@@ -1,0 +1,61 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "shell:allow-open",
+    "store:default",
+    "dialog:default",
+    "dialog:allow-save",
+    "fs:default",
+    "fs:allow-write-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    },
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "https://makechurcheasy-bible-api.fly.dev/*"
+        },
+        {
+          "url": "https://*.r2.cloudflarestorage.com/*"
+        },
+        {
+          "url": "https://*.r2.dev/*"
+        },
+        {
+          "url": "https://api.github.com/*"
+        },
+        {
+          "url": "https://github.com/*"
+        },
+        {
+          "url": "http://localhost:4000/*"
+        },
+        {
+          "url": "http://localhost:4000/*"
+        },
+        {
+          "url": "https://web-tayo-akosiles-projects.vercel.app/*"
+        },
+        {
+          "url": "https://accounts.google.com/*"
+        },
+        {
+          "url": "https://graph.facebook.com/*"
+        }
+      ]
+    }
+  ]
+}

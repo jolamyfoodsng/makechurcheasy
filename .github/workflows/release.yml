@@ -1,0 +1,336 @@
+name: Release — Build & Publish
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Trigger: push a version tag (v*) — created automatically by auto-tag.yml
+# when you bump the version in package.json and push to main.
+#
+# Quick release workflow:
+#   1. npm run version:patch      (or :minor / :major)
+#   2. git add . && git commit -m "bump v0.X.Y" && git push
+#   3. auto-tag.yml creates the git tag automatically
+#   4. This workflow builds + publishes a GitHub Release with installers
+#
+# Manual trigger also available from GitHub → Actions → Release → Run workflow
+#
+# What it does:
+#   1. Builds Windows first
+#   2. Builds macOS after Windows has started/completed
+#   3. Signs update bundles with TAURI_SIGNING_PRIVATE_KEY
+#   4. Creates a GitHub Release with installers + latest.json (for auto-updater)
+#
+# Required secrets:
+#   TAURI_SIGNING_PRIVATE_KEY          — content of ~/.tauri/makechurcheasy.key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD — password for the signing key
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. v0.2.0)"
+        required: false
+      platform:
+        description: "Release platform target"
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - windows-only
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  OBS_BUNDLE_DOWNLOAD_TIMEOUT_MS: 1200000
+  OBS_BUNDLE_DOWNLOAD_ATTEMPTS: 3
+
+jobs:
+  # ── 1) Windows first ─────────────────────────────────────────────────────
+  publish-windows:
+    name: Build + Release (Windows-x64 first)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
+
+      # ── Node.js ──
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # ── Rust ──
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup LLVM
+        id: llvm
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18"
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      # Rust cache temporarily disabled while diagnosing llama-cpp CMake issues
+      # - name: Cache Rust
+      #   uses: swatinem/rust-cache@v2
+
+      # ── Clean stale CMake cache for llama-cpp-sys-2 ──
+      - name: Clean llama.cpp CMake cache
+        shell: pwsh
+        working-directory: src-tauri
+        run: |
+          cargo clean
+          Remove-Item -Recurse -Force target -ErrorAction SilentlyContinue
+
+      # ── Verify LLVM / libclang ──
+      - name: Verify LLVM installation
+        shell: pwsh
+        run: |
+          Write-Host "LLVM_PATH=$env:LLVM_PATH"
+          if (-not $env:LLVM_PATH) {
+            throw "LLVM_PATH is not set. The install-llvm-action may have failed."
+          }
+          $clang = Join-Path $env:LLVM_PATH "bin/clang.exe"
+          $libclang = Join-Path $env:LLVM_PATH "bin/libclang.dll"
+          if (-not (Test-Path $clang))   { throw "clang.exe not found at $clang" }
+          if (-not (Test-Path $libclang)) { throw "libclang.dll not found at $libclang" }
+          Write-Host "LLVM verified: clang.exe and libclang.dll found"
+
+      # ── Install frontend deps ──
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Prepare bundled assets
+        run: node scripts/prepare-bundle-assets.cjs
+
+      # ── Quality gate: typecheck before packaging ──
+      - name: Validate TypeScript
+        run: npx tsc --noEmit
+
+      # ── Sync version from git tag ──
+      - name: Set version from tag
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${GITHUB_REF#refs/tags/v}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            TAG="${{ github.event.inputs.version }}"
+            TAG="${TAG#v}"
+          else
+            echo "No version found, skipping"
+            exit 0
+          fi
+          echo "Setting version to $TAG"
+          node -e "
+            const fs = require('fs');
+            const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8'));
+            conf.version = '$TAG';
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
+          "
+
+      - name: Verify Ninja
+        shell: pwsh
+        run: |
+          ninja --version
+          cmake --version
+
+      - name: Check for stale CMake cache
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path . -Recurse -Filter CMakeCache.txt |
+          ForEach-Object {
+            Write-Host "==== $($_.FullName) ===="
+            Select-String $_.FullName -Pattern "Visual Studio|2022|CMAKE_GENERATOR_INSTANCE|CMAKE_GENERATOR"
+          }
+
+      # ── Build + Release ──
+      - name: Build and release Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_UPDATER_TOKEN: ${{ secrets.UPDATER_GITHUB_TOKEN }}
+          VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
+          VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
+          VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
+          VITE_AUTH_API_URL: ${{ secrets.VITE_AUTH_API_URL }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          LIBCLANG_PATH: ${{ steps.llvm.outputs.LLVM_PATH }}/bin
+          CMAKE_GENERATOR: Ninja
+        with:
+          tauriScript: npx tauri
+          args: --target x86_64-pc-windows-msvc
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || format('v{0}', 'latest') }}
+          releaseName: "MakeChurchEasy ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || 'latest' }}"
+          releaseBody: |
+            ## MakeChurchEasy
+
+            ### Downloads
+            | Platform | File |
+            |----------|------|
+            | macOS (Apple Silicon) | `.dmg` (arm64) |
+            | macOS (Intel) | `.dmg` (x64) |
+            | Windows | `.exe` (NSIS installer) or `.msi` |
+
+            ### Auto-Update
+            Existing installations will automatically download and install this update on next launch.
+
+            ---
+            _Built automatically from commit ${{ github.sha }}_
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+
+      - name: Verify Windows binary has no llama runtime DLL dependency
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path src-tauri/target -Recurse -Filter "makechurcheasy.exe" -File | Select-Object -First 1
+          if (-not $exe) {
+            throw "Could not find built makechurcheasy.exe to inspect."
+          }
+          $llvmObjdump = Join-Path $env:LLVM_PATH "bin/llvm-objdump.exe"
+          if (-not (Test-Path $llvmObjdump)) {
+            throw "llvm-objdump.exe was not found at $llvmObjdump"
+          }
+          $deps = & $llvmObjdump -p $exe.FullName | Out-String
+          if ($deps -match "llama\.dll" -or $deps -match "ggml-base\.dll" -or $deps -match "ggml\.dll") {
+            Write-Host $deps
+            throw "Windows binary still depends on llama/ggml runtime DLLs."
+          }
+
+
+  # ── 2) macOS after Windows ───────────────────────────────────────────────
+  publish-other:
+    name: Build + Release (${{ matrix.label }})
+    needs: publish-windows
+    if: ${{ always() && needs.publish-windows.result != 'cancelled' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform != 'windows-only') }}
+    strategy:
+      fail-fast: false
+      # tauri-action updates the shared release/latest.json asset.
+      # Running these jobs in parallel can race on release asset replacement
+      # and cause 404s when one job deletes/recreates an asset mid-upload.
+      max-parallel: 1
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            label: macOS-arm64
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            label: macOS-x64
+
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
+
+      # ── Node.js ──
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # ── Rust ──
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # ── Rust cache ──
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+
+      # ── Install frontend deps ──
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Prepare bundled assets
+        run: node scripts/prepare-bundle-assets.cjs
+
+      # ── Quality gate: typecheck before packaging ──
+      - name: Validate TypeScript
+        run: npx tsc --noEmit
+
+      # ── Sync version from git tag ──
+      - name: Set version from tag
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${GITHUB_REF#refs/tags/v}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            TAG="${{ github.event.inputs.version }}"
+            TAG="${TAG#v}"
+          else
+            echo "No version found, skipping"
+            exit 0
+          fi
+          echo "Setting version to $TAG"
+          node -e "
+            const fs = require('fs');
+            const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8'));
+            conf.version = '$TAG';
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
+          "
+
+      # ── Build + Release ──
+      - name: Build and release Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_UPDATER_TOKEN: ${{ secrets.UPDATER_GITHUB_TOKEN }}
+          VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
+          VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
+          VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
+          VITE_AUTH_API_URL: ${{ secrets.VITE_AUTH_API_URL }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          tauriScript: npx tauri
+          args: --target ${{ matrix.target }}
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || format('v{0}', 'latest') }}
+          releaseName: "MakeChurchEasy ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || 'latest' }}"
+          releaseBody: |
+            ## MakeChurchEasy
+
+            ### Downloads
+            | Platform | File |
+            |----------|------|
+            | macOS (Apple Silicon) | `.dmg` (arm64) |
+            | macOS (Intel) | `.dmg` (x64) |
+            | Windows | `.exe` (NSIS installer) or `.msi` |
+
+            ### Auto-Update
+            Existing installations will automatically download and install this update on next launch.
+
+            ---
+            _Built automatically from commit ${{ github.sha }}_
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Lower Third Overlay</title>
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,800&display=swap" rel="stylesheet">
+    <style>
+        html,
+        body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+            font-family: 'Open Sans', sans-serif;
+        }
+
+        #toggleBtn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .overlay {
+            position: absolute;
+            left: 60px;
+            bottom: 80px;
+            width: 700px;
+            height: 120px;
+            overflow: visible;
+            opacity: 0;
+            transform: translateY(30px);
+        }
+
+        .main-back {
+            position: absolute;
+            inset: 0;
+            border-radius: 18px;
+            background: rgba(20, 20, 20, 0.35);
+            backdrop-filter: blur(18px);
+            border: 1px solid rgba(255, 255, 255, .08);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, .25);
+        }
+
+        .red-bar {
+            position: absolute;
+            left: 24px;
+            top: 15px;
+            width: 4px;
+            height: 0;
+            border-radius: 999px;
+            background: #00ffd0;
+            box-shadow: 0 0 20px rgba(0, 255, 208, .8);
+        }
+
+        .gold-bar {
+            position: absolute;
+            left: 42px;
+            top: 58px;
+            width: 0;
+            height: 2px;
+            background: rgba(255, 255, 255, .45);
+        }
+
+        .content {
+            position: absolute;
+            left: 70px;
+            top: 0;
+            right: 30px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .title {
+            color: #fff;
+            font-size: 42px;
+            font-weight: 800;
+            line-height: 1;
+            opacity: 0;
+            margin: 0;
+            transform: translateY(40px);
+        }
+
+        .subtitle {
+            color: rgba(255, 255, 255, .75);
+            font-size: 18px;
+            font-weight: 400;
+            letter-spacing: 1px;
+            opacity: 0;
+            margin-top: 8px;
+            transform: translateY(30px);
+        }
+
+        .shine {
+            position: absolute;
+            inset: 0;
+            border-radius: 18px;
+            overflow: hidden;
+        }
+
+        .shine::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: -150%;
+            width: 60%;
+            height: 100%;
+            background: linear-gradient(90deg,
+                    transparent,
+                    rgba(255, 255, 255, .12),
+                    transparent);
+        }
+
+        .overlay.in .shine::after {
+            animation: shineSweep 1.5s .8s forwards;
+        }
+
+        @keyframes shineSweep {
+            from {
+                left: -150%;
+            }
+
+            to {
+                left: 180%;
+            }
+        }
+
+        @keyframes panelIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes panelOut {
+            from {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+            to {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+        }
+
+        @keyframes redBarIn {
+            from {
+                height: 0;
+            }
+
+            to {
+                height: 90px;
+            }
+        }
+
+        @keyframes goldBarIn {
+            from {
+                width: 0;
+            }
+
+            to {
+                width: 560px;
+            }
+        }
+
+        @keyframes textIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes textOut {
+            from {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+            to {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+        }
+
+        .overlay.in {
+            animation: panelIn .7s forwards;
+        }
+
+        .overlay.in .red-bar {
+            animation: redBarIn .6s .1s forwards;
+        }
+
+        .overlay.in .gold-bar {
+            animation: goldBarIn .6s .15s forwards;
+        }
+
+        .overlay.in .title {
+            animation: textIn .4s .45s forwards;
+        }
+
+        .overlay.in .subtitle {
+            animation: textIn .4s .6s forwards;
+        }
+
+        .overlay.out {
+            animation: panelOut .7s forwards;
+        }
+
+        .overlay.out .title {
+            animation: textOut .25s forwards;
+        }
+
+        .overlay.out .subtitle {
+            animation: textOut .25s .1s forwards;
+        }
+
+        .overlay.out .red-bar {
+            animation: redBarOut .45s forwards;
+        }
+
+        .overlay.out .gold-bar {
+            animation: goldBarOut .45s .05s forwards;
+        }
+
+        @keyframes redBarOut {
+            from {
+                height: 90px;
+            }
+
+            to {
+                height: 0;
+            }
+        }
+
+        @keyframes goldBarOut {
+            from {
+                width: 560px;
+            }
+
+            to {
+                width: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <button id="toggleBtn">ON / OFF</button>
+    <div class="overlay" id="lowerThird">
+        <div class="main-back"></div>
+        <div class="shine"></div>
+        <div class="gold-bar"></div>
+        <div class="red-bar"></div>
+        <div class="content">
+            <div class="title">Annual Summit</div>
+            <div class="subtitle">Bangkok, Thailand</div>
+        </div>
+    </div>
+    <script>
+        const lowerThird = document.getElementById('lowerThird');
+        const toggleBtn = document.getElementById('toggleBtn');
+        let showing = true;
+        // Start with panel in
+        lowerThird.classList.add('in');
+        toggleBtn.addEventListener('click', () => {
+            if (showing) {
+                lowerThird.classList.remove('in');
+                lowerThird.classList.remove('out'); // in case
+                lowerThird.classList.add('out');
+                showing = false;
+            } else {
+                lowerThird.classList.remove('in');
+                lowerThird.classList.remove('out');
+                // Force reflow
+                void lowerThird.offsetWidth;
+                lowerThird.classList.add('in');
+                showing = true;
+            }
+        });
+    </script>
+</body>
+
+</html>

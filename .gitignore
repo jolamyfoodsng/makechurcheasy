@@ -1,0 +1,38 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.env.*
+!.env.example
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# License keys (private)
+renewal-keys.md
+
+# Runtime auth session (written by desktop app for dock)
+makechurcheasy-session.json
+
+# Generated embedding files (too large for git)
+public/bible-embeddings-kjv.json
+public/bible-hnsw-index.json
+.vercel

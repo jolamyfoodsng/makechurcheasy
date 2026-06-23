@@ -1,0 +1,12 @@
+name = "mce-analytics"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# Create KV namespace: wrangler kv namespace create ANALYTICS
+# Then paste the ID below:
+[[kv_namespaces]]
+binding = "ANALYTICS"
+id = "177f88236a7642f8a96155d0c7edd390"
+
+# Set secret: wrangler secret put ANALYTICS_TOKEN
+# Use a random token like: openssl rand -hex 32

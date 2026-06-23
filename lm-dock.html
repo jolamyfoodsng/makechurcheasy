@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MakeChurchEasy — LM Dock</title>
+  <script>
+    (() => {
+      try {
+        const pref = localStorage.getItem("obs-church-studio.theme-preference");
+        const useLightMode =
+          pref === "light" ||
+          (pref === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
+        if (useLightMode) {
+          document.documentElement.classList.add("light");
+        }
+      } catch { }
+    })();
+  </script>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&family=Open+Sans:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+  <style>
+    html,
+    body,
+    #dock-root {
+      margin: 0;
+      padding: 0;
+      background: #1a1c25;
+      color: #e8e8ea;
+      font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    html.light,
+    html.light body,
+    html.light #dock-root {
+      background: #f4f5f7;
+      color: #1a1d23;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="dock-root"></div>
+  <script type="module" src="/src/dock/lm-dock-main.tsx"></script>
+</body>
+
+</html>

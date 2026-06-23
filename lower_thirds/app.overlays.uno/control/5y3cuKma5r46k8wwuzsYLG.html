@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="description" content="">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <!-- SECURITY WARNING: This file contains third-party credentials (Singular Live / overlays.uno).
+       Do NOT serve this file publicly. It is only used locally for OBS overlay control.
+       These credentials belong to overlays.uno, not MakeChurchEasy — do not rotate them here. -->
+
+  <title>Lower Third - Executive - overlays.uno Control App</title>
+  <meta property="og:title" content="overlays.uno Control App" />
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.5.3/css/bootstrap.min.css"
+    integrity="sha512-oc9+XSs1H243/FRN9Rw62Fn8EtxjEYWHXRvjS43YtueEewbS6ObfXcJNyohjHqVKFPoXXUxwc+q1K7Dee6vv9g=="
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+  <link rel="stylesheet" type="text/css"
+    href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/6.6.9/sweetalert2.min.css">
+
+  <link href='https://fonts.googleapis.com/css?family=Lato:300,400' rel='stylesheet' type='text/css'>
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="https://app.overlays.uno/unofavicon/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://app.overlays.uno/unofavicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://app.overlays.uno/unofavicon/favicon-16x16.png">
+  <link rel="manifest" href="https://app.overlays.uno/unofavicon/site.webmanifest">
+
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"
+    integrity="sha512-894YE6QWD5I59HgZOGReFYm4dnWc1Qt5NtvYSaNcOP+u1T9qYdvdihz0PPSiiqn/+/3e7Jo4EaG7TubfWGUrMQ=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://app.overlays.uno/libs/singularanalytics/1.0.0/singular-analytics.js"></script>
+
+  <link rel="stylesheet" type="text/css" href="https://app.overlays.uno/css/swal.css">
+</head>
+
+<body style="overflow: hidden">
+
+  <script>
+
+    window.singularUrlBase = 'https://app.overlays.uno/';
+
+  </script>
+
+  <script>
+    window.singularUser = {
+      id: 21072,
+      name: 'UNO',
+      firstName: 'UNO',
+      lastName: 'Template Library',
+      email: 'biyiyic412@alfaceti.com',
+      bannerId: '',
+
+      isAccessToken: true,
+      emailVerified: true,
+      sessionStatus: '/users/21072/sessionStatus/skWKUrlOvRMDVDdj3eSZg5HHxInkxopa',
+
+      account: {
+        accountId: 18365,
+        accountUId: 'a784315d6b22b3c47420f9c0021545c4',
+        accountName: 'UNO Template Library',
+        accountAdminId: '21072',
+        storage: 'datastore',
+        is_sso: false,
+        brand: 'singular',
+        subscription: {
+          enableOnDeviceGraphics: false,
+          expires_on: '2026-12-01T04:46:08.000+00:00',
+          noWatermark: true,
+          subscription_plan: 'trial',
+
+          app_concurrent_limit: 0,
+          burst_api_limit: 500,
+          burst_data_limit: 1048576,
+          daily_api_limit: 100000,
+          daily_data_limit: 524288000,
+          user_limit: 20,
+          weboutput_limit: 10,
+          storage_limit: 5242880000,
+
+          app_concurrent_usage: 0,
+          burst_api_violations: 0,
+          burst_data_violations: 0,
+          daily_api_usage: 44,
+          sdk_daily_api_usage: 0,
+          daily_data_usage: 3290,
+          sdk_daily_data_usage: 0,
+          user_usage: 1,
+          weboutput_usage: 0,
+          storage_usage: 521462920
+        },
+        permission: {
+          permUserManagement: true,
+          permCompEditor: true,
+          permDataNode: true,
+          permStoreManager: false,
+          permDashboard: true,
+          permPlayout: true,
+          permDevTool: true,
+        }
+      }
+    };
+
+    Object.defineProperty(window, 'rwms', { value: 1, writable: false, configurable: false });
+
+
+    window.singularConnections = {
+      twitchToken: null,
+      twitchUserId: null,
+      twitchName: null,
+      twitchClientId: '4t3vdw6loeermopz1351unobnkqhx3',
+      twitchProfileUrl: null,
+
+      youtubeToken: null,
+      youtubeRefreshToken: null,
+      youtubeUserId: null,
+      youtubeName: null,
+      youtubeClientId: '949277319375-b8qqh96ajajl5r2o9deb60ver3sv2shv.apps.googleusercontent.com',
+      youtubeProfileUrl: null
+    };
+
+  </script>
+
+  <script>
+
+    window.singularCoreDb = {
+      apiKey: 'AIzaSyAio3OzdJyS0XSVm8_AiUqa7Ux5z716RrA',
+      authDomain: 'fiery-torch-2122.firebaseapp.com',
+      databaseURL: 'https://fiery-torch-2122.firebaseio.com',
+      databaseMirror: '',
+      storageBucket: 'fiery-torch-2122.appspot.com',
+      token: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJodHRwczovL2lkZW50aXR5dG9vbGtpdC5nb29nbGVhcGlzLmNvbS9nb29nbGUuaWRlbnRpdHkuaWRlbnRpdHl0b29sa2l0LnYxLklkZW50aXR5VG9vbGtpdCIsImlhdCI6MTc4MTU4NjU4OCwiZXhwIjoxNzgxNTkwMTg4LCJpc3MiOiJmaXJlYmFzZS1hZG1pbnNkay1sMXk1YkBmaWVyeS10b3JjaC0yMTIyLmlhbS5nc2VydmljZWFjY291bnQuY29tIiwic3ViIjoiZmlyZWJhc2UtYWRtaW5zZGstbDF5NWJAZmllcnktdG9yY2gtMjEyMi5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsInVpZCI6IjIxMDcyIiwiY2xhaW1zIjp7InVpZCI6IjIxMDcyIiwiYWlkIjoiMTgzNjUifX0.vErFhqb6U0POh5GXwx-7tTvtyWu8fvFNzzYQ4nyz-X7Sy9Lje38o4gxdx7drNIZ4q8aMdYD2dX71HByT06Oc4pJg5Pxkya1gXjJO-ASzkMOY6MDoo468_CL8xcJx0mw4qkFCkgKnonEBCxGSa0ZV5ejC8mXy_hfKyQILkrJJrm2azVj4_I_Gvc5qoGGsSOSCy_iOHQ_t4vpfIRYZSIHJcbY3sYPtsoqOOWYIsdek_eGPYZNgGnnmijIsaY8RlF09PfZsUwlt3XFo8bOzUB8dK1VH4WpQbt2Bj_azPAhveFZpGqr97w1FDkgfKOhpehbL91lpkQIdYmJQE4Yj7npI7Q',
+      projectId: 'fiery-torch-2122'
+    };
+
+  </script>
+
+
+  <div id="appInstanceControl">
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+
+  <script>
+    window.singularStartupDb = '/accounts/18365/appinstances/6616615';
+    window.singularAccessToken = '5y3cuKma5r46k8wwuzsYLG';
+    window.multipleDBs = '0';
+    window.singularWindow = 'app_control';
+
+    window.singularAppInstance = {
+      id: 6616615,
+      name: ('Lower Third  -  Executive'),
+      fid: 'd2b10112-025e-4495-a9f8-8ba0b72780f0',
+      composition_managed_by_singular: 1,
+      use_specific_comp: 0,
+      apptemplate: {
+        id: 518,
+        version: 49,
+        name: 'UNO Essentials',
+        status: 'published'
+      },
+      tenant: null,
+
+      noHeader: 1,
+      uiLayout: '',
+      theme: '',
+      account_id: 18365,
+      token: '5y3cuKma5r46k8wwuzsYLG',
+      created_at: 'Tue Jun 16 2026 04:46:29 GMT+0000 (Coordinated Universal Time)',
+      updated_at: 'Tue Jun 16 2026 05:07:00 GMT+0000 (Coordinated Universal Time)',
+      datastore: 'app_0GkGjxCf64oLzhMc7ks4Hk'
+    };
+
+    window.runningOnSingularServer = true;
+    window.singularAutoPlayPreviewVideo = 0;
+
+    window.singularConnections = {
+      twitchTokenTest: null,
+      twitchUserId: null,
+      twitchName: null,
+      twitchClientId: '4t3vdw6loeermopz1351unobnkqhx3',
+      twitchProfileUrl: null,
+
+      youtubeToken: null,
+      youtubeRefreshToken: null,
+      youtubeUserId: null,
+      youtubeName: null,
+      youtubeClientId: '949277319375-b8qqh96ajajl5r2o9deb60ver3sv2shv.apps.googleusercontent.com',
+      youtubeProfileUrl: null
+    };
+
+  </script>
+
+
+
+  <script>/*<![CDATA[*/window.zEmbed || function (e, t) { var n, o, d, i, s, a = [], r = document.createElement("iframe"); window.zEmbed = function () { a.push(arguments) }, window.zE = window.zE || window.zEmbed, r.src = "javascript:false", r.title = "", r.role = "presentation", (r.frameElement || r).style.cssText = "display: none", d = document.getElementsByTagName("script"), d = d[d.length - 1], d.parentNode.insertBefore(r, d), i = r.contentWindow, s = i.document; try { o = s } catch (e) { n = document.domain, r.src = 'javascript:var d=document.open();d.domain="' + n + '";void(0);', o = s } o.open()._l = function () { var o = this.createElement("script"); n && (this.domain = n), o.id = "js-iframe-async", o.src = e, this.t = +new Date, this.zendeskHost = t, this.zEQueue = a, this.body.appendChild(o) }, o.write('<body onload="document._l();">'), o.close() }("https://assets.zendesk.com/embeddable_framework/main.js", "singularlive.zendesk.com");
+
+    zE(function () {
+      zE.hide();
+    });
+
+    /*]]>*/</script>
+
+
+  <head>
+    <script defer="defer" src="https://app.overlays.uno/build/967.f667ab7b.js"></script>
+    <script defer="defer" src="https://app.overlays.uno/build/822.31df8fca.js"></script>
+    <script defer="defer" src="https://app.overlays.uno/build/34.b28cf93c.js"></script>
+    <script defer="defer" src="https://app.overlays.uno/build/403.cc5c8f2b.js"></script>
+    <script defer="defer" src="https://app.overlays.uno/build/148.9d25632a.js"></script>
+    <script defer="defer" src="https://app.overlays.uno/build/761.588cd327.js"></script>
+    <script defer="defer" src="https://app.overlays.uno/build/559.480e8988.js"></script>
+    <script defer="defer" src="https://app.overlays.uno/build/966.c61e88b0.js"></script>
+    <script defer="defer" src="https://app.overlays.uno/build/274.311a53a1.js"></script>
+    <script defer="defer" src="https://app.overlays.uno/build/515.8f25115b.js"></script>
+    <script defer="defer" src="https://app.overlays.uno/build/900.3a3ad541.js"></script>
+    <script defer="defer" src="https://app.overlays.uno/build/459.19b42859.js"></script>
+    <script defer="defer" src="https://app.overlays.uno/build/controlapp.193df46d.js"></script>
+    <link href="https://app.overlays.uno/build/900.css" rel="stylesheet">
+  </head>
+  <script>
+    (function (i, s, o, g, r, a, m) {
+      i['GoogleAnalyticsObject'] = r; i[r] = i[r] || function () {
+        (i[r].q = i[r].q || []).push(arguments)
+      }, i[r].l = 1 * new Date(); a = s.createElement(o),
+        m = s.getElementsByTagName(o)[0]; a.async = 1; a.src = g; m.parentNode.insertBefore(a, m)
+    })(window, document, 'script', '//www.google-analytics.com/analytics.js', 'ga');
+
+    ga('create', 'UA-68633279-1', 'auto');
+
+    var userType = "Anonymous";
+    var accountId = -1;
+    var accountName = "Unknown"
+    var userId = 0;
+    if (window.singularUser) {
+      userType = "Member";
+      accountId = window.singularUser.account.accountId;
+      userId = window.singularUser.id;
+      accountName = window.singularUser.account.accountName;
+      ga('set', 'userId', userId);
+    }
+
+    var outputName;
+    if (window.singularAppInstanceOutputName) {
+      outputName = window.singularAppInstanceOutputName;
+    }
+
+    var appInstance;
+    var appTemplate;
+    try {
+      if (window.parent.singularAppInstance) {
+        appInstance = window.parent.singularAppInstance.id;
+        appTemplate = window.parent.singularAppInstance.apptemplate.name;
+      }
+    } catch (e) {
+      // not accessible
+      // console.log('different domain');
+    }
+
+    ga('send', 'pageview', {
+      'dimension1': userType,
+      'dimension2': accountId,
+      'dimension3': userId,
+      'dimension4': outputName,
+      'dimension5': appInstance,
+      'dimension6': appTemplate,
+      'dimension7': accountName
+    });
+
+    //ga('send', 'pageview');
+
+  </script>
+
+  <!--script type="text/javascript">
+  window.heap=window.heap||[],heap.load=function(e,t){window.heap.appid=e,window.heap.config=t=t||{};var n=t.forceSSL||"https:"===document.location.protocol,a=document.createElement("script");a.type="text/javascript",a.async=!0,a.src=(n?"https:":"http:")+"//cdn.heapanalytics.com/js/heap-"+e+".js";var o=document.getElementsByTagName("script")[0];o.parentNode.insertBefore(a,o);for(var r=function(e){return function(){heap.push([e].concat(Array.prototype.slice.call(arguments,0)))}},p=["clearEventProperties","identify","setEventProperties","track","unsetEventProperty"],c=0;c<p.length;c++)heap[p[c]]=r(p[c])};
+  heap.load("2170169068");
+</script-->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tether/1.1.1/js/tether.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.5.3/js/bootstrap.bundle.min.js"
+    integrity="sha512-iceXjjbmB2rwoX93Ka6HAHP+B76IY1z0o3h+N1PeDtRSsyeetU3/0QKJqGyPJcX63zysNehggFwMC/bi7dvMig=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- Modal -->
+  <div id="detectBrowserModal" class="modal fade singular-modal singular-modal-white" role="dialog">
+    <div class="modal-dialog" style="width:500px;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal">&times;</button>
+          <h4 class="modal-title">
+            <i class="fa fa-exclamation-triangle" style="color: red"></i> Unsupported Browser
+          </h4>
+        </div>
+        <div class="modal-body" style="height: auto;">
+          <p class="text-center" style="display: none">
+            <i class="fa fa-exclamation-triangle" style="color: red; font-size: 72px;"></i>
+          </p>
+          <p class="section-label text-center">Your browser is not supported. We recommend using the <a
+              href="https://www.google.com/chrome/" target="_Blank">Chrome browser</a> for best performance.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" data-dismiss="modal">Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function detectBrowser() {
+      var ua = window.navigator.userAgent;
+      var msie = ua.indexOf("MSIE ");
+
+      if (msie > 0 || !!navigator.userAgent.match(/Trident.*rv\:11\./))  // If Internet Explorer, return version number
+      {
+        //alert(parseInt(ua.substring(msie + 5, ua.indexOf(".", msie))));
+        $("#detectBrowserModal").modal({
+          backdrop: 'static',
+          keyboard: false
+        });
+      }
+      else {
+        // if not ie
+
+        // For Debug:
+        /*$("#myModal").modal({
+          backdrop: 'static',
+          keyboard: false
+        });*/
+      }
+    }
+
+    $(function () {
+      detectBrowser();
+    });
+  </script>
+</body>
+
+</html>

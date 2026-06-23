@@ -1,0 +1,11 @@
+src-tauri/
+web/
+beta-landing/
+cloudflare-analytics/
+stitch_system_settings_view/
+new_steps_modal/
+dock-reference/
+scripts/
+node_modules/
+dist/
+.vercel/

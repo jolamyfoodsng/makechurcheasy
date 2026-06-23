@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive UK Map</title>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #071217;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: Inter, sans-serif;
+      overflow: hidden;
+    }
+
+    .map-wrapper {
+      width: 90vw;
+      max-width: 900px;
+      position: relative;
+    }
+
+    .counting {
+      position: absolute;
+      top: -40px;
+      right: 0;
+      color: #d8d8d8;
+      font-size: 20px;
+      letter-spacing: 0.5px;
+      opacity: 0.8;
+    }
+
+    svg {
+      width: 100%;
+      height: auto;
+    }
+
+    .region {
+      fill: #d9e0e2;
+      stroke: #4f575c;
+      stroke-width: 1.2;
+      transition: all 0.25s ease;
+      cursor: pointer;
+    }
+
+    .region.active {
+      fill: #13f0be;
+    }
+
+    .region:hover {
+      fill: #62ffd9;
+      filter: drop-shadow(0 0 10px rgba(19, 240, 190, 0.5));
+    }
+
+    .tooltip {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.85);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      transform: translate(-50%, -120%);
+      white-space: nowrap;
+      border: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(8px);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="map-wrapper">
+
+    <div class="counting">counting...</div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <!-- REUSABLE SVG -->
+    <svg viewBox="0 0 600 900">
+
+      <!-- Scotland -->
+      <path
+        class="region"
+        data-name="Scotland"
+        d="M220 70 L320 60 L370 120 L360 240 L250 260 L180 190 Z"
+      />
+
+      <!-- Northern Ireland -->
+      <path
+        class="region"
+        data-name="Northern Ireland"
+        d="M90 350 L145 345 L155 390 L105 405 Z"
+      />
+
+      <!-- Wales -->
+      <path
+        class="region active"
+        data-name="Wales"
+        d="M180 520 L235 500 L245 620 L180 650 L145 580 Z"
+      />
+
+      <!-- England North -->
+      <path
+        class="region active"
+        data-name="Northern England"
+        d="M260 300 L420 300 L460 450 L300 470 L240 400 Z"
+      />
+
+      <!-- Midlands -->
+      <path
+        class="region"
+        data-name="Midlands"
+        d="M240 470 L410 470 L420 580 L250 600 Z"
+      />
+
+      <!-- South England -->
+      <path
+        class="region active"
+        data-name="Southern England"
+        d="M230 600 L440 590 L500 760 L260 790 L200 700 Z"
+      />
+
+      <!-- London -->
+      <circle
+        class="region active"
+        data-name="London"
+        cx="395"
+        cy="690"
+        r="16"
+      />
+
+    </svg>
+  </div>
+
+  <script>
+    const regions = document.querySelectorAll(".region");
+    const tooltip = document.getElementById("tooltip");
+
+    regions.forEach(region => {
+
+      region.addEventListener("mousemove", (e) => {
+        tooltip.style.opacity = 1;
+        tooltip.innerHTML = region.dataset.name;
+
+        tooltip.style.left = e.pageX + "px";
+        tooltip.style.top = e.pageY + "px";
+      });
+
+      region.addEventListener("mouseleave", () => {
+        tooltip.style.opacity = 0;
+      });
+
+      region.addEventListener("click", () => {
+        region.classList.toggle("active");
+      });
+
+    });
+  </script>
+
+</body>
+</html>

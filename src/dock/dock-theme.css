@@ -1,0 +1,253 @@
+:root {
+  color-scheme: dark;
+}
+
+:root.light {
+  color-scheme: light;
+}
+
+html,
+body,
+#dock-root {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #0F1115;
+  color: #F3F6FB;
+  color-scheme: inherit;
+}
+
+:root.light body,
+:root.light #dock-root {
+  background: #eef1f4;
+  color: #1a1d23;
+}
+
+:root.light .dock-root {
+  --dock-bg: #eef1f4;
+  --dock-surface: #ffffff;
+  --dock-surface-alt: #f3f5f8;
+  --dock-surface-hover: #e9edf2;
+  --dock-surface-overlay: #ffffff;
+  --dock-border: #d3dae3;
+  --dock-border-soft: #e2e8f0;
+  --dock-border-active: #5b6abf;
+  --dock-text: #1a1d23;
+  --dock-text-secondary: #1e293b;
+  --dock-text-dim: #1e293b;
+  --dock-text-disabled: #98a2b3;
+  --dock-accent: #5b6abf;
+  --dock-accent-hover: #7083cc;
+  --dock-accent-pressed: #4a59ae;
+  --dock-accent-soft: rgba(91, 106, 191, 0.09);
+  --dock-accent-soft-border: rgba(91, 106, 191, 0.24);
+  --dock-green: #16a34a;
+  --dock-green-button: #15803d;
+  --dock-green-pressed: #166534;
+  --dock-green-soft: rgba(22, 163, 74, 0.08);
+  --dock-green-soft-border: rgba(22, 163, 74, 0.18);
+  --dock-red: #dc2626;
+  --dock-red-hover: #b91c1c;
+  --dock-red-soft: rgba(220, 38, 38, 0.06);
+  --dock-red-soft-border: rgba(220, 38, 38, 0.18);
+  --dock-red-text: #b42318;
+  --dock-yellow: #b4781f;
+  --dock-yellow-soft: rgba(217, 119, 6, 0.08);
+  --dock-input-bg: #ffffff;
+  --dock-input-border: #d6dbe5;
+}
+
+.dock-status-bar__left,
+.dock-status-bar__right {
+  min-width: 0;
+}
+
+.dock-status-bar__right {
+  margin-left: auto;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+:root.light .dock-subtab:hover {
+  background: rgba(106, 52, 222, 0.06);
+}
+
+:root.light .dock-subtab--active {
+  box-shadow: none;
+}
+
+:root.light .dock-shell-header {
+  background: #ffffff;
+  border-bottom-color: rgba(92, 99, 112, 0.12);
+}
+
+:root.light .dock-shell-status__connection,
+:root.light .dock-shell-chip,
+:root.light .dock-shell-icon-btn,
+:root.light .dock-console-toggle,
+:root.light .dock-console-segmented,
+:root.light .dock-background-preset,
+:root.light .dock-staged--console {
+  border-color: rgba(92, 99, 112, 0.14);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+:root.light .dock-shell-chip {
+  color: #4f5664;
+}
+
+:root.light .dock-shell-titleline__app,
+:root.light .dock-shell-titleline__divider {
+  color: #6b7280;
+}
+
+:root.light .dock-shell-chip--good {
+  border-color: rgba(22, 163, 74, 0.18);
+  background: rgba(22, 163, 74, 0.08);
+  color: #15803d;
+}
+
+:root.light .dock-console-panel {
+  background: #ffffff;
+  border-color: rgba(92, 99, 112, 0.12);
+}
+
+:root.light .dock-console-panel--deck,
+:root.light .dock-bottom-nav {
+  background: #ffffff;
+}
+
+:root.light .dock-console-placeholder {
+  border-color: rgba(92, 99, 112, 0.18);
+  background: #f7f9fc;
+}
+
+:root.light .dock-console-segmented__item:hover {
+  background: rgba(106, 52, 222, 0.06);
+}
+
+:root.light .dock-bottom-nav__item {
+  border-color: rgba(92, 99, 112, 0.14);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+:root.light .dock-bottom-nav__item--active {
+  background: #5b6abf;
+  border-color: #5b6abf;
+}
+
+:root.light .dock-search-dropdown,
+:root.light .dock-theme-dropdown-list {
+  box-shadow: none;
+}
+
+:root.light .dock-input,
+:root.light .dock-select {
+  border-color: rgba(92, 99, 112, 0.16);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+:root.light .dock-input:hover,
+:root.light .dock-select:hover {
+  border-color: rgba(92, 99, 112, 0.24);
+}
+
+:root.light .dock-input:focus,
+:root.light .dock-select:focus {
+  border-color: rgba(106, 52, 222, 0.38);
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(106, 52, 222, 0.12);
+}
+
+:root.light .dock-select--translation {
+  background: rgba(106, 52, 222, 0.08);
+  border-color: rgba(106, 52, 222, 0.24);
+}
+
+:root.light .dtb-backdrop {
+  background: rgba(15, 23, 42, 0.24);
+}
+
+:root.light .dtb-modal {
+  box-shadow: none;
+}
+
+:root.light .dtb-card__logo-badge {
+  background: rgba(255, 255, 255, 0.88);
+  color: rgba(26, 29, 35, 0.72);
+}
+
+:root.light .dock-service-plan-btn,
+:root.light .dock-service-item {
+  background: #ffffff;
+}
+
+:root.light .dock-service-plan-btn:hover,
+:root.light .dock-service-item:hover {
+  border-color: rgba(106, 52, 222, 0.28);
+}
+
+:root.light .dock-service-progress-bar {
+  background: rgba(92, 99, 112, 0.16);
+}
+
+:root.light .dock-bible-verse-row--selected,
+:root.light .dock-bible-verse-row--highlighted {
+  background: rgba(91, 106, 191, 0.10);
+  border-bottom-color: rgba(91, 106, 191, 0.18);
+}
+
+:root.light .dock-bible-verse-row--selected .dock-bible-verse-row__text,
+:root.light .dock-bible-verse-row--highlighted .dock-bible-verse-row__text {
+  color: #111827;
+  font-weight: 600;
+}
+
+:root.light .dock-bible-verse-row--selected .dock-bible-verse-row__num,
+:root.light .dock-bible-verse-row--highlighted .dock-bible-verse-row__num {
+  color: var(--dock-accent);
+  font-weight: 700;
+}
+
+:root.light .dock-bible-verse-row--selected .dock-hover-actions,
+:root.light .dock-bible-verse-row--highlighted .dock-hover-actions {
+  opacity: 1;
+}
+
+:root.light .dock-theme-quick__trigger:hover,
+:root.light .dock-theme-quick.is-open .dock-theme-quick__trigger,
+:root.light .dock-theme-studio.is-open .dock-theme-quick__trigger {
+  color: #111827;
+}
+
+:root.light .dock-bible-browser__chapter-option--active,
+:root.light .dock-bible-browser__verse-option--active {
+  color: #111827;
+  font-weight: 600;
+}
+
+:root.light .dock-media-card__action-icon--preview:hover,
+:root.light .dock-media-card__action-icon--active-preview {
+  color: #111827;
+}
+
+:root.light .dock-media-card__action-icon--program:hover,
+:root.light .dock-media-card__action-icon--active-program {
+  color: #111827;
+}
+
+:root.light .dock-media-card__segmented-btn--active {
+  color: #111827;
+  font-weight: 600;
+}
+
+@media (max-width: 360px) {
+  .dock-shell-icon-btn--theme {
+    padding-inline: 6px;
+  }
+}

@@ -1,0 +1,1915 @@
+/* ── Onboarding Wizard ── */
+
+.ob-root {
+  min-height: 100dvh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Top Bar ── */
+.ob-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.ob-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ob-topbar-logo {
+  width: 28px;
+  height: 28px;
+  background: var(--primary);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.ob-topbar-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: var(--font-heading);
+}
+
+.ob-skip-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: var(--font-body);
+}
+
+.ob-skip-btn:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+  background: var(--surface-hover);
+}
+
+/* ── Progress Steps ── */
+.ob-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 20px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.ob-step-dot-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.ob-step-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  border: 2px solid var(--border);
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.ob-step-dot.is-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(91, 95, 207, 0.2);
+}
+
+.ob-step-dot.is-done {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.ob-step-line {
+  width: 32px;
+  height: 2px;
+  background: var(--border);
+  transition: background 0.25s ease;
+}
+
+.ob-step-line.is-done {
+  background: var(--success);
+}
+
+.ob-step-labels {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 0 24px 20px;
+  background: var(--surface);
+}
+
+.ob-step-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: color 0.2s;
+}
+
+.ob-step-label.is-active {
+  color: var(--primary);
+}
+
+.ob-step-label.is-done {
+  color: var(--success);
+}
+
+/* ── Content Area ── */
+.ob-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 24px 60px;
+  overflow-y: auto;
+}
+
+.ob-card {
+  width: 100%;
+  max-width: 720px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* ── Screen: Welcome ── */
+.ob-hero {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.ob-hero-icon {
+  width: 56px;
+  height: 56px;
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-soft-border);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+
+.ob-hero h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+  font-family: var(--font-heading);
+  line-height: 1.3;
+}
+
+.ob-hero p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 480px;
+  line-height: 1.6;
+}
+
+.ob-features {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.ob-feature-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color var(--transition);
+}
+
+.ob-feature-card:hover {
+  border-color: var(--primary-soft-border);
+}
+
+.ob-feature-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ob-feature-icon--purple {
+  background: rgba(91, 95, 207, 0.15);
+  color: var(--primary);
+}
+
+.ob-feature-icon--green {
+  background: rgba(22, 163, 74, 0.15);
+  color: var(--success);
+}
+
+.ob-feature-icon--orange {
+  background: rgba(217, 119, 6, 0.15);
+  color: var(--warning);
+}
+
+.ob-feature-icon--blue {
+  background: rgba(109, 124, 255, 0.15);
+  color: var(--accent-blue);
+}
+
+.ob-feature-card h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.ob-feature-card p {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Buttons ── */
+.ob-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.ob-actions-row {
+  display: flex;
+  gap: 10px;
+}
+
+.ob-btn {
+  min-height: 40px;
+  padding: 0 20px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--transition);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+}
+
+.ob-btn--primary {
+  background: var(--primary);
+  color: #fff;
+  flex: 1;
+}
+
+.ob-btn--primary:hover {
+  background: var(--primary-hover);
+}
+
+.ob-btn--primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ob-btn--secondary {
+  background: var(--surface-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  flex: 1;
+}
+
+.ob-btn--secondary:hover {
+  background: var(--surface-hover);
+  border-color: var(--text-muted);
+}
+
+.ob-btn--ghost {
+  background: none;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.ob-btn--ghost:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+  background: var(--surface-hover);
+}
+
+.ob-btn--success {
+  background: var(--success);
+  color: #fff;
+  flex: 1;
+}
+
+.ob-btn--success:hover {
+  background: var(--success-hover);
+}
+
+.ob-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* ── OBS Connect Screen ── */
+.ob-obs-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.ob-obs-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ob-obs-dot--connected {
+  background: var(--success);
+  box-shadow: 0 0 6px rgba(22, 163, 74, 0.4);
+}
+
+.ob-obs-dot--disconnected {
+  background: var(--error);
+}
+
+.ob-obs-dot--checking {
+  background: var(--warning);
+  animation: pulse 1.2s infinite;
+}
+
+.ob-obs-status-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ob-obs-status-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.ob-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ob-form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.ob-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.ob-field label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ob-field input {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--input-text);
+  font-family: var(--font-body);
+  transition: border-color var(--transition);
+  outline: none;
+}
+
+.ob-field input:focus {
+  border-color: var(--input-focus);
+}
+
+.ob-field input::placeholder {
+  color: var(--input-placeholder);
+  opacity: 1;
+}
+
+.ob-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-instructions h4 {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ob-instructions ol {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ob-instructions li {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.ob-instructions li strong {
+  color: var(--text);
+}
+
+.ob-instructions code {
+  background: var(--surface-hover);
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--primary);
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+
+/* ── Dock URL Cards ── */
+.ob-url-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ob-url-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ob-url-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ob-url-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ob-url-input {
+  flex: 1;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--input-text);
+  font-family: "SF Mono", "Fira Code", monospace;
+  outline: none;
+}
+
+.ob-url-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ── Mock OBS UI ── */
+.ob-mock {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.ob-mock-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ob-mock-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ob-mock-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ob-mock-step-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ob-mock-step.is-highlight {
+  border-color: var(--primary-soft-border);
+  background: var(--primary-soft);
+}
+
+.ob-mock-step.is-highlight .ob-mock-step-num {
+  background: var(--primary);
+  color: #fff;
+}
+
+.ob-mock-step-arrow {
+  color: var(--text-muted);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ── Diagnostics ── */
+.ob-diag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-diag-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+}
+
+.ob-diag-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ob-diag-dot--ok {
+  background: var(--success);
+}
+
+.ob-diag-dot--warn {
+  background: var(--warning);
+}
+
+.ob-diag-dot--fail {
+  background: var(--error);
+}
+
+.ob-diag-dot--pending {
+  background: var(--text-muted);
+}
+
+.ob-diag-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ob-diag-status {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ob-diag-status--ok {
+  color: var(--success);
+}
+
+.ob-diag-status--warn {
+  color: var(--warning);
+}
+
+.ob-diag-status--fail {
+  color: var(--error);
+}
+
+.ob-diag-status--pending {
+  color: var(--text-muted);
+}
+
+/* ── Success Screen ── */
+.ob-success-hero {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.ob-success-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(22, 163, 74, 0.15);
+  border: 2px solid var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--success);
+  margin-bottom: 4px;
+}
+
+.ob-success-hero h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+  font-family: var(--font-heading);
+}
+
+.ob-success-hero p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.ob-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.ob-summary-check {
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+.ob-quick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-quick-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  text-decoration: none;
+  font-family: var(--font-body);
+}
+
+.ob-quick-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary-soft-border);
+}
+
+.ob-quick-btn svg {
+  width: 16px;
+  height: 16px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+/* ── Section Headers inside card ── */
+.ob-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+/* ── Info Banner ── */
+.ob-info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: rgba(109, 124, 255, 0.08);
+  border: 1px solid rgba(109, 124, 255, 0.2);
+  font-size: 12px;
+  color: var(--accent-blue);
+  line-height: 1.5;
+}
+
+.ob-info-banner svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Skip Confirm Modal ── */
+.ob-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fadeIn 0.15s ease;
+}
+
+.ob-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ob-modal h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.ob-modal p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.ob-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* ── Resume Banner (dashboard) ── */
+.ob-resume-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-soft-border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.ob-resume-banner:hover {
+  background: var(--surface-hover);
+}
+
+.ob-resume-banner svg {
+  width: 16px;
+  height: 16px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.ob-resume-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+
+.ob-resume-steps {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ob-resume-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BIBLE WIDGET
+   ══════════════════════════════════════════════════════════════ */
+
+.ob-bible-widget {
+  width: 100%;
+  height: 320px;
+  background: #0d0e15;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid #1e293b;
+  display: flex;
+  color: #e2e8f0;
+  font-family: var(--font-body);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+.ob-bible-rail {
+  width: 45px;
+  border-right: 1px solid rgba(30, 41, 59, 0.8);
+  background: #08090d;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  gap: 20px;
+  flex-shrink: 0;
+}
+
+.ob-bible-rail-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ob-bible-rail-icon:hover {
+  color: #cbd5e1;
+}
+
+.ob-bible-rail-icon--active {
+  background: rgba(99, 102, 241, 0.1);
+  color: #818cf8;
+}
+
+.ob-bible-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.ob-bible-breadcrumb {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.6);
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+}
+
+.ob-bible-breadcrumb-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ob-bible-bc-label {
+  font-size: 10px;
+  font-family: monospace;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ob-bible-bc-sep {
+  color: #475569;
+}
+
+.ob-bible-dropdown-wrap {
+  position: relative;
+}
+
+.ob-bible-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+  background: rgba(30, 41, 59, 0.3);
+  border: none;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-body);
+}
+
+.ob-bible-dropdown-trigger:hover {
+  background: rgba(30, 41, 59, 0.6);
+  color: #fff;
+}
+
+.ob-bible-dropdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+
+.ob-bible-dropdown-menu {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 6px;
+  width: 160px;
+  background: #12131a;
+  border: 1px solid #1e293b;
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+  overflow: hidden;
+}
+
+.ob-bible-dropdown-item {
+  width: 100%;
+  text-align: left;
+  padding: 6px 12px;
+  font-size: 12px;
+  transition: background 0.12s;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: #94a3b8;
+  font-family: var(--font-body);
+}
+
+.ob-bible-dropdown-item:hover {
+  background: rgba(30, 41, 59, 0.5);
+}
+
+.ob-bible-dropdown-item.is-active {
+  color: #818cf8;
+  font-weight: 500;
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.ob-bible-viewport-badge {
+  font-size: 9px;
+  font-family: monospace;
+  color: #64748b;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(30, 41, 59, 0.3);
+}
+
+.ob-bible-verse-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 0;
+  text-align: left;
+}
+
+.ob-bible-verse-text {
+  font-size: 16px;
+  line-height: 1.6;
+  color: #f1f5f9;
+  font-weight: 500;
+  font-style: italic;
+  font-family: var(--font-body);
+  margin: 0;
+}
+
+.ob-bible-verse-tag {
+  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  text-transform: uppercase;
+  font-family: monospace;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.1);
+  padding: 3px 8px;
+  border-radius: var(--radius);
+}
+
+.ob-bible-versions {
+  width: 155px;
+  border-left: 1px solid rgba(30, 41, 59, 0.8);
+  background: #090b10;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 0;
+  flex-shrink: 0;
+}
+
+.ob-bible-versions-header {
+  padding: 0 10px 8px;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ob-bible-versions-title {
+  font-size: 9px;
+  font-family: monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.ob-bible-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  animation: pulse 2s infinite;
+}
+
+.ob-bible-versions-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ob-bible-version-btn {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  font-size: 10px;
+  transition: all 0.15s;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: none;
+  color: #94a3b8;
+  font-family: var(--font-body);
+}
+
+.ob-bible-version-btn:hover {
+  color: #e2e8f0;
+  background: rgba(30, 41, 59, 0.3);
+}
+
+.ob-bible-version-btn.is-selected {
+  background: rgba(99, 102, 241, 0.1);
+  color: #a5b4fc;
+  font-weight: 500;
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.ob-bible-version-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  text-align: left;
+}
+
+.ob-bible-version-short {
+  font-weight: 600;
+  display: block;
+}
+
+.ob-bible-version-full {
+  font-size: 8px;
+  color: #475569;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ob-bible-version-check {
+  color: #818cf8;
+  flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   WORSHIP WIDGET
+   ══════════════════════════════════════════════════════════════ */
+
+.ob-worship-widget {
+  width: 100%;
+  height: 320px;
+  background: #0c0e14;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid #1e293b;
+  display: flex;
+  color: #e2e8f0;
+  font-family: var(--font-body);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+.ob-worship-rail {
+  width: 45px;
+  border-right: 1px solid rgba(30, 41, 59, 0.8);
+  background: #07080c;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.ob-worship-rail-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: #64748b;
+  font-family: var(--font-body);
+}
+
+.ob-worship-rail-btn:hover {
+  color: #cbd5e1;
+}
+
+.ob-worship-rail-btn.is-active {
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+}
+
+.ob-worship-panel {
+  width: 155px;
+  border-right: 1px solid rgba(30, 41, 59, 0.8);
+  background: #090b10;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  text-align: left;
+}
+
+.ob-worship-panel-header {
+  padding: 8px;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.ob-worship-panel-title {
+  font-size: 9px;
+  font-family: monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.ob-worship-panel-sub {
+  font-size: 8px;
+  color: #475569;
+  line-height: 1.3;
+}
+
+.ob-worship-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: var(--radius);
+  border: 1px solid rgba(30, 41, 59, 0.5);
+  padding: 3px 6px;
+}
+
+.ob-worship-search svg {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.ob-worship-search input {
+  background: transparent;
+  font-size: 10px;
+  color: #e2e8f0;
+  border: none;
+  outline: none;
+  width: 100%;
+  font-family: var(--font-body);
+}
+
+.ob-worship-search input::placeholder {
+  color: #334155;
+}
+
+.ob-worship-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ob-worship-song-btn {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  font-size: 10px;
+  transition: all 0.15s;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: none;
+  color: #94a3b8;
+  font-family: var(--font-body);
+}
+
+.ob-worship-song-btn:hover {
+  color: #e2e8f0;
+  background: rgba(30, 41, 59, 0.3);
+}
+
+.ob-worship-song-btn.is-selected {
+  background: rgba(16, 185, 129, 0.1);
+  color: #6ee7b7;
+  font-weight: 500;
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.ob-worship-song-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ob-worship-song-title {
+  font-weight: 600;
+  display: block;
+}
+
+.ob-worship-song-meta {
+  font-size: 8px;
+  color: #475569;
+  margin-top: 2px;
+}
+
+.ob-worship-song-arrow {
+  color: #334155;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ob-worship-song-btn.is-selected .ob-worship-song-arrow {
+  color: #34d399;
+}
+
+.ob-worship-theme-btn {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  font-size: 10px;
+  transition: all 0.15s;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: none;
+  color: #94a3b8;
+  font-family: var(--font-body);
+}
+
+.ob-worship-theme-btn:hover {
+  color: #e2e8f0;
+  background: rgba(30, 41, 59, 0.3);
+}
+
+.ob-worship-theme-btn.is-selected {
+  background: rgba(16, 185, 129, 0.1);
+  color: #6ee7b7;
+  font-weight: 500;
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.ob-worship-theme-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+/* Preview right block */
+
+.ob-worship-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  min-width: 0;
+  background: #0d0e14;
+}
+
+.ob-worship-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.6);
+  padding-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.ob-worship-preview-label {
+  font-size: 10px;
+  font-family: monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.ob-worship-live-badge {
+  font-size: 9px;
+  font-weight: 600;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 2px 6px;
+  border-radius: var(--radius);
+}
+
+.ob-worship-steppers {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ob-worship-step-btn {
+  padding: 4px 6px;
+  border-radius: var(--radius);
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: monospace;
+  transition: all 0.12s;
+}
+
+.ob-worship-step-btn:hover:not(:disabled) {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+.ob-worship-step-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.ob-worship-step-counter {
+  font-size: 9px;
+  font-family: monospace;
+  color: #94a3b8;
+  padding: 0 4px;
+}
+
+.ob-worship-backdrop {
+  flex: 1;
+  margin-top: 16px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.ob-worship-backdrop-gradient {
+  position: absolute;
+  inset: 0;
+  transition: all 0.5s;
+}
+
+.ob-worship-backdrop-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 10px 10px;
+  opacity: 0.4;
+}
+
+.ob-worship-backdrop-live {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  font-size: 8px;
+  font-family: monospace;
+  letter-spacing: 0.1em;
+  color: #cbd5e1;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ob-worship-backdrop-ping {
+  width: 6px;
+  height: 6px;
+  background: #f43f5e;
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+
+.ob-worship-backdrop-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px;
+  z-index: 10;
+}
+
+.ob-worship-lyrics {
+  space-y: 6px;
+  max-width: 90%;
+}
+
+.ob-worship-lyric-line {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.05em;
+  line-height: 1.6;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  margin: 0;
+  font-family: var(--font-body);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MEDIA WIDGET
+   ══════════════════════════════════════════════════════════════ */
+
+.ob-media-widget {
+  width: 100%;
+  height: 320px;
+  background: #0c0e14;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid #1e293b;
+  display: flex;
+  color: #e2e8f0;
+  font-family: var(--font-body);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+.ob-media-rail {
+  width: 45px;
+  border-right: 1px solid #1a1c2a;
+  background: #07080c;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.ob-media-rail-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ob-media-rail-icon:hover {
+  color: #cbd5e1;
+}
+
+.ob-media-rail-icon--active {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.ob-media-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  min-width: 0;
+}
+
+.ob-media-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.6);
+  padding-bottom: 8px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.ob-media-tab {
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  font-size: 9px;
+  font-weight: 500;
+  transition: all 0.15s;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: #94a3b8;
+  text-transform: capitalize;
+  font-family: var(--font-body);
+  white-space: nowrap;
+}
+
+.ob-media-tab:hover {
+  color: #e2e8f0;
+}
+
+.ob-media-tab.is-active {
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.ob-media-grid {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-content: start;
+  padding-right: 4px;
+}
+
+.ob-media-card {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 6px;
+  border: 1px solid #1e293b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ob-media-card:hover {
+  border-color: #334155;
+}
+
+.ob-media-card.is-selected {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+}
+
+.ob-media-card-bg {
+  position: absolute;
+  inset: 0;
+  opacity: 0.85;
+}
+
+.ob-media-card-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.ob-media-card-content {
+  position: absolute;
+  inset: 0;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  text-align: left;
+}
+
+.ob-media-card-text {
+  font-size: 8px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.ob-media-card-category {
+  font-size: 6.5px;
+  font-family: monospace;
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-top: 2px;
+}
+
+.ob-media-card-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: #f59e0b;
+  color: #0c0e14;
+  border-radius: 50%;
+  padding: 2px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Media details panel */
+
+.ob-media-details {
+  width: 155px;
+  border-left: 1px solid rgba(30, 41, 59, 0.8);
+  background: #090b10;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  flex-shrink: 0;
+  text-align: left;
+}
+
+.ob-media-details-header {
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.ob-media-details-label {
+  font-size: 8px;
+  font-family: monospace;
+  color: #64748b;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.ob-media-details-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ob-media-details-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-top: 12px;
+}
+
+.ob-media-details-field {
+  font-size: 8px;
+  font-family: monospace;
+  color: #64748b;
+}
+
+.ob-media-details-field-label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.ob-media-details-input {
+  width: 100%;
+  background: #020617;
+  border: 1px solid #1e293b;
+  border-radius: var(--radius);
+  padding: 4px 6px;
+  font-size: 9px;
+  color: #e2e8f0;
+  outline: none;
+  font-family: var(--font-body);
+}
+
+.ob-media-details-input::placeholder {
+  color: #334155;
+}
+
+.ob-media-details-meta {
+  font-size: 7.5px;
+  font-family: monospace;
+  color: #94a3b8;
+  background: rgba(15, 23, 42, 0.5);
+  padding: 6px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(30, 41, 59, 0.4);
+}
+
+.ob-media-zoom-btn {
+  width: 100%;
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-family: var(--font-body);
+}
+
+.ob-media-zoom-btn:hover {
+  background: #f59e0b;
+  color: #0c0e14;
+  border-color: transparent;
+}
+
+/* Fullscreen preview overlay */
+
+.ob-media-fullscreen-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: rgba(2, 6, 23, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+.ob-media-fullscreen-card {
+  width: 100%;
+  max-width: 90%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid #334155;
+  position: relative;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+
+.ob-media-fullscreen-bg {
+  position: absolute;
+  inset: 0;
+}
+
+.ob-media-fullscreen-darken {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.ob-media-fullscreen-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 16px;
+}
+
+.ob-media-fullscreen-heading {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1.4;
+  margin: 0;
+  font-family: var(--font-body);
+}
+
+.ob-media-fullscreen-sub {
+  color: #cbd5e1;
+  font-size: 10px;
+  text-transform: uppercase;
+  font-family: monospace;
+  letter-spacing: 0.12em;
+  margin-top: 8px;
+}
+
+.ob-media-fullscreen-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-family: monospace;
+  font-size: 9px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ob-media-fullscreen-close:hover {
+  background: rgba(0, 0, 0, 0.8);
+}

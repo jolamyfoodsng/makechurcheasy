@@ -1,0 +1,114 @@
+name: CI — Build Check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  OBS_BUNDLE_DOWNLOAD_TIMEOUT_MS: 1200000
+  OBS_BUNDLE_DOWNLOAD_ATTEMPTS: 3
+
+jobs:
+  # ── 1) Quick frontend typecheck (fast, ~30s) ──
+  typecheck:
+    name: Typecheck + Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck and build
+        run: npm run build
+        env:
+          VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
+          VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
+          VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
+          VITE_AUTH_API_URL: ${{ secrets.VITE_AUTH_API_URL }}
+
+  # ── 2) Full Windows build (catches Rust + Tauri issues) ──
+  build-windows:
+    name: Build Windows Installer
+    needs: typecheck
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup LLVM
+        id: llvm
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18"
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare bundled assets
+        run: node scripts/prepare-bundle-assets.cjs
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
+          VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
+          VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
+          VITE_AUTH_API_URL: ${{ secrets.VITE_AUTH_API_URL }}
+          LIBCLANG_PATH: ${{ steps.llvm.outputs.LLVM_PATH }}/bin
+        with:
+          tauriScript: npx tauri
+
+      - name: Verify Windows binary has no llama runtime DLL dependency
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path src-tauri/target -Recurse -Filter "makechurcheasy.exe" -File | Select-Object -First 1
+          if (-not $exe) {
+            throw "Could not find built makechurcheasy.exe to inspect."
+          }
+          $llvmObjdump = Join-Path $env:LLVM_PATH "bin/llvm-objdump.exe"
+          if (-not (Test-Path $llvmObjdump)) {
+            throw "llvm-objdump.exe was not found at $llvmObjdump"
+          }
+          $deps = & $llvmObjdump -p $exe.FullName | Out-String
+          if ($deps -match "llama\.dll" -or $deps -match "ggml-base\.dll" -or $deps -match "ggml\.dll") {
+            Write-Host $deps
+            throw "Windows binary still depends on llama/ggml runtime DLLs."
+          }
+
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: makechurcheasy-windows
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe

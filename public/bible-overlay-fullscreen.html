@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920,height=1080">
+  <title>Bible Overlay — Fullscreen</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    @import url('/fonts/cmg-sans-fonts.css');
+
+    body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: transparent;
+      font-family: var(--font-family, "CMG Sans", sans-serif);
+    }
+
+    /* Hardware acceleration helper — forces GPU compositing */
+    .hw {
+      transform: translateZ(0);
+      backface-visibility: hidden;
+    }
+
+    /* Background layer — the active background (color, gradient, or image) */
+    #background {
+      position: absolute;
+      inset: 0;
+      background-color: var(--bg-color, transparent);
+      background-image: var(--bg-image, none);
+      background-size: cover;
+      background-position: center;
+      opacity: var(--bg-opacity, 1);
+      z-index: 0;
+      transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        filter 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        background-color 0.25s ease;
+      will-change: opacity, filter;
+    }
+
+    /* Crossfade overlay — holds the OLD background during dissolve transitions.
+       When the BG changes, the old BG is frozen here and faded out to reveal
+       the new BG on #background underneath. */
+    #bg-crossfade {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      will-change: opacity;
+    }
+
+    #background-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: var(--bg-opacity, 1);
+      z-index: 0;
+      display: none;
+      pointer-events: none;
+      transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      will-change: opacity;
+    }
+
+    /* Soft readability shade above BG and below text */
+    #background-shade {
+      position: absolute;
+      inset: 0;
+      background-image: var(--bg-shade-gradient, linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.42) 100%));
+      z-index: 2;
+      pointer-events: none;
+      display: var(--bg-shade-display, none);
+      opacity: 1;
+      transition: opacity var(--anim-duration, 400ms) cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Content layer — this is what transitions */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 3;
+      transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      will-change: opacity, transform;
+    }
+
+    #overlay.hidden {
+      opacity: 0;
+    }
+
+    #overlay.blank {
+      opacity: 0;
+    }
+
+    #content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      max-width: calc(100% - var(--safe-area, 80px) * 2);
+      padding: var(--padding, 60px);
+      will-change: transform;
+    }
+
+    #compare-layout {
+      position: relative;
+      z-index: 1;
+      display: none;
+      width: min(1800px, calc(100% - var(--safe-area, 80px) * 2));
+      min-height: min(820px, calc(100% - var(--safe-area, 80px) * 2));
+      padding: var(--padding, 60px);
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: clamp(28px, 2vw, 42px);
+      align-items: stretch;
+    }
+
+    #compare-layout.is-visible {
+      display: grid;
+    }
+
+    .compare-column {
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 18px;
+      padding: clamp(28px, 2vw, 38px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(8, 12, 20, 0.3);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .compare-column__header {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .compare-column__reference {
+      font-size: var(--compare-ref-font-size, 24px);
+      line-height: 1.2;
+      letter-spacing: 0.02em;
+      font-weight: var(--ref-font-weight, 400);
+      color: var(--ref-font-color, #cccccc);
+      text-transform: uppercase;
+    }
+
+    .compare-column__translation {
+      font-size: var(--compare-ref-meta-size, 15px);
+      line-height: 1.2;
+      letter-spacing: 0.12em;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.72);
+      text-transform: uppercase;
+    }
+
+    .compare-column__text-wrap {
+      min-height: 0;
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+
+    .compare-column__text {
+      width: 100%;
+      font-size: var(--compare-font-size, 40px);
+      font-weight: var(--font-weight, 400);
+      font-style: var(--font-style, normal);
+      color: var(--font-color, #FFFFFF);
+      line-height: var(--compare-line-height, var(--line-height, 1.6));
+      text-shadow: var(--text-shadow, 0 2px 8px rgba(0, 0, 0, 0.6));
+      -webkit-text-stroke: var(--outline-width, 0px) var(--outline-color, transparent);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      text-transform: var(--text-transform, none);
+    }
+
+    #verse-text {
+      width: 100%;
+      text-align: var(--text-align, center);
+      font-size: var(--font-size, 48px);
+      font-weight: var(--font-weight, normal);
+      font-style: var(--font-style, normal);
+      color: var(--font-color, #FFFFFF);
+      line-height: var(--line-height, 1.6);
+      text-shadow: var(--text-shadow, 0 2px 8px rgba(0, 0, 0, 0.6));
+      -webkit-text-stroke: var(--outline-width, 0px) var(--outline-color, transparent);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      text-transform: var(--text-transform, none);
+    }
+
+    #reference {
+      margin-top: var(--ref-spacing, 24px);
+      font-size: var(--ref-font-size, 24px);
+      font-weight: var(--ref-font-weight, normal);
+      color: var(--ref-font-color, #cccccc);
+      opacity: var(--ref-opacity, 1);
+      letter-spacing: var(--ref-letter-spacing, 0px);
+      text-transform: var(--ref-text-transform, none);
+      text-align: var(--ref-text-align, center);
+      display: block;
+      width: var(--ref-width, 100%);
+      margin-left: auto;
+      margin-right: auto;
+      padding: var(--ref-bg-padding, 0);
+      background: var(--ref-bg-color, transparent);
+      border-radius: var(--ref-bg-radius, 0);
+      border: var(--ref-bg-border, none);
+      line-height: 1;
+    }
+
+    #reference.top {
+      order: -1;
+      margin-top: 0;
+      margin-bottom: var(--ref-spacing, 24px);
+    }
+
+    #logo {
+      position: absolute;
+      z-index: 1;
+      width: var(--logo-size, 80px);
+      height: auto;
+      opacity: 0.8;
+      display: none;
+    }
+
+    #logo.visible {
+      display: block;
+    }
+
+    #logo.top-left {
+      top: 20px;
+      left: 20px;
+    }
+
+    #logo.top-right {
+      top: 20px;
+      right: 20px;
+    }
+
+    #logo.bottom-left {
+      bottom: 20px;
+      left: 20px;
+    }
+
+    #logo.bottom-right {
+      bottom: 20px;
+      right: 20px;
+    }
+
+    /* Animations */
+    .anim-fade-enter {
+      animation: fadeIn var(--anim-duration, 400ms) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    .anim-slide-up-enter {
+      animation: slideUp var(--anim-duration, 400ms) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    .anim-slide-left-enter {
+      animation: slideLeft var(--anim-duration, 400ms) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    .anim-scale-in-enter {
+      animation: scaleIn var(--anim-duration, 400ms) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    .anim-text-delayed-enter {
+      opacity: 0;
+      animation: delayedText var(--text-enter-duration, 320ms) cubic-bezier(0.4, 0, 0.2, 1) var(--text-enter-delay, 120ms) forwards;
+    }
+
+    .anim-shade-enter {
+      animation: revealShade var(--bg-enter-duration, 220ms) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(40px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes slideLeft {
+      from {
+        opacity: 0;
+        transform: translateX(60px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes scaleIn {
+      from {
+        opacity: 0;
+        transform: scale(0.96);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes delayedText {
+      from {
+        opacity: 0;
+        transform: translateY(14px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes revealShade {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="background" class="hw"></div>
+  <div id="bg-crossfade" class="hw"></div>
+  <video id="background-video" muted loop playsinline></video>
+  <div id="background-shade"></div>
+  <div id="overlay" class="hidden">
+    <div id="content">
+      <div id="verse-text"></div>
+      <div id="reference"></div>
+    </div>
+    <div id="compare-layout">
+      <section class="compare-column">
+        <div class="compare-column__header">
+          <div class="compare-column__reference" id="compare-reference-left"></div>
+          <div class="compare-column__translation" id="compare-translation-left"></div>
+        </div>
+        <div class="compare-column__text-wrap">
+          <div class="compare-column__text" id="compare-text-left"></div>
+        </div>
+      </section>
+      <section class="compare-column">
+        <div class="compare-column__header">
+          <div class="compare-column__reference" id="compare-reference-right"></div>
+          <div class="compare-column__translation" id="compare-translation-right"></div>
+        </div>
+        <div class="compare-column__text-wrap">
+          <div class="compare-column__text" id="compare-text-right"></div>
+        </div>
+      </section>
+    </div>
+    <img id="logo" src="" alt="">
+  </div>
+
+  <script>
+    /**
+     * Bible Overlay — Fullscreen
+     *
+     * Data delivery (in priority order):
+     * 1. CSS custom property --overlay-data  (injected by bibleObsService via OBS SetInputSettings)
+     * 2. BroadcastChannel  (same-origin popup windows)
+     * 3. localStorage polling  (fallback for same-origin contexts)
+     *
+     * No external WebSocket / HTTP server required.
+     */
+
+    const POLL_INTERVAL = 100;
+    const FONT_SIZE_MIN = 14;
+    const REF_FONT_SIZE_MIN = 16;
+    const CONTENT_PADDING_MIN = 18;
+    const CONTENT_LINE_HEIGHT_MIN = 1.04;
+    const COMPARE_TEXT_MIN = 16;
+
+    // ── XSS prevention ────────────────────────────────────────────────────────
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function safeSupText(value) {
+      return escapeHtml(value).replace(/\[(\d+)\]\s*/g, '<sup>$1</sup> ');
+    }
+    const COMPARE_REF_MIN = 11;
+    const COMPARE_META_MIN = 10;
+    const COMPARE_PADDING_MIN = 16;
+    const COMPARE_LAYOUT_PADDING_MIN = 22;
+
+    const overlay = document.getElementById('overlay');
+    const background = document.getElementById('background');
+    const bgCrossfade = document.getElementById('bg-crossfade');
+    const backgroundVideoEl = document.getElementById('background-video');
+    const backgroundShade = document.getElementById('background-shade');
+    const content = document.getElementById('content');
+    const verseText = document.getElementById('verse-text');
+    const reference = document.getElementById('reference');
+    const compareLayout = document.getElementById('compare-layout');
+    const compareReferenceLeft = document.getElementById('compare-reference-left');
+    const compareReferenceRight = document.getElementById('compare-reference-right');
+    const compareTranslationLeft = document.getElementById('compare-translation-left');
+    const compareTranslationRight = document.getElementById('compare-translation-right');
+    const compareTextLeft = document.getElementById('compare-text-left');
+    const compareTextRight = document.getElementById('compare-text-right');
+    const logo = document.getElementById('logo');
+
+    let currentSlideId = null;
+    let lastTimestamp = 0;
+    let hasShownOnce = false;  // Track first show vs subsequent verse changes
+    let baseFontSize = 48;
+    let baseRefFontSize = 24;
+    let basePadding = 60;
+
+    // ── Crossfade dissolve state ──
+    // Tracks the previous background style so we can freeze it on the crossfade
+    // overlay while the new background fades in underneath.
+    let lastBgStyle = { backgroundImage: 'none', backgroundColor: 'transparent' };
+    let lastBgFingerprint = '';
+    let lastVideoSrc = '';
+    let lastBgType = 'none'; // 'none' | 'color' | 'gradient' | 'image' | 'video'
+    let bgTransitionSuppressed = false;
+    let lastCssOverlayData = '';
+    let baseCompareFontSize = 40;
+    let baseCompareRefFontSize = 24;
+    let fitRafId = 0;
+
+    // ── Seamless video loop controller ──
+    // Uses dual video elements to eliminate the brief black flash when a video
+    // loops. When the active element is within 0.16s of ending, starts the
+    // secondary element, crossfades over 120ms, then swaps primary/secondary.
+    const seamlessLoopControllers = new WeakMap();
+
+    function hideVideoEl(el, clearSrc) {
+      if (!el) return;
+      el.style.display = 'none';
+      el.style.opacity = '0';
+      el.style.transition = '';
+      if (!el.paused) el.pause();
+      if (clearSrc) {
+        el.removeAttribute('src');
+        el.load();
+      }
+    }
+
+    function getSeamlessLoopController(primaryEl) {
+      if (!primaryEl || !primaryEl.parentElement) return null;
+      let ctrl = seamlessLoopControllers.get(primaryEl);
+      if (ctrl) return ctrl;
+      const secondary = document.createElement('video');
+      secondary.className = primaryEl.className;
+      secondary.muted = true;
+      secondary.playsInline = true;
+      secondary.preload = 'auto';
+      secondary.setAttribute('aria-hidden', 'true');
+      secondary.style.cssText = 'display:none;opacity:0;pointer-events:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;';
+      primaryEl.insertAdjacentElement('afterend', secondary);
+      ctrl = {
+        primary: primaryEl,
+        secondary,
+        active: primaryEl,
+        inactive: secondary,
+        rafId: 0,
+        swapping: false,
+        enabled: false,
+        src: '',
+      };
+      seamlessLoopControllers.set(primaryEl, ctrl);
+      return ctrl;
+    }
+
+    function stopSeamlessLoop(ctrl, opts) {
+      if (!ctrl) return;
+      ctrl.enabled = false;
+      ctrl.swapping = false;
+      if (ctrl.rafId) {
+        cancelAnimationFrame(ctrl.rafId);
+        ctrl.rafId = 0;
+      }
+      hideVideoEl(ctrl.secondary, !!(opts && opts.clearSrc));
+      if (opts && opts.resetActiveToPrimary) {
+        ctrl.active = ctrl.primary;
+        ctrl.inactive = ctrl.secondary;
+      }
+      if (opts && opts.clearSrc) ctrl.src = '';
+    }
+
+    function startSeamlessLoopMonitor(ctrl) {
+      if (!ctrl || ctrl.rafId) return;
+      const fadeMs = 120;
+      const onFrame = () => {
+        if (!ctrl.enabled) { ctrl.rafId = 0; return; }
+        const active = ctrl.active;
+        const inactive = ctrl.inactive;
+        if (!ctrl.swapping && active && !active.paused) {
+          const duration = Number(active.duration || 0);
+          const current = Number(active.currentTime || 0);
+          if (Number.isFinite(duration) && duration > 0.4) {
+            const remaining = duration - current;
+            if (remaining <= 0.16) {
+              ctrl.swapping = true;
+              inactive.currentTime = 0.001;
+              inactive.loop = false;
+              inactive.style.display = 'block';
+              inactive.style.opacity = '0';
+              inactive.style.transition = `opacity ${fadeMs}ms linear`;
+              active.style.transition = `opacity ${fadeMs}ms linear`;
+              const p = inactive.play();
+              if (p && p.catch) p.catch(() => { });
+              requestAnimationFrame(() => {
+                inactive.style.opacity = '1';
+                active.style.opacity = '0';
+              });
+              setTimeout(() => {
+                hideVideoEl(active, false);
+                inactive.style.transition = '';
+                ctrl.active = inactive;
+                ctrl.inactive = active;
+                ctrl.swapping = false;
+              }, fadeMs + 40);
+            }
+          }
+        }
+        ctrl.rafId = requestAnimationFrame(onFrame);
+      };
+      ctrl.rafId = requestAnimationFrame(onFrame);
+    }
+
+    // ── Clear token for cancellation ──
+    let bgClearToken = 0;
+    let lastAnimation = 'fade';
+
+    function clamp01(value, fallback) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.max(0, Math.min(1, n));
+    }
+
+    function parseColorToRgb(color) {
+      const raw = String(color || "").trim();
+      if (!raw) return { r: 0, g: 0, b: 0 };
+
+      if (raw[0] === "#") {
+        const hex = raw.slice(1);
+        if (hex.length === 3) {
+          const r = parseInt(hex[0] + hex[0], 16);
+          const g = parseInt(hex[1] + hex[1], 16);
+          const b = parseInt(hex[2] + hex[2], 16);
+          if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) return { r, g, b };
+        } else if (hex.length >= 6) {
+          const r = parseInt(hex.slice(0, 2), 16);
+          const g = parseInt(hex.slice(2, 4), 16);
+          const b = parseInt(hex.slice(4, 6), 16);
+          if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) return { r, g, b };
+        }
+      }
+
+      const rgbMatch = raw.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
+      if (rgbMatch) {
+        const r = Math.max(0, Math.min(255, Number(rgbMatch[1])));
+        const g = Math.max(0, Math.min(255, Number(rgbMatch[2])));
+        const b = Math.max(0, Math.min(255, Number(rgbMatch[3])));
+        if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) return { r, g, b };
+      }
+
+      return { r: 0, g: 0, b: 0 };
+    }
+
+    function buildShadeGradient(color, opacity) {
+      const o = clamp01(opacity, 0.42);
+      const topOpacity = clamp01(o * 0.62, 0.26);
+      const bottomOpacity = o;
+      const { r, g, b } = parseColorToRgb(color);
+      return `linear-gradient(180deg, rgba(${r}, ${g}, ${b}, ${topOpacity}) 0%, rgba(${r}, ${g}, ${b}, ${bottomOpacity}) 100%)`;
+    }
+
+    function ensureCmgSansFont(fontFamily) {
+      const raw = String(fontFamily || "").trim();
+      return /cmg\s*sans/i.test(raw) ? raw : '"CMG Sans", sans-serif';
+    }
+
+    function toCssFontWeight(weight, fallback) {
+      if (weight === "light") return "300";
+      if (weight === "bold") return "700";
+      if (weight === "normal") return "400";
+      const asString = String(weight || "").trim();
+      if (/^\d{3}$/.test(asString)) return asString;
+      return fallback;
+    }
+
+    function invertColorForBg(hex) {
+      try {
+        const c = hex.replace('#', '');
+        const r = parseInt(c.substring(0, 2), 16);
+        const g = parseInt(c.substring(2, 4), 16);
+        const b = parseInt(c.substring(4, 6), 16);
+        const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return lum > 0.55 ? '#1a1a2e' : '#FFFFFF';
+      } catch { return '#FFFFFF'; }
+    }
+
+    function applyTheme(theme) {
+      if (!theme) return;
+      const s = theme;
+      const root = document.documentElement.style;
+
+      root.setProperty('--font-family', ensureCmgSansFont(s.fontFamily));
+      baseFontSize = Number(s.fontSize || 48);
+      baseRefFontSize = Number(s.refFontSize || 24);
+      root.setProperty('--font-size', baseFontSize + 'px');
+      root.setProperty('--font-weight', toCssFontWeight(s.fontWeight, "400"));
+      root.setProperty('--font-style', s.fontStyle === 'italic' ? 'italic' : 'normal');
+      root.setProperty('--font-color', s.fontColor || '#FFFFFF');
+      root.setProperty('--line-height', String(s.lineHeight || 1.6));
+      root.setProperty('--text-align', s.textAlign || 'center');
+      root.setProperty('--text-shadow', s.textShadow || 'none');
+      root.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
+      root.setProperty('--outline-color', s.textOutline ? (s.textOutlineColor || '#000') : 'transparent');
+
+      root.setProperty('--ref-font-size', baseRefFontSize + 'px');
+      root.setProperty('--ref-font-weight', toCssFontWeight(s.refFontWeight, "400"));
+      root.setProperty('--ref-font-color', s.refFontColor || '#ffffff');
+      root.setProperty('--ref-text-transform', s.refTextTransform || 'none');
+      root.setProperty('--ref-letter-spacing', (s.refLetterSpacing || 0) + 'px');
+      root.setProperty('--ref-opacity', String(s.refOpacity ?? 1));
+      root.setProperty('--ref-spacing', (s.refSpacing ?? 24) + 'px');
+      // refTextAlign: "match" means inherit from parent's text-align
+      if (s.refTextAlign && s.refTextAlign !== 'match') {
+        root.setProperty('--ref-text-align', s.refTextAlign);
+      } else {
+        root.removeProperty('--ref-text-align');
+      }
+
+      // Reference background
+      const refBgEnabled = s.referenceBackgroundEnabled === true;
+      const refBgColor = s.referenceBackgroundColor || '#F4D17B';
+      const refBgStyle = s.referenceBackgroundStyle || 'solid';
+      const refBgRadius = Number(s.referenceBackgroundRadius ?? 12);
+      if (refBgEnabled) {
+        root.setProperty('--ref-width', 'fit-content');
+        if (refBgStyle === 'solid') {
+          root.setProperty('--ref-bg-color', refBgColor);
+          root.setProperty('--ref-bg-padding', '6px 14px');
+          root.setProperty('--ref-bg-radius', refBgRadius + 'px');
+          root.setProperty('--ref-bg-border', 'none');
+          // Invert text color for contrast
+          root.setProperty('--ref-font-color', invertColorForBg(refBgColor));
+        } else if (refBgStyle === 'pill') {
+          root.setProperty('--ref-bg-color', refBgColor);
+          root.setProperty('--ref-bg-padding', '6px 20px');
+          root.setProperty('--ref-bg-radius', '999px');
+          root.setProperty('--ref-bg-border', 'none');
+          root.setProperty('--ref-font-color', invertColorForBg(refBgColor));
+        } else if (refBgStyle === 'outline') {
+          root.setProperty('--ref-bg-color', 'transparent');
+          root.setProperty('--ref-bg-padding', '5px 13px');
+          root.setProperty('--ref-bg-radius', refBgRadius + 'px');
+          root.setProperty('--ref-bg-border', '2px solid ' + refBgColor);
+          root.setProperty('--ref-font-color', refBgColor);
+        }
+      } else {
+        root.setProperty('--ref-width', '100%');
+        root.setProperty('--ref-bg-color', 'transparent');
+        root.setProperty('--ref-bg-padding', '0');
+        root.setProperty('--ref-bg-radius', '0');
+        root.setProperty('--ref-bg-border', 'none');
+      }
+      baseCompareFontSize = Math.max(24, Math.round(baseFontSize * 0.76));
+      baseCompareRefFontSize = Math.max(16, Math.round(baseRefFontSize * 0.95));
+      root.setProperty('--compare-font-size', baseCompareFontSize + 'px');
+      root.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
+      root.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
+      root.setProperty('--compare-line-height', String(Math.max(1.22, Number(s.lineHeight || 1.6) - 0.08)));
+
+      root.setProperty('--bg-opacity', String(s.backgroundOpacity ?? 1));
+      root.setProperty(
+        '--bg-shade-gradient',
+        buildShadeGradient(
+          s.fullscreenShadeColor || '#000000',
+          s.fullscreenShadeOpacity ?? 0.42
+        )
+      );
+      root.setProperty('--bg-shade-display', s.fullscreenShadeEnabled === false ? 'none' : 'block');
+      basePadding = Number(s.padding || 60);
+      root.setProperty('--padding', basePadding + 'px');
+      root.setProperty('--safe-area', (s.safeArea || 40) + 'px');
+      const effectiveAnimDuration = Math.max(95, Math.min(170, Math.round((s.animationDuration || 400) * 0.38)));
+      root.setProperty('--anim-duration', effectiveAnimDuration + 'ms');
+      root.setProperty('--bg-enter-duration', Math.max(70, Math.round(effectiveAnimDuration * 0.42)) + 'ms');
+      root.setProperty('--text-enter-duration', Math.max(82, Math.round(effectiveAnimDuration * 0.54)) + 'ms');
+      root.setProperty('--text-enter-delay', Math.max(12, Math.round(effectiveAnimDuration * 0.08)) + 'ms');
+
+      // Text transform
+      root.setProperty('--text-transform', s.textTransform || 'none');
+
+      // ── Background with crossfade dissolve ──
+      const bgVideoUrl = String(s.backgroundVideo || '').trim();
+      const bgOpacity = String(s.backgroundOpacity ?? 1);
+
+      // Determine background color (solid or gradient)
+      const bgGradientAngle = s.bgGradientAngle ?? 135;
+      const bgGradientEnd = s.backgroundColorEnd || '';
+      const hasGradient = bgGradientEnd && bgGradientEnd !== s.backgroundColor;
+      const bgColorSolid = s.backgroundColor || 'transparent';
+      const bgColorFinal = hasGradient
+        ? `linear-gradient(${bgGradientAngle}deg, ${bgColorSolid}, ${bgGradientEnd})`
+        : bgColorSolid;
+
+      // Determine new background type
+      let newBgType = 'none';
+      if (bgVideoUrl) newBgType = 'video';
+      else if (s.backgroundImage && s.backgroundImage !== '__BG_SOURCE__') newBgType = 'image';
+      else if (hasGradient) newBgType = 'gradient';
+      else if (s.backgroundColor && s.backgroundColor !== 'transparent') newBgType = 'color';
+
+      // Compute a fingerprint of the new background to detect changes
+      const newBgFingerprint = [
+        bgVideoUrl,
+        bgColorFinal,
+        s.backgroundImage || '',
+        bgOpacity,
+      ].join('||');
+
+      if (newBgFingerprint === lastBgFingerprint) {
+        bgTransitionSuppressed = true;
+      } else {
+        bgTransitionSuppressed = false;
+        lastBgFingerprint = newBgFingerprint;
+      }
+
+      const bgTypeChanged = newBgType !== lastBgType;
+      const isTransitioningToVideo = bgTypeChanged && newBgType === 'video' && lastBgType !== 'none' && lastBgType !== 'video';
+      const isTransitioningFromVideo = bgTypeChanged && lastBgType === 'video' && newBgType !== 'video';
+
+      // If nothing changed (same fingerprint), skip the entire background block
+      // to prevent video flicker from repeated theme pushes.
+      const skipBg = bgTransitionSuppressed && !bgTypeChanged;
+
+      // Freeze current background on crossfade overlay before applying new background
+      if (!bgTransitionSuppressed && bgCrossfade) {
+        bgCrossfade.style.transition = 'none';
+        const cs = getComputedStyle(background);
+        bgCrossfade.style.backgroundImage = cs.backgroundImage;
+        bgCrossfade.style.backgroundColor = cs.backgroundColor;
+        bgCrossfade.style.background = cs.background;
+      }
+
+      if (!skipBg) {
+
+        if (bgVideoUrl) {
+          root.setProperty('--bg-image', 'none');
+          root.setProperty('--bg-color', 'transparent');
+          backgroundVideoEl.style.display = 'block';
+
+          const srcChanged = backgroundVideoEl.getAttribute('src') !== bgVideoUrl;
+          const ctrl = getSeamlessLoopController(backgroundVideoEl);
+
+          if (srcChanged) {
+            stopSeamlessLoop(ctrl, { clearSrc: true, resetActiveToPrimary: true });
+            backgroundVideoEl.dataset.src = bgVideoUrl;
+            backgroundVideoEl.src = bgVideoUrl;
+            backgroundVideoEl.load();
+            ctrl.secondary.src = bgVideoUrl;
+            ctrl.secondary.load();
+            ctrl.src = bgVideoUrl;
+            backgroundVideoEl.loop = false;
+            ctrl.enabled = true;
+            startSeamlessLoopMonitor(ctrl);
+            // Hide until canplay — crossfade overlay holds old bg until then
+            backgroundVideoEl.style.opacity = '0';
+            const onCanPlay = () => {
+              backgroundVideoEl.removeEventListener('canplay', onCanPlay);
+              backgroundVideoEl.style.transition = 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+              backgroundVideoEl.style.opacity = bgOpacity;
+              if (bgCrossfade && bgCrossfade.style.opacity !== '0') {
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => {
+                    bgCrossfade.style.transition = 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+                    bgCrossfade.style.opacity = '0';
+                  });
+                });
+              }
+              const playPromise = backgroundVideoEl.play();
+              if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => { });
+              }
+            };
+            backgroundVideoEl.addEventListener('canplay', onCanPlay, { once: true });
+            setTimeout(() => {
+              if (bgCrossfade && bgCrossfade.style.opacity !== '0') {
+                bgCrossfade.style.transition = 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+                bgCrossfade.style.opacity = '0';
+              }
+            }, 3000);
+          }
+          // When src hasn't changed, do NOT touch the video element at all.
+        } else {
+          // Fade video out smoothly when switching away from video
+          if (isTransitioningFromVideo && backgroundVideoEl.style.display !== 'none') {
+            backgroundVideoEl.style.transition = 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+            backgroundVideoEl.style.opacity = '0';
+            const ctrl = seamlessLoopControllers.get(backgroundVideoEl);
+            if (ctrl) {
+              if (ctrl.active) {
+                ctrl.active.style.transition = 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+                ctrl.active.style.opacity = '0';
+              }
+              if (ctrl.inactive) hideVideoEl(ctrl.inactive, false);
+            }
+            setTimeout(() => {
+              backgroundVideoEl.style.transition = '';
+              const c = seamlessLoopControllers.get(backgroundVideoEl);
+              if (c) stopSeamlessLoop(c, { clearSrc: true, resetActiveToPrimary: true });
+              if (backgroundVideoEl.getAttribute('src')) {
+                backgroundVideoEl.pause();
+                backgroundVideoEl.removeAttribute('src');
+                backgroundVideoEl.load();
+              }
+              backgroundVideoEl.style.display = 'none';
+            }, 550);
+          } else {
+            const ctrl = seamlessLoopControllers.get(backgroundVideoEl);
+            if (ctrl) stopSeamlessLoop(ctrl, { clearSrc: true, resetActiveToPrimary: true });
+            if (backgroundVideoEl.getAttribute('src')) {
+              backgroundVideoEl.pause();
+              backgroundVideoEl.removeAttribute('src');
+              backgroundVideoEl.load();
+            }
+            backgroundVideoEl.style.display = 'none';
+          }
+        }
+
+        if (!bgVideoUrl && s.backgroundImage) {
+          let bgUrl = s.backgroundImage;
+          if (bgUrl === '__BG_SOURCE__') {
+            root.setProperty('--bg-image', 'none');
+            root.setProperty('--bg-color', 'transparent');
+            root.setProperty('--bg-opacity', '1');
+          } else if (bgUrl === '__FROM_CSS__') {
+            const cssVal = getComputedStyle(document.documentElement).getPropertyValue('--bg-image').trim();
+            root.setProperty('--bg-image', cssVal || 'none');
+            if (cssVal) {
+              root.setProperty('--bg-color', 'transparent');
+              root.setProperty('--bg-opacity', bgOpacity);
+            }
+          } else if (bgUrl === '__FROM_LOCALSTORAGE__') {
+            const stored = localStorage.getItem('bible-overlay-bg-image');
+            bgUrl = stored || '';
+            root.setProperty('--bg-image', bgUrl ? `url(${bgUrl})` : 'none');
+          } else {
+            root.setProperty('--bg-image', `url(${bgUrl})`);
+          }
+        } else if (!bgVideoUrl) {
+          root.setProperty('--bg-image', 'none');
+        }
+
+        // Gradients are invalid for CSS background-color — route via background-image instead
+        if (hasGradient) {
+          root.setProperty('--bg-color', 'transparent');
+          // Only apply gradient to --bg-image when no actual image URL is set;
+          // otherwise the gradient would overwrite the image.
+          if (!bgVideoUrl && !s.backgroundImage) root.setProperty('--bg-image', bgColorFinal);
+        } else {
+          root.setProperty('--bg-color', bgColorFinal);
+        }
+
+        // Trigger crossfade dissolve if background changed and not suppressed
+        if (!bgTransitionSuppressed && bgCrossfade) {
+          if (isTransitioningToVideo) {
+            // Hold crossfade overlay until video fires canplay (handled above)
+            bgCrossfade.style.transition = 'none';
+            bgCrossfade.style.opacity = bgOpacity;
+          } else if (!bgVideoUrl) {
+            // Standard crossfade dissolve for non-video transitions
+            bgCrossfade.style.transition = 'none';
+            bgCrossfade.style.opacity = bgOpacity;
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                bgCrossfade.style.transition = 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+                bgCrossfade.style.opacity = '0';
+              });
+            });
+          }
+        } else if (bgTransitionSuppressed && bgCrossfade) {
+          bgCrossfade.style.transition = 'none';
+          bgCrossfade.style.opacity = '0';
+        }
+
+        // Track background type for next update
+        lastBgType = newBgType;
+
+      } // end skipBg guard
+
+      if (s.refPosition === 'top') {
+        reference.classList.add('top');
+      } else {
+        reference.classList.remove('top');
+      }
+
+      if (s.logoUrl) {
+        if (s.logoUrl === '__FROM_CSS__') {
+          // Logo data URI was stripped from the URL hash to stay within OBS
+          // URL limits — read it from the CSS custom property injected via
+          // OBS SetInputSettings { css: ":root { --logo-data-uri: url(...) }" }
+          const cssVal = getComputedStyle(document.documentElement).getPropertyValue('--logo-data-uri').trim();
+          if (cssVal && cssVal.startsWith('url(')) {
+            // Extract the data URI from url(...)
+            const inner = cssVal.slice(4, -1).replace(/^["']|["']$/g, '');
+            logo.src = inner;
+          }
+        } else {
+          logo.src = s.logoUrl;
+        }
+        logo.className = 'visible ' + (s.logoPosition || 'bottom-right');
+        root.setProperty('--logo-size', (s.logoSize || 80) + 'px');
+      } else {
+        logo.className = '';
+      }
+    }
+
+    function resolveSafeArea() {
+      const safeAreaRaw = getComputedStyle(document.documentElement)
+        .getPropertyValue("--safe-area")
+        .trim()
+        .replace("px", "");
+      return Number(safeAreaRaw) || 40;
+    }
+
+    function isOverflowing(node, width, height) {
+      if (!node) return false;
+      const epsilon = 1;
+      const nodeWidth = Math.max(node.scrollWidth, node.getBoundingClientRect().width);
+      const nodeHeight = Math.max(node.scrollHeight, node.getBoundingClientRect().height);
+      return nodeWidth > width + epsilon || nodeHeight > height + epsilon;
+    }
+
+    function isSingleLayoutOverflowing(targetWidth, targetHeight) {
+      if (!content) return false;
+      return (
+        isOverflowing(content, targetWidth, targetHeight) ||
+        isOverflowing(verseText, verseText.clientWidth || targetWidth, targetHeight) ||
+        (reference.style.display !== "none" && isOverflowing(reference, reference.clientWidth || targetWidth, targetHeight))
+      );
+    }
+
+    function autoScaleContent() {
+      if (!content) return;
+
+      // Auto-scale only on Windows (OBS CEF on Mac doesn't need it — fixed 1920x1080)
+      const isWindows = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
+      if (!isWindows) {
+        // Just apply base sizes without scaling
+        verseText.style.fontSize = Math.round(baseFontSize) + "px";
+        reference.style.fontSize = Math.round(baseRefFontSize) + "px";
+        verseText.style.lineHeight = String(Number(getComputedStyle(document.documentElement).getPropertyValue("--line-height")) || 1.6);
+        return;
+      }
+
+      // Reset to base theme sizes first
+      let verseSize = Math.max(FONT_SIZE_MIN, Math.round(baseFontSize));
+      let refSize = Math.max(REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
+      let padding = Math.max(CONTENT_PADDING_MIN, Math.round(basePadding));
+      let lineHeight = Math.max(CONTENT_LINE_HEIGHT_MIN, Number(getComputedStyle(document.documentElement).getPropertyValue("--line-height")) || 1.6);
+      let referenceSpacing = reference.classList.contains("top") ? 24 : 24;
+      verseText.style.fontSize = verseSize + "px";
+      reference.style.fontSize = refSize + "px";
+      verseText.style.lineHeight = String(lineHeight);
+      content.style.padding = padding + "px";
+      reference.style.marginTop = reference.classList.contains("top") ? "0px" : referenceSpacing + "px";
+      reference.style.marginBottom = reference.classList.contains("top") ? referenceSpacing + "px" : "0px";
+
+      const safeArea = resolveSafeArea();
+      const viewportWidth = document.body?.clientWidth || 1920;
+      const viewportHeight = document.body?.clientHeight || 1080;
+      const targetWidth = Math.max(420, viewportWidth - (safeArea * 2));
+      const targetHeight = Math.max(260, viewportHeight - (safeArea * 2));
+      const ratio = baseFontSize > 0 ? Math.max(0.6, baseRefFontSize / baseFontSize) : 0.6;
+      let guard = 0;
+
+      while (
+        isSingleLayoutOverflowing(targetWidth, targetHeight) &&
+        (
+          verseSize > FONT_SIZE_MIN ||
+          refSize > REF_FONT_SIZE_MIN ||
+          padding > CONTENT_PADDING_MIN ||
+          lineHeight > CONTENT_LINE_HEIGHT_MIN ||
+          referenceSpacing > 8
+        ) &&
+        guard < 220
+      ) {
+        if (verseSize > FONT_SIZE_MIN) {
+          verseSize -= 1;
+        }
+        refSize = Math.max(REF_FONT_SIZE_MIN, Math.round(verseSize * ratio));
+        if (isSingleLayoutOverflowing(targetWidth, targetHeight) && padding > CONTENT_PADDING_MIN) {
+          padding = Math.max(CONTENT_PADDING_MIN, padding - 2);
+        }
+        if (isSingleLayoutOverflowing(targetWidth, targetHeight) && lineHeight > CONTENT_LINE_HEIGHT_MIN) {
+          lineHeight = Math.max(CONTENT_LINE_HEIGHT_MIN, Number((lineHeight - 0.02).toFixed(2)));
+        }
+        if (isSingleLayoutOverflowing(targetWidth, targetHeight) && referenceSpacing > 8) {
+          referenceSpacing = Math.max(8, referenceSpacing - 2);
+        }
+        verseText.style.fontSize = verseSize + "px";
+        reference.style.fontSize = refSize + "px";
+        verseText.style.lineHeight = String(lineHeight);
+        content.style.padding = padding + "px";
+        reference.style.marginTop = reference.classList.contains("top") ? "0px" : referenceSpacing + "px";
+        reference.style.marginBottom = reference.classList.contains("top") ? referenceSpacing + "px" : "0px";
+        guard += 1;
+      }
+    }
+
+    function autoScaleCompareContent() {
+      if (!compareLayout || !compareTextLeft || !compareTextRight) return;
+
+      const isWindows = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
+      if (!isWindows) return;
+
+      const textNodes = [compareTextLeft, compareTextRight];
+      const refNodes = [compareReferenceLeft, compareReferenceRight];
+      const translationNodes = [compareTranslationLeft, compareTranslationRight];
+      const wrappers = Array.from(compareLayout.querySelectorAll('.compare-column__text-wrap'));
+
+      const baseText = Math.max(22, Math.round(baseCompareFontSize));
+      const baseRef = Math.max(14, Math.round(baseCompareRefFontSize));
+      const baseMeta = Math.max(12, Math.round(baseRef * 0.62));
+      let textSize = baseText;
+      let refSize = baseRef;
+      let metaSize = baseMeta;
+      let columnPadding = 38;
+      let layoutPadding = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(basePadding));
+      let lineHeight = Math.max(1.08, Number(getComputedStyle(document.documentElement).getPropertyValue("--compare-line-height")) || 1.4);
+      const safeArea = resolveSafeArea();
+      const viewportWidth = document.body?.clientWidth || 1920;
+      const viewportHeight = document.body?.clientHeight || 1080;
+      const targetWidth = Math.max(600, viewportWidth - (safeArea * 2));
+      const targetHeight = Math.max(320, viewportHeight - (safeArea * 2));
+      const columns = Array.from(compareLayout.querySelectorAll(".compare-column"));
+
+      const applyCompareValues = () => {
+        compareLayout.style.padding = layoutPadding + "px";
+        columns.forEach((column) => {
+          column.style.padding = columnPadding + "px";
+        });
+        textNodes.forEach((node) => {
+          node.style.fontSize = textSize + "px";
+          node.style.lineHeight = String(lineHeight);
+        });
+        refNodes.forEach((node) => {
+          node.style.fontSize = refSize + "px";
+        });
+        translationNodes.forEach((node) => {
+          node.style.fontSize = metaSize + "px";
+        });
+      };
+
+      const compareOverflowing = () => {
+        if (isOverflowing(compareLayout, targetWidth, targetHeight)) return true;
+        return columns.some((column, index) => {
+          const wrapper = wrappers[index];
+          return (
+            isOverflowing(column, column.clientWidth || targetWidth, column.clientHeight || targetHeight) ||
+            (wrapper && isOverflowing(wrapper, wrapper.clientWidth || targetWidth, wrapper.clientHeight || targetHeight)) ||
+            isOverflowing(textNodes[index], textNodes[index].clientWidth || targetWidth, targetHeight)
+          );
+        });
+      };
+
+      applyCompareValues();
+      let guard = 0;
+      while (
+        compareOverflowing() &&
+        (
+          textSize > COMPARE_TEXT_MIN ||
+          refSize > COMPARE_REF_MIN ||
+          metaSize > COMPARE_META_MIN ||
+          columnPadding > COMPARE_PADDING_MIN ||
+          layoutPadding > COMPARE_LAYOUT_PADDING_MIN ||
+          lineHeight > 1.08
+        ) &&
+        guard < 240
+      ) {
+        if (textSize > COMPARE_TEXT_MIN) textSize -= 1;
+        if (refSize > COMPARE_REF_MIN) refSize = Math.max(COMPARE_REF_MIN, refSize - 1);
+        if (metaSize > COMPARE_META_MIN) metaSize = Math.max(COMPARE_META_MIN, metaSize - 1);
+        if (compareOverflowing() && columnPadding > COMPARE_PADDING_MIN) {
+          columnPadding = Math.max(COMPARE_PADDING_MIN, columnPadding - 1);
+        }
+        if (compareOverflowing() && layoutPadding > COMPARE_LAYOUT_PADDING_MIN) {
+          layoutPadding = Math.max(COMPARE_LAYOUT_PADDING_MIN, layoutPadding - 2);
+        }
+        if (compareOverflowing() && lineHeight > 1.08) {
+          lineHeight = Math.max(1.08, Number((lineHeight - 0.02).toFixed(2)));
+        }
+        applyCompareValues();
+        guard += 1;
+      }
+    }
+
+    function scheduleContentFit() {
+      if (fitRafId) {
+        cancelAnimationFrame(fitRafId);
+      }
+      fitRafId = requestAnimationFrame(() => {
+        fitRafId = 0;
+        if (compareLayout && compareLayout.classList.contains("is-visible")) {
+          autoScaleCompareContent();
+        } else {
+          autoScaleContent();
+        }
+      });
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => {
+          requestAnimationFrame(() => {
+            if (compareLayout && compareLayout.classList.contains("is-visible")) {
+              autoScaleCompareContent();
+            } else {
+              autoScaleContent();
+            }
+          });
+        }).catch(() => { });
+      }
+    }
+
+    function setSingleLayoutVisible(visible) {
+      content.style.display = visible ? 'flex' : 'none';
+      if (compareLayout) {
+        compareLayout.classList.toggle('is-visible', !visible);
+      }
+    }
+
+    function clearEntranceAnimationClasses() {
+      content.classList.remove('anim-fade-enter', 'anim-slide-up-enter', 'anim-slide-left-enter', 'anim-scale-in-enter');
+      verseText.classList.remove('anim-text-delayed-enter');
+      reference.classList.remove('anim-text-delayed-enter');
+      if (backgroundShade) backgroundShade.classList.remove('anim-shade-enter');
+    }
+
+    function runEntranceAnimation(anim) {
+      clearEntranceAnimationClasses();
+      void content.offsetWidth;
+
+      if (anim === 'none') return;
+
+      if (anim === 'reveal-bg-then-text') {
+        if (backgroundShade) backgroundShade.classList.add('anim-shade-enter');
+        verseText.classList.add('anim-text-delayed-enter');
+        reference.classList.add('anim-text-delayed-enter');
+        return;
+      }
+
+      if (anim === 'fade') {
+        content.classList.add('anim-fade-enter');
+        return;
+      }
+
+      if (anim === 'slide-up') {
+        content.classList.add('anim-slide-up-enter');
+        return;
+      }
+
+      if (anim === 'scale-in') {
+        content.classList.add('anim-scale-in-enter');
+        return;
+      }
+
+      content.classList.add('anim-slide-left-enter');
+    }
+
+    function applySlide(data) {
+      if (!data) return;
+      // De-duplicate by timestamp
+      if (data.timestamp && data.timestamp <= lastTimestamp) return;
+      lastTimestamp = data.timestamp || 0;
+
+      if (!data.slide) {
+        // ── Smooth clear: fade out gracefully, cancel any pending clear ──
+        bgClearToken++;
+        overlay.classList.add('blank');
+        const token = bgClearToken;
+        setTimeout(() => {
+          if (token === bgClearToken) {
+            overlay.classList.add('hidden');
+            currentSlideId = null;
+            hasShownOnce = false;  // Reset so next appearance animates
+          }
+        }, 280);
+        return;
+      }
+
+      // Cancel any pending clear from a previous empty slide
+      bgClearToken++;
+
+      const slide = data.slide;
+      const isNew = slide.id !== currentSlideId;
+      const isSameVerse = slide.id === currentSlideId && !isNew;
+      currentSlideId = slide.id;
+
+      if (data.theme) {
+        applyTheme(data.theme);
+      }
+
+      if (data.blanked) {
+        overlay.classList.add('blank');
+        return;
+      } else {
+        overlay.classList.remove('blank');
+      }
+
+      // Always show the overlay when we have a slide — the dock/app controls
+      // visibility via OBS scene item enabled state, not via this flag.
+      // We scale content FIRST so the user never sees the unscaled font flash.
+
+      const compareColumns = Array.isArray(slide.columns) ? slide.columns.slice(0, 2) : [];
+      const isCompareLayout = slide.layout === 'compare' && compareColumns.length === 2;
+
+      if (isCompareLayout) {
+        setSingleLayoutVisible(false);
+        const [left, right] = compareColumns;
+        const normalizeCompareText = (value) => safeSupText(value);
+
+        compareReferenceLeft.textContent = String(left.reference || '').trim();
+        compareReferenceRight.textContent = String(right.reference || '').trim();
+        compareTranslationLeft.textContent = String(left.translation || '').trim();
+        compareTranslationRight.textContent = String(right.translation || '').trim();
+        compareTextLeft.innerHTML = normalizeCompareText(left.text);
+        compareTextRight.innerHTML = normalizeCompareText(right.text);
+        autoScaleCompareContent();
+      } else {
+        setSingleLayoutVisible(true);
+        const displayText = safeSupText(slide.text);
+        verseText.innerHTML = displayText;
+        const referenceText = typeof slide.reference === "string" ? slide.reference.trim() : "";
+        reference.textContent = referenceText;
+        reference.style.display = referenceText ? "block" : "none";
+        autoScaleContent();
+        scheduleContentFit();
+      }
+
+      overlay.classList.remove('hidden');
+
+      const anim = data.theme?.animation || 'fade';
+      lastAnimation = anim;
+
+      if (isNew) {
+        // First show — run entrance animation from start
+        if (!hasShownOnce) {
+          hasShownOnce = true;
+          runEntranceAnimation(anim);
+        }
+      } else if (isSameVerse) {
+        // Re-render of same verse (e.g. text size or font changed).
+        // Calculate elapsed time and set negative animationDelay to resume
+        // from the correct point so the animation doesn't restart visually.
+        if (anim !== 'none' && hasShownOnce) {
+          clearEntranceAnimationClasses();
+          void content.offsetWidth;
+          const effectiveDur = Math.max(95, Math.min(170, Math.round((data.theme?.animationDuration || 400) * 0.38)));
+          const elapsed = Date.now() % effectiveDur;
+          const delay = -(elapsed);
+          if (anim === 'fade') {
+            content.style.animationDelay = delay + 'ms';
+            content.classList.add('anim-fade-enter');
+          } else if (anim === 'slide-up') {
+            content.style.animationDelay = delay + 'ms';
+            content.classList.add('anim-slide-up-enter');
+          } else if (anim === 'slide-left') {
+            content.style.animationDelay = delay + 'ms';
+            content.classList.add('anim-slide-left-enter');
+          } else if (anim === 'scale-in') {
+            content.style.animationDelay = delay + 'ms';
+            content.classList.add('anim-scale-in-enter');
+          }
+          // Clear animationDelay after animation completes
+          setTimeout(() => { content.style.animationDelay = ''; }, effectiveDur + 50);
+        }
+      }
+    }
+
+    function readFromCssVar() {
+      try {
+        const raw = getComputedStyle(document.documentElement).getPropertyValue('--overlay-data').trim();
+        if (!raw || raw === lastCssOverlayData) return false;
+        lastCssOverlayData = raw;
+        const normalized = raw.replace(/^['"]|['"]$/g, '');
+        if (!normalized) return false;
+        const data = JSON.parse(decodeURIComponent(normalized));
+        applySlide(data);
+        return true;
+      } catch { /* parse error */ }
+      return false;
+    }
+
+    // --- Method 1: Read from URL hash (OBS updates URL via SetInputSettings) ---
+    function readFromUrlHash() {
+      try {
+        const hash = window.location.hash;
+        if (hash && hash.startsWith('#data=')) {
+          const encoded = hash.slice(6);
+          const data = JSON.parse(decodeURIComponent(encoded));
+          applySlide(data);
+          return true;
+        }
+      } catch { /* parse error */ }
+      return false;
+    }
+
+    // --- Determine tab-specific data channel from URL query param ---
+    const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
+    const _storageKey = _tabParam === 'worship' ? 'worship-overlay-data' : 'bible-overlay-data';
+    const _channelName = _tabParam === 'worship' ? 'obs-church-studio-worship-overlay' : 'obs-church-studio-bible-overlay';
+
+    // --- Method 2: BroadcastChannel (same-origin windows) ---
+    try {
+      const bc = new BroadcastChannel(_channelName);
+      bc.onmessage = (e) => { applySlide(e.data); };
+    } catch { /* not supported */ }
+
+    // --- Method 3: localStorage polling (same-origin fallback) ---
+    function readFromLocalStorage() {
+      try {
+        const raw = localStorage.getItem(_storageKey);
+        if (raw) {
+          const data = JSON.parse(raw);
+          applySlide(data);
+          return true;
+        }
+      } catch { /* parse error */ }
+      return false;
+    }
+
+    // --- hashchange listener: OBS updates the URL hash without reloading ---
+    // This is the primary update path. When bibleObsService calls SetInputSettings
+    // with only the hash fragment changed, OBS/CEF fires hashchange instead of
+    // reloading the page. The background stays static and only text updates.
+    window.addEventListener('hashchange', () => {
+      readFromUrlHash();
+    });
+
+    // --- Unified polling loop ---
+    setInterval(() => {
+      if (!readFromCssVar() && !readFromUrlHash()) {
+        readFromLocalStorage();
+      }
+    }, POLL_INTERVAL);
+
+    if (window.ResizeObserver) {
+      const resizeObserver = new ResizeObserver(() => {
+        scheduleContentFit();
+      });
+      resizeObserver.observe(document.body);
+      resizeObserver.observe(content);
+      resizeObserver.observe(compareLayout);
+    }
+
+    // Initial read
+    readFromCssVar() || readFromUrlHash() || readFromLocalStorage();
+  </script>
+</body>
+
+</html>

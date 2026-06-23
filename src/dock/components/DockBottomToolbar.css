@@ -1,0 +1,249 @@
+/**
+ * DockBottomToolbar.css
+ *
+ * Default (>250px): single row + clear button full-width below
+ * ≤250px: two-row compact (toggle + collapse | action icons incl. delete)
+ */
+
+/* ── Container ── */
+.dock-btm-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--dock-border, #2a2d38);
+  background: var(--dock-surface, #181D29);
+  padding: 8px 10px;
+  min-height: 44px;
+}
+
+/* ── Main row ── */
+.dock-btm-toolbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Segmented control ── */
+.dock-btm-segmented {
+  display: flex;
+  /* border: 1px solid var(--border, #2C3448); */
+  border-radius: var(--radius, 4px);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.dock-btm-segmented__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #7E8AA3);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  line-height: 1;
+}
+
+.dock-btm-segmented__item:not(:last-child) {
+  border-right: 1px solid var(--border, #2C3448);
+}
+
+.dock-btm-segmented__item--active {
+  background: var(--primary, #5B5FCF);
+  color: #fff;
+  font-weight: 600;
+}
+
+.dock-btm-segmented__item:not(.dock-btm-segmented__item--active):hover {
+  background: var(--surface-hover, #2A2A2E);
+  color: var(--text-primary, #F8FAFC);
+}
+
+/* ── Morphing pulse ── */
+@keyframes dock-btm-morph-pulse {
+  0% {
+    opacity: 1;
+  }
+
+  40% {
+    opacity: 0.45;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+.dock-btm-segmented--morphing .dock-btm-segmented__item--active {
+  animation: dock-btm-morph-pulse 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Divider ── */
+.dock-btm-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border, #2C3448);
+  flex-shrink: 0;
+}
+
+/* ── Actions group (children + collapse button) ── */
+.dock-btm-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Spacer ── */
+.dock-btm-spacer {
+  flex: 1;
+}
+
+/* ── Icon button ── */
+.dock-btm-toolbar__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border: 1px solid var(--border, #2C3448);
+  border-radius: var(--radius, 4px);
+  background: var(--surface-raised, #242428);
+  color: var(--text-muted, #7E8AA3);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.dock-btm-toolbar__icon-btn:hover {
+  background: var(--surface-hover, #2A2A2E);
+  color: var(--text-primary, #F8FAFC);
+  border-color: var(--border-strong, #6D7CFF);
+}
+
+.dock-btm-toolbar__icon-btn:active {
+  background: var(--surface-active, #2E2E34);
+}
+
+/* ── Clear button — full-width bar below row at default width ── */
+.dock-btm-toolbar__clear {
+  grid-column: span 4;
+  min-width: 50px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  /* Force full-width break to second line */
+
+  order: 10;
+  margin-top: 8px;
+  padding: 6px;
+  border: 1px solid var(--error-border, #7F2D38);
+  border-radius: var(--radius, 4px);
+  background: var(--error-bg, #3B1F26);
+  color: var(--error, #DC2626);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.dock-btm-toolbar__clear:hover {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: var(--error, #DC2626);
+}
+
+.dock-btm-toolbar__clear:active {
+  background: rgba(220, 38, 38, 0.15);
+}
+
+.dock-btm-toolbar__clear:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Collapsed state ── */
+.dock-btm-toolbar--collapsed {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  /* align-items: center; */
+  gap: 6px;
+  padding: 6px 10px;
+}
+
+.dock-btm-toolbar--collapsed .dock-btm-toolbar__clear {
+  flex: 1;
+  order: 0;
+  margin-top: 0;
+}
+
+.dock-btm-toolbar--collapsed .dock-btm-toolbar__icon-btn {
+  flex: 0 0 28px;
+}
+
+/* ══════════════════════════════════════════════════
+   ≤250px: Compact two-row layout
+   Row 1: Full | LT (flex:1) + collapse button
+   Row 2: action icons inline including delete
+   ══════════════════════════════════════════════════ */
+@media screen and (max-width: 250px) {
+  .dock-btm-toolbar {
+    gap: 6px;
+    padding: 6px 8px;
+    min-height: auto;
+  }
+
+  .dock-btm-toolbar__row {
+    gap: 6px;
+  }
+
+  /* Toggle takes ~90% width */
+  .dock-btm-segmented {
+    flex: 1;
+  }
+
+  .dock-btm-segmented__item {
+    flex: 1;
+    padding: 0;
+    height: 26px;
+  }
+
+  /* Hide divider, spacer — not needed in compact mode */
+  .dock-btm-divider,
+  .dock-btm-spacer {
+    display: none;
+  }
+
+  /* Action icons compact */
+  .dock-btm-toolbar__icon-btn,
+  .dock-btm-toolbar__row .dock-line-popover {
+    width: 26px;
+    height: 26px;
+  }
+
+  /* Clear button becomes inline icon — same size as other action buttons */
+  .dock-btm-toolbar__clear {
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    padding: 0;
+    margin-top: 0;
+    order: 0;
+    border-radius: var(--radius, 4px);
+    gap: 0;
+  }
+
+  .dock-btm-toolbar__clear span {
+    display: none;
+  }
+
+  .dock-btm-toolbar__clear svg {
+    flex-shrink: 0;
+  }
+}

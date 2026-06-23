@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Frontline Lower Third</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        #toggleBtn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 20px;
+            background: #f9b10f;
+            color: #000;
+            font-family: 'Josefin Sans', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Josefin Sans', sans-serif;
+        }
+
+        .overlay {
+            position: absolute;
+            left: 30%;
+            top: 80%;
+            width: 40%;
+            height: 130px;
+            display: flex;
+            transform: skewX(-17deg) translateX(-800px);
+            opacity: 0;
+            animation: panelIn .6s cubic-bezier(.2, .8, .2, 1) forwards;
+        }
+
+        .logo-box {
+            width: 17.5%;
+            height: 100%;
+            background: #fff;
+            position: relative;
+            overflow: hidden;
+            transform-origin: left center;
+            animation: logoIn .4s .15s forwards;
+        }
+
+        .logo-box img {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 80%;
+            height: 80%;
+            object-fit: contain;
+            transform: translate(-50%, -50%) skewX(17deg);
+        }
+
+        .player-main {
+            width: 82.5%;
+            height: 100%;
+            background: #141414;
+            position: relative;
+        }
+
+        .accent-bar {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 50%;
+            background: #fe0000;
+        }
+
+        .header {
+            position: absolute;
+            left: 7.5%;
+            top: 10%;
+            color: #fff;
+            font-size: 36px;
+            font-weight: 700;
+            transform: skewX(17deg);
+            opacity: 0;
+            animation: nameIn .35s .35s forwards;
+            z-index: 2;
+        }
+
+        .subtitle {
+            position: absolute;
+            left: 7.5%;
+            bottom: 10%;
+            color: #e0e0e0;
+            font-size: 32px;
+            font-weight: 400;
+            transform: skewX(17deg);
+            opacity: 0;
+            animation: roleIn .35s .45s forwards;
+            z-index: 2;
+        }
+
+        @keyframes panelIn {
+            from {
+                opacity: 0;
+                transform: skewX(-17deg) translateX(-800px);
+            }
+
+            to {
+                opacity: 1;
+                transform: skewX(-17deg) translateX(0);
+            }
+        }
+
+        @keyframes panelOut {
+            from {
+                opacity: 1;
+                transform: skewX(-17deg) translateX(0);
+            }
+
+            to {
+                opacity: 0;
+                transform: skewX(-17deg) translateX(-800px);
+            }
+        }
+
+        @keyframes logoIn {
+            from {
+                opacity: 0;
+                transform: scale(.5);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @keyframes nameIn {
+            from {
+                opacity: 0;
+                transform: skewX(17deg) translateX(40px);
+            }
+
+            to {
+                opacity: 1;
+                transform: skewX(17deg) translateX(0);
+            }
+        }
+
+        @keyframes roleIn {
+            from {
+                opacity: 0;
+                transform: skewX(17deg) translateY(15px);
+            }
+
+            to {
+                opacity: 1;
+                transform: skewX(17deg) translateY(0);
+            }
+        }
+
+        .overlay.out {
+            animation: panelOut .55s forwards;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="toggleBtn">OUT</button>
+    <div class="overlay" id="lowerThird">
+        <div class="logo-box">
+            <img src="https://upload.wikimedia.org/wikipedia/en/thumb/5/53/Arsenal_FC.svg/1280px-Arsenal_FC.svg.png">
+        </div>
+        <div class="player-main">
+            <div class="accent-bar"></div>
+            <div class="header">
+                Bukayo Saka
+            </div>
+            <div class="subtitle">
+                Arsenal Right Winger
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const overlay = document.getElementById('lowerThird');
+        const btn = document.getElementById('toggleBtn');
+
+        let visible = true;
+
+        function showLowerThird(data = {}) {
+            if (data.header)
+                document.querySelector('.header').textContent = data.header;
+            if (data.subtitle)
+                document.querySelector('.subtitle').textContent = data.subtitle;
+            if (data.logo)
+                document.querySelector('.logo-box img').src = data.logo;
+            overlay.classList.remove('out');
+            overlay.style.animation = 'none';
+            void overlay.offsetWidth;
+            overlay.style.animation = 'panelIn .6s cubic-bezier(.2,.8,.2,1) forwards';
+            visible = true;
+            btn.textContent = 'OUT';
+        }
+
+        function hideLowerThird() {
+            overlay.classList.add('out');
+            visible = false;
+            btn.textContent = 'IN';
+        }
+
+        btn.addEventListener('click', () => {
+            if (visible) {
+                hideLowerThird();
+            } else {
+                showLowerThird();
+            }
+        });
+    </script>
+
+</body>
+
+</html>
