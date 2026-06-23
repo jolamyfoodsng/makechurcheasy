@@ -100,19 +100,45 @@ jobs:
           cargo clean
           Remove-Item -Recurse -Force target -ErrorAction SilentlyContinue
 
-      # ── Verify LLVM / libclang ──
-      - name: Verify LLVM installation
+      # ── Verify LLVM / libclang + resolve LIBCLANG_PATH ──
+      - name: Verify LLVM installation and resolve LIBCLANG_PATH
+        id: resolve-llvm
         shell: pwsh
         run: |
-          Write-Host "LLVM_PATH=$env:LLVM_PATH"
-          if (-not $env:LLVM_PATH) {
-            throw "LLVM_PATH is not set. The install-llvm-action may have failed."
+          # Try action output first, then env var, then common install paths
+          $llvmPath = "${{ steps.llvm.outputs.LLVM_PATH }}"
+          if (-not $llvmPath) { $llvmPath = $env:LLVM_PATH }
+
+          if (-not $llvmPath) {
+            # Fallback: search common Windows LLVM install locations
+            $candidates = @(
+              "C:\Program Files\LLVM",
+              "C:\Program Files (x86)\LLVM",
+              "$env:USERPROFILE\scoop\apps\llvm\current"
+            )
+            foreach ($c in $candidates) {
+              if (Test-Path "$c\bin\libclang.dll") {
+                $llvmPath = $c
+                break
+              }
+            }
           }
-          $clang = Join-Path $env:LLVM_PATH "bin/clang.exe"
-          $libclang = Join-Path $env:LLVM_PATH "bin/libclang.dll"
-          if (-not (Test-Path $clang))   { throw "clang.exe not found at $clang" }
-          if (-not (Test-Path $libclang)) { throw "libclang.dll not found at $libclang" }
-          Write-Host "LLVM verified: clang.exe and libclang.dll found"
+
+          if (-not $llvmPath) {
+            throw "Cannot find LLVM installation. LLVM_PATH='$env:LLVM_PATH', action output='${{ steps.llvm.outputs.LLVM_PATH }}'"
+          }
+
+          $libclang = Join-Path $llvmPath "bin/libclang.dll"
+          if (-not (Test-Path $libclang)) {
+            throw "libclang.dll not found at $libclang"
+          }
+
+          Write-Host "LLVM_PATH=$llvmPath"
+          Write-Host "LIBCLANG_PATH=$llvmPath\bin"
+          Write-Host "LLVM verified: libclang.dll found"
+
+          # Export for downstream steps
+          echo "RESOLVED_LLVM_PATH=$llvmPath" >> $env:GITHUB_OUTPUT
 
       # ── Install frontend deps ──
       - name: Install dependencies
@@ -174,7 +200,7 @@ jobs:
           VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
           VITE_AUTH_API_URL: ${{ secrets.VITE_AUTH_API_URL }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          LIBCLANG_PATH: ${{ steps.llvm.outputs.LLVM_PATH }}/bin
+          LIBCLANG_PATH: ${{ steps.resolve-llvm.outputs.RESOLVED_LLVM_PATH }}/bin
           CMAKE_GENERATOR: Ninja
         with:
           tauriScript: npx tauri
