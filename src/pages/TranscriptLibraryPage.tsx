@@ -5,25 +5,38 @@
 // Manages completed transcripts: import, search, filter, export, translate.
 // ────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  Search, Mic, FileText, Clock, BookOpen, Timer,
-  Globe, Calendar, Tag, LayoutGrid, List, Download, MoreVertical,
-  Wand2, ChevronDown, CheckCircle2, Trash2, X,
+  BookOpen,
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
+  Download,
+  FileText,
+  Globe,
+  LayoutGrid, List,
+  Mic,
+  MoreVertical,
+  Tag,
+  Timer,
+  Trash2,
+  Wand2,
+  X
 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "./TranscriptLibraryPage.css";
 
+import {
+  deleteTranscript,
+  formatDuration,
+  getTranscriptStats,
+  loadTranscripts,
+} from "../transcripts/transcriptService";
 import type {
   Transcript,
-  TranscriptLibraryStats,
   TranscriptFilters,
+  TranscriptLibraryStats,
 } from "../transcripts/transcriptTypes";
-import {
-  loadTranscripts,
-  deleteTranscript,
-  getTranscriptStats,
-  formatDuration,
-} from "../transcripts/transcriptService";
 
 // ── Stat card config ─────────────────────────────────────────────────────────
 

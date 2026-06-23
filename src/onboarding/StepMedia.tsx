@@ -8,28 +8,8 @@
 import {
   ChevronRight
 } from "lucide-react";
-import { useState } from "react";
 
 /* ── Mock Data ── */
-
-interface MediaAsset {
-  id: string;
-  title: string;
-  category: "images" | "videos" | "graphics" | "backgrounds";
-  gradient: string;
-  overlayText: string;
-}
-
-const ASSETS: MediaAsset[] = [
-  { id: "a1", title: "Welcome Slide", category: "images", gradient: "linear-gradient(135deg, #7c3aed, #4f46e5, #ec4899)", overlayText: "Welcome to Worship" },
-  { id: "a2", title: "Announcement", category: "graphics", gradient: "linear-gradient(135deg, #f59e0b, #ea580c, #dc2626)", overlayText: "Sermon Series Starts Sunday" },
-  { id: "a3", title: "Prayer Screen", category: "backgrounds", gradient: "linear-gradient(135deg, #172554, #1e293b, #1e1b4b)", overlayText: "Join Us For Evening Prayer" },
-  { id: "a4", title: "Youth Ministry", category: "graphics", gradient: "linear-gradient(135deg, #0ea5e9, #8b5cf6, #4c1d95)", overlayText: "YTH Night • Wed 7 PM" },
-];
-
-type CategoryFilter = "all" | "images" | "graphics" | "backgrounds";
-
-const CATEGORIES: CategoryFilter[] = ["all", "images", "graphics", "backgrounds"];
 
 /* ── Component ── */
 
@@ -40,15 +20,7 @@ export default function StepMedia({
   onNext: () => void;
   onBack: () => void;
 }) {
-  const [category, setCategory] = useState<CategoryFilter>("all");
-  const [selectedId, setSelectedId] = useState("a1");
-  const [customText, setCustomText] = useState("");
-  const [showPreview, setShowPreview] = useState(false);
 
-  const selected = ASSETS.find((a) => a.id === selectedId) || ASSETS[0];
-  const filtered = ASSETS.filter(
-    (a) => category === "all" || a.category === category,
-  );
 
   return (
     <div className="ob-card">

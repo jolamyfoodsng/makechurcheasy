@@ -9,41 +9,40 @@
  * and sends results to OBS via BroadcastChannel.
  */
 
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import {
-  Mic,
-  Copy,
-  Download,
   BookOpen,
-  Radio,
-  StopCircle,
+  Check,
   CheckCircle,
   ChevronDown,
-  Search,
-  Check,
-  Link,
-  HelpCircle,
   ChevronRight,
+  Copy,
+  Download,
+  HelpCircle,
+  Link,
+  Mic,
+  Radio,
+  StopCircle
 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { bibleObsService } from "../bible/bibleObsService";
 import type { BibleSlide } from "../bible/types";
-import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
+import CreditsDisplay from "../components/CreditsDisplay";
+import { useAuth } from "../contexts/AuthContext";
+import { track } from "../services/analytics";
 import { getDeviceId } from "../services/authService";
+import { calculateTranscriptionCredits, deductCreditsWithSync } from "../services/credits";
+import { checkEntitlement } from "../services/entitlementClient";
+import { getEffectivePlan } from "../services/licenseService";
+import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService } from "../services/obsService";
-import { deductCreditsWithSync, calculateTranscriptionCredits } from "../services/credits";
+import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { loadData } from "../services/store";
+import { trackVoiceSessionCompleted, trackVoiceSessionStarted } from "../services/tracking";
 import type { VoiceBibleCandidate } from "../services/voiceBibleTypes";
 import { MATCH_SOURCE_LABEL } from "../services/voiceBibleTypes";
 import { isWhisperReady, loadWhisperModel } from "../services/whisperService";
-import { getOverlayBaseUrlSync } from "../services/overlayUrl";
-import { track } from "../services/analytics";
-import { trackVoiceSessionStarted, trackVoiceSessionCompleted } from "../services/tracking";
-import { saveTranscript, createTranscript } from "../transcripts/transcriptService";
-import { loadData } from "../services/store";
-import { useAuth } from "../contexts/AuthContext";
-import { checkEntitlement } from "../services/entitlementClient";
-import { getEffectivePlan } from "../services/licenseService";
-import CreditsDisplay from "../components/CreditsDisplay";
+import { createTranscript, saveTranscript } from "../transcripts/transcriptService";
 
 // ── Connectivity hook ──
 function useOnlineStatus(): boolean {
