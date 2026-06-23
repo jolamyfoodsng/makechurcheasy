@@ -39,7 +39,7 @@ const CATEGORY_ICONS: Record<TemplateCategory | "all", string> = {
 /** Region type → fill color for SVG preview */
 function regionColor(type: string): string {
   switch (type) {
-    case "obs-scene": return "#6c5ce7";
+    case "obs-scene": return "#3B82F6";
     case "video-input": return "#0078d4";
     case "image-overlay": return "#00bcd4";
     case "media": return "#9c27b0";

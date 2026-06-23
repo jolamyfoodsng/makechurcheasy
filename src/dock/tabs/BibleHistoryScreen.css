@@ -11,8 +11,8 @@
   z-index: 200;
   display: flex;
   flex-direction: column;
-  background: var(--dock-bg, #0F1115);
-  color: var(--dock-text, #F3F6FB);
+  background: var(--dock-bg, #0F172A);
+  color: var(--dock-text, #F8FAFC);
   font-family: var(--dock-font-body, "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   font-size: 11px;
   line-height: 1.4;
@@ -39,8 +39,8 @@
   gap: 8px;
   height: 40px;
   padding: 0 8px;
-  background: var(--dock-surface, #181D29);
-  border-bottom: 1px solid var(--dock-border, #2C3448);
+  background: var(--dock-surface, #111827);
+  border-bottom: 1px solid var(--dock-border, #334155);
   flex-shrink: 0;
 }
 
@@ -60,15 +60,15 @@
 }
 
 .bible-history-header__back:hover {
-  background: var(--dock-surface-hover, #262D40);
-  color: var(--dock-text, #F3F6FB);
+  background: var(--dock-surface-hover, #334155);
+  color: var(--dock-text, #F8FAFC);
 }
 
 .bible-history-header__title {
   font-family: var(--dock-font-heading, "Inter", "SF Pro Display", sans-serif);
   font-size: 12px;
   font-weight: 600;
-  color: var(--dock-text, #F3F6FB);
+  color: var(--dock-text, #F8FAFC);
   margin: 0;
   white-space: nowrap;
 }
@@ -85,15 +85,15 @@
   margin: 6px 8px 0;
   padding: 0 8px;
   height: 30px;
-  background: var(--dock-input-bg, #121722);
-  border: 1px solid var(--dock-input-border, #2E364A);
+  background: var(--dock-input-bg, #0F172A);
+  border: 1px solid var(--dock-input-border, #334155);
   border-radius: 3px;
   flex-shrink: 0;
   transition: border-color 150ms;
 }
 
 .bible-history-search:focus-within {
-  border-color: var(--dock-accent, #5b6abf);
+  border-color: var(--dock-accent, #1D4ED8);
 }
 
 .bible-history-search__icon {
@@ -107,7 +107,7 @@
   height: 100%;
   border: none;
   background: transparent;
-  color: var(--dock-text, #F3F6FB);
+  color: var(--dock-text, #F8FAFC);
   font-family: inherit;
   font-size: 11px;
   outline: none;
@@ -134,8 +134,8 @@
 }
 
 .bible-history-search__clear:hover {
-  background: var(--dock-surface-hover, #262D40);
-  color: var(--dock-text, #F3F6FB);
+  background: var(--dock-surface-hover, #334155);
+  color: var(--dock-text, #F8FAFC);
 }
 
 /* ── Filter Row ── */
@@ -152,9 +152,9 @@
   gap: 4px;
   height: 26px;
   padding: 0 8px;
-  border: 1px solid var(--dock-border, #2C3448);
+  border: 1px solid var(--dock-border, #334155);
   border-radius: 3px;
-  background: var(--dock-surface, #181D29);
+  background: var(--dock-surface, #111827);
   color: var(--dock-text-secondary, #B6C0D4);
   font-family: inherit;
   font-size: 10px;
@@ -163,15 +163,15 @@
 }
 
 .bible-history-filter-btn:hover {
-  background: var(--dock-surface-hover, #262D40);
-  border-color: var(--dock-border-active, #7083cc);
-  color: var(--dock-text, #F3F6FB);
+  background: var(--dock-surface-hover, #334155);
+  border-color: var(--dock-border-active, #2563EB);
+  color: var(--dock-text, #F8FAFC);
 }
 
 .bible-history-filter-btn--active {
   background: var(--dock-accent-soft, #1e2340);
-  border-color: var(--dock-accent-soft-border, #4a5fb3);
-  color: var(--dock-text, #F3F6FB);
+  border-color: var(--dock-accent-soft-border, #3B82F6);
+  color: var(--dock-text, #F8FAFC);
 }
 
 /* ── Bottom Sheet (Filter / Sort) ── */
@@ -197,8 +197,8 @@
 
 .bible-history-sheet {
   width: 100%;
-  background: var(--dock-surface, #181D29);
-  border-top: 1px solid var(--dock-border, #2C3448);
+  background: var(--dock-surface, #111827);
+  border-top: 1px solid var(--dock-border, #334155);
   border-radius: 3px 3px 0 0;
   padding-bottom: env(safe-area-inset-bottom, 0);
   animation: bible-history-sheet-up 180ms ease-out;
@@ -219,14 +219,14 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--dock-border, #2C3448);
+  border-bottom: 1px solid var(--dock-border, #334155);
 }
 
 .bible-history-sheet__title {
   font-family: var(--dock-font-heading, "Inter", "SF Pro Display", sans-serif);
   font-size: 12px;
   font-weight: 600;
-  color: var(--dock-text, #F3F6FB);
+  color: var(--dock-text, #F8FAFC);
 }
 
 .bible-history-sheet__close {
@@ -244,8 +244,8 @@
 }
 
 .bible-history-sheet__close:hover {
-  background: var(--dock-surface-hover, #262D40);
-  color: var(--dock-text, #F3F6FB);
+  background: var(--dock-surface-hover, #334155);
+  color: var(--dock-text, #F8FAFC);
 }
 
 .bible-history-sheet__item {
@@ -264,12 +264,12 @@
 }
 
 .bible-history-sheet__item:hover {
-  background: var(--dock-surface-hover, #262D40);
-  color: var(--dock-text, #F3F6FB);
+  background: var(--dock-surface-hover, #334155);
+  color: var(--dock-text, #F8FAFC);
 }
 
 .bible-history-sheet__item--active {
-  color: var(--dock-accent, #5b6abf);
+  color: var(--dock-accent, #1D4ED8);
 }
 
 /* ── Scrollable Content ── */
@@ -288,7 +288,7 @@
 }
 
 .bible-history-scroll::-webkit-scrollbar-thumb {
-  background: var(--dock-border, #2C3448);
+  background: var(--dock-border, #334155);
   border-radius: 2px;
 }
 
@@ -315,9 +315,9 @@
   width: 100%;
   padding: 8px;
   margin-bottom: 4px;
-  border: 1px solid var(--dock-border-soft, #252C3D);
+  border: 1px solid var(--dock-border-soft, #334155);
   border-radius: 3px;
-  background: var(--dock-surface, #181D29);
+  background: var(--dock-surface, #111827);
   cursor: pointer;
   transition: background 120ms, border-color 120ms, transform 80ms;
   text-align: left;
@@ -325,8 +325,8 @@
 }
 
 .bible-history-card:hover {
-  background: var(--dock-surface-hover, #262D40);
-  border-color: var(--dock-border-active, #7083cc);
+  background: var(--dock-surface-hover, #334155);
+  border-color: var(--dock-border-active, #2563EB);
 }
 
 .bible-history-card:active {
@@ -341,7 +341,7 @@
   height: 32px;
   border-radius: 3px;
   background: var(--dock-accent-soft, #1e2340);
-  color: var(--dock-accent, #5b6abf);
+  color: var(--dock-accent, #1D4ED8);
   flex-shrink: 0;
 }
 
@@ -354,7 +354,7 @@
   font-family: var(--dock-font-heading, "Inter", "SF Pro Display", sans-serif);
   font-size: 11px;
   font-weight: 600;
-  color: var(--dock-text, #F3F6FB);
+  color: var(--dock-text, #F8FAFC);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -399,7 +399,7 @@
 }
 
 .bible-history-card__fav:hover {
-  background: var(--dock-surface-hover, #262D40);
+  background: var(--dock-surface-hover, #334155);
   color: var(--dock-yellow, #D97706);
 }
 
@@ -434,7 +434,7 @@
   height: 56px;
   border-radius: 50%;
   background: var(--dock-accent-soft, #1e2340);
-  color: var(--dock-accent, #5b6abf);
+  color: var(--dock-accent, #1D4ED8);
   margin-bottom: 4px;
 }
 
@@ -442,7 +442,7 @@
   font-family: var(--dock-font-heading, "Inter", "SF Pro Display", sans-serif);
   font-size: 13px;
   font-weight: 600;
-  color: var(--dock-text, #F3F6FB);
+  color: var(--dock-text, #F8FAFC);
 }
 
 .bible-history-empty__text {

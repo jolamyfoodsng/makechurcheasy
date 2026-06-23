@@ -164,7 +164,7 @@ export default function BackgroundPickerCard({
         backgroundImageFilePath: "",
         backgroundVideo: "",
         backgroundVideoFilePath: "",
-        backgroundColor: prev.backgroundColor || "#0a0a14",
+        backgroundColor: prev.backgroundColor || "#0F172A",
         backgroundOpacity: prev.backgroundOpacity === 0 ? 1 : prev.backgroundOpacity,
         fullscreenShadeOpacity: prev.fullscreenShadeOpacity === 0 ? 0.42 : prev.fullscreenShadeOpacity,
       });
@@ -194,7 +194,7 @@ export default function BackgroundPickerCard({
       case "off": return "Background disabled";
       case "theme": return "Using theme background";
       case "color": {
-        const c = quickSettings.backgroundColor || "#0a0a14";
+        const c = quickSettings.backgroundColor || "#0F172A";
         const end = quickSettings.backgroundColorEnd;
         return end ? `Gradient · ${c} → ${end}` : `Solid · ${c}`;
       }
@@ -713,7 +713,7 @@ function ColorSection({
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
 }) {
   const isGradient = !!(quickSettings.backgroundColor && quickSettings.backgroundColorEnd);
-  const colorStart = quickSettings.backgroundColor || "#0a0a14";
+  const colorStart = quickSettings.backgroundColor || "#0F172A";
   const colorEnd = quickSettings.backgroundColorEnd || "#000000";
   const angle = quickSettings.bgGradientAngle ?? 135;
 
@@ -735,7 +735,7 @@ function ColorSection({
             onClick={() => {
               pushChange((prev) => ({
                 ...prev,
-                backgroundColor: prev.backgroundColor || "#0a0a14",
+                backgroundColor: prev.backgroundColor || "#0F172A",
                 backgroundColorEnd: "",
                 bgGradientAngle: 135,
               }));
@@ -944,7 +944,7 @@ const GRADIENT_PRESETS = [
   { label: "Forest", start: "#1B4332", end: "#0B1A12", angle: 160 },
   { label: "Royal", start: "#4A1A6B", end: "#0D0221", angle: 135 },
   { label: "Ember", start: "#B7410E", end: "#1A0A00", angle: 150 },
-  { label: "Midnight", start: "#1A1A2E", end: "#000000", angle: 180 },
+  { label: "Midnight", start: "#0F172A", end: "#000000", angle: 180 },
   { label: "Dusk", start: "#2D1B69", end: "#11001C", angle: 135 },
   { label: "Slate", start: "#334155", end: "#0F172A", angle: 180 },
 ];
@@ -1312,7 +1312,7 @@ function ThemeSection({
         {themes.map((theme) => {
           const isActive = theme.id === selectedThemeId;
           const s = theme.settings;
-          const bgColor = s.boxBackground || s.backgroundColor || "#0a0a14";
+          const bgColor = s.boxBackground || s.backgroundColor || "#0F172A";
           const fontColor = s.fontColor || "#fff";
           return (
             <button

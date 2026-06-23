@@ -167,7 +167,7 @@ function mergeObsThemes(customThemes: BibleTheme[]): BibleTheme[] {
 function regionColor(type: string): string {
   switch (type) {
     case "obs-scene":
-      return "#6c5ce7";
+      return "#3B82F6";
     case "video-input":
       return "#0078d4";
     case "image-overlay":

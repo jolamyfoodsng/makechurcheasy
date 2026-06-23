@@ -9,7 +9,7 @@
  * Uses @tauri-apps/plugin-http `fetch` to bypass CORS restrictions
  * (API doesn't serve Access-Control-Allow-Origin headers).
  *
- * API base: https://makechurcheasy-bible-api.fly.dev
+ * API base: https://versecast-bible-api.solitary-credit-34b2.workers.dev
  */
 
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
@@ -20,7 +20,7 @@ import type { RawBibleData, CatalogBible } from "./types";
 // Config
 // ---------------------------------------------------------------------------
 
-const API_BASE = "https://makechurcheasy-bible-api.fly.dev/api";
+const API_BASE = "https://versecast-bible-api.solitary-credit-34b2.workers.dev/api";
 
 /**
  * Version header sent with every Bible API request.

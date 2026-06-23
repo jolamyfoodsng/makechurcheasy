@@ -225,7 +225,7 @@ const PRESETS: ThemePreset[] = [
       backgroundVideoFilePath: "",
       backgroundOpacity: 1,
       backgroundColor: "#000000",
-      backgroundColorEnd: "#1A1A2E",
+      backgroundColorEnd: "#0F172A",
       bgGradientAngle: 180,
       referenceBackgroundEnabled: true,
       referenceBackgroundColor: "#FDE68A",

@@ -70,7 +70,7 @@ export default function DockThemeBrowserModal({
 
   const renderThemeCard = (theme: BibleTheme) => {
     const isActive = theme.id === selectedThemeId;
-    const bgColor = theme.settings.boxBackground || theme.settings.backgroundColor || "#0a0a14";
+    const bgColor = theme.settings.boxBackground || theme.settings.backgroundColor || "#0F172A";
     const fontColor = theme.settings.fontColor || "#fff";
     const bgImage = theme.settings.boxBackgroundImage || theme.settings.backgroundImage;
     const bgVideo = theme.settings.backgroundVideo;

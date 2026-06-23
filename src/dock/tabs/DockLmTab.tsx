@@ -922,7 +922,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: "100%",
     overflow: "hidden",
     background: "var(--dock-surface, #1e2028)",
-    color: "var(--dock-text, #e8e8ea)",
+    color: "var(--dock-text, #E2E8F0)",
     fontFamily: '"Open Sans", -apple-system, BlinkMacSystemFont, sans-serif',
   },
   header: {
@@ -930,7 +930,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "space-between",
     padding: "8px 10px",
-    borderBottom: "1px solid var(--dock-border, #2a2d38)",
+    borderBottom: "1px solid var(--dock-border, #334155)",
     flexShrink: 0,
   },
   headerLeft: {
@@ -958,7 +958,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "none",
     borderRadius: 3,
     background: "transparent",
-    color: "var(--dock-text-dim, #888)",
+    color: "var(--dock-text-dim, #94A3B8)",
     cursor: "pointer",
     transition: "color 0.15s",
   },
@@ -971,7 +971,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     border: "none",
     borderRadius: 3,
-    background: "var(--dock-accent, #5b6abf)",
+    background: "var(--dock-accent, #1D4ED8)",
     color: "#fff",
     cursor: "pointer",
     transition: "background 0.15s",
@@ -989,7 +989,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: 6,
     padding: "8px 10px",
-    borderBottom: "1px solid var(--dock-border, #2a2d38)",
+    borderBottom: "1px solid var(--dock-border, #334155)",
     background: "var(--dock-input-bg, #16181f)",
     flexShrink: 0,
     maxHeight: 280,
@@ -1000,7 +1000,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     textTransform: "uppercase" as const,
     letterSpacing: "0.04em",
-    color: "var(--dock-text-dim, #888)",
+    color: "var(--dock-text-dim, #94A3B8)",
     marginBottom: 2,
   },
   settingRow: {
@@ -1012,7 +1012,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   settingLabel: {
     fontSize: 11,
-    color: "var(--dock-text, #e8e8ea)",
+    color: "var(--dock-text, #E2E8F0)",
     flex: 1,
   },
   settingHint: {
@@ -1025,17 +1025,17 @@ const styles: Record<string, React.CSSProperties> = {
   settingCheckbox: {
     width: 14,
     height: 14,
-    accentColor: "#5b6abf",
+    accentColor: "#1D4ED8",
     cursor: "pointer",
     flexShrink: 0,
   },
   settingSelect: {
     padding: "2px 4px",
     fontSize: 10,
-    border: "1px solid var(--dock-border, #2a2d38)",
+    border: "1px solid var(--dock-border, #334155)",
     borderRadius: 3,
     background: "var(--dock-surface, #1e2028)",
-    color: "var(--dock-text, #e8e8ea)",
+    color: "var(--dock-text, #E2E8F0)",
     outline: "none",
     cursor: "pointer",
     minWidth: 100,
@@ -1043,10 +1043,10 @@ const styles: Record<string, React.CSSProperties> = {
   settingNumber: {
     padding: "2px 4px",
     fontSize: 10,
-    border: "1px solid var(--dock-border, #2a2d38)",
+    border: "1px solid var(--dock-border, #334155)",
     borderRadius: 3,
     background: "var(--dock-surface, #1e2028)",
-    color: "var(--dock-text, #e8e8ea)",
+    color: "var(--dock-text, #E2E8F0)",
     outline: "none",
     width: 50,
     textAlign: "center" as const,
@@ -1056,7 +1056,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 6,
     padding: "6px 10px",
-    borderBottom: "1px solid var(--dock-border, #2a2d38)",
+    borderBottom: "1px solid var(--dock-border, #334155)",
     flexShrink: 0,
     minHeight: 28,
   },
@@ -1081,8 +1081,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 3,
     fontSize: 9,
     fontWeight: 600,
-    color: "#5b6abf",
-    background: "rgba(91, 106, 191, 0.1)",
+    color: "#1D4ED8",
+    background: "rgba(29, 78, 216, 0.1)",
     padding: "1px 5px",
     borderRadius: 3,
   },
@@ -1118,7 +1118,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 4,
     fontSize: 10,
-    color: "#ff5252",
+    color: "#EF4444",
   },
   section: {
     padding: "8px 10px",
@@ -1132,7 +1132,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     letterSpacing: "0.04em",
     textTransform: "uppercase" as const,
-    color: "var(--dock-text-dim, #888)",
+    color: "var(--dock-text-dim, #94A3B8)",
   },
   statusText: {
     fontSize: 9,
@@ -1147,7 +1147,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflowY: "auto" as const,
     borderRadius: 3,
     background: "var(--dock-input-bg, #16181f)",
-    border: "1px solid var(--dock-border, #2a2d38)",
+    border: "1px solid var(--dock-border, #334155)",
     padding: "4px 0",
   },
   transcriptLine: {
@@ -1175,7 +1175,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--dock-text, #bbb)",
   },
   transcriptTextActive: {
-    color: "var(--dock-text, #e8e8ea)",
+    color: "var(--dock-text, #E2E8F0)",
   },
   copyBtn: {
     display: "flex",
@@ -1187,7 +1187,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "none",
     borderRadius: 3,
     background: "transparent",
-    color: "var(--dock-text-dim, #888)",
+    color: "var(--dock-text-dim, #94A3B8)",
     cursor: "pointer",
     flexShrink: 0,
     marginLeft: "auto",
@@ -1207,7 +1207,7 @@ const styles: Record<string, React.CSSProperties> = {
   candidateCard: {
     padding: "6px 8px",
     borderRadius: 3,
-    border: "1px solid var(--dock-border, #2a2d38)",
+    border: "1px solid var(--dock-border, #334155)",
     background: "var(--dock-input-bg, #16181f)",
     cursor: "default",
     transition: "border-color 0.15s",
@@ -1223,7 +1223,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   candidateConf: {
     fontSize: 9,
-    color: "var(--dock-text-dim, #888)",
+    color: "var(--dock-text-dim, #94A3B8)",
   },
   candidateSnippet: {
     fontSize: 10,
@@ -1242,7 +1242,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     border: "none",
     borderRadius: 3,
-    background: "var(--dock-accent, #5b6abf)",
+    background: "var(--dock-accent, #1D4ED8)",
     color: "#fff",
     cursor: "pointer",
     width: "100%",
@@ -1257,12 +1257,12 @@ const styles: Record<string, React.CSSProperties> = {
   queueCard: {
     padding: "6px 8px",
     borderRadius: 3,
-    border: "1px solid var(--dock-border, #2a2d38)",
+    border: "1px solid var(--dock-border, #334155)",
     background: "var(--dock-input-bg, #16181f)",
   },
   queueCardActive: {
-    borderColor: "#5b6abf",
-    background: "rgba(91, 106, 191, 0.1)",
+    borderColor: "#1D4ED8",
+    background: "rgba(29, 78, 216, 0.1)",
   },
   queueHeader: {
     display: "flex",
@@ -1328,7 +1328,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 10,
     borderRadius: 3,
     background: "rgba(255, 82, 82, 0.1)",
-    color: "#ff5252",
+    color: "#EF4444",
     border: "1px solid rgba(255, 82, 82, 0.2)",
     flexShrink: 0,
   },
@@ -1350,7 +1350,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   mainTabs: {
     display: "flex",
-    borderBottom: "1px solid var(--dock-border, #2a2d38)",
+    borderBottom: "1px solid var(--dock-border, #334155)",
     flexShrink: 0,
   },
   mainTab: {
@@ -1360,7 +1360,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "8px 12px",
     fontSize: 11,
     fontWeight: 600,
-    color: "var(--dock-text-dim, #888)",
+    color: "var(--dock-text-dim, #94A3B8)",
     background: "transparent",
     border: "none",
     borderBottom: "2px solid transparent",
@@ -1368,13 +1368,13 @@ const styles: Record<string, React.CSSProperties> = {
     transition: "color 0.15s, border-color 0.15s",
   },
   mainTabActive: {
-    color: "var(--dock-text, #e8e8ea)",
-    borderBottomColor: "#5b6abf",
+    color: "var(--dock-text, #E2E8F0)",
+    borderBottomColor: "#1D4ED8",
   },
   mainTabCount: {
     fontSize: 9,
     fontWeight: 600,
-    background: "#5b6abf",
+    background: "#1D4ED8",
     color: "#fff",
     borderRadius: 10,
     padding: "1px 5px",
@@ -1390,7 +1390,7 @@ const styles: Record<string, React.CSSProperties> = {
   labelCount: {
     fontSize: 9,
     fontWeight: 600,
-    background: "#5b6abf",
+    background: "#1D4ED8",
     color: "#fff",
     borderRadius: 10,
     padding: "1px 5px",
@@ -1431,7 +1431,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   modal: {
     background: "var(--dock-surface, #1e2028)",
-    border: "1px solid var(--dock-border, #2a2d38)",
+    border: "1px solid var(--dock-border, #334155)",
     borderRadius: 8,
     width: 300,
     maxWidth: "90vw",
@@ -1444,7 +1444,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: 13,
     fontWeight: 600,
-    color: "var(--dock-text, #e8e8ea)",
+    color: "var(--dock-text, #E2E8F0)",
   },
   modalBody: {
     padding: "12px 16px",
@@ -1452,7 +1452,7 @@ const styles: Record<string, React.CSSProperties> = {
   modalText: {
     margin: 0,
     fontSize: 12,
-    color: "var(--dock-text-secondary, #b6c0d4)",
+    color: "var(--dock-text-secondary, #CBD5E1)",
     lineHeight: 1.5,
   },
   modalFooter: {
@@ -1471,7 +1471,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "none",
     borderRadius: 4,
     background: "transparent",
-    color: "var(--dock-text-secondary, #b6c0d4)",
+    color: "var(--dock-text-secondary, #CBD5E1)",
     cursor: "pointer",
   },
   modalBtnDanger: {
@@ -1524,7 +1524,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   limitDesc: {
     fontSize: 11,
-    color: "var(--dock-text-dim, #888)",
+    color: "var(--dock-text-dim, #94A3B8)",
     lineHeight: 1.5,
     maxWidth: 260,
   },
@@ -1536,7 +1536,7 @@ const styles: Record<string, React.CSSProperties> = {
   limitTimer: {
     fontSize: 22,
     fontWeight: 700,
-    color: "var(--dock-text, #e8e8ea)",
+    color: "var(--dock-text, #E2E8F0)",
     fontVariantNumeric: "tabular-nums",
   },
 };

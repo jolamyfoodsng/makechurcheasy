@@ -899,7 +899,7 @@ function ActiveSourcesPanel() {
                 <input type="range" min={0} max={1} step={0.05} value={region.opacity}
                   onClick={(e) => e.stopPropagation()}
                   onChange={(e) => { e.stopPropagation(); updateRegion(region.id, { opacity: parseFloat(e.target.value) }); }}
-                  style={{ width: 50, height: 14, accentColor: "var(--primary, #6c5ce7)" }}
+                  style={{ width: 50, height: 14, accentColor: "var(--primary, #3B82F6)" }}
                 />
               </div>
               <div className="mv-active-source-actions">

@@ -2563,8 +2563,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           disabled={clearingTarget !== null}
           aria-label="Clear media"
         >
-          <Icon name="delete_sweep" size={16} />
-          <span>Clear</span>
+          {/* <Icon name="delete_sweep" size={16} /> */}
+          <span>Hide Media</span>
         </button>
       )}
 

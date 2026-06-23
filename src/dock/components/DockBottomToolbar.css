@@ -10,10 +10,10 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  border-top: 1px solid var(--dock-border, #2a2d38);
-  background: var(--dock-surface, #181D29);
+  border-top: 1px solid var(--dock-border, #334155);
+  background: var(--dock-surface, #111827);
   padding: 8px 10px;
-  min-height: 44px;
+  min-height: 35px;
 }
 
 /* ── Main row ── */
@@ -27,7 +27,7 @@
 /* ── Segmented control ── */
 .dock-btm-segmented {
   display: flex;
-  /* border: 1px solid var(--border, #2C3448); */
+  /* border: 1px solid var(--border, #334155); */
   border-radius: var(--radius, 4px);
   overflow: hidden;
   flex-shrink: 0;
@@ -51,11 +51,11 @@
 }
 
 .dock-btm-segmented__item:not(:last-child) {
-  border-right: 1px solid var(--border, #2C3448);
+  border-right: 1px solid var(--border, #334155);
 }
 
 .dock-btm-segmented__item--active {
-  background: var(--primary, #5B5FCF);
+  background: var(--primary, #1D4ED8);
   color: #fff;
   font-weight: 600;
 }
@@ -88,7 +88,7 @@
 .dock-btm-divider {
   width: 1px;
   height: 24px;
-  background: var(--border, #2C3448);
+  background: var(--border, #334155);
   flex-shrink: 0;
 }
 
@@ -111,7 +111,7 @@
   justify-content: center;
   min-width: 32px;
   min-height: 32px;
-  border: 1px solid var(--border, #2C3448);
+  border: 1px solid var(--border, #334155);
   border-radius: var(--radius, 4px);
   background: var(--surface-raised, #242428);
   color: var(--text-muted, #7E8AA3);
@@ -142,9 +142,9 @@
   order: 10;
   margin-top: 8px;
   padding: 6px;
-  border: 1px solid var(--error-border, #7F2D38);
+  border: 1px solid var(--error-border, #991B1B);
   border-radius: var(--radius, 4px);
-  background: var(--error-bg, #3B1F26);
+  background: var(--error-bg, #7F1D1D);
   color: var(--error, #DC2626);
   font-family: var(--font-body);
   font-size: 12px;

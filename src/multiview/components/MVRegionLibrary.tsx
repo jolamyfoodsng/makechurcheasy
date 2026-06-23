@@ -966,7 +966,7 @@ export function MVRegionLibrary() {
           /** Region type → fill color for SVG preview */
           const regionColor = (type: string): string => {
             switch (type) {
-              case "obs-scene": return "#6c5ce7";
+              case "obs-scene": return "#3B82F6";
               case "video-input": return "#0078d4";
               case "image-overlay": return "#00bcd4";
               case "media": return "#9c27b0";
@@ -1562,7 +1562,7 @@ export function MVRegionLibrary() {
                     <span className="mv-bg-color-hex">{background?.color ?? "#0a0a14"}</span>
                   </div>
                   <div className="mv-bg-swatches">
-                    {["#0a0a14", "#1a1a2e", "#16213e", "#0f3460", "#533483", "#2c3e50", "#1b1b2f", "#2d132c", "#0d0d0d", "#141e30", "#243b55", "#2c2c54"].map((c) => (
+                    {["#0a0a14", "#0F172A", "#16213e", "#0f3460", "#533483", "#2c3e50", "#1b1b2f", "#2d132c", "#0d0d0d", "#141e30", "#243b55", "#2c2c54"].map((c) => (
                       <button key={c} className="mv-bg-swatch-btn" style={{ background: c }} title={c}
                         onClick={() => setBackground({ type: "color", color: c })} />
                     ))}

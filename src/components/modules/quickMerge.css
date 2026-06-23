@@ -164,7 +164,7 @@
 
 .qm-layer-row {
   padding: 12px 14px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--surface-hover);
   border: 1px solid var(--border);
   transition: opacity 0.15s, border-color 0.15s;
@@ -300,7 +300,7 @@
   width: 100%;
   grid-column: 1 / -1;
   padding: 12px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 2px dashed var(--border);
   background: transparent;
   color: var(--text-secondary);
@@ -365,7 +365,7 @@
 .qm-layout-picker-select {
   width: 100%;
   min-height: 36px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface-hover);
   color: var(--text-primary);
@@ -400,7 +400,7 @@
   width: 100%;
   min-height: 38px;
   padding: 6px 10px 6px 12px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface-hover);
   color: var(--text-primary);
@@ -1301,7 +1301,7 @@
 .qm-shortcuts-card {
   background: var(--surface-hover);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 12px;
 }
 

@@ -97,6 +97,6 @@ export function AppLogo({
     };
   }, [mode]);
 
-  const fallbackLogoSrc = resolvedMode === "light" ? lightLogo : darkLogo;
+  const fallbackLogoSrc = resolvedMode !== "light" ? lightLogo : darkLogo;
   return <img {...imgProps} src={fallbackLogoSrc} alt={alt} />;
 }

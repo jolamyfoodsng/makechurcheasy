@@ -24,7 +24,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             width: "20px",
             height: "20px",
             borderRadius: "50%",
-            border: "2px solid #5B5FCF",
+            border: "2px solid #1D4ED8",
             borderTopColor: "transparent",
             animation: "spin 0.6s linear infinite",
           }}

@@ -236,7 +236,7 @@
   letter-spacing: 0.04em;
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
-  border-radius: 8px 8px 0 0;
+  border-radius: 4px 8px 0 0;
   position: relative;
 }
 
@@ -1030,7 +1030,7 @@ button.worship-online-action.at-limit {
 .worship-lt-theme-card {
   width: 100%;
   border: 1px solid var(--b-border, #2C2C2C);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--b-tile, #262626);
   color: var(--b-text-1, #E0E0E0);
   padding: 8px;
@@ -1276,7 +1276,7 @@ button.worship-online-action.at-limit {
 
 .worship-theme-modal-close {
   border: 1px solid var(--b-border, #2C2C2C);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--b-tile, #262626);
   color: var(--b-text-2, #9E9E9E);
   width: 30px;
@@ -1304,7 +1304,7 @@ button.worship-online-action.at-limit {
 .worship-theme-modal-search {
   width: 100%;
   border: 1px solid var(--b-border, #2C2C2C);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--b-bg, #121212);
   color: var(--b-text-1, #E0E0E0);
   padding: 8px 10px;
@@ -1336,7 +1336,7 @@ button.worship-online-action.at-limit {
 
 .worship-theme-modal-card {
   border: 1px solid var(--b-border, #2C2C2C);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--b-tile, #262626);
   color: var(--b-text-1, #E0E0E0);
   display: flex;
@@ -1358,7 +1358,7 @@ button.worship-online-action.at-limit {
 
 .worship-theme-modal-preview {
   height: 128px;
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
   border: 1px solid var(--b-border, #2C2C2C);
   background: #111;
@@ -2175,7 +2175,7 @@ button.worship-online-action.at-limit {
 .worship-live-strip-slide {
   border: 1px solid var(--b-border, #2C2C2C);
   background: var(--b-surface, #1E1E1E);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 8px 9px;
   text-align: left;
   cursor: pointer;

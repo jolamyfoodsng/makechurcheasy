@@ -712,7 +712,7 @@
 .ps-step-duration-input,
 .ps-step-duration-select {
   width: 100%;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-primary);
@@ -877,7 +877,7 @@
   color: #fff;
   background: rgba(255, 255, 255, 0.08);
   border: 1.5px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
+  border-radius: 4px;
   outline: none;
   transition: border-color 0.15s, background 0.15s;
   -moz-appearance: textfield;
@@ -1361,7 +1361,7 @@
   border: 1px solid rgba(231, 72, 86, 0.35);
   background: rgba(231, 72, 86, 0.08);
   color: #f19ba0;
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 10px 14px;
   font-size: 10px;
   margin: 0 24px;
@@ -1371,7 +1371,7 @@
   border: 1px solid rgba(249, 168, 37, 0.32);
   background: rgba(249, 168, 37, 0.08);
   color: #f9d27a;
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 10px 14px;
   font-size: 10px;
   margin: 0 24px;
@@ -1723,7 +1723,7 @@
 .cfg-search-input {
   width: 100%;
   padding: 8px 34px 8px 34px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--bg-dark);
   color: var(--text-primary);
@@ -2152,7 +2152,7 @@
 }
 
 .cfg-duration-input {
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface-dark);
   padding: 8px 10px;
@@ -2201,7 +2201,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface-dark);
   padding: 8px 10px;
@@ -2248,7 +2248,7 @@
 .cfg-select {
   width: 100%;
   appearance: none;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface-dark);
   color: var(--text-primary);
@@ -2672,7 +2672,7 @@
   justify-content: center;
   gap: 6px;
   padding: 10px 16px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;

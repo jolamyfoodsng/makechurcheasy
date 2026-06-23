@@ -348,7 +348,7 @@
   border: 1px solid var(--border);
   background: var(--surface-hover);
   color: var(--text-secondary);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 9px 10px;
   font-size: 13px;
   font-weight: 600;
@@ -383,7 +383,7 @@
 
 .speaker-module-preset {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--surface-hover);
   padding: 9px 10px;
   display: flex;
@@ -571,7 +571,7 @@
 .speaker-module-field input {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--surface-dark);
   color: var(--text-primary);
   padding: 10px 12px;
@@ -605,7 +605,7 @@
   padding: 8px 12px;
   background: var(--surface-hover);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   cursor: pointer;
   transition: border-color 0.15s;
 }
@@ -657,7 +657,7 @@
   flex-direction: column;
   background: var(--surface-hover);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
   max-height: 320px;
   overflow-y: auto;
@@ -738,7 +738,7 @@
   margin: 0;
   padding: 10px;
   border: 1px dashed var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   color: var(--text-secondary);
   font-size: 10px;
 }
@@ -751,7 +751,7 @@
 .speaker-module-position-card {
   width: 96px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--surface-dark);
   color: var(--text-secondary);
   display: inline-flex;
@@ -869,7 +869,7 @@
 
 .speaker-module-status-badge--in-preview {
   background: rgba(106, 52, 222, 0.15);
-  color: #a78bfa;
+  color: #60A5FA;
   border: 1px solid rgba(106, 52, 222, 0.3);
 }
 
@@ -906,7 +906,7 @@
   text-transform: none;
   letter-spacing: 0.02em;
   font-weight: 700;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 .speaker-module-btn--visibility.is-visible {
@@ -1005,7 +1005,7 @@
 
 .speaker-monitor-frame {
   aspect-ratio: 16 / 9;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: linear-gradient(145deg, #1f2937 0%, #111827 100%);
   position: relative;
@@ -1089,7 +1089,7 @@
 
 .speaker-module-log {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--surface-hover);
   padding: 10px;
 }
@@ -1184,7 +1184,7 @@
 
 .speaker-module-modal-close {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--surface-hover);
   color: var(--text-secondary);
   width: 30px;
@@ -1212,7 +1212,7 @@
 .speaker-module-theme-search {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--bg-dark);
   color: var(--text-primary);
   padding: 8px 10px;
@@ -1247,7 +1247,7 @@
 
 .speaker-module-theme-modal-card {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--surface-hover);
   color: var(--text-primary);
   display: flex;
@@ -1269,7 +1269,7 @@
 
 .speaker-module-theme-modal-preview {
   height: 128px;
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
   border: 1px solid var(--border);
   background: linear-gradient(145deg, #1f2937 0%, #111827 100%);
@@ -1764,7 +1764,7 @@
   align-items: center;
   justify-content: center;
   padding: 6px 14px;
-  background: #1a1a2e;
+  background: #0F172A;
   border: 1px solid #333;
   border-radius: 6px;
   color: #aab;

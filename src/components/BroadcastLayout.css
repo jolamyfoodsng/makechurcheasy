@@ -420,7 +420,7 @@
     min-height: 34px;
     padding: 0 10px;
     border: none;
-    border-radius: 8px 8px 0 0;
+    border-radius: 4px 8px 0 0;
     background: transparent;
     color: var(--tab-text-inactive, var(--text-muted));
     font-size: 11px;

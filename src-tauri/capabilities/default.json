@@ -26,7 +26,7 @@
       "identifier": "http:default",
       "allow": [
         {
-          "url": "https://makechurcheasy-bible-api.fly.dev/*"
+          "url": "https://versecast-bible-api.solitary-credit-34b2.workers.dev/*"
         },
         {
           "url": "https://*.r2.cloudflarestorage.com/*"
@@ -41,7 +41,7 @@
           "url": "https://github.com/*"
         },
         {
-          "url": "http://localhost:4000/*"
+          "url": "http://localhost:3004/*"
         },
         {
           "url": "http://localhost:4000/*"

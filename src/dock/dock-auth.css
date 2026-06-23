@@ -12,7 +12,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 2px solid #5B5FCF;
+  border: 2px solid #1D4ED8;
   border-top-color: transparent;
   animation: spin 0.6s linear infinite;
 }
@@ -38,7 +38,7 @@
 }
 
 .dock-auth-blocked svg {
-  color: #5B5FCF;
+  color: #1D4ED8;
   opacity: 0.8;
 }
 
@@ -82,7 +82,7 @@
 
 .dock-auth-refresh:hover {
   background: #22222e;
-  border-color: #5B5FCF;
+  border-color: #1D4ED8;
 }
 
 .dock-auth-refresh:active {

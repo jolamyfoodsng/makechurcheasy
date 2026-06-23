@@ -1543,7 +1543,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
             {!previewHtml && (
               <div
                 className="dock-sermon-theme-card__fallback"
-                style={{ background: bgVar || theme.accentColor || "#0a0a14", color: fgVar }}
+                style={{ background: bgVar || theme.accentColor || "#0F172A", color: fgVar }}
               >
                 {theme.icon && <Icon name={theme.icon} size={16} />}
               </div>
@@ -1571,7 +1571,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
     const renderThemeCard = (theme: BibleTheme, compact = false) => {
       const isActive = activeTheme?.id === theme.id;
       const isFav = themePrefs.favoriteThemeIds.includes(theme.id);
-      const bgColor = theme.settings.boxBackground || theme.settings.backgroundColor || "#0a0a14";
+      const bgColor = theme.settings.boxBackground || theme.settings.backgroundColor || "#0F172A";
       const fontColor = theme.settings.fontColor || "#fff";
       const bgImage = theme.settings.boxBackgroundImage || theme.settings.backgroundImage;
       const hasBgImage = Boolean(bgImage && !bgImage.startsWith("__"));
@@ -1889,7 +1889,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                         ? `url(${activeTheme.settings.boxBackgroundImage}) center/cover`
                         : activeTheme.settings.backgroundImage
                           ? `url(${activeTheme.settings.backgroundImage}) center/cover`
-                          : activeTheme.settings.boxBackground || activeTheme.settings.backgroundColor || "#0a0a14",
+                          : activeTheme.settings.boxBackground || activeTheme.settings.backgroundColor || "#0F172A",
                       color: activeTheme.settings.fontColor || "#fff",
                       fontFamily: activeTheme.settings.fontFamily,
                       textAlign: activeTheme.settings.textAlign || "center",
@@ -2738,8 +2738,8 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                   <div key={item.id} className="dock-sermon-history-card">
                     <div className="dock-sermon-history-card__preview" style={{
                       background: item.themeSource === "lt-template"
-                        ? (item.ltColorOverrides?.["--bg1"] || item.ltColorOverrides?.["--bg"] || item.ltColorOverrides?.["--fw-maroon"] || "#0a0a14")
-                        : "#0a0a14",
+                        ? (item.ltColorOverrides?.["--bg1"] || item.ltColorOverrides?.["--bg"] || item.ltColorOverrides?.["--fw-maroon"] || "#0F172A")
+                        : "#0F172A",
                       color: item.themeSource === "lt-template"
                         ? (item.ltColorOverrides?.["--fg"] || item.ltColorOverrides?.["--fw-text-white"] || "#fff")
                         : "#fff",

@@ -759,7 +759,7 @@ export default function SpeechToScripturePage() {
       {isOffline && !connectionLostBanner && (
         <div className="sts3-offline-banner">
           <span>📡</span>
-          <span>No internet connection. Using local Whisper model — results may be slower.</span>
+          <span>No internet connection.. Please connect to the internet to use this feature.</span>
           {whisperStatus === "loading" && <span className="sts3-banner-status">Loading model...</span>}
           {whisperStatus === "ready" && <span className="sts3-banner-status sts3-banner-status--ready">Ready</span>}
         </div>

@@ -58,14 +58,14 @@ import "./MVSettings.css";
 
 /* ── Constants ── */
 const SWATCHES = [
-  { id: "purple", hex: "#8B5CF6", rgb: "139, 92, 246", name: "Purple" },
+  { id: "purple", hex: "#1D4ED8", rgb: "29, 78, 216", name: "Purple" },
   { id: "blue", hex: "#3B82F6", rgb: "59, 130, 246", name: "Blue" },
   { id: "cyan", hex: "#06B6D4", rgb: "6, 182, 212", name: "Cyan" },
   { id: "green", hex: "#10B981", rgb: "16, 185, 129", name: "Green" },
   { id: "yellow", hex: "#F59E0B", rgb: "245, 158, 11", name: "Yellow" },
   { id: "orange", hex: "#F97316", rgb: "249, 115, 22", name: "Orange" },
   { id: "pink", hex: "#EC4899", rgb: "236, 72, 153", name: "Pink" },
-  { id: "deeppurple", hex: "#A855F7", rgb: "168, 85, 247", name: "Deep Purple" },
+  { id: "deeppurple", hex: "#1D4ED8", rgb: "168, 85, 247", name: "Deep Purple" },
 ];
 
 const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
@@ -215,13 +215,13 @@ function DeveloperTabContent({
         </div>
         <div className="settings-card" style={{ padding: "32px", textAlign: "center" }}>
           <Key size={32} style={{ color: "var(--text-muted)", marginBottom: "12px" }} />
-          <h4 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "6px" }}>Pro Feature</h4>
+          <h4 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "8px" }}>Pro Feature</h4>
           <p style={{ color: "var(--text-secondary)", fontSize: "0.82rem", marginBottom: "16px", maxWidth: "340px", margin: "0 auto 16px" }}>
             API access lets you build custom integrations, automate workflows, and connect MakeChurchEasy to external tools.
           </p>
           <button
             className="action-btn btn-primary"
-            onClick={() => triggerToast("Visit makechurcheasy.com to upgrade your plan", "accent")}
+            onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream to upgrade your plan", "accent")}
           >
             <ExternalLink size={14} />
             <span>Upgrade to Pro</span>
@@ -239,7 +239,7 @@ function DeveloperTabContent({
       </div>
 
       {/* Create new key */}
-      <div className="settings-card" style={{ padding: "20px", marginBottom: "16px" }}>
+      <div className="settings-card" style={{ padding: "24px", marginBottom: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <input
             className="custom-textbox"
@@ -351,7 +351,7 @@ function DeveloperTabContent({
       </div>
 
       {/* API docs reference */}
-      <div className="settings-section" style={{ marginTop: "20px" }}>
+      <div className="settings-section" style={{ marginTop: "24px" }}>
         <h4 className="section-title">Quick Start</h4>
         <div className="settings-card" style={{ padding: "16px" }}>
           <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
@@ -363,7 +363,7 @@ function DeveloperTabContent({
               padding: "10px 14px",
               borderRadius: "3px",
               overflow: "auto",
-              marginBottom: "10px",
+              marginBottom: "12px",
             }}>
               {`curl -H "Authorization: Bearer mce_live_..." \\
      https://makechurcheasy.com/api/v1/profile`}
@@ -1067,7 +1067,7 @@ export function MVSettings() {
 
 
                   {/* Danger Zone */}
-                  <div className="settings-section" style={{ marginTop: "24px", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-lg)", padding: "20px" }}>
+                  <div className="settings-section" style={{ marginTop: "24px", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-lg)", padding: "24px" }}>
                     <h3 className="section-title" style={{ color: "var(--danger-color)" }}><Trash2 size={18} style={{ verticalAlign: "text-bottom" }} /> Danger Zone</h3>
 
                     {/* Clear All Data */}
@@ -1125,7 +1125,7 @@ export function MVSettings() {
                           <div className="option-select-inner" style={{ padding: "16px", alignItems: "flex-start", textAlign: "left" }}>
                             <div className="checked-indicator"><Check size={10} /></div>
                             <div className="density-icon-box" style={{ background: obsMethod === "WebSocket" ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: obsMethod === "WebSocket" ? "var(--accent-color)" : "var(--text-secondary)" }}><Radio size={16} /></div>
-                            <div style={{ marginTop: "6px" }}>
+                            <div style={{ marginTop: "8px" }}>
                               <span className="option-title">WebSocket (Recommended)</span>
                               <p className="option-desc" style={{ marginTop: "4px" }}>Direct live link with low latency.</p>
                             </div>
@@ -1136,7 +1136,7 @@ export function MVSettings() {
                           <div className="option-select-inner" style={{ padding: "16px", alignItems: "flex-start", textAlign: "left" }}>
                             <div className="checked-indicator"><Check size={10} /></div>
                             <div className="density-icon-box" style={{ background: obsMethod === "Remote" ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: obsMethod === "Remote" ? "var(--accent-color)" : "var(--text-secondary)" }}><ExternalLink size={16} /></div>
-                            <div style={{ marginTop: "6px" }}>
+                            <div style={{ marginTop: "8px" }}>
                               <span className="option-title">Alternative Remote API</span>
                               <p className="option-desc" style={{ marginTop: "4px" }}>Fallback HTTP requests protocol.</p>
                             </div>
@@ -1159,7 +1159,7 @@ export function MVSettings() {
                     </div>
 
                     {/* Password */}
-                    <div className="form-group" style={{ marginTop: "10px" }}>
+                    <div className="form-group" style={{ marginTop: "12px" }}>
                       <label className="form-label">Password (Optional)</label>
                       <div className="custom-input-container">
                         <input type="password" className="custom-textbox" value={obsPasswordDraft} onChange={(e) => setObsPasswordDraft(e.target.value)} placeholder="OBS authentication key" />
@@ -1177,7 +1177,7 @@ export function MVSettings() {
 
                     {/* Connection rules */}
                     <div>
-                      <h4 className="form-label" style={{ marginBottom: "14px" }}>Connection Rules</h4>
+                      <h4 className="form-label" style={{ marginBottom: "16px" }}>Connection Rules</h4>
                       <div className="switch-row" style={{ padding: "10px 0" }}>
                         <div className="switch-left">
                           <span className="switch-title">Auto-reconnect fallback</span>
@@ -1207,7 +1207,7 @@ export function MVSettings() {
 
                   {/* Connection actions */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <div className="section-header" style={{ marginBottom: "14px" }}>
+                    <div className="section-header" style={{ marginBottom: "16px" }}>
                       <h4 className="section-title">Connection Actions</h4>
                     </div>
                     <div className="grid-3-col">
@@ -1263,7 +1263,7 @@ export function MVSettings() {
                               <div className="density-icon-box" style={{ margin: "0 auto", background: theme === id ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: theme === id ? "var(--accent-color)" : "var(--text-secondary)" }}>
                                 <IconComp size={16} />
                               </div>
-                              <span className="option-title" style={{ marginTop: "6px", display: "block" }}>{label}</span>
+                              <span className="option-title" style={{ marginTop: "8px", display: "block" }}>{label}</span>
                             </div>
                           </label>
                         ))}
@@ -1275,7 +1275,7 @@ export function MVSettings() {
                     {/* Accent color */}
                     <div className="form-group">
                       <label className="form-label">Accent Color</label>
-                      <div className="accent-swatches-container" style={{ marginTop: "6px" }}>
+                      <div className="accent-swatches-container" style={{ marginTop: "8px" }}>
                         {SWATCHES.map((swatch) => (
                           <button key={swatch.id} className={`accent-swatch-btn ${accentColor === swatch.id ? "active" : ""}`} style={{ backgroundColor: swatch.hex }} title={swatch.name} onClick={() => setAccentColor(swatch.id)}>
                             {accentColor === swatch.id && <Check size={14} color="#fff" />}
@@ -1298,7 +1298,7 @@ export function MVSettings() {
                         {([1, 2, 3] as const).map((v) => (
                           <label key={v} className="option-select-card">
                             <input type="radio" name="font_size" checked={fontSizeRange === v} onChange={() => setFontSizeRange(v)} />
-                            <div className="option-select-inner" style={{ padding: "10px", textAlign: "center" }}>
+                            <div className="option-select-inner" style={{ padding: "12px", textAlign: "center" }}>
                               <div className="checked-indicator"><Check size={10} /></div>
                               <span className="option-title">{v === 1 ? "Small" : v === 2 ? "Medium" : "Large"}</span>
                             </div>
@@ -1349,11 +1349,11 @@ export function MVSettings() {
                 <div className="settings-section">
                   <div className="section-header">
                     <h3 className="section-title">Church Profile</h3>
-                    <p className="section-desc">Identity values synced from the web dashboard. Edit at makechurcheasy.com → Church Profile.</p>
+                    <p className="section-desc">Identity values synced from the web dashboard. Edit at makechurcheasy.creatorstudioslabs.stream → Church Profile.</p>
                   </div>
 
                   {/* Sync status bar */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, padding: "8px 12px", borderRadius: 3, backgroundColor: syncStatus ? "var(--surface-secondary, rgba(255,255,255,0.04))" : "transparent", border: syncStatus ? "1px solid var(--border-color)" : "none" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, padding: "8px 12px", borderRadius: 8, backgroundColor: syncStatus ? "var(--surface-secondary, rgba(255,255,255,0.04))" : "transparent", border: syncStatus ? "1px solid var(--border-color)" : "none" }}>
                     {syncing && (
                       <>
                         <RefreshCw size={14} className="spin" style={{ animation: "spin 1s linear infinite" }} />
@@ -1397,7 +1397,7 @@ export function MVSettings() {
                             <input className="custom-textbox" type="text" value={profile.name} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                             <input className="custom-textbox" type="text" value={profile.role} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                             {profile.isMain && (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent, #F59E0B)", background: "rgba(245, 158, 11, 0.15)", padding: "2px 8px", borderRadius: 3, whiteSpace: "nowrap" }}>MAIN</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent, #F59E0B)", background: "rgba(245, 158, 11, 0.15)", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>MAIN</span>
                             )}
                           </div>
                         ))}
@@ -1428,14 +1428,14 @@ export function MVSettings() {
                         <div className="form-group">
                           <label className="form-label">Primary Color</label>
                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                            <div style={{ width: 36, height: 36, borderRadius: 4, backgroundColor: settings.brandColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
+                            <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: settings.brandColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
                             <input className="custom-textbox" type="text" value={settings.brandColor} readOnly tabIndex={-1} style={{ flex: 1, fontFamily: "monospace", opacity: 0.7, cursor: "default" }} />
                           </div>
                         </div>
                         <div className="form-group">
                           <label className="form-label">Secondary Color</label>
                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                            <div style={{ width: 36, height: 36, borderRadius: 4, backgroundColor: settings.brandSecondaryColor || DEFAULT_SETTINGS.brandColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
+                            <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: settings.brandSecondaryColor || DEFAULT_SETTINGS.brandColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
                             <input className="custom-textbox" type="text" value={settings.brandSecondaryColor} readOnly tabIndex={-1} style={{ flex: 1, fontFamily: "monospace", opacity: 0.7, cursor: "default" }} />
                           </div>
                         </div>
@@ -1445,7 +1445,7 @@ export function MVSettings() {
                         <div className="form-group">
                           <label className="form-label">Accent Color</label>
                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                            <div style={{ width: 36, height: 36, borderRadius: 4, backgroundColor: settings.brandAccentColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
+                            <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: settings.brandAccentColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
                             <input className="custom-textbox" type="text" value={settings.brandAccentColor} readOnly tabIndex={-1} style={{ flex: 1, fontFamily: "monospace", opacity: 0.7, cursor: "default" }} />
                           </div>
                         </div>
@@ -1470,7 +1470,7 @@ export function MVSettings() {
                           <img
                             src={resolveLogoPreviewSrc(settings.brandLogoPath)}
                             alt="Church logo"
-                            style={{ width: 48, height: 48, borderRadius: 6, objectFit: "contain", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)" }}
+                            style={{ width: 48, height: 48, borderRadius: 8, objectFit: "contain", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)" }}
                           />
                           <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Logo synced from web dashboard</span>
                         </div>
@@ -1506,12 +1506,12 @@ export function MVSettings() {
                   {trialActive && (
                     <div style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
-                      padding: "14px 18px", borderRadius: "3px", marginBottom: "20px",
-                      background: "rgba(139, 92, 246, 0.08)",
-                      border: "1px solid rgba(139, 92, 246, 0.2)",
+                      padding: "14px 18px", borderRadius: "3px", marginBottom: "24px",
+                      background: "rgba(29, 78, 216, 0.08)",
+                      border: "1px solid rgba(29, 78, 216, 0.2)",
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <Calendar size={18} style={{ color: "#8B5CF6" }} />
+                        <Calendar size={18} style={{ color: "#1D4ED8" }} />
                         <div>
                           <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary)" }}>
                             Growth Trial — {trialDaysLeft} Day{trialDaysLeft !== 1 ? "s" : ""} Remaining
@@ -1521,7 +1521,7 @@ export function MVSettings() {
                           </div>
                         </div>
                       </div>
-                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.com/pricing to upgrade", "accent")}>
+                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to upgrade", "accent")}>
                         <ExternalLink size={12} /> Upgrade
                       </button>
                     </div>
@@ -1536,9 +1536,9 @@ export function MVSettings() {
                           <span className="credits-stat-value">{planLabel} Plan</span>
                           <span className="feature-tag-pill" style={{
                             textTransform: "uppercase",
-                            fontSize: "8px",
-                            background: trialActive ? "rgba(139,92,246,0.15)" : "rgba(16,185,129,0.15)",
-                            color: trialActive ? "#8B5CF6" : "var(--success-color)",
+                            fontSize: "12px",
+                            background: trialActive ? "rgba(29,78,216,0.15)" : "rgba(16,185,129,0.15)",
+                            color: trialActive ? "#1D4ED8" : "var(--success-color)",
                           }}>{trialActive ? "Active Trial" : "Active"}</span>
                         </div>
                       </div>
@@ -1589,7 +1589,7 @@ export function MVSettings() {
                                 {new Date(tx.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                               </span>
                             </div>
-                            <span style={{ fontWeight: 700, color: tx.amount < 0 ? "#f87171" : "#34d399" }}>
+                            <span style={{ fontWeight: 700, color: tx.amount < 0 ? "#EF4444" : "#22C55E" }}>
                               {tx.amount > 0 ? "+" : ""}{tx.amount}
                             </span>
                           </div>
@@ -1601,7 +1601,7 @@ export function MVSettings() {
                   {/* ── About Credits ── */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <h4 className="section-title">About Credits</h4>
-                    <p className="section-desc" style={{ marginBottom: "14px" }}>Credits power AI features only.</p>
+                    <p className="section-desc" style={{ marginBottom: "16px" }}>Credits power AI features only.</p>
                     <div className="about-credits-grid">
                       {[
                         "Bible Presentation",
@@ -1623,7 +1623,7 @@ export function MVSettings() {
                   {/* ── Credit Consumption Rates ── */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <h4 className="section-title">Credit Consumption</h4>
-                    <div className="credit-rates-grid" style={{ marginTop: "14px" }}>
+                    <div className="credit-rates-grid" style={{ marginTop: "16px" }}>
                       {(planConfig?.creditCosts ?? []).map((rate, i) => {
                         const icons = [Mic, Globe, FileText, Book, Paintbrush];
                         const IconComp = icons[i] || Mic;
@@ -1649,7 +1649,7 @@ export function MVSettings() {
                   {/* ── Plan Features ── */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <h4 className="section-title">{proUnlocked ? "Pro Plan Features" : trialActive ? "Growth Trial Features" : "Free Plan Features"}</h4>
-                    <div className="plan-features-columns" style={{ marginTop: "14px" }}>
+                    <div className="plan-features-columns" style={{ marginTop: "16px" }}>
                       {/* Included */}
                       <div className="plan-features-col">
                         <span className="plan-features-col-title plan-features-col-included">Included</span>
@@ -1726,12 +1726,12 @@ export function MVSettings() {
                   {trialActive && (
                     <div style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
-                      padding: "14px 18px", borderRadius: "3px", marginBottom: "20px",
-                      background: "rgba(139, 92, 246, 0.08)",
-                      border: "1px solid rgba(139, 92, 246, 0.2)",
+                      padding: "14px 18px", borderRadius: "3px", marginBottom: "24px",
+                      background: "rgba(29, 78, 216, 0.08)",
+                      border: "1px solid rgba(29, 78, 216, 0.2)",
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <Calendar size={18} style={{ color: "#8B5CF6" }} />
+                        <Calendar size={18} style={{ color: "#1D4ED8" }} />
                         <div>
                           <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary)" }}>
                             Growth Trial — {trialDaysLeft} Day{trialDaysLeft !== 1 ? "s" : ""} Remaining
@@ -1741,7 +1741,7 @@ export function MVSettings() {
                           </div>
                         </div>
                       </div>
-                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.com/pricing to upgrade", "accent")}>
+                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to upgrade", "accent")}>
                         <ExternalLink size={12} /> Upgrade
                       </button>
                     </div>
@@ -1784,7 +1784,7 @@ export function MVSettings() {
                     <h4 className="section-title">License Key</h4>
                     <p className="section-desc">Paste in the key provided via invoice.</p>
 
-                    <div className="settings-card" style={{ marginTop: "14px" }}>
+                    <div className="settings-card" style={{ marginTop: "16px" }}>
                       {proUnlocked ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--success-color)", fontSize: "0.88rem", fontWeight: "500", flex: 1 }}>
@@ -1820,7 +1820,7 @@ export function MVSettings() {
                   {/* Features checklist */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <h4 className="section-title">Pro Features</h4>
-                    <div className="settings-card" style={{ marginTop: "14px" }}>
+                    <div className="settings-card" style={{ marginTop: "16px" }}>
                       <ul className="bullet-checklist">
                         {[
                           "Unlimited Speech-to-Scripture triggers",
@@ -1882,7 +1882,7 @@ export function MVSettings() {
                       </div>
                       <div className="details-row">
                         <span className="details-label">Endpoint</span>
-                        <span className="details-value mono-display" style={{ fontSize: "11px" }}>{settings.obsUrl || "N/A"}</span>
+                        <span className="details-value mono-display" style={{ fontSize: "12px" }}>{settings.obsUrl || "N/A"}</span>
                       </div>
                     </div>
                   </div>
@@ -1948,7 +1948,7 @@ export function MVSettings() {
                         <h4 className="widget-title">Getting Started</h4>
                       </div>
                       <div className="widget-body">
-                        <p className="widget-desc" style={{ marginBottom: "14px" }}>Complete setup to get the most from your trial.</p>
+                        <p className="widget-desc" style={{ marginBottom: "16px" }}>Complete setup to get the most from your trial.</p>
                         <ul className="bullet-checklist">
                           {[
                             { label: "Pair a device", done: Boolean(authUser?.appId) },
@@ -1963,7 +1963,7 @@ export function MVSettings() {
                             </li>
                           ))}
                         </ul>
-                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.com/pricing to view plans", "accent")}>
+                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to view plans", "accent")}>
                           <ExternalLink size={14} />
                           <span>View Plans</span>
                         </button>
@@ -1975,7 +1975,7 @@ export function MVSettings() {
                         <h4 className="widget-title">View Plans</h4>
                       </div>
                       <div className="widget-body">
-                        <p className="widget-desc" style={{ marginBottom: "14px" }}>Compare available plans and unlock more features.</p>
+                        <p className="widget-desc" style={{ marginBottom: "16px" }}>Compare available plans and unlock more features.</p>
                         <ul className="bullet-checklist">
                           {[
                             "Speech-to-Scripture",
@@ -1991,7 +1991,7 @@ export function MVSettings() {
                             </li>
                           ))}
                         </ul>
-                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.com/pricing to view plans", "accent")}>
+                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to view plans", "accent")}>
                           <ExternalLink size={14} />
                           <span>View Plans</span>
                         </button>
@@ -2021,7 +2021,7 @@ export function MVSettings() {
                       </div>
                       <div className="details-row">
                         <span className="details-label">Key Format</span>
-                        <span className="details-value mono-display" style={{ fontSize: "10px" }}>mce_live_...</span>
+                        <span className="details-value mono-display" style={{ fontSize: "12px" }}>mce_live_...</span>
                       </div>
                     </div>
                   </div>

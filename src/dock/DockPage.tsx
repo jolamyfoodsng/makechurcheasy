@@ -562,6 +562,8 @@ export default function DockPage() {
   const [showTabVisibility, setShowTabVisibility] = useState(false);
   const [showProjectionSettings, setShowProjectionSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showClearScenesConfirm, setShowClearScenesConfirm] = useState(false);
+  const [clearScenesLoading, setClearScenesLoading] = useState(false);
 
   return (
     <div className="dock-root" ref={dockRootRef}>
@@ -772,7 +774,7 @@ export default function DockPage() {
                       border: "none",
                       borderRadius: 3,
                       background: tickerOutputMode === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                      color: tickerOutputMode === mode ? "var(--dock-accent, #6366f1)" : "var(--dock-text, #e2e8f0)",
+                      color: tickerOutputMode === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
                       cursor: "pointer",
                       textAlign: "left",
                       fontSize: 11,
@@ -824,7 +826,7 @@ export default function DockPage() {
                           border: "none",
                           borderRadius: 3,
                           background: projectionSettings.sceneMode === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                          color: projectionSettings.sceneMode === mode ? "var(--dock-accent, #6366f1)" : "var(--dock-text, #e2e8f0)",
+                          color: projectionSettings.sceneMode === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
                           cursor: "pointer",
                           textAlign: "left",
                           fontSize: 11,
@@ -862,7 +864,7 @@ export default function DockPage() {
                           border: "none",
                           borderRadius: 3,
                           background: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                          color: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent, #6366f1)" : "var(--dock-text, #e2e8f0)",
+                          color: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
                           cursor: "pointer",
                           textAlign: "left",
                           fontSize: 11,
@@ -925,6 +927,88 @@ export default function DockPage() {
               >
                 <Icon name="link" size={16} />
                 <span>{obsConnected ? "Reconnect" : "Connect"} to OBS</span>
+              </button>
+
+              <div className="dock-sidebar__divider" />
+
+              {/* Clear All MCE Scenes */}
+              <button
+                type="button"
+                className="dock-sidebar__item"
+                onClick={() => {
+                  setShowSettingsMenu(false);
+                  setShowClearScenesConfirm(true);
+                }}
+                style={{ color: "var(--dock-red, #EF4444)" }}
+              >
+                <Icon name="delete_sweep" size={16} />
+                <span>Clear All Scenes</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Clear All MCE Scenes Confirmation ── */}
+      {showClearScenesConfirm && (
+        <div className="dock-dialog-backdrop" onClick={() => { if (!clearScenesLoading) setShowClearScenesConfirm(false); }}>
+          <div className="dock-dialog dock-dialog--compact" onClick={(e) => e.stopPropagation()}>
+            <div className="dock-dialog__header">
+              <div>
+                <div className="dock-dialog__eyebrow" style={{ color: "var(--dock-red, #EF4444)" }}>Danger Zone</div>
+                <h2 className="dock-dialog__title">Clear All MCE Scenes?</h2>
+              </div>
+              <button
+                type="button"
+                className="dock-dialog__close"
+                onClick={() => { if (!clearScenesLoading) setShowClearScenesConfirm(false); }}
+                aria-label="Close"
+              >
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+            <div className="dock-dialog__body">
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5 }}>
+                This will <strong>permanently delete</strong> all scenes and sources created by MakeChurchEasy from OBS:
+              </p>
+              <ul style={{ margin: "8px 0", paddingLeft: 20, fontSize: 12, lineHeight: 1.6, color: "var(--dock-text-secondary, #94A3B8)" }}>
+                <li>MCE Presentation, MCE Lower Thirds</li>
+                <li>MCE_PreService, MCE Ticker Scene</li>
+                <li>MV: layouts, Sunday scenes</li>
+                <li>MCE-prefixed sources in your scenes</li>
+              </ul>
+              <p style={{ margin: 0, fontSize: 11, color: "var(--dock-text-dim, #64748B)", lineHeight: 1.4 }}>
+                Your own scenes and sources will not be deleted.
+              </p>
+            </div>
+            <div className="dock-dialog__actions">
+              <button
+                type="button"
+                className="dock-btn dock-btn--sm"
+                disabled={clearScenesLoading}
+                onClick={() => setShowClearScenesConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dock-btn dock-btn--sm dock-btn--danger"
+                disabled={clearScenesLoading}
+                onClick={async () => {
+                  if (!obsConnected) return;
+                  setClearScenesLoading(true);
+                  try {
+                    const result = await dockObsClient.clearAllMCEScenes();
+                    console.log(`[DockOBS] Cleared ${result.deletedScenes} scenes, cleaned ${result.cleanedSources} sources`);
+                  } catch (err) {
+                    console.error("[DockOBS] Failed to clear MCE scenes:", err);
+                  } finally {
+                    setClearScenesLoading(false);
+                    setShowClearScenesConfirm(false);
+                  }
+                }}
+              >
+                {clearScenesLoading ? "Clearing…" : "Delete Everything"}
               </button>
             </div>
           </div>

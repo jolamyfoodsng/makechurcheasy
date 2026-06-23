@@ -40,7 +40,7 @@
     --app-border: #E2E4E9;
     --app-border-light: rgba(0, 0, 0, 0.08);
 
-    --app-primary: #5b6abf;
+    --app-primary: #1D4ED8;
     --app-primary-hover: #7083cc;
     --app-text-main: #1A1D23;
     --app-text-muted: #374151;
@@ -213,7 +213,7 @@ a {
     justify-content: center;
     gap: 8px;
     padding: 8px 16px;
-    border-radius: 8px;
+    border-radius: 4px;
     font-weight: 500;
     transition: all 0.2s;
     font-size: 0.875rem;
@@ -244,7 +244,7 @@ a {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 8px;
+    border-radius: 4px;
     transition: 0.2s;
     border: 1px solid transparent;
 }
@@ -273,7 +273,7 @@ a {
     padding: 10px 16px 10px 36px;
     background: var(--app-surface);
     border: 1px solid var(--app-border);
-    border-radius: 8px;
+    border-radius: 4px;
     font-size: 0.875rem;
     transition: border-color 0.2s;
 }
@@ -328,7 +328,7 @@ a {
     align-items: center;
     gap: 12px;
     padding: 10px 16px;
-    border-radius: 8px;
+    border-radius: 4px;
     color: var(--app-text-muted);
     font-size: 0.875rem;
     font-weight: 500;
@@ -424,7 +424,7 @@ a {
     align-items: center;
     gap: 12px;
     padding: 8px;
-    border-radius: 8px;
+    border-radius: 4px;
     cursor: pointer;
     transition: 0.2s;
     margin-left: -8px;
@@ -756,7 +756,7 @@ a {
     width: 100%;
     background: var(--app-surface-hover);
     border: 1px solid var(--app-border);
-    border-radius: 8px;
+    border-radius: 4px;
     padding: 10px 36px 10px 36px;
     color: white;
     font-size: 0.875rem;
@@ -806,7 +806,7 @@ a {
     display: flex;
     gap: 12px;
     padding: 12px;
-    border-radius: 8px;
+    border-radius: 4px;
     border: 1px solid var(--app-border);
     cursor: pointer;
     transition: 0.2s;
@@ -867,7 +867,7 @@ a {
     display: flex;
     flex-direction: column;
     padding: 12px;
-    border-radius: 8px;
+    border-radius: 4px;
     border: 1px solid var(--app-border);
     cursor: pointer;
     transition: 0.2s;
@@ -912,7 +912,7 @@ a {
 .btn-block {
     width: 100%;
     padding: 12px;
-    border-radius: 8px;
+    border-radius: 4px;
     justify-content: center;
     font-size: 0.95rem;
 }
@@ -923,7 +923,7 @@ a {
     padding: 12px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--app-border);
-    border-radius: 8px;
+    border-radius: 4px;
     align-items: flex-start;
 }
 
@@ -1081,7 +1081,7 @@ a {
     font-size: 0.875rem;
     background: var(--app-primary);
     color: white;
-    border-radius: 8px;
+    border-radius: 4px;
     border: 1px solid var(--app-primary-hover);
     cursor: pointer;
     transition: all 0.2s;
@@ -1226,7 +1226,7 @@ a {
     display: flex;
     gap: 16px;
     padding: 4px 0;
-    border-radius: 8px;
+    border-radius: 4px;
     margin: 0 -8px;
     padding-left: 8px;
     padding-right: 8px;
@@ -1350,7 +1350,7 @@ a {
 .s-icon {
     width: 32px;
     height: 32px;
-    border-radius: 8px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1423,7 +1423,7 @@ a {
 .qa-btn {
     background: var(--app-surface);
     border: 1px solid var(--app-border);
-    border-radius: 8px;
+    border-radius: 4px;
     padding: 12px;
     display: flex;
     align-items: center;
@@ -1625,7 +1625,7 @@ a {
     gap: 4px;
     padding: 4px;
     background: var(--app-surface);
-    border-radius: 8px;
+    border-radius: 4px;
     border: 1px solid var(--app-border);
 }
 

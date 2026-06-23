@@ -198,7 +198,7 @@ const modernLightSettings: BibleThemeSettings = {
   refFontWeight: "bold",
   refPosition: "bottom",
 
-  backgroundColor: "#1a1a2e",
+  backgroundColor: "#0F172A",
   backgroundImage: "",
   backgroundVideo: "",
   backgroundOpacity: 1,

@@ -55,7 +55,7 @@
   justify-content: center;
   gap: 6px;
   min-height: 42px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface-hover);
   color: var(--text-primary);
@@ -95,7 +95,7 @@
 .pre-service-status-card {
   border: 1px solid var(--border-primary);
   background: rgba(var(--primary-rgb), 0.06);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -371,7 +371,7 @@
   grid-template-columns: auto 1fr auto;
   gap: 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--surface-dark);
   padding: 10px;
 }
@@ -464,7 +464,7 @@
 
 .pre-service-empty {
   border: 1px dashed var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   color: var(--text-secondary);
   padding: 24px;
   text-align: center;
@@ -1000,7 +1000,7 @@
 .cfg-search-input {
   width: 100%;
   padding: 8px 12px 8px 34px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--bg-dark);
   color: var(--text-primary);
@@ -1308,7 +1308,7 @@
 }
 
 .cfg-duration-input {
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface-dark);
   padding: 8px 10px;
@@ -1358,7 +1358,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface-dark);
   padding: 8px 10px;
@@ -1403,7 +1403,7 @@
 .cfg-select {
   width: 100%;
   appearance: none;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface-dark);
   color: var(--text-primary);
@@ -1852,7 +1852,7 @@
   justify-content: center;
   gap: 6px;
   padding: 10px 16px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;

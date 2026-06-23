@@ -48,6 +48,8 @@ export interface ForcedUpdateState {
   requiredVersion: string;
   /** Hours remaining until full lock (null = not in countdown) */
   hoursRemaining: number | null;
+  /** Total grace period hours (for live countdown computation) */
+  gracePeriodHours: number | null;
   /** ISO timestamp when the countdown started */
   startedAt: string | null;
   /** Custom update message from admin */
@@ -278,6 +280,7 @@ export function getForcedUpdateState(
     lockType: null,
     requiredVersion: "",
     hoursRemaining: null,
+    gracePeriodHours: null,
     startedAt: null,
     updateMessage: "",
     loading: !settings,
@@ -298,6 +301,21 @@ export function getForcedUpdateState(
       };
     }
 
+    // If the server has turned off the lock that created this record, clear the stale record
+    const serverStillLocking =
+      (record.lockType === "emergency-lock" && settings.emergencyLock) ||
+      (record.lockType === "forced-update" && settings.forceUpdatesEnabled &&
+        (isBelowVersion(ver, settings.minimumSupportedVersion) || isBelowVersion(ver, settings.latestVersion)));
+
+    if (!serverStillLocking) {
+      clearRecord();
+      clearDismissInfo();
+      return {
+        ...base,
+        updateMessage: settings.updateMessage,
+      };
+    }
+
     // Record exists and user hasn't updated — enforce it
     const hoursRemaining = computeRemainingHours(record.startedAt, record.gracePeriodHours);
     const blocked = hoursRemaining <= 0;
@@ -308,6 +326,7 @@ export function getForcedUpdateState(
       lockType: record.lockType,
       requiredVersion: record.requiredVersion,
       hoursRemaining,
+      gracePeriodHours: record.gracePeriodHours,
       startedAt: record.startedAt,
       updateMessage: settings.updateMessage,
       loading: false,
@@ -338,6 +357,7 @@ export function getForcedUpdateState(
       lockType: "emergency-lock",
       requiredVersion,
       hoursRemaining,
+      gracePeriodHours: delayHours,
       startedAt: now,
       updateMessage: settings.updateMessage || "Emergency update required. Please contact your administrator.",
       loading: false,
@@ -371,6 +391,7 @@ export function getForcedUpdateState(
         lockType: "forced-update",
         requiredVersion,
         hoursRemaining,
+        gracePeriodHours: graceHours,
         startedAt: now,
         updateMessage: settings.updateMessage,
         loading: false,

@@ -1021,7 +1021,7 @@ const bible09 = makeTheme({
 //     "description": "Statement quote card for sermon clips and social-friendly moments.",
 //     "category": "general",
 //     "icon": "format_quote",
-//     "accentColor": "#a78bfa",
+//     "accentColor": "#60A5FA",
 //     "tags": [
 //       "quote",
 //       "sermon",
@@ -1097,7 +1097,7 @@ const bible09 = makeTheme({
 //         "group": "Animation"
 //       }
 //     ],
-//     "html": "<div class=\"ylt y-pos-bc\" data-state=\"{{state}}\" data-mode=\"{{animMode}}\" style=\"--bg1:#1a1338;--bg2:#25194c;--fg:#f8f5ff;--accent:#a78bfa;--muted:rgba(236,229,255,.82);--border:rgba(167,139,250,.34);--glow:rgba(167,139,250,.24);\">\n  <div class=\"y-shell y-quote\">\n    <span class=\"y-kicker y-enter-3\">{{label}}</span>\n    <p class=\"y-quote-main y-enter-1\">\"{{quote}}\"</p>\n    <p class=\"y-quote-ref y-enter-2\">{{reference}}</p>\n  </div>\n</div>",
+//     "html": "<div class=\"ylt y-pos-bc\" data-state=\"{{state}}\" data-mode=\"{{animMode}}\" style=\"--bg1:#1a1338;--bg2:#25194c;--fg:#f8f5ff;--accent:#60A5FA;--muted:rgba(236,229,255,.82);--border:rgba(167,139,250,.34);--glow:rgba(167,139,250,.24);\">\n  <div class=\"y-shell y-quote\">\n    <span class=\"y-kicker y-enter-3\">{{label}}</span>\n    <p class=\"y-quote-main y-enter-1\">\"{{quote}}\"</p>\n    <p class=\"y-quote-ref y-enter-2\">{{reference}}</p>\n  </div>\n</div>",
 //     "usesTailwind": false,
 //     "fontImports": [
 //       "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&display=swap"

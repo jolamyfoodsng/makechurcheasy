@@ -29,7 +29,7 @@ import "./Admin.css";
 const FEATURE_ICONS = {
   bible: { icon: BookOpen, color: "#60a5fa" },
   worship: { icon: Music, color: "#34d399" },
-  media: { icon: Images, color: "#a78bfa" },
+  media: { icon: Images, color: "#60A5FA" },
   voice: { icon: Mic, color: "#f59e0b" },
   transcripts: { icon: FileText, color: "#f472b6" },
   themes: { icon: Palette, color: "#38bdf8" },

@@ -84,7 +84,7 @@
   gap: 6px;
   padding: 8px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--surface-dark);
   color: var(--text-secondary);
   font-size: 10px;
@@ -131,7 +131,7 @@
 .dev-db-migration-result {
   margin: 12px 24px 0;
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface-dark);
   position: relative;
@@ -254,7 +254,7 @@
 
 .dev-db-store {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--surface-dark);
   overflow: hidden;
   transition: border-color 120ms;

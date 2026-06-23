@@ -758,7 +758,7 @@ export const BIBLE_THEMES: ThemeLike[] = [
     "description": "Scripture panel with focused readability and gentle glow.",
     "category": "bible",
     "icon": "menu_book",
-    "accentColor": "#a78bfa",
+    "accentColor": "#60A5FA",
     "tags": [
       "bible",
       "scripture",
@@ -834,7 +834,7 @@ export const BIBLE_THEMES: ThemeLike[] = [
         "group": "Animation"
       }
     ],
-    "html": "<div class=\"ylt y-pos-bc\" data-state=\"{{state}}\" data-mode=\"{{animMode}}\" style=\"--bg1:#1a1338;--bg2:#25194c;--fg:#f8f5ff;--accent:#a78bfa;--muted:rgba(236,229,255,.82);--border:rgba(167,139,250,.34);--glow:rgba(167,139,250,.24);\">\n  <div class=\"y-shell y-scripture\">\n    <span class=\"y-kicker y-enter-3\">{{label}}</span>\n    <p class=\"y-scripture-main y-enter-1\">{{verseText}}</p>\n    <p class=\"y-scripture-ref y-enter-2\">{{reference}}</p>\n  </div>\n</div>",
+    "html": "<div class=\"ylt y-pos-bc\" data-state=\"{{state}}\" data-mode=\"{{animMode}}\" style=\"--bg1:#1a1338;--bg2:#25194c;--fg:#f8f5ff;--accent:#60A5FA;--muted:rgba(236,229,255,.82);--border:rgba(167,139,250,.34);--glow:rgba(167,139,250,.24);\">\n  <div class=\"y-shell y-scripture\">\n    <span class=\"y-kicker y-enter-3\">{{label}}</span>\n    <p class=\"y-scripture-main y-enter-1\">{{verseText}}</p>\n    <p class=\"y-scripture-ref y-enter-2\">{{reference}}</p>\n  </div>\n</div>",
     "usesTailwind": false,
     "fontImports": [
       "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&display=swap"

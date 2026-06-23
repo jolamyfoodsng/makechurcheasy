@@ -29,7 +29,7 @@ const CANVAS_H = 1080;
 
 const CONTENT_TYPE_INFO: Record<string, { label: string; icon: string; color: string }> = {
   camera: { label: "Camera", icon: "videocam", color: "#0078d4" },
-  scripture: { label: "Scripture", icon: "menu_book", color: "#6c5ce7" },
+  scripture: { label: "Scripture", icon: "menu_book", color: "#3B82F6" },
   translation: { label: "Translation", icon: "translate", color: "#00bcd4" },
   "lower-third": { label: "Lower Third", icon: "subtitles", color: "#ff9800" },
   browser: { label: "Browser", icon: "language", color: "#ff5722" },
@@ -51,7 +51,7 @@ interface MVBackground {
   sceneName: string;
 }
 
-const DEFAULT_MV_BG: MVBackground = { type: "color", color: "#1a1a2e", filePath: "", sceneName: "" };
+const DEFAULT_MV_BG: MVBackground = { type: "color", color: "#0F172A", filePath: "", sceneName: "" };
 
 interface SavedMultiView {
   id: string;
@@ -363,7 +363,7 @@ function BackgroundPicker({
             type="text"
             value={background.color}
             onChange={(e) => onChange({ ...background, color: e.target.value })}
-            placeholder="#1a1a2e"
+            placeholder="#0F172A"
           />
         </div>
       )}
@@ -881,7 +881,7 @@ export default function DockMultiviewTab() {
 
         // Determine source kind + settings based on background type
         let inputKind = "color_source_v3";
-        let inputSettings: Record<string, unknown> = { color: cssColorToObsInt(bg.color || "#1a1a2e"), width: CANVAS_W, height: CANVAS_H };
+        let inputSettings: Record<string, unknown> = { color: cssColorToObsInt(bg.color || "#0F172A"), width: CANVAS_W, height: CANVAS_H };
 
         if (bg.type === "image" && bg.filePath) {
           inputKind = "image_source";

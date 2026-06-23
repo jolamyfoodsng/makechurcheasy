@@ -6,7 +6,7 @@ import "./Admin.css";
 const PLAN_COLORS: Record<string, string> = {
   Free: "#5F697D",
   Basic: "#60a5fa",
-  Starter: "#a78bfa",
+  Starter: "#60A5FA",
   Growth: "#34d399",
   Pro: "#facc15",
 };

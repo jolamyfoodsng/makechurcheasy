@@ -71,7 +71,7 @@
   padding: 9px 32px 9px 36px;
   background: var(--surface-dark);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 0.8125rem;
   color: var(--text-primary);
   transition: border-color 0.15s;
@@ -114,7 +114,7 @@
   justify-content: center;
   gap: 6px;
   padding: 9px 16px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-weight: 500;
   font-size: 0.8125rem;
   transition: all 0.15s;
@@ -324,7 +324,7 @@
 .tl-icon-circle {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(var(--primary-rgb), 0.12);
   color: var(--primary);
   display: flex;
@@ -463,7 +463,7 @@
   margin-top: 4px;
   background: var(--surface-dark);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 4px;
   min-width: 140px;
   z-index: 50;

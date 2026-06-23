@@ -178,7 +178,7 @@ export default function TrialModal({
             padding: "10px 0",
             borderRadius: "6px",
             border: "none",
-            background: "#5B5FCF",
+            background: "#1D4ED8",
             color: "#ffffff",
             fontSize: "14px",
             fontWeight: 600,
@@ -187,7 +187,7 @@ export default function TrialModal({
             transition: "background 0.2s ease",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#4A4EB8")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "#5B5FCF")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "#1D4ED8")}
         >
           {isExistingUser ? "Start Exploring" : "Get Started"}
         </button>

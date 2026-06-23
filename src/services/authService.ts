@@ -73,22 +73,6 @@ export async function initAuthStore(): Promise<void> {
     _store = null;
   }
 
-  // Detect logout race condition: Tauri store deletion is async, but localStorage
-  // removal in logout() is synchronous. If Tauri has a session but localStorage
-  // doesn't, the user logged out and the Tauri delete hasn't completed yet.
-  if (_session && _store) {
-    try {
-      const lsRaw = localStorage.getItem(SESSION_KEY);
-      if (!lsRaw) {
-        // localStorage was cleared synchronously by logout() — Tauri delete is
-        // still in flight. Treat this as logged out.
-        await _store.delete(SESSION_KEY).catch(() => { });
-        await _store.save().catch(() => { });
-        _session = null;
-      }
-    } catch { /* ignore — treat as logged in */ }
-  }
-
   if (!_session) {
     // Fallback for non-Tauri environments (tests, web)
     try {

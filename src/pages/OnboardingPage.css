@@ -905,7 +905,7 @@
 .ob-bible-rail-icon {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1206,7 +1206,7 @@
 .ob-worship-rail-btn {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1577,7 +1577,7 @@
 .ob-media-rail-icon {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;

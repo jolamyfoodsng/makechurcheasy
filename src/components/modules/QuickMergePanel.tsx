@@ -97,7 +97,7 @@ const MERGE_SCENE_NAME = "⚡ Quick Merge";
 // ---------------------------------------------------------------------------
 // Mini SVG layout thumbnail — renders region rectangles in a tiny preview
 // ---------------------------------------------------------------------------
-const REGION_COLORS = ["#6366f1", "#38bdf8", "#f472b6", "#34d399", "#fb923c", "#a78bfa"];
+const REGION_COLORS = ["#6366f1", "#38bdf8", "#f472b6", "#34d399", "#fb923c", "#60A5FA"];
 
 function LayoutThumb({ regions, size = 40 }: { regions: TemplateDefinition["regions"]; size?: number }) {
   const W = 1920;

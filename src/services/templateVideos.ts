@@ -4,7 +4,7 @@ import { getOverlayBaseUrl } from "./overlayUrl";
 
 const TEMPLATE_VIDEO_API_BASE =
   ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_OBS_BACKEND_API_BASE?.trim() ||
-    "https://makechurcheasy-bible-api.fly.dev") + "/api";
+    "https://versecast-bible-api.solitary-credit-34b2.workers.dev") + "/api";
 
 const APP_VERSION: string =
   typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";

@@ -169,7 +169,7 @@ function getAllDockResources(): DockResourceNames[] {
 const DEFAULT_LT_THEME = {
   id: "dock-default-lt",
   html: `<div class="lt pos-bl in-up">
-  <div class="panel speaker-panel" style="--bg:rgba(18,18,24,.92);--fg:#fff;--accent:#6c63ff;--bd:rgba(255,255,255,.12);">
+  <div class="panel speaker-panel" style="--bg:rgba(18,18,24,.92);--fg:#fff;--accent:#1D4ED8;--bd:rgba(255,255,255,.12);">
     <div class="v-divider"></div>
     <div class="col">
       <p class="name-line">{{name}}</p>
@@ -216,7 +216,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   min-width: 5px;
   height: 72px;
   border-radius: 2px;
-  background: var(--accent, #6c63ff);
+  background: var(--accent, #1D4ED8);
 }
 
 .name-line {
@@ -2140,6 +2140,104 @@ class DockObsClient {
     try {
       await this.call("RemoveScene", { sceneName });
     } catch { /* ignore */ }
+  }
+
+  /**
+   * Determine whether a scene name was created by MakeChurchEasy.
+   *
+   * Matches:
+   *  - Exact names: "MCE Presentation", "MCE Lower Thirds", "MCE_PreService",
+   *    "MCE Ticker Scene", "⚡ Quick Merge"
+   *  - Prefix patterns: "MCE ", "MCE_", "MV: ", "_OVMR_Preview_", "Sunday - "
+   *  - Suffix pattern: "__MCE_Dock_Preview"
+   *  - Source-prefixed scenes: "MCE MV: "
+   */
+  private static isMCEScene(name: string): boolean {
+    const n = name.trim();
+    // Exact matches
+    if (
+      n === "MCE Presentation" ||
+      n === "MCE Lower Thirds" ||
+      n === "MCE_PreService" ||
+      n === "MCE Ticker Scene" ||
+      n === "⚡ Quick Merge"
+    ) return true;
+
+    // Prefix patterns
+    if (
+      n.startsWith("MCE ") ||
+      n.startsWith("MCE_") ||
+      n.startsWith("MV: ") ||
+      n.startsWith("_OVMR_Preview_") ||
+      n.startsWith("Sunday - ")
+    ) return true;
+
+    // Suffix pattern
+    if (n.endsWith("__MCE_Dock_Preview")) return true;
+
+    return false;
+  }
+
+  /**
+   * Delete every scene and source that MakeChurchEasy created in OBS.
+   *
+   * This removes MCE-managed scenes and strips MCE-prefixed sources from
+   * any remaining (user-owned) scenes.  The user is responsible for
+   * confirming the destructive action before calling this.
+   */
+  async clearAllMCEScenes(): Promise<{ deletedScenes: number; cleanedSources: number }> {
+    const sceneNames = await this.getObsSceneNames();
+    const mceScenes = sceneNames.filter((n) => DockObsClient.isMCEScene(n));
+    const userScenes = sceneNames.filter((n) => !DockObsClient.isMCEScene(n));
+
+    // If the current program scene is an MCE scene, switch to the first user scene
+    // so OBS doesn't get stuck on a scene we're about to delete.
+    if (userScenes.length > 0) {
+      try {
+        const currentProgram = await this.getCurrentProgramSceneName();
+        if (mceScenes.includes(currentProgram)) {
+          await this.call("SetCurrentProgramScene", { sceneName: userScenes[0] });
+        }
+      } catch { /* best effort */ }
+    }
+
+    // Delete MCE scenes
+    let deletedScenes = 0;
+    for (const scene of mceScenes) {
+      try {
+        await this.call("RemoveScene", { sceneName: scene });
+        deletedScenes++;
+      } catch (err) {
+        console.warn(`[DockOBS] Failed to delete MCE scene "${scene}":`, err);
+      }
+    }
+
+    // Clean up MCE-prefixed sources from remaining user scenes
+    const MCE_SOURCE_PREFIXES = ["MCE ", "MCE_", "OCS "];
+    let cleanedSources = 0;
+
+    for (const scene of userScenes) {
+      try {
+        const resp = await this.call("GetSceneItemList", { sceneName: scene }) as {
+          sceneItems?: Array<{ sceneItemId: number; sourceName?: string }>;
+        };
+        const items = resp.sceneItems ?? [];
+        for (const item of items) {
+          const src = (item.sourceName ?? "").trim();
+          const isMCE = MCE_SOURCE_PREFIXES.some((p) => src.startsWith(p));
+          if (!isMCE) continue;
+          try {
+            await this.call("RemoveSceneItem", {
+              sceneName: scene,
+              sceneItemId: item.sceneItemId,
+            });
+            cleanedSources++;
+          } catch { /* ignore individual source failures */ }
+        }
+      } catch { /* ignore scene-level failures */ }
+    }
+
+    return { deletedScenes, cleanedSources };
   }
 
   /**

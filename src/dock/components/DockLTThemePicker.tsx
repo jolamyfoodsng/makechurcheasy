@@ -151,7 +151,7 @@ export default function DockLTThemePicker({ selectedThemeId, onSelect, category,
       >
         <div
           className="dock-theme-dropdown-trigger__swatch"
-          style={{ background: selected?.accentColor || "#6c63ff" }}
+          style={{ background: selected?.accentColor || "#1D4ED8" }}
         />
         <span className="dock-theme-dropdown-trigger__name">
           {selected ? shortName(selected) : "Select Theme"}
@@ -177,7 +177,7 @@ export default function DockLTThemePicker({ selectedThemeId, onSelect, category,
             >
               <div
                 className="dock-theme-dropdown-item__swatch"
-                style={{ background: theme.accentColor || "#6c63ff" }}
+                style={{ background: theme.accentColor || "#1D4ED8" }}
               />
               <span className="dock-theme-dropdown-item__name">{shortName(theme)}</span>
               {favoriteIds.has(theme.id) && (

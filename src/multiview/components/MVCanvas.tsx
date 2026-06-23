@@ -560,7 +560,7 @@ export function MVCanvas() {
                 <Rect id={`region-${region.id}`}
                   x={region.x} y={region.y} width={region.width} height={region.height}
                   rotation={region.rotation}
-                  fill={isThemedSlot ? themeBg : isEmptySlot ? "rgba(108,92,231,0.15)" : hasFill ? "transparent" : "#6c5ce7"}
+                  fill={isThemedSlot ? themeBg : isEmptySlot ? "rgba(108,92,231,0.15)" : hasFill ? "transparent" : "#3B82F6"}
                   opacity={region.opacity * (isEmptySlot ? 0.5 : 1)}
                   stroke={borderColor}
                   strokeWidth={borderWidth}

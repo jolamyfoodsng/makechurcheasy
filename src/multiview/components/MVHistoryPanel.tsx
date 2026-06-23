@@ -164,7 +164,7 @@ function useHistoryEntries(): HistoryEntry[] {
 // ---------------------------------------------------------------------------
 
 const CATEGORY_META: Record<HistoryCategory, { label: string; icon: string; color: string }> = {
-  layout:    { label: "Layout",    icon: "dashboard",       color: "#6c5ce7" },
+  layout:    { label: "Layout",    icon: "dashboard",       color: "#3B82F6" },
   region:    { label: "Region",    icon: "crop_free",       color: "#00b894" },
   selection: { label: "Select",    icon: "select_all",      color: "#fdcb6e" },
   view:      { label: "View",      icon: "visibility",      color: "#74b9ff" },

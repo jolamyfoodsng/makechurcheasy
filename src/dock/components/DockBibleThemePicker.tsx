@@ -45,7 +45,7 @@ function themePreviewStyle(settings: BibleThemeSettings) {
       : null;
 
   return {
-    backgroundColor: settings.boxBackground || settings.backgroundColor || "#0a0a14",
+    backgroundColor: settings.boxBackground || settings.backgroundColor || "#0F172A",
     backgroundImage: [overlay, imageLayer].filter(Boolean).join(", ") || undefined,
     backgroundPosition: imageLayer ? "center, center" : undefined,
     backgroundSize: imageLayer ? "cover, cover" : undefined,

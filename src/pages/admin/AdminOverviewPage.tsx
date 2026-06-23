@@ -69,7 +69,7 @@ export default function AdminOverviewPage() {
   const kpiCards = [
     { label: "Total Users", value: formatNumber(kpis.totalUsers), icon: Users, color: "#60a5fa" },
     { label: "Active Users", value: formatNumber(kpis.activeUsers), icon: TrendingUp, color: "#34d399" },
-    { label: "Churches", value: formatNumber(kpis.churches), icon: Church, color: "#a78bfa" },
+    { label: "Churches", value: formatNumber(kpis.churches), icon: Church, color: "#60A5FA" },
     { label: "Paid Subscribers", value: formatNumber(kpis.paidSubscribers), icon: CreditCard, color: "#f59e0b" },
     { label: "Monthly Revenue", value: formatCurrency(kpis.monthlyRevenue), icon: CreditCard, color: "#34d399" },
     { label: "AI Hours Used", value: `${kpis.aiHoursUsed}`, icon: Brain, color: "#f472b6" },

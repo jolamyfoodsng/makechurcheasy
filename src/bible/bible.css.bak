@@ -135,7 +135,7 @@
 }
 .verse-panel-version-btn {
   flex: 1; padding: 6px; font-size: 9px; font-weight: 900; font-family: var(--b-font);
-  border: none; border-radius: 8px; cursor: pointer; transition: all 0.12s;
+  border: none; border-radius: 4px; cursor: pointer; transition: all 0.12s;
   background: transparent; color: var(--b-text-3);
 }
 .verse-panel-version-btn.active { background: rgba(75,85,99,0.5); color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }

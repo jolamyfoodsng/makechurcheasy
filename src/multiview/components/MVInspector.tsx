@@ -889,7 +889,7 @@ function LTInspectorPanel({ region, update }: { region: Region; update: (changes
                 className="mv-field-input"
                 type="text"
                 value={ltBgColor}
-                placeholder="e.g. #1a1a2e (empty = theme default)"
+                placeholder="e.g. #0F172A (empty = theme default)"
                 onChange={(e) => update({ ltBgColor: e.target.value } as any)}
                 style={{ flex: 1 }}
               />

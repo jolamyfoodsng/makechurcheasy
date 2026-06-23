@@ -1282,7 +1282,7 @@ export function BibleModule({
         : undefined,
       backgroundColor: activeFullTheme?.settings.backgroundImage
         ? undefined
-        : (activeFullTheme?.settings.backgroundColor ?? "#1a1a2e"),
+        : (activeFullTheme?.settings.backgroundColor ?? "#0F172A"),
       backgroundSize: "cover",
       backgroundPosition: "center",
     }),

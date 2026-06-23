@@ -1973,7 +1973,7 @@
 }
 
 .verse-card.selected .verse-card-num {
-  color: #a78bfa;
+  color: #60A5FA;
 }
 
 .verse-card.sent .verse-card-num {
@@ -2142,7 +2142,7 @@
   transition: color 0.15s, background 0.15s;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  border-radius: 8px 8px 0 0;
+  border-radius: 4px 8px 0 0;
   position: relative;
 }
 
@@ -4066,7 +4066,7 @@
 
 .theme-editor-btn.save {
   background: rgba(91, 106, 191, 0.12);
-  color: #a78bfa;
+  color: #60A5FA;
   border-color: rgba(91, 106, 191, 0.3);
 }
 
@@ -4572,7 +4572,7 @@
 .bible-library-header h2 svg {
   width: 22px;
   height: 22px;
-  color: var(--b-accent, #5b6abf);
+  color: var(--b-accent, #1D4ED8);
 }
 
 .bible-library-close {
@@ -4606,7 +4606,7 @@
 
 .bible-library-page-back:hover {
   background: var(--b-hover, rgba(255, 255, 255, 0.08));
-  border-color: var(--b-accent, #5b6abf);
+  border-color: var(--b-accent, #1D4ED8);
   color: var(--b-text-1, #e0e0e0);
 }
 
@@ -4631,7 +4631,7 @@
   font-weight: 500;
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
-  border-radius: 8px 8px 0 0;
+  border-radius: 4px 8px 0 0;
   position: relative;
 }
 
@@ -4641,7 +4641,7 @@
 }
 
 .bible-library-tab.active {
-  color: var(--tab-text-active, var(--b-accent, #5b6abf));
+  color: var(--tab-text-active, var(--b-accent, #1D4ED8));
   font-weight: 700;
 }
 
@@ -4659,7 +4659,7 @@
 }
 
 .bible-library-tab.active::after {
-  background: var(--tab-indicator, var(--b-accent, #5b6abf));
+  background: var(--tab-indicator, var(--b-accent, #1D4ED8));
   opacity: 1;
 }
 
@@ -4674,7 +4674,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: var(--b-accent, #5b6abf);
+  background: var(--b-accent, #1D4ED8);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
@@ -4702,7 +4702,7 @@
   min-width: 0;
   background: var(--b-tile, #2a2a3a);
   border: 2px solid var(--b-border, #333);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 0 10px;
 }
 
@@ -4734,7 +4734,7 @@
   flex: 0 0 200px;
   background: var(--b-tile, #2a2a3a);
   border: 2px solid var(--b-border, #333);
-  border-radius: 8px;
+  border-radius: 4px;
   color: var(--b-text-1, #e0e0e0);
   padding: 8px 12px;
   font-size: 13px;
@@ -4743,7 +4743,7 @@
 }
 
 .bible-library-lang-select:focus {
-  border-color: var(--b-accent, #5b6abf);
+  border-color: var(--b-accent, #1D4ED8);
 }
 
 .bible-library-lang-select option {
@@ -4753,10 +4753,10 @@
 }
 
 .bible-library-search-btn {
-  background: var(--b-accent, #5b6abf);
+  background: var(--b-accent, #1D4ED8);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 8px 16px;
   font-size: 13px;
   font-weight: 600;
@@ -4819,13 +4819,13 @@
 }
 
 .bible-library-lang-pill:hover {
-  border-color: var(--b-accent, #5b6abf);
+  border-color: var(--b-accent, #1D4ED8);
   color: var(--b-text-1, #e0e0e0);
 }
 
 .bible-library-lang-pill.active {
-  background: var(--b-accent, #5b6abf);
-  border-color: var(--b-accent, #5b6abf);
+  background: var(--b-accent, #1D4ED8);
+  border-color: var(--b-accent, #1D4ED8);
   color: #fff;
 }
 
@@ -4873,7 +4873,7 @@
 }
 
 .bible-library-row:hover {
-  border-color: var(--b-accent, #5b6abf);
+  border-color: var(--b-accent, #1D4ED8);
   background: rgba(124, 111, 247, 0.04);
 }
 
@@ -4893,7 +4893,7 @@
 .bible-library-row-abbr {
   font-size: 13px;
   font-weight: 800;
-  color: var(--b-accent, #5b6abf);
+  color: var(--b-accent, #1D4ED8);
   letter-spacing: 0.5px;
   min-width: 50px;
   flex-shrink: 0;
@@ -4939,7 +4939,7 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  background: var(--b-accent, #5b6abf);
+  background: var(--b-accent, #1D4ED8);
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -4996,7 +4996,7 @@
 
 .bible-library-progress-fill {
   height: 100%;
-  background: var(--b-accent, #5b6abf);
+  background: var(--b-accent, #1D4ED8);
   transition: width 0.2s ease;
   border-radius: 3px;
 }
@@ -5008,7 +5008,7 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  color: var(--b-accent, #5b6abf);
+  color: var(--b-accent, #1D4ED8);
 }
 
 .bible-library-row-parsing svg {
@@ -5136,7 +5136,7 @@
   margin-bottom: 12px;
   background: rgba(124, 111, 247, 0.08);
   border: 1px solid rgba(124, 111, 247, 0.25);
-  border-radius: 8px;
+  border-radius: 4px;
   color: var(--b-text-1, #e0e0e0);
   font-size: 12px;
 }
@@ -5144,7 +5144,7 @@
 .bible-library-installed-note svg {
   width: 18px;
   height: 18px;
-  color: var(--b-accent, #5b6abf);
+  color: var(--b-accent, #1D4ED8);
   flex-shrink: 0;
 }
 
@@ -5182,7 +5182,7 @@
   padding: 12px 14px;
   background: var(--b-tile, #2a2a3a);
   border: 2px solid var(--b-border, #333);
-  border-radius: 8px;
+  border-radius: 4px;
   transition: border-color 0.15s;
 }
 
@@ -5199,7 +5199,7 @@
 .bible-library-installed-abbr {
   font-size: 12px;
   font-weight: 800;
-  color: var(--b-accent, #5b6abf);
+  color: var(--b-accent, #1D4ED8);
   letter-spacing: 0.5px;
 }
 
@@ -5250,7 +5250,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--b-accent, #5b6abf);
+  color: var(--b-accent, #1D4ED8);
   background: rgba(124, 111, 247, 0.1);
   border: 1px solid rgba(124, 111, 247, 0.25);
   border-radius: 4px;
@@ -5421,7 +5421,7 @@
 
 .bible-library-import-dropzone:hover,
 .bible-library-import-dropzone.dragging {
-  border-color: var(--b-accent, #5b6abf);
+  border-color: var(--b-accent, #1D4ED8);
   background: rgba(124, 111, 247, 0.06);
 }
 
@@ -5432,7 +5432,7 @@
 }
 
 .bible-library-import-dropzone.dragging svg {
-  color: var(--b-accent, #5b6abf);
+  color: var(--b-accent, #1D4ED8);
 }
 
 .bible-library-import-dropzone-text {

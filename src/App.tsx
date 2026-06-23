@@ -550,6 +550,7 @@ function App() {
     lockType: null,
     requiredVersion: "",
     hoursRemaining: null,
+    gracePeriodHours: null,
     startedAt: null,
     updateMessage: "",
     loading: true,

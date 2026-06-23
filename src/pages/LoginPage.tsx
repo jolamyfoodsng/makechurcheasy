@@ -287,6 +287,18 @@ export default function LoginPage() {
               Enter Pairing Code
             </button>
 
+            <p
+              style={{
+                fontSize: "11px",
+                color: "#6a6a7a",
+                marginTop: "12px",
+                lineHeight: 1.5,
+              }}
+            >
+              Get a pairing code from{" "}
+              <span style={{ color: "#9898a8" }}>makechurcheasy.com/devices</span>
+            </p>
+
           </div>
         )}
 
@@ -300,7 +312,7 @@ export default function LoginPage() {
                 fontSize: "32px",
                 fontWeight: 700,
                 letterSpacing: "0.15em",
-                color: "#5B5FCF",
+                color: "#1D4ED8",
               }}
             >
               {code}
@@ -346,8 +358,8 @@ export default function LoginPage() {
                     flex: 1,
                     height: "32px",
                     borderRadius: "4px",
-                    border: "1px solid #5B5FCF",
-                    background: "#5B5FCF",
+                    border: "1px solid #1D4ED8",
+                    background: "#1D4ED8",
                     fontSize: "12px",
                     fontWeight: 600,
                     color: "#fff",
@@ -512,7 +524,7 @@ export default function LoginPage() {
                   height: "38px",
                   borderRadius: "4px",
                   border: "none",
-                  background: "#5B5FCF",
+                  background: "#1D4ED8",
                   fontSize: "13px",
                   fontWeight: 600,
                   color: "#fff",
@@ -578,7 +590,7 @@ export default function LoginPage() {
                 width: "32px",
                 height: "32px",
                 borderRadius: "50%",
-                background: "#5B5FCF",
+                background: "#1D4ED8",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",

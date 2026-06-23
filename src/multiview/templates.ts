@@ -767,7 +767,7 @@ export const TEMPLATE_LIBRARY: TemplateDefinition[] = [
       }),
     ],
     tags: ["logo", "camera", "bottom-right", "watermark"],
-    accentColor: "#6c5ce7",
+    accentColor: "#3B82F6",
   },
 
   // ── 14. Full Camera + Logo Bottom-Left ──
@@ -1268,7 +1268,7 @@ export const TEMPLATE_LIBRARY: TemplateDefinition[] = [
       }),
     ],
     tags: ["baby", "dedication", "ceremony", "family"],
-    accentColor: "#a78bfa",
+    accentColor: "#60A5FA",
   },
 
   // ════════════════════════════════════════════════════════════
@@ -1679,7 +1679,7 @@ export const TEMPLATE_LIBRARY: TemplateDefinition[] = [
       }),
     ],
     tags: ["youth", "teens", "energetic", "social", "vibrant"],
-    accentColor: "#6c5ce7",
+    accentColor: "#3B82F6",
   },
 
   // ── 34. Youth Game Night ──

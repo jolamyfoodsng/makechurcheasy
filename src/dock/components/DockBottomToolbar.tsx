@@ -36,7 +36,7 @@ export default function DockBottomToolbar({
   onModeChange,
   morphing = false,
   children,
-  clearLabel = "Clear",
+  clearLabel = "Hide Bible",
   onClear,
   clearDisabled = false,
   collapsed = false,
@@ -54,7 +54,8 @@ export default function DockBottomToolbar({
             disabled={clearDisabled}
             title={clearLabel}
           >
-            <Icon name="delete_sweep" size={16} />
+            <span>Hide Bible</span>
+            {/* <Icon name="delete_sweep" size={16} /> */}
           </button>
         )}
         <button
@@ -122,6 +123,15 @@ export default function DockBottomToolbar({
               <Icon name="delete_sweep" size={16} />
             </button>
           )}
+          <button
+            type="button"
+            className="dock-btm-toolbar__icon-btn dock-btm-toolbar__icon-btn--collapse_two"
+            onClick={() => onCollapseChange?.(true)}
+            aria-label="Collapse toolbar"
+            title="Collapse toolbar"
+          >
+            <Icon name="expand_more" size={18} />
+          </button>
 
 
         </div>
@@ -135,20 +145,13 @@ export default function DockBottomToolbar({
             disabled={clearDisabled}
             title={clearLabel}
           >
-            <Icon name="delete_sweep" size={16} />
+            <span>Hide Bible</span>
+            {/* <Icon name="delete_sweep" size={16} /> */}
             {/* <span>{clearLabel}</span> */}
           </button>
         )}
 
-        <button
-          type="button"
-          className="dock-btm-toolbar__icon-btn dock-btm-toolbar__icon-btn--collapse_two"
-          onClick={() => onCollapseChange?.(true)}
-          aria-label="Collapse toolbar"
-          title="Collapse toolbar"
-        >
-          <Icon name="expand_more" size={18} />
-        </button>
+
       </div>
       <button
         type="button"
@@ -157,7 +160,8 @@ export default function DockBottomToolbar({
         disabled={clearDisabled}
         title={clearLabel}
       >
-        <Icon name="delete_sweep" size={16} />
+        <span>{clearLabel}</span>
+        {/* <Icon name="delete_sweep" size={16} /> */}
       </button>
     </div>
   );

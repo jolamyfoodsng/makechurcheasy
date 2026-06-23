@@ -78,29 +78,22 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
     setHoursRemaining(state.hoursRemaining);
   }, [state.hoursRemaining]);
 
-  // Also do a local tick for smoother countdown between polls
+  // Local tick for smoother countdown between polls — compute from state prop, not localStorage
   const showLiveCountdown = hoursRemaining !== null && hoursRemaining > 0 && !!state.startedAt;
   useEffect(() => {
-    if (!showLiveCountdown) return;
+    if (!showLiveCountdown || !state.startedAt || state.gracePeriodHours === null) return;
 
     const id = window.setInterval(() => {
-      // Recompute from localStorage directly for accuracy
-      try {
-        const raw = localStorage.getItem("ocs-forced-update-record-v1");
-        if (!raw) return;
-        const record = JSON.parse(raw);
-        const startMs = new Date(record.startedAt).getTime();
-        const endMs = startMs + record.gracePeriodHours * 60 * 60 * 1000;
-        const remainingMs = endMs - Date.now();
-        const hrs = Math.max(0, remainingMs / (60 * 60 * 1000));
-        setHoursRemaining(hrs);
-      } catch {
-        // non-critical
-      }
+      // Recompute from the state prop (backed by server settings, not localStorage)
+      const startMs = new Date(state.startedAt!).getTime();
+      const endMs = startMs + state.gracePeriodHours! * 60 * 60 * 1000;
+      const remainingMs = endMs - Date.now();
+      const hrs = Math.max(0, remainingMs / (60 * 60 * 1000));
+      setHoursRemaining(hrs);
     }, 30_000);
 
     return () => window.clearInterval(id);
-  }, [showLiveCountdown, state.startedAt]);
+  }, [showLiveCountdown, state.startedAt, state.gracePeriodHours]);
 
   const percentComplete =
     progress.contentLength > 0
@@ -185,7 +178,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
         style={{
           width: 440,
           maxWidth: "90vw",
-          background: "var(--surface, #1a1a2e)",
+          background: "var(--surface, #0F172A)",
           borderRadius: 8,
           overflow: "hidden",
           boxShadow: "0 24px 80px rgba(0, 0, 0, 0.6)",

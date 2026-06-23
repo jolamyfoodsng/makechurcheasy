@@ -77,7 +77,7 @@ function saveDockLayouts(items: DockMVLayout[]) {
 
 const CONTENT_TYPE_INFO: Record<string, { label: string; icon: string; color: string }> = {
   camera: { label: "Camera", icon: "videocam", color: "#0078d4" },
-  scripture: { label: "Scripture", icon: "menu_book", color: "#6c5ce7" },
+  scripture: { label: "Scripture", icon: "menu_book", color: "#3B82F6" },
   translation: { label: "Translation", icon: "translate", color: "#00bcd4" },
   "lower-third": { label: "Lower Third", icon: "subtitles", color: "#ff9800" },
   browser: { label: "Browser", icon: "language", color: "#ff5722" },

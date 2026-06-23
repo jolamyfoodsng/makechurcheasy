@@ -129,7 +129,7 @@ const BACKGROUND_COLOR_SWATCHES = [
   "#0F1115",
   "#181D29",
   "#1B2D57",
-  "#7C5CFC",
+  "#1D4ED8",
   "#FFFFFF",
   "#2D4A3E",
   "#3A516D",

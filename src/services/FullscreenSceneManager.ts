@@ -11,7 +11,7 @@
  * It only handles fullscreen-specific content updates and scene switching.
  */
 
-import { obsService } from "../services/obsService";
+import { obsService } from "./obsService";
 import {
   PRESENTATION_SCENE_NAME,
   presentationSceneManager,

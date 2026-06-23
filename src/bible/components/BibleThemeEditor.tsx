@@ -202,9 +202,9 @@ export default function BibleThemeEditor({ editTheme, onSave, onCancel }: Props)
     ? state.themes.filter((t) => t.name.toLowerCase().includes(themeFilter.toLowerCase()))
     : state.themes;
 
-  const SOLID_PRESETS = ["#000000", "#0b0d14", "#1a1a2e", "#16213e", "#0f3460", "#1e3a5f", "#2d2d2d", "#3a0ca3"];
+  const SOLID_PRESETS = ["#000000", "#0b0d14", "#0F172A", "#16213e", "#0f3460", "#1e3a5f", "#2d2d2d", "#3a0ca3"];
   const GRADIENT_PRESETS = [
-    "linear-gradient(135deg, #1a1a2e, #16213e)",
+    "linear-gradient(135deg, #0F172A, #16213e)",
     "linear-gradient(135deg, #0f0c29, #302b63, #24243e)",
     "linear-gradient(135deg, #3a0ca3, #1e3a5f)",
     "linear-gradient(135deg, #141e30, #243b55)",

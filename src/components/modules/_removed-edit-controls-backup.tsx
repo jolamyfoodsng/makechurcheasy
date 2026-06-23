@@ -96,7 +96,7 @@
                       <label className="lt-customize-label">Background</label>
                       <div className="lt-customize-color-row">
                         <input type="color" className="lt-customize-swatch"
-                          value={state.customStyles.bgColor || "#1a1a2e"}
+                          value={state.customStyles.bgColor || "#0F172A"}
                           onChange={(e) => setCustomStyle({ bgColor: e.target.value })} />
                         <input type="text" className="lt-page-form-input lt-customize-hex"
                           value={state.customStyles.bgColor}

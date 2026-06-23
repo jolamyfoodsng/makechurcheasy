@@ -111,7 +111,7 @@ export default function AdminUserDetailPage() {
     { label: "Bible Searches", value: user.usage.bibleSearches.toLocaleString(), icon: BookOpen, color: "#60a5fa" },
     { label: "Songs Created", value: user.usage.songsCreated.toLocaleString(), icon: Music, color: "#34d399" },
     { label: "Media Uploaded", value: user.usage.mediaUploaded.toLocaleString(), icon: Images, color: "#f59e0b" },
-    { label: "AI Hours Used", value: user.usage.aiHoursUsed.toFixed(1), icon: Brain, color: "#a78bfa" },
+    { label: "AI Hours Used", value: user.usage.aiHoursUsed.toFixed(1), icon: Brain, color: "#60A5FA" },
     { label: "Transcript Count", value: user.usage.transcriptCount.toLocaleString(), icon: FileText, color: "#f472b6" },
   ];
 

@@ -40,7 +40,7 @@
 
 .bcp-search-icon {
   flex-shrink: 0;
-  color: color-mix(in srgb, var(--primary, #5b6abf) 55%, white 45%);
+  color: color-mix(in srgb, var(--primary, #1D4ED8) 55%, white 45%);
 }
 
 .bcp-search-input {
@@ -66,7 +66,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.04);
   color: rgba(230, 232, 238, 0.75);
@@ -184,7 +184,7 @@
   height: 20px;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.12);
-  border-top-color: var(--primary, #5b6abf);
+  border-top-color: var(--primary, #1D4ED8);
   animation: bcp-spin 0.8s linear infinite;
 }
 
