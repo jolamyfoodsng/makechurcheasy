@@ -6,6 +6,7 @@ import {
 import { trackDevicePaired, trackLogin } from "@/services/tracking";
 import { useEffect, useRef, useState } from "react";
 import { AppLogo } from "@/components/AppLogo";
+import QRCode from "qrcode";
 
 const AUTH_API = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
@@ -19,7 +20,7 @@ function detectOS(): string {
   return "Unknown OS";
 }
 
-type View = "initial" | "pairing" | "manual";
+type View = "initial" | "pairing" | "manual" | "qr";
 
 export default function LoginPage() {
   const { setUser } = useAuth();
@@ -30,12 +31,41 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [welcomeBack, setWelcomeBack] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState("");
 
   const cleanupRef = useRef<(() => void) | null>(null);
 
   const PAIRING_BASE = AUTH_API.startsWith("http://localhost")
     ? "http://localhost:4000"
     : "https://makechurcheasy.creatorstudioslabs.stream";
+
+  const DASHBOARD_URL = AUTH_API.startsWith("http://localhost")
+    ? "http://localhost:3000"
+    : "https://makechurcheasy.creatorstudioslabs.stream";
+
+  async function generateQrDataUrl(pairCode: string): Promise<string> {
+    const pairUrl = `${DASHBOARD_URL}/pair/mobile?code=${pairCode}`;
+    return QRCode.toDataURL(pairUrl, {
+      width: 240,
+      margin: 2,
+      color: { dark: "#FFFFFF", light: "#00000000" },
+    });
+  }
+
+  async function startQrLogin() {
+    setError("");
+    const result = await createPairingCode("MakeChurchEasy Studio");
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    setCode(result.code);
+    const dataUrl = await generateQrDataUrl(result.code);
+    setQrDataUrl(dataUrl);
+    setCountdown(300);
+    setView("qr");
+    startWatching(result.code);
+  }
 
   async function openPairingInBrowser(targetCode: string) {
     const os = detectOS();
@@ -60,7 +90,7 @@ export default function LoginPage() {
 
   // Countdown timer
   useEffect(() => {
-    if (view !== "pairing" || countdown <= 0) return;
+    if ((view !== "pairing" && view !== "qr") || countdown <= 0) return;
     const timer = setInterval(() => setCountdown((c) => c - 1), 1000);
     return () => clearInterval(timer);
   }, [view, countdown]);
@@ -210,6 +240,37 @@ export default function LoginPage() {
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
               </svg>
               Login with Google
+            </button>
+
+            <button
+              onClick={startQrLogin}
+              style={{
+                width: "100%",
+                height: "42px",
+                borderRadius: "4px",
+                border: "1px solid #2a2a3a",
+                background: "#16161f",
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "#f0f0f5",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="3" height="3" />
+                <line x1="21" y1="14" x2="21" y2="14.01" />
+                <line x1="14" y1="21" x2="14" y2="21.01" />
+                <line x1="21" y1="17" x2="21" y2="21" />
+                <line x1="17" y1="21" x2="21" y2="21" />
+              </svg>
+              Scan QR Code
             </button>
 
             <div
@@ -558,6 +619,135 @@ export default function LoginPage() {
                 Open pairing page in browser ↗
               </button>
             )}
+          </div>
+        )}
+
+        {/* QR Code View */}
+        {view === "qr" && (
+          <div style={{ textAlign: "center" }}>
+            {error && (
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "4px",
+                  background: "rgba(239, 68, 68, 0.1)",
+                  fontSize: "12px",
+                  color: "#ef4444",
+                  marginBottom: "12px",
+                }}
+              >
+                {error}
+              </div>
+            )}
+
+            <p style={{ fontSize: "13px", color: "#9898a8", marginBottom: "16px" }}>
+              Scan this QR code with your phone to log in
+            </p>
+
+            {qrDataUrl && (
+              <div
+                style={{
+                  display: "inline-block",
+                  padding: "16px",
+                  borderRadius: "12px",
+                  background: "#000",
+                  marginBottom: "16px",
+                }}
+              >
+                <img
+                  src={qrDataUrl}
+                  alt="QR Code"
+                  style={{ width: "240px", height: "240px", display: "block" }}
+                />
+              </div>
+            )}
+
+            {!qrDataUrl && (
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "240px",
+                  height: "240px",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: "12px",
+                  background: "#16161f",
+                  border: "1px solid #2a2a3a",
+                  marginBottom: "16px",
+                }}
+              >
+                <span style={{ color: "#6a6a7a", fontSize: "13px" }}>Generating...</span>
+              </div>
+            )}
+
+            <div
+              style={{
+                fontFamily: "monospace",
+                fontSize: "20px",
+                fontWeight: 700,
+                letterSpacing: "0.15em",
+                color: "#f0f0f5",
+                marginBottom: "8px",
+              }}
+            >
+              {code}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                marginBottom: "20px",
+              }}
+            >
+              <div
+                style={{
+                  width: "8px",
+                  height: "8px",
+                  borderRadius: "50%",
+                  background: countdown > 0 ? "#22c55e" : "#ef4444",
+                  animation: countdown > 0 ? "pulse 2s infinite" : "none",
+                }}
+              />
+              <span style={{ fontSize: "13px", color: "#9898a8" }}>
+                {countdown > 0
+                  ? `Expires in ${formatCountdown(countdown)}`
+                  : "Code expired"}
+              </span>
+            </div>
+
+            <button
+              onClick={() => {
+                cleanupRef.current?.();
+                cleanupRef.current = null;
+                setView("initial");
+                setCode("");
+                setQrDataUrl("");
+                setError("");
+              }}
+              style={{
+                width: "100%",
+                height: "38px",
+                borderRadius: "4px",
+                border: "1px solid #2a2a3a",
+                background: "transparent",
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "#9898a8",
+                cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+
+            <style>{`
+              @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.4; }
+              }
+            `}</style>
           </div>
         )}
       </div>

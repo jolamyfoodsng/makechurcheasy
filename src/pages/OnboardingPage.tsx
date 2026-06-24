@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
-import { getDeviceId, getSession } from "../services/authService";
+import { getDeviceId } from "../services/authService";
 import { track } from "../services/analytics";
 import StepBible from "../onboarding/StepBible";
 import StepWorship from "../onboarding/StepWorship";
@@ -71,7 +71,6 @@ function completeOnboarding() {
 
   // Notify server that onboarding is complete (fire and forget)
   try {
-    const session = getSession();
     const deviceId = getDeviceId();
     const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
     fetch(`${API_BASE}/api/onboarding/complete`, {

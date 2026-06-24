@@ -26,6 +26,7 @@ import UpdateNotification from "./components/UpdateNotification";
 import ForceUpdateModal from "./components/ForceUpdateModal";
 import ForcedUpdateOverlay from "./components/ForcedUpdateOverlay";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
+import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
 import { checkForUpdate, getVersionAge, fetchVersionFloor, type UpdateCheckResult } from "./services/updateService";
 import {
@@ -813,7 +814,13 @@ function App() {
     if (user) {
       try {
         const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
-        await fetch(`${API_BASE}/api/auth/trial-welcome`, { method: "POST" });
+        const deviceId = getDeviceId();
+        await fetch(`${API_BASE}/api/auth/trial-welcome`, {
+          method: "POST",
+          headers: {
+            ...(deviceId ? { "X-Device-Id": deviceId } : {}),
+          },
+        });
       } catch (e) {
         console.error("[App] Failed to mark trial welcome shown:", e);
       }
