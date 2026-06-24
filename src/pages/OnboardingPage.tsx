@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
-import { getDeviceId } from "../services/authService";
+import { getDeviceId, getSession } from "../services/authService";
 import { track } from "../services/analytics";
 import StepBible from "../onboarding/StepBible";
 import StepWorship from "../onboarding/StepWorship";
@@ -68,6 +68,27 @@ function saveStep(step: number) {
 function completeOnboarding() {
   localStorage.setItem(STORAGE_KEY, "true");
   localStorage.removeItem(STEP_KEY);
+
+  // Notify server that onboarding is complete (fire and forget)
+  try {
+    const session = getSession();
+    const deviceId = getDeviceId();
+    const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+    fetch(`${API_BASE}/api/onboarding/complete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(deviceId ? { "X-Device-Id": deviceId } : {}),
+      },
+      body: JSON.stringify({
+        churchName: "",
+        country: "",
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "(GMT+00:00) UTC",
+      }),
+    }).catch(() => { });
+  } catch {
+    // Not critical
+  }
 }
 
 /* ── Resume Banner (exported for dashboard) ── */
