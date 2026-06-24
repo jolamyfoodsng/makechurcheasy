@@ -16,7 +16,7 @@
 import type { MVSettings, SpeakerProfileSetting } from "../multiview/mvStore";
 import { MV_SETTINGS_UPDATED_EVENT } from "../multiview/mvStore";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://web-tayo-akosiles-projects.vercel.app";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 export interface MinistryData {
   churchName: string;

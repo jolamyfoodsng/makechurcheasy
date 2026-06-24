@@ -10,7 +10,7 @@ import { DEFAULT_PLAN_CONFIG } from "../services/planConfigTypes";
  * so the dock can verify locally without needing internet access.
  */
 
-const ONLINE_API = "https://web-tayo-akosiles-projects.vercel.app";
+const ONLINE_API = "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 /**
  * Check the local overlay server for an active auth session.

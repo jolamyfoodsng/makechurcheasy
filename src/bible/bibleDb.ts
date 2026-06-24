@@ -23,7 +23,7 @@ const CUSTOM_THEMES_STORAGE_KEY = "ocs-bible-custom-themes";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://web-tayo-akosiles-projects.vercel.app";
+  "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 function getCustomThemesStorageKey(): string {
   const uid = getCurrentUserId();

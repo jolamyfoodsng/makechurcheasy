@@ -208,7 +208,7 @@ export function UpgradeModal({
             <button
               className="ssm-btn-start"
               onClick={() => {
-                window.open("https://makechurcheasy.com/pricing", "_blank");
+                window.open("https://makechurcheasy.creatorstudioslabs.stream/pricing", "_blank");
               }}
             >
               <Zap size={18} />

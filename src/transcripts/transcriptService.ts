@@ -19,7 +19,7 @@ import { getDeviceId } from "../services/authService";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://web-tayo-akosiles-projects.vercel.app";
+  "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 // ── UUID helper ──────────────────────────────────────────────────────────────
 function uid(): string {

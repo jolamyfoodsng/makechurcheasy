@@ -62,7 +62,7 @@ export interface ForcedUpdateState {
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://web-tayo-akosiles-projects.vercel.app";
+  "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 const SETTINGS_CACHE_KEY = "ocs-forced-update-settings-v2";
 const RECORD_KEY = "ocs-forced-update-record-v1";

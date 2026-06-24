@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Shield, Save, RefreshCw, AlertTriangle, Lock, Clock, MessageSquare } from "lucide-react";
 import "./Admin.css";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://web-tayo-akosiles-projects.vercel.app";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 function Toggle({
   checked,
@@ -66,13 +66,13 @@ export default function AdminSettingsPage() {
 
   // App Update settings
   const [appSettings, setAppSettings] = useState<AppSettings>({
-    latestVersion: "4.56.0",
-    minimumSupportedVersion: "4.30.0",
+    latestVersion: "",
+    minimumSupportedVersion: "",
     forceUpdatesEnabled: false,
     emergencyLock: false,
     emergencyLockDelay: 0,
     gracePeriodHours: 72,
-    updateMessage: "A new version of MakeChurchEasy is available. Please update to continue.",
+    updateMessage: "",
   });
   const [appSettingsLoading, setAppSettingsLoading] = useState(true);
   const [appSettingsSaving, setAppSettingsSaving] = useState(false);
@@ -88,8 +88,8 @@ export default function AdminSettingsPage() {
         if (res.ok) {
           const data = await res.json();
           setAppSettings({
-            latestVersion: data.latestVersion ?? "4.56.0",
-            minimumSupportedVersion: data.minimumSupportedVersion ?? "4.30.0",
+            latestVersion: data.latestVersion ?? "2.1.0",
+            minimumSupportedVersion: data.minimumSupportedVersion ?? "2.1.0",
             forceUpdatesEnabled: data.forceUpdatesEnabled ?? false,
             emergencyLock: data.emergencyLock ?? false,
             emergencyLockDelay: data.emergencyLockDelay ?? 0,
@@ -319,7 +319,7 @@ export default function AdminSettingsPage() {
               type="text"
               value={appSettings.latestVersion}
               onChange={(e) => setAppSettings((s) => ({ ...s, latestVersion: e.target.value }))}
-              placeholder="4.56.0"
+              placeholder="e.g. 2.1.0"
               style={inputStyle}
             />
           </div>
@@ -329,7 +329,7 @@ export default function AdminSettingsPage() {
               type="text"
               value={appSettings.minimumSupportedVersion}
               onChange={(e) => setAppSettings((s) => ({ ...s, minimumSupportedVersion: e.target.value }))}
-              placeholder="4.30.0"
+              placeholder="e.g. 2.1.0"
               style={inputStyle}
             />
           </div>

@@ -33,7 +33,7 @@ const path = require("path");
 
 const args = process.argv.slice(2);
 if (args.length < 2) {
-  console.error("Usage: node scripts/generate-update-json.cjs <version> <assets-directory> [--out latest.json]");
+  console.error("Usage: node scripts/generate-update-json.cjs <version> <assets-directory> [--out latest.json] [--min-version <version>]");
   process.exit(1);
 }
 
@@ -41,6 +41,8 @@ const version = args[0].replace(/^v/, "");
 const assetsDir = path.resolve(args[1]);
 const outIdx = args.indexOf("--out");
 const outFile = outIdx !== -1 ? path.resolve(args[outIdx + 1]) : null;
+const minVersionIdx = args.indexOf("--min-version");
+const minVersion = minVersionIdx !== -1 ? args[minVersionIdx + 1] || "" : "";
 
 if (!fs.existsSync(assetsDir)) {
   console.error(`Assets directory not found: ${assetsDir}`);
@@ -119,14 +121,13 @@ if (found === 0) {
 
 // Minimum version the app will function at.
 // Desktop versions below this are blocked server-side (pairing, Bible API)
-// and client-side (startup check). Bump this when raising the floor.
-const MINIMUM_VERSION = "4.30.0";
+// and client-side (startup check). Provided via --min-version CLI flag.
 
 const manifest = {
   version,
   notes: `MakeChurchEasy Studio v${version}`,
   pub_date: new Date().toISOString(),
-  minVersion: MINIMUM_VERSION,
+  ...(minVersion ? { minVersion } : {}),
   platforms,
 };
 

@@ -5,7 +5,7 @@
  * The user authorizes the desktop app through the browser.
  */
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://web-tayo-akosiles-projects.vercel.app";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 /** App version sent with every API request for server-side version gating */
 const APP_VERSION: string =

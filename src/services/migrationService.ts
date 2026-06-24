@@ -13,7 +13,7 @@ const MIGRATION_FLAG_KEY = "mce_mongo_content_migration_v1";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://web-tayo-akosiles-projects.vercel.app";
+  "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 async function apiPost(path: string, body: unknown): Promise<void> {
   const deviceId = getDeviceId();

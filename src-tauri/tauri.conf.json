@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MakeChurchEasy Studio",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "identifier": "com.makechurcheasy.app",
   "build": {
     "beforeDevCommand": "node scripts/prepare-bundle-assets.cjs && npm run dev",
@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' asset: data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' asset: data: blob: http://127.0.0.1:* http://localhost:* https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* wss://streaming.assemblyai.com https://api.github.com https://github.com https://versecast-bible-api.solitary-credit-34b2.workers.dev https://*.r2.cloudflarestorage.com https://*.r2.dev https://*.workers.dev https://app.posthog.com https://us.i.posthog.com http://localhost:4000 https://accounts.google.com https://graph.facebook.com https://web-tayo-akosiles-projects.vercel.app https://*.vercel.app;"
+      "csp": "default-src 'self' asset: data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' asset: data: blob: http://127.0.0.1:* http://localhost:* https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* wss://streaming.assemblyai.com https://api.github.com https://github.com https://versecast-bible-api.solitary-credit-34b2.workers.dev https://*.r2.cloudflarestorage.com https://*.r2.dev https://*.workers.dev https://app.posthog.com https://us.i.posthog.com http://localhost:4000 https://accounts.google.com https://graph.facebook.com https://api.makechurcheasy.creatorstudioslabs.stream https://*.vercel.app;"
     }
   },
   "bundle": {

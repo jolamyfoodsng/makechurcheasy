@@ -805,7 +805,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
             <p>Upgrade your plan to upload more media.</p>
             <div className="lib-confirm-actions">
               <button className="lib-confirm-cancel" onClick={() => setShowMediaLimitModal(false)}>Close</button>
-              <a href="https://makechurcheasy.com/pricing" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
+              <a href="https://makechurcheasy.creatorstudioslabs.stream/pricing" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
                 Upgrade Plan
               </a>
             </div>

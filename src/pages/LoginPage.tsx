@@ -7,7 +7,7 @@ import { trackDevicePaired, trackLogin } from "@/services/tracking";
 import { useEffect, useRef, useState } from "react";
 import { AppLogo } from "@/components/AppLogo";
 
-const AUTH_API = import.meta.env.VITE_AUTH_API_URL || "https://web-tayo-akosiles-projects.vercel.app";
+const AUTH_API = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 function detectOS(): string {
   const ua = navigator.userAgent;
@@ -35,7 +35,7 @@ export default function LoginPage() {
 
   const PAIRING_BASE = AUTH_API.startsWith("http://localhost")
     ? "http://localhost:4000"
-    : "https://beta.makechurcheasy.com";
+    : "https://makechurcheasy.creatorstudioslabs.stream";
 
   async function openPairingInBrowser(targetCode: string) {
     const os = detectOS();
@@ -296,7 +296,7 @@ export default function LoginPage() {
               }}
             >
               Get a pairing code from{" "}
-              <span style={{ color: "#9898a8" }}>makechurcheasy.com/devices</span>
+              <span style={{ color: "#9898a8" }}>makechurcheasy.creatorstudioslabs.stream/devices</span>
             </p>
 
           </div>
@@ -370,7 +370,7 @@ export default function LoginPage() {
                 </button>
                 <button
                   onClick={() => {
-                    const url = `https://beta.makechurcheasy.com/device?code=${code}`;
+                    const url = `https://makechurcheasy.creatorstudioslabs.stream/device?code=${code}`;
                     navigator.clipboard.writeText(url).then(() => {
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);

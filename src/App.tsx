@@ -27,7 +27,7 @@ import ForceUpdateModal from "./components/ForceUpdateModal";
 import ForcedUpdateOverlay from "./components/ForcedUpdateOverlay";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
 import Icon from "./components/Icon";
-import { checkForUpdate, getVersionAge, checkVersionFloor, type UpdateCheckResult } from "./services/updateService";
+import { checkForUpdate, getVersionAge, fetchVersionFloor, type UpdateCheckResult } from "./services/updateService";
 import {
   fetchAppSettings,
   getForcedUpdateState,
@@ -538,10 +538,12 @@ function App() {
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
   const [versionAge, setVersionAge] = useState<{ daysOld: number; forceUpdate: boolean; persistent: boolean }>({ daysOld: 0, forceUpdate: false, persistent: false });
 
-  // ── Version floor check (hardcoded minimum — blocks versions < 4.30.0) ──
-  const [versionFloorBlocked] = useState(() => {
-    return checkVersionFloor();
-  });
+  // ── Version floor check (fetched from server — admin-controlled) ──
+  const [versionFloorBlocked, setVersionFloorBlocked] = useState<{
+    blocked: boolean;
+    currentVersion: string;
+    minimumVersion: string;
+  } | null>(null);
 
   // ── Server-driven forced update (admin-controlled) ──
   const [forcedUpdateState, setForcedUpdateState] = useState<ForcedUpdateState>({
@@ -592,6 +594,15 @@ function App() {
       })
       .catch(() => {
         // If fetch fails, proceed without server-driven forced update
+      });
+
+    // Fetch version floor from server (admin-configured minimum)
+    fetchVersionFloor()
+      .then((result) => {
+        if (result) setVersionFloorBlocked(result);
+      })
+      .catch(() => {
+        // If fetch fails, don't block — proceed normally
       });
 
     // Initialize the overlay URL (queries Tauri for the local server port)
@@ -801,7 +812,7 @@ function App() {
     setShowTrialModal(false);
     if (user) {
       try {
-        const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://web-tayo-akosiles-projects.vercel.app";
+        const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
         await fetch(`${API_BASE}/api/auth/trial-welcome`, { method: "POST" });
       } catch (e) {
         console.error("[App] Failed to mark trial welcome shown:", e);
@@ -902,7 +913,7 @@ function App() {
         <SplashScreen ready={resourcesReady} onDone={handleSplashDone} />
       )}
 
-      {/* 2a. Version floor block — hardcoded minimum (v4.30.0), no self-update possible */}
+      {/* 2a. Version floor block — server-configured minimum, no self-update possible */}
       {!splashVisible && versionFloorBlocked && (
         <div className="force-update-overlay">
           <div className="force-update-modal">
@@ -923,12 +934,12 @@ function App() {
               <p className="force-update-message">
                 This version of MakeChurchEasy Studio is no longer supported. Please download and install the latest version from{" "}
                 <a
-                  href="https://beta.makechurcheasy.com"
+                  href="https://makechurcheasy.creatorstudioslabs.stream"
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: "#8b5cf6", textDecoration: "underline" }}
                 >
-                  beta.makechurcheasy.com
+                  makechurcheasy.creatorstudioslabs.stream
                 </a>{" "}
                 to continue.
               </p>

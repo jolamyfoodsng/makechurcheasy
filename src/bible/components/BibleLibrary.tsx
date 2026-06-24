@@ -912,7 +912,7 @@ export default function BibleLibrary({
             <p>Upgrade your plan to install more translations.</p>
             <div className="lib-confirm-actions">
               <button className="lib-confirm-cancel" onClick={() => setShowBibleLimitModal(false)}>Close</button>
-              <a href="https://makechurcheasy.com/pricing" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
+              <a href="https://makechurcheasy.creatorstudioslabs.stream/pricing" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
                 Upgrade Plan
               </a>
             </div>

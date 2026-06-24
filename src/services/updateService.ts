@@ -64,35 +64,52 @@ export interface VersionAgeInfo {
 }
 
 // ── Version Floor ──
-// Hardcoded minimum version. If the running app is below this, it is blocked.
-// This is a defense-in-depth measure alongside the server-side version gate.
-// Bump this when deprecating a version.
+// The minimum version is fetched from the server (admin-configured in MongoDB).
+// No hardcoded constants — the server is the single source of truth.
 
-const VERSION_FLOOR = "4.30.0";
+const API_BASE =
+  import.meta.env.VITE_AUTH_API_URL ||
+  "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 function parseVersionParts(v: string): [number, number, number] {
   const parts = v.split(".").map(Number);
   return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
 }
 
-export function isBelowVersionFloor(version: string): boolean {
+function isBelowVersionFloor(version: string, floor: string): boolean {
+  if (!floor) return false; // Empty string = no floor enforced
   const [a, b, c] = parseVersionParts(version);
-  const [fA, fB, fC] = parseVersionParts(VERSION_FLOOR);
+  const [fA, fB, fC] = parseVersionParts(floor);
   if (a !== fA) return a < fA;
   if (b !== fB) return b < fB;
   return c < fC;
 }
 
 /**
- * Check if the running version is below the version floor.
- * Returns floor info if blocked, null if OK.
+ * Fetch the minimum version from the server and check if the running
+ * app is below it. Returns floor info if blocked, null if OK or on failure.
  */
-export function checkVersionFloor(): { blocked: boolean; currentVersion: string; minimumVersion: string } | null {
-  const currentVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
-  if (isBelowVersionFloor(currentVersion)) {
-    return { blocked: true, currentVersion, minimumVersion: VERSION_FLOOR };
+export async function fetchVersionFloor(): Promise<{
+  blocked: boolean;
+  currentVersion: string;
+  minimumVersion: string;
+} | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/app/version`);
+    if (!res.ok) return null;
+    const data = await res.json() as { minimumSupportedVersion?: string };
+    const floor = data.minimumSupportedVersion || "";
+    if (!floor) return null; // No floor configured
+
+    const currentVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
+    if (isBelowVersionFloor(currentVersion, floor)) {
+      return { blocked: true, currentVersion, minimumVersion: floor };
+    }
+    return null;
+  } catch {
+    // If fetch fails, don't block — let the forced update check handle it
+    return null;
   }
-  return null;
 }
 
 // ── Offline fallback: cache last-known release date ──

@@ -42,7 +42,7 @@ export async function getTRANSLATION_WORDS_PER_CREDIT(): Promise<number> {
 }
 
 const STORAGE_KEY = "ocs-credits-balance";
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://web-tayo-akosiles-projects.vercel.app";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 /** Build headers with device auth for desktop app API calls. */
 function authHeaders(): Record<string, string> {

@@ -366,7 +366,7 @@ function DeveloperTabContent({
               marginBottom: "12px",
             }}>
               {`curl -H "Authorization: Bearer mce_live_..." \\
-     https://makechurcheasy.com/api/v1/profile`}
+     https://makechurcheasy.creatorstudioslabs.stream/api/v1/profile`}
             </pre>
             <p>Available endpoints:</p>
             <ul style={{ paddingLeft: "18px", marginTop: "4px" }}>

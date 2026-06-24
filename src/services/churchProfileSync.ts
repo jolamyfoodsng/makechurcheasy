@@ -12,7 +12,7 @@
 import { updateSettings } from "../multiview/mvStore";
 import { getSession, initAuthStore } from "./authService";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://web-tayo-akosiles-projects.vercel.app";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 interface ChurchBranding {
   logoUrl: string;

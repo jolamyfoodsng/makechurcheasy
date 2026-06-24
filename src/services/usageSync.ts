@@ -63,7 +63,7 @@ async function syncUsageToServer(): Promise<void> {
     };
 
     // Determine API base URL
-    const apiBase = import.meta.env.VITE_AUTH_API_URL || "https://web-tayo-akosiles-projects.vercel.app";
+    const apiBase = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
     const res = await fetch(`${apiBase}/api/user/usage`, {
       method: "POST",

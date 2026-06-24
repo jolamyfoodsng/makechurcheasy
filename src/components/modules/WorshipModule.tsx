@@ -2033,7 +2033,7 @@ export function WorshipModule({
               </button>
               <a
                 className="ssm-btn-upgrade"
-                href="https://makechurcheasy.com/pricing"
+                href="https://makechurcheasy.creatorstudioslabs.stream/pricing"
                 target="_blank"
                 rel="noopener noreferrer"
               >
