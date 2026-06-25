@@ -108,12 +108,40 @@ jobs:
       - name: Prepare bundled assets
         run: node scripts/prepare-bundle-assets.cjs
 
+      - name: Verify signing env vars are set
+        shell: pwsh
+        run: |
+          $pubkey = $env:TAURI_SIGNING_PUBLIC_KEY
+          if (-not $pubkey) {
+            throw "TAURI_SIGNING_PUBLIC_KEY is not set"
+          }
+          Write-Host "TAURI_SIGNING_PUBLIC_KEY length: $($pubkey.Length)"
+          Write-Host "TAURI_SIGNING_PUBLIC_KEY first char: $($pubkey[0])"
+
+          $privkey = $env:TAURI_SIGNING_PRIVATE_KEY
+          if (-not $privkey) {
+            throw "TAURI_SIGNING_PRIVATE_KEY is not set"
+          }
+          Write-Host "TAURI_SIGNING_PRIVATE_KEY length: $($privkey.Length)"
+          Write-Host "TAURI_SIGNING_PRIVATE_KEY first char: $($privkey[0])"
+
+          $pw = $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          if (-not $pw) {
+            throw "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is not set"
+          }
+          Write-Host "TAURI_SIGNING_PRIVATE_KEY_PASSWORD length: $($pw.Length)"
+        env:
+          TAURI_SIGNING_PUBLIC_KEY: ${{ secrets.TAURI_SIGNING_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PUBLIC_KEY: ${{ secrets.TAURI_SIGNING_PUBLIC_KEY }}
           VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
           VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
           VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
