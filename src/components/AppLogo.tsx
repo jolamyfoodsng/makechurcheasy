@@ -45,7 +45,7 @@ function detectThemeMode(): "light" | "dark" {
 
 export function AppLogo({
   mode = "auto",
-  alt = "MakeChurchEasy Studio",
+  alt = "MakeChurchEasy",
   ...imgProps
 }: AppLogoProps) {
   const [resolvedMode, setResolvedMode] = useState<"light" | "dark">(() => (

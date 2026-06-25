@@ -3,8 +3,8 @@
 <plist version="1.0">
 <dict>
     <key>NSMicrophoneUsageDescription</key>
-    <string>MakeChurchEasy Studio needs microphone access for speech-to-scripture voice recognition.</string>
+    <string>MakeChurchEasy needs microphone access for speech-to-scripture voice recognition.</string>
     <key>NSCameraUsageDescription</key>
-    <string>MakeChurchEasy Studio needs camera access for video features.</string>
+    <string>MakeChurchEasy needs camera access for video features.</string>
 </dict>
 </plist>

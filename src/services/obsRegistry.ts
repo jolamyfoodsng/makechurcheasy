@@ -2,7 +2,7 @@
  * obsRegistry.ts — Persistent UUID tracking for every OBS object the app creates
  *
  * Stores sceneUuid, inputUuid, sceneItemId for all OBS objects created by
- * MakeChurchEasy Studio. Uses IndexedDB for persistence across sessions.
+ * MakeChurchEasy. Uses IndexedDB for persistence across sessions.
  *
  * Why?
  *   - OBS identifies objects by UUID internally. Names can be renamed by the user.
@@ -102,7 +102,7 @@ function getDb(): Promise<IDBPDatabase> {
 // ---------------------------------------------------------------------------
 
 /**
- * Register a scene that MakeChurchEasy Studio created.
+ * Register a scene that MakeChurchEasy created.
  * Uses upsert — if the slot already exists, it updates the UUID.
  */
 export async function registerScene(
@@ -151,7 +151,7 @@ export async function getAllScenes(): Promise<RegisteredScene[]> {
 // ---------------------------------------------------------------------------
 
 /**
- * Register an input (source) that MakeChurchEasy Studio created.
+ * Register an input (source) that MakeChurchEasy created.
  */
 export async function registerInput(
   slot: string,

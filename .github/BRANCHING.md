@@ -1,4 +1,4 @@
-# Git Branching Strategy — OBS Church Studio
+# Git Branching Strategy — MakeChurchEasy
 
 ## Branch Structure
 

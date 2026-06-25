@@ -1,5 +1,5 @@
 /**
- * Layout Service — MakeChurchEasy Studio
+ * Layout Service — MakeChurchEasy
  *
  * Handles auto-detection of camera/scripture sources, programmatic
  * creation of Sunday scenes, configurable split-screen layout, and repair.

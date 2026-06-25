@@ -1,5 +1,5 @@
 /**
- * Preset Service — MakeChurchEasy Studio
+ * Preset Service — MakeChurchEasy
  *
  * Defines 6 service mode presets that configure OBS scenes with
  * different camera/scripture layouts. Each preset is a pure function

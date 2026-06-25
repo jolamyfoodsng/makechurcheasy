@@ -7987,6 +7987,75 @@ input[type="radio"] {
   margin: 0 0 12px;
 }
 
+/* ── In-app update button for version floor screen ── */
+
+.force-update-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #1D4ED8, #7c8cf0);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.force-update-button:hover {
+  background: linear-gradient(135deg, #6b7ad0, #8c9cf0);
+}
+
+.force-update-button:active {
+  transform: scale(0.97);
+}
+
+.force-update-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #aaa;
+  margin-top: 4px;
+}
+
+.force-update-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: #334155;
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 200px;
+}
+
+.force-update-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1D4ED8, #7c8cf0);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.force-update-progress-text {
+  font-size: 12px;
+  color: #aaa;
+  min-width: 36px;
+}
+
+.force-update-error-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.force-update-error-text {
+  font-size: 12px;
+  color: #ef9a9a;
+  margin: 0;
+}
+
 .force-update-versions {
   display: flex;
   align-items: center;

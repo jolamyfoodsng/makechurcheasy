@@ -140,7 +140,7 @@ export default function DockBottomToolbar({
         {onClear && (
           <button
             type="button"
-            className="dock-btm-toolbar__clear"
+            className="dock-btm-toolbar__clear dock-btm-toolbar__clear--bible"
             onClick={onClear}
             disabled={clearDisabled}
             title={clearLabel}

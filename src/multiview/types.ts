@@ -8,7 +8,7 @@
  *     background-as-base-layer, and professional broadcast presets.
  *
  * Naming convention:
- *   MV prefix = Multi-View (avoids collisions with existing MakeChurchEasy Studio types)
+ *   MV prefix = Multi-View (avoids collisions with existing MakeChurchEasy types)
  */
 
 // ---------------------------------------------------------------------------

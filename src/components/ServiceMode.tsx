@@ -417,10 +417,10 @@ export function ServiceMode({
             <header className="sm-header">
                 <div className="header-brand">
                     <div className="header-logo">
-                        <AppLogo alt="MakeChurchEasy Studio" />
+                        <AppLogo alt="MakeChurchEasy" />
                     </div>
                     <div>
-                        <h1 className="header-title">MakeChurchEasy Studio</h1>
+                        <h1 className="header-title">MakeChurchEasy</h1>
                         <p className="header-subtitle">Service Mode</p>
                     </div>
                 </div>

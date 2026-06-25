@@ -105,7 +105,7 @@ export default function DockServiceTab() {
         {!loading && plans.length === 0 && (
           <div className="dock-service-empty">
             <Icon name="playlist_add" size={28} style={{ opacity: 0.3 }} />
-            <span>No service plans found.<br />Create one in MakeChurchEasy Studio → Dashboard.</span>
+            <span>No service plans found.<br />Create one in MakeChurchEasy → Dashboard.</span>
             <button className="dock-btn dock-btn--preview" onClick={loadPlans} style={{ marginTop: 8, width: "100%" }}>
               <Icon name="refresh" size={20} />
               Refresh

@@ -369,7 +369,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
 
           {status === "relaunching" && (
             <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0 }}>
-              Restarting MakeChurchEasy Studio...
+              Restarting MakeChurchEasy...
             </p>
           )}
 

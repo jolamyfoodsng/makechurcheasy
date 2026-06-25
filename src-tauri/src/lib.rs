@@ -1,4 +1,4 @@
-// Tauri Rust backend — MakeChurchEasy Studio
+// Tauri Rust backend — MakeChurchEasy
 //
 // Commands:
 //   save_bg_image      — persist background image to disk (for OBS image_source)
@@ -79,7 +79,7 @@ mod app_nap {
 
         // Create CFString for the assertion type
         let assertion_type = cf_string_from_str(kIOPMAssertionTypePreventUserIdleSystemSleep);
-        let reason = cf_string_from_str("MakeChurchEasy Studio — live transcription active");
+        let reason = cf_string_from_str("MakeChurchEasy — live transcription active");
         let mut id: u32 = 0;
 
         let result = unsafe {

@@ -172,12 +172,8 @@ export function shouldReshowOverlay(hoursRemaining: number | null): boolean {
   const dismiss = getDismissInfo();
   if (!dismiss) return true; // never dismissed — show
 
-  const hoursSinceDismiss = (Date.now() - dismiss.dismissedAt) / (60 * 60 * 1000);
-
-  // Cooldown: don't re-show within 4 hours of dismiss
-  if (hoursSinceDismiss < RE_SHOW_COOLDOWN_HOURS) return false;
-
-  // Check if we've crossed a milestone since the last dismiss
+  // Milestones ALWAYS override cooldown — if the user dismissed at 7h and
+  // the 6h milestone is crossed 30 minutes later, re-show immediately.
   const prevHours = dismiss.hoursRemainingAtDismiss;
   for (const milestone of MILESTONES) {
     if (prevHours > milestone && hoursRemaining <= milestone) {
@@ -185,10 +181,13 @@ export function shouldReshowOverlay(hoursRemaining: number | null): boolean {
     }
   }
 
-  // Cooldown expired but no milestone — re-show anyway (nag mode)
-  if (hoursSinceDismiss >= RE_SHOW_COOLDOWN_HOURS) return true;
+  const hoursSinceDismiss = (Date.now() - dismiss.dismissedAt) / (60 * 60 * 1000);
 
-  return false;
+  // Cooldown: don't re-show within 4 hours of dismiss (unless milestone crossed above)
+  if (hoursSinceDismiss < RE_SHOW_COOLDOWN_HOURS) return false;
+
+  // Cooldown expired but no milestone — re-show anyway (nag mode)
+  return true;
 }
 
 /**

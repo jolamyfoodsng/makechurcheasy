@@ -266,7 +266,7 @@ export function BroadcastLayout({ onDisconnect }: Props) {
             <header className="broadcast-header">
                 <div className="broadcast-header-brand">
                     <Icon name="cameraswitch" size={20} className="broadcast-logo-icon" />
-                    <span className="broadcast-header-title">MakeChurchEasy Studio</span>
+                    <span className="broadcast-header-title">MakeChurchEasy</span>
                 </div>
 
                 <div className="broadcast-header-center">

@@ -78,8 +78,18 @@ const PLATFORMS = [
     sig: (f) => f + ".sig",
   },
   {
+    key: "darwin-aarch64",
+    match: (f) => f.includes("aarch64") && f.endsWith(".dmg") && !f.endsWith(".sig"),
+    sig: (f) => f + ".sig",
+  },
+  {
     key: "darwin-x86_64",
     match: (f) => f.includes("x64") && f.endsWith(".app.tar.gz") && !f.endsWith(".sig"),
+    sig: (f) => f + ".sig",
+  },
+  {
+    key: "darwin-x86_64",
+    match: (f) => f.includes("x64") && f.endsWith(".dmg") && !f.endsWith(".sig"),
     sig: (f) => f + ".sig",
   },
 ];
@@ -125,7 +135,7 @@ if (found === 0) {
 
 const manifest = {
   version,
-  notes: `MakeChurchEasy Studio v${version}`,
+  notes: `MakeChurchEasy v${version}`,
   pub_date: new Date().toISOString(),
   ...(minVersion ? { minVersion } : {}),
   platforms,

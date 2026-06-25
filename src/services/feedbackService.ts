@@ -1,5 +1,5 @@
 /**
- * Feedback Service — MakeChurchEasy Studio
+ * Feedback Service — MakeChurchEasy
  *
  * Checks OBS state and returns actionable warnings/issues.
  * These are shown as a non-intrusive banner in ServiceMode.

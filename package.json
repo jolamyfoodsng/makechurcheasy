@@ -1,7 +1,7 @@
 {
   "name": "makechurcheasy",
   "private": true,
-  "version": "2.6.0",
+  "version": "2.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,7 +17,7 @@
     "release:patch": "npm run version:patch && git add . && git commit -m \"v$(node -p \"require('./package.json').version\")\" && git push",
     "release:minor": "npm run version:minor && git add . && git commit -m \"v$(node -p \"require('./package.json').version\")\" && git push",
     "release:major": "npm run version:major && git add . && git commit -m \"v$(node -p \"require('./package.json').version\")\" && git push",
-    "generate:update-json": "node scripts/generate-update-json.cjs"
+    "latest": " node scripts/generate-update-json.cjs"
   },
   "dependencies": {
     "@ffmpeg/core": "^0.12.6",

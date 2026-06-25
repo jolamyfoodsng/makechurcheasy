@@ -138,8 +138,8 @@ function MVEditorInner({
   useEffect(() => {
     const name = state.layout?.name ?? "Multi-View Editor";
     const isDirty = state.undoStack.length > 0;
-    document.title = isDirty ? `• ${name} — MakeChurchEasy Studio` : `${name} — MakeChurchEasy Studio`;
-    return () => { document.title = "MakeChurchEasy Studio"; };
+    document.title = isDirty ? `• ${name} — MakeChurchEasy` : `${name} — MakeChurchEasy`;
+    return () => { document.title = "MakeChurchEasy"; };
   }, [state.layout?.name, state.undoStack.length]);
 
   // ── Panel sizes & collapse state ──

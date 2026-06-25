@@ -4,7 +4,7 @@ We need to introduce a proper authentication system across both the MakeChurchEa
 
 ## Goal
 
-Users should no longer be able to directly download or use MakeChurchEasy Studio without creating an account.
+Users should no longer be able to directly download or use MakeChurchEasy without creating an account.
 
 Authentication should become the entry point into the MakeChurchEasy ecosystem.
 
@@ -196,7 +196,7 @@ No email/password inside the desktop app. Use device pairing (like Discord TV Lo
 **Login Screen Design:**
 
 ```
-MakeChurchEasy Studio
+MakeChurchEasy
 Church Presentation Software for OBS
 
 [ Continue in Browser ]
@@ -212,12 +212,12 @@ Nothing else. No email fields. No password fields.
 
 ### Primary Flow: Continue in Browser
 
-1. User opens MakeChurchEasy Studio for the first time
-2. Shows: `Welcome to MakeChurchEasy Studio [ Continue in Browser ]`
+1. User opens MakeChurchEasy for the first time
+2. Shows: `Welcome to MakeChurchEasy [ Continue in Browser ]`
 3. Click generates a temporary pairing code (e.g. `ABCD-1234`)
 4. Opens browser to `https://makechurcheasy.app/device`
 5. User signs into their MakeChurchEasy account
-6. Website asks: `Authorize this device? Device: MakeChurchEasy Studio Code: ABCD-1234 [ Authorize ]`
+6. Website asks: `Authorize this device? Device: MakeChurchEasy Code: ABCD-1234 [ Authorize ]`
 7. User clicks Authorize
 8. Desktop app instantly becomes authenticated
 

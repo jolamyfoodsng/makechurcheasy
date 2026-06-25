@@ -1,5 +1,5 @@
 /**
- * Broadcast Store — MakeChurchEasy Studio
+ * Broadcast Store — MakeChurchEasy
  *
  * Central state for the broadcast control interface.
  * Uses React Context + useReducer for predictable, debuggable state.

@@ -9,5 +9,5 @@ export function applyBrandingSettingsToDom(settings: Pick<MVSettings, "brandColo
   root.style.removeProperty("--primary-rgb");
 
   const churchName = settings.churchName.trim();
-  document.title = churchName ? `${churchName} · MakeChurchEasy Studio` : "MakeChurchEasy Studio";
+  document.title = churchName ? `${churchName} · MakeChurchEasy` : "MakeChurchEasy";
 }

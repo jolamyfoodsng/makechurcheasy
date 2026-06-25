@@ -99,7 +99,7 @@ export default function DashboardPage() {
 
           <section className="dash-hero-row">
             <div className="dash-hero-copy">
-              <h1 className="dash-hero-title">MakeChurchEasy Studio</h1>
+              <h1 className="dash-hero-title">MakeChurchEasy</h1>
               <p className="dash-hero-subtitle">
                 Your church production command center — scripture display, worship lyrics, announcements, and AI-powered scripture recognition.
               </p>

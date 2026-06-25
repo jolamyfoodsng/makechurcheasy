@@ -531,9 +531,9 @@ export function MVSettings() {
   /* ── Tab descriptions ── */
   const tabDescription = useMemo(() => {
     switch (activeTab) {
-      case "general": return "Configure general options for MakeChurchEasy Studio operations.";
-      case "obs": return "Configure how MakeChurchEasy Studio connects and communicates with OBS.";
-      case "appearance": return "Customize the look, scaling, and behavior of MakeChurchEasy Studio.";
+      case "general": return "Configure general options for MakeChurchEasy operations.";
+      case "obs": return "Configure how MakeChurchEasy connects and communicates with OBS.";
+      case "appearance": return "Customize the look, scaling, and behavior of MakeChurchEasy.";
       case "branding": return "Church profile, identity, and service defaults.";
       case "bible": return "Bible module preferences and slide configuration.";
       case "usage": return "Track your AI credits usage across all features and see your plan details.";
@@ -707,9 +707,9 @@ export function MVSettings() {
                     </div>
                     <div className="settings-card">
                       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                        <AppLogo alt="MakeChurchEasy Studio" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "contain" }} />
+                        <AppLogo alt="MakeChurchEasy" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "contain" }} />
                         <div>
-                          <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>MakeChurchEasy Studio</p>
+                          <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>MakeChurchEasy</p>
                           <p style={{ margin: 0, fontSize: 12, color: "var(--text-muted)" }}>Version {typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0"}</p>
                         </div>
                       </div>
@@ -900,7 +900,7 @@ export function MVSettings() {
                 <div className="settings-section">
                   <div className="section-header">
                     <h3 className="section-title">Design & Layout</h3>
-                    <p className="section-desc">Customize the look, scaling, and behavior of MakeChurchEasy Studio.</p>
+                    <p className="section-desc">Customize the look, scaling, and behavior of MakeChurchEasy.</p>
                   </div>
 
                   <div className="settings-card fields-rows-stack">

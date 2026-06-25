@@ -1192,7 +1192,7 @@ class DockObsClient {
     return {
       url: "https://github.com/exeldro/obs-move-transition/releases/latest",
       filename: "move-transition",
-      instructions: "Download the installer for your OS from the GitHub releases page, then restart MakeChurchEasy Studio.",
+      instructions: "Download the installer for your OS from the GitHub releases page, then restart MakeChurchEasy.",
     };
   }
 

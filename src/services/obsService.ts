@@ -1,5 +1,5 @@
 /**
- * OBS WebSocket Service — MakeChurchEasy Studio
+ * OBS WebSocket Service — MakeChurchEasy
  *
  * Singleton service wrapping obs-websocket-js v5.
  * Handles connection lifecycle, error classification, and all OBS API calls.

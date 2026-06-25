@@ -173,7 +173,7 @@ export default function UpdateNotification({ result, onDismiss, onRemindLater }:
           {status === "prompt" && (
             <>
               <p className="update-notification__message">
-                A new version of MakeChurchEasy Studio ({result.version}) is ready to install.
+                A new version of MakeChurchEasy ({result.version}) is ready to install.
               </p>
 
               <div className="update-notification__versions">
@@ -225,7 +225,7 @@ export default function UpdateNotification({ result, onDismiss, onRemindLater }:
           )}
 
           {status === "relaunching" && (
-            <p className="update-notification__progress-text">Restarting MakeChurchEasy Studio...</p>
+            <p className="update-notification__progress-text">Restarting MakeChurchEasy...</p>
           )}
 
           {status === "error" && (

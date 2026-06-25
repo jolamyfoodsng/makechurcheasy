@@ -285,9 +285,9 @@ export async function getDeviceInfo(): Promise<string> {
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     const info = await invoke<{ hostname: string; os: string }>("get_device_info");
-    return info.hostname || "MakeChurchEasy Studio";
+    return info.hostname || "MakeChurchEasy";
   } catch {
-    return "MakeChurchEasy Studio";
+    return "MakeChurchEasy";
   }
 }
 

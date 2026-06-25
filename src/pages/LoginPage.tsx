@@ -54,7 +54,7 @@ export default function LoginPage() {
 
   async function startQrLogin() {
     setError("");
-    const result = await createPairingCode("MakeChurchEasy Studio");
+    const result = await createPairingCode("MakeChurchEasy");
     if ("error" in result) {
       setError(result.error);
       return;
@@ -159,9 +159,9 @@ export default function LoginPage() {
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: "36px" }}>
           <AppLogo
-            alt="MakeChurchEasy Studio"
-            mode="light"
-            style={{ height: "80px", width: "auto", marginBottom: "16px" }}
+            alt="MakeChurchEasy"
+            mode="dark"
+            style={{ height: "130px", width: "130px" }}
           />
           <h1
             style={{
@@ -171,7 +171,7 @@ export default function LoginPage() {
               marginBottom: "6px",
             }}
           >
-            MakeChurchEasy Studio
+            MakeChurchEasy
           </h1>
           <p style={{ fontSize: "13px", color: "#9898a8" }}>
             Church Presentation Software for OBS
@@ -198,7 +198,7 @@ export default function LoginPage() {
             <button
               onClick={async () => {
                 setError("");
-                const result = await createPairingCode("MakeChurchEasy Studio");
+                const result = await createPairingCode("MakeChurchEasy");
                 if ("error" in result) {
                   setError(result.error);
                   return;
@@ -289,7 +289,7 @@ export default function LoginPage() {
             <button
               onClick={async () => {
                 setError("");
-                const result = await createPairingCode("MakeChurchEasy Studio");
+                const result = await createPairingCode("MakeChurchEasy");
                 if ("error" in result) {
                   setError(result.error);
                   return;
@@ -526,7 +526,7 @@ export default function LoginPage() {
             >
               Go to{" "}
               <span style={{ color: "#9898a8" }}>
-                MakeChurchEasy Studio
+                MakeChurchEasy
               </span>{" "}
               in your browser, sign in, then copy the code shown on the Devices page.
             </p>

@@ -1,5 +1,5 @@
 /**
- * App.tsx — MakeChurchEasy Studio
+ * App.tsx — MakeChurchEasy
  *
  * Root component with React Router.
  *
@@ -28,7 +28,7 @@ import ForcedUpdateOverlay from "./components/ForcedUpdateOverlay";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
 import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
-import { checkForUpdate, getVersionAge, fetchVersionFloor, type UpdateCheckResult } from "./services/updateService";
+import { checkForUpdate, downloadAndInstallUpdate, getVersionAge, fetchVersionFloor, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
 import {
   fetchAppSettings,
   getForcedUpdateState,
@@ -533,6 +533,13 @@ function App() {
     minimumVersion: string;
   } | null>(null);
 
+  // ── In-app update state for version floor screen ──
+  const [floorUpdateStatus, setFloorUpdateStatus] = useState<
+    "idle" | "checking" | "downloading" | "installing" | "relaunching" | "error"
+  >("idle");
+  const [floorUpdateProgress, setFloorUpdateProgress] = useState<DownloadProgress>({ contentLength: 0, downloaded: 0 });
+  const [floorUpdateError, setFloorUpdateError] = useState<string | null>(null);
+
   // ── Server-driven forced update (admin-controlled) ──
   const [forcedUpdateState, setForcedUpdateState] = useState<ForcedUpdateState>({
     blocked: false,
@@ -887,6 +894,40 @@ function App() {
     };
   }, [handleGlobalMediaUpload, splashVisible, updateResult]);
 
+  // ── In-app update handler for version floor screen ──
+  const DOWNLOAD_URL = "https://makechurcheasy.creatorstudioslabs.stream";
+
+  const handleFloorUpdate = useCallback(async () => {
+    setFloorUpdateStatus("checking");
+    setFloorUpdateError(null);
+    try {
+      const result = await checkForUpdate();
+      if (!result.available || !result.update) {
+        // No newer release found on GitHub — fall back to download page
+        window.open(DOWNLOAD_URL, "_blank");
+        setFloorUpdateError(
+          "No auto-update available for your platform. The download page has been opened in your browser."
+        );
+        setFloorUpdateStatus("error");
+        return;
+      }
+      setFloorUpdateStatus("downloading");
+      await downloadAndInstallUpdate(
+        result.update,
+        (progress) => setFloorUpdateProgress(progress),
+        (status) => setFloorUpdateStatus(status === "relaunching" ? "relaunching" : status as "downloading" | "installing"),
+      );
+    } catch (err: any) {
+      console.error("[App] Floor update failed:", err);
+      // On any error, fall back to download page
+      window.open(DOWNLOAD_URL, "_blank");
+      setFloorUpdateError(
+        "Auto-update failed. The download page has been opened in your browser."
+      );
+      setFloorUpdateStatus("error");
+    }
+  }, []);
+
   return (
     <div className="app">
       <input
@@ -926,17 +967,71 @@ function App() {
             </div>
             <div className="force-update-body">
               <p className="force-update-message">
-                This version of MakeChurchEasy Studio is no longer supported. Please download and install the latest version from{" "}
-                <a
-                  href="https://makechurcheasy.creatorstudioslabs.stream"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: "#8b5cf6", textDecoration: "underline" }}
-                >
-                  makechurcheasy.creatorstudioslabs.stream
-                </a>{" "}
-                to continue.
+                This version of MakeChurchEasy is no longer supported. Please update to continue.
               </p>
+
+              {floorUpdateStatus === "idle" && (
+                <button
+                  onClick={handleFloorUpdate}
+                  className="force-update-button"
+                >
+                  <Icon name="system_update" size={18} />
+                  Update Now
+                </button>
+              )}
+
+              {floorUpdateStatus === "checking" && (
+                <div className="force-update-progress-row">
+                  <Icon name="sync" size={16} className="force-update-icon--spin" />
+                  <span>Checking for updates…</span>
+                </div>
+              )}
+
+              {floorUpdateStatus === "downloading" && (
+                <div className="force-update-progress-row">
+                  <div className="force-update-progress-bar">
+                    <div
+                      className="force-update-progress-fill"
+                      style={{
+                        width: floorUpdateProgress.contentLength
+                          ? `${(floorUpdateProgress.downloaded / floorUpdateProgress.contentLength) * 100}%`
+                          : "60%",
+                      }}
+                    />
+                  </div>
+                  <span className="force-update-progress-text">
+                    {floorUpdateProgress.contentLength
+                      ? `${Math.round((floorUpdateProgress.downloaded / floorUpdateProgress.contentLength) * 100)}%`
+                      : "Downloading…"}
+                  </span>
+                </div>
+              )}
+
+              {floorUpdateStatus === "installing" && (
+                <div className="force-update-progress-row">
+                  <Icon name="sync" size={16} className="force-update-icon--spin" />
+                  <span>Installing update…</span>
+                </div>
+              )}
+
+              {floorUpdateStatus === "relaunching" && (
+                <div className="force-update-progress-row">
+                  <Icon name="sync" size={16} className="force-update-icon--spin" />
+                  <span>Relaunching…</span>
+                </div>
+              )}
+
+              {floorUpdateStatus === "error" && (
+                <div className="force-update-error-row">
+                  <p className="force-update-error-text">{floorUpdateError}</p>
+                  <button
+                    onClick={handleFloorUpdate}
+                    className="force-update-button"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

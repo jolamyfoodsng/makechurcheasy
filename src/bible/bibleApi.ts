@@ -1,7 +1,7 @@
 /**
  * bibleApi.ts — Bible catalog API + XML download & parser
  *
- * Connects to the MakeChurchEasy Studio Bible API to:
+ * Connects to the MakeChurchEasy Bible API to:
  * - Search/browse the catalog of ~1000 Bibles
  * - Download Bible XML from presigned R2 URLs
  * - Parse XML → RawBibleData JSON format for local storage

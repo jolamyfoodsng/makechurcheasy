@@ -57,8 +57,8 @@ const BIBLE_OVERLAY_SCENE_SLOT = "bible-overlay";
 const BIBLE_OVERLAY_SCENE_FALLBACK_NAME = "MCE Bible Overlay";
 const BIBLE_MAIN_INPUT_SLOT = "bible-browser-source";
 const BIBLE_BG_INPUT_SLOT = "bible-bg-source";
-const BIBLE_MAIN_INPUT_FALLBACK_NAME = "OBS Church Studio — Bible";
-const BIBLE_BG_INPUT_FALLBACK_NAME = "OBS Church Studio — Bible BG";
+const BIBLE_MAIN_INPUT_FALLBACK_NAME = "MakeChurchEasy — Bible";
+const BIBLE_BG_INPUT_FALLBACK_NAME = "MakeChurchEasy — Bible BG";
 const SHARED_WORSHIP_BIBLE_THEME_TAG = "shared-worship-bible";
 
 const BIBLE_LOWER_THIRD_THEMES: LowerThirdTheme[] = (() => {

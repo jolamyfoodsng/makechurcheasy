@@ -2,7 +2,7 @@
  * ConnectionStatus — OBS connection UI
  *
  * Shows connection state with a connect/disconnect form.
- * Design follows the MakeChurchEasy Studio design system from multiview.html.
+ * Design follows the MakeChurchEasy design system from multiview.html.
  */
 
 import { useState, type FormEvent } from "react";
