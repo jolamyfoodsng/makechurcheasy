@@ -23141,11 +23141,15 @@
 /* Page details */
 button.dock-btm-toolbar__clear--inline,
 .dock-btm-toolbar__clear.dock-btm-toolbar__clear--full {
-
   display: none !important;
 }
 
 @media (max-width:345px) {
+  .dock-btm-toolbar__clear.dock-btm-toolbar__clear--bible {
+    display: none !important;
+
+  }
+
   .dock-btm-toolbar__clear.dock-btm-toolbar__clear--full {
     display: block !important;
   }
@@ -23158,10 +23162,6 @@ button.dock-btm-toolbar__clear--inline,
     width: 100%;
   }
 
-  .dock-btm-toolbar__clear {
-    display: none !important;
-
-  }
 }
 
 @media (max-width:290px) {

@@ -112,7 +112,7 @@ export async function refreshPlanConfig(): Promise<PlanConfig> {
 
 export function getPlanCredits(config: PlanConfig, plan: string): number {
   const key = plan?.toLowerCase();
-  return config.plans[key as keyof typeof config.plans]?.credits ?? config.plans.free?.credits ?? 1000;
+  return config.plans[key as keyof typeof config.plans]?.credits ?? config.plans.free?.credits ?? 50;
 }
 
 export function getPlanLabel(config: PlanConfig, plan: string): string {

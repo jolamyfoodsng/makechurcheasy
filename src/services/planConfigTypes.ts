@@ -204,7 +204,7 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         USD: { monthly: 0, yearly: 0 },
       },
       paystack: { monthlyPlanCode: "", yearlyPlanCode: "" },
-      credits: 1000,
+      credits: 50,
       entitlements: {
         songs: 3, images: 2, videos: 1, themes: 1, lowerThirds: 1, devices: 1,
         bibleVersions: 4, multiviewTemplates: 0, tickerThemes: 0, themePresets: 0,

@@ -3082,16 +3082,15 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       )}
 
       {/* ── Footer actions (hidden when in text section — it has its own clear) ── */}
-      {browserTab !== "text" && (activeTargets.active || textOverlayTargets.active) && (
+      {browserTab !== "text" && (
         <button
           type="button"
           className="dock-btm-toolbar__clear"
           onClick={() => void clearMedia()}
-          disabled={clearingTarget !== null}
+          disabled={clearingTarget !== null || (!activeTargets.active && !textOverlayTargets.active)}
           aria-label="Clear media"
         >
-          {/* <Icon name="delete_sweep" size={16} /> */}
-          <span>Hide Media</span>
+          <span>{activeTargets.active || textOverlayTargets.active ? "Hide Media" : "Clear"}</span>
         </button>
       )}
 
