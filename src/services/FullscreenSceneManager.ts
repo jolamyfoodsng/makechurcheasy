@@ -96,8 +96,9 @@ class FullscreenSceneManager {
   }> {
     this._assertConnected();
 
-    // Ensure the presentation scene exists (this creates all sources)
-    await presentationSceneManager.ensurePresentationScene();
+    // Map def.key to a ModuleType for lazy source creation
+    const moduleKey = `fullscreen-${def.key}` as import("./PresentationSceneManager").ModuleType;
+    await presentationSceneManager.ensureModuleSource(moduleKey);
 
     // Get the browser source item ID from PresentationSceneManager
     const sourceInfo = (presentationSceneManager as any)._state?.sources?.get(def.browserSourceName);

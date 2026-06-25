@@ -26,6 +26,8 @@ import {
   Zap
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import LanguagePicker from '../components/LanguagePicker';
+import languageData from '../../full_langugae_list.json';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateTranslationCredits, countWords, deductCreditsWithSync, fetchCreditsFromBackend, isProUnlocked } from '../services/credits';
 import { trackTranscriptExported } from '../services/tracking';
@@ -133,13 +135,18 @@ function sanitizeFilename(title: string): string {
 }
 
 async function saveViaTauriDialog(defaultName: string, bytes: Uint8Array, filterName: string, extensions: string[]): Promise<boolean> {
-  const filePath = await save({
-    defaultPath: defaultName,
-    filters: [{ name: filterName, extensions }],
-  });
-  if (!filePath) return false;
-  await writeFile(filePath, bytes);
-  return true;
+  try {
+    const filePath = await save({
+      defaultPath: defaultName,
+      filters: [{ name: filterName, extensions }],
+    });
+    if (!filePath) return false;
+    await writeFile(filePath, bytes);
+    return true;
+  } catch (err) {
+    console.error('[Export] saveViaTauriDialog error:', err);
+    throw err;
+  }
 }
 
 async function exportPDF(
@@ -333,10 +340,12 @@ interface TranslationModalProps {
   userId?: string;
 }
 
-const LANGUAGES = ['Yoruba', 'Hausa', 'Igbo', 'French', 'Spanish', 'Portuguese'];
+const languageLookup = new Map(
+  (languageData as { code: string; name: string }[]).map(l => [l.code, l.name]),
+);
 
 function TranslationModal({ isOpen, onClose, onStart, savedTranslations, transcriptTitle, transcriptText, userId }: TranslationModalProps) {
-  const [targetLanguage, setTargetLanguage] = useState('Yoruba');
+  const [targetLanguage, setTargetLanguage] = useState('yo');
   const [transOption, setTransOption] = useState<'full' | 'detected'>('full');
   const [estimatedCredits, setEstimatedCredits] = useState(0);
   const [availableCredits, setAvailableCredits] = useState(0);
@@ -348,7 +357,7 @@ function TranslationModal({ isOpen, onClose, onStart, savedTranslations, transcr
   // Fetch credits from backend — never from localStorage
   useEffect(() => {
     if (!userId || pro) return;
-    fetchCreditsFromBackend(userId).then((credits) => {
+    fetchCreditsFromBackend().then((credits) => {
       if (credits >= 0) setAvailableCredits(credits);
     });
   }, [userId, pro]);
@@ -374,30 +383,7 @@ function TranslationModal({ isOpen, onClose, onStart, savedTranslations, transcr
               Select Language
             </div>
 
-            <div className="select-wrapper">
-              <Globe className="select-icon-left" size={18} />
-              <select
-                className="custom-select"
-                value={targetLanguage}
-                onChange={(e) => setTargetLanguage(e.target.value)}
-              >
-                {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
-              <ChevronDown className="select-icon-right" size={18} />
-            </div>
-
-            <div className="pill-tags">
-              <span className="pill-label">Popular:</span>
-              {['Yoruba', 'Hausa', 'Igbo', 'French'].map(lang => (
-                <button
-                  key={lang}
-                  className={`pill ${targetLanguage === lang ? 'active' : ''}`}
-                  onClick={() => setTargetLanguage(lang)}
-                >
-                  {lang}
-                </button>
-              ))}
-            </div>
+            <LanguagePicker value={targetLanguage} onChange={setTargetLanguage} />
           </div>
 
           {/* Step 2 */}
@@ -477,7 +463,7 @@ function TranslationModal({ isOpen, onClose, onStart, savedTranslations, transcr
 
           <button
             className="btn btn-primary btn-block"
-            onClick={() => onStart(targetLanguage)}
+            onClick={() => onStart(languageLookup.get(targetLanguage) || targetLanguage)}
             disabled={!canAfford}
             style={!canAfford ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
           >
@@ -848,6 +834,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   const [exporting, setExporting] = useState<'idle' | 'pdf' | 'docx' | 'done_pdf' | 'done_docx'>('idle');
   const [copyState, setCopyState] = useState<'idle' | 'done'>('idle');
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [translationExporting, setTranslationExporting] = useState<Record<string, 'idle' | 'pdf' | 'docx' | 'done_pdf' | 'done_docx'>>({});
   const [isTranslateOpen, setIsTranslateOpen] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState('');
@@ -898,10 +885,45 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
       } else {
         setExporting('idle');
       }
-    } catch {
+    } catch (err) {
+      console.error('[Export] failed:', err);
       setExporting('idle');
     }
   }, [transcript, displayLines, detected, exporting]);
+
+  const doExportTranslation = useCallback(async (translationId: string, translatedText: string, language: string, type: 'pdf' | 'docx') => {
+    if (!transcript) return;
+    const prev = translationExporting[translationId];
+    if (prev && prev !== 'idle' && !prev.startsWith('done')) return;
+    setTranslationExporting(prev => ({ ...prev, [translationId]: type }));
+    try {
+      const lines = translatedText.split('\n').filter(l => l.trim()).map(l => {
+        const m = l.match(/^(\d{2}:\d{2}:\d{2})\s+(.*)$/);
+        return { time: m?.[1] || '', text: m?.[2] || l };
+      });
+      const exportTranscript = { ...transcript, title: `${transcript.title} (${language})`, transcriptText: translatedText };
+      const filename = sanitizeFilename(exportTranscript.title);
+      let bytes: Uint8Array;
+      if (type === 'pdf') {
+        bytes = await exportPDF(exportTranscript, lines, []);
+      } else {
+        bytes = await exportDOCX(exportTranscript, lines, []);
+      }
+      const saved = type === 'pdf'
+        ? await saveViaTauriDialog(`${filename}.pdf`, bytes, 'PDF', ['pdf'])
+        : await saveViaTauriDialog(`${filename}.docx`, bytes, 'Word Document', ['docx']);
+      if (saved) {
+        setTranslationExporting(prev => ({ ...prev, [translationId]: `done_${type}` as any }));
+        trackTranscriptExported(type);
+        setTimeout(() => setTranslationExporting(prev => ({ ...prev, [translationId]: 'idle' })), 2000);
+      } else {
+        setTranslationExporting(prev => ({ ...prev, [translationId]: 'idle' }));
+      }
+    } catch (err) {
+      console.error('[Export] translation export failed:', err);
+      setTranslationExporting(prev => ({ ...prev, [translationId]: 'idle' }));
+    }
+  }, [transcript, translationExporting]);
 
   const handleCopy = useCallback(() => {
     if (copyState === 'done') return;
@@ -1191,30 +1213,73 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
           {sidebarTab === 'translations' && (
             <div className="sidebar-tab-content">
               <div className="translation-cards">
-                {transcript.translations.map((t) => (
-                  <div key={t.id} className="translation-card">
-                    <div className="translation-card-header">
-                      <div className="translation-lang">
-                        <Languages size={14} />
-                        <span>{t.language}</span>
+                {transcript.translations.map((t) => {
+                  const expState = translationExporting[t.id] || 'idle';
+                  const isExporting = expState !== 'idle' && !expState.startsWith('done');
+                  return (
+                    <div key={t.id} className="translation-card">
+                      <div className="translation-card-header">
+                        <div className="translation-lang">
+                          <Languages size={14} />
+                          <span>{t.language}</span>
+                        </div>
+                        <div className="translation-date">
+                          {new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </div>
                       </div>
-                      <div className="translation-date">
-                        {new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      <div className="translation-preview">
+                        {t.translatedText.substring(0, 150)}...
+                      </div>
+                      <div className="translation-actions">
+                        <button
+                          className="btn-icon-small"
+                          title="View translation"
+                        >
+                          <ArrowUpRight size={12} />
+                        </button>
+                        <button
+                          className="btn-icon-small"
+                          title="Copy translation"
+                          onClick={() => {
+                            navigator.clipboard.writeText(t.translatedText);
+                          }}
+                        >
+                          <Copy size={12} />
+                        </button>
+                        <div className="translation-export-group">
+                          <button
+                            className={`btn-icon-small ${expState === 'done_pdf' ? 'export-success' : ''}`}
+                            title="Export as PDF"
+                            disabled={isExporting}
+                            onClick={() => doExportTranslation(t.id, t.translatedText, t.language, 'pdf')}
+                          >
+                            {isExporting && expState === 'pdf' ? (
+                              <div className="btn-spinner" />
+                            ) : expState === 'done_pdf' ? (
+                              <CheckCircle2 size={12} />
+                            ) : (
+                              <FileText size={12} />
+                            )}
+                          </button>
+                          <button
+                            className={`btn-icon-small ${expState === 'done_docx' ? 'export-success' : ''}`}
+                            title="Export as Word"
+                            disabled={isExporting}
+                            onClick={() => doExportTranslation(t.id, t.translatedText, t.language, 'docx')}
+                          >
+                            {isExporting && expState === 'docx' ? (
+                              <div className="btn-spinner" />
+                            ) : expState === 'done_docx' ? (
+                              <CheckCircle2 size={12} />
+                            ) : (
+                              <FileCode size={12} />
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                    <div className="translation-preview">
-                      {t.translatedText.substring(0, 150)}...
-                    </div>
-                    <div className="translation-actions">
-                      <button className="btn-icon-small" title="View translation">
-                        <ArrowUpRight size={12} />
-                      </button>
-                      <button className="btn-icon-small" title="Copy translation">
-                        <Copy size={12} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {transcript.translations.length === 0 && (
                   <div className="sidebar-empty-state">
                     <Languages size={32} style={{ opacity: 0.3, marginBottom: 8 }} />

@@ -14,13 +14,18 @@ interface CreditsDisplayProps {
   refreshKey?: number;
   /** User ID for backend sync. When provided, polls every 5s. */
   userId?: string;
+  /** Credits being consumed right now (e.g. during a live session). Subtracted from displayed balance. */
+  sessionCreditsUsed?: number;
 }
 
-export default function CreditsDisplay({ refreshKey, userId }: CreditsDisplayProps) {
+export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed = 0 }: CreditsDisplayProps) {
   const [balance, setBalance] = useState<number>(0);
   const [synced, setSynced] = useState(false);
   const pro = isProUnlocked();
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Generation counter: incremented on every local deduction so stale poll
+  // responses (initiated before the deduction) are discarded.
+  const genRef = useRef(0);
 
   // Sync from backend on mount and every 5 seconds
   useEffect(() => {
@@ -29,8 +34,11 @@ export default function CreditsDisplay({ refreshKey, userId }: CreditsDisplayPro
     let cancelled = false;
 
     async function sync() {
-      const result = await syncCreditsWithBackend(userId!);
-      if (!cancelled && result >= 0) {
+      const genBefore = genRef.current;
+      const result = await syncCreditsWithBackend();
+      // If a deduction happened while the fetch was in flight, discard
+      // the stale response — the deduction already set the correct balance.
+      if (!cancelled && result >= 0 && genBefore === genRef.current) {
         setBalance(result);
         setSynced(true);
       }
@@ -56,6 +64,7 @@ export default function CreditsDisplay({ refreshKey, userId }: CreditsDisplayPro
   // Live-update when credits change anywhere in the app
   useEffect(() => {
     const unsub = onCreditChange((newBalance) => {
+      genRef.current += 1;
       setBalance(newBalance);
     });
     return unsub;
@@ -73,8 +82,9 @@ export default function CreditsDisplay({ refreshKey, userId }: CreditsDisplayPro
     );
   }
 
+  const effectiveBalance = Math.max(0, balance - sessionCreditsUsed);
   const tier =
-    balance <= 0 ? "red" : balance <= 10 ? "orange" : "gold";
+    effectiveBalance <= 0 ? "red" : effectiveBalance <= 10 ? "orange" : "gold";
 
   return (
     <div
@@ -85,7 +95,7 @@ export default function CreditsDisplay({ refreshKey, userId }: CreditsDisplayPro
       <Zap size={12} />
       <span className="sts3-usage-label">CREDITS</span>
       <span className="sts3-usage-value">
-        {balance <= 0 ? "0 — Buy Credits" : `${balance} remaining`}
+        {effectiveBalance <= 0 ? "0 — Buy Credits" : `${effectiveBalance} remaining`}
       </span>
     </div>
   );

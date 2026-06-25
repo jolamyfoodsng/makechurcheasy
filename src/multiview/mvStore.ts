@@ -57,8 +57,9 @@ let dbPromise: Promise<IDBPDatabase> | null = null;
 function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion, _newVersion, transaction) {
-        // v1 stores
+      upgrade(db, _oldVersion, _newVersion, transaction) {
+        // v1 stores — always ensure they exist (migration may have created
+        // the DB at a higher version without an upgrade function)
         if (!db.objectStoreNames.contains("layouts")) {
           const layouts = db.createObjectStore("layouts", { keyPath: "id" });
           layouts.createIndex("updatedAt", "updatedAt");
@@ -72,35 +73,19 @@ function getDb(): Promise<IDBPDatabase> {
         if (!db.objectStoreNames.contains("mappings")) {
           db.createObjectStore("mappings", { keyPath: "layoutId" });
         }
-        // v2 stores
-        if (oldVersion < 2) {
-          if (!db.objectStoreNames.contains("media-library")) {
-            const media = db.createObjectStore("media-library", { keyPath: "id" });
-            media.createIndex("mediaType", "mediaType");
-            media.createIndex("createdAt", "createdAt");
-          }
+        // v2 store
+        if (!db.objectStoreNames.contains("media-library")) {
+          const media = db.createObjectStore("media-library", { keyPath: "id" });
+          media.createIndex("mediaType", "mediaType");
+          media.createIndex("createdAt", "createdAt");
         }
-        // v3: Add userId index to all stores for cross-account isolation
-        if (oldVersion < 3) {
-          const userStores = ["layouts", "assets", "mappings", "media-library"];
-          for (const storeName of userStores) {
-            if (db.objectStoreNames.contains(storeName)) {
-              const store = transaction.objectStore(storeName) as unknown as IDBObjectStore;
-              if (!store.indexNames.contains("userId")) {
-                store.createIndex("userId", "userId", { unique: false });
-              }
-            }
-          }
-        }
-        // Safety: ensure userId indexes exist even if v3 upgrade partially failed
-        {
-          const userStores = ["layouts", "assets", "mappings", "media-library"];
-          for (const storeName of userStores) {
-            if (db.objectStoreNames.contains(storeName)) {
-              const store = transaction.objectStore(storeName) as unknown as IDBObjectStore;
-              if (!store.indexNames.contains("userId")) {
-                store.createIndex("userId", "userId", { unique: false });
-              }
+        // Ensure userId indexes exist on all user-owned stores
+        const userStores = ["layouts", "assets", "mappings", "media-library"];
+        for (const storeName of userStores) {
+          if (db.objectStoreNames.contains(storeName)) {
+            const store = transaction.objectStore(storeName) as unknown as IDBObjectStore;
+            if (!store.indexNames.contains("userId")) {
+              store.createIndex("userId", "userId", { unique: false });
             }
           }
         }
@@ -506,6 +491,9 @@ export interface MVSettings {
   sermonSeries: string;
   sermonSpeaker: string;
   sermonPoints: SermonPointSetting[];
+
+  // ── Audio ──
+  inputGain: number;  // 0–300 (percent), default 100
 }
 
 export const DEFAULT_SETTINGS: MVSettings = {
@@ -538,6 +526,8 @@ export const DEFAULT_SETTINGS: MVSettings = {
   sermonSeries: "",
   sermonSpeaker: "",
   sermonPoints: [],
+
+  inputGain: 100,
 };
 
 export function getSettings(): MVSettings {

@@ -12,12 +12,15 @@ import type { BibleTranslation } from "../../bible/types";
 import { AppLogo } from "../../components/AppLogo";
 import { useAuth } from "../../contexts/AuthContext";
 import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
+import { createAudioProcessor } from "../../services/audio/audioProcessor";
+import { voiceBibleService } from "../../services/voiceBibleService";
+import { lmDockService } from "../../services/lmDockService";
 import { ltDurationStore } from "../../lowerthirds/ltDurationStore";
 import { applyBrandingSettingsToDom } from "../../services/branding";
-import { fetchCreditTransactions, onCreditChange, syncCreditsWithBackend, type CreditTransaction } from "../../services/credits";
+import { fetchCreditDetails, fetchCreditTransactions, onCreditChange, type CreditTransaction } from "../../services/credits";
 import { obsService } from "../../services/obsService";
 import { formatCredits, getPlanConfig, getPlanCredits, getPlanLabel, type PlanConfig } from "../../services/planConfig";
-import { consumeRenewalKey, getRenewalKeysRemaining, isProUnlocked, setProUnlocked, validateKey } from "../../services/proLicense";
+import { isProUnlocked } from "../../services/proLicense";
 import { getUserPlan, isInTrial, getTrialDaysRemaining } from "../../services/licenseService";
 import { clearAllSongs } from "../../worship/worshipDb";
 import { refreshTheme } from "../components/MVThemeProvider";
@@ -37,8 +40,6 @@ import {
   FileText,
   Globe,
   History,
-  Key,
-  Lock,
   Mic,
   Monitor,
   Moon,
@@ -48,10 +49,8 @@ import {
   RefreshCw,
   RotateCcw,
   Settings,
-  ShieldCheck,
   Sun,
   Trash2,
-  Copy,
 } from "lucide-react";
 
 import "./MVSettings.css";
@@ -72,7 +71,7 @@ const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
   { value: "KJV", label: "King James Version (KJV)" },
 ];
 
-type SettingsTab = "general" | "obs" | "appearance" | "branding" | "bible" | "usage" | "pro" | "developer";
+type SettingsTab = "general" | "obs" | "appearance" | "branding" | "bible" | "usage" | "audio";
 
 const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "" };
 
@@ -108,279 +107,6 @@ function resolveSpeakerProfiles(settings: MVSettingsType): SpeakerProfileSetting
   return parseLegacyPastorNames(settings.pastorNames);
 }
 
-/* ── API Key Types ── */
-interface ApiKeyItem {
-  _id: string;
-  name: string;
-  prefix: string;
-  lastUsedAt: string | null;
-  revoked: boolean;
-  createdAt: string;
-}
-
-/* ── Developer Tab ── */
-function DeveloperTabContent({
-  userPlan,
-  proUnlocked,
-  triggerToast,
-}: {
-  userPlan: string;
-  proUnlocked: boolean;
-  triggerToast: (msg: string, type?: "success" | "accent") => void;
-}) {
-  const [keys, setKeys] = useState<ApiKeyItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [newKeyName, setNewKeyName] = useState("");
-  const [newKeyRaw, setNewKeyRaw] = useState<string | null>(null);
-  const [showKey, setShowKey] = useState(false);
-  const [revokingId, setRevokingId] = useState<string | null>(null);
-
-  const isPro = proUnlocked || userPlan === "pro";
-
-  const fetchKeys = useCallback(async () => {
-    try {
-      const res = await fetch("/api/user/api-keys");
-      if (res.ok) {
-        const data = await res.json();
-        setKeys(data.keys || []);
-      }
-    } catch {
-      // silent
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchKeys();
-  }, [fetchKeys]);
-
-  const handleCreate = useCallback(async () => {
-    if (!newKeyName.trim()) return;
-    setCreating(true);
-    try {
-      const res = await fetch("/api/user/api-keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newKeyName.trim() }),
-      });
-      const data = await res.json();
-      if (res.status === 403 && data.upgradeRequired) {
-        triggerToast("API access requires a Pro plan", "accent");
-        return;
-      }
-      if (res.ok && data.key) {
-        setNewKeyRaw(data.key);
-        setShowKey(true);
-        setNewKeyName("");
-        fetchKeys();
-        triggerToast("API key created", "success");
-      }
-    } catch {
-      triggerToast("Failed to create API key", "accent");
-    } finally {
-      setCreating(false);
-    }
-  }, [newKeyName, fetchKeys, triggerToast]);
-
-  const handleRevoke = useCallback(async (keyId: string) => {
-    setRevokingId(keyId);
-    try {
-      const res = await fetch(`/api/user/api-keys?id=${keyId}`, { method: "DELETE" });
-      if (res.ok) {
-        fetchKeys();
-        triggerToast("API key revoked", "success");
-      }
-    } catch {
-      triggerToast("Failed to revoke key", "accent");
-    } finally {
-      setRevokingId(null);
-    }
-  }, [fetchKeys, triggerToast]);
-
-  const copyKey = useCallback(() => {
-    if (newKeyRaw) {
-      navigator.clipboard.writeText(newKeyRaw);
-      triggerToast("Copied to clipboard", "success");
-    }
-  }, [newKeyRaw, triggerToast]);
-
-  if (!isPro) {
-    return (
-      <div className="settings-section">
-        <div className="section-header">
-          <h3 className="section-title">API Access</h3>
-          <p className="section-desc">Integrate MakeChurchEasy with your own apps and workflows.</p>
-        </div>
-        <div className="settings-card" style={{ padding: "32px", textAlign: "center" }}>
-          <Key size={32} style={{ color: "var(--text-muted)", marginBottom: "12px" }} />
-          <h4 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "8px" }}>Pro Feature</h4>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.82rem", marginBottom: "16px", maxWidth: "340px", margin: "0 auto 16px" }}>
-            API access lets you build custom integrations, automate workflows, and connect MakeChurchEasy to external tools.
-          </p>
-          <button
-            className="action-btn btn-primary"
-            onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream to upgrade your plan", "accent")}
-          >
-            <ExternalLink size={14} />
-            <span>Upgrade to Pro</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="settings-section">
-      <div className="section-header">
-        <h3 className="section-title">API Keys</h3>
-        <p className="section-desc">Manage keys for external API access. Keep your keys secret.</p>
-      </div>
-
-      {/* Create new key */}
-      <div className="settings-card" style={{ padding: "24px", marginBottom: "16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <input
-            className="custom-textbox"
-            type="text"
-            placeholder="Key name (e.g. Production Server)"
-            value={newKeyName}
-            onChange={(e) => setNewKeyName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
-            style={{ flex: 1 }}
-          />
-          <button
-            className="action-btn btn-primary"
-            onClick={handleCreate}
-            disabled={creating || !newKeyName.trim()}
-          >
-            {creating ? <RefreshCw size={14} className="animate-spin" /> : <Key size={14} />}
-            <span>{creating ? "Creating..." : "Create Key"}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* One-time key display */}
-      {newKeyRaw && showKey && (
-        <div className="settings-card" style={{ padding: "16px", marginBottom: "16px", border: "1px solid var(--accent-color)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--accent-color)" }}>Your API Key</span>
-            <button className="action-btn" onClick={() => { setShowKey(false); setNewKeyRaw(null); }} style={{ padding: "4px 8px" }}>
-              Dismiss
-            </button>
-          </div>
-          <p style={{ fontSize: "0.74rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
-            Copy this key now. It will not be shown again.
-          </p>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <code style={{
-              flex: 1,
-              fontFamily: "var(--font-mono)",
-              fontSize: "0.78rem",
-              background: "var(--bg-secondary)",
-              padding: "8px 12px",
-              borderRadius: "3px",
-              wordBreak: "break-all",
-              color: "var(--text-primary)",
-            }}>
-              {newKeyRaw}
-            </code>
-            <button className="action-btn" onClick={copyKey} style={{ flexShrink: 0 }}>
-              <Copy size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Existing keys list */}
-      <div className="settings-card" style={{ padding: "16px" }}>
-        {loading ? (
-          <div style={{ textAlign: "center", padding: "24px", color: "var(--text-muted)" }}>
-            <RefreshCw size={16} className="animate-spin" style={{ marginBottom: "8px" }} />
-            <p style={{ fontSize: "0.8rem" }}>Loading keys...</p>
-          </div>
-        ) : keys.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "24px", color: "var(--text-muted)" }}>
-            <Key size={24} style={{ marginBottom: "8px", opacity: 0.5 }} />
-            <p style={{ fontSize: "0.82rem" }}>No API keys yet. Create one above.</p>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            {keys.map((key) => (
-              <div
-                key={key._id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "12px 14px",
-                  background: "var(--bg-secondary)",
-                  borderRadius: "3px",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, minWidth: 0 }}>
-                  <Key size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: "0.84rem", fontWeight: 500 }}>{key.name}</div>
-                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-                      {key.prefix}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
-                  <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                    {key.lastUsedAt
-                      ? `Used ${new Date(key.lastUsedAt).toLocaleDateString()}`
-                      : "Never used"}
-                  </span>
-                  <button
-                    className="action-btn"
-                    onClick={() => handleRevoke(key._id)}
-                    disabled={revokingId === key._id}
-                    style={{ color: "var(--danger-color)", padding: "4px 8px" }}
-                  >
-                    {revokingId === key._id ? <RefreshCw size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                    <span>Revoke</span>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* API docs reference */}
-      <div className="settings-section" style={{ marginTop: "24px" }}>
-        <h4 className="section-title">Quick Start</h4>
-        <div className="settings-card" style={{ padding: "16px" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-            <p style={{ marginBottom: "8px" }}>Authenticate requests with a Bearer token:</p>
-            <pre style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "0.74rem",
-              background: "var(--bg-secondary)",
-              padding: "10px 14px",
-              borderRadius: "3px",
-              overflow: "auto",
-              marginBottom: "12px",
-            }}>
-              {`curl -H "Authorization: Bearer mce_live_..." \\
-     https://makechurcheasy.creatorstudioslabs.stream/api/v1/profile`}
-            </pre>
-            <p>Available endpoints:</p>
-            <ul style={{ paddingLeft: "18px", marginTop: "4px" }}>
-              <li><code style={{ fontFamily: "var(--font-mono)", fontSize: "0.74rem" }}>GET /api/v1/profile</code> — Your profile</li>
-              <li><code style={{ fontFamily: "var(--font-mono)", fontSize: "0.74rem" }}>GET /api/v1/subscription</code> — Plan & entitlements</li>
-              <li><code style={{ fontFamily: "var(--font-mono)", fontSize: "0.74rem" }}>GET /api/v1/usage</code> — Usage stats</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ── Main Component ── */
 export function MVSettings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
@@ -403,6 +129,23 @@ export function MVSettings() {
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
+  // ── Audio settings state ──
+  const [inputGain, setInputGain] = useState(() => db.getSettings().inputGain ?? 100);
+  const [testMicActive, setTestMicActive] = useState(false);
+  const [testMicLevel, setTestMicLevel] = useState(0);
+  const [testMicClipping, setTestMicClipping] = useState(false);
+  const testMicProcessorRef = useRef<import("../../services/audio/audioProcessor").AudioProcessor | null>(null);
+  const testMicRafRef = useRef<number>(0);
+
+  // Clean up test mic on unmount
+  useEffect(() => {
+    return () => {
+      testMicProcessorRef.current?.destroy();
+      testMicProcessorRef.current = null;
+      cancelAnimationFrame(testMicRafRef.current);
+    };
+  }, []);
+
   // ── Bible settings state ──
   const { state: bibleState, dispatch: bibleDispatch, setTheme: bibleSetTheme } = useBible();
   const [bDefaultTranslation, setBDefaultTranslation] = useState<BibleTranslation>("KJV");
@@ -418,12 +161,7 @@ export function MVSettings() {
   const [bibleSettingsDirty, setBibleSettingsDirty] = useState(false);
 
   // ── Pro License state ──
-  const [proUnlocked, setProUnlockedState] = useState(() => isProUnlocked());
-  const [proKeyInput, setProKeyInput] = useState("");
-  const [proKeyStatus, setProKeyStatus] = useState<"idle" | "validating" | "success" | "error">("idle");
-  const [proKeyError, setProKeyError] = useState<string | null>(null);
-  const [proKeySuccessMsg, setProKeySuccessMsg] = useState<string | null>(null);
-  const [renewalsLeft, setRenewalsLeft] = useState(() => getRenewalKeysRemaining());
+  const [proUnlocked] = useState(() => isProUnlocked());
 
   // ── Credits state (fetched from backend) ──
   const { user: authUser } = useAuth();
@@ -432,8 +170,10 @@ export function MVSettings() {
   const [planConfig, setPlanConfig] = useState<PlanConfig | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<CreditTransaction[]>([]);
   const userPlan = proUnlocked ? "pro" as const : getUserPlan(authUser);
-  const planCredits = planConfig ? getPlanCredits(planConfig, userPlan) : (proUnlocked ? -1 : 1000);
   const trialActive = !proUnlocked && isInTrial(authUser);
+  // During trial, user gets pro-level credits — use effective plan for credit lookup
+  const effectivePlanForCredits = trialActive ? "trial" as const : userPlan;
+  const planCredits = planConfig ? getPlanCredits(planConfig, effectivePlanForCredits) : (proUnlocked ? -1 : 1000);
   const trialDaysLeft = trialActive ? getTrialDaysRemaining(authUser) : 0;
   const trialEndDate = trialActive && authUser?.trial?.endsAt
     ? new Date(authUser.trial.endsAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
@@ -456,15 +196,12 @@ export function MVSettings() {
 
   useEffect(() => {
     if (!authUser?.id) return;
-    syncCreditsWithBackend(authUser.id).then((synced) => {
-      if (synced >= 0) setCreditBalance(synced);
-      // Compute used = plan total − remaining
-      const total = planCredits;
-      if (synced >= 0 && total > 0) {
-        setCreditsUsedThisMonth(Math.max(0, total - synced));
+    fetchCreditDetails().then((details) => {
+      if (details) {
+        setCreditBalance(details.credits);
+        setCreditsUsedThisMonth(details.totalConsumed);
       }
     }).catch(() => {
-      // Backend unreachable — keep balance at 0, no localStorage fallback
       setCreditBalance(0);
       setCreditsUsedThisMonth(0);
     });
@@ -474,25 +211,26 @@ export function MVSettings() {
   useEffect(() => {
     const unsub = onCreditChange((newBalance) => {
       setCreditBalance(newBalance);
-      if (planCredits > 0) setCreditsUsedThisMonth(Math.max(0, planCredits - newBalance));
-      // Re-fetch recent transactions so the list reflects the new deduction
+      // Re-fetch full details to get accurate totalConsumed
+      fetchCreditDetails().then((details) => {
+        if (details) setCreditsUsedThisMonth(details.totalConsumed);
+      });
       fetchCreditTransactions(10).then(setRecentTransactions);
     });
     return unsub;
-  }, [planCredits]);
+  }, []);
 
   // Re-fetch credits and transactions every time the Usage tab is opened
   useEffect(() => {
     if (activeTab !== "usage" || !authUser?.id) return;
-    syncCreditsWithBackend(authUser.id).then((synced) => {
-      if (synced >= 0) setCreditBalance(synced);
-      const total = planCredits;
-      if (synced >= 0 && total > 0) {
-        setCreditsUsedThisMonth(Math.max(0, total - synced));
+    fetchCreditDetails().then((details) => {
+      if (details) {
+        setCreditBalance(details.credits);
+        setCreditsUsedThisMonth(details.totalConsumed);
       }
     }).catch(() => { });
     fetchCreditTransactions(10).then(setRecentTransactions);
-  }, [activeTab, authUser?.id, planCredits]);
+  }, [activeTab, authUser?.id]);
 
   // ── Appearance customization state ──
   const [theme, setTheme] = useState<"light" | "dark" | "system">(
@@ -517,10 +255,6 @@ export function MVSettings() {
 
   // ── Toast system ──
   const [toasts, setToasts] = useState<Array<{ id: number; message: string; type: "success" | "accent" }>>([]);
-
-  // ── License modal ──
-  const [licenseKeyEditOpen, setLicenseKeyEditOpen] = useState(false);
-  const [tempLicenseInput, setTempLicenseInput] = useState("");
 
   // ── OBS advanced state ──
   const [obsMethod, setObsMethod] = useState<"WebSocket" | "Remote">("WebSocket");
@@ -770,64 +504,6 @@ export function MVSettings() {
     setTimeout(() => setBSaved(false), 2000);
   }, [bDefaultTranslation, bDefaultThemeId, bShowVerseNumbers, bMaxLines, bColorMode, bAutoSend, bReduceMotion, bHighContrast, bibleDispatch, bibleSetTheme, bibleState.slideConfig, triggerToast]);
 
-  /* ── Pro License ── */
-  const handleValidateProKey = useCallback(async () => {
-    if (!proKeyInput.trim()) {
-      setProKeyError("Please enter a license key.");
-      setProKeyStatus("error");
-      setProKeySuccessMsg(null);
-      return;
-    }
-    setProKeyStatus("validating");
-    setProKeyError(null);
-    setProKeySuccessMsg(null);
-    try {
-      const result = await validateKey(proKeyInput);
-      if (result.type === "pro") {
-        setProUnlocked(true);
-        setProUnlockedState(true);
-        setProKeyStatus("success");
-        setProKeySuccessMsg("Pro unlocked — unlimited usage active!");
-        setProKeyError(null);
-        triggerToast("Pro license activated!", "success");
-      } else if (result.type === "renewal") {
-        if (result.alreadyUsed) {
-          setProKeyStatus("error");
-          setProKeyError("This renewal key has already been used.");
-        } else {
-          const ok = await consumeRenewalKey(proKeyInput);
-          if (ok) {
-            setProKeyStatus("success");
-            setProKeySuccessMsg("2-hour limit reset!");
-            setProKeyError(null);
-            setRenewalsLeft(getRenewalKeysRemaining());
-            setProKeyInput("");
-            window.dispatchEvent(new StorageEvent("storage", { key: "voiceBibleUsage" }));
-            triggerToast("2-hour limit reset with renewal key!", "success");
-          } else {
-            setProKeyStatus("error");
-            setProKeyError("Failed to activate renewal key.");
-          }
-        }
-      } else {
-        setProKeyStatus("error");
-        setProKeyError("Invalid license key.");
-      }
-    } catch {
-      setProKeyStatus("error");
-      setProKeyError("Validation failed. Try again.");
-    }
-  }, [proKeyInput, triggerToast]);
-
-  const handleRemoveProLicense = useCallback(() => {
-    setProUnlocked(false);
-    setProUnlockedState(false);
-    setProKeyInput("");
-    setProKeyStatus("idle");
-    setProKeyError(null);
-    setProKeySuccessMsg(null);
-  }, []);
-
   /* ── Appearance helpers ── */
   const handleResetAppearance = useCallback(() => {
     setTheme("dark");
@@ -861,7 +537,7 @@ export function MVSettings() {
       case "branding": return "Church profile, identity, and service defaults.";
       case "bible": return "Bible module preferences and slide configuration.";
       case "usage": return "Track your AI credits usage across all features and see your plan details.";
-      case "pro": return "Activate features, check status, and configure software licensing rules.";
+      case "audio": return "Configure microphone input gain and monitor audio levels.";
     }
   }, [activeTab]);
 
@@ -879,33 +555,6 @@ export function MVSettings() {
         ))}
       </div>
 
-      {/* License key modal */}
-      {licenseKeyEditOpen && (
-        <div className="dialog-overlay" onClick={() => setLicenseKeyEditOpen(false)}>
-          <div className="dialog-content" onClick={(e) => e.stopPropagation()}>
-            <div className="dialog-header">
-              <h3 className="dialog-title"><ShieldCheck size={22} /><span>Enter Pro License Key</span></h3>
-              <p className="dialog-desc">Input your premium license key to unlock unlimited speech transcription, translations, and multi-view templates.</p>
-            </div>
-            <div className="dialog-body">
-              <div className="form-group">
-                <label className="form-label" htmlFor="temp-key-input">License Key Code</label>
-                <input id="temp-key-input" className="custom-textbox" placeholder="VC-PRO-XXXX-XXXX-XXXX-XXXX" value={tempLicenseInput} onChange={(e) => setTempLicenseInput(e.target.value)} />
-              </div>
-            </div>
-            <div className="dialog-footer">
-              <button className="action-btn" onClick={() => setLicenseKeyEditOpen(false)}>Cancel</button>
-              <button className="action-btn btn-primary" onClick={() => {
-                if (!tempLicenseInput.trim()) return;
-                setLicenseKeyEditOpen(false);
-                setProKeyInput(tempLicenseInput);
-                triggerToast("Pro License activated!", "success");
-              }} disabled={!tempLicenseInput.trim()}>Activate Pro</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Main content */}
       <main className="app-main settings-main">
         <header className="main-header">
@@ -918,6 +567,13 @@ export function MVSettings() {
             else if (activeTab === "branding") handleResetBrandingSettings();
             else if (activeTab === "appearance") handleResetAppearance();
             else if (activeTab === "bible") handleSaveBible();
+            else if (activeTab === "audio") {
+              setInputGain(100);
+              db.updateSettings({ inputGain: 100 });
+              voiceBibleService.setInputGain(100);
+              lmDockService.setInputGain(100);
+              triggerToast("Input gain reset to 100%", "accent");
+            }
             else triggerToast("Reset options available for this section.", "accent");
           }}>
             <RotateCcw size={16} />
@@ -932,9 +588,10 @@ export function MVSettings() {
             ["obs", Radio, "OBS"],
             ["appearance", Palette, "Appearance"],
             ["branding", Paintbrush, "Branding"],
+            ["audio", Mic, "Audio"],
             ["usage", History, "Usage"],
-            ["pro", ShieldCheck, "Pro License"],
-            ["developer", Key, "Developer"],
+            // ["pro", ShieldCheck, "Pro License"],
+            // ["developer", Key, "Developer"],
           ] as const).map(([id, IconComp, label]) => (
             <button key={id} className={`tab-btn ${activeTab === id ? "active" : ""}`} onClick={() => setActiveTab(id)}>
               <IconComp size={16} /> <span>{label}</span>
@@ -1713,141 +1370,6 @@ export function MVSettings() {
                   </div>
                 </div>
               )}
-
-              {/* ══════════════ PRO LICENSE TAB ══════════════ */}
-              {activeTab === "pro" && (
-                <div className="settings-section">
-                  <div className="section-header">
-                    <h3 className="section-title">License Status</h3>
-                    <p className="section-desc">Verify your license, activate features, manage keys.</p>
-                  </div>
-
-                  {/* Trial Banner */}
-                  {trialActive && (
-                    <div style={{
-                      display: "flex", alignItems: "center", justifyContent: "space-between",
-                      padding: "14px 18px", borderRadius: "3px", marginBottom: "24px",
-                      background: "rgba(29, 78, 216, 0.08)",
-                      border: "1px solid rgba(29, 78, 216, 0.2)",
-                    }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <Calendar size={18} style={{ color: "#1D4ED8" }} />
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary)" }}>
-                            Growth Trial — {trialDaysLeft} Day{trialDaysLeft !== 1 ? "s" : ""} Remaining
-                          </div>
-                          <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                            Ends {trialEndDate} · You have access to all premium features
-                          </div>
-                        </div>
-                      </div>
-                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to upgrade", "accent")}>
-                        <ExternalLink size={12} /> Upgrade
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="settings-card" style={{ padding: "24px", position: "relative", overflow: "hidden" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div className="flex-vertical-item" style={{ gap: "14px" }}>
-                        <div className="flex-vertical-item" style={{ gap: "4px" }}>
-                          <span style={{ fontSize: "0.8rem", fontWeight: "700", textTransform: "uppercase", color: "var(--text-muted)" }}>Status</span>
-                          <span className={`license-status-tag ${proUnlocked || trialActive ? "active" : "inactive"}`}>
-                            {proUnlocked ? "Active" : trialActive ? "Active Trial" : "Inactive"}
-                          </span>
-                        </div>
-                        <div className="grid-3-col" style={{ gap: "32px" }}>
-                          <div className="flex-vertical-item" style={{ gap: "4px" }}>
-                            <span style={{ fontSize: "0.74rem", color: "var(--text-secondary)" }}>Type</span>
-                            <span style={{ fontWeight: "700", fontSize: "0.98rem" }}>{proUnlocked ? "Pro Unlimited" : trialActive ? "Growth Trial" : "N/A"}</span>
-                          </div>
-                          {trialActive && (
-                            <div className="flex-vertical-item" style={{ gap: "4px" }}>
-                              <span style={{ fontSize: "0.74rem", color: "var(--text-secondary)" }}>Expires</span>
-                              <span style={{ fontWeight: "700", fontSize: "0.98rem" }}>{trialEndDate}</span>
-                            </div>
-                          )}
-                          {renewalsLeft > 0 && !proUnlocked && !trialActive && (
-                            <div className="flex-vertical-item" style={{ gap: "4px" }}>
-                              <span style={{ fontSize: "0.74rem", color: "var(--text-secondary)" }}>Renewals Left</span>
-                              <span style={{ fontWeight: "700", fontSize: "0.98rem" }}>{renewalsLeft}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="pro-shield-badge"><ShieldCheck size={32} /></div>
-                    </div>
-                  </div>
-
-                  {/* Pro key form */}
-                  <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <h4 className="section-title">License Key</h4>
-                    <p className="section-desc">Paste in the key provided via invoice.</p>
-
-                    <div className="settings-card" style={{ marginTop: "16px" }}>
-                      {proUnlocked ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--success-color)", fontSize: "0.88rem", fontWeight: "500", flex: 1 }}>
-                            <CheckCircle size={16} />
-                            <span>License active. Unlimited usage.</span>
-                          </div>
-                          <button className="action-btn" onClick={handleRemoveProLicense}>Remove</button>
-                        </div>
-                      ) : (
-                        <div className="form-group">
-                          <label className="form-label">License Key</label>
-                          <div className="custom-input-container">
-                            <input
-                              className="custom-textbox"
-                              type="text"
-                              style={{ fontFamily: "var(--font-mono)", fontSize: "0.84rem" }}
-                              placeholder="VC-PRO-XXXX-XXXX-XXXX-XXXX or renewal key"
-                              value={proKeyInput}
-                              onChange={(e) => { setProKeyInput(e.target.value); setProKeyStatus("idle"); setProKeyError(null); setProKeySuccessMsg(null); }}
-                              onKeyDown={(e) => { if (e.key === "Enter") handleValidateProKey(); }}
-                            />
-                            <button className="action-btn btn-primary" onClick={handleValidateProKey} disabled={proKeyStatus === "validating"}>
-                              {proKeyStatus === "validating" ? (<><RefreshCw size={14} className="animate-spin" /><span>Validating...</span></>) : (<><Lock size={14} /><span>Activate</span></>)}
-                            </button>
-                          </div>
-                          {proKeyError && <p style={{ color: "var(--danger-color)", fontSize: 12, marginTop: 6 }}>{proKeyError}</p>}
-                          {proKeySuccessMsg && <p style={{ color: "var(--success-color)", fontSize: 12, marginTop: 6 }}>{proKeySuccessMsg}</p>}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Features checklist */}
-                  <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <h4 className="section-title">Pro Features</h4>
-                    <div className="settings-card" style={{ marginTop: "16px" }}>
-                      <ul className="bullet-checklist">
-                        {[
-                          "Unlimited Speech-to-Scripture triggers",
-                          "Advanced dual multi-language translation",
-                          "Premium overlay output themes",
-                          "Connect 5 secondary devices simultaneously",
-                          "Priority 24/7 technical support",
-                        ].map((feature, i) => (
-                          <li key={i} className="checklist-bullet">
-                            <CheckCircle size={15} className="bullet-icon-box" />
-                            <span>{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ══════════════ DEVELOPER TAB ══════════════ */}
-              {activeTab === "developer" && (
-                <DeveloperTabContent
-                  userPlan={userPlan}
-                  proUnlocked={proUnlocked}
-                  triggerToast={triggerToast}
-                />
-              )}
             </div>
 
             {/* Right: widgets column */}
@@ -1917,7 +1439,7 @@ export function MVSettings() {
               )}
 
               {/* Upgrade CTA / Plan features / Onboarding Checklist */}
-              {(activeTab === "pro" || activeTab === "usage") && (
+              {activeTab === "usage" && (
                 <div className="widget-card">
                   {proUnlocked ? (
                     <>
@@ -2001,32 +1523,141 @@ export function MVSettings() {
                 </div>
               )}
 
-              {/* Tips card */}
-
-              {/* API Keys widget */}
-              {activeTab === "developer" && (
-                <div className="widget-card">
-                  <div className="widget-header">
-                    <h4 className="widget-title">API Rate Limit</h4>
+              {/* ══════════════ AUDIO TAB ══════════════ */}
+              {activeTab === "audio" && (
+                <div className="settings-section">
+                  <div className="section-header">
+                    <h3 className="section-title">Microphone Input</h3>
+                    <p className="section-desc">Configure input gain and monitor audio levels.</p>
                   </div>
-                  <div className="widget-body">
-                    <div className="details-rows-list">
-                      <div className="details-row">
-                        <span className="details-label">Daily Limit</span>
-                        <span className="details-value">1,000 requests</span>
+
+                  <div className="settings-card fields-rows-stack">
+                    {/* ── Gain Slider ── */}
+                    <div className="setting-item">
+                      <label className="setting-label">Input Gain</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%" }}>
+                        <input
+                          type="range"
+                          min={0}
+                          max={300}
+                          step={1}
+                          value={inputGain}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setInputGain(val);
+                            db.updateSettings({ inputGain: val });
+                            voiceBibleService.setInputGain(val);
+                            lmDockService.setInputGain(val);
+                          }}
+                          style={{ flex: 1 }}
+                        />
+                        <span style={{ minWidth: 56, textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.88rem", color: "var(--text-primary)" }}>
+                          {inputGain}%
+                        </span>
+                        <button
+                          className="action-btn"
+                          style={{ fontSize: "0.75rem", padding: "4px 10px" }}
+                          onClick={() => {
+                            setInputGain(100);
+                            db.updateSettings({ inputGain: 100 });
+                            voiceBibleService.setInputGain(100);
+                            lmDockService.setInputGain(100);
+                          }}
+                        >
+                          Reset
+                        </button>
                       </div>
-                      <div className="details-row">
-                        <span className="details-label">Auth Method</span>
-                        <span className="details-value">Bearer Token</span>
+                      <p className="setting-hint" style={{ color: "var(--text-muted)", fontSize: "0.75rem", marginTop: 4 }}>
+                        0% = muted · 100% = unity · 300% = max boost
+                      </p>
+                    </div>
+
+                    {/* ── Live Level Meter ── */}
+                    <div className="setting-item">
+                      <label className="setting-label">Input Level</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
+                        <div style={{
+                          flex: 1, height: 10, borderRadius: 5,
+                          background: "var(--surface-2, rgba(255,255,255,0.06))",
+                          overflow: "hidden", position: "relative",
+                        }}>
+                          <div style={{
+                            width: `${Math.min(100, (testMicActive ? testMicLevel : 0) * 100)}%`,
+                            height: "100%", borderRadius: 5,
+                            background: testMicClipping
+                              ? "#ef4444"
+                              : (testMicActive ? testMicLevel : 0) >= 0.7
+                                ? "#ef4444"
+                                : (testMicActive ? testMicLevel : 0) >= 0.25
+                                  ? "#eab308"
+                                  : "#22c55e",
+                            transition: "width 0.05s linear",
+                          }} />
+                        </div>
+                        {testMicActive && testMicClipping && (
+                          <span style={{ color: "#ef4444", fontWeight: 700, fontSize: "0.75rem", letterSpacing: "0.05em" }}>
+                            CLIPPING
+                          </span>
+                        )}
                       </div>
-                      <div className="details-row">
-                        <span className="details-label">Key Format</span>
-                        <span className="details-value mono-display" style={{ fontSize: "12px" }}>mce_live_...</span>
+                    </div>
+
+                    {/* ── Test Mic Button ── */}
+                    <div className="setting-item">
+                      <label className="setting-label">Test Microphone</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <button
+                          className={`action-btn ${testMicActive ? "btn-danger" : "btn-primary"}`}
+                          style={{ fontSize: "0.82rem", padding: "6px 16px" }}
+                          onClick={async () => {
+                            if (testMicActive) {
+                              // Stop test
+                              testMicProcessorRef.current?.destroy();
+                              testMicProcessorRef.current = null;
+                              cancelAnimationFrame(testMicRafRef.current);
+                              setTestMicActive(false);
+                              setTestMicLevel(0);
+                              setTestMicClipping(false);
+                              return;
+                            }
+                            try {
+                              const stream = await navigator.mediaDevices.getUserMedia({
+                                audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+                              });
+                              const gainMultiplier = (db.getSettings().inputGain ?? 100) / 100;
+                              const processor = createAudioProcessor(stream, gainMultiplier);
+                              testMicProcessorRef.current = processor;
+                              setTestMicActive(true);
+
+                              const tick = () => {
+                                if (!testMicProcessorRef.current) return;
+                                const level = processor.getLevel();
+                                const clipping = processor.isClipping();
+                                setTestMicLevel(level);
+                                setTestMicClipping(clipping);
+                                testMicRafRef.current = requestAnimationFrame(tick);
+                              };
+                              testMicRafRef.current = requestAnimationFrame(tick);
+                            } catch (err) {
+                              console.warn("[Audio Settings] Mic test failed:", err);
+                              triggerToast("Could not access microphone", "accent");
+                            }
+                          }}
+                        >
+                          {testMicActive ? "Stop Test" : "Start Test"}
+                        </button>
+                        {testMicActive && (
+                          <span style={{ color: "var(--success-color, #22c55e)", fontSize: "0.8rem", fontWeight: 500 }}>
+                            Listening…
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
               )}
+
+              {/* Tips card */}
 
             </div>
           </div>

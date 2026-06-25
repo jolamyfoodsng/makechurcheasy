@@ -17,6 +17,7 @@ import { dockBridge } from "./dockBridge";
 import { ScriptureDetectionEngine } from "./scriptureEngine";
 import { parseScriptureReference } from "./scriptureParser";
 import { getOverlayBaseUrl } from "./overlayUrl";
+import { getSettings as getMvSettings } from "../multiview/mvStore";
 import type { VoiceBibleCandidate, TranscriptEntry } from "./voiceBibleTypes";
 
 /**
@@ -111,6 +112,8 @@ class LmDockService {
   /** Cooldown: prevent auto-push to OBS more than once every 3 seconds */
   private lastAutoPushTime = 0;
   private static readonly AUTO_PUSH_COOLDOWN_MS = 3000;
+  /** One-shot flag: auto-push to OBS only once per listening session */
+  private hasAutoPushed = false;
 
   // ── Sentence detection state ──────────────────────────────────────────────
   /** Accumulated text for the current sentence (across ASR finals) */
@@ -314,9 +317,12 @@ class LmDockService {
     // Queue the chunk behind any in-flight processing
     this.matchingQueue = this.matchingQueue.then(async () => {
       // Re-check idle inside the queue — status may have changed since enqueue
-      if (this.snapshot.status === "idle") return;
+      const s: LmServiceStatus = this.snapshot.status;
+      if (s === "idle") return;
       try {
         const result = await this.scriptureEngine.processChunk(text, isFinal);
+        // Re-check — stop may have been called while awaiting
+        if (this.snapshot.status === "idle") return;
         this.handleMatchResult(result);
       } catch (err) {
         console.warn("[LmDockService] processChunk error:", err);
@@ -519,7 +525,10 @@ class LmDockService {
       console.warn("[LmDockService] Sentence quote search failed:", err);
     } finally {
       this.snapshot = { ...this.snapshot, matching: false };
-      this.pushStatus();
+      // Don't push status after stop — the stop handler already pushed idle
+      if (this.snapshot.status !== "idle") {
+        this.pushStatus();
+      }
     }
   }
 
@@ -534,6 +543,11 @@ class LmDockService {
   private async autoPushToObs(candidate: VoiceBibleCandidate): Promise<void> {
     // Don't push to OBS if listening has stopped
     if (this.snapshot.status !== "listening") {
+      return;
+    }
+
+    // One-shot: only auto-push once per listening session
+    if (this.hasAutoPushed) {
       return;
     }
 
@@ -573,6 +587,7 @@ class LmDockService {
       };
 
       await bibleObsService.pushSlide(slide, null, true, false, "fullscreen");
+      this.hasAutoPushed = true;
     } catch (err) {
       console.warn("[LmDockService] Auto-push to OBS failed:", err);
     }
@@ -593,6 +608,7 @@ class LmDockService {
       entries: this.snapshot.entries,
     };
     this.scriptureEngine.reset();
+    this.hasAutoPushed = false;
     this.pushStatus();
 
     try {
@@ -726,8 +742,13 @@ class LmDockService {
         }
       }, 100);
 
-      // Invoke the Rust backend to start mic capture + AssemblyAI WebSocket
+      // Invoke the Rust backend to start mic capture + AssemblyAI WebSocket.
+      // Pass the current user gain so the Rust pipeline applies it from the start.
+      const mvSettings = getMvSettings();
+      const gainMultiplier = (mvSettings.inputGain ?? 100) / 100;
       await invoke("start_assemblyai_stream", { apiKey, deviceId: micId || null });
+      // Apply current gain (separate call so it's live-updatable)
+      await invoke("set_microphone_gain", { gain: gainMultiplier }).catch(() => { });
     } catch (err) {
       console.warn("[LmDockService] Failed to start listening:", err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -760,6 +781,15 @@ class LmDockService {
       inputLevel: 0,
     };
     this.pushStatus();
+  }
+
+  /**
+   * Update the microphone input gain at runtime (0–300 → 0.0–3.0 multiplier).
+   * Calls the Rust-side set_microphone_gain command — no stream restart needed.
+   */
+  async setInputGain(gainPercent: number): Promise<void> {
+    const gain = Math.max(0, Math.min(3, gainPercent / 100));
+    await invoke("set_microphone_gain", { gain }).catch(() => { });
   }
 
   private cleanup(): void {

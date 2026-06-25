@@ -11,6 +11,10 @@
  * RULE: The backend (MongoDB) is the single source of truth.
  *       localStorage is a write-only cache — NEVER read for gating features.
  *       Every credit check must fetch from the backend.
+ *
+ * Credits are calculated dynamically:
+ *   remaining = planAllocation + adminGranted − totalConsumed
+ *   -1 = unlimited (admin or plan with -1)
  */
 
 import { isProUnlocked } from "./proLicense";
@@ -136,47 +140,56 @@ export async function deductCreditsWithSync(
 
 // ── Backend fetch ────────────────────────────────────────────────────────────
 
+/** Full credit breakdown from the backend. */
+export interface CreditDetails {
+  credits: number;
+  totalConsumed: number;
+  planAllocation: number;
+  adminGranted: number;
+}
+
 /**
- * Fetch credits from the backend API. Returns the backend balance, or -1 on failure.
- * This is the ONLY way to read credits — never use localStorage for feature gating.
+ * Fetch full credit details from the backend API.
+ * Returns the complete breakdown or null on failure.
  */
-export async function fetchCreditsFromBackend(userId: string): Promise<number> {
+export async function fetchCreditDetails(): Promise<CreditDetails | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/user/credits?userId=${encodeURIComponent(userId)}`, {
+    const res = await fetch(`${API_BASE}/api/user/credits`, {
       headers: authHeaders(),
     });
-    if (!res.ok) return -1;
+    if (!res.ok) return null;
     const data = await res.json();
-    if (typeof data.credits === "number") return data.credits;
-    return -1;
+    if (typeof data.credits === "number") {
+      return {
+        credits: data.credits,
+        totalConsumed: data.totalConsumed ?? 0,
+        planAllocation: data.planAllocation ?? 0,
+        adminGranted: data.adminGranted ?? 0,
+      };
+    }
+    return null;
   } catch {
-    return -1;
+    return null;
   }
 }
 
 /**
- * Push credits to the backend API. Returns true on success.
+ * Fetch credits from the backend API. Returns the dynamically-calculated
+ * balance, or -1 on failure.
+ * This is the ONLY way to read credits — never use localStorage for feature gating.
+ * Auth is via X-Device-Id header — no userId param needed.
  */
-export async function pushCreditsToBackend(userId: string, credits: number): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE}/api/user/credits`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ userId, credits: Math.max(0, Math.round(credits)) }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+export async function fetchCreditsFromBackend(): Promise<number> {
+  const details = await fetchCreditDetails();
+  return details?.credits ?? -1;
 }
 
 /**
  * Sync credits with the backend. The backend is the single source of truth.
  * Local localStorage cache is updated to match what the backend reports.
- * Local values are NEVER pushed to the backend during sync.
  */
-export async function syncCreditsWithBackend(userId: string): Promise<number> {
-  const backendCredits = await fetchCreditsFromBackend(userId);
+export async function syncCreditsWithBackend(): Promise<number> {
+  const backendCredits = await fetchCreditsFromBackend();
   if (backendCredits < 0) return -1;
 
   setCreditsBalance(backendCredits);
@@ -192,7 +205,7 @@ export interface CreditTransaction {
   type: string;
   source: string;
   amount: number;
-  balanceAfter: number;
+  balanceAfter?: number;
   description: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
@@ -241,15 +254,17 @@ export function countWords(text: string): number {
 export interface CreditSummary {
   balance: number;
   isPro: boolean;
+  isAdmin?: boolean;
 }
 
 /**
  * Get credit summary. Balance must be provided (fetched from backend by caller).
  * Never reads localStorage for feature decisions.
  */
-export function getCreditSummary(balance: number): CreditSummary {
+export function getCreditSummary(balance: number, extra?: { isAdmin?: boolean }): CreditSummary {
   return {
     balance,
     isPro: isProUnlocked(),
+    isAdmin: extra?.isAdmin,
   };
 }

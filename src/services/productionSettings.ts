@@ -2,6 +2,7 @@ import type { BibleTheme } from "../bible/types";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
 import { getByKey, putRecord, STORES, getCurrentUserId } from "./db";
 import { serializeBibleThemesForDock } from "./dockBibleThemeAssets";
+import { getSettings } from "../multiview/mvStore";
 
 const PRODUCTION_SETTINGS_KEY = "production-mode-settings";
 const PRODUCTION_SETTINGS_STORAGE_KEY = "ocs-production-mode-settings";
@@ -154,9 +155,14 @@ function uniqueThemes(themes: BibleTheme[]): BibleTheme[] {
 }
 
 export function getDefaultProductionSettings(): ProductionSettings {
+  const globalDefaults = getSettings();
+  const moduleDefaults: ProductionModuleSettings = {
+    ...DEFAULT_MODULE_SETTINGS,
+    defaultMode: globalDefaults.defaultBibleOverlayMode,
+  };
   return {
-    bible: { ...DEFAULT_MODULE_SETTINGS },
-    worship: { ...DEFAULT_MODULE_SETTINGS },
+    bible: { ...moduleDefaults },
+    worship: { ...moduleDefaults },
     updatedAt: new Date(0).toISOString(),
   };
 }

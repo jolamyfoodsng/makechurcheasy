@@ -8,6 +8,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { ALL_THEMES, canonicalizeLowerThirdThemeId, type ThemeLike } from "../../lowerthirds/themes";
 import { loadDockLTFavorites } from "../dockThemeData";
+import { requireEntitlement } from "../dockEntitlement";
 import DockIcon from "../DockIcon";
 
 /** Compact label for the theme card */
@@ -119,14 +120,17 @@ export default function DockLTThemePicker({ selectedThemeId, onSelect, category,
 
   const handleSelect = useCallback(
     (theme: ThemeLike) => {
-      onSelect({
-        id: theme.id,
-        html: theme.html || "",
-        css: theme.css || "",
+      void requireEntitlement("themes", filteredThemes.length).then((allowed) => {
+        if (!allowed) return;
+        onSelect({
+          id: theme.id,
+          html: theme.html || "",
+          css: theme.css || "",
+        });
+        setOpen(false);
       });
-      setOpen(false);
     },
-    [onSelect],
+    [onSelect, filteredThemes.length],
   );
 
   // Auto-pick a visible theme so staged payloads don't fall back to generic defaults.

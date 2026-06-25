@@ -9,6 +9,7 @@
  * Tauri commands:
  *   start_assemblyai_stream — begin mic capture → WS → transcript events
  *   stop_assemblyai_stream  — tear down the stream
+ *   set_microphone_gain     — update user gain (0.0–3.0) at runtime
  *
  * Tauri events emitted:
  *   "assemblyai-transcript"  { text, end_of_turn, audio_start, audio_end }
@@ -20,11 +21,17 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, StreamConfig};
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
+
+/// User-controlled gain multiplier, stored as f32 bits in an AtomicU32.
+/// Positioned AFTER AGC so it doesn't fight the auto-gain.
+/// 1.0 = unity (100%), 0.0 = muted (0%), 3.0 = max boost (300%).
+static USER_GAIN: AtomicU32 = AtomicU32::new(f32_to_bits(1.0));
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +79,18 @@ struct StatusPayload {
 #[derive(Serialize, Clone)]
 struct LevelPayload {
     level: f32,
+}
+
+// ── Atomic f32 helpers ───────────────────────────────────────────────────────
+
+/// Store an f32 as its raw bit pattern in an AtomicU32.
+const fn f32_to_bits(v: f32) -> u32 {
+    v.to_bits()
+}
+
+/// Load an f32 from its raw bit pattern in an AtomicU32.
+const fn f32_from_bits(bits: u32) -> f32 {
+    f32::from_bits(bits)
 }
 
 // ── Commands ─────────────────────────────────────────────────────────────────
@@ -395,6 +414,16 @@ pub async fn stop_assemblyai_stream(
     Ok(())
 }
 
+/// Update the user-controlled microphone gain at runtime (0.0–3.0).
+/// This multiplier is applied AFTER the auto-gain, so it acts as a post-AGC
+/// trim control that doesn't fight the dynamic range compression.
+#[tauri::command]
+pub fn set_microphone_gain(gain: f32) {
+    let clamped = gain.clamp(0.0, 3.0);
+    USER_GAIN.store(f32_to_bits(clamped), Ordering::Relaxed);
+    println!("[AssemblyAI Stream] User gain set to {clamped:.2}");
+}
+
 // ── Audio processing ─────────────────────────────────────────────────────────
 
 /// Persistent audio state across callbacks (DC offset, gain, noise gate).
@@ -471,7 +500,12 @@ fn process_and_send_f32(
             (sum / filtered.len() as f32).sqrt().max(1e-10)
         };
         st.rms_ema = rms_alpha * chunk_rms + (1.0 - rms_alpha) * st.rms_ema;
-        let gain = (target_rms / st.rms_ema).min(10.0).max(0.1); // clamp gain
+        let agc_gain = (target_rms / st.rms_ema).min(10.0).max(0.1);
+
+        // Read user gain from the atomic (lock-free, thread-safe).
+        // Positioned AFTER AGC so it doesn't fight the dynamic range compression.
+        let user_gain = f32_from_bits(USER_GAIN.load(Ordering::Relaxed));
+        let effective_gain = agc_gain * user_gain;
 
         // 3) Noise gate — hold open for ~200 ms (2 chunks) after level drops
         let gate_threshold = 0.003;
@@ -484,9 +518,9 @@ fn process_and_send_f32(
             st.gate_open = false;
         }
 
-        // Apply gain + gate
+        // Apply effective gain (AGC × user) + gate
         let processed: Vec<f32> = if st.gate_open {
-            filtered.iter().map(|s| (s * gain).max(-1.0).min(1.0)).collect()
+            filtered.iter().map(|s| (s * effective_gain).max(-1.0).min(1.0)).collect()
         } else {
             vec![0.0; filtered.len()]
         };

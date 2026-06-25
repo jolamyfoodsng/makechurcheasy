@@ -14,10 +14,8 @@ import {
   Check,
   CheckCircle,
   ChevronDown,
-  ChevronRight,
   Copy,
   Download,
-  HelpCircle,
   Link,
   Mic,
   Radio,
@@ -268,11 +266,14 @@ export default function SpeechToScripturePage() {
             if (creditsNeeded > 0 && user?.id && !serviceFailed) {
               const ok = await deductCreditsWithSync(user.id, creditsNeeded, "transcription", `Transcription: ${Math.round(durationSec)}s audio`);
               if (!ok) {
-                console.warn("[Credits] Transcription completed but credit deduction failed — check backend");
+                setSaveToast("Credit deduction failed — insufficient credits");
+                setTimeout(() => setSaveToast(null), 4000);
               }
             }
           } catch (err) {
             console.warn("[Credits] Transcription credit deduction error:", err);
+            setSaveToast("Credit sync failed — check connection");
+            setTimeout(() => setSaveToast(null), 4000);
           }
         })();
       }).catch(() => {
@@ -369,11 +370,14 @@ export default function SpeechToScripturePage() {
             if (creditsNeeded > 0 && user?.id && !serviceFailed) {
               const ok = await deductCreditsWithSync(user.id, creditsNeeded, "transcription", `Transcription: ${Math.round(durationSec)}s audio`);
               if (!ok) {
-                console.warn("[Credits] Transcription completed but credit deduction failed — check backend");
+                setSaveToast("Credit deduction failed — insufficient credits");
+                setTimeout(() => setSaveToast(null), 4000);
               }
             }
           } catch (err) {
             console.warn("[Credits] Transcription credit deduction error:", err);
+            setSaveToast("Credit sync failed — check connection");
+            setTimeout(() => setSaveToast(null), 4000);
           }
         })();
       }).catch(() => { });
@@ -657,7 +661,7 @@ export default function SpeechToScripturePage() {
             <div className="sts3-header-sub">Real-time speech to scripture detection</div>
           </div>
         </div>
-        <CreditsDisplay userId={user?.id} />
+        <CreditsDisplay userId={user?.id} sessionCreditsUsed={isListening ? Math.ceil(elapsed / 60) : 0} />
         <div className="sts3-header-right">
           <button
             className="sts3-btn sts3-btn--dock"
@@ -698,45 +702,7 @@ export default function SpeechToScripturePage() {
         </div>
       )}
 
-      {/* ── Guide ── */}
-      <div className="sts3-guide">
-        <div className="sts3-guide-toggle" onClick={() => {
-          const el = document.querySelector('.sts3-guide-body');
-          el?.classList.toggle('sts3-guide-body--collapsed');
-        }}>
-          <HelpCircle size={14} />
-          <span className="sts3-guide-label">How this works</span>
-          <ChevronRight size={12} className="sts3-guide-chevron" />
-        </div>
-        <div className="sts3-guide-body">
-          <div className="sts3-guide-steps">
-            <div className="sts3-guide-step">
-              <span className="sts3-guide-step-num">1</span>
-              <div>
-                <strong>Select your microphone</strong> from the dropdown in the left panel.
-              </div>
-            </div>
-            <div className="sts3-guide-step">
-              <span className="sts3-guide-step-num">2</span>
-              <div>
-                <strong>Start Listening</strong> — your speech is streamed for real-time transcription.
-              </div>
-            </div>
-            <div className="sts3-guide-step">
-              <span className="sts3-guide-step-num">3</span>
-              <div>
-                <strong>Speak Bible references or verses</strong> the engine detects them automatically and matches scripture.
-              </div>
-            </div>
-            <div className="sts3-guide-step">
-              <span className="sts3-guide-step-num">4</span>
-              <div>
-                <strong>Push to Live</strong> sends the detected verse to OBS. Use <strong>Copy to Dock</strong> to grab the dock URL for OBS.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+
 
       {/* ── Connection Lost Banner ── */}
       {connectionLostBanner && isOffline && isListening && (
@@ -758,7 +724,7 @@ export default function SpeechToScripturePage() {
       {isOffline && !connectionLostBanner && (
         <div className="sts3-offline-banner">
           <span>📡</span>
-          <span>No internet connection.. Please connect to the internet to use this feature.</span>
+          <span>No internet connection. Please connect to the internet to use this feature.</span>
           {whisperStatus === "loading" && <span className="sts3-banner-status">Loading model...</span>}
           {whisperStatus === "ready" && <span className="sts3-banner-status sts3-banner-status--ready">Ready</span>}
         </div>

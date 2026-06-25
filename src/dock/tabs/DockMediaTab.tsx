@@ -44,16 +44,38 @@ type DockAddMediaTab = "background" | "template-videos";
 type DockTextAlign = "left" | "center" | "right";
 type DockTextVerticalPos = "top" | "center" | "bottom";
 type DockTextAnimation = "none" | "fade" | "fade-up" | "slide-up" | "slide-down" | "zoom";
+type OverlayDisplayMode = "text-only" | "box" | "lower-third" | "fullscreen";
+type OverlayBgType = "color" | "image" | "pattern";
+type OverlayBgWidth = "full" | "clip";
+
+interface OverlayBackgroundSettings {
+  enabled: boolean;
+  mode: OverlayDisplayMode;
+  bgType: OverlayBgType;
+  color: string;
+  opacity: number;
+  imageId: string | null;
+  patternId: string | null;
+  blur: number;
+  scale: number;
+  radius: number;
+  padding: number;
+  width: OverlayBgWidth;
+  imageDataUrl?: string | null;
+  patternSvgData?: string | null;
+}
 
 interface DockTextOverlayState {
   headline: string;
   subline: string;
+  textColor: string;
   align: DockTextAlign;
   verticalPos: DockTextVerticalPos;
   headlineSize: number;
   sublineSize: number;
   animation: DockTextAnimation;
   animationDuration: number;
+  background: OverlayBackgroundSettings;
 }
 
 interface DockMediaEntry {
@@ -94,12 +116,6 @@ interface ActiveMediaPlaybackState {
   active: boolean;
 }
 
-interface DockTextOverlayState {
-  headline: string;
-  subline: string;
-  align: DockTextAlign;
-}
-
 interface DockMediaTargetKeys {
   active: string | null;
 }
@@ -120,6 +136,21 @@ const MEDIA_PREFS_STORAGE_KEY = "ocs-dock-media-preferences-v1";
 const MEDIA_LOCAL_LIBRARY_STORAGE_KEY = "ocs-dock-media-library-v1";
 const MEDIA_SESSION_STORAGE_KEY = "ocs-dock-media-session-v1";
 const INTERNAL_UPLOAD_PREFIXES = ["dock_theme_bg_", "dock_theme_box_bg_", "dock_theme_logo_"];
+
+const DEFAULT_BACKGROUND_SETTINGS: OverlayBackgroundSettings = {
+  enabled: false,
+  mode: "text-only",
+  bgType: "color",
+  color: "#000000",
+  opacity: 0.85,
+  imageId: null,
+  patternId: null,
+  blur: 0,
+  scale: 1,
+  radius: 12,
+  padding: 24,
+  width: "full",
+};
 
 /** Determine icon for file type */
 function getFileIcon(kind: DockMediaKind): string {
@@ -175,6 +206,31 @@ function isDockTextAlign(value: unknown): value is DockTextAlign {
   return value === "left" || value === "center" || value === "right";
 }
 
+function parseBackgroundSettings(raw: unknown): OverlayBackgroundSettings {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_BACKGROUND_SETTINGS };
+  const obj = raw as Record<string, unknown>;
+  const mode = (["text-only", "box", "lower-third", "fullscreen"] as OverlayDisplayMode[]).includes(obj.mode as OverlayDisplayMode)
+    ? obj.mode as OverlayDisplayMode : DEFAULT_BACKGROUND_SETTINGS.mode;
+  const bgType = (["color", "image", "pattern"] as OverlayBgType[]).includes(obj.bgType as OverlayBgType)
+    ? obj.bgType as OverlayBgType : DEFAULT_BACKGROUND_SETTINGS.bgType;
+  const width = (["full", "clip"] as OverlayBgWidth[]).includes(obj.width as OverlayBgWidth)
+    ? obj.width as OverlayBgWidth : DEFAULT_BACKGROUND_SETTINGS.width;
+  return {
+    enabled: Boolean(obj.enabled),
+    mode,
+    bgType,
+    color: typeof obj.color === "string" ? obj.color : DEFAULT_BACKGROUND_SETTINGS.color,
+    opacity: typeof obj.opacity === "number" ? obj.opacity : DEFAULT_BACKGROUND_SETTINGS.opacity,
+    imageId: typeof obj.imageId === "string" ? obj.imageId : null,
+    patternId: typeof obj.patternId === "string" ? obj.patternId : null,
+    blur: typeof obj.blur === "number" ? obj.blur : DEFAULT_BACKGROUND_SETTINGS.blur,
+    scale: typeof obj.scale === "number" ? obj.scale : DEFAULT_BACKGROUND_SETTINGS.scale,
+    radius: typeof obj.radius === "number" ? obj.radius : DEFAULT_BACKGROUND_SETTINGS.radius,
+    padding: typeof obj.padding === "number" ? obj.padding : DEFAULT_BACKGROUND_SETTINGS.padding,
+    width,
+  };
+}
+
 function loadMediaSessionState(): DockMediaSessionState {
   const fallback: DockMediaSessionState = {
     browserTab: "uploads",
@@ -189,12 +245,14 @@ function loadMediaSessionState(): DockMediaSessionState {
     textOverlay: {
       headline: "",
       subline: "",
+      textColor: "#ffffff",
       align: "center",
       verticalPos: "center",
       headlineSize: 72,
       sublineSize: 28,
       animation: "fade-up",
       animationDuration: 1.0,
+      background: { ...DEFAULT_BACKGROUND_SETTINGS },
     },
     textOverlayTargets: {
       active: false,
@@ -222,6 +280,7 @@ function loadMediaSessionState(): DockMediaSessionState {
       textOverlay: {
         headline: typeof parsed.textOverlay?.headline === "string" ? parsed.textOverlay.headline : "",
         subline: typeof parsed.textOverlay?.subline === "string" ? parsed.textOverlay.subline : "",
+        textColor: typeof parsed.textOverlay?.textColor === "string" ? parsed.textOverlay.textColor : fallback.textOverlay.textColor,
         align: isDockTextAlign(parsed.textOverlay?.align) ? parsed.textOverlay.align : fallback.textOverlay.align,
         verticalPos: (parsed.textOverlay?.verticalPos === "top" || parsed.textOverlay?.verticalPos === "center" || parsed.textOverlay?.verticalPos === "bottom")
           ? parsed.textOverlay.verticalPos : fallback.textOverlay.verticalPos,
@@ -230,6 +289,7 @@ function loadMediaSessionState(): DockMediaSessionState {
         animation: parsed.textOverlay && (["none", "fade", "fade-up", "slide-up", "slide-down", "zoom"] as DockTextAnimation[]).includes(parsed.textOverlay.animation as DockTextAnimation)
           ? parsed.textOverlay.animation as DockTextAnimation : fallback.textOverlay.animation,
         animationDuration: typeof parsed.textOverlay?.animationDuration === "number" ? parsed.textOverlay.animationDuration : fallback.textOverlay.animationDuration,
+        background: parseBackgroundSettings(parsed.textOverlay?.background),
       },
       textOverlayTargets: {
         active: Boolean(parsed.textOverlayTargets?.active),
@@ -414,6 +474,8 @@ function TemplateVideoPreview({ src, label }: { src: string; label: string }) {
 
 export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Props) {
   const overlayBaseUrl = getOverlayBaseUrlSync();
+  const tabsRef = useRef<HTMLDivElement | null>(null);
+  const [compactTabs, setCompactTabs] = useState(false);
   const [mediaSession] = useState<DockMediaSessionState>(() => loadMediaSessionState());
   const [browserTab, setBrowserTab] = useState<DockMediaBrowserTab>(() => mediaSession.browserTab);
   const [activeKind, setActiveKind] = useState<DockMediaFilter>(() => mediaSession.activeKind);
@@ -441,6 +503,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
   const [applyingTextTarget, setApplyingTextTarget] = useState<boolean | null>(null);
   const [clearingTarget, setClearingTarget] = useState<boolean | null>(null);
   const [animatingPreview, setAnimatingPreview] = useState(false);
+  const [textTab, setTextTab] = useState<"content" | "background">("content");
   const [templateVideos, setTemplateVideos] = useState<TemplateVideoAsset[]>([]);
   const [templateVideosLoading, setTemplateVideosLoading] = useState(false);
   const [templateVideosError, setTemplateVideosError] = useState<string | null>(null);
@@ -467,6 +530,17 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     return () => {
       mountedRef.current = false;
     };
+  }, []);
+
+  // Compact tabs when the console is narrow
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setCompactTabs(entry.contentRect.width < 290);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   useEffect(() => {
@@ -549,7 +623,19 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       // Strategy 2: fetch from overlay server (works when dock runs in OBS CEF)
       try {
         const res = await fetch("/uploads/dock-media-library.json");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          // File doesn't exist yet — create it with an empty array so subsequent requests work
+          if (res.status === 404) {
+            try {
+              await fetch("/api/save-dock-data", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: "dock-media-library", data: "[]" }),
+              });
+            } catch { /* best effort */ }
+          }
+          throw new Error(`HTTP ${res.status}`);
+        }
         const all = await res.json();
         console.log("[UPLOAD] loadLibraryMedia: JSON fetch returned", Array.isArray(all) ? all.length : 0, "items");
         if (Array.isArray(all) && all.length > 0) {
@@ -1312,7 +1398,14 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       return true;
     });
 
-    if (allowedQueue.length === 0) return;
+    if (allowedQueue.length === 0) {
+      // All files rejected — show upgrade modal
+      const rejectedType = imageQuotaExceeded ? "images" : "videos";
+      const limit = imageQuotaExceeded ? imageLimit : videoLimit;
+      const current = imageQuotaExceeded ? currentImages : currentVideos;
+      showUpgradeModal(`You've reached your ${rejectedType} limit (${current}/${limit}). Upgrade to upload more.`);
+      return;
+    }
 
     // Show explanation if some files were rejected
     const rejectedCount = queue.length - allowedQueue.length;
@@ -1480,26 +1573,44 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     const trimmedHeadline = textOverlay.headline.trim();
     const trimmedSubline = textOverlay.subline.trim();
 
+    /* Resolve background image/pattern data for OBS overlay */
+    let bgPayload = textOverlay.background.enabled ? { ...textOverlay.background } : undefined;
+    if (bgPayload && bgPayload.bgType === "image" && bgPayload.imageId) {
+      const img = localLibrary.find((item) => item.id === bgPayload!.imageId && item.type === "image");
+      if (img) {
+        bgPayload = { ...bgPayload, imageDataUrl: img.url || null };
+      }
+    } else if (bgPayload && bgPayload.bgType === "pattern" && bgPayload.patternId) {
+      const pat = BACKGROUND_PATTERNS.find((p) => p.label === bgPayload!.patternId);
+      if (pat) {
+        bgPayload = { ...bgPayload, patternSvgData: pat.src };
+      }
+    }
+
     setApplyingTextTarget(true);
     try {
       await ensureObsConnected();
-      await dockObsClient.setMediaTextOverlay(trimmedHeadline || trimmedSubline ? {
+      const hasContent = Boolean(trimmedHeadline || trimmedSubline);
+      const hasBg = Boolean(textOverlay.background.enabled && textOverlay.background.mode !== "text-only");
+      await dockObsClient.setMediaTextOverlay(hasContent || hasBg ? {
         headline: trimmedHeadline,
         subline: trimmedSubline || undefined,
+        textColor: textOverlay.textColor,
         align: textOverlay.align,
         verticalPos: textOverlay.verticalPos,
         headlineSize: textOverlay.headlineSize,
         sublineSize: textOverlay.sublineSize,
         animation: textOverlay.animation,
         animationDuration: textOverlay.animationDuration,
+        background: bgPayload,
       } : null);
-      setTextOverlayTargets({ active: Boolean(trimmedHeadline || trimmedSubline) });
+      setTextOverlayTargets({ active: hasContent || hasBg });
     } catch (err) {
       console.warn("[DockMediaTab] Failed to apply text overlay:", err);
     } finally {
       setApplyingTextTarget(null);
     }
-  }, [textOverlay]);
+  }, [textOverlay, localLibrary]);
 
   const clearTextOverlayEverywhere = useCallback(async () => {
     setTextOverlay((current) => ({ ...current, headline: "", subline: "" }));
@@ -1514,6 +1625,28 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       setApplyingTextTarget(null);
     }
   }, []);
+
+  // ── Auto-apply text overlay changes when overlay is already active ──
+  // Without this, background setting changes (color, opacity, blur, etc.)
+  // are saved to localStorage but never pushed to OBS until the user
+  // manually clicks "Show" on the Content tab.
+  const lastAppliedRef = useRef<string>("");
+  useEffect(() => {
+    if (!textOverlayTargets.active) return;
+    const hasContent = textOverlay.headline.trim() || textOverlay.subline.trim();
+    const hasBg = textOverlay.background.enabled && textOverlay.background.mode !== "text-only";
+    if (!hasContent && !hasBg) return;
+
+    const snapshot = JSON.stringify(textOverlay);
+    if (snapshot === lastAppliedRef.current) return;
+
+    const timer = setTimeout(() => {
+      lastAppliedRef.current = snapshot;
+      void applyTextOverlay();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [textOverlay, textOverlayTargets.active, applyTextOverlay]);
 
   const triggerAnimPreview = useCallback(() => {
     setAnimatingPreview(true);
@@ -1749,7 +1882,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
 
   return (
-    <div className="dock-media-console">
+    <div ref={tabsRef} className="dock-media-console">
       {/* ── Header ── */}
       <div className="dock-media-header">
         <div className="dock-media-header__left">
@@ -1813,7 +1946,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       />
 
       {/* ── Category Tabs ── */}
-      <div className="dock-media-tabs" role="tablist" aria-label="Media browser views">
+      <div className={`dock-media-tabs${compactTabs ? " dock-media-tabs--compact" : ""}`} role="tablist" aria-label="Media browser views">
         <button
           type="button"
           role="tab"
@@ -1821,8 +1954,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           className={`dock-media-tab ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
           onClick={() => setBrowserTab("uploads")}
         >
-          Uploads
-          <span className="dock-media-tab__count">{mediaEntries.length}</span>
+          {compactTabs ? <Icon name="upload" size={12} /> : "Uploads"}
+          {!compactTabs && <span className="dock-media-tab__count">{mediaEntries.length}</span>}
         </button>
         <button
           type="button"
@@ -1831,8 +1964,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           className={`dock-media-tab ${browserTab === "animations" ? "dock-media-tab--active" : ""}`}
           onClick={() => setBrowserTab("animations")}
         >
-          Animations
-          <span className="dock-media-tab__count">{animationEntries.length}</span>
+          {compactTabs ? <Icon name="animation" size={12} /> : "Animations"}
+          {!compactTabs && <span className="dock-media-tab__count">{animationEntries.length}</span>}
         </button>
         <button
           type="button"
@@ -1841,8 +1974,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           className={`dock-media-tab ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
           onClick={() => setBrowserTab("patterns")}
         >
-          Patterns
-          <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>
+          {compactTabs ? <Icon name="grid_view" size={12} /> : "Patterns"}
+          {!compactTabs && <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>}
         </button>
         <button
           type="button"
@@ -1851,7 +1984,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           className={`dock-media-tab ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
           onClick={() => setBrowserTab("text")}
         >
-          Text
+          {compactTabs ? <Icon name="text_fields" size={12} /> : "Text"}
         </button>
       </div>
 
@@ -2094,72 +2227,129 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           <div className="dock-overlay-composer">
             {/* ── Status Header ── */}
 
-
-            {/* ── Live Preview Canvas ── */}
-            <div className="dock-overlay-canvas">
-              <div className="dock-overlay-canvas__bg">
-                {previewBaseEntry?.kind === "image" && previewBaseEntry.previewUrl ? (
-                  <img src={previewBaseEntry.previewUrl} alt="" />
-                ) : previewBaseEntry?.thumbnailUrl ? (
-                  <img src={previewBaseEntry.thumbnailUrl} alt="" />
-                ) : previewBaseEntry?.previewUrl ? (
-                  <video src={previewBaseEntry.previewUrl} muted playsInline loop autoPlay />
-                ) : (
-                  <div className="dock-overlay-canvas__placeholder">
-                    <Icon name="theaters" size={24} />
-                  </div>
-                )}
-              </div>
-
-              {/* Safe Area Guides */}
-              <div className="dock-overlay-canvas__guides">
-                <div className="dock-overlay-canvas__guide--h" />
-                <div className="dock-overlay-canvas__guide--v" />
-                <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--tl" />
-                <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--tr" />
-                <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--bl" />
-                <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--br" />
-              </div>
-
-              {/* Text Overlay */}
-              <div
-                className={`dock-overlay-canvas__text ${getAnimationClass()}`}
-                style={{ ...getVerticalPosStyle(), "--overlay-anim-duration": `${textOverlay.animationDuration}s` } as React.CSSProperties}
+            {/* ── Inner Tab Bar ── */}
+            <div className="dock-overlay-tabs" role="tablist" aria-label="Text overlay tabs">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={textTab === "content"}
+                className={`dock-overlay-tabs__btn${textTab === "content" ? " dock-overlay-tabs__btn--active" : ""}`}
+                onClick={() => setTextTab("content")}
               >
-                <div className={`dock-overlay-canvas__text-inner dock-overlay-canvas__text-inner--${textOverlay.align}`}>
-                  {textOverlay.headline.trim() && (
-                    <div className="dock-overlay-canvas__headline" style={{ fontSize: "16px" }}>
-                      {textOverlay.headline}
-                    </div>
-                  )}
-                  {textOverlay.subline.trim() && (
-                    <div className="dock-overlay-canvas__subline" style={{ fontSize: "12px" }}>
-                      {textOverlay.subline}
-                    </div>
-                  )}
-                  {!textOverlay.headline.trim() && !textOverlay.subline.trim() && (
-                    <div className="dock-overlay-canvas__empty-hint">Your overlay text will appear here</div>
-                  )}
-                </div>
-              </div>
-
-              {/* Canvas Controls */}
-              <div className="dock-overlay-canvas__controls">
-
-                <span className="dock-overlay-canvas__safe-badge">
-                  <Icon name="crop_free" size={10} />
-                  Safe Area
-                </span>
-              </div>
+                <Icon name="title" size={12} />
+                Content
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={textTab === "background"}
+                className={`dock-overlay-tabs__btn${textTab === "background" ? " dock-overlay-tabs__btn--active" : ""}`}
+                onClick={() => setTextTab("background")}
+              >
+                <Icon name="palette" size={12} />
+                Background
+              </button>
             </div>
 
-            {/* ── Animation Bar ── */}
-            <div className="dock-overlay-anim-bar">
-              <button type="button" className="dock-overlay-anim-bar__preview" onClick={triggerAnimPreview}>
-                <Icon name="play_arrow" size={12} />
-                Preview Animation
-              </button>
-              {/* <div className="dock-overlay-anim-bar__select-wrap">
+            {/* ── Content Tab ── */}
+            {textTab === "content" && (
+              <>
+                {/* ── Live Preview Canvas ── */}
+                <div className="dock-overlay-canvas">
+                  <div className="dock-overlay-canvas__bg">
+                    {previewBaseEntry?.kind === "image" && previewBaseEntry.previewUrl ? (
+                      <img src={previewBaseEntry.previewUrl} alt="" />
+                    ) : previewBaseEntry?.thumbnailUrl ? (
+                      <img src={previewBaseEntry.thumbnailUrl} alt="" />
+                    ) : previewBaseEntry?.previewUrl ? (
+                      <video src={previewBaseEntry.previewUrl} muted playsInline loop autoPlay />
+                    ) : (
+                      <div className="dock-overlay-canvas__placeholder">
+                        <Icon name="theaters" size={24} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Background Preview Overlay */}
+                  {textOverlay.background.enabled && textOverlay.background.mode !== "text-only" && (
+                    <div className={`dock-overlay-canvas__bg-preview dock-overlay-canvas__bg-preview--${textOverlay.background.mode}`}>
+                      {(() => {
+                        const bg = textOverlay.background;
+                        let bgImageStyle = "none";
+                        if (bg.bgType === "image" && bg.imageId) {
+                          const img = localLibrary.find((item) => item.id === bg.imageId && item.type === "image");
+                          if (img) bgImageStyle = `url(${img.thumbnailUrl || img.url})`;
+                        } else if (bg.bgType === "pattern" && bg.patternId) {
+                          const pat = BACKGROUND_PATTERNS.find((p) => p.label === bg.patternId);
+                          if (pat) bgImageStyle = `url(${pat.src})`;
+                        }
+                        return (
+                          <div
+                            className="dock-overlay-canvas__bg-fill"
+                            style={{
+                              backgroundColor: bg.color,
+                              backgroundImage: bgImageStyle !== "none" ? bgImageStyle : undefined,
+                              backgroundSize: "cover",
+                              backgroundPosition: "center",
+                              opacity: bg.opacity,
+                              filter: bg.blur > 0 ? `blur(${Math.min(bg.blur / 2, 8)}px)` : undefined,
+                              borderRadius: bg.mode === "lower-third" ? `${bg.radius}px ${bg.radius}px 0 0` : bg.mode === "box" ? `${bg.radius}px` : "0",
+                            }}
+                          />
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Safe Area Guides */}
+                  <div className="dock-overlay-canvas__guides">
+                    <div className="dock-overlay-canvas__guide--h" />
+                    <div className="dock-overlay-canvas__guide--v" />
+                    <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--tl" />
+                    <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--tr" />
+                    <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--bl" />
+                    <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--br" />
+                  </div>
+
+                  {/* Text Overlay */}
+                  <div
+                    className={`dock-overlay-canvas__text ${getAnimationClass()}`}
+                    style={{ ...getVerticalPosStyle(), "--overlay-anim-duration": `${textOverlay.animationDuration}s`, color: textOverlay.textColor } as React.CSSProperties}
+                  >
+                    <div className={`dock-overlay-canvas__text-inner dock-overlay-canvas__text-inner--${textOverlay.align}`}>
+                      {textOverlay.headline.trim() && (
+                        <div className="dock-overlay-canvas__headline" style={{ fontSize: "16px" }}>
+                          {textOverlay.headline}
+                        </div>
+                      )}
+                      {textOverlay.subline.trim() && (
+                        <div className="dock-overlay-canvas__subline" style={{ fontSize: "12px" }}>
+                          {textOverlay.subline}
+                        </div>
+                      )}
+                      {!textOverlay.headline.trim() && !textOverlay.subline.trim() && (
+                        <div className="dock-overlay-canvas__empty-hint">Your overlay text will appear here</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Canvas Controls */}
+                  <div className="dock-overlay-canvas__controls">
+
+                    <span className="dock-overlay-canvas__safe-badge">
+                      <Icon name="crop_free" size={10} />
+                      Safe Area
+                    </span>
+                  </div>
+                </div>
+
+                {/* ── Animation Bar ── */}
+                <div className="dock-overlay-anim-bar">
+                  <button type="button" className="dock-overlay-anim-bar__preview" onClick={triggerAnimPreview}>
+                    <Icon name="play_arrow" size={12} />
+                    Preview Animation
+                  </button>
+                  {/* <div className="dock-overlay-anim-bar__select-wrap">
                 <select
                   className="dock-overlay-anim-bar__select"
                   value={textOverlay.animation}
@@ -2173,152 +2363,489 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   <option value="zoom">Zoom</option>
                 </select>
               </div> */}
-              <div className="dock-overlay-anim-bar__duration">
-                <span>Duration</span>
-                <input
-                  type="number"
-                  className="dock-overlay-anim-bar__duration-input"
-                  value={textOverlay.animationDuration}
-                  min={0.3}
-                  max={3}
-                  step={0.1}
-                  onChange={(e) => setTextOverlay((c) => ({ ...c, animationDuration: parseFloat(e.target.value) || 1 }))}
-                />
-                <span>s</span>
-              </div>
-            </div>
-
-            {/* ── Text Controls ── */}
-            <div className="dock-overlay-text-controls">
-              <div className="dock-overlay-text-controls__row">
-                <div className="dock-overlay-text-controls__field">
-                  <label className="dock-overlay-text-controls__label">Headline</label>
-                  <input
-                    type="text"
-                    className="dock-overlay-text-controls__input"
-                    value={textOverlay.headline}
-                    onChange={(e) => setTextOverlay((c) => ({ ...c, headline: e.target.value }))}
-                    placeholder="YOUR MAIN OVERLAY TEXT"
-                  />
+                  <div className="dock-overlay-anim-bar__duration">
+                    <span>Duration</span>
+                    <input
+                      type="number"
+                      className="dock-overlay-anim-bar__duration-input"
+                      value={textOverlay.animationDuration}
+                      min={0.3}
+                      max={3}
+                      step={0.1}
+                      onChange={(e) => setTextOverlay((c) => ({ ...c, animationDuration: parseFloat(e.target.value) || 1 }))}
+                    />
+                    <span>s</span>
+                  </div>
                 </div>
-                <div className="dock-overlay-text-controls__size">
-                  <label className="dock-overlay-text-controls__label">Font Size</label>
-                  <div className="dock-overlay-text-controls__size-ctrl">
-                    <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, headlineSize: Math.max(24, c.headlineSize - 4) }))}>
-                      <Icon name="remove" size={12} />
+
+                {/* ── Text Controls ── */}
+                <div className="dock-overlay-text-controls">
+                  <div className="dock-overlay-text-controls__row">
+                    <div className="dock-overlay-text-controls__field">
+                      <label className="dock-overlay-text-controls__label">Headline</label>
+                      <input
+                        type="text"
+                        className="dock-overlay-text-controls__input"
+                        value={textOverlay.headline}
+                        onChange={(e) => setTextOverlay((c) => ({ ...c, headline: e.target.value }))}
+                        placeholder="YOUR MAIN OVERLAY TEXT"
+                      />
+                    </div>
+                    <div className="dock-overlay-text-controls__size">
+                      <label className="dock-overlay-text-controls__label">Font Size</label>
+                      <div className="dock-overlay-text-controls__size-ctrl">
+                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, headlineSize: Math.max(24, c.headlineSize - 4) }))}>
+                          <Icon name="remove" size={12} />
+                        </button>
+                        <span className="dock-overlay-text-controls__size-value">{textOverlay.headlineSize}<small>px</small></span>
+                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, headlineSize: Math.min(120, c.headlineSize + 4) }))}>
+                          <Icon name="add" size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="dock-overlay-text-controls__row">
+                    <div className="dock-overlay-text-controls__field">
+                      <label className="dock-overlay-text-controls__label">Subline <span className="dock-overlay-text-controls__optional">(optional)</span></label>
+                      <input
+                        type="text"
+                        className="dock-overlay-text-controls__input"
+                        value={textOverlay.subline}
+                        onChange={(e) => setTextOverlay((c) => ({ ...c, subline: e.target.value }))}
+                        placeholder="YOUR SECONDARY LINE"
+                      />
+                    </div>
+                    <div className="dock-overlay-text-controls__size">
+                      <label className="dock-overlay-text-controls__label">Font Size</label>
+                      <div className="dock-overlay-text-controls__size-ctrl">
+                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, sublineSize: Math.max(14, c.sublineSize - 2) }))}>
+                          <Icon name="remove" size={12} />
+                        </button>
+                        <span className="dock-overlay-text-controls__size-value">{textOverlay.sublineSize}<small>px</small></span>
+                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, sublineSize: Math.min(60, c.sublineSize + 2) }))}>
+                          <Icon name="add" size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Alignment & Position ── */}
+                <div className="dock-overlay-align-section">
+                  <div className="dock-overlay-align-section__label">Alignment & Position</div>
+                  <div className="dock-overlay-align-section__row">
+                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "top" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "top" }))}>
+                      <Icon name="arrow_upward" size={14} />
+                      Up
                     </button>
-                    <span className="dock-overlay-text-controls__size-value">{textOverlay.headlineSize}<small>px</small></span>
-                    <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, headlineSize: Math.min(120, c.headlineSize + 4) }))}>
-                      <Icon name="add" size={12} />
+                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "center" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "center" }))}>
+                      <Icon name="vertical_align_center" size={14} />
+                      Center
+                    </button>
+                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "bottom" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "bottom" }))}>
+                      <Icon name="arrow_downward" size={14} />
+                      Down
+                    </button>
+                  </div>
+                  <div className="dock-overlay-align-section__row">
+                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "left" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "left" }))}>
+                      <Icon name="format_align_left" size={14} />
+                      Left
+                    </button>
+                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "center" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "center" }))}>
+                      <Icon name="format_align_center" size={14} />
+                      Center
+                    </button>
+                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "right" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "right" }))}>
+                      <Icon name="format_align_right" size={14} />
+                      Right
                     </button>
                   </div>
                 </div>
-              </div>
-              <div className="dock-overlay-text-controls__row">
-                <div className="dock-overlay-text-controls__field">
-                  <label className="dock-overlay-text-controls__label">Subline <span className="dock-overlay-text-controls__optional">(optional)</span></label>
-                  <input
-                    type="text"
-                    className="dock-overlay-text-controls__input"
-                    value={textOverlay.subline}
-                    onChange={(e) => setTextOverlay((c) => ({ ...c, subline: e.target.value }))}
-                    placeholder="YOUR SECONDARY LINE"
-                  />
-                </div>
-                <div className="dock-overlay-text-controls__size">
-                  <label className="dock-overlay-text-controls__label">Font Size</label>
-                  <div className="dock-overlay-text-controls__size-ctrl">
-                    <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, sublineSize: Math.max(14, c.sublineSize - 2) }))}>
-                      <Icon name="remove" size={12} />
-                    </button>
-                    <span className="dock-overlay-text-controls__size-value">{textOverlay.sublineSize}<small>px</small></span>
-                    <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, sublineSize: Math.min(60, c.sublineSize + 2) }))}>
-                      <Icon name="add" size={12} />
-                    </button>
+
+                {/* ── Animation Selection ── */}
+                <div className="dock-overlay-anim-section">
+                  <div className="dock-overlay-anim-section__label">Animate In</div>
+                  <div className="dock-overlay-anim-section__options">
+                    {([
+                      { key: "none", label: "None", icon: "block" },
+                      { key: "fade", label: "Fade", icon: "opacity" },
+                      { key: "fade-up", label: "Fade Up", icon: "north" },
+                      { key: "slide-up", label: "Slide Up", icon: "arrow_upward" },
+                      { key: "slide-down", label: "Slide Down", icon: "arrow_downward" },
+                      { key: "zoom", label: "Zoom", icon: "zoom_in" },
+                    ] as { key: DockTextAnimation; label: string; icon: string }[]).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        className={`dock-overlay-anim-section__opt ${textOverlay.animation === opt.key ? "dock-overlay-anim-section__opt--active" : ""}`}
+                        onClick={() => setTextOverlay((c) => ({ ...c, animation: opt.key }))}
+                      >
+                        <Icon name={opt.icon} size={12} />
+                        {opt.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* ── Alignment & Position ── */}
-            <div className="dock-overlay-align-section">
-              <div className="dock-overlay-align-section__label">Alignment & Position</div>
-              <div className="dock-overlay-align-section__row">
-                <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "top" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "top" }))}>
-                  <Icon name="arrow_upward" size={14} />
-                  Up
-                </button>
-                <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "center" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "center" }))}>
-                  <Icon name="vertical_align_center" size={14} />
-                  Center
-                </button>
-                <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "bottom" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "bottom" }))}>
-                  <Icon name="arrow_downward" size={14} />
-                  Down
-                </button>
-              </div>
-              <div className="dock-overlay-align-section__row">
-                <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "left" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "left" }))}>
-                  <Icon name="format_align_left" size={14} />
-                  Left
-                </button>
-                <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "center" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "center" }))}>
-                  <Icon name="format_align_center" size={14} />
-                  Center
-                </button>
-                <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "right" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "right" }))}>
-                  <Icon name="format_align_right" size={14} />
-                  Right
-                </button>
-              </div>
-            </div>
-
-            {/* ── Animation Selection ── */}
-            <div className="dock-overlay-anim-section">
-              <div className="dock-overlay-anim-section__label">Animate In</div>
-              <div className="dock-overlay-anim-section__options">
-                {([
-                  { key: "none", label: "None", icon: "block" },
-                  { key: "fade", label: "Fade", icon: "opacity" },
-                  { key: "fade-up", label: "Fade Up", icon: "north" },
-                  { key: "slide-up", label: "Slide Up", icon: "arrow_upward" },
-                  { key: "slide-down", label: "Slide Down", icon: "arrow_downward" },
-                  { key: "zoom", label: "Zoom", icon: "zoom_in" },
-                ] as { key: DockTextAnimation; label: string; icon: string }[]).map((opt) => (
+                {/* ── Action Bar ── */}
+                <div className="dock-overlay-actions">
                   <button
-                    key={opt.key}
                     type="button"
-                    className={`dock-overlay-anim-section__opt ${textOverlay.animation === opt.key ? "dock-overlay-anim-section__opt--active" : ""}`}
-                    onClick={() => setTextOverlay((c) => ({ ...c, animation: opt.key }))}
+                    className="dock-overlay-actions__btn dock-overlay-actions__btn--show"
+                    onClick={() => void applyTextOverlay()}
+                    disabled={applyingTextTarget !== null}
                   >
-                    <Icon name={opt.icon} size={12} />
-                    {opt.label}
+                    <Icon name="visibility" size={14} />
+                    {applyingTextTarget ? "Applying…" : "Show"}
                   </button>
-                ))}
-              </div>
-            </div>
+                  <button
+                    type="button"
+                    className="dock-overlay-actions__btn dock-overlay-actions__btn--clear"
+                    onClick={() => void clearTextOverlayEverywhere()}
+                    disabled={applyingTextTarget !== null}
+                  >
+                    <Icon name="delete" size={14} />
+                    Clear
+                  </button>
+                </div>
+              </>
+            )}
 
-            {/* ── Action Bar ── */}
-            <div className="dock-overlay-actions">
-              <button
-                type="button"
-                className="dock-overlay-actions__btn dock-overlay-actions__btn--show"
-                onClick={() => void applyTextOverlay()}
-                disabled={applyingTextTarget !== null}
-              >
-                <Icon name="visibility" size={14} />
-                {applyingTextTarget ? "Applying…" : "Show"}
-              </button>
-              <button
-                type="button"
-                className="dock-overlay-actions__btn dock-overlay-actions__btn--clear"
-                onClick={() => void clearTextOverlayEverywhere()}
-                disabled={applyingTextTarget !== null}
-              >
-                <Icon name="delete" size={14} />
-                Clear
-              </button>
-            </div>
+            {/* ── Background Tab ── */}
+            {textTab === "background" && (
+              <>
+                {/* ── Enable Toggle ── */}
+                <div className="dock-overlay-bg-section">
+                  <div className="dock-overlay-bg-section__row">
+                    <span className="dock-overlay-bg-section__label">Background</span>
+                    <button
+                      type="button"
+                      className={`dock-overlay-bg-toggle ${textOverlay.background.enabled ? "dock-overlay-bg-toggle--on" : ""}`}
+                      onClick={() => setTextOverlay((c) => ({
+                        ...c,
+                        background: { ...c.background, enabled: !c.background.enabled },
+                      }))}
+                    >
+                      <span className="dock-overlay-bg-toggle__thumb" />
+                    </button>
+                  </div>
+                </div>
+
+                {textOverlay.background.enabled && (
+                  <>
+                    {/* ── Display Mode ── */}
+                    <div className="dock-overlay-bg-section">
+                      <div className="dock-overlay-bg-section__label">Display Mode</div>
+                      <div className="dock-overlay-bg-segmented">
+                        {([
+                          { key: "text-only" as OverlayDisplayMode, label: "Text Only", icon: "title" },
+                          { key: "box" as OverlayDisplayMode, label: "Box", icon: "square" },
+                          { key: "lower-third" as OverlayDisplayMode, label: "Lower Third", icon: "move_down" },
+                          { key: "fullscreen" as OverlayDisplayMode, label: "Fullscreen", icon: "fullscreen" },
+                        ]).map((opt) => (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            className={`dock-overlay-bg-seg ${textOverlay.background.mode === opt.key ? "dock-overlay-bg-seg--active" : ""}`}
+                            onClick={() => setTextOverlay((c) => ({
+                              ...c,
+                              background: { ...c.background, mode: opt.key },
+                            }))}
+                          >
+                            <Icon name={opt.icon} size={11} />
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ── Text Color ── */}
+                    {textOverlay.background.mode !== "text-only" && (
+                      <div className="dock-overlay-bg-section">
+                        <div className="dock-overlay-bg-section__label">Text Color</div>
+                        <div className="dock-overlay-bg-color-row">
+                          <input
+                            type="color"
+                            className="dock-overlay-bg-color-input"
+                            value={textOverlay.textColor}
+                            onChange={(e) => setTextOverlay((c) => ({ ...c, textColor: e.target.value }))}
+                          />
+                          <input
+                            type="text"
+                            className="dock-overlay-bg-hex-input"
+                            value={textOverlay.textColor}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (/^#[0-9a-fA-F]{0,6}$/.test(val)) {
+                                setTextOverlay((c) => ({ ...c, textColor: val }));
+                              }
+                            }}
+                            maxLength={7}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Background Type ── */}
+                    {textOverlay.background.mode !== "text-only" && (
+                      <div className="dock-overlay-bg-section">
+                        <div className="dock-overlay-bg-section__label">Background Type</div>
+                        <div className="dock-overlay-bg-segmented">
+                          {([
+                            { key: "color" as OverlayBgType, label: "Solid Color", icon: "palette" },
+                            { key: "image" as OverlayBgType, label: "Image", icon: "image" },
+                            { key: "pattern" as OverlayBgType, label: "Pattern", icon: "grid_on" },
+                          ]).map((opt) => (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              className={`dock-overlay-bg-seg ${textOverlay.background.bgType === opt.key ? "dock-overlay-bg-seg--active" : ""}`}
+                              onClick={() => setTextOverlay((c) => ({
+                                ...c,
+                                background: { ...c.background, bgType: opt.key },
+                              }))}
+                            >
+                              <Icon name={opt.icon} size={11} />
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Color Picker ── */}
+                    {textOverlay.background.bgType === "color" && textOverlay.background.mode !== "text-only" && (
+                      <div className="dock-overlay-bg-section">
+                        <div className="dock-overlay-bg-section__label">Color</div>
+                        <div className="dock-overlay-bg-color-row">
+                          <input
+                            type="color"
+                            className="dock-overlay-bg-color-input"
+                            value={textOverlay.background.color}
+                            onChange={(e) => setTextOverlay((c) => ({
+                              ...c,
+                              background: { ...c.background, color: e.target.value },
+                            }))}
+                          />
+                          <input
+                            type="text"
+                            className="dock-overlay-bg-hex-input"
+                            value={textOverlay.background.color}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (/^#[0-9a-fA-F]{0,6}$/.test(val)) {
+                                setTextOverlay((c) => ({
+                                  ...c,
+                                  background: { ...c.background, color: val },
+                                }));
+                              }
+                            }}
+                            maxLength={7}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Image Selector ── */}
+                    {textOverlay.background.bgType === "image" && textOverlay.background.mode !== "text-only" && (
+                      <div className="dock-overlay-bg-section">
+                        <div className="dock-overlay-bg-section__label">Image</div>
+                        <div className="dock-overlay-bg-image-grid">
+                          {localLibrary.filter((item) => item.type === "image").length === 0 ? (
+                            <div className="dock-overlay-bg-empty">No images in library</div>
+                          ) : (
+                            localLibrary.filter((item) => item.type === "image").map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                className={`dock-overlay-bg-image-card ${textOverlay.background.imageId === item.id ? "dock-overlay-bg-image-card--active" : ""}`}
+                                onClick={() => setTextOverlay((c) => ({
+                                  ...c,
+                                  background: { ...c.background, imageId: item.id },
+                                }))}
+                              >
+                                <img src={item.thumbnailUrl || item.url} alt={item.name} />
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Pattern Selector ── */}
+                    {textOverlay.background.bgType === "pattern" && textOverlay.background.mode !== "text-only" && (
+                      <div className="dock-overlay-bg-section">
+                        <div className="dock-overlay-bg-section__label">Pattern</div>
+                        <div className="dock-overlay-bg-pattern-grid">
+                          {BACKGROUND_PATTERNS.map((pat) => (
+                            <button
+                              key={pat.label}
+                              type="button"
+                              className={`dock-overlay-bg-pattern-card ${textOverlay.background.patternId === pat.label ? "dock-overlay-bg-pattern-card--active" : ""}`}
+                              onClick={() => setTextOverlay((c) => ({
+                                ...c,
+                                background: { ...c.background, patternId: pat.label },
+                              }))}
+                            >
+                              <img src={pat.src} alt={pat.label} />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Opacity ── */}
+                    <div className="dock-overlay-bg-section">
+                      <div className="dock-overlay-bg-section__row">
+                        <span className="dock-overlay-bg-section__label">Opacity</span>
+                        <span className="dock-overlay-bg-section__value">{Math.round(textOverlay.background.opacity * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        className="dock-overlay-bg-slider"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={textOverlay.background.opacity}
+                        onChange={(e) => setTextOverlay((c) => ({
+                          ...c,
+                          background: { ...c.background, opacity: parseFloat(e.target.value) },
+                        }))}
+                      />
+                    </div>
+
+                    {/* ── Blur ── */}
+                    <div className="dock-overlay-bg-section">
+                      <div className="dock-overlay-bg-section__row">
+                        <span className="dock-overlay-bg-section__label">Blur</span>
+                        <span className="dock-overlay-bg-section__value">{textOverlay.background.blur}px</span>
+                      </div>
+                      <input
+                        type="range"
+                        className="dock-overlay-bg-slider"
+                        min={0}
+                        max={30}
+                        step={1}
+                        value={textOverlay.background.blur}
+                        onChange={(e) => setTextOverlay((c) => ({
+                          ...c,
+                          background: { ...c.background, blur: parseInt(e.target.value, 10) },
+                        }))}
+                      />
+                    </div>
+
+                    {/* ── Scale ── */}
+                    <div className="dock-overlay-bg-section">
+                      <div className="dock-overlay-bg-section__row">
+                        <span className="dock-overlay-bg-section__label">Scale</span>
+                        <span className="dock-overlay-bg-section__value">{textOverlay.background.scale.toFixed(1)}×</span>
+                      </div>
+                      <input
+                        type="range"
+                        className="dock-overlay-bg-slider"
+                        min={0.5}
+                        max={2}
+                        step={0.1}
+                        value={textOverlay.background.scale}
+                        onChange={(e) => setTextOverlay((c) => ({
+                          ...c,
+                          background: { ...c.background, scale: parseFloat(e.target.value) },
+                        }))}
+                      />
+                    </div>
+
+                    {/* ── Corner Radius ── */}
+                    <div className="dock-overlay-bg-section">
+                      <div className="dock-overlay-bg-section__row">
+                        <span className="dock-overlay-bg-section__label">Corner Radius</span>
+                        <span className="dock-overlay-bg-section__value">{textOverlay.background.radius}px</span>
+                      </div>
+                      <input
+                        type="range"
+                        className="dock-overlay-bg-slider"
+                        min={0}
+                        max={48}
+                        step={2}
+                        value={textOverlay.background.radius}
+                        onChange={(e) => setTextOverlay((c) => ({
+                          ...c,
+                          background: { ...c.background, radius: parseInt(e.target.value, 10) },
+                        }))}
+                      />
+                    </div>
+
+                    {/* ── Padding ── */}
+                    <div className="dock-overlay-bg-section">
+                      <div className="dock-overlay-bg-section__row">
+                        <span className="dock-overlay-bg-section__label">Padding</span>
+                        <span className="dock-overlay-bg-section__value">{textOverlay.background.padding}px</span>
+                      </div>
+                      <input
+                        type="range"
+                        className="dock-overlay-bg-slider"
+                        min={8}
+                        max={80}
+                        step={4}
+                        value={textOverlay.background.padding}
+                        onChange={(e) => setTextOverlay((c) => ({
+                          ...c,
+                          background: { ...c.background, padding: parseInt(e.target.value, 10) },
+                        }))}
+                      />
+                    </div>
+
+                    {/* ── Width ── */}
+                    {textOverlay.background.mode !== "fullscreen" && (
+                      <div className="dock-overlay-bg-section">
+                        <div className="dock-overlay-bg-section__label">Background Width</div>
+                        <div className="dock-overlay-bg-segmented">
+                          {([
+                            { key: "full" as OverlayBgWidth, label: "Full Width", icon: "aspect_ratio" },
+                            { key: "clip" as OverlayBgWidth, label: "Clip to Text", icon: "crop" },
+                          ]).map((opt) => (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              className={`dock-overlay-bg-seg ${textOverlay.background.width === opt.key ? "dock-overlay-bg-seg--active" : ""}`}
+                              onClick={() => setTextOverlay((c) => ({
+                                ...c,
+                                background: { ...c.background, width: opt.key },
+                              }))}
+                            >
+                              <Icon name={opt.icon} size={11} />
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* ── Apply Button (Background tab) ── */}
+                <div className="dock-overlay-actions">
+                  <button
+                    type="button"
+                    className="dock-overlay-actions__btn dock-overlay-actions__btn--show"
+                    onClick={() => void applyTextOverlay()}
+                    disabled={applyingTextTarget !== null}
+                  >
+                    <Icon name="visibility" size={14} />
+                    {applyingTextTarget ? "Applying…" : "Apply"}
+                  </button>
+                  <button
+                    type="button"
+                    className="dock-overlay-actions__btn dock-overlay-actions__btn--clear"
+                    onClick={() => void clearTextOverlayEverywhere()}
+                    disabled={applyingTextTarget !== null}
+                  >
+                    <Icon name="delete" size={14} />
+                    Clear
+                  </button>
+                </div>
+              </>
+            )}
 
             {/* ── Footer Status ── */}
 

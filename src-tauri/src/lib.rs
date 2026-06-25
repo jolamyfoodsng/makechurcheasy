@@ -3015,6 +3015,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Load .env file so Rust commands can read env vars (e.g. OPENCODE_API_KEY)
+    dotenvy::dotenv().ok();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -3108,6 +3111,7 @@ pub fn run() {
             audio_capture::stop_audio_capture,
             assemblyai_stream::start_assemblyai_stream,
             assemblyai_stream::stop_assemblyai_stream,
+            assemblyai_stream::set_microphone_gain,
             local_llm::get_local_llm_runtime_status,
             local_llm::install_local_llm_model,
             local_llm::generate_local_llm_text

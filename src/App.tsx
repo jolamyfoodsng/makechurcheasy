@@ -44,19 +44,6 @@ import { applyBrandingSettingsToDom } from "./services/branding";
 import { useAppTheme } from "./hooks/useAppTheme";
 import DevDashboard from "./pages/DevDashboard";
 
-// Admin Dashboard
-import AdminGate from "./pages/admin/AdminGate";
-import AdminLayout from "./pages/admin/AdminLayout";
-import AdminOverviewPage from "./pages/admin/AdminOverviewPage";
-import AdminUsersPage from "./pages/admin/AdminUsersPage";
-import AdminUserDetailPage from "./pages/admin/AdminUserDetailPage";
-import AdminAnalyticsPage from "./pages/admin/AdminAnalyticsPage";
-import AdminPaymentsPage from "./pages/admin/AdminPaymentsPage";
-import AdminAIUsagePage from "./pages/admin/AdminAIUsagePage";
-import AdminFeatureUsagePage from "./pages/admin/AdminFeatureUsagePage";
-import AdminChurchesPage from "./pages/admin/AdminChurchesPage";
-import AdminSupportPage from "./pages/admin/AdminSupportPage";
-import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
 import { dockBridge } from "./services/dockBridge";
 import { initDockCommandHandler } from "./services/dockCommandHandler";
 import { getUserScopedKey } from "./services/userScopedStorage";
@@ -1041,27 +1028,6 @@ function App() {
 
                   {/* Developer Tools */}
                   <Route path="dev/db" element={<DevDashboard />} />
-                </Route>
-
-                {/* Admin Dashboard — standalone layout, no AppShell sidebar */}
-                <Route
-                  path="admin"
-                  element={
-                    <AdminGate>
-                      <AdminLayout />
-                    </AdminGate>
-                  }
-                >
-                  <Route index element={<AdminOverviewPage />} />
-                  <Route path="users" element={<AdminUsersPage />} />
-                  <Route path="users/:id" element={<AdminUserDetailPage />} />
-                  <Route path="analytics" element={<AdminAnalyticsPage />} />
-                  <Route path="payments" element={<AdminPaymentsPage />} />
-                  <Route path="ai-usage" element={<AdminAIUsagePage />} />
-                  <Route path="feature-usage" element={<AdminFeatureUsagePage />} />
-                  <Route path="churches" element={<AdminChurchesPage />} />
-                  <Route path="support" element={<AdminSupportPage />} />
-                  <Route path="settings" element={<AdminSettingsPage />} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

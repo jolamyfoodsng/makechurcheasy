@@ -342,6 +342,108 @@ export default function BackgroundPickerCard({
           </div>
         )}
 
+        {/* ── Text Section ── */}
+        <div className="dtb-bg-picker__settings">
+          <div className="dtb-section-title">Text</div>
+
+          {/* Text Color */}
+          <div className="dtb-color-field">
+            <span className="dtb-color-field__label">Color</span>
+            <InlineColorPicker
+              value={quickSettings.fontColor ?? "#ffffff"}
+              onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, fontColor: v }))}
+            />
+          </div>
+
+          {/* Font Size */}
+          <div className="dtb-slider-field">
+            <div className="dtb-slider-field__head">
+              <span>Font size</span>
+              <span className="dtb-slider-field__value">{quickSettings.fontSize}px</span>
+            </div>
+            <input
+              type="range"
+              className="dtb-slider"
+              min={28}
+              max={200}
+              step={1}
+              value={quickSettings.fontSize}
+              onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, fontSize: Number(e.target.value) }))}
+              aria-label="Font size"
+            />
+          </div>
+
+          {/* Weight */}
+          <div className="dtb-font-weight-row">
+            <span className="dtb-position-label">Weight</span>
+            <div className="dtb-position-options">
+              {(["light", "normal", "bold"] as const).map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  className={`dtb-position-btn${quickSettings.fontWeight === w ? " dtb-position-btn--active" : ""}`}
+                  onClick={() => onQuickSettingsChange((prev) => ({ ...prev, fontWeight: w }))}
+                  style={{ fontWeight: w === "bold" ? 700 : w === "light" ? 300 : 500 }}
+                >
+                  {w === "light" ? "Light" : w === "bold" ? "Bold" : "Regular"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Alignment */}
+          <div className="dtb-font-weight-row">
+            <span className="dtb-position-label">Alignment</span>
+            <div className="dtb-position-options">
+              {(["left", "center", "right"] as const).map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  className={`dtb-position-btn${quickSettings.textAlign === a ? " dtb-position-btn--active" : ""}`}
+                  onClick={() => onQuickSettingsChange((prev) => ({ ...prev, textAlign: a }))}
+                >
+                  {a.charAt(0).toUpperCase() + a.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Line Height */}
+          <div className="dtb-slider-field">
+            <div className="dtb-slider-field__head">
+              <span>Line height</span>
+              <span className="dtb-slider-field__value">{quickSettings.lineHeight.toFixed(2)}x</span>
+            </div>
+            <input
+              type="range"
+              className="dtb-slider"
+              min={1.05}
+              max={1.8}
+              step={0.01}
+              value={quickSettings.lineHeight}
+              onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, lineHeight: Number(e.target.value) }))}
+              aria-label="Line height"
+            />
+          </div>
+
+          {/* Text Case */}
+          <div className="dtb-font-weight-row">
+            <span className="dtb-position-label">Text case</span>
+            <div className="dtb-position-options">
+              {(["none", "uppercase", "lowercase", "capitalize"] as const).map((tc) => (
+                <button
+                  key={tc}
+                  type="button"
+                  className={`dtb-position-btn${quickSettings.textTransform === tc ? " dtb-position-btn--active" : ""}`}
+                  onClick={() => onQuickSettingsChange((prev) => ({ ...prev, textTransform: tc }))}
+                >
+                  {tc === "none" ? "Aa" : tc === "capitalize" ? "Ab" : tc === "uppercase" ? "AA" : "aa"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* ── Reference Section ── */}
         {showReferences && (
           <ReferenceSection
@@ -383,7 +485,18 @@ function ImageTab({
 
         try {
           const res = await fetch("/uploads/dock-media-library.json");
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          if (!res.ok) {
+            if (res.status === 404) {
+              try {
+                await fetch("/api/save-dock-data", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: "dock-media-library", data: "[]" }),
+                });
+              } catch { /* best effort */ }
+            }
+            throw new Error(`HTTP ${res.status}`);
+          }
           const all = await res.json();
           if (!cancelled && Array.isArray(all)) {
             setMedia(all.filter((m: MediaItem) => m.type === "image"));
@@ -553,7 +666,18 @@ function VideoTab({
 
         try {
           const res = await fetch("/uploads/dock-media-library.json");
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          if (!res.ok) {
+            if (res.status === 404) {
+              try {
+                await fetch("/api/save-dock-data", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: "dock-media-library", data: "[]" }),
+                });
+              } catch { /* best effort */ }
+            }
+            throw new Error(`HTTP ${res.status}`);
+          }
           const all = await res.json();
           if (!cancelled && Array.isArray(all)) {
             setMedia(all.filter((m: MediaItem) => m.type === "video"));

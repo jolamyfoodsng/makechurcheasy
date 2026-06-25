@@ -1685,19 +1685,22 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                     setOnlineSearchOpen(true);
                     setOnlineSearchError("");
                   }}
+                  title="Search Online"
+                  aria-label="Search Online"
                 >
                   <Icon name="travel_explore" size={13} />
-                  Search Online
+                  <span className="dock-console-toggle__label">Search Online</span>
                 </button>
                 <button
                   type="button"
                   className="dock-console-toggle"
                   onClick={() => openNewSongModal()}
+                  title="Add Song"
+                  aria-label="Add Song"
                 >
                   <Icon name="add" size={13} />
-                  Add Song
+                  <span className="dock-console-toggle__label">Add Song</span>
                 </button>
-
               </div>
             </div>
             <div className="dock-search dock-search--console" style={{ marginBottom: 0 }} ref={searchRef}>

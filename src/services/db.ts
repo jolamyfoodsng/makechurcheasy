@@ -127,97 +127,103 @@ export function getCentralDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(CENTRAL_DB_NAME, CENTRAL_DB_VERSION, {
       upgrade(db, oldVersion, _newVersion, transaction) {
-        if (oldVersion < 1) {
-          // ── Bible ──
-          if (!db.objectStoreNames.contains(STORES.BIBLE_FAVORITES)) {
-            db.createObjectStore(STORES.BIBLE_FAVORITES, { keyPath: "reference" });
-          }
-          if (!db.objectStoreNames.contains(STORES.BIBLE_HISTORY)) {
-            const hist = db.createObjectStore(STORES.BIBLE_HISTORY, {
-              keyPath: "id",
-              autoIncrement: true,
-            });
-            hist.createIndex("timestamp", "timestamp");
-          }
-          if (!db.objectStoreNames.contains(STORES.BIBLE_THEMES)) {
-            db.createObjectStore(STORES.BIBLE_THEMES, { keyPath: "id" });
-          }
-          if (!db.objectStoreNames.contains(STORES.BIBLE_SETTINGS)) {
-            db.createObjectStore(STORES.BIBLE_SETTINGS);
-          }
-          if (!db.objectStoreNames.contains(STORES.BIBLE_TRANSLATIONS)) {
-            db.createObjectStore(STORES.BIBLE_TRANSLATIONS, { keyPath: "abbr" });
-          }
+        // ── Ensure ALL stores exist on every upgrade ──
+        // This handles partial upgrades where earlier version blocks
+        // may have failed partway through.
 
-          // ── Worship ──
-          if (!db.objectStoreNames.contains(STORES.WORSHIP_SONGS)) {
-            const songs = db.createObjectStore(STORES.WORSHIP_SONGS, { keyPath: "id" });
-            songs.createIndex("title", "metadata.title");
-            songs.createIndex("updatedAt", "updatedAt");
-          }
-
-          // ── Speakers ──
-          if (!db.objectStoreNames.contains(STORES.SPEAKERS)) {
-            const speakers = db.createObjectStore(STORES.SPEAKERS, { keyPath: "id" });
-            speakers.createIndex("name", "name");
-          }
-
-          // ── OBS Registry ──
-          if (!db.objectStoreNames.contains(STORES.OBS_SCENES)) {
-            const scenes = db.createObjectStore(STORES.OBS_SCENES, { keyPath: "slot" });
-            scenes.createIndex("sceneUuid", "sceneUuid", { unique: true });
-          }
-          if (!db.objectStoreNames.contains(STORES.OBS_INPUTS)) {
-            const inputs = db.createObjectStore(STORES.OBS_INPUTS, { keyPath: "slot" });
-            inputs.createIndex("inputUuid", "inputUuid", { unique: true });
-          }
-          if (!db.objectStoreNames.contains(STORES.OBS_SCENE_ITEMS)) {
-            const items = db.createObjectStore(STORES.OBS_SCENE_ITEMS, { keyPath: "slot" });
-            items.createIndex("sceneSlot", "sceneSlot");
-            items.createIndex("inputSlot", "inputSlot");
-          }
-
-          // ── Multi-View ──
-          if (!db.objectStoreNames.contains(STORES.MV_LAYOUTS)) {
-            const layouts = db.createObjectStore(STORES.MV_LAYOUTS, { keyPath: "id" });
-            layouts.createIndex("updatedAt", "updatedAt");
-            layouts.createIndex("isTemplate", "isTemplate");
-          }
-          if (!db.objectStoreNames.contains(STORES.MV_ASSETS)) {
-            const assets = db.createObjectStore(STORES.MV_ASSETS, { keyPath: "id" });
-            assets.createIndex("type", "type");
-            assets.createIndex("folder", "folder");
-          }
-          if (!db.objectStoreNames.contains(STORES.MV_MAPPINGS)) {
-            db.createObjectStore(STORES.MV_MAPPINGS, { keyPath: "layoutId" });
-          }
-          if (!db.objectStoreNames.contains(STORES.MV_MEDIA)) {
-            const media = db.createObjectStore(STORES.MV_MEDIA, { keyPath: "id" });
-            media.createIndex("mediaType", "mediaType");
-            media.createIndex("createdAt", "createdAt");
-          }
-
-          // ── App settings ──
-          if (!db.objectStoreNames.contains(STORES.APP_SETTINGS)) {
-            db.createObjectStore(STORES.APP_SETTINGS);
-          }
+        // ── Bible ──
+        if (!db.objectStoreNames.contains(STORES.BIBLE_FAVORITES)) {
+          db.createObjectStore(STORES.BIBLE_FAVORITES, { keyPath: "reference" });
+        }
+        if (!db.objectStoreNames.contains(STORES.BIBLE_HISTORY)) {
+          const hist = db.createObjectStore(STORES.BIBLE_HISTORY, {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          hist.createIndex("timestamp", "timestamp");
+        }
+        if (!db.objectStoreNames.contains(STORES.BIBLE_THEMES)) {
+          db.createObjectStore(STORES.BIBLE_THEMES, { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains(STORES.BIBLE_SETTINGS)) {
+          db.createObjectStore(STORES.BIBLE_SETTINGS);
+        }
+        if (!db.objectStoreNames.contains(STORES.BIBLE_TRANSLATIONS)) {
+          db.createObjectStore(STORES.BIBLE_TRANSLATIONS, { keyPath: "abbr" });
         }
 
-        if (oldVersion < 2) {
-          if (!db.objectStoreNames.contains(STORES.SERVICE_PLANS)) {
-            const plans = db.createObjectStore(STORES.SERVICE_PLANS, { keyPath: "id" });
-            plans.createIndex("serviceDate", "serviceDate");
-            plans.createIndex("updatedAt", "updatedAt");
-            plans.createIndex("status", "status");
-          }
+        // ── Worship ──
+        if (!db.objectStoreNames.contains(STORES.WORSHIP_SONGS)) {
+          const songs = db.createObjectStore(STORES.WORSHIP_SONGS, { keyPath: "id" });
+          songs.createIndex("title", "metadata.title");
+          songs.createIndex("updatedAt", "updatedAt");
         }
 
-        if (oldVersion < 3) {
-          if (!db.objectStoreNames.contains(STORES.LIVE_TOOL_TEMPLATES)) {
-            const liveTools = db.createObjectStore(STORES.LIVE_TOOL_TEMPLATES, { keyPath: "id" });
-            liveTools.createIndex("moment", "moment");
-            liveTools.createIndex("updatedAt", "updatedAt");
-          }
+        // ── Speakers ──
+        if (!db.objectStoreNames.contains(STORES.SPEAKERS)) {
+          const speakers = db.createObjectStore(STORES.SPEAKERS, { keyPath: "id" });
+          speakers.createIndex("name", "name");
+        }
+
+        // ── OBS Registry ──
+        if (!db.objectStoreNames.contains(STORES.OBS_SCENES)) {
+          const scenes = db.createObjectStore(STORES.OBS_SCENES, { keyPath: "slot" });
+          scenes.createIndex("sceneUuid", "sceneUuid", { unique: true });
+        }
+        if (!db.objectStoreNames.contains(STORES.OBS_INPUTS)) {
+          const inputs = db.createObjectStore(STORES.OBS_INPUTS, { keyPath: "slot" });
+          inputs.createIndex("inputUuid", "inputUuid", { unique: true });
+        }
+        if (!db.objectStoreNames.contains(STORES.OBS_SCENE_ITEMS)) {
+          const items = db.createObjectStore(STORES.OBS_SCENE_ITEMS, { keyPath: "slot" });
+          items.createIndex("sceneSlot", "sceneSlot");
+          items.createIndex("inputSlot", "inputSlot");
+        }
+
+        // ── Multi-View ──
+        if (!db.objectStoreNames.contains(STORES.MV_LAYOUTS)) {
+          const layouts = db.createObjectStore(STORES.MV_LAYOUTS, { keyPath: "id" });
+          layouts.createIndex("updatedAt", "updatedAt");
+          layouts.createIndex("isTemplate", "isTemplate");
+        }
+        if (!db.objectStoreNames.contains(STORES.MV_ASSETS)) {
+          const assets = db.createObjectStore(STORES.MV_ASSETS, { keyPath: "id" });
+          assets.createIndex("type", "type");
+          assets.createIndex("folder", "folder");
+        }
+        if (!db.objectStoreNames.contains(STORES.MV_MAPPINGS)) {
+          db.createObjectStore(STORES.MV_MAPPINGS, { keyPath: "layoutId" });
+        }
+        if (!db.objectStoreNames.contains(STORES.MV_MEDIA)) {
+          const media = db.createObjectStore(STORES.MV_MEDIA, { keyPath: "id" });
+          media.createIndex("mediaType", "mediaType");
+          media.createIndex("createdAt", "createdAt");
+        }
+
+        // ── App settings ──
+        if (!db.objectStoreNames.contains(STORES.APP_SETTINGS)) {
+          db.createObjectStore(STORES.APP_SETTINGS);
+        }
+
+        // ── Service plans ──
+        if (!db.objectStoreNames.contains(STORES.SERVICE_PLANS)) {
+          const plans = db.createObjectStore(STORES.SERVICE_PLANS, { keyPath: "id" });
+          plans.createIndex("serviceDate", "serviceDate");
+          plans.createIndex("updatedAt", "updatedAt");
+          plans.createIndex("status", "status");
+        }
+
+        // ── Live tool templates ──
+        if (!db.objectStoreNames.contains(STORES.LIVE_TOOL_TEMPLATES)) {
+          const liveTools = db.createObjectStore(STORES.LIVE_TOOL_TEMPLATES, { keyPath: "id" });
+          liveTools.createIndex("moment", "moment");
+          liveTools.createIndex("updatedAt", "updatedAt");
+        }
+
+        // ── Transcripts (MongoDB-backed, IndexedDB as offline cache) ──
+        if (!db.objectStoreNames.contains(STORES.TRANSCRIPTS)) {
+          const transcripts = db.createObjectStore(STORES.TRANSCRIPTS, { keyPath: "id" });
+          transcripts.createIndex("updatedAt", "updatedAt");
         }
 
         if (oldVersion < 3 || oldVersion === 3) {
@@ -271,14 +277,6 @@ export function getCentralDb(): Promise<IDBPDatabase> {
             }
           }
         }
-
-        // ── v6: Add transcripts store (MongoDB-backed, IndexedDB as offline cache) ──
-        if (oldVersion < 6) {
-          if (!db.objectStoreNames.contains(STORES.TRANSCRIPTS)) {
-            const transcripts = db.createObjectStore(STORES.TRANSCRIPTS, { keyPath: "id" });
-            transcripts.createIndex("updatedAt", "updatedAt");
-          }
-        }
       },
     });
   }
@@ -300,7 +298,11 @@ export async function migrateFromLegacyDatabases(): Promise<{ migrated: string[]
   const alreadyDone = await central.get(STORES.APP_SETTINGS, MIGRATION_FLAG_KEY);
   if (alreadyDone) return { migrated: [], errors: [] };
 
-  // Helper: copy all records from a legacy store to a central store
+  // Helper: copy all records from a legacy store to a central store.
+  // Uses the raw IndexedDB API to open the legacy database WITHOUT an
+  // upgrade function.  If the DB does not exist yet, onupgradeneeded
+  // never fires and the open succeeds with zero object stores — we
+  // detect that and bail out so we don't create empty databases.
   async function copyStore(
     legacyDbName: string,
     legacyVersion: number,
@@ -308,12 +310,23 @@ export async function migrateFromLegacyDatabases(): Promise<{ migrated: string[]
     centralStoreName: string,
   ) {
     try {
-      const legacyDb = await openDB(legacyDbName, legacyVersion);
+      const legacyDb = await new Promise<IDBDatabase>((resolve, reject) => {
+        const req = indexedDB.open(legacyDbName, legacyVersion);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+        // Intentionally NO onupgradeneeded — if the DB doesn't exist yet
+        // the browser creates it with zero stores and we detect that below.
+      });
       if (!legacyDb.objectStoreNames.contains(legacyStoreName)) {
         legacyDb.close();
         return;
       }
-      const all = await legacyDb.getAll(legacyStoreName);
+      const all = await new Promise<unknown[]>((resolve, reject) => {
+        const tx = legacyDb.transaction(legacyStoreName, "readonly");
+        const req = tx.objectStore(legacyStoreName).getAll();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
       legacyDb.close();
 
       if (all.length === 0) return;
@@ -337,15 +350,29 @@ export async function migrateFromLegacyDatabases(): Promise<{ migrated: string[]
     centralStoreName: string,
   ) {
     try {
-      const legacyDb = await openDB(legacyDbName, legacyVersion);
+      const legacyDb = await new Promise<IDBDatabase>((resolve, reject) => {
+        const req = indexedDB.open(legacyDbName, legacyVersion);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
       if (!legacyDb.objectStoreNames.contains(legacyStoreName)) {
         legacyDb.close();
         return;
       }
-      const keys = await legacyDb.getAllKeys(legacyStoreName);
+      const keys = await new Promise<IDBValidKey[]>((resolve, reject) => {
+        const tx = legacyDb.transaction(legacyStoreName, "readonly");
+        const req = tx.objectStore(legacyStoreName).getAllKeys();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
       const tx = central.transaction(centralStoreName, "readwrite");
       for (const key of keys) {
-        const value = await legacyDb.get(legacyStoreName, key);
+        const value = await new Promise<unknown>((resolve, reject) => {
+          const req2 = legacyDb.transaction(legacyStoreName, "readonly")
+            .objectStore(legacyStoreName).get(key);
+          req2.onsuccess = () => resolve(req2.result);
+          req2.onerror = () => reject(req2.error);
+        });
         await tx.store.put(value, key);
       }
       await tx.done;

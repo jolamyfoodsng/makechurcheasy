@@ -3038,15 +3038,33 @@ class DockObsClient {
   private buildMediaTextOverlayUrl(payload: {
     headline: string;
     subline?: string;
+    textColor?: string;
     align?: "left" | "center" | "right";
     verticalPos?: "top" | "center" | "bottom";
     headlineSize?: number;
     sublineSize?: number;
     animation?: "none" | "fade" | "fade-up" | "slide-up" | "slide-down" | "zoom";
     animationDuration?: number;
+    background?: {
+      enabled: boolean;
+      mode: "text-only" | "box" | "lower-third" | "fullscreen";
+      bgType: "color" | "image" | "pattern";
+      color: string;
+      opacity: number;
+      imageId: string | null;
+      patternId: string | null;
+      blur: number;
+      scale: number;
+      radius: number;
+      padding: number;
+      width?: "full" | "clip";
+      imageDataUrl?: string | null;
+      patternSvgData?: string | null;
+    };
   }): string {
     const headline = this.escapeHtml(payload.headline || "");
     const subline = this.escapeHtml(payload.subline || "");
+    const textColor = this.escapeHtml(payload.textColor || "#ffffff");
     const align = payload.align === "left" || payload.align === "right" ? payload.align : "center";
     const verticalPos = payload.verticalPos === "top" || payload.verticalPos === "center" || payload.verticalPos === "bottom"
       ? payload.verticalPos : "bottom";
@@ -3055,9 +3073,21 @@ class DockObsClient {
     const animation = payload.animation || "none";
     const animDuration = payload.animationDuration || 1;
 
+    const bg = payload.background;
+    const bgEnabled = Boolean(bg?.enabled);
+    const bgMode = bg?.mode || "text-only";
+
     const alignValue = align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center";
-    const justifyValue = verticalPos === "top" ? "flex-start" : verticalPos === "center" ? "center" : "flex-end";
-    const paddingValue = verticalPos === "top" ? "72px 88px 0" : verticalPos === "center" ? "0 88px" : "0 88px 72px";
+    let justifyValue = verticalPos === "top" ? "flex-start" : verticalPos === "center" ? "center" : "flex-end";
+    let paddingValue = verticalPos === "top" ? "72px 88px 0" : verticalPos === "center" ? "0 88px" : "0 88px 72px";
+
+    if (bgEnabled && bgMode === "lower-third") {
+      justifyValue = "flex-end";
+      paddingValue = "0 0 80px 0";
+    } else if (bgEnabled && bgMode === "fullscreen") {
+      justifyValue = "center";
+      paddingValue = "0";
+    }
 
     let animKeyframes = "";
     let animClass = "";
@@ -3082,6 +3112,94 @@ class DockObsClient {
       }
     }
 
+    /* ── Background styles ── */
+    let bgStyle = "";
+    if (bgEnabled && bgMode !== "text-only") {
+      const bgColor = this.escapeHtml(bg?.color || "#000000");
+      const bgOpacity = bg?.opacity ?? 0.85;
+      const bgBlur = bg?.blur ?? 0;
+      const bgScale = bg?.scale ?? 1;
+      const bgRadius = bg?.radius ?? 12;
+      const bgPadding = bg?.padding ?? 24;
+      const bgWidth = bg?.width || "full";
+
+      let bgImage = "none";
+      if (bg?.bgType === "image" && bg.imageDataUrl) {
+        bgImage = `url("${bg.imageDataUrl}")`;
+      } else if (bg?.bgType === "pattern" && bg.patternSvgData) {
+        bgImage = `url("${bg.patternSvgData}")`;
+      }
+
+      if (bgMode === "box") {
+        const boxClip = bgWidth === "clip";
+        bgStyle = `
+    .bg-box {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 0;
+    }
+    .bg-box__fill {
+      background-color: ${bgColor};
+      background-image: ${bgImage};
+      background-size: cover;
+      background-position: center;
+      opacity: ${bgOpacity};
+      filter: blur(${bgBlur}px);
+      transform: scale(${bgScale});
+      border-radius: ${bgRadius}px;
+      padding: ${bgPadding}px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: ${alignValue};
+      ${boxClip ? "max-width: 90vw;" : "min-width: 200px;\n      min-height: 80px;\n      max-width: 90vw;"}
+    }`;
+      } else if (bgMode === "lower-third") {
+        const ltClip = bgWidth === "clip";
+        bgStyle = `
+    .bg-lower-third {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 0;
+    }
+    .bg-lower-third__fill {
+      background-color: ${bgColor};
+      background-image: ${bgImage};
+      background-size: cover;
+      background-position: center;
+      opacity: ${bgOpacity};
+      filter: blur(${bgBlur}px);
+      transform: scale(${bgScale});
+      border-radius: ${bgRadius}px ${bgRadius}px 0 0;
+      padding: ${bgPadding + 16}px ${bgPadding + 32}px ${bgPadding + 24}px;
+      ${ltClip ? "display: inline-flex;\n      align-items: center;\n      justify-content: center;" : "width: 100%;\n      max-width: 100vw;"}
+    }`;
+      } else if (bgMode === "fullscreen") {
+        bgStyle = `
+    .bg-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+    .bg-fullscreen__fill {
+      width: 100%;
+      height: 100%;
+      background-color: ${bgColor};
+      background-image: ${bgImage};
+      background-size: cover;
+      background-position: center;
+      opacity: ${bgOpacity};
+      filter: blur(${bgBlur}px);
+      transform: scale(${bgScale});
+    }`;
+      }
+    }
+
     const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -3098,7 +3216,7 @@ class DockObsClient {
     }
     body {
       font-family: "Montserrat", "Segoe UI", Arial, sans-serif;
-      color: #ffffff;
+      color: ${textColor};
     }
     .frame {
       position: fixed;
@@ -3108,6 +3226,17 @@ class DockObsClient {
       justify-content: ${alignValue};
       padding: ${paddingValue};
       text-align: ${align};
+      z-index: 1;
+    }
+    .frame--inline {
+      position: relative;
+      inset: auto;
+      display: flex;
+      align-items: center;
+      justify-content: ${alignValue};
+      padding: 0;
+      text-align: ${align};
+      z-index: 1;
     }
     .copy {
       max-width: min(84vw, 1440px);
@@ -3128,6 +3257,7 @@ class DockObsClient {
       opacity: 0.95;
       text-shadow: 0 3px 16px rgba(0, 0, 0, 0.56);
     }
+    ${bgStyle}
     ${animKeyframes}
     .animate-in .copy {
       animation: overlayIn ${animDuration}s ease-out both;
@@ -3135,12 +3265,10 @@ class DockObsClient {
   </style>
 </head>
 <body>
-  <div class="frame ${animClass}">
-    <div class="copy">
-      ${headline ? `<div class="headline">${headline}</div>` : ""}
-      ${subline ? `<div class="subline">${subline}</div>` : ""}
-    </div>
-  </div>
+  ${bgEnabled && bgMode === "box" ? `<div class="bg-box"><div class="bg-box__fill"><div class="frame frame--inline ${animClass}"><div class="copy">${headline ? `<div class="headline">${headline}</div>` : ""}${subline ? `<div class="subline">${subline}</div>` : ""}</div></div></div></div>` : ""}
+  ${bgEnabled && bgMode === "lower-third" ? `<div class="bg-lower-third"><div class="bg-lower-third__fill"><div class="frame frame--inline ${animClass}"><div class="copy">${headline ? `<div class="headline">${headline}</div>` : ""}${subline ? `<div class="subline">${subline}</div>` : ""}</div></div></div></div>` : ""}
+  ${bgEnabled && bgMode === "fullscreen" ? `<div class="bg-fullscreen"><div class="bg-fullscreen__fill"></div><div class="frame ${animClass}"><div class="copy">${headline ? `<div class="headline">${headline}</div>` : ""}${subline ? `<div class="subline">${subline}</div>` : ""}</div></div></div>` : ""}
+  ${!bgEnabled || bgMode === "text-only" ? `<div class="frame ${animClass}"><div class="copy">${headline ? `<div class="headline">${headline}</div>` : ""}${subline ? `<div class="subline">${subline}</div>` : ""}</div></div>` : ""}
 </body>
 </html>`;
     return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
@@ -5357,17 +5485,36 @@ class DockObsClient {
     payload: {
       headline: string;
       subline?: string;
+      textColor?: string;
       align?: "left" | "center" | "right";
       verticalPos?: "top" | "center" | "bottom";
       headlineSize?: number;
       sublineSize?: number;
       animation?: "none" | "fade" | "fade-up" | "slide-up" | "slide-down" | "zoom";
       animationDuration?: number;
+      background?: {
+        enabled: boolean;
+        mode: "text-only" | "box" | "lower-third" | "fullscreen";
+        bgType: "color" | "image" | "pattern";
+        color: string;
+        opacity: number;
+        imageId: string | null;
+        patternId: string | null;
+        blur: number;
+        scale: number;
+        radius: number;
+        padding: number;
+        width?: "full" | "clip";
+        imageDataUrl?: string | null;
+        patternSvgData?: string | null;
+      };
     } | null,
   ): Promise<void> {
     const mediaTextSource = "MCE Media - Text";
 
-    if (!payload || (!payload.headline.trim() && !String(payload.subline || "").trim())) {
+    const hasText = Boolean(payload?.headline?.trim() || String(payload?.subline || "").trim());
+    const hasBackground = Boolean(payload?.background?.enabled && payload?.background?.mode !== "text-only");
+    if (!payload || (!hasText && !hasBackground)) {
       try {
         const target = await this.getTargetScene("media");
         if (target.sceneName) {
@@ -5387,12 +5534,14 @@ class DockObsClient {
       this.buildMediaTextOverlayUrl({
         headline: payload.headline,
         subline: payload.subline,
+        textColor: payload.textColor,
         align: payload.align,
         verticalPos: payload.verticalPos,
         headlineSize: payload.headlineSize,
         sublineSize: payload.sublineSize,
         animation: payload.animation,
         animationDuration: payload.animationDuration,
+        background: payload.background,
       }),
       true,
     );

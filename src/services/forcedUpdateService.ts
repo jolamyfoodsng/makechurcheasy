@@ -248,6 +248,12 @@ function computeRemainingHours(startedAt: string, gracePeriodHours: number): num
  */
 export async function fetchAppSettings(): Promise<AppVersionSettings | null> {
   try {
+    // In dev mode the local API server may not be running — use cached
+    // settings to avoid a noisy "Load failed" on every startup.
+    if (import.meta.env.DEV) {
+      return getCachedSettings();
+    }
+
     const res = await fetch(`${API_BASE}/api/app/version`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const settings: AppVersionSettings = await res.json();

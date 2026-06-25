@@ -124,6 +124,32 @@ export interface QueueItem {
 
 export type BibleThemeCategory = "bible" | "worship" | "general";
 
+/**
+ * Raw HTML/CSS template data from all_themes.json lower-third themes.
+ * When present, the preview renders the actual template instead of
+ * building HTML from BibleThemeSettings.
+ */
+export interface BibleThemeRawTemplate {
+  html: string;
+  css: string;
+  variables: Array<{
+    key: string;
+    label: string;
+    type: string;
+    defaultValue: string;
+    placeholder?: string;
+    required?: boolean;
+    group?: string;
+    options?: Array<{ label: string; value: string }>;
+  }>;
+  fontImports?: string[];
+  animation?: { name: string; duration: number; easing: string };
+  exitAnimation?: { name: string; duration: number; easing: string };
+  accentColor?: string;
+  /** Default values for rendering the template in preview */
+  previewValues?: Record<string, string>;
+}
+
 export interface BibleTheme {
   id: string;
   name: string;
@@ -142,6 +168,8 @@ export interface BibleTheme {
   preview?: string;
   /** Whether this theme is hidden from the theme picker modal */
   hidden?: boolean;
+  /** Raw HTML/CSS template from all_themes.json (for lower-third templates) */
+  rawTemplate?: BibleThemeRawTemplate;
   createdAt: string;
   updatedAt: string;
 }

@@ -28,6 +28,7 @@ import allThemesData from "../../../lower_thirds/all_themes.json";
 import DockLowerThirdEditor from "./DockLowerThirdEditor";
 import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { getSettings } from "../../multiview/mvStore";
 
 const ALL_LT_THEMES: LowerThirdTheme[] = [
   ...LT_ALL_THEMES,
@@ -99,7 +100,7 @@ function loadSettings(): TickerSettings {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<TickerSettings>;
       return {
-        speed: typeof parsed.speed === "number" ? Math.max(1, Math.min(100, parsed.speed)) : 50,
+        speed: typeof parsed.speed === "number" ? Math.max(1, Math.min(100, parsed.speed)) : getSettings().defaultTickerScrollSpeed * 20,
         position: parsed.position === "top" ? "top" : "bottom",
         loop: typeof parsed.loop === "boolean" ? parsed.loop : true,
         themeId: parsed.themeId ?? defaultTheme.id,
@@ -110,7 +111,7 @@ function loadSettings(): TickerSettings {
     }
   } catch { /* ignore */ }
   return {
-    speed: 50,
+    speed: getSettings().defaultTickerScrollSpeed * 20,
     position: "bottom",
     loop: true,
     themeId: defaultTheme.id,
@@ -146,7 +147,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const [ltSending, setLtSending] = useState(false);
   const [ltFeedback, setLtFeedback] = useState<string | null>(null);
   const [ltFeedbackTone, setLtFeedbackTone] = useState<"success" | "error">("success");
-  const [ltSize, setLtSize] = useState<LTSize>("xl");
+  const [ltSize, setLtSize] = useState<LTSize>(() => {
+    const saved = getSettings().defaultSpeakerSize;
+    return (saved && LT_SIZE_LABELS[saved as LTSize]) ? (saved as LTSize) : "xl";
+  });
   const [ltLive, setLtLive] = useState(false);
   // BibleTheme lower-third text input (used when a BibleTheme is selected)
   const [bibleLtText, setBibleLtText] = useState("");

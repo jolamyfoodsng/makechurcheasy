@@ -23,6 +23,7 @@ import { onCreditChange, isProUnlocked } from "../../services/credits";
 import Icon from "../DockIcon";
 import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { getSettings } from "../../multiview/mvStore";
 
 type LmStatus = "idle" | "requesting-mic" | "connecting" | "listening" | "error";
 
@@ -56,13 +57,14 @@ const DEFAULT_SETTINGS: LmDockSettings = {
 };
 
 function loadSettings(): LmDockSettings {
+  const globalDefaults = getSettings();
   try {
     const raw = localStorage.getItem(getUserScopedKey(LM_DOCK_SETTINGS_KEY));
-    if (!raw) return { ...DEFAULT_SETTINGS };
+    if (!raw) return { ...DEFAULT_SETTINGS, overlayMode: globalDefaults.defaultBibleOverlayMode };
     const parsed = JSON.parse(raw);
     return { ...DEFAULT_SETTINGS, ...parsed };
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, overlayMode: globalDefaults.defaultBibleOverlayMode };
   }
 }
 
@@ -1201,7 +1203,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: 4,
-    maxHeight: 200,
+    maxHeight: 600,
     overflowY: "auto" as const,
   },
   candidateCard: {
@@ -1281,10 +1283,11 @@ const styles: Record<string, React.CSSProperties> = {
   queueBadge: {
     fontSize: 9,
     fontWeight: 700,
-    background: "#4caf50",
-    color: "#fff",
-    padding: "1px 5px",
-    borderRadius: 2,
+    background: "transparent",
+    color: "#4caf50",
+    padding: 0,
+    borderRadius: 0,
+    letterSpacing: 0.5,
   },
   queueSnippet: {
     fontSize: 10,

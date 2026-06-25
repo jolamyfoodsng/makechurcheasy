@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Initial credit sync on login
   useEffect(() => {
     if (!authenticated || !user?.id) return;
-    syncCreditsWithBackend(user.id).catch(() => { });
+    syncCreditsWithBackend().catch(() => { });
   }, [authenticated, user?.id]);
 
   return (

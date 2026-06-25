@@ -25,30 +25,44 @@ async function syncUsageToServer(): Promise<void> {
     const session = getSession();
     if (!session?.deviceId) return;
 
-    // Import counting helpers dynamically
-    const worshipDb = await import("../worship/worshipDb");
-    const bibleDb = await import("../bible/bibleDb");
-    const libraryDb = await import("../library/libraryDb");
+    // Count resources — each DB is wrapped individually so one failure
+    // doesn't prevent the others from syncing.
+    let songs = 0;
+    let images = 0;
+    let videos = 0;
+    let themes = 0;
+    let lowerThirds = 0;
+    let bibleVersions = 0;
 
-    // Count resources
-    const songs = (await worshipDb.getAllSongs()).filter((s: any) => !s.archived).length;
-    const allMedia = await libraryDb.getAllMedia();
-    const images = allMedia.filter((m: any) => m.type === "image").length;
-    const videos = allMedia.filter((m: any) => m.type === "video").length;
+    try {
+      const worshipDb = await import("../worship/worshipDb");
+      songs = (await worshipDb.getAllSongs()).filter((s: any) => !s.archived).length;
+    } catch (err) {
+      console.warn("[usageSync] Failed to count songs:", err);
+    }
 
-    // Bible themes: count fullscreen templates
-    const allThemes = await bibleDb.getCustomThemes();
-    const themes = allThemes.filter((t: any) => t.templateType === "fullscreen").length;
-    const lowerThirds = allThemes.filter(
-      (t: any) => t.templateType === "lower-third" || t.templateType === "side-by-side"
-    ).length;
+    try {
+      const libraryDb = await import("../library/libraryDb");
+      const allMedia = await libraryDb.getAllMedia();
+      images = allMedia.filter((m: any) => m.type === "image").length;
+      videos = allMedia.filter((m: any) => m.type === "video").length;
+    } catch (err) {
+      console.warn("[usageSync] Failed to count media:", err);
+    }
 
-    // Bible versions
-    const bibleVersions = (await bibleDb.getInstalledTranslations()).length;
+    try {
+      const bibleDb = await import("../bible/bibleDb");
+      const allThemes = await bibleDb.getCustomThemes();
+      themes = allThemes.filter((t: any) => t.templateType === "fullscreen").length;
+      lowerThirds = allThemes.filter(
+        (t: any) => t.templateType === "lower-third" || t.templateType === "side-by-side"
+      ).length;
+      bibleVersions = (await bibleDb.getInstalledTranslations()).length;
+    } catch (err) {
+      console.warn("[usageSync] Failed to count bible resources:", err);
+    }
 
     // Devices: count from server-known devices (1 per registration)
-    // We don't have a local device count — the server tracks this.
-    // Send 0 and let the server maintain its own count.
     const devices = 0;
 
     const payload = {

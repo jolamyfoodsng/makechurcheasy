@@ -114,12 +114,12 @@ async function getCanvasSize(): Promise<{ width: number; height: number }> {
 
 class PresentationSceneManager {
   /**
-   * Ensure the MCE Presentation scene exists with all required sources.
-   * Creates the scene if it doesn't exist, and ensures all sources are present.
+   * Ensure the MCE Presentation scene exists.
+   * Creates the scene if it doesn't exist and adds the program scene reference.
+   * Sources are created lazily — only when ensureModuleSource() is called.
    */
   async ensurePresentationScene(): Promise<{ sceneName: string; sceneUuid: string }> {
     this._assertConnected();
-    const canvas = await getCanvasSize();
 
     // ── 1. Ensure the presentation scene exists ──
     let sceneUuid = _state.sceneUuid;
@@ -145,10 +145,7 @@ class PresentationSceneManager {
       throw new Error(`Failed to ensure scene: ${PRESENTATION_SCENE_NAME}`);
     }
 
-    // ── 2. Ensure all required sources exist ──
-    await this.ensureAllSources(PRESENTATION_SCENE_NAME, canvas);
-
-    // ── 3. Ensure program scene reference at bottom ──
+    // ── 2. Ensure program scene reference at bottom ──
     await this.ensureProgramSceneReference();
 
     return { sceneName: PRESENTATION_SCENE_NAME, sceneUuid };
@@ -216,31 +213,6 @@ class PresentationSceneManager {
 
     } catch (err) {
       console.warn("[PresentationScene] Failed to add program scene reference:", err);
-    }
-  }
-
-  /**
-   * Ensure all required sources exist in the presentation scene.
-   */
-  private async ensureAllSources(sceneName: string, canvas: { width: number; height: number }): Promise<void> {
-    // Ensure each module's source exists
-    for (const [key, sourceName] of Object.entries(SOURCE_NAMES)) {
-      await this.ensureSource(sceneName, sourceName, "browser_source", canvas, key.toLowerCase());
-    }
-
-    // Ensure background sources exist
-    for (const [key, bgSourceName] of Object.entries(BG_SOURCE_NAMES)) {
-      await this.ensureBgSource(sceneName, bgSourceName, canvas, key.toLowerCase());
-    }
-
-    // Ensure fullscreen sources exist
-    for (const [key, sourceName] of Object.entries(FULLSCREEN_SOURCE_NAMES)) {
-      await this.ensureSource(sceneName, sourceName, "browser_source", canvas, `fullscreen-${key.toLowerCase()}`);
-    }
-
-    // Ensure fullscreen background sources exist
-    for (const [key, bgSourceName] of Object.entries(FULLSCREEN_BG_SOURCE_NAMES)) {
-      await this.ensureBgSource(sceneName, bgSourceName, canvas, `fullscreen-${key.toLowerCase()}`);
     }
   }
 
@@ -412,8 +384,28 @@ class PresentationSceneManager {
   }
 
   /**
+   * Ensure a specific module's source (+ BG) exists in the presentation scene.
+   * Creates the source lazily — only when first requested.
+   */
+  async ensureModuleSource(module: ModuleType): Promise<void> {
+    await this.ensurePresentationScene();
+    const canvas = await getCanvasSize();
+    const sceneName = PRESENTATION_SCENE_NAME;
+
+    const sourceName = this.getModuleName(module);
+    if (sourceName) {
+      await this.ensureSource(sceneName, sourceName, "browser_source", canvas, module);
+    }
+
+    const bgSourceName = this.getBgModuleName(module);
+    if (bgSourceName) {
+      await this.ensureBgSource(sceneName, bgSourceName, canvas, module);
+    }
+  }
+
+  /**
    * Show a specific module's source and hide all others.
-   * This is the core visibility management logic.
+   * Lazily creates only the requested module's sources (not all 16).
    */
   async showModule(module: ModuleType): Promise<void> {
     await this.ensurePresentationScene();
@@ -426,7 +418,19 @@ class PresentationSceneManager {
       return;
     }
 
-    // Hide all sources first
+    // Lazily create only this module's sources
+    const canvas = await getCanvasSize();
+    await this.ensureSource(sceneName, sourceName, "browser_source", canvas, module);
+
+    const bgSourceName = this.getBgModuleName(module);
+    if (bgSourceName) {
+      await this.ensureBgSource(sceneName, bgSourceName, canvas, module);
+    }
+
+    // Sync known sources from OBS (in case other code paths added sources)
+    await this._syncSourcesFromObs(sceneName);
+
+    // Hide all known sources first
     await this.hideAllSources(sceneName);
 
     // Show the requested module's source
@@ -436,7 +440,6 @@ class PresentationSceneManager {
     }
 
     // Show the corresponding background source
-    const bgSourceName = this.getBgModuleName(module);
     if (bgSourceName) {
       const bgInfo = _state.bgSources.get(bgSourceName);
       if (bgInfo) {
@@ -460,6 +463,46 @@ class PresentationSceneManager {
     for (const [, bgInfo] of _state.bgSources) {
       await this.setSourceEnabled(targetScene, bgInfo.sceneItemId, false);
     }
+  }
+
+  /**
+   * Sync the internal source maps from OBS.
+   * Discovers sources that were created by other code paths (e.g. dockObsClient)
+   * and registers them so hideAllSources() can manage their visibility.
+   */
+  private async _syncSourcesFromObs(sceneName: string): Promise<void> {
+    try {
+      const resp = await obsService.call("GetSceneItemList", { sceneName });
+      const items = (resp as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> }).sceneItems ?? [];
+
+      // Build lookup of all known source names (regular + BG + fullscreen + fullscreen BG)
+      const allKnownNames = new Set<string>();
+      for (const name of Object.values(SOURCE_NAMES)) allKnownNames.add(name);
+      for (const name of Object.values(BG_SOURCE_NAMES)) allKnownNames.add(name);
+      for (const name of Object.values(FULLSCREEN_SOURCE_NAMES)) allKnownNames.add(name);
+      for (const name of Object.values(FULLSCREEN_BG_SOURCE_NAMES)) allKnownNames.add(name);
+
+      for (const item of items) {
+        if (!allKnownNames.has(item.sourceName)) continue;
+
+        if (Object.values(SOURCE_NAMES).includes(item.sourceName as any) ||
+          Object.values(FULLSCREEN_SOURCE_NAMES).includes(item.sourceName as any)) {
+          if (!_state.sources.has(item.sourceName)) {
+            _state.sources.set(item.sourceName, {
+              sceneItemId: item.sceneItemId,
+              sceneUuid: _state.sceneUuid ?? "",
+            });
+          }
+        } else {
+          if (!_state.bgSources.has(item.sourceName)) {
+            _state.bgSources.set(item.sourceName, {
+              sceneItemId: item.sceneItemId,
+              sceneUuid: _state.sceneUuid ?? "",
+            });
+          }
+        }
+      }
+    } catch { /* best effort */ }
   }
 
   /**

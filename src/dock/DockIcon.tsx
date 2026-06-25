@@ -340,6 +340,7 @@ const ICONS: Record<string, IconDef> = {
   person_off: { component: UserMinus },
   photo_library: { component: Images },
   place: { component: MapPin },
+  play: { component: Play },
   play_arrow: { component: Play },
   play_circle: { component: Clapperboard },
   play_circle_outline: { component: PlayCircle },

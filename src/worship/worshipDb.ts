@@ -46,24 +46,17 @@ function notifySongsChanged(): void {
 function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion, _newVersion, transaction) {
-        if (oldVersion < 1) {
-          if (!db.objectStoreNames.contains("songs")) {
-            const store = db.createObjectStore("songs", { keyPath: "id" });
-            store.createIndex("title", "metadata.title");
-            store.createIndex("updatedAt", "updatedAt");
-          }
+      upgrade(db, _oldVersion, _newVersion, transaction) {
+        // Always ensure the songs store exists. The migrateFromLegacyDatabases()
+        // helper may have opened this DB at version 1 without an upgrade
+        // function, creating an empty DB. Use contains() checks instead of
+        // oldVersion gates so the store is created regardless.
+        if (!db.objectStoreNames.contains("songs")) {
+          const store = db.createObjectStore("songs", { keyPath: "id" });
+          store.createIndex("title", "metadata.title");
+          store.createIndex("updatedAt", "updatedAt");
         }
-        if (oldVersion < 2) {
-          // v2: Add userId index for cross-account isolation
-          if (db.objectStoreNames.contains("songs")) {
-            const store = transaction.objectStore("songs") as unknown as IDBObjectStore;
-            if (!store.indexNames.contains("userId")) {
-              store.createIndex("userId", "userId", { unique: false });
-            }
-          }
-        }
-        // Safety: ensure userId index exists even if v2 upgrade partially failed
+        // Ensure userId index exists on the songs store
         if (db.objectStoreNames.contains("songs")) {
           const store = transaction.objectStore("songs") as unknown as IDBObjectStore;
           if (!store.indexNames.contains("userId")) {
@@ -71,6 +64,10 @@ function getDb(): Promise<IDBPDatabase> {
           }
         }
       },
+    }).catch((err) => {
+      // Reset so the next call can retry instead of being permanently stuck
+      dbPromise = null;
+      throw err;
     });
   }
   return dbPromise;

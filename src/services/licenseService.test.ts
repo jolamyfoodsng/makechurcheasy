@@ -327,25 +327,25 @@ describe("getTrialDaysRemaining", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("Feature gates — all plans", () => {
-  const ALL_PLANS: PlanTier[] = ["free", "basic", "starter", "growth", "pro"];
+  const ALL_PLANS: PlanTier[] = ["free", "trial", "basic", "starter", "growth", "pro"];
 
   // Feature → expected results per plan
   const FEATURE_MATRIX: Record<string, Record<PlanTier, boolean>> = {
-    translation: { free: false, basic: false, starter: true, growth: true, pro: true },
-    massImport: { free: false, basic: false, starter: true, growth: true, pro: true },
-    multiview: { free: false, basic: false, starter: true, growth: true, pro: true },
-    easyWorshipImport: { free: false, basic: false, starter: true, growth: true, pro: true },
-    proPresenterImport: { free: false, basic: false, starter: true, growth: true, pro: true },
-    tickers: { free: false, basic: false, starter: true, growth: true, pro: true },
-    speechToScripture: { free: false, basic: false, starter: true, growth: true, pro: true },
-    sermonExport: { free: false, basic: false, starter: true, growth: true, pro: true },
-    aiFeatures: { free: false, basic: false, starter: true, growth: true, pro: true },
-    cloudFeatures: { free: false, basic: false, starter: false, growth: true, pro: true },
-    advancedAnalytics: { free: false, basic: false, starter: false, growth: true, pro: true },
-    customReports: { free: false, basic: false, starter: false, growth: true, pro: true },
-    unlimitedDevices: { free: false, basic: false, starter: false, growth: true, pro: true },
-    unlimitedMultiview: { free: false, basic: false, starter: false, growth: true, pro: true },
-    mobileControl: { free: false, basic: false, starter: false, growth: false, pro: true },
+    translation: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
+    massImport: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
+    multiview: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
+    easyWorshipImport: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
+    proPresenterImport: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
+    tickers: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
+    speechToScripture: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
+    sermonExport: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
+    aiFeatures: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
+    cloudFeatures: { free: false, trial: true, basic: false, starter: false, growth: true, pro: true },
+    advancedAnalytics: { free: false, trial: true, basic: false, starter: false, growth: true, pro: true },
+    customReports: { free: false, trial: true, basic: false, starter: false, growth: true, pro: true },
+    unlimitedDevices: { free: false, trial: true, basic: false, starter: false, growth: true, pro: true },
+    unlimitedMultiview: { free: false, trial: true, basic: false, starter: false, growth: true, pro: true },
+    mobileControl: { free: false, trial: true, basic: false, starter: false, growth: false, pro: true },
   };
 
   const FEATURE_FN_MAP: Record<string, (user: AuthUser | null) => boolean> = {

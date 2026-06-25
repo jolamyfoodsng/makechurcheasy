@@ -49,10 +49,10 @@ function unwrapEnvelope<T = any>(json: any): T {
 
 /** Top 4 free / public-domain Bibles to auto-download on first run */
 export const AUTO_DOWNLOAD_BIBLES: { id: string; abbr: string; name: string }[] = [
-  { id: "bbea9716-19bd-4b3d-abd0-c7bb0f0e5e12", abbr: "KJV", name: "King James Version" },
-  { id: "d65f0bd4-2c36-43dc-afa4-4bc985db1994", abbr: "ASV", name: "American Standard Version" },
-  { id: "e9edbd9d-9dd7-4595-92c4-4306555f3776", abbr: "NKJV", name: "New King James Version" },
-  { id: "b3b38c78-a876-40b5-8aad-ec92ca65a548", abbr: "ERV", name: "English Revised Version" },
+  { id: "837ae1f9-fc5c-8398-88f9-6a14476aff0f", abbr: "KJV", name: "King James Version" },
+  { id: "2824e81a-64f2-5cb7-d095-da69082bb75d", abbr: "ASV", name: "American Standard Version" },
+  { id: "6a3d46ba-f05a-8a56-ced9-f71e3abd6683", abbr: "NKJV", name: "New King James Version" },
+  { id: "db71260d-d438-0a7d-d546-f7b07d45a98e", abbr: "ERV", name: "English Revised Version" },
 ];
 
 // ---------------------------------------------------------------------------

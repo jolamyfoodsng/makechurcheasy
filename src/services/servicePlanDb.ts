@@ -65,22 +65,16 @@ let dbPromise: Promise<IDBPDatabase> | null = null;
 function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion, _newVersion, transaction) {
-        if (oldVersion < 1) {
-          if (!db.objectStoreNames.contains("plans")) {
-            const store = db.createObjectStore("plans", { keyPath: "id" });
-            store.createIndex("updatedAt", "updatedAt");
-          }
+      upgrade(db, _oldVersion, _newVersion, transaction) {
+        // Always ensure the plans store exists (migration may have created
+        // the DB at a higher version without an upgrade function)
+        if (!db.objectStoreNames.contains("plans")) {
+          const store = db.createObjectStore("plans", { keyPath: "id" });
+          store.createIndex("updatedAt", "updatedAt");
+          store.createIndex("serviceDate", "serviceDate");
+          store.createIndex("status", "status");
         }
-        if (oldVersion < 2) {
-          if (db.objectStoreNames.contains("plans")) {
-            const store = transaction.objectStore("plans") as unknown as IDBObjectStore;
-            if (!store.indexNames.contains("userId")) {
-              store.createIndex("userId", "userId", { unique: false });
-            }
-          }
-        }
-        // Safety: ensure userId index exists even if v2 upgrade partially failed
+        // Ensure userId index exists on the plans store
         if (db.objectStoreNames.contains("plans")) {
           const store = transaction.objectStore("plans") as unknown as IDBObjectStore;
           if (!store.indexNames.contains("userId")) {

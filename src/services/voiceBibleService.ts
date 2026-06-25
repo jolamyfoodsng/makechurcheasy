@@ -17,6 +17,7 @@ import {
   transcribeVoiceAudio,
 } from "./voiceBibleSettings";
 import { getLocalLlmRuntimeStatus } from "./localLlm";
+import { getSettings as getMvSettings } from "../multiview/mvStore";
 import type {
   VoiceBibleContextPayload,
   VoiceBibleSnapshot,
@@ -484,6 +485,8 @@ class VoiceBibleService {
   private lowPassNode: BiquadFilterNode | null = null;
   private presenceNode: BiquadFilterNode | null = null;
   private compressorNode: DynamicsCompressorNode | null = null;
+  private inputGainNode: GainNode | null = null;
+  private inputAnalyserNode: AnalyserNode | null = null;
   private processorNode: ScriptProcessorNode | null = null;
   private sinkNode: GainNode | null = null;
   private audioChunks: Float32Array[] = [];
@@ -606,6 +609,17 @@ class VoiceBibleService {
 
     for (const listener of this.levelListeners) {
       listener(nextLevel);
+    }
+  }
+
+  /**
+   * Update the microphone input gain at runtime (0–300 → 0.0–3.0 multiplier).
+   * Applies immediately via setTargetAtTime — no stream restart needed.
+   */
+  setInputGain(gainPercent: number): void {
+    const gain = Math.max(0, Math.min(3, gainPercent / 100));
+    if (this.inputGainNode && this.audioContext) {
+      this.inputGainNode.gain.setTargetAtTime(gain, this.audioContext.currentTime, 0.02);
     }
   }
 
@@ -1291,6 +1305,17 @@ class VoiceBibleService {
       compressorNode.attack.value = MIC_COMPRESSOR_ATTACK_SECONDS;
       compressorNode.release.value = MIC_COMPRESSOR_RELEASE_SECONDS;
 
+      // ── User input gain (post-compression trim) ──
+      const mvSettings = getMvSettings();
+      const inputGainMultiplier = (mvSettings.inputGain ?? 100) / 100;
+      const inputGainNode = audioContext.createGain();
+      inputGainNode.gain.value = Math.max(0, Math.min(3, inputGainMultiplier));
+
+      // ── Analyser for level metering ──
+      const inputAnalyserNode = audioContext.createAnalyser();
+      inputAnalyserNode.fftSize = 256;
+      inputAnalyserNode.smoothingTimeConstant = 0.3;
+
       const processorNode = audioContext.createScriptProcessor(4096, 1, 1);
       const sinkNode = audioContext.createGain();
       sinkNode.gain.value = 0;
@@ -1336,7 +1361,9 @@ class VoiceBibleService {
       highPassNode.connect(lowPassNode);
       lowPassNode.connect(presenceNode);
       presenceNode.connect(compressorNode);
-      compressorNode.connect(processorNode);
+      compressorNode.connect(inputGainNode);
+      inputGainNode.connect(inputAnalyserNode);
+      inputAnalyserNode.connect(processorNode);
       processorNode.connect(sinkNode);
       sinkNode.connect(audioContext.destination);
 
@@ -1347,6 +1374,8 @@ class VoiceBibleService {
       this.lowPassNode = lowPassNode;
       this.presenceNode = presenceNode;
       this.compressorNode = compressorNode;
+      this.inputGainNode = inputGainNode;
+      this.inputAnalyserNode = inputAnalyserNode;
       this.processorNode = processorNode;
       this.sinkNode = sinkNode;
 
@@ -1680,6 +1709,16 @@ class VoiceBibleService {
       // noop
     }
     try {
+      this.inputGainNode?.disconnect();
+    } catch {
+      // noop
+    }
+    try {
+      this.inputAnalyserNode?.disconnect();
+    } catch {
+      // noop
+    }
+    try {
       this.sinkNode?.disconnect();
     } catch {
       // noop
@@ -1691,6 +1730,8 @@ class VoiceBibleService {
     this.lowPassNode = null;
     this.presenceNode = null;
     this.compressorNode = null;
+    this.inputGainNode = null;
+    this.inputAnalyserNode = null;
     this.sinkNode = null;
 
     this.mediaStream?.getTracks().forEach((track) => track.stop());

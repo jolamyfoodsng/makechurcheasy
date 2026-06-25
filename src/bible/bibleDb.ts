@@ -209,64 +209,51 @@ function removeCustomThemeFromLocalStorage(id: string): boolean {
 function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion, _newVersion, transaction) {
-        // ── v1 stores ──
-        if (oldVersion < 1) {
-          // Favorites store
-          if (!db.objectStoreNames.contains("favorites")) {
-            db.createObjectStore("favorites", { keyPath: "reference" });
-          }
-          // History store (keyed by timestamp)
-          if (!db.objectStoreNames.contains("history")) {
-            const store = db.createObjectStore("history", {
-              keyPath: "id",
-              autoIncrement: true,
-            });
-            store.createIndex("timestamp", "timestamp");
-          }
-          // Custom themes
-          if (!db.objectStoreNames.contains("themes")) {
-            db.createObjectStore("themes", { keyPath: "id" });
-          }
-          // Settings (single row, key = "settings")
-          if (!db.objectStoreNames.contains("settings")) {
-            db.createObjectStore("settings");
-          }
+      upgrade(db, _oldVersion, _newVersion, transaction) {
+        // ── Ensure ALL stores exist on every upgrade ──
+        // This handles partial upgrades where earlier version blocks
+        // may have failed partway through.
+
+        // Favorites store
+        if (!db.objectStoreNames.contains("favorites")) {
+          db.createObjectStore("favorites", { keyPath: "reference" });
+        }
+        // History store (keyed by timestamp)
+        if (!db.objectStoreNames.contains("history")) {
+          const store = db.createObjectStore("history", {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          store.createIndex("timestamp", "timestamp");
+        }
+        // Custom themes
+        if (!db.objectStoreNames.contains("themes")) {
+          db.createObjectStore("themes", { keyPath: "id" });
+        }
+        // Settings (single row, key = "settings")
+        if (!db.objectStoreNames.contains("settings")) {
+          db.createObjectStore("settings");
+        }
+        // Downloaded translations
+        if (!db.objectStoreNames.contains("translations")) {
+          db.createObjectStore("translations", { keyPath: "abbr" });
         }
 
-        // ── v2: downloaded translations ──
-        if (oldVersion < 2) {
-          if (!db.objectStoreNames.contains("translations")) {
-            db.createObjectStore("translations", { keyPath: "abbr" });
-          }
-        }
-
-        // ── v3: Add userId index to user-owned stores for cross-account isolation ──
-        if (oldVersion < 3) {
-          const userStores = ["favorites", "history", "themes"];
-          for (const storeName of userStores) {
-            if (db.objectStoreNames.contains(storeName)) {
-              const store = transaction.objectStore(storeName) as unknown as IDBObjectStore;
-              if (!store.indexNames.contains("userId")) {
-                store.createIndex("userId", "userId", { unique: false });
-              }
-            }
-          }
-          // Settings uses manual key — no index needed (key will be userId-prefixed)
-        }
-        // Safety: ensure userId indexes exist even if v3 upgrade partially failed
-        {
-          const userStores = ["favorites", "history", "themes"];
-          for (const storeName of userStores) {
-            if (db.objectStoreNames.contains(storeName)) {
-              const store = transaction.objectStore(storeName) as unknown as IDBObjectStore;
-              if (!store.indexNames.contains("userId")) {
-                store.createIndex("userId", "userId", { unique: false });
-              }
+        // ── Ensure userId indexes exist on user-owned stores ──
+        const userStores = ["favorites", "history", "themes"];
+        for (const storeName of userStores) {
+          if (db.objectStoreNames.contains(storeName)) {
+            const store = transaction.objectStore(storeName) as unknown as IDBObjectStore;
+            if (!store.indexNames.contains("userId")) {
+              store.createIndex("userId", "userId", { unique: false });
             }
           }
         }
       },
+    }).catch((err) => {
+      // Reset so the next call can retry instead of being permanently stuck
+      dbPromise = null;
+      throw err;
     });
   }
   return dbPromise;

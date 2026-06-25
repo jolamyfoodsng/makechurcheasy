@@ -196,6 +196,12 @@ export function getVersionAge(
  */
 export async function checkForUpdate(): Promise<UpdateCheckResult> {
   try {
+    // Skip update checks in dev mode — the updater endpoint is not
+    // available and the plugin throws "relative URL without a base".
+    if (import.meta.env.DEV) {
+      return { available: false };
+    }
+
     // Add auth headers for private repo access (no-op if token not set)
     const headers = getUpdaterHeaders();
     const update = await check(headers ? { headers } : undefined);

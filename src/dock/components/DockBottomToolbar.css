@@ -19,8 +19,8 @@
 /* ── Main row ── */
 .dock-btm-toolbar__row {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  /* flex-wrap: wrap; */
   gap: 10px;
 }
 

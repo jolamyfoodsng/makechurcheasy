@@ -11,9 +11,9 @@
 
 // ── Core Types ───────────────────────────────────────────────────────────────
 
-export type PlanTier = "free" | "basic" | "starter" | "growth" | "pro";
+export type PlanTier = "free" | "trial" | "basic" | "starter" | "growth" | "pro";
 
-/** Ordered list of tiers from lowest to highest. */
+/** Ordered list of tiers from lowest to highest (excludes "trial" — it's a temporary state, not a purchasable tier). */
 export const ALL_TIERS: PlanTier[] = ["free", "basic", "starter", "growth", "pro"];
 
 /**
@@ -214,6 +214,25 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
         customReports: false, mobileControl: false, apiAccess: false,
         teamManagement: false, campusManagement: false, slideshow: false,
+      },
+    },
+    trial: {
+      label: "Trial",
+      pricing: {
+        NGN: { monthly: 0, yearly: 0 },
+        USD: { monthly: 0, yearly: 0 },
+      },
+      paystack: { monthlyPlanCode: "", yearlyPlanCode: "" },
+      credits: 500,
+      entitlements: {
+        songs: -1, images: -1, videos: -1, themes: -1, lowerThirds: -1, devices: -1,
+        bibleVersions: -1, multiviewTemplates: -1, tickerThemes: -1, themePresets: -1,
+        cloudStorageGB: 200,
+        multiview: true, tickers: true, massImport: true, easyWorshipImport: true,
+        proPresenterImport: true, translation: true, speechToScripture: true,
+        sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,
+        customReports: true, mobileControl: true, apiAccess: true,
+        teamManagement: true, campusManagement: true, slideshow: true,
       },
     },
     basic: {

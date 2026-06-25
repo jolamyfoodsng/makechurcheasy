@@ -190,6 +190,7 @@ export default function DockBibleThemePicker({
         title={browserTitle ?? (showLabel ? resolvedLabel : "Select Bible Theme")}
         templateType={templateType}
         allowedCategories={allowedCategories}
+        themeCount={allThemes.length}
       />
     </>
   );

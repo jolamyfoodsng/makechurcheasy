@@ -177,7 +177,25 @@ export function loadLocalLibrary(): MediaItem[] {
 }
 
 export function saveLocalLibrary(items: MediaItem[]): void {
-  localStorage.setItem(getUserScopedKey(LOCAL_LIBRARY_KEY), JSON.stringify(items));
+  try {
+    // Strip large base64 data-URLs before persisting — the file is already on
+    // disk and accessible via the overlay URL, so thumbnails are not needed in
+    // localStorage.  This keeps the payload well under the ~5 MB quota.
+    const lightweight = items.map((item) => {
+      if (!item.thumbnailUrl || item.thumbnailUrl.startsWith("http")) return item;
+      const { thumbnailUrl, ...rest } = item;
+      return rest;
+    });
+    localStorage.setItem(getUserScopedKey(LOCAL_LIBRARY_KEY), JSON.stringify(lightweight));
+  } catch (err) {
+    console.warn("[UPLOAD] saveLocalLibrary: localStorage write failed — trying without thumbnails", err);
+    try {
+      const stripped = items.map(({ thumbnailUrl: _t, ...rest }) => rest);
+      localStorage.setItem(getUserScopedKey(LOCAL_LIBRARY_KEY), JSON.stringify(stripped));
+    } catch (innerErr) {
+      console.error("[UPLOAD] saveLocalLibrary: giving up — library will not persist", innerErr);
+    }
+  }
 }
 
 export function dedupeMediaItems(items: MediaItem[]): MediaItem[] {

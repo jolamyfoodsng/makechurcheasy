@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import type { BibleTheme } from "../../bible/types";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
+import { dockEntitlementGuard, requireEntitlement } from "../dockEntitlement";
 import DockIcon from "../DockIcon";
 import ThemePreviewSurface from "../../components/ThemePreviewSurface";
 
@@ -12,6 +13,8 @@ interface Props {
   title?: string;
   templateType?: BibleTheme["templateType"];
   allowedCategories?: Array<NonNullable<BibleTheme["category"]>>;
+  /** Current number of favorite themes the user has saved */
+  themeCount?: number;
 }
 
 function clampPreviewSize(size: number, min: number, max: number, ratio = 0.2): number {
@@ -26,9 +29,19 @@ export default function DockThemeBrowserModal({
   title = "Select Theme",
   templateType,
   allowedCategories,
+  themeCount = 0,
 }: Props) {
   const [allThemes, setAllThemes] = useState<BibleTheme[]>([]);
   const [search, setSearch] = useState("");
+  const [themeLimit, setThemeLimit] = useState<number>(-1);
+
+  // Fetch theme entitlement limit on open
+  useEffect(() => {
+    if (!open) return;
+    void dockEntitlementGuard("themes", themeCount).then((result) => {
+      setThemeLimit(result.limit);
+    });
+  }, [open, themeCount]);
 
   useEffect(() => {
     if (!open) return;
@@ -68,8 +81,14 @@ export default function DockThemeBrowserModal({
 
   if (!open) return null;
 
+  const isUnlimited = themeLimit === -1 || themeLimit === Infinity;
+  const lockedThemeIds = new Set(
+    isUnlimited ? [] : allThemes.slice(themeLimit).map((t) => t.id),
+  );
+
   const renderThemeCard = (theme: BibleTheme) => {
     const isActive = theme.id === selectedThemeId;
+    const isLocked = lockedThemeIds.has(theme.id);
     const bgColor = theme.settings.boxBackground || theme.settings.backgroundColor || "#0F172A";
     const fontColor = theme.settings.fontColor || "#fff";
     const bgImage = theme.settings.boxBackgroundImage || theme.settings.backgroundImage;
@@ -80,12 +99,16 @@ export default function DockThemeBrowserModal({
     return (
       <button
         key={theme.id}
-        className={`dtb-card${isActive ? " dtb-card--active" : ""}`}
+        className={`dtb-card${isActive ? " dtb-card--active" : ""}${isLocked ? " dtb-card--locked" : ""}`}
         onClick={() => {
+          if (isLocked) {
+            void requireEntitlement("themes", themeCount);
+            return;
+          }
           onSelect(theme);
           onClose();
         }}
-        title={theme.description || theme.name}
+        title={isLocked ? "Upgrade to use more themes" : (theme.description || theme.name)}
       >
         <ThemePreviewSurface
           className="dtb-card__swatch"
@@ -125,6 +148,11 @@ export default function DockThemeBrowserModal({
           {theme.settings.logoUrl && (
             <span className="dtb-card__logo-badge" title="Includes logo">
               <DockIcon name="image" size={9} />
+            </span>
+          )}
+          {isLocked && (
+            <span className="dtb-card__lock-badge" title="Upgrade to unlock">
+              <DockIcon name="lock" size={14} />
             </span>
           )}
         </ThemePreviewSurface>

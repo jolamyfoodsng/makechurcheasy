@@ -31,7 +31,7 @@ export default function SplashScreen({ ready, onDone }: SplashScreenProps) {
   return (
     <div className={`splash-screen${fading ? " splash-fade-out" : ""}`}>
       <img
-        src="/obs_studio_introductory_image.png"
+        src="/make_church_easy_onboarding.png"
         alt="MakeChurchEasy Studio"
         className="splash-image"
         draggable={false}

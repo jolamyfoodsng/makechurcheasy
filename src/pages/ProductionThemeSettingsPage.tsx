@@ -261,6 +261,7 @@ export default function ProductionThemeSettingsPage() {
   const [obsSearch, setObsSearch] = useState("");
   const [previewTheme, setPreviewTheme] = useState<ObsTheme | null>(null);
   const [previewTicker, setPreviewTicker] = useState<DockTickerPreview | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const allObsThemes: ObsTheme[] = useMemo(
     () => (allThemesData as { themes: ObsTheme[] }).themes ?? [],
@@ -441,18 +442,37 @@ export default function ProductionThemeSettingsPage() {
   }, [pendingDeleteTheme, persistSettings, settings, themes]);
 
   // ---------------------------------------------------------------------------
+  // Toast helper
+  // ---------------------------------------------------------------------------
+
+  const showToast = useCallback((message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // OBS favorite toggle
   // ---------------------------------------------------------------------------
 
   const handleToggleObsFavorite = useCallback((themeId: string) => {
+    const wasFav = obsFavorites.has(themeId);
     const next = toggleObsFavorite(themeId);
     setObsFavorites(next);
-  }, []);
+    if (!wasFav) {
+      const theme = allObsThemes.find((t) => t.id === themeId);
+      showToast(`"${theme?.name ?? "Theme"}" added to dock`, "success");
+    }
+  }, [obsFavorites, allObsThemes, showToast]);
 
   const handleToggleTickerFavorite = useCallback((tickerId: string) => {
+    const wasFav = tickerFavorites.has(tickerId);
     const next = toggleTickerFavorite(tickerId);
     setTickerFavorites(next);
-  }, []);
+    if (!wasFav) {
+      const ticker = allTickers.find((t) => t.id === tickerId);
+      showToast(`"${ticker?.name ?? "Ticker"}" added to dock`, "success");
+    }
+  }, [tickerFavorites, allTickers, showToast]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -986,6 +1006,38 @@ export default function ProductionThemeSettingsPage() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Toast */}
+        {toast && (
+          <div
+            className="mvg-toast"
+            style={{
+              position: "fixed",
+              bottom: 24,
+              right: 24,
+              zIndex: 10001,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 16px",
+              borderRadius: "var(--radius)",
+              background: "var(--surface)",
+              border: toast.type === "success" ? "1px solid var(--success)" : "1px solid var(--error)",
+              color: "var(--text-primary)",
+              fontSize: 12,
+              fontWeight: 500,
+              boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+              animation: "fadeIn 0.15s ease",
+            }}
+          >
+            <Icon
+              name={toast.type === "success" ? "check_circle" : "error"}
+              size={18}
+              style={{ color: toast.type === "success" ? "var(--success)" : "var(--error)" }}
+            />
+            <span>{toast.message}</span>
           </div>
         )}
       </div>

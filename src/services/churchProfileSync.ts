@@ -87,10 +87,12 @@ export async function syncChurchProfile(): Promise<SyncResult> {
       }
     }
 
-    // Fallback: regular userId-based endpoint
+    // Fallback: regular userId-based endpoint (with device auth header)
     if (!profile) {
       try {
-        const res = await fetch(`${API_BASE}/api/church-profile?userId=${encodeURIComponent(userId)}`);
+        const res = await fetch(`${API_BASE}/api/church-profile?userId=${encodeURIComponent(userId)}`, {
+          headers: session.deviceId ? { "X-Device-Id": session.deviceId } : {},
+        });
 
 
         if (res.ok) {

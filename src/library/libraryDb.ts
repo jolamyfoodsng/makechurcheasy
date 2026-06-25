@@ -43,7 +43,11 @@ function openDb(): Promise<IDBDatabase> {
       };
 
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        // Reset so the next call can retry instead of being permanently stuck
+        dbPromise = null;
+        reject(request.error);
+      };
     });
   }
   return dbPromise;
