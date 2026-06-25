@@ -63,7 +63,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "$ENV{TAURI_SIGNING_PUBLIC_KEY}",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg4QUQxNTRDNDlFOUREREUKUldUZTNlbEpUQld0aU5nRzUvU0JuWnQ0b1VNRUR5VVhYQmtvRjIyK2tYbXNxMUZwdnF4bGVkVXUK",
       "endpoints": [
         "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/latest/download/latest.json"
       ],
