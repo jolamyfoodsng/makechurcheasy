@@ -9,6 +9,7 @@
  */
 
 import { obsService } from "../services/obsService";
+import { obsSyncService } from "../services/obsSyncService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import {
   registerInput,
@@ -459,6 +460,10 @@ class BibleObsService {
     this.currentSceneName = overlaySceneName;
 
     this.currentTemplateType = templateType;
+
+    // Trigger centralized sync so obsSyncService discovers Bible resources
+    obsSyncService.sync("bible:ensure-source").catch(() => { });
+
     return { sceneName: overlaySceneName, sceneItemId: this.sceneItemId! };
   }
 
@@ -1220,6 +1225,9 @@ class BibleObsService {
 
     this._liveSlide = null;
     this._liveTheme = null;
+
+    // Trigger centralized sync after clearing overlay
+    obsSyncService.sync("bible:clear").catch(() => { });
   }
 
   /**
@@ -1320,6 +1328,8 @@ class BibleObsService {
     // Also push to MV Bible sources
     await this.pushToMVBibleSources(slide, live, blanked);
 
+    // Trigger centralized sync after showing fullscreen
+    obsSyncService.sync("bible:show-fullscreen").catch(() => { });
   }
 
   /**
@@ -1339,6 +1349,8 @@ class BibleObsService {
     this._liveSlide = null;
     this._liveTheme = null;
 
+    // Trigger centralized sync after hiding fullscreen
+    obsSyncService.sync("bible:hide-fullscreen").catch(() => { });
   }
 
   /**

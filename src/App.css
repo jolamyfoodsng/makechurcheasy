@@ -18446,16 +18446,7 @@ sts3-transcript-item--active .sts3-transcript-item--interim {
 }
 
 .tc-editor .color-box input[type="color"] {
-  position: absolute !important;
-  width: 100% !important;
-  height: 100% !important;
-  top: 0;
-  left: 0;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: auto !important;
+  display: none;
 }
 
 .tc-editor .format-group {
@@ -19291,6 +19282,110 @@ html.mv-theme-light .tc-editor .canvas-area {
   border-color: var(--tc-primary);
 }
 
+.tc-close-btn {
+  border-radius: 8px;
+  color: var(--tc-on-surface-dim);
+  border: 1px solid transparent;
+}
+
+.tc-close-btn:hover {
+  background-color: #ef444422;
+  color: #ef4444;
+  border-color: #ef444444;
+}
+
+/* ── Variant Tabs ── */
+.tc-variant-tabs {
+  display: flex;
+  background-color: var(--tc-surface);
+  border: 1px solid var(--tc-outline-variant);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.tc-variant-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--tc-on-surface-dim);
+  background: transparent;
+}
+
+.tc-variant-tab:hover:not(.disabled) {
+  background-color: var(--tc-surface-mid);
+  color: var(--tc-on-surface);
+}
+
+.tc-variant-tab.active {
+  background-color: var(--tc-primary);
+  color: var(--tc-on-primary);
+}
+
+.tc-variant-tab.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Variant Enable Toggles ── */
+.tc-variant-toggles {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tc-variant-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tc-variant-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--tc-primary);
+  cursor: pointer;
+}
+
+.tc-variant-toggle-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tc-on-surface-dim);
+  letter-spacing: 0.03em;
+}
+
+/* ── Sync Button ── */
+.tc-sync-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+  border: 1px solid var(--tc-outline-variant) !important;
+  border-radius: 6px !important;
+  color: var(--tc-primary) !important;
+  font-weight: 600;
+}
+
+.tc-sync-btn:hover {
+  background-color: var(--tc-primary) !important;
+  color: var(--tc-on-primary) !important;
+}
+
+.tc-sync-label {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .tc-toolbar-separator {
   width: 1px;
   height: 20px;
@@ -19386,6 +19481,17 @@ html.mv-theme-light .tc-editor .canvas-area {
   letter-spacing: 0.2em;
   color: var(--tc-outline);
   font-weight: 600;
+}
+
+.tc-library-variant-label {
+  font-size: 10px;
+  font-family: var(--font-mono, "SF Mono", monospace);
+  letter-spacing: 0.1em;
+  color: var(--tc-primary);
+  font-weight: 600;
+  padding: 2px 8px;
+  background-color: color-mix(in srgb, var(--tc-primary) 12%, transparent);
+  border-radius: 4px;
 }
 
 .tc-library-search {
@@ -19746,6 +19852,7 @@ html.mv-theme-light .tc-editor .canvas-area {
 .tc-inspector-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 12px 16px 8px;
 }
 
@@ -19755,6 +19862,17 @@ html.mv-theme-light .tc-editor .canvas-area {
   letter-spacing: 0.2em;
   color: var(--tc-outline);
   font-weight: 600;
+}
+
+.tc-inspector-variant-badge {
+  font-size: 10px;
+  font-family: var(--font-mono, "SF Mono", monospace);
+  letter-spacing: 0.08em;
+  color: var(--tc-primary);
+  font-weight: 600;
+  padding: 2px 8px;
+  background-color: color-mix(in srgb, var(--tc-primary) 12%, transparent);
+  border-radius: 4px;
 }
 
 /* ── Inspector Tabs ── */

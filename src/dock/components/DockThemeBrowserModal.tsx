@@ -48,7 +48,7 @@ export default function DockThemeBrowserModal({
     let cancelled = false;
 
     (async () => {
-      const favoriteThemes = await loadDockFavoriteBibleThemes(templateType);
+      const favoriteThemes = await loadDockFavoriteBibleThemes();
       if (cancelled) return;
       const allowed = new Set((allowedCategories ?? []).map((category) => category.toLowerCase()));
       const filtered = allowed.size === 0

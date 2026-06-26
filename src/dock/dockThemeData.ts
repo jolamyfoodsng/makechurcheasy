@@ -68,35 +68,33 @@ export async function loadDockCustomBibleThemes(): Promise<BibleTheme[]> {
   return loadJsonArray<BibleTheme>("/uploads/dock-bible-themes.json");
 }
 
-export async function loadDockFavoriteBibleThemes(
-  templateType?: BibleTheme["templateType"],
-): Promise<BibleTheme[]> {
+export async function loadDockFavoriteBibleThemes(): Promise<BibleTheme[]> {
   const remoteFavorites = await loadJsonArray<BibleTheme>("/uploads/dock-bible-favorite-themes.json");
-  const favoriteIds =
-    templateType === "lower-third"
-      ? await loadDockLTFavorites()
-      : await loadDockBibleFavorites();
+  // Load both fullscreen and lower-third favorites — themes are now unified
+  const [fullscreenFavoriteIds, lowerThirdFavoriteIds] = await Promise.all([
+    loadDockBibleFavorites(),
+    loadDockLTFavorites(),
+  ]);
+  const allFavoriteIds = new Set([...fullscreenFavoriteIds, ...lowerThirdFavoriteIds]);
   const customThemes = await loadDockCustomBibleThemes();
   const builtinIds = new Set(BUILTIN_THEMES.map((theme) => theme.id));
   const uniqueCustom = customThemes.filter((theme) => !builtinIds.has(theme.id));
   // Built-in themes: only show if favorited. Custom themes: always show.
-  const favoritedBuiltins = BUILTIN_THEMES.filter((theme) => favoriteIds.has(theme.id));
+  const favoritedBuiltins = BUILTIN_THEMES.filter((theme) => allFavoriteIds.has(theme.id));
   const localThemes = [...favoritedBuiltins, ...uniqueCustom];
   const remoteById = new Map(remoteFavorites.map((theme) => [theme.id, theme]));
   const localById = new Map(localThemes.map((theme) => [theme.id, theme]));
+  // Merge by ID — deduplicates so each theme appears once regardless of templateType
   const merged = new Map<string, BibleTheme>([...localById, ...remoteById]);
   const values = [...merged.values()];
-  const templateFiltered = templateType ? values.filter((theme) => theme.templateType === templateType) : values;
   console.log("[loadDockFavoriteBibleThemes]", {
-    templateType: templateType ?? "ALL",
-    favoriteIdsCount: favoriteIds.size,
+    favoriteIdsCount: allFavoriteIds.size,
     customThemesCount: customThemes.length,
     uniqueCustomCount: uniqueCustom.length,
     favoritedBuiltinsCount: favoritedBuiltins.length,
     remoteCount: remoteFavorites.length,
     mergedCount: values.length,
-    finalCount: templateFiltered.length,
-    themeNames: templateFiltered.map((t) => t.name),
+    themeNames: values.map((t) => t.name),
   });
-  return templateFiltered;
+  return values;
 }

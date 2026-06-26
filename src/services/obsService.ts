@@ -10,6 +10,7 @@
  */
 
 import OBSWebSocket from "obs-websocket-js";
+import { getDefaultOBSUrl } from "./desktopConfig";
 import {
   registerScene,
   registerInput,
@@ -106,7 +107,7 @@ class OBSService {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private disconnectDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private lastUrl = "ws://localhost:4455";
+  private lastUrl = getDefaultOBSUrl();
   private lastPassword?: string;
 
   /** Grace period before broadcasting "disconnected" — prevents brief hiccups from flashing the UI */
@@ -242,7 +243,7 @@ class OBSService {
    * 3. 5s timeout prevents hangs
    */
   async connect(
-    url: string = "ws://localhost:4455",
+    url: string = getDefaultOBSUrl(),
     password?: string
   ): Promise<void> {
     // Guard: prevent concurrent connect attempts

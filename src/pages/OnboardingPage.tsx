@@ -34,6 +34,7 @@ import { obsService } from "../services/obsService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { getDeviceId } from "../services/authService";
 import { track } from "../services/analytics";
+import { getDefaultOBSPort } from "../services/desktopConfig";
 import StepBible from "../onboarding/StepBible";
 import StepWorship from "../onboarding/StepWorship";
 import StepMedia from "../onboarding/StepMedia";
@@ -303,7 +304,7 @@ function StepConnectOBS({
   onBack: () => void;
 }) {
   const [host, setHost] = useState("localhost");
-  const [port, setPort] = useState("4455");
+  const [port, setPort] = useState(getDefaultOBSPort());
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "checking" | "connected" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");

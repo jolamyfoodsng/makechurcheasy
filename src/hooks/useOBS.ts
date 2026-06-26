@@ -17,6 +17,7 @@ import {
     type OBSInput,
 } from "../services/obsService";
 import { loadData, updateData } from "../services/store";
+import { getDefaultOBSUrl } from "../services/desktopConfig";
 import { SUNDAY_SCENE_NAMES } from "../services/layoutService";
 
 export interface UseOBSReturn {
@@ -151,7 +152,7 @@ export function useOBS(): UseOBSReturn {
         async (url?: string, password?: string) => {
             setError(null);
             try {
-                const connectUrl = url || "ws://localhost:4455";
+                const connectUrl = url || getDefaultOBSUrl();
                 lastUrlRef.current = connectUrl;
                 lastPasswordRef.current = password;
 

@@ -11,6 +11,7 @@
  */
 
 import { obsService } from "../services/obsService";
+import { obsSyncService } from "../services/obsSyncService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import {
   registerScene,
@@ -687,6 +688,9 @@ class LowerThirdObsService {
     this._isLive = live;
     this._isBlanked = blanked;
 
+    // Trigger centralized sync after pushing to scene
+    obsSyncService.sync("lower-third:push").catch(() => { });
+
     return sourceName;
   }
 
@@ -780,6 +784,9 @@ class LowerThirdObsService {
     this._currentCustomStyles = { ...LT_DEFAULT_CUSTOM_STYLE, ...(customStyles || {}) };
     this._isLive = live;
     this._isBlanked = blanked;
+
+    // Trigger centralized sync after pushing to all sources
+    obsSyncService.sync("lower-third:push-all").catch(() => { });
 
     return { success, failed };
   }
@@ -880,6 +887,9 @@ class LowerThirdObsService {
     this._currentSize = "xl";
     this._isLive = false;
     this._isBlanked = false;
+
+    // Trigger centralized sync after clearing all
+    obsSyncService.sync("lower-third:clear").catch(() => { });
   }
 }
 

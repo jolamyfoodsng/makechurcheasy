@@ -4,6 +4,8 @@
  * Core types for scripture data, slides, themes, queue, and OBS output.
  */
 
+import { getDefaultBibleTheme } from "../services/desktopConfig";
+
 // ---------------------------------------------------------------------------
 // Bible Data Types
 // ---------------------------------------------------------------------------
@@ -150,26 +152,44 @@ export interface BibleThemeRawTemplate {
   previewValues?: Record<string, string>;
 }
 
+/**
+ * A single variant's settings + optional raw template.
+ * One theme can contain up to two variants: fullscreen and lowerThird.
+ */
+export interface BibleThemeVariant {
+  settings: BibleThemeSettings;
+  rawTemplate?: BibleThemeRawTemplate;
+}
+
+export interface BibleThemeVariants {
+  fullscreen?: BibleThemeVariant;
+  lowerThird?: BibleThemeVariant;
+}
+
 export interface BibleTheme {
   id: string;
   name: string;
   description?: string;
   /** "builtin" for shipped themes, "custom" for user-created */
   source: "builtin" | "custom";
-  /** Template type this theme uses */
+  /** Template type this theme uses (primary variant for backward compat) */
   templateType: BibleTemplateType;
   /** Category for filtering in the Templates Library */
   category?: BibleThemeCategory;
   /** Optional multi-category mapping for custom themes */
   categories?: BibleThemeCategory[];
-  /** Theme settings */
+  /** Theme settings (primary variant's settings for backward compat) */
   settings: BibleThemeSettings;
   /** Preview thumbnail data URL (optional) */
   preview?: string;
   /** Whether this theme is hidden from the theme picker modal */
   hidden?: boolean;
-  /** Raw HTML/CSS template from all_themes.json (for lower-third templates) */
+  /** Raw HTML/CSS template from all_themes.json (for lower-third templates, primary variant) */
   rawTemplate?: BibleThemeRawTemplate;
+  /** Independent fullscreen + lower-third variants */
+  variants?: BibleThemeVariants;
+  /** Which variants are enabled (defaults to [templateType]) */
+  enabledVariants?: BibleTemplateType[];
   createdAt: string;
   updatedAt: string;
 }
@@ -352,6 +372,20 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   animation: "fade",
   animationDuration: 400,
 };
+
+/**
+ * Applies admin-configured theme overrides to DEFAULT_THEME_SETTINGS.
+ * Call once at app startup after config is loaded.
+ * Mutates the exported object so all 150+ usage sites pick up the values.
+ */
+export function applyThemeConfigOverrides(): void {
+  const bible = getDefaultBibleTheme();
+  DEFAULT_THEME_SETTINGS.fontFamily = `"${bible.font}", sans-serif`;
+  DEFAULT_THEME_SETTINGS.fontSize = bible.textSize;
+  DEFAULT_THEME_SETTINGS.fontColor = bible.textColor;
+  DEFAULT_THEME_SETTINGS.backgroundColor = bible.backgroundColor;
+  DEFAULT_THEME_SETTINGS.referenceBackgroundColor = bible.accentColor;
+}
 
 // ---------------------------------------------------------------------------
 // Bible Module State

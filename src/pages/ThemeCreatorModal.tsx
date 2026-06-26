@@ -1,8 +1,9 @@
 /**
- * ThemeCreatorModal.tsx — Theme Designer V2
+ * ThemeCreatorModal.tsx — Theme Designer V3
  *
- * 3-panel layout: Theme Library | Live Preview | Property Inspector
- * Top toolbar with Undo/Redo and Save/Close actions.
+ * Full-screen editor with independent Fullscreen + Lower Third variants.
+ * 3-panel layout: Theme Library | Live Preview | Property Inspector.
+ * Top toolbar with Undo/Redo, variant tabs, sync, and Save/Close.
  */
 
 import React, {
@@ -37,6 +38,7 @@ import {
   Download,
   Eye,
   Grid3X3,
+  ArrowRightLeft,
 } from "lucide-react";
 import type {
   BibleTheme,
@@ -68,6 +70,8 @@ import { BIBLE_BUILTIN_THEMES, getBibleThemePreviewHtml } from "../bible/bibleTh
 // Types
 // ---------------------------------------------------------------------------
 
+type VariantType = "fullscreen" | "lower-third";
+
 type BackgroundPickerTab =
   | "my-images"
   | "my-videos"
@@ -86,8 +90,6 @@ type InspectorTab =
   | "bible"
   | "worship"
   | "animation";
-
-type LayoutFilter = "all" | "fullscreen" | "lower-third";
 
 interface PreviewOptions {
   showVerse: boolean;
@@ -312,6 +314,10 @@ function resolveMediaPreviewSrc(item: MediaItem): string {
   return "";
 }
 
+function defaultSettingsForVariant(): BibleThemeSettings {
+  return { ...DEFAULT_THEME_SETTINGS };
+}
+
 // ---------------------------------------------------------------------------
 // TemplateVideoPreview sub-component
 // ---------------------------------------------------------------------------
@@ -471,10 +477,72 @@ interface Props {
 export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initialCategory }: Props) {
   const isEditing = !!editTheme;
 
-  // ── Core state ──
-  const [tab, setTab] = useState<"fullscreen" | "lower-third">(
+  // Hide the app sidebar while this modal is open
+  useEffect(() => {
+    const sidebar = document.querySelector(".sidebar") as HTMLElement | null;
+    const main = document.querySelector(".app-main") as HTMLElement | null;
+    if (sidebar) sidebar.style.display = "none";
+    if (main) main.style.marginLeft = "0";
+    return () => {
+      if (sidebar) sidebar.style.display = "";
+      if (main) main.style.marginLeft = "";
+    };
+  }, []);
+
+  // ── Variant state ──
+  const [activeVariant, setActiveVariant] = useState<VariantType>(
     editTheme?.templateType === "lower-third" ? "lower-third" : "fullscreen"
   );
+  const [enabledVariants, setEnabledVariants] = useState<Set<VariantType>>(() => {
+    if (editTheme?.enabledVariants) {
+      return new Set(editTheme.enabledVariants as VariantType[]);
+    }
+    return new Set<VariantType>([editTheme?.templateType === "lower-third" ? "lower-third" : "fullscreen"]);
+  });
+
+  // ── Per-variant settings ──
+  const initFsSettings = useMemo(() => {
+    if (editTheme?.variants?.fullscreen) {
+      return normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...editTheme.variants.fullscreen.settings });
+    }
+    if (editTheme?.templateType === "fullscreen" && editTheme?.settings) {
+      return normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...editTheme.settings });
+    }
+    return defaultSettingsForVariant();
+  }, []);
+
+  const initLtSettings = useMemo(() => {
+    if (editTheme?.variants?.lowerThird) {
+      return normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...editTheme.variants.lowerThird.settings });
+    }
+    if (editTheme?.templateType === "lower-third" && editTheme?.settings) {
+      return normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...editTheme.settings });
+    }
+    return defaultSettingsForVariant();
+  }, []);
+
+  const [fullscreenSettings, setFullscreenSettings] = useState<BibleThemeSettings>(initFsSettings);
+  const [lowerThirdSettings, setLowerThirdSettings] = useState<BibleThemeSettings>(initLtSettings);
+  const [fullscreenRawTemplate, setFullscreenRawTemplate] = useState<BibleThemeRawTemplate | null>(
+    editTheme?.variants?.fullscreen?.rawTemplate ?? (editTheme?.templateType === "fullscreen" ? editTheme?.rawTemplate ?? null : null)
+  );
+  const [lowerThirdRawTemplate, setLowerThirdRawTemplate] = useState<BibleThemeRawTemplate | null>(
+    editTheme?.variants?.lowerThird?.rawTemplate ?? (editTheme?.templateType === "lower-third" ? editTheme?.rawTemplate ?? null : null)
+  );
+
+  // Derived: current active settings for the inspector/preview
+  const settings = activeVariant === "fullscreen" ? fullscreenSettings : lowerThirdSettings;
+  const activeRawTemplate = activeVariant === "fullscreen" ? fullscreenRawTemplate : lowerThirdRawTemplate;
+
+  const setActiveSettings = useCallback((partial: BibleThemeSettings | ((prev: BibleThemeSettings) => BibleThemeSettings)) => {
+    if (activeVariant === "fullscreen") {
+      setFullscreenSettings((prev) => typeof partial === "function" ? partial(prev) : partial);
+    } else {
+      setLowerThirdSettings((prev) => typeof partial === "function" ? partial(prev) : partial);
+    }
+  }, [activeVariant]);
+
+  // ── Core state ──
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(editTheme?.name || "Untitled Theme");
   const [description] = useState(editTheme?.description || "");
@@ -482,13 +550,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     () => normalizeCategories(editTheme?.categories || (initialCategory ? [initialCategory] : []))
   );
 
-  const [settings, setSettings] = useState<BibleThemeSettings>(() =>
-    editTheme?.settings
-      ? normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...editTheme.settings })
-      : { ...DEFAULT_THEME_SETTINGS }
-  );
-
-  // ── Undo / Redo ──
+  // ── Undo / Redo (per variant) ──
   const undoStackRef = useRef<BibleThemeSettings[]>([]);
   const redoStackRef = useRef<BibleThemeSettings[]>([]);
   const [canUndo, setCanUndo] = useState(false);
@@ -498,27 +560,26 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     if (undoStackRef.current.length === 0) return;
     const prev = undoStackRef.current[undoStackRef.current.length - 1];
     undoStackRef.current = undoStackRef.current.slice(0, -1);
-    setSettings((current) => {
+    setActiveSettings((current) => {
       redoStackRef.current = [...redoStackRef.current, { ...current }];
       setCanUndo(undoStackRef.current.length > 0);
       setCanRedo(true);
       return prev;
     });
-  }, []);
+  }, [setActiveSettings]);
 
   const handleRedo = useCallback(() => {
     if (redoStackRef.current.length === 0) return;
     const next = redoStackRef.current[redoStackRef.current.length - 1];
     redoStackRef.current = redoStackRef.current.slice(0, -1);
-    setSettings((current) => {
+    setActiveSettings((current) => {
       undoStackRef.current = [...undoStackRef.current, { ...current }];
       setCanUndo(true);
       setCanRedo(redoStackRef.current.length > 0);
       return next;
     });
-  }, []);
+  }, [setActiveSettings]);
 
-  // Keyboard shortcuts for undo/redo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
@@ -538,11 +599,63 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleUndo, handleRedo]);
 
+  // ── Variant Management ──
+
+  const handleSwitchVariant = useCallback((variant: VariantType) => {
+    setActiveVariant(variant);
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setCanUndo(false);
+    setCanRedo(false);
+  }, []);
+
+  const handleToggleVariant = useCallback((variant: VariantType) => {
+    setEnabledVariants((prev) => {
+      const next = new Set(prev);
+      if (next.has(variant)) {
+        if (next.size <= 1) return prev;
+        next.delete(variant);
+        if (activeVariant === variant) {
+          const remaining = variant === "fullscreen" ? "lower-third" : "fullscreen";
+          handleSwitchVariant(remaining);
+        }
+      } else {
+        next.add(variant);
+      }
+      return next;
+    });
+  }, [activeVariant, handleSwitchVariant]);
+
+  const handleSyncVariant = useCallback(() => {
+    const source = activeVariant === "fullscreen" ? fullscreenSettings : lowerThirdSettings;
+    if (activeVariant === "fullscreen") {
+      const ltLayout = {
+        boxBackground: lowerThirdSettings.boxBackground,
+        boxOpacity: lowerThirdSettings.boxOpacity,
+        boxBackgroundImage: lowerThirdSettings.boxBackgroundImage,
+        borderRadius: lowerThirdSettings.borderRadius,
+        lowerThirdSize: lowerThirdSettings.lowerThirdSize,
+        lowerThirdPosition: lowerThirdSettings.lowerThirdPosition,
+        lowerThirdHeight: lowerThirdSettings.lowerThirdHeight,
+        lowerThirdWidthPreset: lowerThirdSettings.lowerThirdWidthPreset,
+        lowerThirdOffsetX: lowerThirdSettings.lowerThirdOffsetX,
+        padding: lowerThirdSettings.padding,
+        safeArea: lowerThirdSettings.safeArea,
+      };
+      setLowerThirdSettings(normalizeThemeSettings({ ...source, ...ltLayout }));
+    } else {
+      const fsLayout = {
+        padding: fullscreenSettings.padding,
+        safeArea: fullscreenSettings.safeArea,
+        borderRadius: 0,
+      };
+      setFullscreenSettings(normalizeThemeSettings({ ...source, ...fsLayout }));
+    }
+  }, [activeVariant, fullscreenSettings, lowerThirdSettings]);
+
   // ── Theme Library ──
   const [themeLibrary, setThemeLibrary] = useState<BibleTheme[]>([]);
   const [librarySearch, setLibrarySearch] = useState("");
-  const [libraryFilter, setLibraryFilter] = useState<LayoutFilter>("all");
-  const [activeRawTemplate, setActiveRawTemplate] = useState<BibleThemeRawTemplate | null>(null);
 
   const loadThemeLibrary = useCallback(async () => {
     try {
@@ -558,10 +671,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   }, [loadThemeLibrary]);
 
   const filteredThemes = useMemo(() => {
-    let list = themeLibrary;
-    if (libraryFilter !== "all") {
-      list = list.filter((t) => t.templateType === libraryFilter);
-    }
+    let list = themeLibrary.filter((t) => t.templateType === activeVariant);
     if (librarySearch.trim()) {
       const q = librarySearch.toLowerCase();
       list = list.filter(
@@ -571,26 +681,35 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
       );
     }
     return list;
-  }, [themeLibrary, librarySearch, libraryFilter]);
+  }, [themeLibrary, librarySearch, activeVariant]);
 
   const handleLoadTheme = useCallback((theme: BibleTheme) => {
-    setTab(theme.templateType === "lower-third" ? "lower-third" : "fullscreen");
-    setName(theme.name);
-    setCategories(normalizeCategories(theme.categories || []));
-    setSettings(normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...theme.settings }));
-    setActiveRawTemplate(theme.rawTemplate || null);
+    const incomingSettings = normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...theme.settings });
+    const incomingRawTemplate = theme.rawTemplate || null;
+    if (activeVariant === "fullscreen") {
+      setFullscreenSettings(incomingSettings);
+      setFullscreenRawTemplate(incomingRawTemplate);
+    } else {
+      setLowerThirdSettings(incomingSettings);
+      setLowerThirdRawTemplate(incomingRawTemplate);
+    }
+    if (theme.name) setName(theme.name);
+    if (theme.categories) setCategories(normalizeCategories(theme.categories));
     undoStackRef.current = [];
     redoStackRef.current = [];
     setCanUndo(false);
     setCanRedo(false);
-  }, []);
+  }, [activeVariant]);
 
   const handleNewTheme = useCallback(() => {
-    setTab("fullscreen");
+    setFullscreenSettings(defaultSettingsForVariant());
+    setLowerThirdSettings(defaultSettingsForVariant());
+    setFullscreenRawTemplate(null);
+    setLowerThirdRawTemplate(null);
     setName("Untitled Theme");
     setCategories(["bible"]);
-    setSettings({ ...DEFAULT_THEME_SETTINGS });
-    setActiveRawTemplate(null);
+    setEnabledVariants(new Set(["fullscreen"]));
+    setActiveVariant("fullscreen");
     undoStackRef.current = [];
     redoStackRef.current = [];
     setCanUndo(false);
@@ -610,9 +729,15 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
       name: name.trim() || "Untitled Theme",
       description: description.trim(),
       source: "custom",
-      templateType: tab,
+      templateType: activeVariant,
       categories,
       settings: { ...settings },
+      ...(activeRawTemplate ? { rawTemplate: activeRawTemplate } : {}),
+      variants: {
+        ...(enabledVariants.has("fullscreen") ? { fullscreen: { settings: { ...fullscreenSettings }, ...(fullscreenRawTemplate ? { rawTemplate: fullscreenRawTemplate } : {}) } } : {}),
+        ...(enabledVariants.has("lower-third") ? { lowerThird: { settings: { ...lowerThirdSettings }, ...(lowerThirdRawTemplate ? { rawTemplate: lowerThirdRawTemplate } : {}) } } : {}),
+      },
+      enabledVariants: Array.from(enabledVariants),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -623,7 +748,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     a.download = `${theme.name.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [name, description, tab, categories, settings]);
+  }, [name, description, activeVariant, categories, settings, activeRawTemplate, enabledVariants, fullscreenSettings, fullscreenRawTemplate, lowerThirdSettings, lowerThirdRawTemplate]);
 
   const handleImportTheme = useCallback(async () => {
     const input = document.createElement("input");
@@ -637,6 +762,20 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
         const imported = JSON.parse(text) as BibleTheme;
         if (imported.settings) {
           handleLoadTheme(imported);
+          if (imported.name) setName(imported.name);
+          if (imported.variants) {
+            if (imported.variants.fullscreen) {
+              setFullscreenSettings(normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...imported.variants.fullscreen.settings }));
+              setFullscreenRawTemplate(imported.variants.fullscreen.rawTemplate || null);
+            }
+            if (imported.variants.lowerThird) {
+              setLowerThirdSettings(normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...imported.variants.lowerThird.settings }));
+              setLowerThirdRawTemplate(imported.variants.lowerThird.rawTemplate || null);
+            }
+          }
+          if (imported.enabledVariants) {
+            setEnabledVariants(new Set(imported.enabledVariants as VariantType[]));
+          }
         }
       } catch { /* silent */ }
     };
@@ -702,11 +841,10 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     prevDurRef.current = settings.animationDuration;
   }
 
-  const backgroundColorValue = tab === "fullscreen" ? settings.backgroundColor : settings.boxBackground;
-  const backgroundImageValue = tab === "fullscreen" ? settings.backgroundImage : settings.boxBackgroundImage;
-  const backgroundVideoValue = tab === "fullscreen" ? settings.backgroundVideo : "";
-  const backgroundOpacityValue = settings.backgroundOpacity;
-  const backgroundOpacityPercent = Math.round(backgroundOpacityValue * 100);
+  const backgroundColorValue = activeVariant === "fullscreen" ? settings.backgroundColor : settings.boxBackground;
+  const backgroundImageValue = activeVariant === "fullscreen" ? settings.backgroundImage : settings.boxBackgroundImage;
+  const backgroundVideoValue = activeVariant === "fullscreen" ? settings.backgroundVideo : "";
+  const backgroundOpacityPercent = Math.round(settings.backgroundOpacity * 100);
 
   const selectedBackgroundImageAsset = useMemo(
     () => backgroundMediaLibrary.find((item) => item.type === "image" && item.url === backgroundImageValue),
@@ -744,26 +882,25 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     return "No background";
   }, [selectedBackgroundPattern, selectedBackgroundImageAsset, selectedBackgroundVideoAsset, backgroundColorValue]);
 
-  const hasPreviewBackgroundVideo = backgroundVideoValue !== "" && tab === "fullscreen";
+  const hasPreviewBackgroundVideo = backgroundVideoValue !== "" && activeVariant === "fullscreen";
 
   const previewHtml = useMemo(() => {
     if (activeRawTemplate) return getBibleThemePreviewHtml({ rawTemplate: activeRawTemplate } as BibleTheme, settings) || "";
-    if (tab === "fullscreen") return buildFullscreenPreviewHtml(settings, categories[0] || "bible", previewOpts);
+    if (activeVariant === "fullscreen") return buildFullscreenPreviewHtml(settings, categories[0] || "bible", previewOpts);
     return buildLowerThirdPreviewHtml(settings, categories[0] || "bible", previewOpts);
-  }, [tab, settings, categories, previewOpts, activeRawTemplate]);
+  }, [activeVariant, settings, categories, previewOpts, activeRawTemplate]);
 
   const previewFrameKey = useMemo(() => {
     if (activeRawTemplate) {
-      // Include key settings so the iframe re-renders on inspector changes
       return `raw-${activeRawTemplate.html.slice(0, 80)}-${settings.fontSize}-${settings.fontWeight}-${settings.fontStyle}-${settings.fontColor}-${settings.lineHeight}-${settings.textAlign}-${settings.textShadow}-${settings.textTransform}-${settings.refFontSize}-${settings.refFontWeight}-${settings.refFontColor}-${settings.refTextTransform}-${settings.refLetterSpacing}-${settings.refOpacity}-${settings.refTextAlign}-${settings.boxBackground}-${settings.borderRadius}-${settings.fontFamily}-${settings.referenceBackgroundEnabled}-${settings.referenceBackgroundColor}-${settings.referenceBackgroundStyle}-${settings.referenceBackgroundRadius}`;
     }
-    return `${tab}-${animKeyRef.current}-${settings.fontFamily}-${settings.fontSize}-${settings.fontWeight}-${settings.fontStyle}-${settings.fontColor}-${settings.textAlign}-${settings.lineHeight}-${settings.textShadow}-${settings.textOutline}-${settings.textOutlineWidth}-${settings.textOutlineColor}-${settings.textTransform}-${settings.padding}-${settings.backgroundColor}-${settings.backgroundImage}-${settings.backgroundOpacity}-${settings.animation}-${settings.animationDuration}-${settings.boxBackground}-${settings.boxBackgroundImage}-${settings.borderRadius}-${settings.safeArea}-${settings.refPosition}-${settings.refFontSize}-${settings.refFontWeight}-${settings.refFontColor}-${settings.refTextTransform}-${settings.refTextAlign}-${settings.refLetterSpacing}-${settings.refSpacing}-${settings.refOpacity}-${settings.referenceBackgroundEnabled}-${settings.referenceBackgroundColor}-${settings.referenceBackgroundStyle}-${settings.referenceBackgroundRadius}-${settings.logoUrl}-${settings.logoSize}-${settings.logoPosition}-${settings.fullscreenShadeEnabled}-${settings.fullscreenShadeColor}-${settings.fullscreenShadeOpacity}-${settings.lowerThirdWidthPreset}-${settings.lowerThirdPosition}-${settings.lowerThirdOffsetX}-${settings.lowerThirdSize}-${settings.lowerThirdHeight}-${backgroundVideoValue}-${hasPreviewBackgroundVideo}`;
-  }, [tab, settings, backgroundVideoValue, hasPreviewBackgroundVideo, activeRawTemplate]);
+    return `${activeVariant}-${animKeyRef.current}-${settings.fontFamily}-${settings.fontSize}-${settings.fontWeight}-${settings.fontStyle}-${settings.fontColor}-${settings.textAlign}-${settings.lineHeight}-${settings.textShadow}-${settings.textOutline}-${settings.textOutlineWidth}-${settings.textOutlineColor}-${settings.textTransform}-${settings.padding}-${settings.backgroundColor}-${settings.backgroundImage}-${settings.backgroundOpacity}-${settings.animation}-${settings.animationDuration}-${settings.boxBackground}-${settings.boxBackgroundImage}-${settings.borderRadius}-${settings.safeArea}-${settings.refPosition}-${settings.refFontSize}-${settings.refFontWeight}-${settings.refFontColor}-${settings.refTextTransform}-${settings.refTextAlign}-${settings.refLetterSpacing}-${settings.refSpacing}-${settings.refOpacity}-${settings.referenceBackgroundEnabled}-${settings.referenceBackgroundColor}-${settings.referenceBackgroundStyle}-${settings.referenceBackgroundRadius}-${settings.logoUrl}-${settings.logoSize}-${settings.logoPosition}-${settings.fullscreenShadeEnabled}-${settings.fullscreenShadeColor}-${settings.fullscreenShadeOpacity}-${settings.lowerThirdWidthPreset}-${settings.lowerThirdPosition}-${settings.lowerThirdOffsetX}-${settings.lowerThirdSize}-${settings.lowerThirdHeight}-${backgroundVideoValue}-${hasPreviewBackgroundVideo}`;
+  }, [activeVariant, settings, backgroundVideoValue, hasPreviewBackgroundVideo, activeRawTemplate]);
 
   // ── Handlers ──
 
   const patch = useCallback((partial: Partial<BibleThemeSettings>) => {
-    setSettings((prev) => {
+    setActiveSettings((prev) => {
       const next = normalizeThemeSettings({ ...prev, ...partial });
       undoStackRef.current = [...undoStackRef.current.slice(-49), { ...prev }];
       redoStackRef.current = [];
@@ -771,7 +908,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
       setCanRedo(false);
       return next;
     });
-  }, []);
+  }, [setActiveSettings]);
 
   const refreshBackgroundMediaLibrary = useCallback(async () => {
     try {
@@ -781,18 +918,18 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   }, []);
 
   const loadTemplateVideoAssets = useCallback(async () => {
-    if (tab !== "fullscreen") return;
+    if (activeVariant !== "fullscreen") return;
     try {
       const assets = await fetchTemplateVideos();
       setTemplateVideoAssets(assets);
     } catch { /* silent */ }
-  }, [tab]);
+  }, [activeVariant]);
 
   useEffect(() => {
     if (!showBackgroundModal) return;
     refreshBackgroundMediaLibrary();
-    if (tab === "fullscreen") loadTemplateVideoAssets();
-  }, [loadTemplateVideoAssets, refreshBackgroundMediaLibrary, showBackgroundModal, tab]);
+    if (activeVariant === "fullscreen") loadTemplateVideoAssets();
+  }, [loadTemplateVideoAssets, refreshBackgroundMediaLibrary, showBackgroundModal, activeVariant]);
 
   const findTemplateVideoDownload = useCallback(
     (asset: TemplateVideoAsset) => backgroundMediaLibrary.find((item) => item.name === asset.fileName && item.type === "video"),
@@ -839,15 +976,24 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   const saveTheme = useCallback(async (duplicate: boolean) => {
     setSaving(true);
     try {
+      const primaryType = enabledVariants.has("fullscreen") ? "fullscreen" : "lower-third";
+      const primarySettings = primaryType === "fullscreen" ? fullscreenSettings : lowerThirdSettings;
+      const primaryRawTemplate = primaryType === "fullscreen" ? fullscreenRawTemplate : lowerThirdRawTemplate;
+
       const themeToSave: BibleTheme = {
         id: isEditing && !duplicate ? editTheme!.id : uid(),
         name: name.trim() || "Untitled Theme",
         description: description.trim(),
         source: "custom",
-        templateType: tab,
+        templateType: primaryType,
         categories,
-        settings: { ...settings },
-        ...(activeRawTemplate ? { rawTemplate: activeRawTemplate } : {}),
+        settings: { ...primarySettings },
+        ...(primaryRawTemplate ? { rawTemplate: primaryRawTemplate } : {}),
+        variants: {
+          ...(enabledVariants.has("fullscreen") ? { fullscreen: { settings: { ...fullscreenSettings }, ...(fullscreenRawTemplate ? { rawTemplate: fullscreenRawTemplate } : {}) } } : {}),
+          ...(enabledVariants.has("lower-third") ? { lowerThird: { settings: { ...lowerThirdSettings }, ...(lowerThirdRawTemplate ? { rawTemplate: lowerThirdRawTemplate } : {}) } } : {}),
+        },
+        enabledVariants: Array.from(enabledVariants),
         createdAt: isEditing && !duplicate ? editTheme!.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -861,7 +1007,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     } finally {
       setSaving(false);
     }
-  }, [name, description, categories, tab, settings, activeRawTemplate, onSaved, onClose, isEditing, editTheme, loadThemeLibrary]);
+  }, [name, description, categories, activeVariant, enabledVariants, fullscreenSettings, fullscreenRawTemplate, lowerThirdSettings, lowerThirdRawTemplate, onSaved, onClose, isEditing, editTheme, loadThemeLibrary, settings, activeRawTemplate]);
 
   const handleSave = useCallback(() => { saveTheme(false); }, [saveTheme]);
   const handleDuplicate = useCallback(() => { saveTheme(true); }, [saveTheme]);
@@ -878,25 +1024,25 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   const bgPickerInputColor = /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(bgPickerColor) ? bgPickerColor : "#000000";
 
   const handleBgColorPickerConfirm = useCallback(() => {
-    patch(tab === "fullscreen" ? { backgroundColor: bgPickerColor } : { boxBackground: bgPickerColor });
+    patch(activeVariant === "fullscreen" ? { backgroundColor: bgPickerColor } : { boxBackground: bgPickerColor });
     setShowBackgroundModal(false);
-  }, [bgPickerColor, patch, tab]);
+  }, [bgPickerColor, patch, activeVariant]);
 
   const handleBgTransparent = useCallback(() => {
     patch(
-      tab === "fullscreen"
+      activeVariant === "fullscreen"
         ? { backgroundColor: "transparent", backgroundImage: "", backgroundVideo: "" }
         : { boxBackground: "transparent", boxBackgroundImage: "" }
     );
     setShowBackgroundModal(false);
-  }, [patch, tab]);
+  }, [patch, activeVariant]);
 
   const handleBgSelectImage = useCallback(
     (url: string) => {
-      patch(tab === "fullscreen" ? { backgroundImage: url, backgroundColor: "transparent" } : { boxBackgroundImage: url, boxBackground: "transparent" });
+      patch(activeVariant === "fullscreen" ? { backgroundImage: url, backgroundColor: "transparent" } : { boxBackgroundImage: url, boxBackground: "transparent" });
       setShowBackgroundModal(false);
     },
-    [patch, tab],
+    [patch, activeVariant],
   );
 
   const handleBgSelectVideo = useCallback(
@@ -909,10 +1055,10 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
 
   const handleBgSelectPattern = useCallback(
     (src: string) => {
-      patch(tab === "fullscreen" ? { backgroundImage: src, backgroundColor: "transparent", backgroundVideo: "" } : { boxBackgroundImage: src, boxBackground: "transparent" });
+      patch(activeVariant === "fullscreen" ? { backgroundImage: src, backgroundColor: "transparent", backgroundVideo: "" } : { boxBackgroundImage: src, boxBackground: "transparent" });
       setShowBackgroundModal(false);
     },
-    [patch, tab],
+    [patch, activeVariant],
   );
 
   const [fontDropdownOpen, setFontDropdownOpen] = useState(false);
@@ -929,48 +1075,61 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
       {/* ── Top Toolbar ── */}
       <div className="tc-toolbar">
         <div className="tc-toolbar-left">
-          <button
-            className="tc-toolbar-btn"
-            onClick={handleUndo}
-            disabled={!canUndo}
-            title="Undo (Ctrl+Z)"
-          >
+          <button className="tc-toolbar-btn" onClick={handleUndo} disabled={!canUndo} title="Undo (Ctrl+Z)">
             <Undo2 size={16} />
           </button>
-          <button
-            className="tc-toolbar-btn"
-            onClick={handleRedo}
-            disabled={!canRedo}
-            title="Redo (Ctrl+Shift+Z)"
-          >
+          <button className="tc-toolbar-btn" onClick={handleRedo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
             <Redo2 size={16} />
           </button>
           <div className="tc-toolbar-separator" />
-          <input
-            className="tc-theme-name-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Theme name..."
-          />
+          <input className="tc-theme-name-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Theme name..." />
         </div>
+
         <div className="tc-toolbar-center">
-          <div className="tc-layout-switcher">
-            <button
-              className={`tc-layout-btn${tab === "fullscreen" ? " active" : ""}`}
-              onClick={() => setTab("fullscreen")}
-            >
-              <Monitor size={14} />
-              Fullscreen
-            </button>
-            <button
-              className={`tc-layout-btn${tab === "lower-third" ? " active" : ""}`}
-              onClick={() => setTab("lower-third")}
-            >
-              <LayoutGrid size={14} />
-              Lower Third
-            </button>
+          {/* Variant Tabs */}
+          <div className="tc-variant-tabs">
+            {(["fullscreen", "lower-third"] as VariantType[]).map((v) => (
+              <button
+                key={v}
+                className={`tc-variant-tab${activeVariant === v ? " active" : ""}${!enabledVariants.has(v) ? " disabled" : ""}`}
+                onClick={() => { if (enabledVariants.has(v)) handleSwitchVariant(v); }}
+                title={!enabledVariants.has(v) ? "Enable this variant first" : `Edit ${v === "fullscreen" ? "Fullscreen" : "Lower Third"}`}
+              >
+                {v === "fullscreen" ? <Monitor size={14} /> : <LayoutGrid size={14} />}
+                {v === "fullscreen" ? "Fullscreen" : "Lower Third"}
+              </button>
+            ))}
           </div>
+
+          {/* Variant Enable Toggles */}
+          <div className="tc-variant-toggles">
+            {(["fullscreen", "lower-third"] as VariantType[]).map((v) => (
+              <label key={v} className="tc-variant-toggle" title={`Enable ${v === "fullscreen" ? "Fullscreen" : "Lower Third"} variant`}>
+                <input
+                  type="checkbox"
+                  checked={enabledVariants.has(v)}
+                  onChange={() => handleToggleVariant(v)}
+                />
+                <span className="tc-variant-toggle-label">{v === "fullscreen" ? "FS" : "LT"}</span>
+              </label>
+            ))}
+          </div>
+
+          {/* Sync Button */}
+          {enabledVariants.size === 2 && (
+            <button
+              className="tc-toolbar-btn tc-sync-btn"
+              onClick={handleSyncVariant}
+              title={`Sync style from ${activeVariant === "fullscreen" ? "Fullscreen \u2192 Lower Third" : "Lower Third \u2192 Fullscreen"}`}
+            >
+              <ArrowRightLeft size={14} />
+              <span className="tc-sync-label">
+                {activeVariant === "fullscreen" ? "FS \u2192 LT" : "LT \u2192 FS"}
+              </span>
+            </button>
+          )}
         </div>
+
         <div className="tc-toolbar-right">
           <button className="tc-toolbar-btn" onClick={handleDuplicate} title="Duplicate">
             <Copy size={16} />
@@ -980,20 +1139,23 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
           </button>
           <button className="tc-toolbar-btn tc-toolbar-btn--save" onClick={handleSave} disabled={saving}>
             <Save size={16} />
-            {saving ? "Saving…" : "Save"}
+            {saving ? "Saving\u2026" : "Save"}
           </button>
-          <button className="tc-toolbar-btn" onClick={onClose} title="Close">
-            <X size={16} />
+          <button className="tc-toolbar-btn tc-close-btn" onClick={onClose} title="Close">
+            <X size={20} />
           </button>
         </div>
       </div>
 
       {/* ── 3-Panel Layout ── */}
       <div className="tc-panels">
-        {/* ═══ Left Panel: Theme Library ═══ */}
+        {/* Left Panel: Theme Library */}
         <aside className="tc-library">
           <div className="tc-library-header">
             <span className="tc-library-title">THEME LIBRARY</span>
+            <span className="tc-library-variant-label">
+              {activeVariant === "fullscreen" ? "Fullscreen" : "Lower Third"} Presets
+            </span>
           </div>
 
           <div className="tc-library-search">
@@ -1001,25 +1163,9 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
             <input
               value={librarySearch}
               onChange={(e) => setLibrarySearch(e.target.value)}
-              placeholder="Search themes…"
+              placeholder="Search themes\u2026"
               className="tc-library-search-input"
             />
-          </div>
-
-          <div className="tc-layout-filter-tabs">
-            {([
-              { value: "all" as LayoutFilter, label: "All" },
-              { value: "fullscreen" as LayoutFilter, label: "Fullscreen" },
-              { value: "lower-third" as LayoutFilter, label: "Lower Third" },
-            ]).map((f) => (
-              <button
-                key={f.value}
-                className={`tc-layout-filter-btn${libraryFilter === f.value ? " active" : ""}`}
-                onClick={() => setLibraryFilter(f.value)}
-              >
-                {f.label}
-              </button>
-            ))}
           </div>
 
           <div className="tc-library-grid">
@@ -1071,11 +1217,6 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                   <div className="tc-theme-card-name">{theme.name}</div>
                   <div className="tc-theme-card-meta">
                     <span className="tc-theme-card-category">{theme.templateType}</span>
-                    {theme.rawTemplate && (
-                      <span className="tc-theme-card-source" style={{ color: theme.rawTemplate.accentColor }}>
-                        {theme.category || "bible"}
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1098,102 +1239,60 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
           </div>
         </aside>
 
-        {/* ═══ Center Panel: Live Preview ═══ */}
+        {/* Center Panel: Live Preview */}
         <main className="tc-preview-area">
           <div className="tc-preview-wrapper" ref={previewWrapperRef}>
             <div className="tv-screen">
-              <div
-                className="preview-canvas"
-                style={{ transform: canvasTransform }}
-              >
+              <div className="preview-canvas" style={{ transform: canvasTransform }}>
                 <iframe
                   key={previewFrameKey}
                   srcDoc={previewHtml}
                   sandbox="allow-same-origin"
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    border: "none",
-                    pointerEvents: "none",
-                  }}
+                  style={{ width: "100%", height: "100%", border: "none", pointerEvents: "none" }}
                   title="Theme Preview"
                 />
-
-                {/* Safe Area overlay */}
                 {showSafeArea && (
-                  <div
-                    className="tc-safe-area-overlay"
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      border: `1px dashed rgba(29,78,216,0.5)`,
-                      pointerEvents: "none",
-                      margin: `${settings.safeArea}px`,
-                    }}
-                  />
+                  <div className="tc-safe-area-overlay" style={{ position: "absolute", inset: 0, border: "1px dashed rgba(29,78,216,0.5)", pointerEvents: "none", margin: `${settings.safeArea}px` }} />
                 )}
-
-                {/* Grid overlay */}
                 {showGrid && (
-                  <div
-                    className="tc-grid-overlay"
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      pointerEvents: "none",
-                      backgroundImage:
-                        "linear-gradient(rgba(29,78,216,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(29,78,216,0.15) 1px, transparent 1px)",
-                      backgroundSize: "192px 108px",
-                    }}
-                  />
+                  <div className="tc-grid-overlay" style={{ position: "absolute", inset: 0, pointerEvents: "none", backgroundImage: "linear-gradient(rgba(29,78,216,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(29,78,216,0.15) 1px, transparent 1px)", backgroundSize: "192px 108px" }} />
                 )}
               </div>
             </div>
           </div>
 
-          {/* Output Info Bar */}
           <div className="tc-output-bar">
-            <span className="tc-output-info">1920 × 1080</span>
+            <span className="tc-output-info">1920 \u00D7 1080</span>
             <span className="tc-output-info">16:9</span>
             <div className="tc-output-separator" />
             <label className="tc-overlay-toggle">
-              <input
-                type="checkbox"
-                checked={showSafeArea}
-                onChange={(e) => setShowSafeArea(e.target.checked)}
-              />
+              <input type="checkbox" checked={showSafeArea} onChange={(e) => setShowSafeArea(e.target.checked)} />
               <Eye size={12} />
               Safe Area
             </label>
             <label className="tc-overlay-toggle">
-              <input
-                type="checkbox"
-                checked={showGrid}
-                onChange={(e) => setShowGrid(e.target.checked)}
-              />
+              <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} />
               <Grid3X3 size={12} />
               Grid
             </label>
           </div>
 
-          {/* Zoom Controls */}
           <div className="tc-zoom-controls">
             {(["fit", 50, 75, 100, 125] as const).map((mode) => (
-              <button
-                key={mode}
-                className={`tc-zoom-btn${previewZoom === mode ? " active" : ""}`}
-                onClick={() => setPreviewZoom(mode)}
-              >
+              <button key={mode} className={`tc-zoom-btn${previewZoom === mode ? " active" : ""}`} onClick={() => setPreviewZoom(mode)}>
                 {mode === "fit" ? "Fit" : `${mode}%`}
               </button>
             ))}
           </div>
         </main>
 
-        {/* ═══ Right Panel: Property Inspector ═══ */}
+        {/* Right Panel: Property Inspector */}
         <aside className="tc-inspector">
           <div className="tc-inspector-header">
             <span className="tc-inspector-title">INSPECTOR</span>
+            <span className="tc-inspector-variant-badge">
+              {activeVariant === "fullscreen" ? "Fullscreen" : "Lower Third"}
+            </span>
           </div>
 
           <div className="tc-inspector-tabs">
@@ -1202,40 +1301,24 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
               if (t.key === "worship" && !showWorshipTab) return false;
               return true;
             }).map((t) => (
-              <button
-                key={t.key}
-                className={`tc-inspector-tab${inspectorTab === t.key ? " active" : ""}`}
-                onClick={() => setInspectorTab(t.key)}
-              >
+              <button key={t.key} className={`tc-inspector-tab${inspectorTab === t.key ? " active" : ""}`} onClick={() => setInspectorTab(t.key)}>
                 {t.label}
               </button>
             ))}
           </div>
 
           <div className="tc-inspector-content">
-            {/* ── Typography Tab ── */}
+            {/* Typography Tab */}
             {inspectorTab === "typography" && (
               <div className="tc-inspector-panel">
                 <div className="typography-row">
-                  <div
-                    className="select-box"
-                    style={{ position: "relative" }}
-                    onClick={() => setFontDropdownOpen((v) => !v)}
-                  >
+                  <div className="select-box" style={{ position: "relative" }} onClick={() => setFontDropdownOpen((v) => !v)}>
                     <span>{FONT_FAMILY_LABELS[settings.fontFamily] ?? "Select"}</span>
                     <ChevronDown size={14} className="panel-header-icon" />
                     {fontDropdownOpen && (
                       <div className="tc-font-dropdown" onClick={(e) => e.stopPropagation()}>
                         {FONT_FAMILIES.map((f) => (
-                          <div
-                            key={f}
-                            className={`tc-font-option${settings.fontFamily === f ? " active" : ""}`}
-                            style={{ fontFamily: f }}
-                            onClick={() => {
-                              patch({ fontFamily: f });
-                              setFontDropdownOpen(false);
-                            }}
-                          >
+                          <div key={f} className={`tc-font-option${settings.fontFamily === f ? " active" : ""}`} style={{ fontFamily: f }} onClick={() => { patch({ fontFamily: f }); setFontDropdownOpen(false); }}>
                             {FONT_FAMILY_LABELS[f] ?? f}
                           </div>
                         ))}
@@ -1243,102 +1326,40 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     )}
                   </div>
                   <div className="value-box" style={{ display: "flex", gap: 0, padding: 0, overflow: "hidden" }}>
-                    <button
-                      onClick={() => patch({ fontSize: Math.max(8, settings.fontSize - 2) })}
-                      style={{ background: "none", border: "none", color: "var(--on-surface)", cursor: "pointer", padding: "2px 6px", fontSize: 14, lineHeight: 1 }}
-                    >
-                      −
-                    </button>
+                    <button onClick={() => patch({ fontSize: Math.max(8, settings.fontSize - 2) })} style={{ background: "none", border: "none", color: "var(--on-surface)", cursor: "pointer", padding: "2px 6px", fontSize: 14, lineHeight: 1 }}>\u2212</button>
                     <span style={{ fontSize: 13, minWidth: 28, textAlign: "center", lineHeight: "26px" }}>{settings.fontSize}</span>
-                    <button
-                      onClick={() => patch({ fontSize: Math.min(200, settings.fontSize + 2) })}
-                      style={{ background: "none", border: "none", color: "var(--on-surface)", cursor: "pointer", padding: "2px 6px", fontSize: 14, lineHeight: 1 }}
-                    >
-                      +
-                    </button>
+                    <button onClick={() => patch({ fontSize: Math.min(200, settings.fontSize + 2) })} style={{ background: "none", border: "none", color: "var(--on-surface)", cursor: "pointer", padding: "2px 6px", fontSize: 14, lineHeight: 1 }}>+</button>
                   </div>
-                  <label
-                    className="color-box"
-                    style={{ backgroundColor: settings.fontColor }}
-                  >
-                    <input
-                      type="color"
-                      value={settings.fontColor}
-                      onChange={(e) => patch({ fontColor: e.target.value })}
-                      style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
-                    />
-                  </label>
                 </div>
-
-                {/* Format row */}
                 <div className="format-group">
-                  <button
-                    className={`format-btn${settings.fontWeight === "bold" ? " active" : ""}`}
-                    onClick={() => patch({ fontWeight: settings.fontWeight === "bold" ? "normal" : "bold" })}
-                  >
-                    <Bold size={16} />
-                  </button>
+                  <button className={`format-btn${settings.fontWeight === "bold" ? " active" : ""}`} onClick={() => patch({ fontWeight: settings.fontWeight === "bold" ? "normal" : "bold" })}><Bold size={16} /></button>
                   <div className="format-divider" />
-                  <button
-                    className={`format-btn${settings.fontStyle === "italic" ? " active" : ""}`}
-                    onClick={() => patch({ fontStyle: settings.fontStyle === "italic" ? "normal" : "italic" })}
-                  >
-                    <Italic size={16} />
-                  </button>
+                  <button className={`format-btn${settings.fontStyle === "italic" ? " active" : ""}`} onClick={() => patch({ fontStyle: settings.fontStyle === "italic" ? "normal" : "italic" })}><Italic size={16} /></button>
                   <div className="format-divider" />
-                  <button className="format-btn">
-                    <Underline size={16} />
-                  </button>
+                  <button className="format-btn"><Underline size={16} /></button>
                   <div className="format-divider" />
-                  <button className="format-btn">
-                    <Strikethrough size={16} />
-                  </button>
+                  <button className="format-btn"><Strikethrough size={16} /></button>
                 </div>
-
-                {/* Casing row */}
                 <div className="case-group">
                   {([
                     { value: "uppercase" as const, label: "Uppercase" },
                     { value: "lowercase" as const, label: "lowercase" },
                     { value: "capitalize" as const, label: "Title Case" },
                   ]).map((c) => (
-                    <button
-                      key={c.value}
-                      className={`case-btn${settings.textTransform === c.value ? " active" : ""}`}
-                      onClick={() => patch({ textTransform: settings.textTransform === c.value ? "none" : c.value })}
-                    >
-                      {c.label}
-                    </button>
+                    <button key={c.value} className={`case-btn${settings.textTransform === c.value ? " active" : ""}`} onClick={() => patch({ textTransform: settings.textTransform === c.value ? "none" : c.value })}>{c.label}</button>
                   ))}
                 </div>
-
-                {/* Sliders */}
                 <div className="slider-row">
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>PAD</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={120}
-                      value={settings.padding}
-                      onChange={(e) => patch({ padding: Number(e.target.value) })}
-                    />
+                    <input type="range" min={0} max={120} value={settings.padding} onChange={(e) => patch({ padding: Number(e.target.value) })} />
                     <div className="slider-val">{settings.padding}</div>
                   </div>
                   <div className="slider-wrapper flex-1">
                     <span>LINE</span>
-                    <input
-                      type="range"
-                      min={1}
-                      max={3}
-                      step={0.1}
-                      value={settings.lineHeight}
-                      onChange={(e) => patch({ lineHeight: Number(e.target.value) })}
-                    />
+                    <input type="range" min={1} max={3} step={0.1} value={settings.lineHeight} onChange={(e) => patch({ lineHeight: Number(e.target.value) })} />
                   </div>
                 </div>
-
-                {/* Alignment row */}
                 <div className="format-group" style={{ marginTop: "4px" }}>
                   {([
                     { value: "left" as const, IconComp: AlignLeft },
@@ -1347,204 +1368,83 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                   ]).map((a, i) => (
                     <React.Fragment key={a.value}>
                       {i > 0 && <div className="format-divider" />}
-                      <button
-                        className={`format-btn${settings.textAlign === a.value ? " active" : ""}`}
-                        onClick={() => patch({ textAlign: a.value })}
-                      >
-                        <a.IconComp size={16} />
-                      </button>
+                      <button className={`format-btn${settings.textAlign === a.value ? " active" : ""}`} onClick={() => patch({ textAlign: a.value })}><a.IconComp size={16} /></button>
                     </React.Fragment>
                   ))}
                   <div className="format-divider" />
-                  <button className="format-btn">
-                    <AlignJustify size={16} />
-                  </button>
+                  <button className="format-btn"><AlignJustify size={16} /></button>
                 </div>
-
-                {/* Text Shadow */}
                 <div className="slider-row" style={{ marginTop: "8px" }}>
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>SHADOW</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={20}
-                      step={1}
-                      value={settings.textShadow !== "none" ? (Number(settings.textShadow.match(/(\d+)px/)?.[1]) || 0) : 0}
-                      onChange={(e) => {
-                        const v = Number(e.target.value);
-                        patch({ textShadow: v > 0 ? `0 2px ${v}px rgba(0,0,0,0.6)` : "none" });
-                      }}
-                    />
+                    <input type="range" min={0} max={20} step={1} value={settings.textShadow !== "none" ? (Number(settings.textShadow.match(/(\d+)px/)?.[1]) || 0) : 0} onChange={(e) => { const v = Number(e.target.value); patch({ textShadow: v > 0 ? `0 2px ${v}px rgba(0,0,0,0.6)` : "none" }); }} />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* ── Content Tab ── */}
+            {/* Content Tab */}
             {inspectorTab === "content" && (
               <div className="tc-inspector-panel">
                 <div className="tc-inspector-section-title">REFERENCE LABEL</div>
-
-                {/* Position */}
                 <div className="case-group">
-                  {([
-                    { value: "top" as const, label: "Above verse" },
-                    { value: "bottom" as const, label: "Below verse" },
-                  ]).map((p) => (
-                    <button
-                      key={p.value}
-                      className={`case-btn${settings.refPosition === p.value ? " active" : ""}`}
-                      onClick={() => patch({ refPosition: p.value })}
-                    >
-                      {p.label}
-                    </button>
+                  {([{ value: "top" as const, label: "Above verse" }, { value: "bottom" as const, label: "Below verse" }]).map((p) => (
+                    <button key={p.value} className={`case-btn${settings.refPosition === p.value ? " active" : ""}`} onClick={() => patch({ refPosition: p.value })}>{p.label}</button>
                   ))}
                 </div>
-
-                {/* Font Size */}
                 <div className="slider-row">
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>FONT SIZE</span>
-                    <input
-                      type="range"
-                      min={12}
-                      max={72}
-                      step={1}
-                      value={settings.refFontSize}
-                      onChange={(e) => patch({ refFontSize: Number(e.target.value) })}
-                    />
+                    <input type="range" min={12} max={72} step={1} value={settings.refFontSize} onChange={(e) => patch({ refFontSize: Number(e.target.value) })} />
                     <div className="slider-val">{settings.refFontSize}px</div>
                   </div>
                 </div>
-
-                {/* Weight */}
                 <div className="case-group" style={{ marginTop: "8px" }}>
-                  {([
-                    { value: "light" as const, label: "Light" },
-                    { value: "normal" as const, label: "Normal" },
-                    { value: "bold" as const, label: "Bold" },
-                  ]).map((w) => (
-                    <button
-                      key={w.value}
-                      className={`case-btn${settings.refFontWeight === w.value ? " active" : ""}`}
-                      style={{ fontWeight: w.value === "bold" ? 700 : w.value === "light" ? 300 : 500 }}
-                      onClick={() => patch({ refFontWeight: w.value })}
-                    >
-                      {w.label}
-                    </button>
+                  {([{ value: "light" as const, label: "Light" }, { value: "normal" as const, label: "Normal" }, { value: "bold" as const, label: "Bold" }]).map((w) => (
+                    <button key={w.value} className={`case-btn${settings.refFontWeight === w.value ? " active" : ""}`} style={{ fontWeight: w.value === "bold" ? 700 : w.value === "light" ? 300 : 500 }} onClick={() => patch({ refFontWeight: w.value })}>{w.label}</button>
                   ))}
                 </div>
-
-                {/* Color */}
                 <div className="typography-row" style={{ marginTop: "8px", marginBottom: "8px" }}>
                   <span className="tc-label-mono">COLOR</span>
-                  <label
-                    className="color-box"
-                    style={{ backgroundColor: settings.refFontColor }}
-                  >
-                    <input
-                      type="color"
-                      value={settings.refFontColor}
-                      onChange={(e) => patch({ refFontColor: e.target.value })}
-                      style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
-                    />
+                  <label className="color-box" style={{ backgroundColor: settings.refFontColor }}>
+                    <input type="color" value={settings.refFontColor} onChange={(e) => patch({ refFontColor: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
                   </label>
                 </div>
-
-                {/* Text Case */}
                 <div className="case-group">
-                  {([
-                    { value: "none" as const, label: "Normal" },
-                    { value: "uppercase" as const, label: "UPPER" },
-                    { value: "lowercase" as const, label: "lower" },
-                    { value: "capitalize" as const, label: "Title" },
-                  ]).map((c) => (
-                    <button
-                      key={c.value}
-                      className={`case-btn${settings.refTextTransform === c.value ? " active" : ""}`}
-                      onClick={() => patch({ refTextTransform: c.value })}
-                    >
-                      {c.label}
-                    </button>
+                  {([{ value: "none" as const, label: "Normal" }, { value: "uppercase" as const, label: "UPPER" }, { value: "lowercase" as const, label: "lower" }, { value: "capitalize" as const, label: "Title" }]).map((c) => (
+                    <button key={c.value} className={`case-btn${settings.refTextTransform === c.value ? " active" : ""}`} onClick={() => patch({ refTextTransform: c.value })}>{c.label}</button>
                   ))}
                 </div>
-
-                {/* Alignment */}
                 <div className="case-group">
-                  {([
-                    { value: "match" as const, label: "Match verse" },
-                    { value: "left" as const, label: "Left" },
-                    { value: "center" as const, label: "Center" },
-                    { value: "right" as const, label: "Right" },
-                  ]).map((a) => (
-                    <button
-                      key={a.value}
-                      className={`case-btn${settings.refTextAlign === a.value ? " active" : ""}`}
-                      onClick={() => patch({ refTextAlign: a.value })}
-                    >
-                      {a.label}
-                    </button>
+                  {([{ value: "match" as const, label: "Match verse" }, { value: "left" as const, label: "Left" }, { value: "center" as const, label: "Center" }, { value: "right" as const, label: "Right" }]).map((a) => (
+                    <button key={a.value} className={`case-btn${settings.refTextAlign === a.value ? " active" : ""}`} onClick={() => patch({ refTextAlign: a.value })}>{a.label}</button>
                   ))}
                 </div>
-
-                {/* Letter Spacing */}
                 <div className="slider-row" style={{ marginTop: "8px" }}>
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>LETTER SPACING</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={10}
-                      step={0.5}
-                      value={settings.refLetterSpacing}
-                      onChange={(e) => patch({ refLetterSpacing: Number(e.target.value) })}
-                    />
+                    <input type="range" min={0} max={10} step={0.5} value={settings.refLetterSpacing} onChange={(e) => patch({ refLetterSpacing: Number(e.target.value) })} />
                     <div className="slider-val">{settings.refLetterSpacing}px</div>
                   </div>
                 </div>
-
-                {/* Spacing */}
                 <div className="slider-row" style={{ marginTop: "8px" }}>
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>SPACING</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={80}
-                      step={1}
-                      value={settings.refSpacing}
-                      onChange={(e) => patch({ refSpacing: Number(e.target.value) })}
-                    />
+                    <input type="range" min={0} max={80} step={1} value={settings.refSpacing} onChange={(e) => patch({ refSpacing: Number(e.target.value) })} />
                     <div className="slider-val">{settings.refSpacing}px</div>
                   </div>
                 </div>
-
-                {/* Opacity */}
                 <div className="slider-row" style={{ marginTop: "8px" }}>
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>OPACITY</span>
-                    <input
-                      type="range"
-                      min={10}
-                      max={100}
-                      step={1}
-                      value={Math.round(settings.refOpacity * 100)}
-                      onChange={(e) => patch({ refOpacity: Number(e.target.value) / 100 })}
-                    />
+                    <input type="range" min={10} max={100} step={1} value={Math.round(settings.refOpacity * 100)} onChange={(e) => patch({ refOpacity: Number(e.target.value) / 100 })} />
                     <div className="slider-val">{Math.round(settings.refOpacity * 100)}%</div>
                   </div>
                 </div>
-
-                {/* Reference Background */}
                 <div className="tc-inspector-divider">
                   <div className="tc-inspector-toggle-row">
                     <span className="tc-label-mono">REF BACKGROUND</span>
-                    <button
-                      className="tc-toggle-switch"
-                      data-active={settings.referenceBackgroundEnabled}
-                      onClick={() => patch({ referenceBackgroundEnabled: !settings.referenceBackgroundEnabled })}
-                    >
+                    <button className="tc-toggle-switch" data-active={settings.referenceBackgroundEnabled} onClick={() => patch({ referenceBackgroundEnabled: !settings.referenceBackgroundEnabled })}>
                       <span className="tc-toggle-knob" />
                     </button>
                   </div>
@@ -1552,44 +1452,19 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     <>
                       <div className="typography-row" style={{ marginBottom: "8px" }}>
                         <span className="tc-label-mono">COLOR</span>
-                        <label
-                          className="color-box"
-                          style={{ backgroundColor: settings.referenceBackgroundColor }}
-                        >
-                          <input
-                            type="color"
-                            value={settings.referenceBackgroundColor}
-                            onChange={(e) => patch({ referenceBackgroundColor: e.target.value })}
-                            style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
-                          />
+                        <label className="color-box" style={{ backgroundColor: settings.referenceBackgroundColor }}>
+                          <input type="color" value={settings.referenceBackgroundColor} onChange={(e) => patch({ referenceBackgroundColor: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
                         </label>
                       </div>
                       <div className="case-group" style={{ marginBottom: "8px" }}>
-                        {([
-                          { value: "solid" as const, label: "Solid" },
-                          { value: "pill" as const, label: "Pill" },
-                          { value: "outline" as const, label: "Outline" },
-                        ]).map((s) => (
-                          <button
-                            key={s.value}
-                            className={`case-btn${settings.referenceBackgroundStyle === s.value ? " active" : ""}`}
-                            onClick={() => patch({ referenceBackgroundStyle: s.value })}
-                          >
-                            {s.label}
-                          </button>
+                        {([{ value: "solid" as const, label: "Solid" }, { value: "pill" as const, label: "Pill" }, { value: "outline" as const, label: "Outline" }]).map((s) => (
+                          <button key={s.value} className={`case-btn${settings.referenceBackgroundStyle === s.value ? " active" : ""}`} onClick={() => patch({ referenceBackgroundStyle: s.value })}>{s.label}</button>
                         ))}
                       </div>
                       <div className="slider-row">
                         <div className="slider-wrapper" style={{ flex: 1 }}>
                           <span>ROUNDNESS</span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={40}
-                            step={1}
-                            value={settings.referenceBackgroundRadius}
-                            onChange={(e) => patch({ referenceBackgroundRadius: Number(e.target.value) })}
-                          />
+                          <input type="range" min={0} max={40} step={1} value={settings.referenceBackgroundRadius} onChange={(e) => patch({ referenceBackgroundRadius: Number(e.target.value) })} />
                           <div className="slider-val">{settings.referenceBackgroundRadius}px</div>
                         </div>
                       </div>
@@ -1599,16 +1474,10 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
               </div>
             )}
 
-            {/* ── Background Tab ── */}
+            {/* Background Tab */}
             {inspectorTab === "background" && (
               <div className="tc-inspector-panel">
-                <div
-                  className="bg-row"
-                  onClick={openBackgroundModal}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openBackgroundModal(); } }}
-                >
+                <div className="bg-row" onClick={openBackgroundModal} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openBackgroundModal(); } }}>
                   <div className="bg-thumb">
                     {activeBackgroundPreviewSrc ? (
                       <img src={activeBackgroundPreviewSrc} alt="Background" />
@@ -1621,38 +1490,17 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     <div className="bg-subtitle">{backgroundPreviewNameLabel}</div>
                     <div className="bg-action-hint">Click to change background</div>
                   </div>
-                  <button
-                    className="bg-change-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openBackgroundModal();
-                    }}
-                  >
-                    Change
-                  </button>
+                  <button className="bg-change-btn" onClick={(e) => { e.stopPropagation(); openBackgroundModal(); }}>Change</button>
                 </div>
-
                 <div className="opacity-row">
                   <span>OPACITY</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={backgroundOpacityPercent}
-                    onChange={(e) => patch({ backgroundOpacity: Number(e.target.value) / 100 })}
-                  />
+                  <input type="range" min={0} max={100} value={backgroundOpacityPercent} onChange={(e) => patch({ backgroundOpacity: Number(e.target.value) / 100 })} />
                   <span>{backgroundOpacityPercent}%</span>
                 </div>
-
-                {/* Shade */}
                 <div className="tc-inspector-divider">
                   <div className="tc-inspector-toggle-row">
                     <span className="tc-label-mono">READABILITY SHADE</span>
-                    <button
-                      className="tc-toggle-switch"
-                      data-active={settings.fullscreenShadeEnabled}
-                      onClick={() => patch({ fullscreenShadeEnabled: !settings.fullscreenShadeEnabled })}
-                    >
+                    <button className="tc-toggle-switch" data-active={settings.fullscreenShadeEnabled} onClick={() => patch({ fullscreenShadeEnabled: !settings.fullscreenShadeEnabled })}>
                       <span className="tc-toggle-knob" />
                     </button>
                   </div>
@@ -1660,78 +1508,37 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     <>
                       <div className="typography-row" style={{ marginBottom: "8px" }}>
                         <span className="tc-label-mono">COLOR</span>
-                        <label
-                          className="color-box"
-                          style={{ backgroundColor: settings.fullscreenShadeColor }}
-                        >
-                          <input
-                            type="color"
-                            value={settings.fullscreenShadeColor}
-                            onChange={(e) => patch({ fullscreenShadeColor: e.target.value })}
-                            style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
-                          />
+                        <label className="color-box" style={{ backgroundColor: settings.fullscreenShadeColor }}>
+                          <input type="color" value={settings.fullscreenShadeColor} onChange={(e) => patch({ fullscreenShadeColor: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
                         </label>
                       </div>
                       <div className="slider-row">
                         <div className="slider-wrapper" style={{ flex: 1 }}>
                           <span>OPACITY</span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={Math.round(settings.fullscreenShadeOpacity * 100)}
-                            onChange={(e) => patch({ fullscreenShadeOpacity: Number(e.target.value) / 100 })}
-                          />
+                          <input type="range" min={0} max={100} step={1} value={Math.round(settings.fullscreenShadeOpacity * 100)} onChange={(e) => patch({ fullscreenShadeOpacity: Number(e.target.value) / 100 })} />
                           <div className="slider-val">{Math.round(settings.fullscreenShadeOpacity * 100)}%</div>
                         </div>
                       </div>
                     </>
                   )}
                 </div>
-
-                {/* Logo */}
                 <div className="tc-inspector-divider">
                   <div className="tc-inspector-section-title">LOGO</div>
                   <div className="typography-row" style={{ marginBottom: "8px" }}>
                     <span className="tc-label-mono">URL</span>
-                    <input
-                      type="text"
-                      className="tc-text-input"
-                      value={settings.logoUrl}
-                      onChange={(e) => patch({ logoUrl: e.target.value })}
-                      placeholder="Logo URL…"
-                    />
+                    <input type="text" className="tc-text-input" value={settings.logoUrl} onChange={(e) => patch({ logoUrl: e.target.value })} placeholder="Logo URL\u2026" />
                   </div>
                   {settings.logoUrl && (
                     <>
                       <div className="case-group">
-                        {([
-                          { value: "top-left" as const, label: "TL" },
-                          { value: "top-right" as const, label: "TR" },
-                          { value: "bottom-left" as const, label: "BL" },
-                          { value: "bottom-right" as const, label: "BR" },
-                        ]).map((p) => (
-                          <button
-                            key={p.value}
-                            className={`case-btn${settings.logoPosition === p.value ? " active" : ""}`}
-                            onClick={() => patch({ logoPosition: p.value })}
-                          >
-                            {p.label}
-                          </button>
+                        {([{ value: "top-left" as const, label: "TL" }, { value: "top-right" as const, label: "TR" }, { value: "bottom-left" as const, label: "BL" }, { value: "bottom-right" as const, label: "BR" }]).map((p) => (
+                          <button key={p.value} className={`case-btn${settings.logoPosition === p.value ? " active" : ""}`} onClick={() => patch({ logoPosition: p.value })}>{p.label}</button>
                         ))}
                       </div>
                       <div className="slider-row">
                         <div className="slider-wrapper" style={{ flex: 1 }}>
                           <span>SIZE</span>
-                          <input
-                            type="range"
-                            min={20}
-                            max={200}
-                            step={5}
-                            value={settings.logoSize}
-                            onChange={(e) => patch({ logoSize: Number(e.target.value) })}
-                          />
+                          <input type="range" min={20} max={200} step={5} value={settings.logoSize} onChange={(e) => patch({ logoSize: Number(e.target.value) })} />
                           <div className="slider-val">{settings.logoSize}px</div>
                         </div>
                       </div>
@@ -1741,146 +1548,69 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
               </div>
             )}
 
-            {/* ── Layout Tab ── */}
+            {/* Layout Tab */}
             {inspectorTab === "layout" && (
               <div className="tc-inspector-panel">
                 <div className="tc-inspector-section-title">SPACING & SAFE AREA</div>
-
                 <div className="slider-row">
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>PADDING</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={120}
-                      value={settings.padding}
-                      onChange={(e) => patch({ padding: Number(e.target.value) })}
-                    />
+                    <input type="range" min={0} max={120} value={settings.padding} onChange={(e) => patch({ padding: Number(e.target.value) })} />
                     <div className="slider-val">{settings.padding}px</div>
                   </div>
                 </div>
-
                 <div className="slider-row">
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>SAFE AREA</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={200}
-                      value={settings.safeArea}
-                      onChange={(e) => patch({ safeArea: Number(e.target.value) })}
-                    />
+                    <input type="range" min={0} max={200} value={settings.safeArea} onChange={(e) => patch({ safeArea: Number(e.target.value) })} />
                     <div className="slider-val">{settings.safeArea}px</div>
                   </div>
                 </div>
-
                 <div className="slider-row">
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>BORDER RADIUS</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={40}
-                      value={settings.borderRadius}
-                      onChange={(e) => patch({ borderRadius: Number(e.target.value) })}
-                    />
+                    <input type="range" min={0} max={40} value={settings.borderRadius} onChange={(e) => patch({ borderRadius: Number(e.target.value) })} />
                     <div className="slider-val">{settings.borderRadius}px</div>
                   </div>
                 </div>
-
-                {tab === "lower-third" && (
+                {activeVariant === "lower-third" && (
                   <>
                     <div className="tc-inspector-divider">
                       <div className="tc-inspector-section-title">LOWER THIRD LAYOUT</div>
-
-                      {/* Position */}
                       <div className="case-group">
-                        {([
-                          { value: "left" as const, label: "Left" },
-                          { value: "center" as const, label: "Center" },
-                          { value: "right" as const, label: "Right" },
-                        ]).map((p) => (
-                          <button
-                            key={p.value}
-                            className={`case-btn${settings.lowerThirdPosition === p.value ? " active" : ""}`}
-                            onClick={() => patch({ lowerThirdPosition: p.value })}
-                          >
-                            {p.label}
-                          </button>
+                        {([{ value: "left" as const, label: "Left" }, { value: "center" as const, label: "Center" }, { value: "right" as const, label: "Right" }]).map((p) => (
+                          <button key={p.value} className={`case-btn${settings.lowerThirdPosition === p.value ? " active" : ""}`} onClick={() => patch({ lowerThirdPosition: p.value })}>{p.label}</button>
                         ))}
                       </div>
-
-                      {/* Width Preset */}
                       <div className="case-group">
                         {LT_WIDTHS.map((w) => (
-                          <button
-                            key={w.value}
-                            className={`case-btn${settings.lowerThirdWidthPreset === w.value ? " active" : ""}`}
-                            onClick={() => patch({ lowerThirdWidthPreset: w.value })}
-                          >
-                            {w.label}
-                          </button>
+                          <button key={w.value} className={`case-btn${settings.lowerThirdWidthPreset === w.value ? " active" : ""}`} onClick={() => patch({ lowerThirdWidthPreset: w.value })}>{w.label}</button>
                         ))}
                       </div>
-
-                      {/* Height */}
                       <div className="slider-row">
                         <div className="slider-wrapper" style={{ flex: 1 }}>
                           <span>HEIGHT</span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={650}
-                            step={10}
-                            value={settings.lowerThirdHeight}
-                            onChange={(e) => patch({ lowerThirdHeight: Number(e.target.value) })}
-                          />
+                          <input type="range" min={0} max={650} step={10} value={settings.lowerThirdHeight} onChange={(e) => patch({ lowerThirdHeight: Number(e.target.value) })} />
                           <div className="slider-val">{settings.lowerThirdHeight || "Auto"}</div>
                         </div>
                       </div>
-
-                      {/* Offset X */}
                       <div className="slider-row">
                         <div className="slider-wrapper" style={{ flex: 1 }}>
                           <span>OFFSET X</span>
-                          <input
-                            type="range"
-                            min={-500}
-                            max={500}
-                            value={settings.lowerThirdOffsetX}
-                            onChange={(e) => patch({ lowerThirdOffsetX: Number(e.target.value) })}
-                          />
+                          <input type="range" min={-500} max={500} value={settings.lowerThirdOffsetX} onChange={(e) => patch({ lowerThirdOffsetX: Number(e.target.value) })} />
                           <div className="slider-val">{settings.lowerThirdOffsetX}px</div>
                         </div>
                       </div>
-
-                      {/* Box Background */}
                       <div className="typography-row" style={{ marginBottom: "8px" }}>
                         <span className="tc-label-mono">BOX BG</span>
-                        <label
-                          className="color-box"
-                          style={{ backgroundColor: settings.boxBackground }}
-                        >
-                          <input
-                            type="color"
-                            value={settings.boxBackground !== "transparent" ? settings.boxBackground : "#000000"}
-                            onChange={(e) => patch({ boxBackground: e.target.value })}
-                            style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
-                          />
+                        <label className="color-box" style={{ backgroundColor: settings.boxBackground }}>
+                          <input type="color" value={settings.boxBackground !== "transparent" ? settings.boxBackground : "#000000"} onChange={(e) => patch({ boxBackground: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
                         </label>
                       </div>
-
                       <div className="slider-row">
                         <div className="slider-wrapper" style={{ flex: 1 }}>
                           <span>BOX OPACITY</span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={Math.round(settings.boxOpacity * 100)}
-                            onChange={(e) => patch({ boxOpacity: Number(e.target.value) / 100 })}
-                          />
+                          <input type="range" min={0} max={100} step={1} value={Math.round(settings.boxOpacity * 100)} onChange={(e) => patch({ boxOpacity: Number(e.target.value) / 100 })} />
                           <div className="slider-val">{Math.round(settings.boxOpacity * 100)}%</div>
                         </div>
                       </div>
@@ -1890,67 +1620,34 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
               </div>
             )}
 
-            {/* ── Bible Tab ── */}
+            {/* Bible Tab */}
             {inspectorTab === "bible" && showBibleTab && (
               <div className="tc-inspector-panel">
                 <div className="tc-inspector-section-title">BIBLE DISPLAY</div>
-                <div className="tc-inspector-hint">
-                  Bible verse display settings. Adjust reference label in the Content tab.
-                </div>
-
+                <div className="tc-inspector-hint">Bible verse display settings. Adjust reference label in the Content tab.</div>
                 <div className="case-group">
-                  {([
-                    { value: "top" as const, label: "Ref Above" },
-                    { value: "bottom" as const, label: "Ref Below" },
-                  ]).map((p) => (
-                    <button
-                      key={p.value}
-                      className={`case-btn${settings.refPosition === p.value ? " active" : ""}`}
-                      onClick={() => patch({ refPosition: p.value })}
-                    >
-                      {p.label}
-                    </button>
+                  {([{ value: "top" as const, label: "Ref Above" }, { value: "bottom" as const, label: "Ref Below" }]).map((p) => (
+                    <button key={p.value} className={`case-btn${settings.refPosition === p.value ? " active" : ""}`} onClick={() => patch({ refPosition: p.value })}>{p.label}</button>
                   ))}
                 </div>
-
                 <div className="slider-row">
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>TEXT SIZE</span>
-                    <input
-                      type="range"
-                      min={12}
-                      max={200}
-                      step={2}
-                      value={settings.fontSize}
-                      onChange={(e) => patch({ fontSize: Number(e.target.value) })}
-                    />
+                    <input type="range" min={12} max={200} step={2} value={settings.fontSize} onChange={(e) => patch({ fontSize: Number(e.target.value) })} />
                     <div className="slider-val">{settings.fontSize}px</div>
                   </div>
                 </div>
-
                 <div className="slider-row">
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>REF SIZE</span>
-                    <input
-                      type="range"
-                      min={12}
-                      max={72}
-                      step={1}
-                      value={settings.refFontSize}
-                      onChange={(e) => patch({ refFontSize: Number(e.target.value) })}
-                    />
+                    <input type="range" min={12} max={72} step={1} value={settings.refFontSize} onChange={(e) => patch({ refFontSize: Number(e.target.value) })} />
                     <div className="slider-val">{settings.refFontSize}px</div>
                   </div>
                 </div>
-
                 <div className="tc-inspector-divider">
                   <div className="tc-inspector-toggle-row">
                     <span className="tc-label-mono">TEXT OUTLINE</span>
-                    <button
-                      className="tc-toggle-switch"
-                      data-active={settings.textOutline}
-                      onClick={() => patch({ textOutline: !settings.textOutline })}
-                    >
+                    <button className="tc-toggle-switch" data-active={settings.textOutline} onClick={() => patch({ textOutline: !settings.textOutline })}>
                       <span className="tc-toggle-knob" />
                     </button>
                   </div>
@@ -1958,29 +1655,14 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     <>
                       <div className="typography-row" style={{ marginBottom: "8px" }}>
                         <span className="tc-label-mono">OUTLINE COLOR</span>
-                        <label
-                          className="color-box"
-                          style={{ backgroundColor: settings.textOutlineColor }}
-                        >
-                          <input
-                            type="color"
-                            value={settings.textOutlineColor}
-                            onChange={(e) => patch({ textOutlineColor: e.target.value })}
-                            style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
-                          />
+                        <label className="color-box" style={{ backgroundColor: settings.textOutlineColor }}>
+                          <input type="color" value={settings.textOutlineColor} onChange={(e) => patch({ textOutlineColor: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
                         </label>
                       </div>
                       <div className="slider-row">
                         <div className="slider-wrapper" style={{ flex: 1 }}>
                           <span>WIDTH</span>
-                          <input
-                            type="range"
-                            min={1}
-                            max={8}
-                            step={0.5}
-                            value={settings.textOutlineWidth}
-                            onChange={(e) => patch({ textOutlineWidth: Number(e.target.value) })}
-                          />
+                          <input type="range" min={1} max={8} step={0.5} value={settings.textOutlineWidth} onChange={(e) => patch({ textOutlineWidth: Number(e.target.value) })} />
                           <div className="slider-val">{settings.textOutlineWidth}px</div>
                         </div>
                       </div>
@@ -1990,95 +1672,53 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
               </div>
             )}
 
-            {/* ── Worship Tab ── */}
+            {/* Worship Tab */}
             {inspectorTab === "worship" && showWorshipTab && (
               <div className="tc-inspector-panel">
                 <div className="tc-inspector-section-title">WORSHIP DISPLAY</div>
-                <div className="tc-inspector-hint">
-                  Worship/lyrics display settings. Typography and layout apply globally.
-                </div>
-
+                <div className="tc-inspector-hint">Worship/lyrics display settings. Typography and layout apply globally.</div>
                 <div className="slider-row">
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>TEXT SIZE</span>
-                    <input
-                      type="range"
-                      min={12}
-                      max={200}
-                      step={2}
-                      value={settings.fontSize}
-                      onChange={(e) => patch({ fontSize: Number(e.target.value) })}
-                    />
+                    <input type="range" min={12} max={200} step={2} value={settings.fontSize} onChange={(e) => patch({ fontSize: Number(e.target.value) })} />
                     <div className="slider-val">{settings.fontSize}px</div>
                   </div>
                 </div>
-
                 <div className="slider-row">
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>LINE HEIGHT</span>
-                    <input
-                      type="range"
-                      min={1}
-                      max={3}
-                      step={0.1}
-                      value={settings.lineHeight}
-                      onChange={(e) => patch({ lineHeight: Number(e.target.value) })}
-                    />
+                    <input type="range" min={1} max={3} step={0.1} value={settings.lineHeight} onChange={(e) => patch({ lineHeight: Number(e.target.value) })} />
                     <div className="slider-val">{settings.lineHeight}</div>
                   </div>
                 </div>
-
                 <div className="case-group">
-                  {([
-                    { value: "left" as const, label: "Left" },
-                    { value: "center" as const, label: "Center" },
-                    { value: "right" as const, label: "Right" },
-                  ]).map((a) => (
-                    <button
-                      key={a.value}
-                      className={`case-btn${settings.textAlign === a.value ? " active" : ""}`}
-                      onClick={() => patch({ textAlign: a.value })}
-                    >
-                      {a.label}
-                    </button>
+                  {([{ value: "left" as const, label: "Left" }, { value: "center" as const, label: "Center" }, { value: "right" as const, label: "Right" }]).map((a) => (
+                    <button key={a.value} className={`case-btn${settings.textAlign === a.value ? " active" : ""}`} onClick={() => patch({ textAlign: a.value })}>{a.label}</button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* ── Animation Tab ── */}
+            {/* Animation Tab */}
             {inspectorTab === "animation" && (
               <div className="tc-inspector-panel">
                 <div className="tc-inspector-section-title">ANIMATION</div>
                 <div className="btn-group" style={{ flexWrap: "wrap", gap: "4px" }}>
-                  {[
+                  {([
                     { value: "none" as const, label: "None" },
                     { value: "fade" as const, label: "Fade" },
                     { value: "slide-up" as const, label: "Slide Up" },
                     { value: "slide-left" as const, label: "Slide Left" },
                     { value: "scale-in" as const, label: "Scale" },
                     { value: "reveal-bg-then-text" as const, label: "Reveal" },
-                  ].map((a) => (
-                    <button
-                      key={a.value}
-                      className={`btn-tab${settings.animation === a.value ? " active" : ""}`}
-                      onClick={() => patch({ animation: a.value })}
-                    >
-                      {a.label}
-                    </button>
+                  ]).map((a) => (
+                    <button key={a.value} className={`btn-tab${settings.animation === a.value ? " active" : ""}`} onClick={() => patch({ animation: a.value })}>{a.label}</button>
                   ))}
                 </div>
                 <div className="slider-row" style={{ marginTop: "10px" }}>
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>DURATION</span>
-                    <input
-                      type="range"
-                      min={100}
-                      max={1500}
-                      step={50}
-                      value={settings.animationDuration}
-                      onChange={(e) => patch({ animationDuration: Number(e.target.value) })}
-                    />
+                    <input type="range" min={100} max={1500} step={50} value={settings.animationDuration} onChange={(e) => patch({ animationDuration: Number(e.target.value) })} />
                     <div className="slider-val">{settings.animationDuration}ms</div>
                   </div>
                 </div>
@@ -2088,82 +1728,48 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
         </aside>
       </div>
 
-      {/* ── Background Picker Modal ── */}
+      {/* Background Picker Modal */}
       {showBackgroundModal && (
         <div className="tc-modal-overlay" onClick={() => setShowBackgroundModal(false)}>
           <div className="tc-modal-panel" onClick={(e) => e.stopPropagation()}>
             <div className="tc-modal-header">
               <span>Choose Background</span>
-              <button className="icon-btn" onClick={() => setShowBackgroundModal(false)}>
-                <X size={16} />
-              </button>
+              <button className="icon-btn" onClick={() => setShowBackgroundModal(false)}><X size={16} /></button>
             </div>
             <div className="tc-modal-tabs">
               {BACKGROUND_PICKER_TABS.map((t) => (
-                <button
-                  key={t.value}
-                  className={`tc-modal-tab${bgTab === t.value ? " active" : ""}`}
-                  onClick={() => setBgTab(t.value)}
-                >
-                  {t.label}
-                </button>
+                <button key={t.value} className={`tc-modal-tab${bgTab === t.value ? " active" : ""}`} onClick={() => setBgTab(t.value)}>{t.label}</button>
               ))}
             </div>
             <div className="tc-modal-body">
-              <input
-                ref={bgImportInputRef}
-                type="file"
-                accept={MEDIA_FILE_ACCEPT}
-                style={{ display: "none" }}
-                onChange={handleBgImportFile}
-              />
+              <input ref={bgImportInputRef} type="file" accept={MEDIA_FILE_ACCEPT} style={{ display: "none" }} onChange={handleBgImportFile} />
               {bgTab === "color" && (
                 <div className="tc-color-grid">
                   {BACKGROUND_COLOR_SWATCHES.map((swatch) => (
-                    <button
-                      key={swatch}
-                      className={`tc-color-swatch${bgPickerColor === swatch ? " active" : ""}`}
-                      style={{ backgroundColor: swatch }}
-                      onClick={() => setBgPickerColor(swatch)}
-                    />
+                    <button key={swatch} className={`tc-color-swatch${bgPickerColor === swatch ? " active" : ""}`} style={{ backgroundColor: swatch }} onClick={() => setBgPickerColor(swatch)} />
                   ))}
                   <div className="tc-color-custom">
-                    <input
-                      type="color"
-                      value={bgPickerInputColor}
-                      onChange={(e) => setBgPickerColor(e.target.value)}
-                    />
+                    <input type="color" value={bgPickerInputColor} onChange={(e) => setBgPickerColor(e.target.value)} />
                     <span>{bgPickerColor}</span>
                   </div>
                 </div>
               )}
               {bgTab === "transparent" && (
                 <div className="tc-transparent-option">
-                  <button className="tc-transparent-btn" onClick={handleBgTransparent}>
-                    Transparent Background
-                  </button>
+                  <button className="tc-transparent-btn" onClick={handleBgTransparent}>Transparent Background</button>
                 </div>
               )}
               {(bgTab === "my-images" || bgTab === "images") && (
                 <div className="tc-media-grid">
-                  <button
-                    className="tc-media-thumb tc-media-thumb--import"
-                    onClick={() => bgImportInputRef.current?.click()}
-                  >
+                  <button className="tc-media-thumb tc-media-thumb--import" onClick={() => bgImportInputRef.current?.click()}>
                     <Plus size={20} />
                     <span>Import</span>
                   </button>
-                  {backgroundMediaLibrary
-                    .filter((item) => item.type === "image")
-                    .map((item) => (
-                      <button
-                        key={item.id}
-                        className="tc-media-thumb"
-                        onClick={() => handleBgSelectImage(item.url)}
-                      >
-                        <img src={resolveMediaPreviewSrc(item)} alt={item.name} />
-                      </button>
-                    ))}
+                  {backgroundMediaLibrary.filter((item) => item.type === "image").map((item) => (
+                    <button key={item.id} className="tc-media-thumb" onClick={() => handleBgSelectImage(item.url)}>
+                      <img src={resolveMediaPreviewSrc(item)} alt={item.name} />
+                    </button>
+                  ))}
                 </div>
               )}
               {(bgTab === "my-videos" || bgTab === "template-videos") && (
@@ -2175,17 +1781,11 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                         <div key={asset.id} className="tc-media-thumb tc-media-thumb--video">
                           <TemplateVideoPreview asset={asset} />
                           {!downloaded ? (
-                            <button
-                              className="tc-media-download"
-                              onClick={() => handleTemplateVideoDownload(asset)}
-                            >
+                            <button className="tc-media-download" onClick={() => handleTemplateVideoDownload(asset)}>
                               <Icon name="download" size={16} />
                             </button>
                           ) : (
-                            <button
-                              className="tc-media-download tc-media-download--done"
-                              onClick={() => handleBgSelectVideo(downloaded.url)}
-                            >
+                            <button className="tc-media-download tc-media-download--done" onClick={() => handleBgSelectVideo(downloaded.url)}>
                               <Icon name="check" size={16} />
                             </button>
                           )}
@@ -2193,28 +1793,19 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                       );
                     })
                     : <>
-                      <button
-                        className="tc-media-thumb tc-media-thumb--import"
-                        onClick={() => bgImportInputRef.current?.click()}
-                      >
+                      <button className="tc-media-thumb tc-media-thumb--import" onClick={() => bgImportInputRef.current?.click()}>
                         <Plus size={20} />
                         <span>Import</span>
                       </button>
-                      {backgroundMediaLibrary
-                        .filter((item) => item.type === "video")
-                        .map((item) => (
-                          <button
-                            key={item.id}
-                            className="tc-media-thumb tc-media-thumb--video"
-                            onClick={() => handleBgSelectVideo(item.url)}
-                          >
-                            {item.thumbnailUrl ? (
-                              <img src={item.thumbnailUrl} alt={item.name} />
-                            ) : (
-                              <Icon name="videocam" size={24} />
-                            )}
-                          </button>
-                        ))}
+                      {backgroundMediaLibrary.filter((item) => item.type === "video").map((item) => (
+                        <button key={item.id} className="tc-media-thumb tc-media-thumb--video" onClick={() => handleBgSelectVideo(item.url)}>
+                          {item.thumbnailUrl ? (
+                            <img src={item.thumbnailUrl} alt={item.name} />
+                          ) : (
+                            <Icon name="videocam" size={24} />
+                          )}
+                        </button>
+                      ))}
                     </>
                   }
                 </div>
@@ -2222,11 +1813,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
               {bgTab === "patterns" && (
                 <div className="tc-media-grid">
                   {BACKGROUND_PATTERNS.map((p) => (
-                    <button
-                      key={p.label}
-                      className="tc-media-thumb"
-                      onClick={() => handleBgSelectPattern(p.src)}
-                    >
+                    <button key={p.label} className="tc-media-thumb" onClick={() => handleBgSelectPattern(p.src)}>
                       <img src={p.src} alt={p.label} />
                     </button>
                   ))}
@@ -2235,9 +1822,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
             </div>
             {bgTab === "color" && (
               <div className="tc-modal-footer">
-                <button className="tc-modal-confirm" onClick={handleBgColorPickerConfirm}>
-                  Apply Color
-                </button>
+                <button className="tc-modal-confirm" onClick={handleBgColorPickerConfirm}>Apply Color</button>
               </div>
             )}
           </div>

@@ -13,6 +13,8 @@
  *   media-library — MediaItem objects (key: id) — uploaded images/videos references
  */
 
+import { getDefaultOBSUrl } from "../services/desktopConfig";
+
 import { openDB, type IDBPDatabase } from "idb";
 import type {
   MVLayout,
@@ -497,7 +499,7 @@ export interface MVSettings {
 }
 
 export const DEFAULT_SETTINGS: MVSettings = {
-  obsUrl: "ws://localhost:4455",
+  obsUrl: getDefaultOBSUrl(),
   obsPassword: "",
   obsAutoReconnect: true,
   streamingPlatform: "custom",

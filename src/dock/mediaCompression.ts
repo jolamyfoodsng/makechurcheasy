@@ -4,25 +4,28 @@
  * Images: Canvas-based downscale + JPEG recomposition.
  * Videos: ffmpeg.wasm single-thread transcode to H.264 with aggressive compression.
  *
- * Both target < 1 MB output.
+ * Both target < 1 MB output (configurable via platform settings).
  */
+
+import {
+  getDefaultImageTargetBytes,
+  getDefaultImageMaxDimension,
+  getDefaultVideoTargetBytes,
+  getDefaultVideoMaxWidth,
+} from "../services/desktopConfig";
 
 /* ── Image compression ───────────────────────────────────────────────────── */
 
-const IMAGE_MAX_DIMENSION = 1920;
 const IMAGE_INITIAL_QUALITY = 0.72;
 const IMAGE_MIN_QUALITY = 0.35;
-const IMAGE_TARGET_BYTES = 1024 * 1024; // 1 MB
 
 export async function compressImage(file: File): Promise<File> {
-  if (file.size <= IMAGE_TARGET_BYTES) return file;
+  const targetBytes = getDefaultImageTargetBytes();
+  const maxDim = getDefaultImageMaxDimension();
+  if (file.size <= targetBytes) return file;
 
   const bitmap = await createImageBitmap(file);
-  const { width, height } = scaleDimensions(
-    bitmap.width,
-    bitmap.height,
-    IMAGE_MAX_DIMENSION,
-  );
+  const { width, height } = scaleDimensions(bitmap.width, bitmap.height, maxDim);
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -34,14 +37,12 @@ export async function compressImage(file: File): Promise<File> {
   let quality = IMAGE_INITIAL_QUALITY;
   let blob = await canvasToBlob(canvas, quality);
 
-  // Iteratively lower quality until we hit the target
-  while (blob.size > IMAGE_TARGET_BYTES && quality > IMAGE_MIN_QUALITY) {
+  while (blob.size > targetBytes && quality > IMAGE_MIN_QUALITY) {
     quality = Math.max(IMAGE_MIN_QUALITY, quality - 0.08);
     blob = await canvasToBlob(canvas, quality);
   }
 
-  // If still too large, try WebP (typically 25-35% smaller than JPEG)
-  if (blob.size > IMAGE_TARGET_BYTES) {
+  if (blob.size > targetBytes) {
     const webpBlob = await canvasToBlob(canvas, quality, "image/webp");
     if (webpBlob.size < blob.size) {
       blob = webpBlob;
@@ -55,10 +56,8 @@ export async function compressImage(file: File): Promise<File> {
 
 /* ── Video compression ───────────────────────────────────────────────────── */
 
-const VIDEO_TARGET_BYTES = 1024 * 1024; // 1 MB
 const VIDEO_CRF_INITIAL = 32;
 const VIDEO_CRF_AGGRESSIVE = 40;
-const VIDEO_MAX_WIDTH = 854; // 480p-ish
 
 let ffmpegLoaded = false;
 
@@ -66,7 +65,9 @@ export async function compressVideo(
   file: File,
   onProgress?: (pct: number) => void,
 ): Promise<File> {
-  if (file.size <= VIDEO_TARGET_BYTES) return file;
+  const targetBytes = getDefaultVideoTargetBytes();
+  const maxWidth = getDefaultVideoMaxWidth();
+  if (file.size <= targetBytes) return file;
 
   const { FFmpeg } = await import("@ffmpeg/ffmpeg");
   const { fetchFile, toBlobURL } = await import("@ffmpeg/util");
@@ -93,11 +94,11 @@ export async function compressVideo(
   // First pass: moderate compression
   await ffmpeg.exec([
     "-i", inputName,
-    "-vf", `scale='min(${VIDEO_MAX_WIDTH},iw)':-2`,
+    "-vf", `scale='min(${maxWidth},iw)':-2`,
     "-c:v", "libx264",
     "-preset", "fast",
     "-crf", String(VIDEO_CRF_INITIAL),
-    "-an", // strip audio (background video doesn't need it)
+    "-an",
     "-movflags", "+faststart",
     "-y", outputName,
   ]);
@@ -105,11 +106,11 @@ export async function compressVideo(
   let data = await ffmpeg.readFile(outputName);
 
   // Second pass: more aggressive if still too large
-  if ((data as Uint8Array).byteLength > VIDEO_TARGET_BYTES) {
+  if ((data as Uint8Array).byteLength > targetBytes) {
     await ffmpeg.deleteFile(outputName);
     await ffmpeg.exec([
       "-i", inputName,
-      "-vf", `scale='min(${VIDEO_MAX_WIDTH},iw)':-2`,
+      "-vf", `scale='min(${maxWidth},iw)':-2`,
       "-c:v", "libx264",
       "-preset", "fast",
       "-crf", String(VIDEO_CRF_AGGRESSIVE),

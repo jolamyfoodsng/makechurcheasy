@@ -50,7 +50,7 @@ export function ObsScenesPanel({
   activeScenes = [],
   refreshing = false,
   disabled = false,
-  sendLabel = "Send",
+  sendLabel = "Push To OBS",
   onRefresh,
   onSendToScene,
 }: ObsScenesPanelProps) {

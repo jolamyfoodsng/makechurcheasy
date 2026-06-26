@@ -810,7 +810,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
     (async () => {
       try {
         const { loadDockFavoriteBibleThemes } = await import("../dockThemeData");
-        const themes = await loadDockFavoriteBibleThemes(overlayMode === "fullscreen" ? "fullscreen" : "lower-third");
+        const themes = await loadDockFavoriteBibleThemes();
         if (!cancelled) setAllThemes(themes);
       } catch { /* ignore */ }
       finally { if (!cancelled) setThemesLoading(false); }

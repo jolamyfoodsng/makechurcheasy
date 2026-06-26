@@ -2,6 +2,7 @@ import { dockObsClient } from "../dock/dockObsClient";
 import { getSettings } from "../multiview/mvStore";
 import { initOverlayUrl } from "./overlayUrl";
 import { loadData } from "./store";
+import { getDefaultOBSUrl } from "./desktopConfig";
 
 let connectPromise: Promise<void> | null = null;
 
@@ -11,7 +12,7 @@ export async function ensureDockObsClientConnected(): Promise<void> {
   if (connectPromise) return connectPromise;
 
   connectPromise = (async () => {
-    let url = "ws://localhost:4455";
+    let url = getDefaultOBSUrl();
     let password: string | undefined;
 
     try {

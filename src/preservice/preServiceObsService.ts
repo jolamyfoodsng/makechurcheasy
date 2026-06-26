@@ -1,4 +1,5 @@
 import { obsService } from "../services/obsService";
+import { obsSyncService } from "../services/obsSyncService";
 import type {
   PreServiceCountdownStep,
   PreServiceMediaStep,
@@ -249,6 +250,9 @@ export async function setupPreServiceScene(steps: readonly PreServiceStep[]): Pr
     await setSourceEnabled(sceneItemId, false);
     stepItemMap.set(step.id, { sceneItemId, sourceName });
   }
+
+  // Trigger centralized sync after setting up pre-service scene
+  obsSyncService.sync("preservice:setup").catch(() => { });
 }
 
 /**
@@ -375,6 +379,9 @@ export async function teardownPreServiceScene(): Promise<void> {
   activeStepId = null;
   sceneOnProgram = false;
   nextAutoIndex = 0;
+
+  // Trigger centralized sync after tearing down pre-service scene
+  obsSyncService.sync("preservice:teardown").catch(() => { });
 }
 
 /* ═══════════════════════════════════════════════════════════════════

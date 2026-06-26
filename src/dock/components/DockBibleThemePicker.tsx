@@ -79,7 +79,7 @@ export default function DockBibleThemePicker({
   const sampleMeta = sampleReference ?? "John 3:16";
 
   const loadThemes = useCallback(async () => {
-    const favorites = await loadDockFavoriteBibleThemes(templateType);
+    const favorites = await loadDockFavoriteBibleThemes();
     const allowed = new Set((allowedCategories ?? []).map((category) => category.toLowerCase()));
     const filtered = allowed.size === 0
       ? favorites

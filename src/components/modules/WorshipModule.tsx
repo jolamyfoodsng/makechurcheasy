@@ -1244,7 +1244,7 @@ export function WorshipModule({
   }, [activeWorshipLowerThird?.accentColor, primaryColor]);
 
   const activeModeLiveScenes = layoutMode === "fullscreen" ? fullLiveScenes : ltLiveScenes;
-  const modeSendLabel = layoutMode === "fullscreen" ? "Send Full" : "Send Lower";
+  const modeSendLabel = layoutMode === "fullscreen" ? "Push To OBS" : "Push To OBS";
   const showLiveSlideStrip = isLive && songSlides.length > 0;
 
   if (!songsLoaded) {
@@ -1750,10 +1750,10 @@ export function WorshipModule({
               <button
                 className="worship-control-btn danger"
                 onClick={handleClear}
-                title="Clear output (C)"
+                title="Remove from OBS (C)"
               >
                 <Icon name="cancel_presentation" size={20} />
-                <span>Clear</span>
+                <span>Remove From OBS</span>
               </button>
             </div>
 
@@ -1921,9 +1921,9 @@ export function WorshipModule({
             <div className="worship-shortcuts-hint">
               <span>← → slides</span>
               <span>B blackout</span>
-              <span>C clear</span>
+              <span>C remove from OBS</span>
               {layoutMode === "fullscreen" && <span>1-4 theme</span>}
-              <span>Send by scene</span>
+              <span>Push To OBS by scene</span>
               <span>Dbl-click → OBS</span>
             </div>
           </aside>

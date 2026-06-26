@@ -9,7 +9,6 @@ import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuic
 interface Props {
   selectedThemeId: string | null;
   onSelect: (theme: BibleTheme) => void;
-  templateType?: BibleTheme["templateType"];
   allowedCategories?: Array<NonNullable<BibleTheme["category"]>>;
   sampleText?: string;
   sampleReference?: string;
@@ -57,7 +56,6 @@ function SectionLabel({ icon, label, accent }: { icon: string; label: string; ac
 export default function DockThemeSettingsModal({
   selectedThemeId,
   onSelect,
-  templateType,
   allowedCategories,
   sampleText = "Faith",
   sampleReference = "John 3:16",
@@ -186,7 +184,11 @@ export default function DockThemeSettingsModal({
 
   const handleThemeSelect = useCallback((theme: BibleTheme) => {
     onSelect(theme);
-    const ts = theme.settings;
+    // Resolve variant settings based on active overlay mode
+    const variant = overlayMode === "lower-third"
+      ? theme.variants?.lowerThird
+      : theme.variants?.fullscreen;
+    const ts = variant?.settings ?? theme.settings;
     updateDraft((prev) => ({
       ...prev,
       fontColor: ts.fontColor,
@@ -222,7 +224,7 @@ export default function DockThemeSettingsModal({
       lowerThirdWidthPreset: ts.lowerThirdWidthPreset,
       lowerThirdOffsetX: ts.lowerThirdOffsetX,
     }));
-  }, [onSelect, updateDraft]);
+  }, [onSelect, updateDraft, overlayMode]);
 
   const handleSave = useCallback(() => {
     const nextSettings = { ...draftSettings };
@@ -299,12 +301,12 @@ export default function DockThemeSettingsModal({
                   onQuickSettingsSave={(settings) => onQuickSettingsSave(settings)}
                   selectedThemeId={selectedThemeId}
                   onThemeSelect={handleThemeSelect}
-                  templateType={templateType}
                   allowedCategories={allowedCategories}
                   sampleText={sampleText}
                   sampleReference={sampleReference}
                   onBackgroundPresetChange={onBackgroundPresetChange}
                   showReferences={showReferences}
+                  overlayMode={overlayMode}
                 />
 
                 {/* Lower-Third Positioning — only shown in lower-third mode */}
