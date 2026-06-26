@@ -13,6 +13,7 @@
  */
 
 import { obsService } from "../services/obsService";
+import { obsSyncService } from "../services/obsSyncService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import type { MVLayout, Region, RegionId } from "./types";
 import { getLTThemeById } from "../lowerthirds/themes";
@@ -912,6 +913,10 @@ export async function pushLayoutToOBS(
       }
     }
 
+    // 6. Trigger centralized sync so obsSyncService discovers new resources
+    //    (fire-and-forget — don't block the return)
+    obsSyncService.sync("multiview:push").catch(() => { });
+
     return { success: failed.length === 0, sceneName: targetScene, errors, synced, failed, setAsPreview, stagingScene, updatedInPlace };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -959,6 +964,9 @@ export async function pushAllSlotsToOBS(
     results.push(result);
     totalErrors += result.errors.length;
   }
+
+  // Trigger centralized sync after all slots are pushed
+  obsSyncService.sync("multiview:push-all").catch(() => { });
 
   return { results, totalErrors };
 }
@@ -1010,6 +1018,94 @@ export async function getProgramScreenshot(width = 320): Promise<string | null> 
     return obsService.getSourceScreenshot(scene, width);
   } catch {
     return null;
+  }
+}
+
+/**
+ * Remove a Multi-View layout's OBS scene and all associated resources.
+ *
+ * Per OBS_SYNC_ARCHITECTURE.md:
+ *   - Discover resources from OBS first (don't rely on local state)
+ *   - Remove scene items, then the scene itself
+ *   - Trigger centralized sync after removal
+ *
+ * @param layoutName  The layout name (used to construct scene name "MV: {name}")
+ * @param sceneName   Optional explicit scene name (overrides the constructed name)
+ * @returns           Number of resources removed, errors encountered
+ */
+export async function removeLayoutFromOBS(
+  layoutName: string,
+  sceneName?: string,
+): Promise<{ removed: number; errors: string[] }> {
+  const targetScene = sceneName || `MV: ${layoutName || "Untitled"}`;
+  const errors: string[] = [];
+  let removed = 0;
+
+  if (!obsService.isConnected) {
+    return { removed: 0, errors: ["OBS not connected"] };
+  }
+
+  try {
+    // 1. Discover resources from OBS (source of truth)
+    const scenes = await obsService.getSceneList();
+    const sceneExists = scenes.some(s => s.sceneName === targetScene);
+
+    if (!sceneExists) {
+      console.log(`[MV→OBS] Scene "${targetScene}" does not exist — nothing to remove`);
+      return { removed: 0, errors: [] };
+    }
+
+    // 2. Get all scene items and remove them
+    try {
+      const items = await obsService.getSceneItemList(targetScene);
+      for (const item of items) {
+        try {
+          await obsService.call("RemoveSceneItem", {
+            sceneName: targetScene,
+            sceneItemId: item.sceneItemId,
+          });
+          removed++;
+        } catch (err) {
+          errors.push(`Failed to remove item "${item.sourceName}": ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    } catch (err) {
+      errors.push(`Failed to list scene items: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // 3. Remove the scene itself
+    try {
+      await obsService.call("RemoveScene", { sceneName: targetScene });
+      removed++;
+    } catch (err) {
+      errors.push(`Failed to remove scene "${targetScene}": ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // 4. Also clean up any overlay scenes (MCE MV: ...) that were created for this layout
+    const overlayPrefix = `MCE MV: MV_${(layoutName || "Untitled").replace(/[^a-zA-Z0-9 _-]/g, "").trim()}`;
+    try {
+      const allScenes = await obsService.getSceneList();
+      for (const scene of allScenes) {
+        if (scene.sceneName.startsWith(overlayPrefix)) {
+          try {
+            await obsService.call("RemoveScene", { sceneName: scene.sceneName });
+            removed++;
+          } catch {
+            // Best-effort cleanup
+          }
+        }
+      }
+    } catch {
+      // Best-effort overlay cleanup
+    }
+
+    // 5. Trigger centralized sync
+    obsSyncService.sync("multiview:remove").catch(() => { });
+
+    return { removed, errors };
+  } catch (err) {
+    errors.push(`Failed to remove layout: ${err instanceof Error ? err.message : String(err)}`);
+    return { removed, errors };
   }
 }
 

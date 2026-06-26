@@ -12,6 +12,7 @@ import { dockClient } from "../services/dockBridge";
 import { compressImage, compressVideo } from "./mediaCompression";
 import { isSupportedMediaFile } from "../services/mediaValidation";
 import { getUserScopedKey } from "../services/userScopedStorage";
+import { getDefaultImageTargetBytes, getDefaultVideoTargetBytes } from "../services/desktopConfig";
 
 const LOCAL_LIBRARY_KEY = "ocs-dock-media-library-v1";
 
@@ -241,14 +242,14 @@ export async function uploadFileToDock(
   let processedFile: File = file;
   try {
     if (category === "image") {
-      if (file.size > 1024 * 1024) {
+      if (file.size > getDefaultImageTargetBytes()) {
         console.log("[UPLOAD] Compressing image…");
         onProgress?.("Compressing image…");
         processedFile = await compressImage(file);
         console.log("[UPLOAD] Image compressed:", processedFile.size);
       }
     } else {
-      if (file.size > 1024 * 1024) {
+      if (file.size > getDefaultVideoTargetBytes()) {
         console.log("[UPLOAD] Compressing video…");
         onProgress?.("Compressing video…");
         processedFile = await compressVideo(file);

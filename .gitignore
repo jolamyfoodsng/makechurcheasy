@@ -37,3 +37,10 @@ makechurcheasy-session.json
 public/bible-embeddings-kjv.json
 public/bible-hnsw-index.json
 .vercel
+
+# Release artifacts (Tauri builds)
+uploads/*.dmg
+uploads/*.exe
+uploads/*.msi
+uploads/*.app.tar.gz
+uploads/*.sig

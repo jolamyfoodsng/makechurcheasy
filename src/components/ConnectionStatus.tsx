@@ -7,6 +7,7 @@
 
 import { useState, type FormEvent } from "react";
 import type { ConnectionStatus as ConnectionStatusType } from "../services/obsService";
+import { getDefaultOBSUrl } from "../services/desktopConfig";
 import Icon from "./Icon";
 
 interface Props {
@@ -22,7 +23,7 @@ export function ConnectionStatus({
     onConnect,
     onDisconnect,
 }: Props) {
-    const [url, setUrl] = useState("ws://localhost:4455");
+    const [url, setUrl] = useState(getDefaultOBSUrl());
     const [password, setPassword] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 

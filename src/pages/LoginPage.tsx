@@ -7,6 +7,7 @@ import { trackDevicePaired, trackLogin } from "@/services/tracking";
 import { useEffect, useRef, useState } from "react";
 import { AppLogo } from "@/components/AppLogo";
 import QRCode from "qrcode";
+import { readDesktopConfigCache, DEFAULT_DESKTOP_CONFIG } from "@/services/desktopConfig";
 
 const AUTH_API = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
@@ -155,6 +156,36 @@ export default function LoginPage() {
         padding: "24px",
       }}
     >
+      {/* Maintenance Mode Overlay */}
+      {(readDesktopConfigCache() || DEFAULT_DESKTOP_CONFIG).security.maintenanceMode && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "rgba(0,0,0,0.9)",
+          zIndex: 9999,
+        }}>
+          <div style={{
+            textAlign: "center",
+            padding: "48px",
+            maxWidth: "400px",
+          }}>
+            <div style={{ fontSize: "48px", marginBottom: "16px" }}>🔧</div>
+            <h1 style={{ fontSize: "24px", fontWeight: 600, color: "#f0f0f5", marginBottom: "12px" }}>
+              Maintenance Mode
+            </h1>
+            <p style={{ fontSize: "16px", color: "#a0a0b0", lineHeight: 1.6 }}>
+              {(readDesktopConfigCache() || DEFAULT_DESKTOP_CONFIG).security.maintenanceMessage || "We'll be back shortly!"}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div style={{ width: "100%", maxWidth: "360px" }}>
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: "36px" }}>

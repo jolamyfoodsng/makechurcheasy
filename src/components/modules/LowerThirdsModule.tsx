@@ -1608,7 +1608,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                       title="Clear Now"
                     >
                       <Icon name="clear" size={14} />
-                      Clear
+                      Remove From OBS
                     </button>
                   </div>
                 </div>
@@ -1932,7 +1932,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                 activeScene={programScene}
                 refreshing={state.isRefreshing}
                 disabled={!theme || state.isSending}
-                sendLabel="Send LT"
+                sendLabel="Push To OBS"
                 onRefresh={async () => {
                   await refreshSources();
                   await refreshScenes();
@@ -1962,7 +1962,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                   ) : (
                     <>
                       <Icon name="broadcast_on_personal" size={16} />
-                      Update All Lower Third Sources
+                      Update In OBS
                     </>
                   )}
                 </button>

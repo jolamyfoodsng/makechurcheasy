@@ -690,15 +690,12 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
       );
       setLowerThirdQuickThemeSettingsLinkedToFullscreen(storedLowerThirdLinked);
 
-      const [fullscreenFavorites, lowerThirdFavorites] = await Promise.all([
-        loadDockFavoriteBibleThemes("fullscreen"),
-        loadDockFavoriteBibleThemes("lower-third"),
-      ]);
+      const allFavorites = await loadDockFavoriteBibleThemes();
 
       if (cancelled) return;
 
-      const storedFullscreen = fullscreenFavorites.find((theme) => theme.id === prefs.fullscreenThemeId);
-      const storedLowerThird = lowerThirdFavorites.find((theme) => theme.id === prefs.lowerThirdThemeId);
+      const storedFullscreen = allFavorites.find((theme) => theme.id === prefs.fullscreenThemeId);
+      const storedLowerThird = allFavorites.find((theme) => theme.id === prefs.lowerThirdThemeId);
 
       if (storedFullscreen) setSelectedFSTheme(storedFullscreen);
       if (storedLowerThird) setSelectedLTTheme(storedLowerThird);

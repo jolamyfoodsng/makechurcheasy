@@ -853,15 +853,12 @@ export default function DockBibleTab({
     let cancelled = false;
     const applyStoredThemes = async () => {
       scheduleAutoStageResume();
-      const [fullscreenFavorites, lowerThirdFavorites] = await Promise.all([
-        loadDockFavoriteBibleThemes("fullscreen"),
-        loadDockFavoriteBibleThemes("lower-third"),
-      ]);
+      const allFavorites = await loadDockFavoriteBibleThemes();
 
       if (cancelled) return;
 
-      const storedFullscreen = fullscreenFavorites.find((theme) => theme.id === prefs.fullscreenThemeId);
-      const storedLowerThird = lowerThirdFavorites.find((theme) => theme.id === prefs.lowerThirdThemeId);
+      const storedFullscreen = allFavorites.find((theme) => theme.id === prefs.fullscreenThemeId);
+      const storedLowerThird = allFavorites.find((theme) => theme.id === prefs.lowerThirdThemeId);
 
       if (storedFullscreen) {
         setSelectedBibleTheme(storedFullscreen);
@@ -980,13 +977,28 @@ export default function DockBibleTab({
     });
   }, [availableTranslations]);
 
+  // Resolve the base theme for each mode from the unified theme's variants
+  const baseFullscreenTheme = useMemo(() => {
+    const variant = selectedBibleTheme.variants?.fullscreen;
+    return variant
+      ? { ...selectedBibleTheme, settings: variant.settings, rawTemplate: variant.rawTemplate }
+      : selectedBibleTheme;
+  }, [selectedBibleTheme]);
+
+  const baseLowerThirdTheme = useMemo(() => {
+    const variant = selectedLowerThirdTheme.variants?.lowerThird;
+    return variant
+      ? { ...selectedLowerThirdTheme, settings: variant.settings, rawTemplate: variant.rawTemplate }
+      : selectedLowerThirdTheme;
+  }, [selectedLowerThirdTheme]);
+
   const effectiveSelectedBibleTheme = useMemo(
     () =>
       applyFullscreenQuickThemeSettings(
-        selectedBibleTheme,
+        baseFullscreenTheme,
         fullscreenQuickThemeSettings,
       ),
-    [fullscreenQuickThemeSettings, selectedBibleTheme],
+    [fullscreenQuickThemeSettings, baseFullscreenTheme],
   );
 
   const activeFullscreenQuickThemeSettings = useMemo(
@@ -995,13 +1007,13 @@ export default function DockBibleTab({
   );
 
   const defaultFullscreenQuickThemeSettings = useMemo(
-    () => extractFullscreenQuickThemeSettings(selectedBibleTheme.settings),
-    [selectedBibleTheme.settings],
+    () => extractFullscreenQuickThemeSettings(baseFullscreenTheme.settings),
+    [baseFullscreenTheme.settings],
   );
 
   const defaultLowerThirdQuickThemeSettings = useMemo(
-    () => extractFullscreenQuickThemeSettings(selectedLowerThirdTheme.settings),
-    [selectedLowerThirdTheme.settings],
+    () => extractFullscreenQuickThemeSettings(baseLowerThirdTheme.settings),
+    [baseLowerThirdTheme.settings],
   );
 
   // Lower-third theme — uses fullscreen settings as base so all properties
@@ -1009,8 +1021,8 @@ export default function DockBibleTab({
   // LT-specific overrides (position, size) are layered on top.
   const effectiveSelectedLowerThirdTheme = useMemo(() => {
     const mergedQuickSettings = { ...fullscreenQuickThemeSettings, ...lowerThirdQuickThemeSettings } as DockFullscreenQuickThemeSettings;
-    return applyFullscreenQuickThemeSettings(selectedLowerThirdTheme, mergedQuickSettings);
-  }, [fullscreenQuickThemeSettings, lowerThirdQuickThemeSettings, selectedLowerThirdTheme]);
+    return applyFullscreenQuickThemeSettings(baseLowerThirdTheme, mergedQuickSettings);
+  }, [fullscreenQuickThemeSettings, lowerThirdQuickThemeSettings, baseLowerThirdTheme]);
 
   const activeLowerThirdQuickThemeSettings = useMemo(
     () => extractFullscreenQuickThemeSettings(effectiveSelectedLowerThirdTheme.settings),
@@ -2439,15 +2451,20 @@ export default function DockBibleTab({
   }, [activeColumnIndex, activeTranslation, selectedBook, selectedChapter, stageVerse]);
 
   const handleSelectFullscreenTheme = useCallback((theme: BibleTheme) => {
+    // Set both modes to the same unified theme — variant is resolved at render time
     setSelectedBibleTheme(theme);
+    setSelectedLowerThirdTheme(theme);
     setOverlayMode("fullscreen");
   }, []);
 
   const handleSelectLowerThirdTheme = useCallback((theme: BibleTheme) => {
+    // Set both modes to the same unified theme — variant is resolved at render time
+    setSelectedBibleTheme(theme);
     setSelectedLowerThirdTheme(theme);
     setOverlayMode("lower-third");
   }, []);
 
+  // Use the same theme ID regardless of mode — the selected theme is unified
   const activeThemePickerProps =
     overlayMode === "fullscreen"
       ? {
@@ -2457,7 +2474,7 @@ export default function DockBibleTab({
         templateType: "fullscreen" as const,
       }
       : {
-        selectedThemeId: selectedLowerThirdTheme.id,
+        selectedThemeId: selectedBibleTheme.id,
         onSelect: handleSelectLowerThirdTheme,
         label: "Lower Third Theme",
         templateType: "lower-third" as const,
@@ -2700,7 +2717,7 @@ export default function DockBibleTab({
               {/* <Icon name="search" size={14} className="dock-search__icon" /> */}
               <input
                 className="dock-input dock_search__input"
-                placeholder='Search reference or word, e.g. "jn3:16", "icor", "God"...'
+                placeholder='Search e.g. "jn3:16", "icor","g121", "God so loved the world"..., '
                 aria-label="Search Bible by reference or word"
                 autoComplete="off"
                 autoCorrect="off"
@@ -3148,7 +3165,6 @@ export default function DockBibleTab({
       <DockThemeSettingsModal
         selectedThemeId={activeThemePickerProps.selectedThemeId}
         onSelect={activeThemePickerProps.onSelect}
-        templateType={activeThemePickerProps.templateType}
         allowedCategories={["bible", "general"]}
         quickSettings={
           overlayMode === "fullscreen"

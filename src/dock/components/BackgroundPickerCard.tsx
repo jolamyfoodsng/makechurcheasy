@@ -25,6 +25,8 @@ interface Props {
   onBackgroundPresetChange?: (preset: DockBackgroundPreset) => void;
   /** Show the Reference section (only relevant for Bible tab) */
   showReferences?: boolean;
+  /** Active overlay mode — used to resolve variant preview in theme cards */
+  overlayMode?: "fullscreen" | "lower-third";
 }
 
 const BG_TYPE_KEY = "dtb-bg-picker-type";
@@ -84,6 +86,7 @@ export default function BackgroundPickerCard({
   sampleReference: _sampleReference = "John 3:16",
   onBackgroundPresetChange,
   showReferences = true,
+  overlayMode = "fullscreen",
 }: Props) {
   const [bgType, setBgType] = useState<BackgroundType>(() => {
     try {
@@ -284,8 +287,8 @@ export default function BackgroundPickerCard({
             <ThemeSection
               selectedThemeId={_selectedThemeId}
               onThemeSelect={_onThemeSelect}
-              templateType={_templateType}
               allowedCategories={_allowedCategories}
+              overlayMode={overlayMode}
             />
           )}
         </div>
@@ -1370,13 +1373,13 @@ function ReferenceBackgroundSection({
 function ThemeSection({
   selectedThemeId,
   onThemeSelect,
-  templateType,
   allowedCategories,
+  overlayMode,
 }: {
   selectedThemeId: string | null;
   onThemeSelect: (theme: BibleTheme) => void;
-  templateType?: BibleTheme["templateType"];
   allowedCategories?: Array<NonNullable<BibleTheme["category"]>>;
+  overlayMode: "fullscreen" | "lower-third";
 }) {
   const [themes, setThemes] = useState<BibleTheme[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1385,7 +1388,8 @@ function ThemeSection({
     let cancelled = false;
     (async () => {
       try {
-        const all = await loadDockFavoriteBibleThemes(templateType);
+        // Load all themes (unified — no templateType filter)
+        const all = await loadDockFavoriteBibleThemes();
         const allowed = new Set((allowedCategories ?? []).map((c) => c.toLowerCase()));
         const filtered = allowed.size === 0
           ? all
@@ -1394,7 +1398,7 @@ function ThemeSection({
             return cats.some((c) => allowed.has(c.toLowerCase()));
           });
         console.log("[ThemeSection]", {
-          templateType: templateType ?? "ALL",
+          overlayMode,
           allowedCategories: allowedCategories ?? "ALL",
           loadedCount: all.length,
           filteredCount: filtered.length,
@@ -1409,7 +1413,7 @@ function ThemeSection({
       }
     })();
     return () => { cancelled = true; };
-  }, [templateType, allowedCategories]);
+  }, [allowedCategories, overlayMode]);
 
   if (loading) {
     return (
@@ -1435,9 +1439,16 @@ function ThemeSection({
       <div className="dtb-theme-section__grid">
         {themes.map((theme) => {
           const isActive = theme.id === selectedThemeId;
-          const s = theme.settings;
+          // Resolve variant for preview — use the active mode's variant, fallback to theme.settings
+          const variant = overlayMode === "lower-third"
+            ? theme.variants?.lowerThird
+            : theme.variants?.fullscreen;
+          const s = variant?.settings ?? theme.settings;
           const bgColor = s.boxBackground || s.backgroundColor || "#0F172A";
           const fontColor = s.fontColor || "#fff";
+          // Determine which variants this theme supports
+          const hasFs = !!(theme.variants?.fullscreen) || theme.templateType === "fullscreen";
+          const hasLt = !!(theme.variants?.lowerThird) || theme.templateType === "lower-third";
           return (
             <button
               key={theme.id}
@@ -1451,6 +1462,10 @@ function ThemeSection({
                 style={{ backgroundColor: bgColor, color: fontColor }}
               >
                 <span className="dtb-theme-section__preview-text">Aa</span>
+                <div className="dtb-theme-section__variants">
+                  {hasFs && <span className="dtb-theme-section__variant-badge">FS</span>}
+                  {hasLt && <span className="dtb-theme-section__variant-badge">LT</span>}
+                </div>
               </div>
               <span className="dtb-theme-section__name">{theme.name}</span>
             </button>

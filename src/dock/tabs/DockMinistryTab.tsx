@@ -191,7 +191,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     let cancelled = false;
     Promise.all([
       loadDockLTFavorites().catch(() => new Set<string>()),
-      loadDockFavoriteBibleThemes("lower-third").catch(() => [] as BibleTheme[]),
+      loadDockFavoriteBibleThemes().catch(() => [] as BibleTheme[]),
     ]).then(([ltIdSet, bibleThemes]) => {
       if (cancelled) return;
       const entries: MixedLTThemeEntry[] = [];

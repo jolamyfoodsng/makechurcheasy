@@ -1641,7 +1641,7 @@ export function BibleModule({
   }, [effectiveColorMode, state.reduceMotion, state.highContrast]);
 
   const activeModeLiveScenes = layoutMode === "fullscreen" ? fullLiveScenes : ltLiveScenes;
-  const modeSendLabel = layoutMode === "fullscreen" ? "Send Full" : "Send Lower";
+  const modeSendLabel = layoutMode === "fullscreen" ? "Push To OBS" : "Push To OBS";
   const canSendSelectedVerse = Boolean(selectedBook && selectedChapter && selectedVerse);
 
   return (
@@ -1944,7 +1944,7 @@ export function BibleModule({
                 <>
                   <div className="bible-search-result-count">
                     {searchResults.length >= 200 ? "200+ results" : `${searchResults.length} result${searchResults.length !== 1 ? "s" : ""}`}
-                    <span className="bible-search-result-hint"> — click to send to OBS</span>
+                    <span className="bible-search-result-hint"> — click to push to OBS</span>
                   </div>
                   <div className="bible-search-results">
                     {searchResults.map((r, idx) => (
@@ -2168,10 +2168,10 @@ export function BibleModule({
             <span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
             <span><kbd>Shift+←</kbd><kbd>↓</kbd> Prev Ch.</span>
             <span><kbd>Shift+→</kbd><kbd>↑</kbd> Next Ch.</span>
-            <span><kbd>Click</kbd> Send to OBS</span>
+            <span><kbd>Click</kbd> Push To OBS</span>
             <span><kbd>⌘/Ctrl+1-9</kbd> Theme</span>
             <span><kbd>Ctrl+D</kbd> Favorite</span>
-            <span><kbd>Esc</kbd> Clear</span>
+            <span><kbd>Esc</kbd> Remove From OBS</span>
           </div>
         </div>
       </div>

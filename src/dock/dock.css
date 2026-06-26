@@ -21460,6 +21460,7 @@
 }
 
 .dtb-theme-section__preview {
+  position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
   display: flex;
@@ -21485,6 +21486,28 @@
   text-overflow: ellipsis;
   width: 100%;
   padding: 0 2px;
+}
+
+.dtb-theme-section__variants {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  display: flex;
+  gap: 2px;
+  z-index: 1;
+}
+
+.dtb-theme-section__variant-badge {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, rgba(0, 0, 0, 0.6) 80%, transparent);
+  color: #fff;
+  letter-spacing: 0.03em;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* ─────────────────────────────────────────────

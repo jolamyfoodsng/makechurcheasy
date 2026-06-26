@@ -29,6 +29,7 @@ import { useDockDragDrop } from "./useDockDragDrop";
 import { useDockUpload } from "./useDockUpload";
 import { ensureObsConnected } from "./obsConnectionGuard";
 import { getUserScopedKey } from "../services/userScopedStorage";
+import { getDefaultOBSUrl, readDesktopConfigCache, DEFAULT_DESKTOP_CONFIG } from "../services/desktopConfig";
 import DockDropOverlay from "./DockDropOverlay";
 import DockUploadToasts from "./DockUploadToasts";
 import { DockUpgradeModal } from "./components/DockUpgradeModal";
@@ -165,6 +166,9 @@ function getCompactDockTabLabel(tab: DockTab): string {
 }
 
 export default function DockPage() {
+  // Synchronous config reader (reads from cache, falls back to defaults)
+  const cfg = readDesktopConfigCache() || DEFAULT_DESKTOP_CONFIG;
+
   const dockRootRef = useRef<HTMLDivElement>(null);
   const shellPreferences = loadDockShellPreferences();
   const { effective, setTheme } = useAppTheme();
@@ -178,7 +182,7 @@ export default function DockPage() {
   const [isReloadingDock, setIsReloadingDock] = useState(false);
   const [staged, setStaged] = useState<DockStagedItem | null>(() => loadDockStagedItem());
   const [appConnected, setAppConnected] = useState(false);
-  const [obsUrlInput, setObsUrlInput] = useState("ws://localhost:4455");
+  const [obsUrlInput, setObsUrlInput] = useState(getDefaultOBSUrl());
   const [obsPwInput, setObsPwInput] = useState("");
   const [productionSettings, setProductionSettings] = useState<DockProductionSettingsPayload>(
     getDefaultDockProductionSettings(),
@@ -261,10 +265,15 @@ export default function DockPage() {
   // ── Force update: fetch latest release info and check pub_date ──
   useEffect(() => {
     const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-releases/releases/latest";
-    const FORCE_UPDATE_DAYS = 21;
     const CACHE_KEY = "ocs-dock-update-cache-v1";
 
+    // Use config for force-update settings (fallback: 21 days, enabled)
+    const FORCE_UPDATE_DAYS = Math.round((cfg.appUpdates.gracePeriodHours || 24 * 21) / 24);
+    const forceEnabled = cfg.appUpdates.forceUpdatesEnabled;
+
     const currentVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined;
+
+    if (!forceEnabled) return;
 
     fetch(RELEASES_API)
       .then((r) => r.json())
@@ -580,8 +589,8 @@ export default function DockPage() {
           <a
             href={(() => {
               const ua = navigator.userAgent.toLowerCase();
-              if (ua.includes("mac")) return "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/download/v4.38.0/MakeChurchEasy_4.38.0_aarch64.dmg";
-              return "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/download/v4.38.0/MakeChurchEasy_4.38.0_x64-setup.exe";
+              if (ua.includes("mac")) return cfg.appUpdates.downloadUrls.macosAppleSilicon;
+              return cfg.appUpdates.downloadUrls.windows;
             })()}
             target="_blank"
             rel="noopener noreferrer"
@@ -589,6 +598,16 @@ export default function DockPage() {
           >
             Download Update
           </a>
+        </div>
+      )}
+
+      {/* ── Maintenance Mode Banner ── */}
+      {cfg.security.maintenanceMode && (
+        <div className="dock-force-update-banner" style={{ background: "var(--accent, #f59e0b)", color: "#000" }}>
+          <Icon name="build" size={14} />
+          <span>
+            {cfg.security.maintenanceMessage || "System maintenance in progress. Some features may be unavailable."}
+          </span>
         </div>
       )}
 

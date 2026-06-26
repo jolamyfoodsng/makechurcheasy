@@ -46,6 +46,35 @@ void initAuthStore().then(async () => {
     startUsageSync();
   } catch { /* usage sync is best-effort */ }
 
+  // Load desktop config from API (with cache/fallback) and apply theme overrides
+  try {
+    const { getDesktopConfig, refreshDesktopConfig } = await import("./services/desktopConfig");
+    await getDesktopConfig();
+
+    // Apply admin-configured theme overrides to DEFAULT_THEME_SETTINGS
+    const { applyThemeConfigOverrides } = await import("./bible/types");
+    applyThemeConfigOverrides();
+
+    // Background refresh every 5 minutes
+    setInterval(() => {
+      void refreshDesktopConfig().then(() => {
+        applyThemeConfigOverrides();
+      });
+    }, 5 * 60 * 1000);
+
+    // Refresh on window focus and connectivity change
+    window.addEventListener("focus", () => {
+      void refreshDesktopConfig().then(() => {
+        applyThemeConfigOverrides();
+      });
+    });
+    window.addEventListener("online", () => {
+      void refreshDesktopConfig().then(() => {
+        applyThemeConfigOverrides();
+      });
+    });
+  } catch { /* config loading is best-effort, falls back to defaults */ }
+
   // MakeChurchEasy Dock uses a real pathname (/dock), not a hash route.
   // Intercept before HashRouter mounts so the dock page works standalone.
   if (window.location.pathname === "/dock" || window.location.pathname === "/dock/") {

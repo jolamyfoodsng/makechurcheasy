@@ -1,4 +1,5 @@
 import { obsService } from "../services/obsService";
+import { obsSyncService } from "../services/obsSyncService";
 import { getOverlayBaseUrl } from "../services/overlayUrl";
 import type { LiveToolOverlayPayload, LiveToolTemplate } from "./types";
 
@@ -293,6 +294,9 @@ export async function sendLiveToolToObs(tool: LiveToolTemplate, live: boolean): 
   }
 
   await pushTemplate(tool, live);
+
+  // Trigger centralized sync after sending live tool to OBS
+  obsSyncService.sync("live-tools:send").catch(() => { });
 }
 
 export async function clearLiveToolTarget(live: boolean): Promise<void> {
@@ -307,4 +311,7 @@ export async function clearLiveToolTarget(live: boolean): Promise<void> {
 
 export async function clearAllLiveTools(): Promise<void> {
   await Promise.all([clearLiveToolTarget(false), clearLiveToolTarget(true)]);
+
+  // Trigger centralized sync after clearing all live tools
+  obsSyncService.sync("live-tools:clear").catch(() => { });
 }

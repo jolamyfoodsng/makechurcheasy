@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { obsService, type ConnectionStatus } from "../services/obsService";
 import { loadData, updateData } from "../services/store";
+import { getDefaultOBSUrl } from "../services/desktopConfig";
 import Icon from "./Icon";
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
 export function OBSConnectGate({ children }: Props) {
   const [, setStatus] = useState<ConnectionStatus>(obsService.status);
   const [error, setError] = useState<string | null>(null);
-  const [url, setUrl] = useState("ws://localhost:4455");
+  const [url, setUrl] = useState(getDefaultOBSUrl());
   const [password, setPassword] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [, setAutoConnectTried] = useState(false);

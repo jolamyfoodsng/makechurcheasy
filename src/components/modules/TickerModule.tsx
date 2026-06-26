@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { obsService } from "../../services/obsService";
+import { obsSyncService } from "../../services/obsSyncService";
 import { getDisplaySceneName } from "../../services/obsSceneTargets";
 import { serviceStore } from "../../services/serviceStore";
 import { getSettings as getMVSettings } from "../../multiview/mvStore";
@@ -554,6 +555,8 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
     setActiveDurationTotalSeconds(0);
     setActiveDurationInfinite(false);
     setRunning(false);
+    // Trigger centralized sync after stopping ticker
+    obsSyncService.sync("ticker:stop").catch(() => { });
     return ok;
   }, [clearAutoStopTimers, settings.scene]);
 
@@ -678,6 +681,8 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
       setRunning(true);
       setSettings((prev) => ({ ...prev, scene: sceneName }));
       applyActiveDurationMode(resolveDurationConfig(settings));
+      // Trigger centralized sync after starting ticker
+      obsSyncService.sync("ticker:start").catch(() => { });
       return true;
     } catch (err) {
       console.error(`[TickerModule] Failed to start ticker in "${sceneName}":`, err);
@@ -1029,10 +1034,10 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                     className="ticker-now-showing-btn ticker-now-showing-btn--clear"
                     onClick={() => { void handleToggleTicker(); }}
                     disabled={liveToggleBusy}
-                    title="Clear ticker"
+                    title="Remove ticker from OBS"
                   >
                     <Icon name="clear" size={14} />
-                    Clear
+                    Remove From OBS
                   </button>
                 </div>
               </div>
@@ -1464,7 +1469,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                 disabled={(!running && messages.length === 0) || (!running && !obsConnected) || liveToggleBusy}
               >
                 <Icon name={running ? "stop_circle" : "play_circle"} size={20} />
-                {liveToggleBusy ? (running ? "STOPPING..." : "STARTING...") : running ? "STOP TICKER" : "START TICKER"}
+                {liveToggleBusy ? (running ? "STOPPING..." : "STARTING...") : running ? "Remove From OBS" : "Push To OBS"}
               </button>
             </div>
             <ObsScenesPanel
@@ -1478,7 +1483,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
               activeScenes={running && activeTickerScene ? [activeTickerScene] : []}
               refreshing={scenesRefreshing}
               disabled={messages.length === 0}
-              sendLabel="Send"
+              sendLabel="Push To OBS"
               onRefresh={handleRefreshScenes}
               onSendToScene={async (sceneName, mode) => {
                 await sendTickerToScene(sceneName, mode);

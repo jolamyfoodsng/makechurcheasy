@@ -7,13 +7,7 @@
  * Used by: MediaTab, DockMediaTab, uploadFileToDock, saveLibraryMediaFile
  */
 
-const IMAGE_EXTENSIONS = new Set([
-  "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg",
-]);
-
-const VIDEO_EXTENSIONS = new Set([
-  "mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv", "flv",
-]);
+import { getDefaultImageExtensions, getDefaultVideoExtensions } from "./desktopConfig";
 
 const SUPPORTED_MIME_PREFIXES = ["image/", "video/"];
 
@@ -22,13 +16,11 @@ const SUPPORTED_MIME_PREFIXES = ["image/", "video/"];
  * Validates by MIME type prefix AND by file extension as fallback.
  */
 export function isSupportedMediaFile(file: File): boolean {
-  // Check MIME type first
   if (SUPPORTED_MIME_PREFIXES.some((prefix) => file.type.startsWith(prefix))) {
     return true;
   }
-  // Fallback: check file extension (handles cases where MIME is missing or wrong)
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  return IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
+  return getDefaultImageExtensions().includes(ext) || getDefaultVideoExtensions().includes(ext);
 }
 
 /**
@@ -37,7 +29,7 @@ export function isSupportedMediaFile(file: File): boolean {
 export function isSupportedImageFile(file: File): boolean {
   if (file.type.startsWith("image/")) return true;
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  return IMAGE_EXTENSIONS.has(ext);
+  return getDefaultImageExtensions().includes(ext);
 }
 
 /**
@@ -46,17 +38,18 @@ export function isSupportedImageFile(file: File): boolean {
 export function isSupportedVideoFile(file: File): boolean {
   if (file.type.startsWith("video/")) return true;
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  return VIDEO_EXTENSIONS.has(ext);
+  return getDefaultVideoExtensions().includes(ext);
 }
 
 /**
  * Get the media kind from a file (by MIME or extension).
  */
 export function getMediaKind(file: File): "image" | "video" | null {
-  if (file.type.startsWith("image/") || IMAGE_EXTENSIONS.has(file.name.split(".").pop()?.toLowerCase() ?? "")) {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (file.type.startsWith("image/") || getDefaultImageExtensions().includes(ext)) {
     return "image";
   }
-  if (file.type.startsWith("video/") || VIDEO_EXTENSIONS.has(file.name.split(".").pop()?.toLowerCase() ?? "")) {
+  if (file.type.startsWith("video/") || getDefaultVideoExtensions().includes(ext)) {
     return "video";
   }
   return null;
@@ -70,6 +63,3 @@ export function validateMediaFile(file: File): string | null {
   if (isSupportedMediaFile(file)) return null;
   return `Unsupported file type: "${file.name}". Please upload an image or video file.`;
 }
-
-/** Re-export extension sets for use in accept attributes */
-export { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS };

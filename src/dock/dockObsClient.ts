@@ -27,6 +27,7 @@
  */
 
 import OBSWebSocket from "obs-websocket-js";
+import { getDefaultOBSUrl, getDefaultCanvasSize, getDefaultLowerThirdTheme } from "../services/desktopConfig";
 import { ALL_THEMES, type ThemeLike } from "../lowerthirds/themes";
 import { getWorshipLTFavorites } from "../services/favoriteThemes";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
@@ -236,6 +237,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 }`,
 };
 
+/**
+ * Returns the default lower-third theme with config-driven colors.
+ * Falls back to DEFAULT_LT_THEME if config is not yet loaded.
+ */
+function getDefaultLTTheme(): typeof DEFAULT_LT_THEME {
+  const lt = getDefaultLowerThirdTheme();
+  return {
+    ...DEFAULT_LT_THEME,
+    html: `<div class="lt pos-bl in-up">
+  <div class="panel speaker-panel" style="--bg:${lt.backgroundColor};--fg:${lt.nameColor};--accent:#1D4ED8;--bd:rgba(255,255,255,.12);">
+    <div class="v-divider"></div>
+    <div class="col">
+      <p class="name-line" style="font-size:clamp(${lt.nameSize}px, 2.2vw, ${Math.round(lt.nameSize * 1.86)}px);">{{name}}</p>
+      <p class="role-line">{{role}}</p>
+    </div>
+  </div>
+</div>`,
+  };
+}
+
 function normalizeThemeToken(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -274,7 +295,7 @@ class DockObsClient {
   private listeners = new Set<StatusCallback>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private _reconnectAttempts = 0;
-  private _url = "ws://localhost:4455";
+  private _url = getDefaultOBSUrl();
   private _password: string | undefined;
   /** Track last overlay mode per source so we can force-reload when switching HTML files */
   private _lastOverlayMode: Record<string, string> = {};
@@ -425,7 +446,7 @@ class DockObsClient {
     } catch { /* ignore */ }
 
     // 4. Default
-    this._url = "ws://localhost:4455";
+    this._url = getDefaultOBSUrl();
     this._password = undefined;
   }
 
@@ -590,12 +611,13 @@ class DockObsClient {
         baseWidth?: number;
         baseHeight?: number;
       };
+      const fallback = getDefaultCanvasSize();
       return {
-        width: Number(video.baseWidth) || 1920,
-        height: Number(video.baseHeight) || 1080,
+        width: Number(video.baseWidth) || fallback.width,
+        height: Number(video.baseHeight) || fallback.height,
       };
     } catch {
-      return { width: 1920, height: 1080 };
+      return getDefaultCanvasSize();
     }
   }
 
@@ -1192,6 +1214,29 @@ class DockObsClient {
     return {
       url: "https://github.com/exeldro/obs-move-transition/releases/latest",
       filename: "move-transition",
+      instructions: "Download the installer for your OS from the GitHub releases page, then restart MakeChurchEasy.",
+    };
+  }
+
+  /**
+   * Check if the Image Slideshow plugin (exeldro/obs-slideshow) is installed.
+   */
+  async isSlideshowPluginInstalled(): Promise<boolean> {
+    try {
+      const resp = await this.call("GetInputKindList") as { inputKinds?: string[] };
+      return Array.isArray(resp.inputKinds) && resp.inputKinds.includes("image_slideshow");
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Returns platform-specific download info for the Slideshow plugin.
+   */
+  getSlideshowPluginDownloadInfo(): { url: string; filename: string; instructions: string } {
+    return {
+      url: "https://github.com/exeldro/obs-slideshow/releases/latest",
+      filename: "obs-slideshow",
       instructions: "Download the installer for your OS from the GitHub releases page, then restart MakeChurchEasy.",
     };
   }
@@ -2900,11 +2945,11 @@ class DockObsClient {
     const customMatches = list.filter((t) => isLikelyCustomTheme(t));
     const fallback = favoriteMatches[0] ?? customMatches[0] ?? list[0];
 
-    if (!fallback) return DEFAULT_LT_THEME;
+    if (!fallback) return getDefaultLTTheme();
     return {
       id: fallback.id,
-      html: fallback.html || DEFAULT_LT_THEME.html,
-      css: fallback.css || DEFAULT_LT_THEME.css,
+      html: fallback.html || getDefaultLTTheme().html,
+      css: fallback.css || getDefaultLTTheme().css,
     };
   }
 
@@ -2949,7 +2994,7 @@ class DockObsClient {
     blanked: boolean,
     theme?: DockLTThemeRef,
   ): string {
-    const t = theme ?? DEFAULT_LT_THEME;
+    const t = theme ?? getDefaultLTTheme();
     const payload = {
       themeId: t.id,
       html: t.html,
@@ -3324,7 +3369,7 @@ class DockObsClient {
     blanked: boolean,
     theme?: DockLTThemeRef,
   ): string {
-    const t = theme ?? DEFAULT_LT_THEME;
+    const t = theme ?? getDefaultLTTheme();
     const payload = {
       themeId: t.id,
       html: t.html,
@@ -4250,7 +4295,7 @@ class DockObsClient {
     blanked: boolean,
     theme?: DockLTThemeRef,
   ): string {
-    const t = theme ?? DEFAULT_LT_THEME;
+    const t = theme ?? getDefaultLTTheme();
     const cleanedLabel = cleanWorshipObsLabel(sectionLabel);
 
     // Build variable values that worship themes expect
@@ -4615,7 +4660,7 @@ class DockObsClient {
     blanked: boolean,
     theme?: DockLTThemeRef,
   ): string {
-    const t = theme ?? DEFAULT_LT_THEME;
+    const t = theme ?? getDefaultLTTheme();
     const payload = {
       themeId: t.id,
       html: t.html,
@@ -5408,6 +5453,15 @@ class DockObsClient {
   }): Promise<void> {
     const { sourceName, images, loop = true, transitionTime = 3000 } = options;
 
+    // Pre-flight: check slideshow plugin is installed
+    if (!(await this.isSlideshowPluginInstalled())) {
+      throw new Error(
+        "The Image Slideshow plugin is not installed in OBS. " +
+        "Please install obs-slideshow from https://github.com/exeldro/obs-slideshow/releases/latest " +
+        "and restart OBS."
+      );
+    }
+
     // Get the current scene
     const target = await this.getTargetScene("media");
     const sceneName = target.sceneName;
@@ -5438,7 +5492,7 @@ class DockObsClient {
     await this.call("CreateInput", {
       sceneName,
       inputName: sourceName,
-      inputKind: "obs_slideshow",
+      inputKind: "image_slideshow",
       inputSettings: {
         files: slideshowItems,
         loop,
@@ -5882,7 +5936,7 @@ class DockObsClient {
   private _hasSeparateFullscreenBg(
     themeSettings: Record<string, unknown> | null | undefined,
   ): boolean {
-    const canvas = { width: 1920, height: 1080 };
+    const canvas = getDefaultCanvasSize();
     return Boolean(this._resolveNativeBackgroundSource(themeSettings, canvas));
   }
 
