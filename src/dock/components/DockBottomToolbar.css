@@ -176,6 +176,11 @@
   padding: 6px 10px;
 }
 
+.dock-btm-toolbar.dock-btm-toolbar--collapsed button.dock-btm-toolbar__clear.dock-btm-toolbar__clear--bible {
+  display: block !important;
+}
+
+
 .dock-btm-toolbar--collapsed .dock-btm-toolbar__clear {
   flex: 1;
   order: 0;
