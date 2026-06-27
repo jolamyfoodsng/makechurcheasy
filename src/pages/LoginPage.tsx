@@ -12,6 +12,8 @@ import QRCode from "qrcode";
 import { readDesktopConfigCache, DEFAULT_DESKTOP_CONFIG } from "@/services/desktopConfig";
 
 const AUTH_API = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+console.log('AUTH_API :', AUTH_API);
+
 
 function detectOS(): string {
   const ua = navigator.userAgent;
