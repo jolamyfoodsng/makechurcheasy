@@ -51,7 +51,7 @@ export default function LoginPage() {
     : "https://makechurcheasy.creatorstudioslabs.stream";
 
   const DASHBOARD_URL = AUTH_API.startsWith("http://localhost")
-    ? "http://localhost:3000"
+    ? "http://localhost:4000"
     : "https://makechurcheasy.creatorstudioslabs.stream";
 
   async function generateQrDataUrl(pairCode: string): Promise<string> {

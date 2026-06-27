@@ -26,7 +26,7 @@
  */
 
 import { getUserScopedKey } from "./userScopedStorage";
-import { getDeviceId, getSession } from "./authService";
+import { getDeviceId, getDeviceSecret, getSession } from "./authService";
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
@@ -180,6 +180,7 @@ async function fetchLicenseFromBackend(): Promise<LicensePayload | null> {
       {
         headers: {
           "X-App-Version": APP_VERSION,
+          "X-Device-Secret": getDeviceSecret() || "",
         },
       },
     );

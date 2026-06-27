@@ -34,7 +34,7 @@ import type { BibleSlide } from "../bible/types";
 import CreditsDisplay from "../components/CreditsDisplay";
 import { useAuth } from "../contexts/AuthContext";
 import { track } from "../services/analytics";
-import { getDeviceId } from "../services/authService";
+import { getDeviceId, getDeviceSecret } from "../services/authService";
 import { calculateTranscriptionCredits, deductCreditsWithSync } from "../services/credits";
 import { checkEntitlement } from "../services/entitlementClient";
 import { getEffectivePlan } from "../services/licenseService";
@@ -214,7 +214,10 @@ export default function SpeechToScripturePage() {
         `${API_BASE}/api/device/speech-to-scripture/check-access?deviceId=${encodeURIComponent(deviceId || "")}`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Device-Secret": getDeviceSecret() || "",
+          },
         }
       );
 

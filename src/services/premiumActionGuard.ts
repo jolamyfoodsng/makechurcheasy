@@ -8,7 +8,7 @@
  * within the offline verification window.
  */
 
-import { getDeviceId } from "./authService";
+import { getDeviceId, getDeviceSecret } from "./authService";
 import { getLicensePayload, isUnlocked } from "./licenseGuard";
 
 const API_BASE =
@@ -31,16 +31,16 @@ export type PremiumFeature =
 export interface AccessCheckResult {
   allowed: boolean;
   reason?:
-    | "feature_not_available"
-    | "insufficient_credits"
-    | "subscription_expired"
-    | "trial_expired"
-    | "account_suspended"
-    | "device_revoked"
-    | "maintenance"
-    | "internet_required"
-    | "server_error"
-    | "device_not_found";
+  | "feature_not_available"
+  | "insufficient_credits"
+  | "subscription_expired"
+  | "trial_expired"
+  | "account_suspended"
+  | "device_revoked"
+  | "maintenance"
+  | "internet_required"
+  | "server_error"
+  | "device_not_found";
   credits?: number;
   plan?: string;
   requiredPlan?: string;
@@ -81,6 +81,7 @@ export async function checkPremiumAccess(
         headers: {
           "Content-Type": "application/json",
           "X-App-Version": APP_VERSION,
+          "X-Device-Secret": getDeviceSecret() || "",
         },
         body: JSON.stringify({
           feature,

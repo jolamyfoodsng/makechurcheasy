@@ -36,6 +36,7 @@ export interface AuthUser {
 interface AuthSession {
   user: AuthUser;
   deviceId: string;
+  deviceSecret?: string;
   expiresAt: number;
 }
 
@@ -113,6 +114,10 @@ export function getSession(): AuthSession | null {
 
 export function getDeviceId(): string | null {
   return _session?.deviceId ?? null;
+}
+
+export function getDeviceSecret(): string | null {
+  return _session?.deviceSecret ?? null;
 }
 
 async function saveSession(session: AuthSession) {
@@ -238,7 +243,7 @@ export async function refreshPlanFromServer(): Promise<void> {
   try {
     const res = await fetch(
       `${API_BASE}/api/device/profile?deviceId=${encodeURIComponent(_session.deviceId)}`,
-      { headers: { "X-App-Version": APP_VERSION } },
+      { headers: { "X-App-Version": APP_VERSION, "X-Device-Secret": _session.deviceSecret || "" } },
     );
     if (!res.ok) return;
     const data = await res.json();
@@ -372,6 +377,7 @@ export function watchPairingStatus(
     saveSession({
       user: authUser,
       deviceId: data.deviceId,
+      deviceSecret: data.deviceSecret || undefined,
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
     });
 
