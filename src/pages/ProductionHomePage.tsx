@@ -895,8 +895,20 @@ export default function ProductionHomePage() {
   // ── Tutorial Modal ──
   const [tutorialOpen, setTutorialOpen] = useState(false);
 
-  const handleConnectObs = useCallback(() => {
-    navigate("/settings");
+  const handleConnectObs = useCallback(async () => {
+    try {
+      // If obsService.connect does not exist, replace with appropriate connect/reconnect method.
+      await obsService.connect();
+
+      // Give OBS status a moment to update.
+      setTimeout(() => {
+        if (obsService.status !== "connected") {
+          navigate("/settings?tab=obs");
+        }
+      }, 1500);
+    } catch {
+      navigate("/settings?tab=obs");
+    }
   }, [navigate]);
 
   const handleOpenTutorials = useCallback(() => {

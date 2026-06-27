@@ -16,6 +16,7 @@
 export interface AppVersionSettings {
   forceUpdatesEnabled: boolean;
   emergencyLock: boolean;
+  maintenanceMode: boolean;
   emergencyLockDelay: number; // hours (0 = immediate, 24/48/72 = delayed)
   minimumSupportedVersion: string;
   gracePeriodHours: number;
@@ -308,7 +309,7 @@ export function getForcedUpdateState(
 
     // If the server has turned off the lock that created this record, clear the stale record
     const serverStillLocking =
-      (record.lockType === "emergency-lock" && settings.emergencyLock) ||
+      (record.lockType === "emergency-lock" && (settings.emergencyLock || settings.maintenanceMode)) ||
       (record.lockType === "forced-update" && settings.forceUpdatesEnabled &&
         (isBelowVersion(ver, settings.minimumSupportedVersion) || isBelowVersion(ver, settings.latestVersion)));
 
@@ -341,7 +342,7 @@ export function getForcedUpdateState(
   // ── Step 2: No local record — check if server wants to trigger one ──
 
   // Emergency lock
-  if (settings.emergencyLock) {
+  if (settings.emergencyLock || settings.maintenanceMode) {
     const delayHours = settings.emergencyLockDelay || 0;
     const now = new Date().toISOString();
     const requiredVersion = settings.latestVersion || settings.minimumSupportedVersion;

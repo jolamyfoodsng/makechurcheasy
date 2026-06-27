@@ -24,6 +24,7 @@ import BibleCommandPalette from "./components/BibleCommandPalette";
 import { BibleProvider } from "./bible/bibleStore";
 import Icon from "./components/Icon";
 import DashboardSidebar from "./components/DashboardSidebar";
+import LiveStatusBar from "./components/LiveStatusBar";
 import { getOverlayBaseUrlSync } from "./services/overlayUrl";
 import type { ConnectionStatus } from "./services/obsService";
 
@@ -159,6 +160,7 @@ export function AppShell() {
       />
 
       <main className={`app-main${sidebarCollapsed ? " app-main--collapsed" : ""}`}>
+        <LiveStatusBar />
         <div className="app-glow" />
         <div className="app-content">
           <Outlet />

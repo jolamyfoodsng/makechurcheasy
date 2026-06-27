@@ -115,22 +115,17 @@ export function getDefaultOBSUrl(): string {
 
 /**
  * Synchronous helper to get the default OBS canvas dimensions.
- * Reads from cache; falls back to hardcoded 1920×1080 if config not yet loaded.
+ * Falls back to 1920×1080 if config not yet loaded.
  */
 export function getDefaultCanvasSize(): { width: number; height: number } {
-  const cached = readCache();
-  return {
-    width: cached?.obs.width ?? DEFAULT_DESKTOP_CONFIG.obs.width,
-    height: cached?.obs.height ?? DEFAULT_DESKTOP_CONFIG.obs.height,
-  };
+  return { width: 1920, height: 1080 };
 }
 
 /**
  * Synchronous helper to get the default OBS FPS.
  */
 export function getDefaultFPS(): number {
-  const cached = readCache();
-  return cached?.obs.fps ?? DEFAULT_DESKTOP_CONFIG.obs.fps;
+  return 30;
 }
 
 /**

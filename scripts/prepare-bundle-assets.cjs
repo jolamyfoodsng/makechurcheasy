@@ -11,6 +11,8 @@ const windowsRuntimeOutputDir = path.join(
   "resources",
   "windows-runtime"
 );
+const appIconsSrcDir = path.join(projectRoot, "public", "app_icons");
+const appIconsDestDir = path.join(projectRoot, "src-tauri", "resources", "app_icons");
 const llmDir = path.join(projectRoot, "src-tauri", "resources", "models", "llm");
 const qwenFileName = "qwen2.5-1.5b-instruct-q4_k_m.gguf";
 const qwenModelPath = path.join(llmDir, qwenFileName);
@@ -297,8 +299,32 @@ function stageWindowsRuntimeDlls() {
   );
 }
 
+function copyAppIcons() {
+  if (!fs.existsSync(appIconsSrcDir)) {
+    console.log("[prepare-bundle-assets] No app_icons source directory found; skipping.");
+    return;
+  }
+
+  fs.mkdirSync(appIconsDestDir, { recursive: true });
+
+  const files = fs.readdirSync(appIconsSrcDir).filter((f) => /\.(png|jpe?g)$/i.test(f));
+  if (files.length === 0) {
+    console.log("[prepare-bundle-assets] No icon files found in app_icons; skipping.");
+    return;
+  }
+
+  for (const file of files) {
+    fs.copyFileSync(path.join(appIconsSrcDir, file), path.join(appIconsDestDir, file));
+  }
+
+  console.log(
+    `[prepare-bundle-assets] Copied ${files.length} app icon(s) to resources/app_icons: ${files.join(", ")}`
+  );
+}
+
 async function main() {
   stageWindowsRuntimeDlls();
+  copyAppIcons();
 }
 
 main().catch((error) => {

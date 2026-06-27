@@ -180,7 +180,7 @@ export default function LoginPage() {
               Maintenance Mode
             </h1>
             <p style={{ fontSize: "16px", color: "#a0a0b0", lineHeight: 1.6 }}>
-              {(readDesktopConfigCache() || DEFAULT_DESKTOP_CONFIG).security.maintenanceMessage || "We'll be back shortly!"}
+              We'll be back shortly!
             </p>
           </div>
         </div>

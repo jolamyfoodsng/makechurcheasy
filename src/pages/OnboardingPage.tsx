@@ -1,7 +1,10 @@
 /**
- * OnboardingPage — First-run setup wizard for MakeChurchEasy.
+ * OnboardingPage — Desktop onboarding wizard for MakeChurchEasy.
  *
- * Flow: Welcome → Connect OBS → Bible → Worship → Media → Install Dock → Test → Ready
+ * Flow: Welcome → Connect OBS → Present First Verse →
+ *       Create Theme → Install Dock → Run Diagnostics → Ready
+ *
+ * Every step fires a milestone to the backend.
  * Persisted in localStorage so future launches skip straight to dashboard.
  */
 
@@ -29,24 +32,40 @@ import {
   ListMusic,
   Video,
   Users,
+  Eye,
+  Palette,
 } from "lucide-react";
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { getDeviceId } from "../services/authService";
 import { track } from "../services/analytics";
 import { getDefaultOBSPort } from "../services/desktopConfig";
-import StepBible from "../onboarding/StepBible";
-import StepWorship from "../onboarding/StepWorship";
-import StepMedia from "../onboarding/StepMedia";
+import { getInstalledTranslations } from "../bible/bibleDb";
+import { getVerse } from "../bible/bibleData";
+import { generateSlides } from "../bible/slideEngine";
+import { bibleObsService } from "../bible/bibleObsService";
+import ThemeCreatorModal from "./ThemeCreatorModal";
+import type { BiblePassage, BibleTranslation } from "../bible/types";
 import "./OnboardingPage.css";
 
 /* ── Constants ── */
 const STORAGE_KEY = "mce-onboarding-complete";
 const STEP_KEY = "mce-onboarding-step";
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 7;
 const YOUTUBE_URL = "https://www.youtube.com/@MakeChurchEasy";
+const API_BASE =
+  import.meta.env.VITE_AUTH_API_URL ||
+  "https://api.makechurcheasy.creatorstudioslabs.stream";
 
-const STEP_NAMES = ["Welcome", "OBS", "Bible", "Worship", "Media", "Dock", "Test", "Finish"];
+const STEP_NAMES = [
+  "Welcome",
+  "OBS",
+  "Verse",
+  "Theme",
+  "Dock",
+  "Test",
+  "Ready",
+];
 
 /* ── Helpers ── */
 function isOnboardingComplete(): boolean {
@@ -68,12 +87,10 @@ function saveStep(step: number) {
 
 function completeOnboarding() {
   localStorage.setItem(STORAGE_KEY, "true");
-  localStorage.removeItem(STEP_KEY);
+  localStorage.removeItem(STORAGE_KEY + "-theme-id");
 
-  // Notify server that onboarding is complete (fire and forget)
   try {
     const deviceId = getDeviceId();
-    const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
     fetch(`${API_BASE}/api/onboarding/complete`, {
       method: "POST",
       headers: {
@@ -81,10 +98,25 @@ function completeOnboarding() {
         ...(deviceId ? { "X-Device-Id": deviceId } : {}),
       },
       body: JSON.stringify({
-        churchName: "",
-        country: "",
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "(GMT+00:00) UTC",
+        timezone:
+          Intl.DateTimeFormat().resolvedOptions().timeZone || "(GMT+00:00) UTC",
       }),
+    }).catch(() => { });
+  } catch {
+    // Not critical
+  }
+}
+
+function fireMilestone(milestone: string) {
+  try {
+    const deviceId = getDeviceId();
+    fetch(`${API_BASE}/api/onboarding/milestone`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(deviceId ? { "X-Device-Id": deviceId } : {}),
+      },
+      body: JSON.stringify({ milestone, timestamp: new Date().toISOString() }),
     }).catch(() => { });
   } catch {
     // Not critical
@@ -101,10 +133,15 @@ export function OnboardingResumeBanner() {
   const remaining = TOTAL_STEPS - step + 1;
 
   return (
-    <div className="ob-resume-banner" onClick={() => navigate("/onboarding")}>
+    <div
+      className="ob-resume-banner"
+      onClick={() => navigate("/onboarding")}
+    >
       <AlertTriangle size={16} />
       <span className="ob-resume-text">Complete Setup</span>
-      <span className="ob-resume-steps">{remaining} step{remaining !== 1 ? "s" : ""} remaining</span>
+      <span className="ob-resume-steps">
+        {remaining} step{remaining !== 1 ? "s" : ""} remaining
+      </span>
       <ChevronRight size={14} className="ob-resume-arrow" />
     </div>
   );
@@ -120,7 +157,9 @@ export default function OnboardingPage() {
       const next = step + 1;
       setStep(next);
       saveStep(next);
-      track("onboarding_step_completed", { step: STEP_NAMES[next - 1] ?? String(next) });
+      track("onboarding_step_completed", {
+        step: STEP_NAMES[next - 1] ?? String(next),
+      });
     }
   }, [step]);
 
@@ -133,6 +172,7 @@ export default function OnboardingPage() {
   }, [step]);
 
   const finish = useCallback(() => {
+    fireMilestone("desktopOnboardingCompletedAt");
     track("onboarding_completed");
     completeOnboarding();
     window.location.href = "/";
@@ -148,16 +188,13 @@ export default function OnboardingPage() {
     openUrl(YOUTUBE_URL);
   }, []);
 
-  // Track onboarding started once
   useEffect(() => {
     track("onboarding_started");
+    fireMilestone("desktopOnboardingStartedAt");
   }, []);
 
   return (
     <div className="ob-root">
-      {/* Top bar */}
-
-
       {/* Progress dots */}
       <div className="ob-progress">
         {STEP_NAMES.map((_, i) => {
@@ -166,7 +203,11 @@ export default function OnboardingPage() {
           const isActive = s === step;
           return (
             <div className="ob-step-dot-wrap" key={i}>
-              {i > 0 && <div className={`ob-step-line${isDone ? " is-done" : ""}`} />}
+              {i > 0 && (
+                <div
+                  className={`ob-step-line${isDone ? " is-done" : ""}`}
+                />
+              )}
               <div
                 className={`ob-step-dot${isActive ? " is-active" : ""}${isDone ? " is-done" : ""}`}
               />
@@ -194,27 +235,48 @@ export default function OnboardingPage() {
 
       {/* Content */}
       <div className="ob-content">
-        {step === 1 && <StepWelcome onNext={goNext} onTutorial={openTutorial} />}
-        {step === 2 && <StepConnectOBS onNext={goNext} onBack={goPrev} />}
-        {step === 3 && <StepBible onNext={goNext} onBack={goPrev} />}
-        {step === 4 && <StepWorship onNext={goNext} onBack={goPrev} />}
-        {step === 5 && <StepMedia onNext={goNext} onBack={goPrev} />}
-        {step === 6 && <StepInstallDock onNext={goNext} onBack={goPrev} onTutorial={openTutorial} />}
-        {step === 7 && <StepTest onFinish={finish} onBack={goPrev} />}
-        {step === 8 && <StepReady onFinish={finish} />}
+        {step === 1 && (
+          <StepWelcome onNext={goNext} onTutorial={openTutorial} />
+        )}
+        {step === 2 && (
+          <StepConnectOBS onNext={goNext} onBack={goPrev} />
+        )}
+        {step === 3 && (
+          <StepPresentVerse onNext={goNext} onBack={goPrev} />
+        )}
+        {step === 4 && (
+          <StepCreateTheme onNext={goNext} onBack={goPrev} />
+        )}
+        {step === 5 && (
+          <StepInstallDock
+            onNext={goNext}
+            onBack={goPrev}
+            onTutorial={openTutorial}
+          />
+        )}
+        {step === 6 && (
+          <StepTest onFinish={finish} onBack={goPrev} />
+        )}
+        {step === 7 && <StepReady onFinish={finish} />}
       </div>
 
       {/* Skip modal */}
       {showSkipModal && (
-        <div className="ob-modal-overlay" onClick={() => setShowSkipModal(false)}>
+        <div
+          className="ob-modal-overlay"
+          onClick={() => setShowSkipModal(false)}
+        >
           <div className="ob-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Skip Setup?</h3>
             <p>
-              Some features may not work until setup is completed. You can resume setup later from
-              the dashboard.
+              Some features may not work until setup is completed. You can
+              resume setup later from the dashboard.
             </p>
             <div className="ob-modal-actions">
-              <button className="ob-btn ob-btn--ghost" onClick={() => setShowSkipModal(false)}>
+              <button
+                className="ob-btn ob-btn--ghost"
+                onClick={() => setShowSkipModal(false)}
+              >
                 Continue Setup
               </button>
               <button className="ob-btn ob-btn--primary" onClick={skip}>
@@ -232,7 +294,13 @@ export default function OnboardingPage() {
    Step 1 — Welcome
    ══════════════════════════════════════════════════════════════ */
 
-function StepWelcome({ onNext, onTutorial }: { onNext: () => void; onTutorial: () => void }) {
+function StepWelcome({
+  onNext,
+  onTutorial,
+}: {
+  onNext: () => void;
+  onTutorial: () => void;
+}) {
   return (
     <div className="ob-card">
       <div className="ob-hero">
@@ -241,8 +309,9 @@ function StepWelcome({ onNext, onTutorial }: { onNext: () => void; onTutorial: (
         </div>
         <h1>Welcome to MakeChurchEasy</h1>
         <p>
-          Complete Church Presentation Studio for OBS. Present Bible verses, worship lyrics, media,
-          and live scripture detection directly inside OBS.
+          Complete Church Presentation Studio for OBS. Present Bible verses,
+          worship lyrics, media, and live scripture detection directly inside
+          OBS.
         </p>
       </div>
 
@@ -306,7 +375,9 @@ function StepConnectOBS({
   const [host, setHost] = useState("localhost");
   const [port, setPort] = useState(getDefaultOBSPort());
   const [password, setPassword] = useState("");
-  const [status, setStatus] = useState<"idle" | "checking" | "connected" | "error">("idle");
+  const [status, setStatus] = useState<
+    "idle" | "checking" | "connected" | "error"
+  >("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
   const testConnection = useCallback(async () => {
@@ -315,17 +386,19 @@ function StepConnectOBS({
     try {
       const url = `ws://${host}:${port}`;
       await obsService.connect(url, password || undefined);
-      // Wait a moment for status to settle
       await new Promise((r) => setTimeout(r, 500));
       if (obsService.isConnected) {
         setStatus("connected");
+        fireMilestone("firstDesktopLoginAt");
       } else {
         setStatus("error");
         setErrorMsg(obsService.error || "Connection failed");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatus("error");
-      setErrorMsg(err?.message || "Could not connect to OBS");
+      setErrorMsg(
+        err instanceof Error ? err.message : "Could not connect to OBS",
+      );
     }
   }, [host, port, password]);
 
@@ -333,7 +406,9 @@ function StepConnectOBS({
     <div className="ob-card">
       <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
         <h1>Connect OBS</h1>
-        <p>Verify that OBS Studio is running with WebSocket support enabled.</p>
+        <p>
+          Verify that OBS Studio is running with WebSocket support enabled.
+        </p>
       </div>
 
       {/* Status */}
@@ -346,11 +421,11 @@ function StepConnectOBS({
             ? "Connected"
             : status === "checking"
               ? "Checking..."
-              : status === "error"
-                ? "Not Connected"
-                : "Not Connected"}
+              : "Not Connected"}
         </span>
-        {status === "error" && <span className="ob-obs-status-sub">{errorMsg}</span>}
+        {status === "error" && (
+          <span className="ob-obs-status-sub">{errorMsg}</span>
+        )}
       </div>
 
       {/* Instructions */}
@@ -373,11 +448,19 @@ function StepConnectOBS({
         <div className="ob-form-row">
           <div className="ob-field">
             <label>Host</label>
-            <input value={host} onChange={(e) => setHost(e.target.value)} placeholder="localhost" />
+            <input
+              value={host}
+              onChange={(e) => setHost(e.target.value)}
+              placeholder="localhost"
+            />
           </div>
           <div className="ob-field">
             <label>Port</label>
-            <input value={port} onChange={(e) => setPort(e.target.value)} placeholder="4455" />
+            <input
+              value={port}
+              onChange={(e) => setPort(e.target.value)}
+              placeholder="4455"
+            />
           </div>
         </div>
         <div className="ob-field">
@@ -396,16 +479,26 @@ function StepConnectOBS({
           <button className="ob-btn ob-btn--ghost" onClick={onBack}>
             Back
           </button>
-          <button className="ob-btn ob-btn--secondary" onClick={testConnection}>
+          <button
+            className="ob-btn ob-btn--secondary"
+            onClick={testConnection}
+          >
             {status === "checking" ? (
-              <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+              <Loader2
+                size={14}
+                style={{ animation: "spin 1s linear infinite" }}
+              />
             ) : (
               <Play size={14} />
             )}
             Test Connection
           </button>
         </div>
-        <button className="ob-btn ob-btn--primary" disabled={status !== "connected"} onClick={onNext}>
+        <button
+          className="ob-btn ob-btn--primary"
+          disabled={status !== "connected"}
+          onClick={onNext}
+        >
           Continue
           <ArrowRight size={16} />
         </button>
@@ -415,7 +508,338 @@ function StepConnectOBS({
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Step 3 — Install Dock
+   Step 3 — Present First Verse
+   ══════════════════════════════════════════════════════════════ */
+
+function StepPresentVerse({
+  onNext,
+  onBack,
+}: {
+  onNext: () => void;
+  onBack: () => void;
+}) {
+  const [verseText, setVerseText] = useState<string | null>(null);
+  const [reference, setReference] = useState("John 3:16");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadVerse = useCallback(async () => {
+    try {
+      const verse = await getVerse("John", 3, 16, "KJV" as BibleTranslation);
+      if (verse) {
+        setVerseText(verse.text);
+        setReference("John 3:16 (KJV)");
+      } else {
+        setVerseText(
+          "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
+        );
+      }
+    } catch {
+      setVerseText(
+        "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    loadVerse();
+  }, [loadVerse]);
+
+  const presentToObs = useCallback(async () => {
+    setSending(true);
+    setError(null);
+
+    try {
+      if (!obsService.isConnected) {
+        setError(
+          "OBS is not connected. Go back to Step 2 to connect.",
+        );
+        setSending(false);
+        return;
+      }
+
+      // Build a BiblePassage for John 3:16
+      const passage: BiblePassage = {
+        reference: "John 3:16 (KJV)",
+        book: "John",
+        chapter: 3,
+        startVerse: 16,
+        endVerse: 16,
+        verses: [
+          {
+            book: "John",
+            chapter: 3,
+            verse: 16,
+            text:
+              verseText ||
+              "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
+            abbrev: "Jhn",
+          },
+        ],
+        translation: "KJV",
+      };
+
+      const slides = generateSlides(passage);
+      if (slides.length > 0) {
+        await bibleObsService.pushSlide(
+          slides[0],
+          null,
+          true,
+          false,
+          "fullscreen",
+        );
+        setSent(true);
+        fireMilestone("firstVersePresentedAt");
+      }
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Failed to present verse",
+      );
+    } finally {
+      setSending(false);
+    }
+  }, [verseText]);
+
+  const clearObs = useCallback(async () => {
+    try {
+      await bibleObsService.pushSlide(null, null, false, true);
+      setSent(false);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  return (
+    <div className="ob-card">
+      <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
+        <h1>Present Your First Verse</h1>
+        <p>
+          See how MakeChurchEasy displays Bible verses in OBS. This will send
+          John 3:16 to your OBS overlay.
+        </p>
+      </div>
+
+      {/* Verse Preview */}
+      <div className="ob-verse-preview">
+        <div className="ob-verse-preview-label">Preview</div>
+        <div className="ob-verse-preview-text">
+          {verseText || "Loading verse..."}
+        </div>
+        <div className="ob-verse-preview-ref">{reference}</div>
+      </div>
+
+      {error && (
+        <div className="ob-info-banner ob-info-banner--error">
+          <AlertTriangle size={16} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {sent && (
+        <div className="ob-info-banner ob-info-banner--success">
+          <Check size={16} />
+          <span>
+            Verse is now live in OBS! Check your OBS preview to see it.
+          </span>
+        </div>
+      )}
+
+      <div className="ob-actions">
+        <div className="ob-actions-row">
+          <button className="ob-btn ob-btn--ghost" onClick={onBack}>
+            Back
+          </button>
+          {sent ? (
+            <button className="ob-btn ob-btn--secondary" onClick={clearObs}>
+              Clear from OBS
+            </button>
+          ) : (
+            <button
+              className="ob-btn ob-btn--secondary"
+              onClick={presentToObs}
+              disabled={sending || !obsService.isConnected}
+            >
+              {sending ? (
+                <Loader2
+                  size={14}
+                  style={{ animation: "spin 1s linear infinite" }}
+                />
+              ) : (
+                <Eye size={14} />
+              )}
+              Present to OBS
+            </button>
+          )}
+        </div>
+        <button className="ob-btn ob-btn--primary" onClick={onNext}>
+          Continue
+          <ArrowRight size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Step 4 — Create Theme
+   ══════════════════════════════════════════════════════════════ */
+
+const THEME_PRESETS = [
+  {
+    id: "classic-white",
+    label: "Classic White",
+    description: "Clean white text on dark background",
+    bg: "#1a1a2e",
+    color: "#ffffff",
+    fontSize: 48,
+  },
+  {
+    id: "golden-heritage",
+    label: "Golden Heritage",
+    description: "Warm gold text with elegant styling",
+    bg: "#0d1117",
+    color: "#f0c040",
+    fontSize: 44,
+  },
+  {
+    id: "modern-blue",
+    label: "Modern Blue",
+    description: "Crisp white on deep blue",
+    bg: "#0a1628",
+    color: "#e8f0fe",
+    fontSize: 46,
+  },
+  {
+    id: "bold-red",
+    label: "Bold Red",
+    description: "High contrast red accent",
+    bg: "#1a0a0a",
+    color: "#ff4444",
+    fontSize: 44,
+  },
+];
+
+function StepCreateTheme({
+  onNext,
+  onBack,
+}: {
+  onNext: () => void;
+  onBack: () => void;
+}) {
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
+  const [showCreator, setShowCreator] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSavePreset = useCallback(() => {
+    if (!selectedPreset) return;
+    const preset = THEME_PRESETS.find((p) => p.id === selectedPreset);
+    if (!preset) return;
+
+    // Store the selected preset ID so the app can use it after onboarding
+    try {
+      localStorage.setItem("mce-onboarding-theme-id", preset.id);
+    } catch {
+      // ignore
+    }
+    setSaved(true);
+    fireMilestone("firstThemeCreatedAt");
+  }, [selectedPreset]);
+
+  const handleCreatorSaved = useCallback(() => {
+    setShowCreator(false);
+    setSaved(true);
+    fireMilestone("firstThemeCreatedAt");
+  }, []);
+
+  if (showCreator) {
+    return (
+      <ThemeCreatorModal
+        onClose={() => setShowCreator(false)}
+        onSaved={handleCreatorSaved}
+      />
+    );
+  }
+
+  return (
+    <div className="ob-card">
+      <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
+        <h1>Create Your Theme</h1>
+        <p>
+          Choose a preset theme for your Bible presentations, or open the
+          full Theme Creator to design your own.
+        </p>
+      </div>
+
+      {/* Theme Presets */}
+      <div className="ob-theme-grid">
+        {THEME_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            className={`ob-theme-preset${selectedPreset === preset.id ? " ob-theme-preset--selected" : ""}`}
+            onClick={() => setSelectedPreset(preset.id)}
+          >
+            <div
+              className="ob-theme-preset-preview"
+              style={{ background: preset.bg }}
+            >
+              <span style={{ color: preset.color, fontSize: 14 }}>
+                For God so loved the world
+              </span>
+            </div>
+            <div className="ob-theme-preset-info">
+              <span className="ob-theme-preset-label">{preset.label}</span>
+              <span className="ob-theme-preset-desc">
+                {preset.description}
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div className="ob-actions">
+        <div className="ob-actions-row">
+          <button className="ob-btn ob-btn--ghost" onClick={onBack}>
+            Back
+          </button>
+          <button
+            className="ob-btn ob-btn--secondary"
+            onClick={() => setShowCreator(true)}
+          >
+            <Palette size={14} />
+            Open Theme Creator
+          </button>
+        </div>
+        <div className="ob-actions-row">
+          {saved ? (
+            <span className="ob-saved-label">
+              <Check size={14} />
+              Theme saved
+            </span>
+          ) : (
+            <button
+              className="ob-btn ob-btn--primary"
+              disabled={!selectedPreset}
+              onClick={handleSavePreset}
+            >
+              Save Preset
+              <ArrowRight size={16} />
+            </button>
+          )}
+          {saved && (
+            <button className="ob-btn ob-btn--primary" onClick={onNext}>
+              Continue
+              <ArrowRight size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Step 5 — Install Dock
    ══════════════════════════════════════════════════════════════ */
 
 function StepInstallDock({
@@ -432,9 +856,13 @@ function StepInstallDock({
     window.location.protocol === "http:" && window.location.port === "1420";
   const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
   const deviceId = getDeviceId();
-  const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : "";
-  const dockUrl = (isDev ? `${base}/dock` : `${base}/dock.html`) + deviceIdParam;
-  const aiUrl = (isDev ? `${base}/lm-dock` : `${base}/lm-dock.html`) + deviceIdParam;
+  const deviceIdParam = deviceId
+    ? `?deviceId=${encodeURIComponent(deviceId)}`
+    : "";
+  const dockUrl =
+    (isDev ? `${base}/dock` : `${base}/dock.html`) + deviceIdParam;
+  const aiUrl =
+    (isDev ? `${base}/lm-dock` : `${base}/lm-dock.html`) + deviceIdParam;
 
   const copyUrl = async (url: string, which: "dock" | "ai") => {
     try {
@@ -450,7 +878,10 @@ function StepInstallDock({
     <div className="ob-card">
       <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
         <h1>Install MakeChurchEasy Dock</h1>
-        <p>Copy these URLs — you'll paste them into OBS as Custom Browser Docks.</p>
+        <p>
+          Copy these URLs — you'll paste them into OBS as Custom Browser
+          Docks.
+        </p>
       </div>
 
       <p className="ob-section-title">OBS Custom Browser Docks</p>
@@ -459,11 +890,17 @@ function StepInstallDock({
       <div className="ob-url-card">
         <div className="ob-url-card-header">
           <span className="ob-url-card-title">Bible Overlay Dock</span>
-          {copied === "dock" && <Check size={14} style={{ color: "var(--success)" }} />}
+          {copied === "dock" && (
+            <Check size={14} style={{ color: "var(--success)" }} />
+          )}
         </div>
         <div className="ob-url-input-row">
           <input className="ob-url-input" readOnly value={dockUrl} />
-          <button className="ob-btn ob-btn--primary" style={{ flex: "none", padding: "0 16px" }} onClick={() => copyUrl(dockUrl, "dock")}>
+          <button
+            className="ob-btn ob-btn--primary"
+            style={{ flex: "none", padding: "0 16px" }}
+            onClick={() => copyUrl(dockUrl, "dock")}
+          >
             <Copy size={14} />
             {copied === "dock" ? "Copied" : "Copy"}
           </button>
@@ -476,12 +913,20 @@ function StepInstallDock({
       {/* MakeChurchEasy Control Dock */}
       <div className="ob-url-card">
         <div className="ob-url-card-header">
-          <span className="ob-url-card-title">MakeChurchEasy Control Dock</span>
-          {copied === "ai" && <Check size={14} style={{ color: "var(--success)" }} />}
+          <span className="ob-url-card-title">
+            MakeChurchEasy Control Dock
+          </span>
+          {copied === "ai" && (
+            <Check size={14} style={{ color: "var(--success)" }} />
+          )}
         </div>
         <div className="ob-url-input-row">
           <input className="ob-url-input" readOnly value={aiUrl} />
-          <button className="ob-btn ob-btn--primary" style={{ flex: "none", padding: "0 16px" }} onClick={() => copyUrl(aiUrl, "ai")}>
+          <button
+            className="ob-btn ob-btn--primary"
+            style={{ flex: "none", padding: "0 16px" }}
+            onClick={() => copyUrl(aiUrl, "ai")}
+          >
             <Copy size={14} />
             {copied === "ai" ? "Copied" : "Copy"}
           </button>
@@ -493,7 +938,10 @@ function StepInstallDock({
 
       <div className="ob-info-banner">
         <Info size={16} />
-        <span>These are OBS Dock URLs, not Browser Sources. Add them under Docks → Custom Browser Docks.</span>
+        <span>
+          These are OBS Dock URLs, not Browser Sources. Add them under Docks
+          → Custom Browser Docks.
+        </span>
       </div>
 
       <div className="ob-actions">
@@ -516,7 +964,7 @@ function StepInstallDock({
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Step 4 — Test Everything
+   Step 6 — Run Diagnostics
    ══════════════════════════════════════════════════════════════ */
 
 interface DiagItem {
@@ -534,11 +982,10 @@ function StepTest({
 }) {
   const [diags, setDiags] = useState<DiagItem[]>([
     { label: "OBS Connected", status: "pending", detail: "" },
+    { label: "Bible Resources", status: "pending", detail: "" },
     { label: "MakeChurchEasy Dock", status: "pending", detail: "" },
     { label: "AI Dock", status: "pending", detail: "" },
     { label: "Voice Bible", status: "pending", detail: "" },
-    { label: "Bible Engine", status: "pending", detail: "" },
-    { label: "Media Engine", status: "pending", detail: "" },
   ]);
   const [running, setRunning] = useState(false);
 
@@ -557,48 +1004,80 @@ function StepTest({
     });
     setDiags([...results]);
 
-    // 2. MakeChurchEasy Dock
+    // 2. Bible Resources
     try {
-      const dockUrl = isDev ? `${base}/dock` : `${base}/dock.html`;
-      await fetch(dockUrl, { method: "HEAD", mode: "no-cors" });
-      results.push({ label: "MakeChurchEasy Dock", status: "ok", detail: "Reachable" });
+      const installed = await getInstalledTranslations();
+      results.push({
+        label: "Bible Resources",
+        status: installed.length > 0 ? "ok" : "warn",
+        detail:
+          installed.length > 0
+            ? `${installed.length} translation${installed.length !== 1 ? "s" : ""} installed`
+            : "No translations downloaded",
+      });
     } catch {
-      results.push({ label: "MakeChurchEasy Dock", status: "warn", detail: "Could not verify" });
+      results.push({
+        label: "Bible Resources",
+        status: "warn",
+        detail: "Could not verify",
+      });
     }
     setDiags([...results]);
 
-    // 3. AI Dock
+    // 3. MakeChurchEasy Dock
+    try {
+      const dockUrl = isDev ? `${base}/dock` : `${base}/dock.html`;
+      await fetch(dockUrl, { method: "HEAD", mode: "no-cors" });
+      results.push({
+        label: "MakeChurchEasy Dock",
+        status: "ok",
+        detail: "Reachable",
+      });
+    } catch {
+      results.push({
+        label: "MakeChurchEasy Dock",
+        status: "warn",
+        detail: "Could not verify",
+      });
+    }
+    setDiags([...results]);
+
+    // 4. AI Dock
     try {
       const aiUrl = `${base}/lm-dock.html`;
       await fetch(aiUrl, { method: "HEAD", mode: "no-cors" });
       results.push({ label: "AI Dock", status: "ok", detail: "Reachable" });
     } catch {
-      results.push({ label: "AI Dock", status: "warn", detail: "Could not verify" });
+      results.push({
+        label: "AI Dock",
+        status: "warn",
+        detail: "Could not verify",
+      });
     }
     setDiags([...results]);
 
-    // 4. Voice Bible
-    results.push({
-      label: "Voice Bible",
-      status: "ok",
-      detail: "Ready",
-    });
-    setDiags([...results]);
-
-    // 5. Bible Engine
-    results.push({
-      label: "Bible Engine",
-      status: "ok",
-      detail: "Ready",
-    });
-    setDiags([...results]);
-
-    // 6. Media Engine
-    results.push({
-      label: "Media Engine",
-      status: "ok",
-      detail: "Ready",
-    });
+    // 5. Voice Bible (check if mic permission is available)
+    try {
+      if (navigator.mediaDevices) {
+        results.push({
+          label: "Voice Bible",
+          status: "ok",
+          detail: "Microphone available",
+        });
+      } else {
+        results.push({
+          label: "Voice Bible",
+          status: "warn",
+          detail: "Microphone API not available",
+        });
+      }
+    } catch {
+      results.push({
+        label: "Voice Bible",
+        status: "warn",
+        detail: "Could not verify",
+      });
+    }
     setDiags([...results]);
 
     setRunning(false);
@@ -607,8 +1086,10 @@ function StepTest({
   return (
     <div className="ob-card">
       <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
-        <h1>Test Everything</h1>
-        <p>Run diagnostics to make sure all components are working.</p>
+        <h1>Run Diagnostics</h1>
+        <p>
+          Run a quick check to make sure all components are working correctly.
+        </p>
       </div>
 
       <div className="ob-diag-list">
@@ -634,9 +1115,16 @@ function StepTest({
           <button className="ob-btn ob-btn--ghost" onClick={onBack}>
             Back
           </button>
-          <button className="ob-btn ob-btn--secondary" onClick={runDiagnostics} disabled={running}>
+          <button
+            className="ob-btn ob-btn--secondary"
+            onClick={runDiagnostics}
+            disabled={running}
+          >
             {running ? (
-              <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+              <Loader2
+                size={14}
+                style={{ animation: "spin 1s linear infinite" }}
+              />
             ) : (
               <Play size={14} />
             )}
@@ -653,7 +1141,7 @@ function StepTest({
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Step 5 — Ready To Go
+   Step 7 — Ready
    ══════════════════════════════════════════════════════════════ */
 
 function StepReady({ onFinish }: { onFinish: () => void }) {
@@ -674,15 +1162,15 @@ function StepReady({ onFinish }: { onFinish: () => void }) {
         </div>
         <div className="ob-summary-item">
           <CheckCircle size={16} className="ob-summary-check" />
+          Bible Resources Downloaded
+        </div>
+        <div className="ob-summary-item">
+          <CheckCircle size={16} className="ob-summary-check" />
           Dock Installed
         </div>
         <div className="ob-summary-item">
           <CheckCircle size={16} className="ob-summary-check" />
           Voice Bible Ready
-        </div>
-        <div className="ob-summary-item">
-          <CheckCircle size={16} className="ob-summary-check" />
-          Bible Library Ready
         </div>
       </div>
 
@@ -717,7 +1205,10 @@ function StepReady({ onFinish }: { onFinish: () => void }) {
           <Video size={16} />
           Watch Tutorials
         </button>
-        <button className="ob-quick-btn" onClick={() => openUrl("https://discord.gg/makechurcheasy")}>
+        <button
+          className="ob-quick-btn"
+          onClick={() => openUrl("https://discord.gg/makechurcheasy")}
+        >
           <Users size={16} />
           Join Community
         </button>

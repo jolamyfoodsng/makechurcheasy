@@ -587,11 +587,7 @@ export default function DockPage() {
             )}
           </span>
           <a
-            href={(() => {
-              const ua = navigator.userAgent.toLowerCase();
-              if (ua.includes("mac")) return cfg.appUpdates.downloadUrls.macosAppleSilicon;
-              return cfg.appUpdates.downloadUrls.windows;
-            })()}
+            href="https://github.com/nicholasracisz/makechurcheasy/releases/latest"
             target="_blank"
             rel="noopener noreferrer"
             className="dock-force-update-banner__link"
@@ -605,9 +601,7 @@ export default function DockPage() {
       {cfg.security.maintenanceMode && (
         <div className="dock-force-update-banner" style={{ background: "var(--accent, #f59e0b)", color: "#000" }}>
           <Icon name="build" size={14} />
-          <span>
-            {cfg.security.maintenanceMessage || "System maintenance in progress. Some features may be unavailable."}
-          </span>
+          <span>System maintenance in progress. Some features may be unavailable.</span>
         </div>
       )}
 

@@ -18,22 +18,43 @@ export interface DesktopConfig {
     emergencyLockDelay: number;
     gracePeriodHours: number;
     updateMessage: string;
-    downloadUrls: {
-      windows: string;
-      macosAppleSilicon: string;
-      macosIntel: string;
-      linux: string;
-    };
+  };
+  trial: {
+    enabled: boolean;
+    defaultDurationDays: number;
+  };
+  credits: {
+    translationCost: number;
+    speechToScriptureCost: number;
+    aiSummaryCost: number;
+  };
+  authentication: {
+    maxDevicesPerUser: number;
   };
   obs: {
+    enableOBSIntegration: boolean;
+    requireOBSAuthentication: boolean;
+    allowAutoDiscovery: boolean;
+    enableOBSDock: boolean;
+    enableMultiview: boolean;
+    minSupportedOBSVersion: string;
+    minSupportedWebSocketVersion: string;
     websocketPort: number;
     autoDetect: boolean;
-    width: number;
-    height: number;
-    fps: number;
     reconnectIntervalMs: number;
   };
+  ai: {
+    scriptureTranslation: boolean;
+    speechToScripture: boolean;
+    aiSummaries: boolean;
+    sermonNotes: boolean;
+    aiAssistant: boolean;
+    dailyRequestLimit: number;
+    maximumTranslationMinutes: number;
+    supportedLanguages: string[];
+  };
   storage: {
+    enableCloudSync: boolean;
     maxUploadSizeMB: number;
     allowedFileTypes: string;
     compressionEnabled: boolean;
@@ -43,8 +64,27 @@ export interface DesktopConfig {
     videoMaxWidth: number;
     allowedImageExtensions: string[];
     allowedVideoExtensions: string[];
+    maximumBackgroundVideoSizeMB: number;
+    churchLogoSizeLimitMB: number;
+    mediaLibraryQuotaGB: number;
+  };
+  security: {
+    maintenanceMode: boolean;
+    internetVerificationEnabled: boolean;
+    maxOfflineDays: number;
+    verificationIntervalHours: number;
   };
   themes: {
+    defaultBibleTheme: string;
+    defaultWorshipTheme: string;
+    defaultLowerThirdTheme: string;
+    defaultAnnouncementTheme: string;
+    defaultFont: string;
+    defaultBrandColours: {
+      primary: string;
+      secondary: string;
+      accent: string;
+    };
     bibleDefaults: {
       font: string;
       textSize: number;
@@ -66,15 +106,11 @@ export interface DesktopConfig {
       nameSize: number;
     };
   };
-  features: {
-    scriptureTranslation: boolean;
-    speechToScripture: boolean;
-    aiSummaries: boolean;
-    sermonNotes: boolean;
-  };
-  security: {
-    maintenanceMode: boolean;
-    maintenanceMessage: string;
+  analytics: {
+    usageAnalytics: boolean;
+    crashReporting: boolean;
+    errorTracking: boolean;
+    performanceMonitoring: boolean;
   };
 }
 
@@ -89,22 +125,43 @@ export const DEFAULT_DESKTOP_CONFIG: DesktopConfig = {
     emergencyLockDelay: 0,
     gracePeriodHours: 48,
     updateMessage: "A new version is available. Please update to continue.",
-    downloadUrls: {
-      windows: "",
-      macosAppleSilicon: "",
-      macosIntel: "",
-      linux: "",
-    },
+  },
+  trial: {
+    enabled: true,
+    defaultDurationDays: 14,
+  },
+  credits: {
+    translationCost: 1,
+    speechToScriptureCost: 2,
+    aiSummaryCost: 3,
+  },
+  authentication: {
+    maxDevicesPerUser: 3,
   },
   obs: {
+    enableOBSIntegration: true,
+    requireOBSAuthentication: false,
+    allowAutoDiscovery: true,
+    enableOBSDock: true,
+    enableMultiview: true,
+    minSupportedOBSVersion: "28.0.0",
+    minSupportedWebSocketVersion: "5.0.0",
     websocketPort: 4455,
     autoDetect: true,
-    width: 1920,
-    height: 1080,
-    fps: 30,
     reconnectIntervalMs: 3000,
   },
+  ai: {
+    scriptureTranslation: true,
+    speechToScripture: true,
+    aiSummaries: true,
+    sermonNotes: false,
+    aiAssistant: true,
+    dailyRequestLimit: 100,
+    maximumTranslationMinutes: 60,
+    supportedLanguages: ["en", "es", "fr", "de", "pt", "zh", "ja", "ko", "ar", "hi"],
+  },
   storage: {
+    enableCloudSync: true,
     maxUploadSizeMB: 50,
     allowedFileTypes: "jpg,png,gif,mp4,pdf,docx",
     compressionEnabled: true,
@@ -114,8 +171,27 @@ export const DEFAULT_DESKTOP_CONFIG: DesktopConfig = {
     videoMaxWidth: 854,
     allowedImageExtensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"],
     allowedVideoExtensions: ["mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv", "flv"],
+    maximumBackgroundVideoSizeMB: 500,
+    churchLogoSizeLimitMB: 5,
+    mediaLibraryQuotaGB: 10,
+  },
+  security: {
+    maintenanceMode: false,
+    internetVerificationEnabled: false,
+    maxOfflineDays: 28,
+    verificationIntervalHours: 6,
   },
   themes: {
+    defaultBibleTheme: "",
+    defaultWorshipTheme: "",
+    defaultLowerThirdTheme: "",
+    defaultAnnouncementTheme: "",
+    defaultFont: "Inter",
+    defaultBrandColours: {
+      primary: "#3b82f6",
+      secondary: "#6366f1",
+      accent: "#8b5cf6",
+    },
     bibleDefaults: {
       font: "Inter",
       textSize: 48,
@@ -137,14 +213,10 @@ export const DEFAULT_DESKTOP_CONFIG: DesktopConfig = {
       nameSize: 36,
     },
   },
-  features: {
-    scriptureTranslation: true,
-    speechToScripture: true,
-    aiSummaries: true,
-    sermonNotes: false,
-  },
-  security: {
-    maintenanceMode: false,
-    maintenanceMessage: "We'll be back shortly!",
+  analytics: {
+    usageAnalytics: true,
+    crashReporting: true,
+    errorTracking: true,
+    performanceMonitoring: false,
   },
 };

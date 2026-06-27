@@ -5,9 +5,16 @@
  * credit additions reflect live without a page refresh.
  */
 
-import { Zap } from "lucide-react";
+import { Zap, CloudOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { getCreditsBalance, isProUnlocked, onCreditChange, syncCreditsWithBackend } from "../services/credits";
+import {
+  getCreditsBalance,
+  isProUnlocked,
+  onCreditChange,
+  syncCreditsWithBackend,
+  getPendingCount,
+  getOfflineCreditBalance,
+} from "../services/credits";
 
 interface CreditsDisplayProps {
   /** Force a re-render when external state changes (e.g. after deduction). */
@@ -20,6 +27,7 @@ interface CreditsDisplayProps {
 
 export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed = 0 }: CreditsDisplayProps) {
   const [balance, setBalance] = useState<number>(0);
+  const [pendingCount, setPendingCount] = useState(0);
   const [synced, setSynced] = useState(false);
   const pro = isProUnlocked();
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -59,6 +67,7 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
   // Also update when refreshKey changes (local deduction)
   useEffect(() => {
     setBalance(getCreditsBalance());
+    setPendingCount(getPendingCount());
   }, [refreshKey]);
 
   // Live-update when credits change anywhere in the app
@@ -66,6 +75,7 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
     const unsub = onCreditChange((newBalance) => {
       genRef.current += 1;
       setBalance(newBalance);
+      setPendingCount(getPendingCount());
     });
     return unsub;
   }, []);
@@ -82,7 +92,7 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
     );
   }
 
-  const effectiveBalance = Math.max(0, balance - sessionCreditsUsed);
+  const effectiveBalance = Math.max(0, getOfflineCreditBalance(balance) - sessionCreditsUsed);
   const tier =
     effectiveBalance <= 0 ? "red" : effectiveBalance <= 10 ? "orange" : "gold";
 
@@ -97,6 +107,22 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
       <span className="sts3-usage-value">
         {effectiveBalance <= 0 ? "0 — Buy Credits" : `${effectiveBalance} remaining`}
       </span>
+      {pendingCount > 0 && (
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 3,
+            fontSize: 10,
+            color: "var(--text-muted, #94a3b8)",
+            marginLeft: 4,
+          }}
+          title={`${pendingCount} transaction(s) pending sync`}
+        >
+          <CloudOff size={10} />
+          {pendingCount} pending
+        </span>
+      )}
     </div>
   );
 }

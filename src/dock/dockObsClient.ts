@@ -246,7 +246,7 @@ function getDefaultLTTheme(): typeof DEFAULT_LT_THEME {
   return {
     ...DEFAULT_LT_THEME,
     html: `<div class="lt pos-bl in-up">
-  <div class="panel speaker-panel" style="--bg:${lt.backgroundColor};--fg:${lt.nameColor};--accent:#1D4ED8;--bd:rgba(255,255,255,.12);">
+  <div class="panel speaker-panel" style="--bg:${lt.backgroundColor};--fg:${lt.nameColor};--accent:${lt.titleColor};--bd:rgba(255,255,255,.12);">
     <div class="v-divider"></div>
     <div class="col">
       <p class="name-line" style="font-size:clamp(${lt.nameSize}px, 2.2vw, ${Math.round(lt.nameSize * 1.86)}px);">{{name}}</p>

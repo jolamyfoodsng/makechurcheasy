@@ -3013,6 +3013,102 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
     port
 }
 
+// ── Dynamic App Icon ─────────────────────────────────────────────────────────
+// Changes the macOS dock icon at runtime to reflect application state
+// (OBS connection, Speech-to-Scripture listening).
+//
+// The actual AppKit calls live in `macos_icon.m` (compiled via build.rs / `cc`)
+// so that Objective-C exceptions are caught by @try/@catch *before* they can
+// cross any Rust `catch_unwind` boundary (which would abort the process with
+// "Rust cannot catch foreign exceptions").
+
+#[cfg(target_os = "macos")]
+mod app_icon {
+    use std::fs;
+    use std::path::PathBuf;
+    use tauri::Manager;
+
+    extern "C" {
+        /// Defined in macos_icon.m.  Returns true on success.
+        fn mce_set_app_icon(data: *const u8, len: usize) -> bool;
+    }
+
+    /// Resolve the absolute path to an icon file inside `app_icons/`.
+    ///
+    /// Resolution order:
+    ///   1. `<resource_dir>/app_icons/<filename>`   (bundled production app)
+    ///   2. `<project>/public/app_icons/<filename>`  (Vite dev server)
+    fn resolve_icon_path(app: &tauri::AppHandle, filename: &str) -> Option<PathBuf> {
+        // Bundled production path
+        if let Ok(resource_dir) = app.path().resource_dir() {
+            let path = resource_dir.join("app_icons").join(filename);
+            println!("[AppIcon] Checking bundled path: {:?} exists={}", path, path.exists());
+            if path.exists() {
+                return Some(path);
+            }
+        }
+
+        // Dev fallback — walk up from executable to project root
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(project_root) = exe
+                .parent() // target/{debug|release}
+                .and_then(|p| p.parent()) // target
+                .and_then(|p| p.parent()) // src-tauri
+                .and_then(|p| p.parent()) // project root
+            {
+                let path = project_root.join("public").join("app_icons").join(filename);
+                println!("[AppIcon] Checking dev fallback: {:?} exists={}", path, path.exists());
+                if path.exists() {
+                    return Some(path);
+                }
+            }
+        }
+
+        println!("[AppIcon] Icon not found: {}", filename);
+        None
+    }
+
+    /// Tauri command: set the macOS dock icon from a bundled icon file.
+    ///
+    /// `icon_name` should be one of the known filenames (e.g. "app_icon_general.png").
+    /// Returns `Ok(true)` on success, `Ok(false)` if the file was not found,
+    /// or `Err(...)` if the native API call failed.
+    #[tauri::command]
+    pub async fn set_app_icon(app: tauri::AppHandle, icon_name: String) -> Result<bool, String> {
+        println!("[AppIcon] set_app_icon called with icon_name: {}", icon_name);
+
+        let path = resolve_icon_path(&app, &icon_name)
+            .ok_or_else(|| format!("Icon file not found: {}", icon_name))?;
+
+        let data = fs::read(&path)
+            .map_err(|e| format!("Failed to read icon file {}: {}", path.display(), e))?;
+
+        // Validate with the `image` crate as an extra safety net.
+        image::load_from_memory(&data)
+            .map_err(|e| format!("Invalid image data in {}: {}", path.display(), e))?;
+
+        // Call the ObjC helper (in macos_icon.m) which has @try/@catch.
+        // This runs on the Tokio worker thread, but that's fine — the helper
+        // is a plain C function that won't propagate ObjC exceptions into Rust.
+        let success = unsafe { mce_set_app_icon(data.as_ptr(), data.len()) };
+
+        if success {
+            println!("[AppIcon] Icon set successfully: {}", icon_name);
+            Ok(true)
+        } else {
+            println!("[AppIcon] mce_set_app_icon returned false for: {}", icon_name);
+            Ok(false)
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+async fn set_app_icon(_icon_name: String) -> Result<bool, String> {
+    // Dynamic icon switching not supported on this platform
+    Ok(false)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Load .env file so Rust commands can read env vars (e.g. OPENCODE_API_KEY)
@@ -3114,7 +3210,8 @@ pub fn run() {
             assemblyai_stream::set_microphone_gain,
             local_llm::get_local_llm_runtime_status,
             local_llm::install_local_llm_model,
-            local_llm::generate_local_llm_text
+            local_llm::generate_local_llm_text,
+            app_icon::set_app_icon
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

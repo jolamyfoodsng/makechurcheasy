@@ -10,16 +10,22 @@
  */
 
 import {
+  AlertTriangle,
   BookOpen,
   Check,
   CheckCircle,
   ChevronDown,
   Copy,
+  CreditCard,
   Download,
   Link,
+  Lock,
   Mic,
   Radio,
-  StopCircle
+  ShieldAlert,
+  StopCircle,
+  Wifi,
+  Zap
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -41,6 +47,10 @@ import type { VoiceBibleCandidate } from "../services/voiceBibleTypes";
 import { MATCH_SOURCE_LABEL } from "../services/voiceBibleTypes";
 import { isWhisperReady, loadWhisperModel } from "../services/whisperService";
 import { createTranscript, saveTranscript } from "../transcripts/transcriptService";
+
+const API_BASE =
+  import.meta.env.VITE_AUTH_API_URL ||
+  "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 // ── Connectivity hook ──
 function useOnlineStatus(): boolean {
@@ -96,7 +106,7 @@ function formatTimestamp(entry: { startTime?: number }, elapsed: number): string
 
 export default function SpeechToScripturePage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const effectivePlan = getEffectivePlan(user);
 
   // ── LM state ──
@@ -186,10 +196,45 @@ export default function SpeechToScripturePage() {
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [generatedTranscriptId, setGeneratedTranscriptId] = useState<string | null>(null);
 
-  const handleStart = useCallback(() => {
-    track("sts_listening_started", { mic: selectedMic || "default" });
-    trackVoiceSessionStarted();
-    void lmDockService.startListening(selectedMic || undefined);
+  // ── Backend access check ──
+  const [checkingAccess, setCheckingAccess] = useState(false);
+  const [accessDenied, setAccessDenied] = useState<{
+    reason: string;
+    requiredPlan?: string;
+  } | null>(null);
+
+  const handleStart = useCallback(async () => {
+    // Disable button and show checking state
+    setCheckingAccess(true);
+    setAccessDenied(null);
+
+    try {
+      const deviceId = getDeviceId();
+      const res = await fetch(
+        `${API_BASE}/api/device/speech-to-scripture/check-access?deviceId=${encodeURIComponent(deviceId || "")}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      const data = await res.json();
+
+      if (!data.allowed) {
+        setAccessDenied({ reason: data.reason, requiredPlan: data.requiredPlan });
+        return;
+      }
+
+      // Backend approved — start listening
+      track("sts_listening_started", { mic: selectedMic || "default" });
+      trackVoiceSessionStarted();
+      void lmDockService.startListening(selectedMic || undefined);
+    } catch (err) {
+      console.warn("[SpeechToScripture] Access check failed:", err);
+      setAccessDenied({ reason: "internet_verification_required" });
+    } finally {
+      setCheckingAccess(false);
+    }
   }, [selectedMic]);
 
   const handleStop = useCallback(() => {
@@ -674,10 +719,12 @@ export default function SpeechToScripturePage() {
             <button
               className={`sts3-btn ${isListening ? "sts3-btn--red" : ""}`}
               onClick={isListening ? handleStop : handleStart}
-              disabled={isConnecting}
+              disabled={isConnecting || checkingAccess}
             >
               {isListening ? (
                 <><StopCircle size={16} /> Stop Listening</>
+              ) : checkingAccess ? (
+                <><span className="sts3-spinner" /> Checking access…</>
               ) : isConnecting ? (
                 <><span className="sts3-spinner" /> Connecting…</>
               ) : (
@@ -1131,6 +1178,123 @@ export default function SpeechToScripturePage() {
                 <StopCircle size={14} /> Stop &amp; Leave
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Access Denied Modal ── */}
+      {accessDenied && (
+        <div className="sts3-lock-overlay">
+          <div className="sts3-lock-card">
+            {accessDenied.reason === "subscription_expired" && (
+              <>
+                <CreditCard size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Subscription Required</h2>
+                <p className="sts3-lock-desc">
+                  Your subscription is no longer active. Renew your subscription to use Speech to Scripture.
+                </p>
+                <button
+                  className="sts3-btn sts3-btn--primary"
+                  onClick={() => setAccessDenied(null)}
+                >
+                  Manage Subscription
+                </button>
+              </>
+            )}
+            {accessDenied.reason === "trial_expired" && (
+              <>
+                <Zap size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Free Trial Ended</h2>
+                <p className="sts3-lock-desc">
+                  Your trial has expired. Subscribe to continue using Speech to Scripture.
+                </p>
+                <button
+                  className="sts3-btn sts3-btn--primary"
+                  onClick={() => setAccessDenied(null)}
+                >
+                  Choose a Plan
+                </button>
+              </>
+            )}
+            {accessDenied.reason === "device_revoked" && (
+              <>
+                <ShieldAlert size={40} style={{ color: "var(--error)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Device Removed</h2>
+                <p className="sts3-lock-desc">
+                  This device has been removed from your account. Please sign in again.
+                </p>
+                <button
+                  className="sts3-btn sts3-btn--primary"
+                  onClick={() => {
+                    setAccessDenied(null);
+                    logout();
+                  }}
+                >
+                  Sign Out
+                </button>
+              </>
+            )}
+            {accessDenied.reason === "account_suspended" && (
+              <>
+                <Lock size={40} style={{ color: "var(--error)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Account Restricted</h2>
+                <p className="sts3-lock-desc">
+                  Your account has been temporarily restricted. Please contact support for assistance.
+                </p>
+                <button
+                  className="sts3-btn sts3-btn--primary"
+                  onClick={() => setAccessDenied(null)}
+                >
+                  Contact Support
+                </button>
+              </>
+            )}
+            {accessDenied.reason === "insufficient_credits" && (
+              <>
+                <Zap size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Insufficient Credits</h2>
+                <p className="sts3-lock-desc">
+                  You do not have enough credits to start a transcription session. Purchase more credits to continue.
+                </p>
+                <button
+                  className="sts3-btn sts3-btn--primary"
+                  onClick={() => setAccessDenied(null)}
+                >
+                  Buy Credits
+                </button>
+              </>
+            )}
+            {accessDenied.reason === "feature_not_available" && (
+              <>
+                <AlertTriangle size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Feature Not Available</h2>
+                <p className="sts3-lock-desc">
+                  Speech to Scripture is not available on your current plan.
+                  {accessDenied.requiredPlan && ` Upgrade to ${accessDenied.requiredPlan} or higher to use this feature.`}
+                </p>
+                <button
+                  className="sts3-btn sts3-btn--primary"
+                  onClick={() => setAccessDenied(null)}
+                >
+                  View Plans
+                </button>
+              </>
+            )}
+            {accessDenied.reason === "internet_verification_required" && (
+              <>
+                <Wifi size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Connection Required</h2>
+                <p className="sts3-lock-desc">
+                  Unable to verify your account. Please check your internet connection and try again.
+                </p>
+                <button
+                  className="sts3-btn sts3-btn--primary"
+                  onClick={() => setAccessDenied(null)}
+                >
+                  Retry
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

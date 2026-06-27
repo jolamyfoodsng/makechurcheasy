@@ -5099,6 +5099,91 @@ input[type="radio"] {
   text-transform: uppercase;
 }
 
+/* ── Live Status Bar ── */
+.live-status-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 1rem;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+}
+
+.live-status-bar__inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 5px 0;
+}
+
+.live-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: opacity 0.15s ease, filter 0.15s ease;
+  line-height: 1;
+  white-space: nowrap;
+  font-family: var(--font-body);
+}
+
+.live-status-pill:hover {
+  opacity: 0.8;
+  filter: brightness(1.1);
+}
+
+.live-status-pill__icon {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.live-status-pill__label {
+  line-height: 1;
+}
+
+@keyframes live-status-pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes live-status-glow {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+    filter: brightness(1.15);
+  }
+}
+
+.live-status-pill--pulse {
+  animation: live-status-pulse 3s ease-in-out infinite;
+}
+
+.live-status-pill--glow {
+  animation: live-status-glow 1.5s ease-in-out infinite;
+}
+
 /* ════════════════════════════════════════════════════════
    CONNECTION SCREEN
    ════════════════════════════════════════════════════════ */
@@ -8198,6 +8283,206 @@ input[type="radio"] {
 
 .force-update-btn--primary:hover {
   background: linear-gradient(135deg, #6b7ad0, #8c9cf0);
+}
+
+/* ===================================================================
+   License Guard Lock Screen (license-guard-*)
+   =================================================================== */
+
+.license-guard-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.92);
+  backdrop-filter: blur(12px);
+  animation: license-guard-fade-in 0.3s ease;
+}
+
+@keyframes license-guard-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.license-guard-modal {
+  width: 460px;
+  max-width: calc(100vw - 40px);
+  background: #0F172A;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  animation: license-guard-slide-in 0.35s ease;
+}
+
+@keyframes license-guard-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.license-guard-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: color-mix(in srgb, #ef4444 12%, #0F172A);
+  color: #fca5a5;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid color-mix(in srgb, #ef4444 20%, transparent);
+}
+
+.license-guard-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 24px 0;
+  text-align: center;
+}
+
+.license-guard-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, #ef4444 12%, #0F172A);
+  color: #fca5a5;
+  border: 1px solid color-mix(in srgb, #ef4444 20%, transparent);
+}
+
+.license-guard-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.license-guard-body {
+  padding: 16px 24px 24px;
+  text-align: center;
+}
+
+.license-guard-description {
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.6;
+  margin: 0 0 20px;
+  max-width: 380px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.license-guard-verifying {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  background: color-mix(in srgb, #1d4ed8 8%, #0F172A);
+  border: 1px solid color-mix(in srgb, #1d4ed8 20%, transparent);
+  border-radius: 6px;
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.license-guard-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #1d4ed8;
+  border-top-color: transparent;
+  animation: license-guard-spin 0.6s linear infinite;
+}
+
+@keyframes license-guard-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.license-guard-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.license-guard-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.license-guard-button:active {
+  transform: scale(0.98);
+}
+
+.license-guard-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.license-guard-button--primary {
+  background: linear-gradient(135deg, #1D4ED8, #7c8cf0);
+  color: #fff;
+}
+
+.license-guard-button--primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563EB, #8c9cf0);
+}
+
+.license-guard-button--secondary {
+  background: #1E293B;
+  color: #cbd5e1;
+  border: 1px solid #334155;
+}
+
+.license-guard-button--secondary:hover:not(:disabled) {
+  background: #334155;
+}
+
+.license-guard-button--ghost {
+  background: transparent;
+  color: #64748b;
+  border: 1px solid transparent;
+}
+
+.license-guard-button--ghost:hover {
+  color: #94a3b8;
+  background: color-mix(in srgb, #64748b 8%, transparent);
 }
 
 /* ===================================================================
@@ -20065,4 +20350,444 @@ html.mv-theme-light .tc-editor .canvas-area {
 .lib-media-info-text {
   flex: 1;
   min-width: 0;
+}
+
+/* ===================================================================
+   Internet Verification Grace Period (verification-*)
+   =================================================================== */
+
+/* ── Warning Banner (floating, bottom-right) ──────────────────────── */
+
+.verification-banner {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 10001;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.verification-banner--visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.verification-banner__card {
+  width: 360px;
+  max-width: calc(100vw - 40px);
+  background: var(--surface-dark, #0F172A);
+  border: 1px solid color-mix(in srgb, var(--warning, #F59E0B) 30%, var(--border, #334155));
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.verification-banner__close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted, #64748B);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.verification-banner__close:hover {
+  background: var(--surface-hover, #1F2937);
+  color: var(--text-secondary, #CBD5E1);
+}
+
+.verification-banner__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-right: 24px;
+}
+
+.verification-banner__icon {
+  color: var(--warning, #F59E0B);
+  flex: 0 0 auto;
+}
+
+.verification-banner__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary, #F8FAFC);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.verification-banner__body {
+  margin-bottom: 12px;
+}
+
+.verification-banner__message {
+  font-size: 13px;
+  color: var(--text-secondary, #CBD5E1);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.verification-banner__error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error, #EF4444);
+  font-size: 12px;
+}
+
+.verification-banner__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.verification-banner__btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.verification-banner__btn:active {
+  transform: scale(0.97);
+}
+
+.verification-banner__btn--dismiss {
+  background: transparent;
+  border: 1px solid var(--border, #334155);
+  color: var(--text-secondary, #CBD5E1);
+}
+
+.verification-banner__btn--dismiss:hover {
+  background: var(--surface-hover, #1F2937);
+}
+
+.verification-banner__btn--retry {
+  background: var(--warning, #F59E0B);
+  color: #000;
+}
+
+.verification-banner__btn--retry:hover {
+  background: color-mix(in srgb, var(--warning, #F59E0B) 85%, white);
+}
+
+.verification-banner__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── Critical Modal (centered overlay) ────────────────────────────── */
+
+.verification-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  animation: verification-fade-in 0.3s ease;
+}
+
+@keyframes verification-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.verification-modal {
+  width: 440px;
+  max-width: calc(100vw - 40px);
+  background: var(--surface-dark, #0F172A);
+  border: 1px solid var(--border, #334155);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  animation: verification-slide-in 0.35s ease;
+}
+
+@keyframes verification-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.verification-modal__banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: color-mix(in srgb, var(--warning, #F59E0B) 12%, var(--surface-dark, #0F172A));
+  color: color-mix(in srgb, var(--warning, #F59E0B) 80%, white);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border-bottom: 1px solid color-mix(in srgb, var(--warning, #F59E0B) 20%, transparent);
+}
+
+.verification-modal__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 20px 0;
+  color: var(--warning, #F59E0B);
+}
+
+.verification-modal__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary, #F8FAFC);
+  margin: 0;
+}
+
+.verification-modal__subtitle {
+  font-size: 12px;
+  color: var(--text-muted, #94A3B8);
+  margin: 2px 0 0;
+}
+
+.verification-modal__body {
+  padding: 16px 20px;
+}
+
+.verification-modal__message {
+  font-size: 14px;
+  color: var(--text-secondary, #CBD5E1);
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.verification-modal__warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--warning, #F59E0B) 8%, var(--surface-dark, #0F172A));
+  border: 1px solid color-mix(in srgb, var(--warning, #F59E0B) 15%, transparent);
+  color: var(--warning, #F59E0B);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.verification-modal__success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--success, #22C55E) 8%, var(--surface-dark, #0F172A));
+  border: 1px solid color-mix(in srgb, var(--success, #22C55E) 15%, transparent);
+  color: var(--success, #22C55E);
+  font-size: 13px;
+}
+
+.verification-modal__error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--error, #EF4444) 8%, var(--surface-dark, #0F172A));
+  border: 1px solid color-mix(in srgb, var(--error, #EF4444) 15%, transparent);
+  color: var(--error, #EF4444);
+  font-size: 13px;
+}
+
+.verification-modal__icon--spin {
+  animation: verification-spin 1.2s linear infinite;
+}
+
+.verification-modal__actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 20px 20px;
+}
+
+.verification-modal__btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.verification-modal__btn:active {
+  transform: scale(0.97);
+}
+
+.verification-modal__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.verification-modal__btn--primary {
+  background: var(--primary, #1D4ED8);
+  color: #fff;
+}
+
+.verification-modal__btn--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary, #1D4ED8) 85%, white);
+}
+
+.verification-modal__btn--secondary {
+  background: transparent;
+  border: 1px solid var(--border, #334155);
+  color: var(--text-secondary, #CBD5E1);
+}
+
+.verification-modal__btn--secondary:hover {
+  background: var(--surface-hover, #1F2937);
+}
+
+/* ── Lock Screen (full-screen, no dismiss) ────────────────────────── */
+
+.verification-overlay--locked {
+  background: rgba(0, 0, 0, 0.92);
+}
+
+.verification-lock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+}
+
+.verification-lock__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--error, #EF4444) 12%, rgba(0, 0, 0, 0.3));
+  color: var(--error, #EF4444);
+  margin-bottom: 24px;
+}
+
+.verification-lock__title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary, #F8FAFC);
+  margin: 0 0 8px;
+}
+
+.verification-lock__subtitle {
+  font-size: 14px;
+  color: var(--text-muted, #94A3B8);
+  margin: 0 0 16px;
+}
+
+.verification-lock__message {
+  font-size: 14px;
+  color: var(--text-secondary, #CBD5E1);
+  line-height: 1.6;
+  margin: 0 0 24px;
+  max-width: 360px;
+}
+
+.verification-lock__error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--error, #EF4444) 10%, rgba(0, 0, 0, 0.3));
+  border: 1px solid color-mix(in srgb, var(--error, #EF4444) 20%, transparent);
+  color: var(--error, #EF4444);
+  font-size: 13px;
+  margin-bottom: 16px;
+  width: 100%;
+}
+
+.verification-lock__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 32px;
+  border-radius: 8px;
+  background: var(--primary, #1D4ED8);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, transform 0.1s;
+  margin-bottom: 16px;
+}
+
+.verification-lock__btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary, #1D4ED8) 85%, white);
+}
+
+.verification-lock__btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.verification-lock__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.verification-lock__icon--spin {
+  animation: verification-spin 1.2s linear infinite;
+}
+
+.verification-lock__help {
+  font-size: 12px;
+  color: var(--text-muted, #94A3B8);
+  margin: 0;
+}
+
+@keyframes verification-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }

@@ -25,9 +25,11 @@ import {
   X,
   Zap
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LanguagePicker from '../components/LanguagePicker';
 import languageData from '../../full_langugae_list.json';
+import { checkPremiumAccess, getPremiumAccessDeniedMessage } from '../services/premiumActionGuard';
+import { useLicenseGuardState } from '../services/licenseGuard';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateTranslationCredits, countWords, deductCreditsWithSync, fetchCreditsFromBackend, isProUnlocked } from '../services/credits';
 import { trackTranscriptExported } from '../services/tracking';
@@ -328,12 +330,59 @@ function copyTranscriptText(lines: ParsedLine[]): string {
   return lines.map(l => `${l.time}    ${l.text}`).join('\n');
 }
 
+/* ── AccessDeniedDialog ── */
+
+interface AccessDeniedDialogProps {
+  isOpen: boolean;
+  reason: string;
+  onClose: () => void;
+}
+
+function AccessDeniedDialog({ isOpen, reason, onClose }: AccessDeniedDialogProps) {
+  const msg = getPremiumAccessDeniedMessage(reason);
+  return (
+    <div className={`modal-overlay ${isOpen ? 'open' : ''}`} onClick={onClose}>
+      <div className="modal-panel" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ShieldCheck size={20} color="var(--error)" />
+            <h2 className="modal-title">{msg.title}</h2>
+          </div>
+          <button className="modal-close" onClick={onClose}><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{msg.description}</p>
+        </div>
+        <div className="modal-footer" style={{ gap: 8 }}>
+          {msg.action === 'upgrade' && (
+            <button className="btn btn-primary btn-block" onClick={onClose}>
+              <Zap size={16} /> Upgrade Plan
+            </button>
+          )}
+          {msg.action === 'reconnect' && (
+            <button className="btn btn-primary btn-block" onClick={onClose}>
+              <Search size={16} /> Check Connection
+            </button>
+          )}
+          {msg.action === 'contact' && (
+            <button className="btn btn-primary btn-block" onClick={onClose}>
+              <Info size={16} /> Contact Support
+            </button>
+          )}
+          <button className="btn btn-outline btn-block" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── TranslationModal ── */
 
 interface TranslationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onStart: (language: string) => void;
+  onBeforeStart?: () => Promise<boolean>;
   savedTranslations: { language: string; createdAt: string }[];
   transcriptTitle: string;
   transcriptText: string;
@@ -344,11 +393,12 @@ const languageLookup = new Map(
   (languageData as { code: string; name: string }[]).map(l => [l.code, l.name]),
 );
 
-function TranslationModal({ isOpen, onClose, onStart, savedTranslations, transcriptTitle, transcriptText, userId }: TranslationModalProps) {
+function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, savedTranslations, transcriptTitle, transcriptText, userId }: TranslationModalProps) {
   const [targetLanguage, setTargetLanguage] = useState('yo');
   const [transOption, setTransOption] = useState<'full' | 'detected'>('full');
   const [estimatedCredits, setEstimatedCredits] = useState(0);
   const [availableCredits, setAvailableCredits] = useState(0);
+  const [verifyingAccess, setVerifyingAccess] = useState(false);
   const pro = isProUnlocked();
   const wordCount = countWords(transcriptText);
   useEffect(() => {
@@ -463,11 +513,31 @@ function TranslationModal({ isOpen, onClose, onStart, savedTranslations, transcr
 
           <button
             className="btn btn-primary btn-block"
-            onClick={() => onStart(languageLookup.get(targetLanguage) || targetLanguage)}
-            disabled={!canAfford}
-            style={!canAfford ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+            onClick={async () => {
+              if (onBeforeStart) {
+                setVerifyingAccess(true);
+                try {
+                  const allowed = await onBeforeStart();
+                  if (!allowed) {
+                    setVerifyingAccess(false);
+                    return;
+                  }
+                } catch {
+                  setVerifyingAccess(false);
+                  return;
+                }
+                setVerifyingAccess(false);
+              }
+              onStart(languageLookup.get(targetLanguage) || targetLanguage);
+            }}
+            disabled={!canAfford || verifyingAccess}
+            style={!canAfford || verifyingAccess ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
           >
-            <Globe size={18} /> {canAfford ? 'Start Translation' : 'Insufficient Credits'}
+            {verifyingAccess ? (
+              <><div className="btn-spinner" /> Verifying access...</>
+            ) : (
+              <><Globe size={18} /> {canAfford ? 'Start Translation' : 'Insufficient Credits'}</>
+            )}
           </button>
 
           {!pro && (
@@ -839,6 +909,18 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   const [isTranslating, setIsTranslating] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState('');
   const [sidebarTab, setSidebarTab] = useState<'scriptures' | 'translations'>('scriptures');
+  const [accessDeniedDialog, setAccessDeniedDialog] = useState<{ open: boolean; reason: string }>({ open: false, reason: '' });
+  const isLicenseUnlocked = useLicenseGuardState();
+
+  // Runtime license change: cancel in-progress work if license revoked
+  const isTranslatingRef = useRef(isTranslating);
+  isTranslatingRef.current = isTranslating;
+
+  useEffect(() => {
+    if (!isLicenseUnlocked && isTranslatingRef.current) {
+      setIsTranslating(false);
+    }
+  }, [isLicenseUnlocked]);
 
   useEffect(() => {
     loadTranscripts()
@@ -866,6 +948,11 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
 
   const doExport = useCallback(async (type: 'pdf' | 'docx') => {
     if (!transcript || exporting !== 'idle') return;
+    const access = await checkPremiumAccess('transcriptExport');
+    if (!access.allowed) {
+      setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
+      return;
+    }
     setExporting(type);
     try {
       const filename = sanitizeFilename(transcript.title);
@@ -893,6 +980,11 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
 
   const doExportTranslation = useCallback(async (translationId: string, translatedText: string, language: string, type: 'pdf' | 'docx') => {
     if (!transcript) return;
+    const access = await checkPremiumAccess('translationExport');
+    if (!access.allowed) {
+      setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
+      return;
+    }
     const prev = translationExporting[translationId];
     if (prev && prev !== 'idle' && !prev.startsWith('done')) return;
     setTranslationExporting(prev => ({ ...prev, [translationId]: type }));
@@ -1098,7 +1190,14 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                 </>
               )}
             </div>
-            <button className="btn btn-outline" onClick={() => setIsTranslateOpen(true)} style={{ padding: '8px 16px', color: '#adc7ff', borderColor: 'rgba(173,199,255,0.3)' }}>
+            <button className="btn btn-outline" onClick={async () => {
+              const access = await checkPremiumAccess('translation');
+              if (!access.allowed) {
+                setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
+                return;
+              }
+              setIsTranslateOpen(true);
+            }} style={{ padding: '8px 16px', color: '#adc7ff', borderColor: 'rgba(173,199,255,0.3)' }}>
               <Languages size={16} /> Translate
             </button>
           </div>
@@ -1240,7 +1339,12 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                         <button
                           className="btn-icon-small"
                           title="Copy translation"
-                          onClick={() => {
+                          onClick={async () => {
+                            const access = await checkPremiumAccess('translationExport');
+                            if (!access.allowed) {
+                              setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
+                              return;
+                            }
                             navigator.clipboard.writeText(t.translatedText);
                           }}
                         >
@@ -1286,7 +1390,14 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                     <p>No translations yet.</p>
                     <button
                       className="btn btn-outline btn-small"
-                      onClick={() => setIsTranslateOpen(true)}
+                      onClick={async () => {
+                        const access = await checkPremiumAccess('translation');
+                        if (!access.allowed) {
+                          setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
+                          return;
+                        }
+                        setIsTranslateOpen(true);
+                      }}
                     >
                       <Languages size={14} /> Add Translation
                     </button>
@@ -1307,10 +1418,27 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
           setIsTranslateOpen(false);
           setIsTranslating(true);
         }}
+        onBeforeStart={async () => {
+          const wordCount = countWords(transcript?.transcriptText ?? '');
+          const isPro = isProUnlocked();
+          const credits = isPro ? 0 : Math.ceil(wordCount / 150);
+          const access = await checkPremiumAccess('translation', { requiredCredits: credits });
+          if (!access.allowed) {
+            setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
+            return false;
+          }
+          return true;
+        }}
         savedTranslations={transcript?.translations ?? []}
         transcriptTitle={transcript?.title ?? ''}
         transcriptText={transcript?.transcriptText ?? ''}
         userId={user?.id}
+      />
+
+      <AccessDeniedDialog
+        isOpen={accessDeniedDialog.open}
+        reason={accessDeniedDialog.reason}
+        onClose={() => setAccessDeniedDialog({ open: false, reason: '' })}
       />
 
     </div>

@@ -15,7 +15,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Navigate, useParams, useNavigate } from "react-router-dom";
 import { OBSConnectGate } from "./components/OBSConnectGate";
 import AuthGate from "./components/AuthGate";
+import LicenseGuard from "./components/LicenseGuard";
+import FeatureGuard from "./components/FeatureGuard";
 import { useAuth } from "./contexts/AuthContext";
+import { initLicenseGuard, reverifyOnAuth } from "./services/licenseGuard";
 import { AppShell } from "./AppShell";
 import { MVSettings } from "./multiview/pages/MVSettings";
 import { MVShell } from "./multiview/MVShell";
@@ -26,6 +29,7 @@ import UpdateNotification from "./components/UpdateNotification";
 import ForceUpdateModal from "./components/ForceUpdateModal";
 import ForcedUpdateOverlay from "./components/ForcedUpdateOverlay";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
+import VerificationGate from "./components/VerificationGate";
 import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
 import { checkForUpdate, downloadAndInstallUpdate, getVersionAge, fetchVersionFloor, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
@@ -49,6 +53,7 @@ import { initDockCommandHandler } from "./services/dockCommandHandler";
 import { getUserScopedKey } from "./services/userScopedStorage";
 import { lmDockService } from "./services/lmDockService";
 import { obsService } from "./services/obsService";
+import { appStatusManager } from "./services/appStatusManager";
 import { serviceStore as svcStore } from "./services/serviceStore";
 import { getAllSongs, getSong, saveSong, syncSongsToDock } from "./worship/worshipDb";
 import { generateSlides } from "./worship/slideEngine";
@@ -67,6 +72,7 @@ import ServicePlannerPage from "./pages/ServicePlannerPage";
 import SpeechToScripturePage from "./pages/SpeechToScripturePage";
 import TranscriptLibraryPage from "./pages/TranscriptLibraryPage";
 import TranscriptDetailPage from "./pages/TranscriptDetailPage";
+import CreditsGuard from "./components/CreditsGuard";
 import {
   getServicePlannerSnapshot,
   importDockServicePlansFromUploads,
@@ -232,6 +238,9 @@ function App() {
 
     // Wire up LM dock mic capture + AssemblyAI streaming
     const unsubLmDock = lmDockService.init();
+
+    // Dynamic app icon — updates macOS dock icon based on OBS + speech state
+    const unsubAppStatus = appStatusManager.init();
 
     // Relay OBS connection status to the dock
     const unsubObs = obsService.onStatusChange((status) => {
@@ -500,6 +509,7 @@ function App() {
       unsubCmd();
       unsubDockCmd();
       unsubLmDock();
+      unsubAppStatus();
     };
   }, []);
 
@@ -564,6 +574,11 @@ function App() {
     // Track app started (also tracks app_installed on first launch)
     trackAppStarted();
     trackAppStartedBackend();
+
+    // Initialize the license guard (central subscription enforcement)
+    initLicenseGuard().catch(() => {
+      // Non-critical — will retry on next verification cycle
+    });
 
     const minSplashTime = new Promise((r) => setTimeout(r, 2000));
 
@@ -663,6 +678,17 @@ function App() {
       setResourcesReady(true);
     });
   }, []);
+
+  // ── Re-verify license when user logs in (BUG 2) ──
+  const prevUserRef = useRef(user);
+  useEffect(() => {
+    const prev = prevUserRef.current;
+    prevUserRef.current = user;
+    // User just logged in (was null, now has a value)
+    if (!prev && user) {
+      reverifyOnAuth().catch(() => { });
+    }
+  }, [user]);
 
   // ── Splash done callback ──
   const handleSplashDone = useCallback(() => {
@@ -1075,59 +1101,63 @@ function App() {
       {!splashVisible && (
         <AuthGate>
           <OBSConnectGate>
-            <LowerThirdProvider>
-              <Routes>
-                {/* Onboarding — standalone layout, no sidebar */}
-                {!mceOnboardingDone && (
-                  <Route path="onboarding" element={<OnboardingPage />} />
-                )}
-                <Route element={<AppShell />}>
-                  <Route
-                    index
-                    element={
-                      mceOnboardingDone ? <ProductionHomePage /> : <Navigate to="/onboarding" replace />
-                    }
-                  />
-                  <Route path="live-tools" element={<Navigate to="/" replace />} />
-                  <Route path="live" element={<Navigate to="/" replace />} />
-                  <Route path="service" element={<Navigate to="/" replace />} />
-                  <Route path="resources" element={<BibleProvider><ResourcesPage /></BibleProvider>} />
-                  <Route path="service-planner" element={<ServicePlannerPage />} />
+            <VerificationGate>
+              <LicenseGuard>
+                <LowerThirdProvider>
+                  <Routes>
+                    {/* Onboarding — standalone layout, no sidebar */}
+                    {!mceOnboardingDone && (
+                      <Route path="onboarding" element={<OnboardingPage />} />
+                    )}
+                    <Route element={<AppShell />}>
+                      <Route
+                        index
+                        element={
+                          mceOnboardingDone ? <ProductionHomePage /> : <Navigate to="/onboarding" replace />
+                        }
+                      />
+                      <Route path="live-tools" element={<Navigate to="/" replace />} />
+                      <Route path="live" element={<Navigate to="/" replace />} />
+                      <Route path="service" element={<Navigate to="/" replace />} />
+                      <Route path="resources" element={<BibleProvider><ResourcesPage /></BibleProvider>} />
+                      <Route path="service-planner" element={<ServicePlannerPage />} />
 
-                  <Route path="songs" element={<Navigate to="/resources?tab=worship" replace />} />
-                  <Route path="bible-library" element={<Navigate to="/resources?tab=bible" replace />} />
-                  <Route path="bible/translations" element={<Navigate to="/resources?tab=bible" replace />} />
-                  <Route path="production/themes" element={<ProductionThemeSettingsPage />} />
-                  <Route path="settings" element={<BibleProvider><MVSettings /></BibleProvider>} />
-                  <Route path="speech-to-scripture" element={<SpeechToScripturePage />} />
-                  <Route path="gallery" element={<MultiViewGalleryPage />} />
-                  <Route path="transcripts" element={<TranscriptLibraryPageWrapper />} />
-                  <Route path="transcripts/:id" element={<TranscriptDetailPageWrapper />} />
-                  <Route path="library" element={<Navigate to="/resources" replace />} />
-                  <Route path="templates" element={<Navigate to="/production/themes" replace />} />
-                  <Route path="templates/*" element={<Navigate to="/production/themes" replace />} />
-                  <Route path="hub" element={<Navigate to="/" replace />} />
-                  <Route path="hub/*" element={<Navigate to="/" replace />} />
-                  <Route path="service-hub" element={<Navigate to="/" replace />} />
-                  <Route path="service-control-hub" element={<Navigate to="/" replace />} />
-                  <Route path="quick-merge" element={<Navigate to="/" replace />} />
-                  <Route path="broadcast" element={<Navigate to="/" replace />} />
-                  <Route path="bible" element={<Navigate to="/settings" replace />} />
-                  <Route path="bible/*" element={<Navigate to="/settings" replace />} />
-                  <Route path="worship" element={<Navigate to="/resources" replace />} />
-                  <Route path="lower-thirds" element={<Navigate to="/production/themes" replace />} />
-                  <Route path="scenes" element={<Navigate to="/settings" replace />} />
-                  <Route path="multiview" element={<MVShell />} />
-                  <Route path="multiview/*" element={<MVShell />} />
-                  <Route path="new" element={<Navigate to="/" replace />} />
+                      <Route path="songs" element={<Navigate to="/resources?tab=worship" replace />} />
+                      <Route path="bible-library" element={<Navigate to="/resources?tab=bible" replace />} />
+                      <Route path="bible/translations" element={<Navigate to="/resources?tab=bible" replace />} />
+                      <Route path="production/themes" element={<ProductionThemeSettingsPage />} />
+                      <Route path="settings" element={<BibleProvider><MVSettings /></BibleProvider>} />
+                      <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
+                      <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
+                      <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
+                      <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />
+                      <Route path="library" element={<Navigate to="/resources" replace />} />
+                      <Route path="templates" element={<Navigate to="/production/themes" replace />} />
+                      <Route path="templates/*" element={<Navigate to="/production/themes" replace />} />
+                      <Route path="hub" element={<Navigate to="/" replace />} />
+                      <Route path="hub/*" element={<Navigate to="/" replace />} />
+                      <Route path="service-hub" element={<Navigate to="/" replace />} />
+                      <Route path="service-control-hub" element={<Navigate to="/" replace />} />
+                      <Route path="quick-merge" element={<Navigate to="/" replace />} />
+                      <Route path="broadcast" element={<Navigate to="/" replace />} />
+                      <Route path="bible" element={<Navigate to="/settings" replace />} />
+                      <Route path="bible/*" element={<Navigate to="/settings" replace />} />
+                      <Route path="worship" element={<Navigate to="/resources" replace />} />
+                      <Route path="lower-thirds" element={<Navigate to="/production/themes" replace />} />
+                      <Route path="scenes" element={<Navigate to="/settings" replace />} />
+                      <Route path="multiview" element={<MVShell />} />
+                      <Route path="multiview/*" element={<MVShell />} />
+                      <Route path="new" element={<Navigate to="/" replace />} />
 
-                  {/* Developer Tools */}
-                  <Route path="dev/db" element={<DevDashboard />} />
-                </Route>
+                      {/* Developer Tools */}
+                      <Route path="dev/db" element={<DevDashboard />} />
+                    </Route>
 
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </LowerThirdProvider>
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </LowerThirdProvider>
+              </LicenseGuard>
+            </VerificationGate>
           </OBSConnectGate>
         </AuthGate>
       )}

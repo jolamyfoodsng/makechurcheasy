@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getBibleSettings, getInstalledTranslations, saveBibleSettings } from "../../bible/bibleDb";
 import { useBible } from "../../bible/bibleStore";
 import type { BibleTranslation } from "../../bible/types";
@@ -109,7 +110,12 @@ function resolveSpeakerProfiles(settings: MVSettingsType): SpeakerProfileSetting
 
 /* ── Main Component ── */
 export function MVSettings() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  const [searchParams] = useSearchParams();
+  const validTabs: SettingsTab[] = ["general", "obs", "appearance", "branding", "bible", "usage", "audio"];
+  const initialTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    initialTab && validTabs.includes(initialTab as SettingsTab) ? (initialTab as SettingsTab) : "general"
+  );
   const [settings, setSettings] = useState<MVSettingsType>(db.getSettings);
   const [confirmClear, setConfirmClear] = useState(false);
   const [cleared, setCleared] = useState(false);
@@ -478,6 +484,11 @@ export function MVSettings() {
 
   const handleResetChurchOnboarding = useCallback(() => {
     update({ churchProfileOnboardingCompleted: false });
+    // Also reset the desktop onboarding wizard so it re-runs on next launch
+    try {
+      localStorage.removeItem("mce-onboarding-complete");
+      localStorage.removeItem("mce-onboarding-step");
+    } catch { /* ignore */ }
   }, [update]);
 
   /* ── Bible settings save ── */
@@ -768,7 +779,7 @@ export function MVSettings() {
               {activeTab === "obs" && (
                 <div className="settings-section">
                   <div className="section-header">
-                    <h3 className="section-title">Primary Connection Methods</h3>
+                    {/* <h3 className="section-title">Primary Connection Methods</h3> */}
                     <p className="section-desc">Connect to OBS Studio via the obs-websocket plugin (v5+).</p>
                   </div>
 
@@ -860,35 +871,6 @@ export function MVSettings() {
                         </div>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Connection actions */}
-                  <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <div className="section-header" style={{ marginBottom: "16px" }}>
-                      <h4 className="section-title">Connection Actions</h4>
-                    </div>
-                    <div className="grid-3-col">
-                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={handleReconnectNow}>
-                        <RefreshCw size={14} /><span>Force Reconnect</span>
-                      </button>
-                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={() => setShowLogsPanel(!showLogsPanel)}>
-                        <FileText size={14} /><span>{showLogsPanel ? "Hide Logs" : "View Logs"}</span>
-                      </button>
-                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600", color: "var(--danger-color)" }} onClick={() => { obsService.disconnect(); setObsStatus("disconnected"); setObsPasswordDraft(""); triggerToast("Disconnected.", "accent"); }}>
-                        <Trash2 size={14} /><span>Disconnect</span>
-                      </button>
-                    </div>
-                    {showLogsPanel && (
-                      <div className="expandable-logs-panel">
-                        {obsLogs.map((log) => (
-                          <div key={log.id} className="log-entry">
-                            <span className="log-time">[{log.timestamp}]</span>
-                            <span className="log-source">[{log.source}]</span>
-                            <span>{log.message}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
 
@@ -1407,6 +1389,30 @@ export function MVSettings() {
                         <span className="details-value mono-display" style={{ fontSize: "12px" }}>{settings.obsUrl || "N/A"}</span>
                       </div>
                     </div>
+
+                    {/* Connection actions */}
+                    <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={handleReconnectNow}>
+                        <RefreshCw size={14} /><span>Force Reconnect</span>
+                      </button>
+                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={() => setShowLogsPanel(!showLogsPanel)}>
+                        <FileText size={14} /><span>{showLogsPanel ? "Hide Logs" : "View Logs"}</span>
+                      </button>
+                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600", color: "var(--danger-color)" }} onClick={() => { obsService.disconnect(); setObsStatus("disconnected"); setObsPasswordDraft(""); triggerToast("Disconnected.", "accent"); }}>
+                        <Trash2 size={14} /><span>Disconnect</span>
+                      </button>
+                    </div>
+                    {showLogsPanel && (
+                      <div className="expandable-logs-panel" style={{ marginTop: "12px" }}>
+                        {obsLogs.map((log) => (
+                          <div key={log.id} className="log-entry">
+                            <span className="log-time">[{log.timestamp}]</span>
+                            <span className="log-source">[{log.source}]</span>
+                            <span>{log.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

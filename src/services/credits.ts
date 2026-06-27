@@ -24,6 +24,15 @@ import { getPlanConfig } from "./planConfig";
 import { getUserScopedKey } from "./userScopedStorage";
 import type { PlanConfig } from "./planConfig";
 import { getDeviceId } from "./authService";
+import {
+  queueDeduction,
+  getPendingTransactions,
+  removeTransaction,
+  getPendingCount as getPendingCount,
+  getOfflineCreditBalance,
+} from "./offlineCreditQueue";
+
+export { getPendingCount, getOfflineCreditBalance };
 
 async function config(): Promise<PlanConfig> {
   return getPlanConfig();
@@ -102,7 +111,11 @@ function emitCreditChange(balance: number): void {
  * Deduct credits with backend sync. Atomically decrements in MongoDB,
  * logs a transaction, and updates the local cache.
  * This is the ONLY way to deduct credits — no local-only deductions.
- * Throws if the server is unreachable — credits must always be server-verified.
+ *
+ * When offline or the backend is unreachable, the transaction is queued
+ * locally and synced automatically when connectivity is restored.
+ * Returns true if the deduction succeeded (online) or was queued (offline).
+ * Returns false only on 402 (insufficient credits).
  */
 export async function deductCreditsWithSync(
   _userId: string,
@@ -113,29 +126,45 @@ export async function deductCreditsWithSync(
 ): Promise<boolean> {
   if (amount <= 0) return true;
 
-  const res = await fetch(`${API_BASE}/api/credit-transactions/deduct`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ amount, source, description, metadata }),
-  });
+  try {
+    const res = await fetch(`${API_BASE}/api/credit-transactions/deduct`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ amount, source, description, metadata }),
+    });
 
-  if (res.ok) {
-    const data = await res.json();
-    setCreditsBalance(data.credits);
-    emitCreditChange(data.credits);
+    if (res.ok) {
+      const data = await res.json();
+      setCreditsBalance(data.credits);
+      emitCreditChange(data.credits);
+      return true;
+    }
+
+    if (res.status === 402) {
+      const err = await res.json();
+      if (typeof err.currentBalance === "number") {
+        setCreditsBalance(err.currentBalance);
+        emitCreditChange(err.currentBalance);
+      }
+      return false;
+    }
+
+    // Server error — queue for later
+    const tx = queueDeduction(source, amount, description);
+    console.warn(`[Credits] Server error (${res.status}) — queued transaction ${tx.id}`);
+    const offlineBalance = getOfflineCreditBalance(getCreditsBalance());
+    setCreditsBalance(offlineBalance);
+    emitCreditChange(offlineBalance);
+    return true;
+  } catch {
+    // Network failure — queue for later
+    const tx = queueDeduction(source, amount, description);
+    console.warn(`[Credits] Offline — queued transaction ${tx.id}`);
+    const offlineBalance = getOfflineCreditBalance(getCreditsBalance());
+    setCreditsBalance(offlineBalance);
+    emitCreditChange(offlineBalance);
     return true;
   }
-
-  if (res.status === 402) {
-    const err = await res.json();
-    if (typeof err.currentBalance === "number") {
-      setCreditsBalance(err.currentBalance);
-      emitCreditChange(err.currentBalance);
-    }
-    return false;
-  }
-
-  throw new Error("Unable to verify credits with server. Please check your connection.");
 }
 
 // ── Backend fetch ────────────────────────────────────────────────────────────
@@ -195,6 +224,72 @@ export async function syncCreditsWithBackend(): Promise<number> {
   setCreditsBalance(backendCredits);
   emitCreditChange(backendCredits);
   return backendCredits;
+}
+
+// ── Offline queue sync ─────────────────────────────────────────────────────
+
+let _syncing = false;
+
+/**
+ * Sync all pending offline credit transactions to the backend.
+ * Called on app startup and when the browser comes back online.
+ * Each transaction is sent to POST /api/credit-transactions/sync-offline
+ * which handles deduplication via transactionId.
+ *
+ * Returns true if all transactions synced successfully.
+ */
+export async function syncPendingTransactions(): Promise<boolean> {
+  if (_syncing) return false;
+  _syncing = true;
+
+  try {
+    const pending = getPendingTransactions();
+    if (pending.length === 0) return true;
+
+    console.log(`[Credits] Syncing ${pending.length} pending offline transaction(s)...`);
+
+    let failed = 0;
+    for (const tx of pending) {
+      try {
+        const res = await fetch(`${API_BASE}/api/credit-transactions/sync-offline`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({
+            transactionId: tx.id,
+            feature: tx.feature,
+            amount: tx.amount,
+            description: tx.description,
+          }),
+        });
+
+        if (res.ok || res.status === 402) {
+          // Success or insufficient credits — remove from queue either way
+          removeTransaction(tx.id);
+        } else {
+          // Server error — leave in queue for next retry
+          console.warn(`[Credits] Failed to sync transaction ${tx.id}: HTTP ${res.status}`);
+          failed++;
+        }
+      } catch {
+        // Network error — leave in queue for next retry
+        console.warn(`[Credits] Failed to sync transaction ${tx.id}: network error`);
+        failed++;
+      }
+    }
+
+    // Sync final balance from backend
+    await syncCreditsWithBackend();
+
+    if (failed === 0) {
+      console.log("[Credits] All pending transactions synced successfully");
+    } else {
+      console.warn(`[Credits] ${failed} transaction(s) failed to sync — will retry`);
+    }
+
+    return failed === 0;
+  } finally {
+    _syncing = false;
+  }
 }
 
 // ── Transaction History ─────────────────────────────────────────────────────

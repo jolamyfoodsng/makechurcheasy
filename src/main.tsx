@@ -46,6 +46,12 @@ void initAuthStore().then(async () => {
     startUsageSync();
   } catch { /* usage sync is best-effort */ }
 
+  // Sync any pending offline credit transactions from previous sessions
+  try {
+    const { syncPendingTransactions } = await import("./services/credits");
+    void syncPendingTransactions();
+  } catch { /* credit sync is best-effort */ }
+
   // Load desktop config from API (with cache/fallback) and apply theme overrides
   try {
     const { getDesktopConfig, refreshDesktopConfig } = await import("./services/desktopConfig");
@@ -72,6 +78,10 @@ void initAuthStore().then(async () => {
       void refreshDesktopConfig().then(() => {
         applyThemeConfigOverrides();
       });
+      // Sync pending offline credit transactions when connectivity returns
+      import("./services/credits").then(({ syncPendingTransactions }) => {
+        void syncPendingTransactions();
+      }).catch(() => { /* credit sync is best-effort */ });
     });
   } catch { /* config loading is best-effort, falls back to defaults */ }
 

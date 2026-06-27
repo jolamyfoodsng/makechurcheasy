@@ -9,18 +9,34 @@
 // Generated from the same keypair as SUBSCRIPTION_PRIVATE_KEY on the server
 const PUBLIC_KEY_BASE64 = import.meta.env.VITE_SUBSCRIPTION_PUBLIC_KEY || "";
 
+// Fail loudly in production if the public key is not configured.
+if (!PUBLIC_KEY_BASE64 && import.meta.env.PROD) {
+  console.error(
+    "[cryptoVerify] FATAL: VITE_SUBSCRIPTION_PUBLIC_KEY is not set. " +
+    "Subscription signature verification is disabled. " +
+    "Set this environment variable before building for production."
+  );
+}
+
 /**
  * Verify an Ed25519 signature against a payload.
  * Returns true if the signature is valid, false otherwise.
+ *
+ * In development mode (import.meta.env.DEV), verification is skipped
+ * when no key is configured, to allow local dev without keypair setup.
+ * In production, missing key = reject all payloads (defense in depth).
  */
 export async function verifySubscriptionSignature(
   payload: Record<string, unknown>,
   signatureBase64: string
 ): Promise<boolean> {
-  // In dev mode without keys, skip verification
   if (!PUBLIC_KEY_BASE64) {
-    console.warn("[cryptoVerify] No public key configured — skipping verification (dev mode)");
-    return true;
+    if (import.meta.env.DEV) {
+      console.warn("[cryptoVerify] No public key configured — skipping verification (dev mode)");
+      return true;
+    }
+    console.error("[cryptoVerify] No public key configured — rejecting payload (production)");
+    return false;
   }
 
   try {

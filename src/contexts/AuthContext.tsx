@@ -11,6 +11,7 @@ import {
 import { syncCreditsWithBackend } from "@/services/credits";
 import { resetFavoriteThemeCaches } from "@/services/favoriteThemes";
 import { clearAllUserScopedStorage } from "@/services/userScopedStorage";
+import { resetLicenseGuard } from "@/services/licenseGuard";
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
@@ -59,6 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
+    // Reset license guard first while session is still available
+    // so getUserScopedKey can resolve the correct user-scoped key
+    resetLicenseGuard();
     authLogout();
     resetFavoriteThemeCaches();
     clearAllUserScopedStorage();

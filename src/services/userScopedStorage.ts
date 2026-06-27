@@ -43,6 +43,7 @@ const USER_SCOPED_KEY_PREFIXES = [
   "ocs-credits-balance",
   "ocs-pending-credits",
   "ocs-subscription-cache",
+  "ocs-license-cache",
   "ocs-pro-unlocked",
   "ocs-consumed-renewals",
   "voiceBibleUsage",
