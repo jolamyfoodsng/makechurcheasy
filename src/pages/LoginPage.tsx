@@ -1,15 +1,13 @@
+import { AppLogo } from "@/components/AppLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   createPairingCode,
-  watchPairingStatus,
-  resendVerificationEmail,
-  checkVerificationStatus,
+  watchPairingStatus
 } from "@/services/authService";
+import { DEFAULT_DESKTOP_CONFIG, readDesktopConfigCache } from "@/services/desktopConfig";
 import { trackDevicePaired, trackLogin } from "@/services/tracking";
-import { useEffect, useRef, useState } from "react";
-import { AppLogo } from "@/components/AppLogo";
 import QRCode from "qrcode";
-import { readDesktopConfigCache, DEFAULT_DESKTOP_CONFIG } from "@/services/desktopConfig";
+import { useEffect, useRef, useState } from "react";
 
 const AUTH_API = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 console.log('AUTH_API :', AUTH_API);
@@ -870,110 +868,6 @@ export default function LoginPage() {
                 </p>
               )}
             </div>
-
-            {/* Resend button */}
-            <button
-              onClick={async () => {
-                if (!code) return;
-                setResendStatus("sending");
-                const result = await resendVerificationEmail(code);
-                if (result.error) {
-                  setResendStatus("error");
-                } else {
-                  setResendStatus("sent");
-                }
-              }}
-              disabled={resendStatus === "sending" || resendStatus === "sent"}
-              style={{
-                width: "100%",
-                height: "40px",
-                borderRadius: "4px",
-                border: "none",
-                background: resendStatus === "sent" ? "#22c55e" : "#1D4ED8",
-                fontSize: "13px",
-                fontWeight: 600,
-                color: "#fff",
-                cursor: resendStatus === "sending" || resendStatus === "sent" ? "default" : "pointer",
-                opacity: resendStatus === "sending" ? 0.7 : 1,
-                marginBottom: "8px",
-              }}
-            >
-              {resendStatus === "sending" && "Sending..."}
-              {resendStatus === "sent" && "✓ Verification Email Sent"}
-              {resendStatus === "error" && "Failed to Send — Try Again"}
-              {resendStatus === "idle" && "Resend Verification Email"}
-            </button>
-
-            {/* I've Verified button */}
-            <button
-              onClick={async () => {
-                if (!code) return;
-                setCheckStatus("checking");
-                const result = await checkVerificationStatus(code);
-                if (result.error) {
-                  setCheckStatus("error");
-                  setTimeout(() => setCheckStatus("idle"), 2000);
-                } else if (result.verified) {
-                  setCheckStatus("verified");
-                  setTimeout(() => {
-                    setShowVerificationModal(false);
-                    // Generate a new pairing code and restart the flow
-                    setView("initial");
-                    setCode("");
-                    setError("");
-                  }, 1000);
-                } else {
-                  setCheckStatus("not_verified");
-                  setTimeout(() => setCheckStatus("idle"), 2000);
-                }
-              }}
-              disabled={checkStatus === "checking" || checkStatus === "verified"}
-              style={{
-                width: "100%",
-                height: "40px",
-                borderRadius: "4px",
-                border: checkStatus === "verified" ? "1px solid #22c55e" : "1px solid #2a2a3a",
-                background: checkStatus === "verified" ? "rgba(34,197,94,0.1)" : "transparent",
-                fontSize: "13px",
-                fontWeight: 500,
-                color: checkStatus === "verified" ? "#22c55e" : "#f0f0f5",
-                cursor: checkStatus === "checking" || checkStatus === "verified" ? "default" : "pointer",
-                marginBottom: "8px",
-              }}
-            >
-              {checkStatus === "checking" && "Checking..."}
-              {checkStatus === "verified" && "✓ Email Verified! Closing..."}
-              {checkStatus === "not_verified" && "Email not verified yet. Try again."}
-              {checkStatus === "error" && "Failed to check. Try again."}
-              {(checkStatus === "idle" || checkStatus === "not_verified" || checkStatus === "error") && "I've Verified My Email"}
-            </button>
-
-            {/* Change Email button */}
-            <button
-              onClick={async () => {
-                const dashboardUrl = DASHBOARD_URL;
-                try {
-                  const { openUrl } = await import("@tauri-apps/plugin-opener");
-                  await openUrl(`${dashboardUrl}/dashboard/settings`);
-                } catch {
-                  window.open(`${dashboardUrl}/dashboard/settings`, "_blank");
-                }
-              }}
-              style={{
-                width: "100%",
-                height: "40px",
-                borderRadius: "4px",
-                border: "1px solid #2a2a3a",
-                background: "transparent",
-                fontSize: "13px",
-                fontWeight: 500,
-                color: "#9898a8",
-                cursor: "pointer",
-                marginBottom: "16px",
-              }}
-            >
-              Change Email Address ↗
-            </button>
 
             {/* Close / cancel */}
             <button
