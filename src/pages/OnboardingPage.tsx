@@ -624,7 +624,7 @@ function StepInstallDock({
       <div className="ob-url-card">
         <div className="ob-url-card-header">
           <span className="ob-url-card-title">
-            MakeChurchEasy Control Dock
+            Scripture Assistant
           </span>
           {copied === "ai" && (
             <Check size={14} style={{ color: "var(--success)" }} />
@@ -642,7 +642,7 @@ function StepInstallDock({
           </button>
         </div>
         <p className="ob-url-desc">
-          Full MakeChurchEasy control panel for live service management.
+          Automatically detects and displays Bible references as the preacher speaks.
         </p>
       </div>
 

@@ -192,32 +192,217 @@ export function formatLyricsFromSections(sections: Array<Pick<LyricSection, "lab
 }
 
 /**
+ * Worship lyric line labels that appear inline in user text.
+ * e.g. "Verse:", "Chorus:", "Bridge 2:"
+ */
+const LYRIC_LABEL_RE =
+  /^(Verse|Chorus|Bridge|Pre[-\s]?Chorus|Refrain|Tag|Intro|Outro)\s*\d*:?\s*[:\-]?\s*(.*)/i;
+
+/**
+ * Expand a single lyric line into shorter display lines:
+ *  1. Extract section labels (Verse:, Chorus:) to their own line
+ *  2. Split remaining text at comma / semicolon boundaries
+ *
+ * Rules satisfied:
+ *  • Labels stay with at least the next line
+ *  • Splits at sentence boundaries (after , or ;)
+ *  • Never breaks mid-thought — each piece is a coherent phrase
+ */
+function expandLine(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+
+  // 1. Check for a section label at the start of the line
+  const labelMatch = trimmed.match(LYRIC_LABEL_RE);
+  if (labelMatch) {
+    const num = trimmed.match(/\d+/)?.[0] ?? "";
+    const label = labelMatch[1] + (num ? ` ${num}` : "") + ":";
+    const rest = labelMatch[2]?.trim() ?? "";
+    if (rest) {
+      // Label + remaining content — expand the rest recursively
+      return [label, ...expandLine(rest)];
+    }
+    return [label];
+  }
+
+  // 2. Split at commas / semicolons followed by whitespace
+  const parts = trimmed.split(/([,;])\s+/);
+  if (parts.length <= 1) return [trimmed];
+
+  const result: string[] = [];
+  let current = "";
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (/^[,;]$/.test(part)) {
+      // Punctuation — attach to the piece before it
+      current += part;
+    } else if (i === 0) {
+      current = part;
+    } else {
+      // New text segment after punctuation
+      if (current.trim()) result.push(current.trim());
+      current = part;
+    }
+  }
+  if (current.trim()) result.push(current.trim());
+
+  return result;
+}
+
+/**
+ * Flatten an array of lyric lines by expanding each one at natural
+ * boundaries (labels, commas, semicolons).
+ */
+function expandLines(lines: string[]): string[] {
+  return lines.flatMap(expandLine);
+}
+
+/**
+ * Detect the dominant section type from a group of display lines.
+ */
+function detectGroupType(lines: string[]): Slide["type"] {
+  const joined = lines.join(" ").toLowerCase();
+  if (joined.includes("chorus")) return "chorus";
+  if (joined.includes("bridge")) return "bridge";
+  if (joined.includes("pre-chorus") || joined.includes("prechorus")) return "pre-chorus";
+  if (joined.includes("tag")) return "tag";
+  if (joined.includes("intro")) return "intro";
+  if (joined.includes("outro")) return "outro";
+  return "verse";
+}
+
+/**
+ * Detect a section label (Verse, Chorus, etc.) from a group of display lines
+ * to use as the slide card heading.
+ */
+function detectGroupLabel(lines: string[]): string {
+  for (const line of lines) {
+    const m = line.match(LYRIC_LABEL_RE);
+    if (m) {
+      const num = lines.join(" ").match(new RegExp(m[1] + "\\s*(\\d+)", "i"))?.[1] ?? "";
+      return m[1] + (num ? " " + num : "");
+    }
+  }
+  return "";
+}
+
+/**
+ * Split display lines into balanced slide groups.
+ *
+ * Rules:
+ *  • Fill each slide up to maxLines
+ *  • Prefer breaking at sentence boundaries (lines ending with .!?)
+ *  • Never leave a tiny last slide — merge into the previous if it fits
+ *  • If a sentence exceeds maxLines it gets its own slide(s)
+ */
+function splitIntoBalancedSlides(lines: string[], maxLines: number): string[][] {
+  if (lines.length === 0) return [];
+  if (lines.length <= maxLines) return [lines];
+
+  // Group lines into "sentences" — consecutive lines ending with terminal
+  // punctuation form one sentence block that should stay together.
+  const sentences: string[][] = [];
+  let current: string[] = [];
+
+  for (const line of lines) {
+    current.push(line);
+    if (/[.!?]\s*$/.test(line)) {
+      sentences.push(current);
+      current = [];
+    }
+  }
+  if (current.length > 0) sentences.push(current);
+
+  // Greedy fill: add sentences to the current slide until full, then start a new one
+  const slides: string[][] = [];
+  let slide: string[] = [];
+
+  for (const sentence of sentences) {
+    if (slide.length + sentence.length <= maxLines) {
+      slide.push(...sentence);
+    } else {
+      // Current slide can't fit this sentence — flush it
+      if (slide.length > 0) {
+        slides.push(slide);
+        slide = [];
+      }
+      if (sentence.length > maxLines) {
+        // Sentence itself exceeds maxLines — hard-split it
+        for (let i = 0; i < sentence.length; i += maxLines) {
+          slides.push(sentence.slice(i, i + maxLines));
+        }
+      } else {
+        slide = [...sentence];
+      }
+    }
+  }
+  if (slide.length > 0) slides.push(slide);
+
+  // Balance: if the last slide is very small (≤2 lines), merge it into the
+  // previous slide when it fits — avoids lopsided presentations.
+  if (slides.length >= 2) {
+    const last = slides[slides.length - 1];
+    const prev = slides[slides.length - 2];
+    if (last.length <= 2 && prev.length + last.length <= maxLines) {
+      prev.push(...last);
+      slides.pop();
+    }
+  }
+
+  return slides;
+}
+
+/**
  * Split raw lyrics into slides based on stanza breaks and lines-per-slide.
+ *
+ * When identifyChorus (auto-split) is ON, the engine:
+ *  1. Expands each line at natural boundaries (labels, commas, semicolons)
+ *  2. Respects sentence boundaries — no mid-thought breaks
+ *  3. Balances slide sizes — no tiny last slides
+ *  4. Keeps section labels (Verse:, Chorus:) with their content
+ *
+ * When auto-split is OFF, each parsed section becomes one slide.
  */
 export function generateSlides(
   rawLyrics: string,
   linesPerSlide: number,
-  _identifyChorus: boolean
+  identifyChorus: boolean
 ): Slide[] {
   if (!rawLyrics.trim()) return [];
 
-  const slides: Slide[] = [];
   const sections = parseWorshipLyricSections(rawLyrics, linesPerSlide);
 
-  sections.forEach((section) => {
-    for (let i = 0; i < section.lines.length; i += linesPerSlide) {
-      const chunk = section.lines.slice(i, i + linesPerSlide);
-      const isContinuation = i > 0;
+  if (!identifyChorus) {
+    // Auto-split OFF: each section is a single slide (no line chunking)
+    return sections.map((section) => ({
+      id: `slide-${section.id}-0`,
+      label: section.label,
+      content: section.lines.join("\n"),
+      isContinuation: false,
+      type: section.type,
+    }));
+  }
 
-      slides.push({
-        id: `slide-${section.id}-${slides.length}`,
-        label: isContinuation ? `${section.label} (cont)` : section.label,
-        content: chunk.join("\n"),
-        isContinuation,
-        type: section.type,
-      });
-    }
+  // ── Auto-split ON ──────────────────────────────────────────────────────
+  // Flatten all sections into one continuous list of display lines,
+  // expand at natural boundaries, then balance into slides.
+  const displayLines: string[] = [];
+  for (const section of sections) {
+    displayLines.push(...expandLines(section.lines));
+  }
+
+  const groups = splitIntoBalancedSlides(displayLines, linesPerSlide);
+
+  return groups.map((group, i) => {
+    const label = detectGroupLabel(group) || (i === 0 ? sections[0]?.label ?? "Lyrics" : `${sections[0]?.label ?? "Lyrics"} (cont)`);
+    const type = detectGroupType(group);
+    return {
+      id: `slide-auto-${i}`,
+      label,
+      content: group.join("\n"),
+      isContinuation: i > 0,
+      type,
+    };
   });
-
-  return slides;
 }

@@ -169,6 +169,7 @@
 
 .ws-autosplit-controls {
   display: flex;
+  min-width: 60px;
   align-items: center;
   gap: 4px;
 }
@@ -179,7 +180,7 @@
 }
 
 .ws-autosplit-num {
-  width: 36px;
+  width: 80px;
   background: var(--bg-dark);
   border: 1px solid var(--border);
   border-radius: var(--radius, 4px);
@@ -358,6 +359,7 @@
   border-top: 1px solid var(--border);
   background: var(--surface-dark);
   padding: 10px 14px;
+  min-height: 50px;
   flex-shrink: 0;
 }
 

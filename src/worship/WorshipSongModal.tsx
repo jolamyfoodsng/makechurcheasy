@@ -7,14 +7,14 @@
  * Replaces the old SongFormModal in SongsTab.tsx.
  */
 
+import { Music, Save, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Music, X, Save } from "lucide-react";
-import { generateSlides } from "./slideEngine";
-import { saveSong } from "./worshipDb";
-import type { Song, Slide } from "./types";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
 import { DEFAULT_THEME_SETTINGS, type BibleTheme, type BibleThemeSettings } from "../bible/types";
+import { generateSlides } from "./slideEngine";
 import { nextAutoSongTitle } from "./songTitleAutoGen";
+import type { Slide, Song } from "./types";
+import { saveSong } from "./worshipDb";
 import "./worshipSongModal.css";
 
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
@@ -41,16 +41,6 @@ function themeBackgroundStyle(s: BibleThemeSettings): React.CSSProperties {
 }
 
 /** Build inline style for a theme gallery thumbnail */
-function themeThumbStyle(s: BibleThemeSettings): React.CSSProperties {
-  if (s.backgroundImage) {
-    return {
-      backgroundImage: `url(${s.backgroundImage})`,
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-    };
-  }
-  return { backgroundColor: s.backgroundColor };
-}
 
 /* ── Fullscreen themes only ─────────────────────────────────────────────── */
 
@@ -72,7 +62,7 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
   const [lyrics, setLyrics] = useState(song?.lyrics ?? "");
   const [autoSplit, setAutoSplit] = useState(song?.autoSplit ?? true);
   const [linesPerSlide, setLinesPerSlide] = useState(song?.linesPerSlide ?? 2);
-  const [selectedThemeId, setSelectedThemeId] = useState<string>(
+  const [selectedThemeId] = useState<string>(
     song?.themeId ?? FULLSCREEN_THEMES[0]?.id ?? "",
   );
   const [saving, setSaving] = useState(false);
@@ -281,27 +271,7 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
 
             {/* Theme gallery strip */}
             <div className="ws-theme-strip">
-              <div className="ws-theme-strip-header">
-                <h4 className="ws-theme-strip-title">Theme</h4>
-              </div>
-              <div className="ws-theme-strip-scroll">
-                {FULLSCREEN_THEMES.map((theme) => {
-                  const resolved = resolveThemeSettings(theme);
-                  return (
-                    <div
-                      key={theme.id}
-                      className={`ws-theme-thumb${selectedThemeId === theme.id ? " active" : ""}`}
-                      onClick={() => setSelectedThemeId(theme.id)}
-                    >
-                      <div
-                        className="ws-theme-thumb-preview"
-                        style={themeThumbStyle(resolved)}
-                      />
-                      <span className="ws-theme-thumb-name">{theme.name}</span>
-                    </div>
-                  );
-                })}
-              </div>
+
             </div>
           </div>
         </div>

@@ -10,7 +10,7 @@ import type { Song } from "./types";
 import { getCurrentUserId } from "../services/db";
 
 const DB_NAME = "obs-church-studio-worship";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
@@ -64,6 +64,31 @@ function getDb(): Promise<IDBPDatabase> {
           }
         }
       },
+    }).then((db) => {
+      // Safety check: if the songs store is missing (e.g. the upgrade handler
+      // didn't run because the DB was already at the current version), force
+      // a version bump so the upgrade handler re-runs.
+      if (!db.objectStoreNames.contains("songs")) {
+        db.close();
+        dbPromise = null;
+        // Re-open with a higher version to guarantee the upgrade handler fires
+        return openDB(DB_NAME, DB_VERSION + 1, {
+          upgrade(db, _oldVersion, _newVersion, transaction) {
+            if (!db.objectStoreNames.contains("songs")) {
+              const store = db.createObjectStore("songs", { keyPath: "id" });
+              store.createIndex("title", "metadata.title");
+              store.createIndex("updatedAt", "updatedAt");
+            }
+            if (db.objectStoreNames.contains("songs")) {
+              const store = transaction.objectStore("songs") as unknown as IDBObjectStore;
+              if (!store.indexNames.contains("userId")) {
+                store.createIndex("userId", "userId", { unique: false });
+              }
+            }
+          },
+        });
+      }
+      return db;
     }).catch((err) => {
       // Reset so the next call can retry instead of being permanently stuck
       dbPromise = null;

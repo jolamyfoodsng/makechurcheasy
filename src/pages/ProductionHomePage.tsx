@@ -410,12 +410,10 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
         </div>
 
         <div className="urls-group">
-          <div className="url-label-block">
-            <span className="url-label-text text-green">MakeChurchEasy Control Dock</span>
-            <p className="url-label-desc">
-              Full MakeChurchEasy control panel for live service management
-            </p>
-          </div>
+          <span className="url-label-text text-green">Scripture Assistant</span>
+          <p className="url-label-desc">
+            Automatically detects and displays Bible references as the preacher speaks
+          </p>
           <div className="url-input-group">
             <input
               className="url-input input-green"
