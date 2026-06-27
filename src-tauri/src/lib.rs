@@ -3211,6 +3211,7 @@ pub fn run() {
             local_llm::get_local_llm_runtime_status,
             local_llm::install_local_llm_model,
             local_llm::generate_local_llm_text,
+            #[cfg(target_os = "macos")]
             app_icon::set_app_icon
         ])
         .run(tauri::generate_context!())

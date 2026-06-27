@@ -188,7 +188,7 @@ export default function OnboardingPage() {
   return (
     <div className="ob-root">
       {/* Progress dots */}
-      <div className="ob-progress">
+      {/* <div className="ob-progress">
         {STEP_NAMES.map((_, i) => {
           const s = i + 1;
           const isDone = s < step;
@@ -206,7 +206,7 @@ export default function OnboardingPage() {
             </div>
           );
         })}
-      </div>
+      </div> */}
 
       {/* Step labels */}
       <div className="ob-step-labels">
