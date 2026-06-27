@@ -154,6 +154,8 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const [ltLive, setLtLive] = useState(false);
   // BibleTheme lower-third text input (used when a BibleTheme is selected)
   const [bibleLtText, setBibleLtText] = useState("");
+  // Track whether "MCE Ticker Scene" already exists in OBS
+  const [tickerSceneExists, setTickerSceneExists] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mountedRef = useRef(true);
@@ -171,6 +173,19 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     if (mountedRef.current) setObsConnected(dockObsClient.isConnected);
     return () => { mountedRef.current = false; unsub(); };
   }, []);
+
+  // Detect MCE Ticker Scene on OBS connect
+  useEffect(() => {
+    if (!obsConnected || tickerOutputMode !== "scene") return;
+    dockObsClient.call("GetSceneList")
+      .then((res) => {
+        const { scenes } = res as { scenes: Array<{ sceneName: string }> };
+        if (mountedRef.current) {
+          setTickerSceneExists(scenes.some((s) => s.sceneName === "MCE Ticker Scene"));
+        }
+      })
+      .catch(() => { });
+  }, [obsConnected, tickerOutputMode]);
 
   // Clear feedback after 3s
   useEffect(() => {
@@ -319,9 +334,15 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
         }
 
         // Add program scene as nested source at bottom (index 0) if not already there
+        // Guard: skip if program scene IS the ticker scene (self-reference not allowed)
         const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName: tickerSceneName }) as {
           sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number }>;
         };
+        if (programSceneName === tickerSceneName) {
+          setError("Cannot nest MCE Ticker Scene within itself. Switch to a different scene in OBS and try again, or delete the MCE Ticker Scene.");
+          setSending(false);
+          return;
+        }
         const existingProgramSource = sceneItems.sceneItems.find((i) => i.sourceName === programSceneName);
         if (!existingProgramSource) {
           const created = await dockObsClient.call("CreateSceneItem", {
@@ -436,6 +457,13 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       setRunning(true);
       setIsPaused(false);
       setSuccess(tickerOutputMode === "scene" ? "Ticker live (scene mode) ✓" : "Ticker live ✓");
+      // Re-check for MCE Ticker Scene after successful push
+      if (tickerOutputMode === "scene") {
+        try {
+          const res = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
+          setTickerSceneExists(res.scenes.some((s) => s.sceneName === "MCE Ticker Scene"));
+        } catch { /* ignore */ }
+      }
     } catch (err) {
       console.warn("[DockMinistry] Push failed:", err);
       setError(err instanceof Error ? err.message : "Push failed");
@@ -484,10 +512,11 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       if (tickerOutputMode === "scene") {
         // Delete the MCE Ticker Scene entirely
         const scenes = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
-        const tickerSceneExists = scenes.scenes.some((s) => s.sceneName === "MCE Ticker Scene");
-        if (tickerSceneExists) {
+        const sceneExists = scenes.scenes.some((s) => s.sceneName === "MCE Ticker Scene");
+        if (sceneExists) {
           await dockObsClient.call("RemoveScene", { sceneName: "MCE Ticker Scene" });
         }
+        setTickerSceneExists(false);
 
         // Restore original scene in preview
         let originalScene = "";
@@ -817,7 +846,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   type="button"
                   className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--primary"}`}
                   onClick={handlePush}
-                  disabled={sending || activeMessages.length === 0 || !obsConnected}
+                  disabled={sending || activeMessages.length === 0 || !obsConnected || (tickerOutputMode === "scene" && tickerSceneExists)}
                   style={{ flex: 1 }}
                 >
                   <Icon name="play_arrow" size={14} />
@@ -853,6 +882,11 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
               {!obsConnected && (
                 <div style={{ fontSize: 10, color: "var(--dock-red)", textAlign: "center" }}>
                   Connect to OBS to use the ticker
+                </div>
+              )}
+              {tickerOutputMode === "scene" && tickerSceneExists && (
+                <div style={{ fontSize: 10, color: "var(--dock-red)", textAlign: "center", marginTop: 4 }}>
+                  MCE Ticker Scene exists in OBS — delete it before pushing the ticker
                 </div>
               )}
             </div>

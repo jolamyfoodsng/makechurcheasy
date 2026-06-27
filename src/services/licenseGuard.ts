@@ -629,9 +629,9 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
     case "internet_required":
       return {
         icon: "wifi_off",
-        title: "Internet Verification Required",
+        title: "Verification Required",
         description:
-          "This device has not connected to the internet for an extended period. Please connect to the internet to verify your account before continuing.",
+          "Your license could not be verified recently. Please ensure you have an internet connection and try again.",
         primaryAction: "retry",
         primaryLabel: "Retry Verification",
       };
