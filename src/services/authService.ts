@@ -346,6 +346,7 @@ export function watchPairingStatus(
     onExpired: () => void;
     onError: (msg: string) => void;
     onVersionBlocked?: (message: string) => void;
+    onVerificationRequired?: (email: string, name: string, message: string) => void;
   }
 ): () => void {
   const os = detectOS();
@@ -388,6 +389,16 @@ export function watchPairingStatus(
     callbacks.onVersionBlocked?.(data.message || "This version is no longer supported. Please update.");
   });
 
+  es.addEventListener("verification_required", (e: MessageEvent) => {
+    es.close();
+    const data = JSON.parse(e.data);
+    callbacks.onVerificationRequired?.(
+      data.email || "",
+      data.name || "",
+      data.message || "Please verify your email address before authorizing a device."
+    );
+  });
+
   es.addEventListener("error", (e: MessageEvent | Event) => {
     es.close();
     const msg = "data" in e ? JSON.parse(e.data).message : "Connection lost";
@@ -407,5 +418,49 @@ export async function openBrowserForPairing(code: string): Promise<void> {
     await openUrl(url);
   } catch {
     window.open(url, "_blank");
+  }
+}
+
+/**
+ * Resend the email verification link to the authorizing user (dashboard side).
+ * Called from the desktop app when the pairing is blocked by email verification.
+ * Uses the pairing code as lightweight auth.
+ */
+export async function resendVerificationEmail(
+  code: string
+): Promise<{ success?: boolean; alreadyVerified?: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/pairing/resend-verification`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { error: data.error || "Failed to resend" };
+    return { success: true, alreadyVerified: data.alreadyVerified };
+  } catch {
+    return { error: "Connection failed" };
+  }
+}
+
+/**
+ * Check if the authorizing user's email is now verified.
+ * Called when the user clicks "I've Verified My Email" in the verification modal.
+ * Uses the pairing code as lightweight auth.
+ */
+export async function checkVerificationStatus(
+  code: string
+): Promise<{ verified: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/pairing/check-verification`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { verified: false, error: data.error || "Failed to check" };
+    return { verified: data.verified };
+  } catch {
+    return { verified: false, error: "Connection failed" };
   }
 }

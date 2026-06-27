@@ -32,8 +32,6 @@ import {
   ListMusic,
   Video,
   Users,
-  Eye,
-  Palette,
 } from "lucide-react";
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
@@ -41,17 +39,12 @@ import { getDeviceId } from "../services/authService";
 import { track } from "../services/analytics";
 import { getDefaultOBSPort } from "../services/desktopConfig";
 import { getInstalledTranslations } from "../bible/bibleDb";
-import { getVerse } from "../bible/bibleData";
-import { generateSlides } from "../bible/slideEngine";
-import { bibleObsService } from "../bible/bibleObsService";
-import ThemeCreatorModal from "./ThemeCreatorModal";
-import type { BiblePassage, BibleTranslation } from "../bible/types";
 import "./OnboardingPage.css";
 
 /* ── Constants ── */
 const STORAGE_KEY = "mce-onboarding-complete";
 const STEP_KEY = "mce-onboarding-step";
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 6;
 const YOUTUBE_URL = "https://www.youtube.com/@MakeChurchEasy";
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
@@ -60,8 +53,7 @@ const API_BASE =
 const STEP_NAMES = [
   "Welcome",
   "OBS",
-  "Verse",
-  "Theme",
+  "Features",
   "Dock",
   "Test",
   "Ready",
@@ -242,22 +234,19 @@ export default function OnboardingPage() {
           <StepConnectOBS onNext={goNext} onBack={goPrev} />
         )}
         {step === 3 && (
-          <StepPresentVerse onNext={goNext} onBack={goPrev} />
+          <StepFeatures onNext={goNext} onBack={goPrev} />
         )}
         {step === 4 && (
-          <StepCreateTheme onNext={goNext} onBack={goPrev} />
-        )}
-        {step === 5 && (
           <StepInstallDock
             onNext={goNext}
             onBack={goPrev}
             onTutorial={openTutorial}
           />
         )}
-        {step === 6 && (
+        {step === 5 && (
           <StepTest onFinish={finish} onBack={goPrev} />
         )}
-        {step === 7 && <StepReady onFinish={finish} />}
+        {step === 6 && <StepReady onFinish={finish} />}
       </div>
 
       {/* Skip modal */}
@@ -508,169 +497,47 @@ function StepConnectOBS({
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Step 3 — Present First Verse
+   Step 3 — Features Showcase (display only)
    ══════════════════════════════════════════════════════════════ */
 
-function StepPresentVerse({
+function StepFeatures({
   onNext,
   onBack,
 }: {
   onNext: () => void;
   onBack: () => void;
 }) {
-  const [verseText, setVerseText] = useState<string | null>(null);
-  const [reference, setReference] = useState("John 3:16");
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadVerse = useCallback(async () => {
-    try {
-      const verse = await getVerse("John", 3, 16, "KJV" as BibleTranslation);
-      if (verse) {
-        setVerseText(verse.text);
-        setReference("John 3:16 (KJV)");
-      } else {
-        setVerseText(
-          "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
-        );
-      }
-    } catch {
-      setVerseText(
-        "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-    loadVerse();
-  }, [loadVerse]);
-
-  const presentToObs = useCallback(async () => {
-    setSending(true);
-    setError(null);
-
-    try {
-      if (!obsService.isConnected) {
-        setError(
-          "OBS is not connected. Go back to Step 2 to connect.",
-        );
-        setSending(false);
-        return;
-      }
-
-      // Build a BiblePassage for John 3:16
-      const passage: BiblePassage = {
-        reference: "John 3:16 (KJV)",
-        book: "John",
-        chapter: 3,
-        startVerse: 16,
-        endVerse: 16,
-        verses: [
-          {
-            book: "John",
-            chapter: 3,
-            verse: 16,
-            text:
-              verseText ||
-              "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
-            abbrev: "Jhn",
-          },
-        ],
-        translation: "KJV",
-      };
-
-      const slides = generateSlides(passage);
-      if (slides.length > 0) {
-        await bibleObsService.pushSlide(
-          slides[0],
-          null,
-          true,
-          false,
-          "fullscreen",
-        );
-        setSent(true);
-        fireMilestone("firstVersePresentedAt");
-      }
-    } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Failed to present verse",
-      );
-    } finally {
-      setSending(false);
-    }
-  }, [verseText]);
-
-  const clearObs = useCallback(async () => {
-    try {
-      await bibleObsService.pushSlide(null, null, false, true);
-      setSent(false);
-    } catch {
-      // ignore
-    }
-  }, []);
-
   return (
     <div className="ob-card">
       <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
-        <h1>Present Your First Verse</h1>
+        <h1>Powerful Features</h1>
         <p>
-          See how MakeChurchEasy displays Bible verses in OBS. This will send
-          John 3:16 to your OBS overlay.
+          MakeChurchEasy comes with everything you need for a modern church service.
         </p>
       </div>
 
-      {/* Verse Preview */}
-      <div className="ob-verse-preview">
-        <div className="ob-verse-preview-label">Preview</div>
-        <div className="ob-verse-preview-text">
-          {verseText || "Loading verse..."}
+      <div className="ob-features">
+        <div className="ob-feature-card">
+          <div className="ob-feature-icon ob-feature-icon--green">
+            <BookOpen size={16} />
+          </div>
+          <h3>Bible Presentation</h3>
+          <p>Display scripture verses live in OBS with beautiful themes</p>
         </div>
-        <div className="ob-verse-preview-ref">{reference}</div>
+        <div className="ob-feature-card">
+          <div className="ob-feature-icon ob-feature-icon--purple">
+            <Mic size={16} />
+          </div>
+          <h3>Speech to Scripture</h3>
+          <p>AI detects Bible references as you preach and auto-displays them</p>
+        </div>
       </div>
-
-      {error && (
-        <div className="ob-info-banner ob-info-banner--error">
-          <AlertTriangle size={16} />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {sent && (
-        <div className="ob-info-banner ob-info-banner--success">
-          <Check size={16} />
-          <span>
-            Verse is now live in OBS! Check your OBS preview to see it.
-          </span>
-        </div>
-      )}
 
       <div className="ob-actions">
         <div className="ob-actions-row">
           <button className="ob-btn ob-btn--ghost" onClick={onBack}>
             Back
           </button>
-          {sent ? (
-            <button className="ob-btn ob-btn--secondary" onClick={clearObs}>
-              Clear from OBS
-            </button>
-          ) : (
-            <button
-              className="ob-btn ob-btn--secondary"
-              onClick={presentToObs}
-              disabled={sending || !obsService.isConnected}
-            >
-              {sending ? (
-                <Loader2
-                  size={14}
-                  style={{ animation: "spin 1s linear infinite" }}
-                />
-              ) : (
-                <Eye size={14} />
-              )}
-              Present to OBS
-            </button>
-          )}
         </div>
         <button className="ob-btn ob-btn--primary" onClick={onNext}>
           Continue
@@ -682,164 +549,7 @@ function StepPresentVerse({
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Step 4 — Create Theme
-   ══════════════════════════════════════════════════════════════ */
-
-const THEME_PRESETS = [
-  {
-    id: "classic-white",
-    label: "Classic White",
-    description: "Clean white text on dark background",
-    bg: "#1a1a2e",
-    color: "#ffffff",
-    fontSize: 48,
-  },
-  {
-    id: "golden-heritage",
-    label: "Golden Heritage",
-    description: "Warm gold text with elegant styling",
-    bg: "#0d1117",
-    color: "#f0c040",
-    fontSize: 44,
-  },
-  {
-    id: "modern-blue",
-    label: "Modern Blue",
-    description: "Crisp white on deep blue",
-    bg: "#0a1628",
-    color: "#e8f0fe",
-    fontSize: 46,
-  },
-  {
-    id: "bold-red",
-    label: "Bold Red",
-    description: "High contrast red accent",
-    bg: "#1a0a0a",
-    color: "#ff4444",
-    fontSize: 44,
-  },
-];
-
-function StepCreateTheme({
-  onNext,
-  onBack,
-}: {
-  onNext: () => void;
-  onBack: () => void;
-}) {
-  const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
-  const [showCreator, setShowCreator] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  const handleSavePreset = useCallback(() => {
-    if (!selectedPreset) return;
-    const preset = THEME_PRESETS.find((p) => p.id === selectedPreset);
-    if (!preset) return;
-
-    // Store the selected preset ID so the app can use it after onboarding
-    try {
-      localStorage.setItem("mce-onboarding-theme-id", preset.id);
-    } catch {
-      // ignore
-    }
-    setSaved(true);
-    fireMilestone("firstThemeCreatedAt");
-  }, [selectedPreset]);
-
-  const handleCreatorSaved = useCallback(() => {
-    setShowCreator(false);
-    setSaved(true);
-    fireMilestone("firstThemeCreatedAt");
-  }, []);
-
-  if (showCreator) {
-    return (
-      <ThemeCreatorModal
-        onClose={() => setShowCreator(false)}
-        onSaved={handleCreatorSaved}
-      />
-    );
-  }
-
-  return (
-    <div className="ob-card">
-      <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
-        <h1>Create Your Theme</h1>
-        <p>
-          Choose a preset theme for your Bible presentations, or open the
-          full Theme Creator to design your own.
-        </p>
-      </div>
-
-      {/* Theme Presets */}
-      <div className="ob-theme-grid">
-        {THEME_PRESETS.map((preset) => (
-          <button
-            key={preset.id}
-            className={`ob-theme-preset${selectedPreset === preset.id ? " ob-theme-preset--selected" : ""}`}
-            onClick={() => setSelectedPreset(preset.id)}
-          >
-            <div
-              className="ob-theme-preset-preview"
-              style={{ background: preset.bg }}
-            >
-              <span style={{ color: preset.color, fontSize: 14 }}>
-                For God so loved the world
-              </span>
-            </div>
-            <div className="ob-theme-preset-info">
-              <span className="ob-theme-preset-label">{preset.label}</span>
-              <span className="ob-theme-preset-desc">
-                {preset.description}
-              </span>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      <div className="ob-actions">
-        <div className="ob-actions-row">
-          <button className="ob-btn ob-btn--ghost" onClick={onBack}>
-            Back
-          </button>
-          <button
-            className="ob-btn ob-btn--secondary"
-            onClick={() => setShowCreator(true)}
-          >
-            <Palette size={14} />
-            Open Theme Creator
-          </button>
-        </div>
-        <div className="ob-actions-row">
-          {saved ? (
-            <span className="ob-saved-label">
-              <Check size={14} />
-              Theme saved
-            </span>
-          ) : (
-            <button
-              className="ob-btn ob-btn--primary"
-              disabled={!selectedPreset}
-              onClick={handleSavePreset}
-            >
-              Save Preset
-              <ArrowRight size={16} />
-            </button>
-          )}
-          {saved && (
-            <button className="ob-btn ob-btn--primary" onClick={onNext}>
-              Continue
-              <ArrowRight size={16} />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════
-   Step 5 — Install Dock
+   Step 4 — Install Dock
    ══════════════════════════════════════════════════════════════ */
 
 function StepInstallDock({

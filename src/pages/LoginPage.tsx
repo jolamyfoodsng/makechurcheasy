@@ -1,7 +1,9 @@
 import { useAuth } from "@/contexts/AuthContext";
 import {
   createPairingCode,
-  watchPairingStatus
+  watchPairingStatus,
+  resendVerificationEmail,
+  checkVerificationStatus,
 } from "@/services/authService";
 import { trackDevicePaired, trackLogin } from "@/services/tracking";
 import { useEffect, useRef, useState } from "react";
@@ -33,6 +35,14 @@ export default function LoginPage() {
   const [welcomeBack, setWelcomeBack] = useState(false);
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState("");
+
+  // Email verification modal state
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
+  const [verificationName, setVerificationName] = useState("");
+  const [verificationMessage, setVerificationMessage] = useState("");
+  const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [checkStatus, setCheckStatus] = useState<"idle" | "checking" | "verified" | "not_verified" | "error">("idle");
 
   const cleanupRef = useRef<(() => void) | null>(null);
 
@@ -121,6 +131,15 @@ export default function LoginPage() {
         cleanupRef.current = null;
         setError(msg);
         setView("initial");
+      },
+      onVerificationRequired(email, name, message) {
+        cleanupRef.current = null;
+        setVerificationEmail(email);
+        setVerificationName(name);
+        setVerificationMessage(message);
+        setResendStatus("idle");
+        setCheckStatus("idle");
+        setShowVerificationModal(true);
       },
     });
   }
@@ -782,6 +801,203 @@ export default function LoginPage() {
           </div>
         )}
       </div>
+
+      {/* Email Verification Modal */}
+      {showVerificationModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.8)",
+            zIndex: 9999,
+            padding: "24px",
+          }}
+          onClick={(e) => {
+            // Only close on backdrop click if not actively processing
+            if (e.target === e.currentTarget && resendStatus !== "sending" && checkStatus !== "checking") {
+              setShowVerificationModal(false);
+              setView("initial");
+            }
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "380px",
+              background: "#16161f",
+              borderRadius: "8px",
+              border: "1px solid #2a2a3a",
+              padding: "28px",
+              boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
+            }}
+          >
+            {/* Icon */}
+            <div style={{ textAlign: "center", marginBottom: "20px" }}>
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  background: "rgba(239, 68, 68, 0.1)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: "12px",
+                }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <polyline points="3 7 12 13 21 7" />
+                </svg>
+              </div>
+              <h2 style={{ fontSize: "16px", fontWeight: 600, color: "#f0f0f5", margin: "0 0 6px" }}>
+                Email Verification Required
+              </h2>
+              <p style={{ fontSize: "13px", color: "#9898a8", margin: 0, lineHeight: 1.5 }}>
+                {verificationMessage}
+              </p>
+              {verificationEmail && (
+                <p style={{ fontSize: "12px", color: "#6a6a7a", margin: "8px 0 0", wordBreak: "break-all" }}>
+                  {verificationName ? `${verificationName} — ` : ""}{verificationEmail}
+                </p>
+              )}
+            </div>
+
+            {/* Resend button */}
+            <button
+              onClick={async () => {
+                if (!code) return;
+                setResendStatus("sending");
+                const result = await resendVerificationEmail(code);
+                if (result.error) {
+                  setResendStatus("error");
+                } else {
+                  setResendStatus("sent");
+                }
+              }}
+              disabled={resendStatus === "sending" || resendStatus === "sent"}
+              style={{
+                width: "100%",
+                height: "40px",
+                borderRadius: "4px",
+                border: "none",
+                background: resendStatus === "sent" ? "#22c55e" : "#1D4ED8",
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "#fff",
+                cursor: resendStatus === "sending" || resendStatus === "sent" ? "default" : "pointer",
+                opacity: resendStatus === "sending" ? 0.7 : 1,
+                marginBottom: "8px",
+              }}
+            >
+              {resendStatus === "sending" && "Sending..."}
+              {resendStatus === "sent" && "✓ Verification Email Sent"}
+              {resendStatus === "error" && "Failed to Send — Try Again"}
+              {resendStatus === "idle" && "Resend Verification Email"}
+            </button>
+
+            {/* I've Verified button */}
+            <button
+              onClick={async () => {
+                if (!code) return;
+                setCheckStatus("checking");
+                const result = await checkVerificationStatus(code);
+                if (result.error) {
+                  setCheckStatus("error");
+                  setTimeout(() => setCheckStatus("idle"), 2000);
+                } else if (result.verified) {
+                  setCheckStatus("verified");
+                  setTimeout(() => {
+                    setShowVerificationModal(false);
+                    // Generate a new pairing code and restart the flow
+                    setView("initial");
+                    setCode("");
+                    setError("");
+                  }, 1000);
+                } else {
+                  setCheckStatus("not_verified");
+                  setTimeout(() => setCheckStatus("idle"), 2000);
+                }
+              }}
+              disabled={checkStatus === "checking" || checkStatus === "verified"}
+              style={{
+                width: "100%",
+                height: "40px",
+                borderRadius: "4px",
+                border: checkStatus === "verified" ? "1px solid #22c55e" : "1px solid #2a2a3a",
+                background: checkStatus === "verified" ? "rgba(34,197,94,0.1)" : "transparent",
+                fontSize: "13px",
+                fontWeight: 500,
+                color: checkStatus === "verified" ? "#22c55e" : "#f0f0f5",
+                cursor: checkStatus === "checking" || checkStatus === "verified" ? "default" : "pointer",
+                marginBottom: "8px",
+              }}
+            >
+              {checkStatus === "checking" && "Checking..."}
+              {checkStatus === "verified" && "✓ Email Verified! Closing..."}
+              {checkStatus === "not_verified" && "Email not verified yet. Try again."}
+              {checkStatus === "error" && "Failed to check. Try again."}
+              {(checkStatus === "idle" || checkStatus === "not_verified" || checkStatus === "error") && "I've Verified My Email"}
+            </button>
+
+            {/* Change Email button */}
+            <button
+              onClick={async () => {
+                const dashboardUrl = DASHBOARD_URL;
+                try {
+                  const { openUrl } = await import("@tauri-apps/plugin-opener");
+                  await openUrl(`${dashboardUrl}/dashboard/settings`);
+                } catch {
+                  window.open(`${dashboardUrl}/dashboard/settings`, "_blank");
+                }
+              }}
+              style={{
+                width: "100%",
+                height: "40px",
+                borderRadius: "4px",
+                border: "1px solid #2a2a3a",
+                background: "transparent",
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "#9898a8",
+                cursor: "pointer",
+                marginBottom: "16px",
+              }}
+            >
+              Change Email Address ↗
+            </button>
+
+            {/* Close / cancel */}
+            <button
+              onClick={() => {
+                setShowVerificationModal(false);
+                setView("initial");
+                setCode("");
+                setError("");
+              }}
+              style={{
+                width: "100%",
+                height: "36px",
+                borderRadius: "4px",
+                border: "none",
+                background: "transparent",
+                fontSize: "12px",
+                fontWeight: 500,
+                color: "#6a6a7a",
+                cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Welcome back toast */}
       {welcomeBack && (
