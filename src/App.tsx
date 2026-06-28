@@ -272,7 +272,7 @@ function App() {
         try {
           const allSongs = await getAllSongs();
           sendSongLimitToDock();
-          const { limit: songLimit } = checkEntitlementSync("songs", userRef.current?.plan);
+          const { limit: songLimit } = checkEntitlementSync("songs", getEffectivePlan(userRef.current));
           const songs = (songLimit > 0 && songLimit < 9999) ? allSongs.slice(0, songLimit) : allSongs;
           dockBridge.sendState({
             type: "state:songs-data",
@@ -328,7 +328,7 @@ function App() {
           const allSongs = await getAllSongs();
           const media = getAllMedia();
           sendSongLimitToDock();
-          const { limit: songLimit } = checkEntitlementSync("songs", userRef.current?.plan);
+          const { limit: songLimit } = checkEntitlementSync("songs", getEffectivePlan(userRef.current));
           const songs = (songLimit > 0 && songLimit < 9999) ? allSongs.slice(0, songLimit) : allSongs;
           dockBridge.sendState({
             type: "state:songs-data",
@@ -390,7 +390,7 @@ function App() {
             timestamp: Date.now(),
           });
           sendSongLimitToDock();
-          const { limit: songLimit } = checkEntitlementSync("songs", userRef.current?.plan);
+          const { limit: songLimit } = checkEntitlementSync("songs", getEffectivePlan(userRef.current));
           const limitedSongs = (songLimit > 0 && songLimit < 9999) ? songs.slice(0, songLimit) : songs;
           dockBridge.sendState({
             type: "state:songs-data",
@@ -470,7 +470,7 @@ function App() {
             timestamp: Date.now(),
           });
           sendSongLimitToDock();
-          const { limit: songLimit } = checkEntitlementSync("songs", userRef.current?.plan);
+          const { limit: songLimit } = checkEntitlementSync("songs", getEffectivePlan(userRef.current));
           const limitedSongs = (songLimit > 0 && songLimit < 9999) ? songs.slice(0, songLimit) : songs;
           dockBridge.sendState({
             type: "state:songs-data",

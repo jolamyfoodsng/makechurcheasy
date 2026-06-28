@@ -185,6 +185,7 @@ import type { LucideIcon } from "lucide-react";
  */
 const ICON_MAP: Record<string, LucideIcon> = {
   /* Navigation / Actions */
+  travel_explore: Globe,
   arrow_back: ArrowLeft,
   arrow_back_ios: ArrowLeft,
   arrow_forward: ArrowRight,

@@ -6,6 +6,7 @@
  */
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { ALL_THEMES, canonicalizeLowerThirdThemeId, type ThemeLike } from "../../lowerthirds/themes";
 import { loadDockLTFavorites } from "../dockThemeData";
 import { requireEntitlement } from "../dockEntitlement";
@@ -46,6 +47,7 @@ interface Props {
 }
 
 export default function DockLTThemePicker({ selectedThemeId, onSelect, category, tag, tags, label }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
@@ -144,21 +146,21 @@ export default function DockLTThemePicker({ selectedThemeId, onSelect, category,
   return (
     <div className="dock-lt-theme-picker" ref={wrapRef} style={{ position: "relative" }}>
       <div className="dock-section-label" style={{ marginBottom: 4 }}>
-        {label ?? "Lower Third Theme"}
+        {label ?? t('worship.lowerThirdTheme')}
       </div>
 
       {/* Selected theme preview — click to toggle dropdown */}
       <button
         className="dock-theme-dropdown-trigger"
         onClick={() => setOpen((v) => !v)}
-        title={selected ? (selected.name || selected.id) : "Select theme"}
+        title={selected ? (selected.name || selected.id) : t('themes.selectTheme')}
       >
         <div
           className="dock-theme-dropdown-trigger__swatch"
           style={{ background: selected?.accentColor || "#1D4ED8" }}
         />
         <span className="dock-theme-dropdown-trigger__name">
-          {selected ? shortName(selected) : "Select Theme"}
+          {selected ? shortName(selected) : t('themes.selectTheme')}
         </span>
         {selected && favoriteIds.has(selected.id) && (
           <DockIcon name="star" size={12} className="dock-theme-dropdown-trigger__favorite" />
@@ -192,7 +194,7 @@ export default function DockLTThemePicker({ selectedThemeId, onSelect, category,
 
           {filteredThemes.length === 0 && (
             <div style={{ padding: 10, textAlign: "center", color: "var(--dock-text-dim)", fontSize: 10 }}>
-              No themes available
+              {t('themes.noThemesFound')}
             </div>
           )}
         </div>

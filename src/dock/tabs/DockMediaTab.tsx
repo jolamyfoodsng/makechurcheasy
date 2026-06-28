@@ -30,6 +30,7 @@ import { isSupportedMediaFile } from "../../services/mediaValidation";
 import { getFeatureLimit } from "../../services/entitlementClient";
 import Icon from "../DockIcon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -397,6 +398,7 @@ function isAnimatedPattern(pattern: BackgroundPattern): boolean {
 }
 
 function TemplateVideoPreview({ src, label }: { src: string; label: string }) {
+  const { t } = useTranslation();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
@@ -459,13 +461,13 @@ function TemplateVideoPreview({ src, label }: { src: string; label: string }) {
           />
           <span className="dock-media-template-preview__badge">
             <Icon name="movie" size={10} />
-            <span>Preview</span>
+            <span>{t('media.toPreview')}</span>
           </span>
         </>
       ) : (
         <div className="dock-media-card__placeholder" aria-hidden="true">
           <Icon name="movie" size={18} />
-          <span>Template Video</span>
+          <span>{t('media.templateVideos')}</span>
         </div>
       )}
     </div>
@@ -473,6 +475,7 @@ function TemplateVideoPreview({ src, label }: { src: string; label: string }) {
 }
 
 export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Props) {
+  const { t } = useTranslation();
   const overlayBaseUrl = getOverlayBaseUrlSync();
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [compactTabs, setCompactTabs] = useState(false);
@@ -1730,7 +1733,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         thumbUrl = entry.previewUrl;
       }
 
-      const statusLabel = isActiveTarget ? (pausedTargets.active ? "In Preview" : "Live") : null;
+      const statusLabel = isActiveTarget ? (pausedTargets.active ? t('media.inPreview') : "Live") : null;
       const statusVariant = isActiveTarget ? (pausedTargets.active ? "preview" : "live") : null;
 
       const handleCardClick = () => {
@@ -1779,7 +1782,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                   <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                 </svg>
-                <span className="dock-media-gallery-card__lock-label">Upgrade to access</span>
+                <span className="dock-media-gallery-card__lock-label">{t('media.upgradeToAccess')}</span>
               </div>
             ) : (
               <div className="dock-media-gallery-card__overlay">
@@ -1789,7 +1792,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                       <button
                         type="button"
                         className="dock-media-gallery-card__menu-btn"
-                        aria-label="More options"
+                        aria-label={t('media.moreOptions')}
                         onClick={(event) => {
                           event.stopPropagation();
                           setOpenOptionsKey(openOptionsKey === entry.key ? null : entry.key);
@@ -1802,14 +1805,14 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                       <button
                         type="button"
                         className="dock-media-gallery-card__preview-btn"
-                        aria-label={`Send ${displayName} to Preview`}
+                        aria-label={`${t('media.send')} ${displayName} ${t('media.toPreview')}`}
                         onClick={(event) => {
                           event.stopPropagation();
                           void handleSendEntry(entry);
                         }}
                       >
                         <Icon name="open_in_new" size={14} />
-                        Send
+                        {t('media.send')}
                       </button>
                     </div>
                   </>
@@ -1824,7 +1827,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   onClick={() => { setPreviewEntry(entry); setOpenOptionsKey(null); }}
                 >
                   <Icon name="open_in_full" size={13} />
-                  Preview
+                  {t('media.toPreview')}
                 </button>
                 <button
                   type="button"
@@ -1832,7 +1835,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   onClick={() => { void deleteEntry(entry); setOpenOptionsKey(null); }}
                 >
                   <Icon name="delete" size={13} />
-                  Delete {entry.kind === "video" ? "video" : "image"}
+                  {entry.kind === "video" ? t('media.deleteVideo') : t('media.deleteImage')}
                 </button>
               </div>
             )}
@@ -1872,10 +1875,10 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
   );
 
   const searchPlaceholder = browserTab === "animations"
-    ? "Search saved animations"
+    ? t('media.searchAnimations')
     : browserTab === "patterns"
-      ? "Search patterns"
-      : "Search uploads and saved media";
+      ? t('media.searchTemplates')
+      : t('media.searchPlaceholderShort');
 
   // ── Render ──
 
@@ -1886,7 +1889,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       {/* ── Header ── */}
       <div className="dock-media-header">
         <div className="dock-media-header__left">
-          <span className="dock-media-header__label">Media</span>
+          <span className="dock-media-header__label">{t('media.title')}</span>
 
         </div>
         <div className="dock-media-header__actions">
@@ -1900,10 +1903,10 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
               uploadInputRef.current?.click();
             }}
             disabled={uploading || browserTab !== "uploads"}
-            title={browserTab !== "uploads" ? "Upload is only available in Uploads tab" : (uploading ? "Uploading..." : "Upload media")}
+            title={browserTab !== "uploads" ? t('media.uploadRestricted') : (uploading ? t('media.preparing') : t('media.addMedia'))}
           >
             <Icon name="add" size={12} />
-            {uploading ? "Uploading" : "Add"}
+            {uploading ? t('media.preparing') : t('media.addMedia')}
           </button>
           <button
             type="button"
@@ -1918,7 +1921,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
               toggleSelectionMode();
             }}
             disabled={browserTab !== "uploads"}
-            title={browserTab !== "uploads" ? "Slideshow is only available in Uploads tab" : (selectionMode ? "Cancel selection" : "Create slideshow from selected media")}
+            title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
           >
             {/* {selectionMode ? "Cancel" : "Create Slideshow"} */}
             <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
@@ -1946,7 +1949,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       />
 
       {/* ── Category Tabs ── */}
-      <div className={`dock-media-tabs${compactTabs ? " dock-media-tabs--compact" : ""}`} role="tablist" aria-label="Media browser views">
+      <div className={`dock-media-tabs${compactTabs ? " dock-media-tabs--compact" : ""}`} role="tablist" aria-label={t('media.mediaBrowserViews')}>
         <button
           type="button"
           role="tab"
@@ -1954,7 +1957,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           className={`dock-media-tab ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
           onClick={() => setBrowserTab("uploads")}
         >
-          {compactTabs ? <Icon name="upload" size={12} /> : "Uploads"}
+          {compactTabs ? <Icon name="upload" size={12} /> : t('media.tabImages')}
           {!compactTabs && <span className="dock-media-tab__count">{mediaEntries.length}</span>}
         </button>
         <button
@@ -1964,7 +1967,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           className={`dock-media-tab ${browserTab === "animations" ? "dock-media-tab--active" : ""}`}
           onClick={() => setBrowserTab("animations")}
         >
-          {compactTabs ? <Icon name="animation" size={12} /> : "Animations"}
+          {compactTabs ? <Icon name="animation" size={12} /> : t('media.tabAnimations')}
           {!compactTabs && <span className="dock-media-tab__count">{animationEntries.length}</span>}
         </button>
         <button
@@ -1974,7 +1977,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           className={`dock-media-tab ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
           onClick={() => setBrowserTab("patterns")}
         >
-          {compactTabs ? <Icon name="grid_view" size={12} /> : "Patterns"}
+          {compactTabs ? <Icon name="grid_view" size={12} /> : t('media.patterns')}
           {!compactTabs && <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>}
         </button>
         <button
@@ -1984,7 +1987,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           className={`dock-media-tab ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
           onClick={() => setBrowserTab("text")}
         >
-          {compactTabs ? <Icon name="text_fields" size={12} /> : "Text"}
+          {compactTabs ? <Icon name="text_fields" size={12} /> : t('media.tabText')}
         </button>
       </div>
 
@@ -2005,8 +2008,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
               type="button"
               className="dock-media-search__clear"
               onClick={() => setAssetSearch("")}
-              aria-label="Clear asset search"
-              title="Clear asset search"
+              aria-label={t('media.clearAssetSearch')}
+              title={t('media.clearAssetSearch')}
             >
               <Icon name="close" size={10} />
             </button>
@@ -2027,9 +2030,9 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 <div className="dock-media-empty__icon">
                   <Icon name="perm_media" size={24} />
                 </div>
-                <div className="dock-media-empty__title">No uploads or saved media yet</div>
+                <div className="dock-media-empty__title">{t('media.noUploads')}</div>
                 <div className="dock-media-empty__text">
-                  Add images or videos. Saved media from the app library also appears here.
+                  {t('media.addImagesOrVideos')}
                 </div>
                 <button
                   type="button"
@@ -2037,13 +2040,13 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   onClick={() => openAddMediaModal("background")}
                 >
                   <Icon name="add" size={12} />
-                  Add Media
+                  {t('media.addMedia')}
                 </button>
               </div>
             ) : (
               <>
                 {/* Kind toggle */}
-                <div className="dock-media-pills" role="tablist" aria-label="Upload media type">
+                <div className="dock-media-pills" role="tablist" aria-label={t('media.uploadType')}>
                   <button
                     type="button"
                     role="tab"
@@ -2051,7 +2054,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     className={`dock-media-pill${activeKind === "all" ? " dock-media-pill--active" : ""}`}
                     onClick={() => setActiveKind("all")}
                   >
-                    All
+                    {t('media.all')}
                     <span className="dock-media-pill__count">{mediaEntries.length}</span>
                   </button>
                   <button
@@ -2061,7 +2064,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     className={`dock-media-pill${activeKind === "video" ? " dock-media-pill--active" : ""}`}
                     onClick={() => setActiveKind("video")}
                   >
-                    Video
+                    {t('media.tabVideos')}
                     <span className="dock-media-pill__count">{videoEntries.length}</span>
                   </button>
                   <button
@@ -2071,13 +2074,13 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     className={`dock-media-pill${activeKind === "image" ? " dock-media-pill--active" : ""}`}
                     onClick={() => setActiveKind("image")}
                   >
-                    Picture
+                    {t('media.tabImages')}
                     <span className="dock-media-pill__count">{imageEntries.length}</span>
                   </button>
                 </div>
 
                 {/* View mode toggle */}
-                <div className="dock-media-pills dock-media-pills--secondary" role="tablist" aria-label="Sort order">
+                <div className="dock-media-pills dock-media-pills--secondary" role="tablist" aria-label={t('media.sortOrder')}>
                   <button
                     type="button"
                     role="tab"
@@ -2085,7 +2088,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     className={`dock-media-pill dock-media-pill--small${viewMode === "recent" ? " dock-media-pill--active" : ""}`}
                     onClick={() => setViewMode("recent")}
                   >
-                    Recently Used
+                    {t('media.recentlyUsed')}
                   </button>
                   <button
                     type="button"
@@ -2094,7 +2097,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     className={`dock-media-pill dock-media-pill--small${viewMode === "uploaded" ? " dock-media-pill--active" : ""}`}
                     onClick={() => setViewMode("uploaded")}
                   >
-                    Newly Uploaded
+                    {t('media.newlyUploaded')}
                   </button>
                 </div>
 
@@ -2107,7 +2110,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                       type="button"
                       className="dock-media-send-error__dismiss"
                       onClick={() => setSendError(null)}
-                      aria-label="Dismiss"
+                      aria-label={t('media.dismiss')}
                     >
                       <Icon name="close" size={13} />
                     </button>
@@ -2119,10 +2122,10 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   <div className="dock-empty dock-empty--inline">
                     <div className="dock-empty__text">
                       {activeKind === "all"
-                        ? "No media uploaded yet."
+                        ? t('media.noUploads')
                         : activeKind === "video"
-                          ? "No video media matches that search."
-                          : "No picture media matches that search."}
+                          ? t('media.noVideos')
+                          : t('media.noImages')}
                     </div>
                   </div>
                 ) : (
@@ -2142,15 +2145,15 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 <div className="dock-media-empty__icon">
                   <Icon name="movie" size={24} />
                 </div>
-                <div className="dock-media-empty__title">No saved animations</div>
-                <div className="dock-media-empty__text">Download template videos from Add Media, then they will appear here.</div>
+                <div className="dock-media-empty__title">{t('media.downloadedAnimations')}</div>
+                <div className="dock-media-empty__text">{t('media.browseTemplatesDesc')}</div>
                 <button
                   type="button"
                   className="dock-btn dock-btn--preview dock-btn--compact"
                   onClick={() => openAddMediaModal("template-videos")}
                 >
                   <Icon name="download" size={12} />
-                  Add Animation
+                  {t('media.addAnimation')}
                 </button>
               </div>
             ) : (
@@ -2165,7 +2168,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           <>
             {filteredPatternEntries.length === 0 ? (
               <div className="dock-empty dock-empty--inline">
-                <div className="dock-empty__text">No patterns match that search.</div>
+                <div className="dock-empty__text">{t('media.noPatternsMatch')}</div>
               </div>
             ) : (
               <div className="dock-media-list">
@@ -2195,24 +2198,24 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                           <button
                             type="button"
                             className="dock-media-gallery-card__preview-btn"
-                            aria-label={`Show ${entry.name}`}
+                            aria-label={`${t('media.show')} ${entry.name}`}
                             onClick={(event) => {
                               event.stopPropagation();
                               void handleSendPattern(entry);
                             }}
                           >
                             <Icon name="visibility" size={12} />
-                            Show
+                            {t('media.show')}
                           </button>
                         </div>
                         {isActiveTarget && (
                           <span className="dock-media-gallery-card__active-badge">
                             <Icon name="visibility" size={10} />
-                            Showing
+                            {t('media.showing')}
                           </span>
                         )}
                         <span className="dock-media-gallery-card__type-badge">
-                          {animated ? "Motion" : "Still"}
+                          {animated ? t('media.motion') : t('media.still')}
                         </span>
                       </div>
                     </div>
@@ -2228,7 +2231,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
             {/* ── Status Header ── */}
 
             {/* ── Inner Tab Bar ── */}
-            <div className="dock-overlay-tabs" role="tablist" aria-label="Text overlay tabs">
+            <div className="dock-overlay-tabs" role="tablist" aria-label={t('media.textOverlayTabs')}>
               <button
                 type="button"
                 role="tab"
@@ -2237,7 +2240,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 onClick={() => setTextTab("content")}
               >
                 <Icon name="title" size={12} />
-                Content
+                {t('media.textOverlayTitle')}
               </button>
               <button
                 type="button"
@@ -2247,7 +2250,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 onClick={() => setTextTab("background")}
               >
                 <Icon name="palette" size={12} />
-                Background
+                {t('media.backgroundType')}
               </button>
             </div>
 
@@ -2328,7 +2331,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                         </div>
                       )}
                       {!textOverlay.headline.trim() && !textOverlay.subline.trim() && (
-                        <div className="dock-overlay-canvas__empty-hint">Your overlay text will appear here</div>
+                        <div className="dock-overlay-canvas__empty-hint">{t('media.overlayTextPlaceholder')}</div>
                       )}
                     </div>
                   </div>
@@ -2338,7 +2341,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
                     <span className="dock-overlay-canvas__safe-badge">
                       <Icon name="crop_free" size={10} />
-                      Safe Area
+                      {t('media.safeArea')}
                     </span>
                   </div>
                 </div>
@@ -2347,7 +2350,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 <div className="dock-overlay-anim-bar">
                   <button type="button" className="dock-overlay-anim-bar__preview" onClick={triggerAnimPreview}>
                     <Icon name="play_arrow" size={12} />
-                    Preview Animation
+                    {t('media.addAnimation')}
                   </button>
                   {/* <div className="dock-overlay-anim-bar__select-wrap">
                 <select
@@ -2364,7 +2367,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 </select>
               </div> */}
                   <div className="dock-overlay-anim-bar__duration">
-                    <span>Duration</span>
+                    <span>{t('media.duration')}</span>
                     <input
                       type="number"
                       className="dock-overlay-anim-bar__duration-input"
@@ -2382,17 +2385,17 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 <div className="dock-overlay-text-controls">
                   <div className="dock-overlay-text-controls__row">
                     <div className="dock-overlay-text-controls__field">
-                      <label className="dock-overlay-text-controls__label">Headline</label>
+                      <label className="dock-overlay-text-controls__label">{t('media.headline')}</label>
                       <input
                         type="text"
                         className="dock-overlay-text-controls__input"
                         value={textOverlay.headline}
                         onChange={(e) => setTextOverlay((c) => ({ ...c, headline: e.target.value }))}
-                        placeholder="YOUR MAIN OVERLAY TEXT"
+                        placeholder={t('media.mainOverlayText')}
                       />
                     </div>
                     <div className="dock-overlay-text-controls__size">
-                      <label className="dock-overlay-text-controls__label">Font Size</label>
+                      <label className="dock-overlay-text-controls__label">{t('media.fontSize')}</label>
                       <div className="dock-overlay-text-controls__size-ctrl">
                         <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, headlineSize: Math.max(24, c.headlineSize - 4) }))}>
                           <Icon name="remove" size={12} />
@@ -2406,17 +2409,17 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   </div>
                   <div className="dock-overlay-text-controls__row">
                     <div className="dock-overlay-text-controls__field">
-                      <label className="dock-overlay-text-controls__label">Subline <span className="dock-overlay-text-controls__optional">(optional)</span></label>
+                      <label className="dock-overlay-text-controls__label">{t('media.subline')} <span className="dock-overlay-text-controls__optional">{t('common.optional')}</span></label>
                       <input
                         type="text"
                         className="dock-overlay-text-controls__input"
                         value={textOverlay.subline}
                         onChange={(e) => setTextOverlay((c) => ({ ...c, subline: e.target.value }))}
-                        placeholder="YOUR SECONDARY LINE"
+                        placeholder={t('media.sublinePlaceholder')}
                       />
                     </div>
                     <div className="dock-overlay-text-controls__size">
-                      <label className="dock-overlay-text-controls__label">Font Size</label>
+                      <label className="dock-overlay-text-controls__label">{t('media.fontSize')}</label>
                       <div className="dock-overlay-text-controls__size-ctrl">
                         <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, sublineSize: Math.max(14, c.sublineSize - 2) }))}>
                           <Icon name="remove" size={12} />
@@ -2432,48 +2435,48 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
                 {/* ── Alignment & Position ── */}
                 <div className="dock-overlay-align-section">
-                  <div className="dock-overlay-align-section__label">Alignment & Position</div>
+                  <div className="dock-overlay-align-section__label">{t('media.alignmentAndPosition')}</div>
                   <div className="dock-overlay-align-section__row">
                     <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "top" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "top" }))}>
                       <Icon name="arrow_upward" size={14} />
-                      Up
+                      {t('common.up')}
                     </button>
                     <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "center" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "center" }))}>
                       <Icon name="vertical_align_center" size={14} />
-                      Center
+                      {t('common.center')}
                     </button>
                     <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "bottom" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "bottom" }))}>
                       <Icon name="arrow_downward" size={14} />
-                      Down
+                      {t('common.down')}
                     </button>
                   </div>
                   <div className="dock-overlay-align-section__row">
                     <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "left" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "left" }))}>
                       <Icon name="format_align_left" size={14} />
-                      Left
+                      {t('common.left')}
                     </button>
                     <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "center" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "center" }))}>
                       <Icon name="format_align_center" size={14} />
-                      Center
+                      {t('common.center')}
                     </button>
                     <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "right" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "right" }))}>
                       <Icon name="format_align_right" size={14} />
-                      Right
+                      {t('common.right')}
                     </button>
                   </div>
                 </div>
 
                 {/* ── Animation Selection ── */}
                 <div className="dock-overlay-anim-section">
-                  <div className="dock-overlay-anim-section__label">Animate In</div>
+                  <div className="dock-overlay-anim-section__label">{t('media.animateIn')}</div>
                   <div className="dock-overlay-anim-section__options">
                     {([
-                      { key: "none", label: "None", icon: "block" },
-                      { key: "fade", label: "Fade", icon: "opacity" },
-                      { key: "fade-up", label: "Fade Up", icon: "north" },
-                      { key: "slide-up", label: "Slide Up", icon: "arrow_upward" },
-                      { key: "slide-down", label: "Slide Down", icon: "arrow_downward" },
-                      { key: "zoom", label: "Zoom", icon: "zoom_in" },
+                      { key: "none", label: t('media.animNone'), icon: "block" },
+                      { key: "fade", label: t('media.animFade'), icon: "opacity" },
+                      { key: "fade-up", label: t('media.animFadeUp'), icon: "north" },
+                      { key: "slide-up", label: t('media.animSlideUp'), icon: "arrow_upward" },
+                      { key: "slide-down", label: t('media.animSlideDown'), icon: "arrow_downward" },
+                      { key: "zoom", label: t('media.animZoom'), icon: "zoom_in" },
                     ] as { key: DockTextAnimation; label: string; icon: string }[]).map((opt) => (
                       <button
                         key={opt.key}
@@ -2497,7 +2500,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     disabled={applyingTextTarget !== null}
                   >
                     <Icon name="visibility" size={14} />
-                    {applyingTextTarget ? "Applying…" : "Show"}
+                    {applyingTextTarget ? t('media.applying') : t('media.show')}
                   </button>
                   <button
                     type="button"
@@ -2506,7 +2509,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     disabled={applyingTextTarget !== null}
                   >
                     <Icon name="delete" size={14} />
-                    Clear
+                    {t('common.clear')}
                   </button>
                 </div>
               </>
@@ -2518,7 +2521,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 {/* ── Enable Toggle ── */}
                 <div className="dock-overlay-bg-section">
                   <div className="dock-overlay-bg-section__row">
-                    <span className="dock-overlay-bg-section__label">Background</span>
+                    <span className="dock-overlay-bg-section__label">{t('media.background')}</span>
                     <button
                       type="button"
                       className={`dock-overlay-bg-toggle ${textOverlay.background.enabled ? "dock-overlay-bg-toggle--on" : ""}`}
@@ -2536,13 +2539,13 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   <>
                     {/* ── Display Mode ── */}
                     <div className="dock-overlay-bg-section">
-                      <div className="dock-overlay-bg-section__label">Display Mode</div>
+                      <div className="dock-overlay-bg-section__label">{t('media.displayMode')}</div>
                       <div className="dock-overlay-bg-segmented">
                         {([
-                          { key: "text-only" as OverlayDisplayMode, label: "Text Only", icon: "title" },
-                          { key: "box" as OverlayDisplayMode, label: "Box", icon: "square" },
-                          { key: "lower-third" as OverlayDisplayMode, label: "Lower Third", icon: "move_down" },
-                          { key: "fullscreen" as OverlayDisplayMode, label: "Fullscreen", icon: "fullscreen" },
+                          { key: "text-only" as OverlayDisplayMode, label: t('media.displayTextOnly'), icon: "title" },
+                          { key: "box" as OverlayDisplayMode, label: t('media.displayBox'), icon: "square" },
+                          { key: "lower-third" as OverlayDisplayMode, label: t('media.displayLowerThird'), icon: "move_down" },
+                          { key: "fullscreen" as OverlayDisplayMode, label: t('media.displayFullscreen'), icon: "fullscreen" },
                         ]).map((opt) => (
                           <button
                             key={opt.key}
@@ -2563,7 +2566,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     {/* ── Text Color ── */}
                     {textOverlay.background.mode !== "text-only" && (
                       <div className="dock-overlay-bg-section">
-                        <div className="dock-overlay-bg-section__label">Text Color</div>
+                        <div className="dock-overlay-bg-section__label">{t('media.textColor')}</div>
                         <div className="dock-overlay-bg-color-row">
                           <input
                             type="color"
@@ -2590,12 +2593,12 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     {/* ── Background Type ── */}
                     {textOverlay.background.mode !== "text-only" && (
                       <div className="dock-overlay-bg-section">
-                        <div className="dock-overlay-bg-section__label">Background Type</div>
+                        <div className="dock-overlay-bg-section__label">{t('media.backgroundType')}</div>
                         <div className="dock-overlay-bg-segmented">
                           {([
-                            { key: "color" as OverlayBgType, label: "Solid Color", icon: "palette" },
-                            { key: "image" as OverlayBgType, label: "Image", icon: "image" },
-                            { key: "pattern" as OverlayBgType, label: "Pattern", icon: "grid_on" },
+                            { key: "color" as OverlayBgType, label: t('media.bgTypeSolidColor'), icon: "palette" },
+                            { key: "image" as OverlayBgType, label: t('common.image'), icon: "image" },
+                            { key: "pattern" as OverlayBgType, label: t('common.pattern'), icon: "grid_on" },
                           ]).map((opt) => (
                             <button
                               key={opt.key}
@@ -2617,7 +2620,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     {/* ── Color Picker ── */}
                     {textOverlay.background.bgType === "color" && textOverlay.background.mode !== "text-only" && (
                       <div className="dock-overlay-bg-section">
-                        <div className="dock-overlay-bg-section__label">Color</div>
+                        <div className="dock-overlay-bg-section__label">{t('common.color')}</div>
                         <div className="dock-overlay-bg-color-row">
                           <input
                             type="color"
@@ -2650,10 +2653,10 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     {/* ── Image Selector ── */}
                     {textOverlay.background.bgType === "image" && textOverlay.background.mode !== "text-only" && (
                       <div className="dock-overlay-bg-section">
-                        <div className="dock-overlay-bg-section__label">Image</div>
+                        <div className="dock-overlay-bg-section__label">{t('common.image')}</div>
                         <div className="dock-overlay-bg-image-grid">
                           {localLibrary.filter((item) => item.type === "image").length === 0 ? (
-                            <div className="dock-overlay-bg-empty">No images in library</div>
+                            <div className="dock-overlay-bg-empty">{t('media.noImagesInLibrary')}</div>
                           ) : (
                             localLibrary.filter((item) => item.type === "image").map((item) => (
                               <button
@@ -2676,7 +2679,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     {/* ── Pattern Selector ── */}
                     {textOverlay.background.bgType === "pattern" && textOverlay.background.mode !== "text-only" && (
                       <div className="dock-overlay-bg-section">
-                        <div className="dock-overlay-bg-section__label">Pattern</div>
+                        <div className="dock-overlay-bg-section__label">{t('common.pattern')}</div>
                         <div className="dock-overlay-bg-pattern-grid">
                           {BACKGROUND_PATTERNS.map((pat) => (
                             <button
@@ -2698,7 +2701,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     {/* ── Opacity ── */}
                     <div className="dock-overlay-bg-section">
                       <div className="dock-overlay-bg-section__row">
-                        <span className="dock-overlay-bg-section__label">Opacity</span>
+                        <span className="dock-overlay-bg-section__label">{t('common.opacity')}</span>
                         <span className="dock-overlay-bg-section__value">{Math.round(textOverlay.background.opacity * 100)}%</span>
                       </div>
                       <input
@@ -2718,7 +2721,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     {/* ── Blur ── */}
                     <div className="dock-overlay-bg-section">
                       <div className="dock-overlay-bg-section__row">
-                        <span className="dock-overlay-bg-section__label">Blur</span>
+                        <span className="dock-overlay-bg-section__label">{t('common.blur')}</span>
                         <span className="dock-overlay-bg-section__value">{textOverlay.background.blur}px</span>
                       </div>
                       <input
@@ -2738,7 +2741,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     {/* ── Scale ── */}
                     <div className="dock-overlay-bg-section">
                       <div className="dock-overlay-bg-section__row">
-                        <span className="dock-overlay-bg-section__label">Scale</span>
+                        <span className="dock-overlay-bg-section__label">{t('common.scale')}</span>
                         <span className="dock-overlay-bg-section__value">{textOverlay.background.scale.toFixed(1)}×</span>
                       </div>
                       <input
@@ -2758,7 +2761,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     {/* ── Corner Radius ── */}
                     <div className="dock-overlay-bg-section">
                       <div className="dock-overlay-bg-section__row">
-                        <span className="dock-overlay-bg-section__label">Corner Radius</span>
+                        <span className="dock-overlay-bg-section__label">{t('common.cornerRadius')}</span>
                         <span className="dock-overlay-bg-section__value">{textOverlay.background.radius}px</span>
                       </div>
                       <input
@@ -2778,7 +2781,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     {/* ── Padding ── */}
                     <div className="dock-overlay-bg-section">
                       <div className="dock-overlay-bg-section__row">
-                        <span className="dock-overlay-bg-section__label">Padding</span>
+                        <span className="dock-overlay-bg-section__label">{t('common.padding')}</span>
                         <span className="dock-overlay-bg-section__value">{textOverlay.background.padding}px</span>
                       </div>
                       <input
@@ -2798,11 +2801,11 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     {/* ── Width ── */}
                     {textOverlay.background.mode !== "fullscreen" && (
                       <div className="dock-overlay-bg-section">
-                        <div className="dock-overlay-bg-section__label">Background Width</div>
+                        <div className="dock-overlay-bg-section__label">{t('media.backgroundWidth')}</div>
                         <div className="dock-overlay-bg-segmented">
                           {([
-                            { key: "full" as OverlayBgWidth, label: "Full Width", icon: "aspect_ratio" },
-                            { key: "clip" as OverlayBgWidth, label: "Clip to Text", icon: "crop" },
+                            { key: "full" as OverlayBgWidth, label: t('media.bgWidthFull'), icon: "aspect_ratio" },
+                            { key: "clip" as OverlayBgWidth, label: t('media.bgWidthClip'), icon: "crop" },
                           ]).map((opt) => (
                             <button
                               key={opt.key}
@@ -2832,7 +2835,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     disabled={applyingTextTarget !== null}
                   >
                     <Icon name="visibility" size={14} />
-                    {applyingTextTarget ? "Applying…" : "Apply"}
+                    {applyingTextTarget ? t('media.applying') : t('media.apply')}
                   </button>
                   <button
                     type="button"
@@ -2841,7 +2844,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     disabled={applyingTextTarget !== null}
                   >
                     <Icon name="delete" size={14} />
-                    Clear
+                    {t('common.clear')}
                   </button>
                 </div>
               </>
@@ -2864,15 +2867,15 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           >
             <div className="dock-dialog__header">
               <div>
-                <div className="dock-dialog__eyebrow">Add Media</div>
-                <h2 id="dock-media-add-title" className="dock-dialog__title">Choose what to add to the media library</h2>
+                <div className="dock-dialog__eyebrow">{t('media.addMedia')}</div>
+                <h2 id="dock-media-add-title" className="dock-dialog__title">{t('media.chooseWhatToAdd')}</h2>
               </div>
-              <button type="button" className="dock-dialog__close" onClick={closeAddMediaModal} aria-label="Close add media dialog">
+              <button type="button" className="dock-dialog__close" onClick={closeAddMediaModal} aria-label={t('media.closeAddMediaDialog')}>
                 <Icon name="close" size={14} />
               </button>
             </div>
             <div className="dock-dialog__body">
-              <div className="dock-console-segmented dock-media-tabs" role="tablist" aria-label="Add media tabs">
+              <div className="dock-console-segmented dock-media-tabs" role="tablist" aria-label={t('media.addMediaTabs')}>
                 <button
                   type="button"
                   role="tab"
@@ -2880,7 +2883,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   className={`dock-console-segmented__item${addMediaTab === "background" ? " dock-console-segmented__item--active" : ""}`}
                   onClick={() => setAddMediaTab("background")}
                 >
-                  Background
+                  {t('media.background')}
                 </button>
                 <button
                   type="button"
@@ -2889,7 +2892,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   className={`dock-console-segmented__item${addMediaTab === "template-videos" ? " dock-console-segmented__item--active" : ""}`}
                   onClick={() => setAddMediaTab("template-videos")}
                 >
-                  Template Videos
+                  {t('media.templateVideos')}
                 </button>
               </div>
 
@@ -2900,8 +2903,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                       <Icon name="perm_media" size={18} />
                     </div>
                     <div className="dock-media-add-modal__hero-copy">
-                      <div className="dock-media-add-modal__hero-title">Add regular media</div>
-                      <div className="dock-media-add-modal__hero-text">Upload images or local videos. They will appear under Uploads and can be used immediately in the dock.</div>
+                      <div className="dock-media-add-modal__hero-title">{t('media.addRegularMedia')}</div>
+                      <div className="dock-media-add-modal__hero-text">{t('media.uploadImagesOrVideos')}</div>
                     </div>
                   </div>
                   <button
@@ -2914,10 +2917,10 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     disabled={uploading}
                   >
                     <Icon name="upload" size={12} />
-                    {uploading ? "Uploading…" : "Choose Files"}
+                    {uploading ? t('media.uploading') : t('media.chooseFiles')}
                   </button>
                   <div className="dock-media-card__hint">
-                    Accepted: images and videos. Downloaded template videos are kept separate under Animations.
+                    {t('media.acceptedHint')}
                   </div>
                 </div>
               ) : (
@@ -2929,16 +2932,16 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                       className="dock-input dock-media-searchbar__input"
                       value={templateVideoSearch}
                       onChange={(event) => setTemplateVideoSearch(event.target.value)}
-                      placeholder="Search template videos"
-                      aria-label="Search template videos"
+                      placeholder={t('media.searchTemplateVideos')}
+                      aria-label={t('media.searchTemplateVideos')}
                     />
                     {templateVideoSearch && (
                       <button
                         type="button"
                         className="dock-shell-icon-btn dock-media-searchbar__clear"
                         onClick={() => setTemplateVideoSearch("")}
-                        aria-label="Clear template video search"
-                        title="Clear template video search"
+                        aria-label={t('media.clearTemplateVideoSearch')}
+                        title={t('media.clearTemplateVideoSearch')}
                       >
                         <Icon name="close" size={10} />
                       </button>
@@ -2947,8 +2950,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
                   <div className="dock-media-section__header">
                     <div>
-                      <div className="dock-media-section__title">Template Videos</div>
-                      <div className="dock-media-section__meta">Browse poster previews first, then download only the animations you want to keep locally.</div>
+                      <div className="dock-media-section__title">{t('media.templateVideos')}</div>
+                      <div className="dock-media-section__meta">{t('media.templateVideosMeta')}</div>
                     </div>
                     <div className="dock-media-section__actions">
                       <span className="dock-media-section__count">{templateVideosLoading ? "…" : filteredTemplateVideos.length}</span>
@@ -2957,8 +2960,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                         className="dock-shell-icon-btn"
                         onClick={() => void loadTemplateVideos()}
                         disabled={templateVideosLoading}
-                        aria-label="Refresh template videos"
-                        title="Refresh template videos"
+                        aria-label={t('media.refreshTemplateVideos')}
+                        title={t('media.refreshTemplateVideos')}
                       >
                         <Icon
                           name="refresh"
@@ -2975,11 +2978,11 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     </div>
                   ) : templateVideosLoading && filteredTemplateVideos.length === 0 ? (
                     <div className="dock-empty dock-empty--inline">
-                      <div className="dock-empty__text">Loading template videos…</div>
+                      <div className="dock-empty__text">{t('media.loadingTemplateVideos')}</div>
                     </div>
                   ) : filteredTemplateVideos.length === 0 ? (
                     <div className="dock-empty dock-empty--inline">
-                      <div className="dock-empty__text">No template videos match that search.</div>
+                      <div className="dock-empty__text">{t('media.noTemplateVideosMatch')}</div>
                     </div>
                   ) : (
                     <div className="dock-media-list">
@@ -2987,7 +2990,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                         const downloadedItem = findDownloadedTemplateVideo(asset);
                         const downloading = templateVideoProgress[asset.id] !== undefined;
                         const progressLabel = templateVideoProgress[asset.id] == null
-                          ? "Preparing"
+                          ? t('media.preparing')
                           : `${Math.round((templateVideoProgress[asset.id] || 0) * 100)}%`;
 
                         return (
@@ -3004,8 +3007,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                                 <TemplateVideoPreview src={asset.videoUrl} label={asset.fileName} />
                               )}
                               <div className="dock-media-card__badges">
-                                <span className="dock-media-card__badge">Template</span>
-                                <span className="dock-media-card__badge">{downloadedItem ? "Saved" : "Remote"}</span>
+                                <span className="dock-media-card__badge">{t('media.badgeTemplate')}</span>
+                                <span className="dock-media-card__badge">{downloadedItem ? t('media.badgeSaved') : t('media.badgeRemote')}</span>
                               </div>
                             </div>
                             <div className="dock-media-card__body">
@@ -3021,8 +3024,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                                 <button
                                   type="button"
                                   className={`dock-media-card__action-icon${downloadedItem ? " dock-media-card__action-icon--active-program" : ""}`}
-                                  aria-label={downloadedItem ? `${asset.fileName} is already saved` : `Download ${asset.fileName}`}
-                                  title={downloadedItem ? "Already saved to Animations" : downloading ? `Downloading ${progressLabel}` : "Download template video"}
+                                  aria-label={downloadedItem ? t('media.isAlreadySaved', { fileName: asset.fileName }) : t('media.downloadAsset', { fileName: asset.fileName })}
+                                  title={downloadedItem ? t('media.alreadySavedToAnimations') : downloading ? t('media.downloadingProgress', { progress: progressLabel }) : t('media.downloadTemplateVideo')}
                                   disabled={downloading || Boolean(downloadedItem)}
                                   onClick={() => void handleDownloadTemplateVideo(asset)}
                                 >
@@ -3044,7 +3047,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
             </div>
             <div className="dock-dialog__footer">
               <button type="button" className="dock-btn dock-btn--compact" onClick={closeAddMediaModal}>
-                Close
+                {t('common.close')}
               </button>
             </div>
           </div>
@@ -3055,7 +3058,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       {selectionMode && selectedKeys.size > 0 && (
         <div className="dock-media-selection-tray">
           <div className="dock-media-selection-tray__info">
-            <span className="dock-media-selection-tray__count">{selectedKeys.size} Selected</span>
+            <span className="dock-media-selection-tray__count">{t('media.selectedCount', { count: selectedKeys.size })}</span>
             <div className="dock-media-selection-tray__thumbs">
               {selectedVideoEntries.slice(0, 5).map((entry) => (
                 <div key={entry.key} className="dock-media-selection-tray__thumb">
@@ -3088,9 +3091,9 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           className="dock-btm-toolbar__clear"
           onClick={() => void clearMedia()}
           disabled={clearingTarget !== null || (!activeTargets.active && !textOverlayTargets.active)}
-          aria-label="Clear media"
+          aria-label={t('media.clearMedia')}
         >
-          <span>{activeTargets.active || textOverlayTargets.active ? "Hide Media" : "Clear"}</span>
+          <span>{activeTargets.active || textOverlayTargets.active ? t('media.hideMedia') : t('common.clear')}</span>
         </button>
       )}
 
@@ -3099,7 +3102,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         const entryPrefs = mediaPrefs[entry.prefKey] ?? {};
         const isActive = activeTargets.active?.key === entry.key;
         const isPaused = isActive && pausedTargets.active;
-        const statusLabel = isActive ? (isPaused ? "In Preview" : "Live") : "Not Active";
+        const statusLabel = isActive ? (isPaused ? t('media.inPreview') : t('media.live')) : t('media.notActive');
         const statusVariant = isActive ? (isPaused ? "preview" : "live") : "idle";
         const thumbUrl = entry.thumbnailUrl || (entry.previewUrl && entry.kind === "image" ? entry.previewUrl : null);
         const cleanName = entryPrefs.label?.trim()
@@ -3119,7 +3122,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
               onClick={(event) => event.stopPropagation()}
             >
               {/* Close button */}
-              <button type="button" className="dock-media-inspector__close" onClick={() => { setPreviewPlaying(false); closeEntryOptions(); }} aria-label="Close">
+              <button type="button" className="dock-media-inspector__close" onClick={() => { setPreviewPlaying(false); closeEntryOptions(); }} aria-label={t('common.close')}>
                 <Icon name="close" size={14} />
               </button>
 
@@ -3165,7 +3168,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
               {/* ── Quick Rename ── */}
               <div className="dock-media-inspector__section">
-                <label className="dock-media-inspector__label">Label</label>
+                <label className="dock-media-inspector__label">{t('media.label')}</label>
                 <input
                   type="text"
                   className="dock-input dock-media-inspector__rename-input"
@@ -3183,25 +3186,26 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   onClick={() => { void handleSendEntry(entry); closeEntryOptions(); }}
                 >
                   <Icon name="play_arrow" size={14} />
-                  Send to Preview
+                  {t('media.sendToPreview')}
                 </button>
 
               </div>
 
               {/* ── Display ── */}
               <div className="dock-media-inspector__card">
-                <h4 className="dock-media-inspector__card-title">Display</h4>
+                <h4 className="dock-media-inspector__card-title">{t('media.display')}</h4>
                 <div className="dock-media-inspector__segmented">
                   {(["cover", "contain", "stretch"] as DockMediaFitMode[]).map((option) => {
                     const isActiveFit = (entryPrefs.fitMode ?? "cover") === option;
                     const icons: Record<DockMediaFitMode, string> = { cover: "crop", contain: "fit_screen", stretch: "aspect_ratio" };
+                    const fitTitles: Record<DockMediaFitMode, string> = { cover: t('media.fillScreen'), contain: t('media.fitWithinScreen'), stretch: t('media.stretchToScreen') };
                     return (
                       <button
                         key={option}
                         type="button"
                         className={`dock-media-inspector__seg-btn${isActiveFit ? " dock-media-inspector__seg-btn--active" : ""}`}
                         onClick={() => void setEntryFitMode(entry, option)}
-                        title={option === "cover" ? "Fill screen" : option === "contain" ? "Fit within screen" : "Stretch to screen"}
+                        title={fitTitles[option]}
                       >
                         <Icon name={icons[option]} size={12} />
                         {formatFitMode(option)}
@@ -3214,7 +3218,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
               {/* ── Audio (video only) ── */}
               {entry.kind === "video" && (
                 <div className="dock-media-inspector__card">
-                  <h4 className="dock-media-inspector__card-title">Audio</h4>
+                  <h4 className="dock-media-inspector__card-title">{t('media.audio')}</h4>
                   <div className="dock-media-inspector__chips">
                     <button
                       type="button"
@@ -3223,7 +3227,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                       onClick={() => void toggleVideoMute(entry)}
                     >
                       <Icon name={(entryPrefs.videoMuted ?? true) ? "volume_off" : "volume_up"} size={12} />
-                      {(entryPrefs.videoMuted ?? true) ? "Muted" : "Audio On"}
+                      {(entryPrefs.videoMuted ?? true) ? t('media.muted') : t('media.audioOn')}
                     </button>
                     <button
                       type="button"
@@ -3232,7 +3236,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                       onClick={() => void setEntryLoop(entry, !(entryPrefs.loop ?? true))}
                     >
                       <Icon name="refresh" size={12} />
-                      {(entryPrefs.loop ?? true) ? "Loop" : "Once"}
+                      {(entryPrefs.loop ?? true) ? t('media.loop') : t('media.once')}
                     </button>
                   </div>
                 </div>
@@ -3249,7 +3253,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   onClick={() => { void deleteEntry(entry); closeEntryOptions(); }}
                 >
                   <Icon name="delete" size={12} />
-                  Delete {entry.kind === "video" ? "Video" : "Image"}
+                  {t('media.delete')} {entry.kind === "video" ? t('media.video') : t('common.image')}
                 </button>
               </div>
             </div>
@@ -3270,27 +3274,27 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
             >
               <div className="dock-dialog__header">
                 <div>
-                  <div className="dock-dialog__eyebrow">Media Source</div>
-                  <h2 id="dock-playlist-title" className="dock-dialog__title">Create Media Playlist</h2>
+                  <div className="dock-dialog__eyebrow">{t('media.mediaSource')}</div>
+                  <h2 id="dock-playlist-title" className="dock-dialog__title">{t('media.createMediaPlaylist')}</h2>
                 </div>
-                <button type="button" className="dock-dialog__close" onClick={() => setShowPlaylistModal(false)} aria-label="Close">
+                <button type="button" className="dock-dialog__close" onClick={() => setShowPlaylistModal(false)} aria-label={t('common.close')}>
                   <Icon name="close" size={14} />
                 </button>
               </div>
               <div className="dock-dialog__body">
                 <div className="dock-playlist-modal__field">
-                  <label className="dock-playlist-modal__label">Source Name</label>
+                  <label className="dock-playlist-modal__label">{t('media.sourceName')}</label>
                   <input
                     type="text"
                     className="dock-input"
                     value={playlistName}
                     onChange={(e) => setPlaylistName(e.target.value)}
-                    placeholder="e.g. Pre-Service Playlist"
+                    placeholder={t('media.sourceNamePlaceholder')}
                   />
                 </div>
                 {selectedVideoEntries.length > 0 && (
                   <div className="dock-playlist-modal__field">
-                    <label className="dock-playlist-modal__label">Videos ({selectedVideoEntries.length})</label>
+                    <label className="dock-playlist-modal__label">{t('media.videos')} ({selectedVideoEntries.length})</label>
                     <div className="dock-playlist-modal__thumbs">
                       {selectedVideoEntries.map((entry) => entry && (
                         <div key={entry.key} className="dock-playlist-modal__thumb">
@@ -3306,7 +3310,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 )}
                 {selectedImageEntries.length > 0 && (
                   <div className="dock-playlist-modal__field">
-                    <label className="dock-playlist-modal__label">Images ({selectedImageEntries.length})</label>
+                    <label className="dock-playlist-modal__label">{t('common.images')} ({selectedImageEntries.length})</label>
                     <div className="dock-playlist-modal__thumbs">
                       {selectedImageEntries.map((entry) => entry && (
                         <div key={entry.key} className="dock-playlist-modal__thumb">
@@ -3323,29 +3327,29 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 <div className="dock-playlist-modal__toggles">
                   <label className="dock-playlist-modal__toggle">
                     <input type="checkbox" checked={playlistLoop} onChange={(e) => setPlaylistLoop(e.target.checked)} />
-                    <span>Loop Playlist</span>
+                    <span>{t('media.loopPlaylist')}</span>
                   </label>
                   <label className="dock-playlist-modal__toggle">
                     <input type="checkbox" checked={playlistShuffle} onChange={(e) => setPlaylistShuffle(e.target.checked)} />
-                    <span>Shuffle</span>
+                    <span>{t('media.shuffle')}</span>
                   </label>
                   <label className="dock-playlist-modal__toggle">
                     <input type="checkbox" checked={playlistMuted} onChange={(e) => setPlaylistMuted(e.target.checked)} />
-                    <span>Mute Audio</span>
+                    <span>{t('media.muteAudio')}</span>
                   </label>
                 </div>
                 <div className="dock-playlist-modal__hint">
                   {selectedVideoEntries.length > 0 && selectedImageEntries.length > 0
-                    ? "Creates a VLC Video Source for videos and an Image Slide Show for images in the current OBS scene."
+                    ? t('media.playlistHintBoth')
                     : selectedVideoEntries.length > 0
-                      ? "Creates a VLC Video Source in the current OBS scene. OBS handles playback natively."
-                      : "Creates an Image Slide Show source in the current OBS scene. OBS handles the slideshow natively."
+                      ? t('media.playlistHintVideos')
+                      : t('media.playlistHintImages')
                   }
                 </div>
               </div>
               <div className="dock-dialog__footer">
                 <button type="button" className="dock-btn dock-btn--compact" onClick={() => setShowPlaylistModal(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="button"
@@ -3354,7 +3358,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   disabled={selectedKeys.size === 0}
                 >
                   <Icon name="playlist_add" size={12} />
-                  Create{selectedVideoEntries.length > 0 && selectedImageEntries.length > 0 ? " Both" : selectedVideoEntries.length > 0 ? " VLC Source" : " Slideshow"}
+                  {t('media.create')}{selectedVideoEntries.length > 0 && selectedImageEntries.length > 0 ? t('media.createBoth') : selectedVideoEntries.length > 0 ? t('media.createVlcSource') : t('media.createSlideshow')}
                 </button>
               </div>
             </div>
@@ -3438,23 +3442,23 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
               onClick={(event) => event.stopPropagation()}
             >
               <div className="dock-dialog__header">
-                <h2 className="dock-dialog__title">Clear All Media?</h2>
-                <button type="button" className="dock-dialog__close" onClick={() => setShowClearAllConfirm(false)} aria-label="Close">
+                <h2 className="dock-dialog__title">{t('media.clearAllMedia')}</h2>
+                <button type="button" className="dock-dialog__close" onClick={() => setShowClearAllConfirm(false)} aria-label={t('common.close')}>
                   <Icon name="close" size={14} />
                 </button>
               </div>
               <div className="dock-dialog__body">
                 <p className="dock-media-clear-confirm__summary">
-                  {totalCount} {totalCount === 1 ? "upload" : "uploads"} will be removed.
+                  {t('media.clearAllSummary', { count: totalCount, item: totalCount === 1 ? t('media.upload') : t('media.uploads') })}
                 </p>
               </div>
               <div className="dock-dialog__footer">
                 <button type="button" className="dock-btn dock-btn--compact" onClick={() => setShowClearAllConfirm(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button type="button" className="dock-btn dock-btn--danger dock-btn--compact" onClick={() => void clearAllMedia()}>
                   <Icon name="delete_sweep" size={12} />
-                  Clear All
+                  {t('media.clearAll')}
                 </button>
               </div>
             </div>

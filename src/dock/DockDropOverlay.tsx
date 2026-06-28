@@ -5,6 +5,7 @@
  * Fades in/out via CSS transition.
  */
 
+import { useTranslation } from "react-i18next";
 import Icon from "./DockIcon";
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function DockDropOverlay({ visible }: Props) {
+  const { t } = useTranslation();
   return (
     <div
       className={`dock-drop-overlay${visible ? " dock-drop-overlay--active" : ""}`}
@@ -21,9 +23,9 @@ export default function DockDropOverlay({ visible }: Props) {
         <div className="dock-drop-overlay__icon">
           <Icon name="cloud_upload" size={28} />
         </div>
-        <div className="dock-drop-overlay__title">Drop files to upload</div>
+        <div className="dock-drop-overlay__title">{t('drop.title')}</div>
         <div className="dock-drop-overlay__subtitle">
-          Images and videos are supported
+          {t('drop.description')}
         </div>
       </div>
     </div>

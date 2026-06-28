@@ -4,6 +4,7 @@
  * Renders a fixed stack of toasts at the bottom-right of the dock.
  */
 
+import { useTranslation } from "react-i18next";
 import Icon from "./DockIcon";
 import type { UploadToast } from "./useDockUpload";
 
@@ -15,13 +16,14 @@ interface Props {
 }
 
 export default function DockUploadToasts({ toasts, uploading, progress, onDismiss }: Props) {
+  const { t } = useTranslation();
   return (
     <div className="dock-upload-toast-stack" aria-live="polite">
       {uploading && progress && (
         <div className="dock-upload-toast dock-upload-toast--progress">
           <Icon name="upload" size={12} />
           <span>
-            Uploading {progress.current}/{progress.total}...
+            {t('upload.uploading', { current: progress.current, total: progress.total })}
           </span>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { BibleTheme, BibleThemeSettings } from "../../bible/types";
 import DockThemeBrowserModal from "./DockThemeBrowserModal";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
@@ -70,9 +71,10 @@ export default function DockBibleThemePicker({
   sampleText,
   sampleReference,
 }: Props) {
+  const { t } = useTranslation();
   const [allThemes, setAllThemes] = useState<BibleTheme[]>([]);
   const [showBrowser, setShowBrowser] = useState(false);
-  const resolvedLabel = typeof label === "string" ? label.trim() : "Bible Theme";
+  const resolvedLabel = typeof label === "string" ? label.trim() : t("bible.theme");
   const showLabel = typeof label === "string" ? resolvedLabel.length > 0 : true;
   const previewRatio = templateType === "fullscreen" ? 0.15 : 0.18;
   const sampleMain = sampleText || "Faith";
@@ -139,7 +141,7 @@ export default function DockBibleThemePicker({
         <button
           className="dock-theme-dropdown-trigger dock-theme-dropdown-trigger--preview"
           onClick={() => setShowBrowser(true)}
-          title={displayTheme?.description || displayTheme?.name || "Select favorite theme"}
+          title={displayTheme?.description || displayTheme?.name || t("bible.selectFavoriteTheme")}
         >
           <ThemePreviewSurface
             className="dock-theme-dropdown-trigger__swatch dock-theme-dropdown-trigger__swatch--preview"
@@ -187,7 +189,7 @@ export default function DockBibleThemePicker({
         selectedThemeId={selectedThemeId}
         onSelect={handleSelect}
         onClose={() => setShowBrowser(false)}
-        title={browserTitle ?? (showLabel ? resolvedLabel : "Select Bible Theme")}
+        title={browserTitle ?? (showLabel ? resolvedLabel : t("bible.selectBibleVersion"))}
         templateType={templateType}
         allowedCategories={allowedCategories}
         themeCount={allThemes.length}

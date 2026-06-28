@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 import BibleVersionLibrary from "./BibleVersionLibrary";
 
@@ -50,6 +51,7 @@ export function BibleControls({
   abbreviateBook,
   BOOK_CHAPTERS,
 }: BibleControlsProps) {
+  const { t } = useTranslation();
   return (
     <div className="dock-bible-controls">
       {/* Book Selector */}
@@ -68,11 +70,11 @@ export function BibleControls({
           disabled={!selectedBook}
           aria-haspopup="listbox"
           aria-expanded={isBookDropdownOpen}
-          aria-label="Choose book"
+          aria-label={t("bible.chooseBook")}
         >
           <span className="dock-bible-controls__book-label"></span>
           <span className="dock-bible-controls__book-name">
-            {selectedBook ?? "Select"}
+            {selectedBook ?? t("bible.chooseBook")}
           </span>
           <Icon name="expand_more" size={14} />
         </button>
@@ -120,7 +122,7 @@ export function BibleControls({
             disabled={!selectedBook || !selectedChapter || chapterCount <= 0}
             aria-haspopup="listbox"
             aria-expanded={isChapterDropdownOpen}
-            aria-label="Choose chapter"
+            aria-label={t("bible.chooseChapter")}
           >
             <span className="dock-bible-controls__compact-label">Ch</span>
             <span className="dock-bible-controls__compact-value">{selectedChapter ?? "--"}</span>
@@ -140,7 +142,7 @@ export function BibleControls({
                     onClick={() => onChapterSelect(chapter)}
                     role="option"
                     aria-selected={isActive}
-                    title={`Chapter ${chapter}`}
+                    title={t("bible.chapter", { number: chapter })}
                   >
                     {chapter}
                   </button>
@@ -168,7 +170,7 @@ export function BibleControls({
             disabled={!selectedBook || !selectedChapter || verseCount <= 0}
             aria-haspopup="listbox"
             aria-expanded={isVerseDropdownOpen}
-            aria-label="Choose verse"
+            aria-label={t("bible.chooseVerse")}
           >
             <span className="dock-bible-controls__compact-label">V</span>
             <span className="dock-bible-controls__compact-value">{selectedVerse ?? "--"}</span>
@@ -188,7 +190,7 @@ export function BibleControls({
                     onClick={() => onVerseSelect(verse)}
                     role="option"
                     aria-selected={isActive}
-                    title={`Verse ${verse}`}
+                    title={t("bible.verse", { number: verse })}
                   >
                     {verse}
                   </button>
@@ -214,6 +216,7 @@ interface BibleTopbarProps {
 }
 
 export function BibleTopbar({ isExpanded, selectedBook: _selectedBook, onToggle, headerActions, children }: BibleTopbarProps) {
+  const { t } = useTranslation();
   return (
     <section className={`dock-bible-topbar${isExpanded ? " dock-bible-topbar--expanded" : ""}`}>
       <div className="dock-bible-topbar__header">
@@ -221,8 +224,8 @@ export function BibleTopbar({ isExpanded, selectedBook: _selectedBook, onToggle,
           type="button"
           className="dock-bible-topbar__toggle-btn"
           onClick={onToggle}
-          aria-label={isExpanded ? "Collapse controls" : "Expand controls"}
-          title={isExpanded ? "Collapse" : "Expand"}
+          aria-label={isExpanded ? t("bible.closeOptions") : t("bible.options")}
+          title={isExpanded ? t("bible.closeOptions") : t("bible.options")}
         >
           <Icon name="book_open" size={14} />
           {/* <Icon name={isExpanded ? "expand_less" : "expand_more"} size={14} /> */}

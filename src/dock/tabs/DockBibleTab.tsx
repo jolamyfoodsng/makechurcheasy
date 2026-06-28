@@ -6,6 +6,7 @@
  */
 
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { SearchResult as BibleKeywordResult } from "../../bible/bibleData";
 import { addFavorite, getFavorites, removeFavorite } from "../../bible/bibleDb";
 import { BUILTIN_THEMES } from "../../bible/themes/builtinThemes";
@@ -582,6 +583,7 @@ export default function DockBibleTab({
   showHistory,
   onHistoryClose,
 }: Props) {
+  const { t } = useTranslation();
   const [selectedBook, setSelectedBook] = useState<string | null>(OT_BOOKS[0] ?? null);
   const [selectedChapter, setSelectedChapter] = useState<number | null>(1);
   const [selectedVerse, setSelectedVerse] = useState<number | null>(null);
@@ -2470,13 +2472,13 @@ export default function DockBibleTab({
       ? {
         selectedThemeId: selectedBibleTheme.id,
         onSelect: handleSelectFullscreenTheme,
-        label: "Fullscreen Theme",
+        label: t("bible.fullscreenTheme"),
         templateType: "fullscreen" as const,
       }
       : {
         selectedThemeId: selectedBibleTheme.id,
         onSelect: handleSelectLowerThirdTheme,
-        label: "Lower Third Theme",
+        label: t("bible.lowerThirdTheme"),
         templateType: "lower-third" as const,
       };
   const navigateVerse = useCallback(
@@ -2660,7 +2662,7 @@ export default function DockBibleTab({
   }, [handleClearVerse, navigateVerse, selectedBook, selectedChapter, selectedVerse, sendSelectedVerseToShow]);
 
   const currentChapterLabel =
-    selectedBook && selectedChapter ? `${selectedBook} ${selectedChapter}` : "Bible Browser";
+    selectedBook && selectedChapter ? `${selectedBook} ${selectedChapter}` : t("bible.defaultTitle");
   const chapterCount = selectedBook ? BOOK_CHAPTERS[selectedBook] ?? 0 : 0;
   const activePassage = chapterPassages[activeColumnIndex] ?? null;
   const activeChapterError = chapterErrors[activeColumnIndex] ?? "";
@@ -2670,7 +2672,7 @@ export default function DockBibleTab({
       ? `–${Math.min(currentVerseNumber + verseLineCount - 1, verseCount)}`
       : ""
     }`
-    : "Bible Browser";
+    : t("bible.defaultTitle");
   const _selectedReferenceLabel = selectedPassageForFavorite?.reference
     ?? (selectedBook && selectedChapter && selectedVerse
       ? `${selectedBook} ${selectedChapter}:${selectedVerse}`
@@ -2717,8 +2719,8 @@ export default function DockBibleTab({
               {/* <Icon name="search" size={14} className="dock-search__icon" /> */}
               <input
                 className="dock-input dock_search__input"
-                placeholder='Search e.g. "jn3:16", "icor","g121", "God so loved the world"..., '
-                aria-label="Search Bible by reference or word"
+                placeholder={t("bible.searchPlaceholder")}
+                aria-label={t("bible.searchPlaceholder")}
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
@@ -2740,8 +2742,8 @@ export default function DockBibleTab({
                     setShowDropdown(false);
                     setShowRecentSearches(recentSearches.length > 0);
                   }}
-                  aria-label="Clear Bible search"
-                  title="Clear Bible search"
+                  aria-label={t("bible.clearSearchShort")}
+                  title={t("bible.clearSearchShort")}
                 >
                   <Icon name="close" size={13} />
                 </button>
@@ -2784,7 +2786,7 @@ export default function DockBibleTab({
 
               {showRecentSearches && !searchQuery.trim() && recentSearches.length > 0 && (
                 <div className="dock-search-dropdown dock-search-dropdown--recent">
-                  <div className="dock-search-dropdown__heading">Recent searches</div>
+                  <div className="dock-search-dropdown__heading">{t("bible.recentSearches")}</div>
                   {recentSearches.map((item) => (
                     <button
                       type="button"
@@ -2821,13 +2823,13 @@ export default function DockBibleTab({
           {activePassage && activePassage.verses.length > 0 && (
             <div className="dock-bible-reader__ref-header">
               <div>
-                <span className="dock-bible-reader__ref-header-label">Reading</span>
+                <span className="dock-bible-reader__ref-header-label">{t("bible.reading")}</span>
                 <button
                   type="button"
                   className={`dock-favorites-inline dock-bible-reader__ref-header-fav${isCurrentPassageFavorite ? " dock-bible-reader__ref-header-fav--active" : ""}`}
                   onClick={handleToggleFavoritePassage}
                   disabled={!selectedPassageForFavorite}
-                  title={isCurrentPassageFavorite ? "Remove favorite" : "Favorite passage"}
+                  title={isCurrentPassageFavorite ? t("bible.favRemove") : t("bible.favAdd")}
                 >
                   <Icon name={isCurrentPassageFavorite ? "star" : "star_border"} size={12} />
                 </button>
@@ -2840,14 +2842,14 @@ export default function DockBibleTab({
                 className={` dock-favorites dock-bible-reader__ref-header-fav${isCurrentPassageFavorite ? " dock-bible-reader__ref-header-fav--active" : ""}`}
                 onClick={handleToggleFavoritePassage}
                 disabled={!selectedPassageForFavorite}
-                title={isCurrentPassageFavorite ? "Remove favorite" : "Favorite passage"}
+                title={isCurrentPassageFavorite ? t("bible.favRemove") : t("bible.favAdd")}
               >
                 <Icon name={isCurrentPassageFavorite ? "star" : "star_border"} size={12} />
               </button>
             </div>
           )}
           {chapterLoading && !activePassage?.verses.length && (
-            <div className="dock-console-placeholder">Loading {currentChapterLabel}…</div>
+            <div className="dock-console-placeholder">{t("common.loading")} {currentChapterLabel}...</div>
           )}
 
           {chapterLoading && activeChapterError && !activePassage?.verses.length && (
@@ -2859,7 +2861,7 @@ export default function DockBibleTab({
 
           {!chapterLoading && !activePassage?.verses.length && !activeChapterError && (
             <div className="dock-console-placeholder">
-              No verses are available for the selected chapter.
+              {t("bible.noVersesAvailable")}
             </div>
           )}
 
@@ -2887,7 +2889,7 @@ export default function DockBibleTab({
               tabIndex={0}
               role="button"
               aria-current={selectedVerse === verse.verse ? "true" : undefined}
-              aria-label={`Verse ${verse.verse} in ${activeTranslation}. ${verse.text}`}
+              aria-label={t("bible.verseAriaLabel", { verse: verse.verse, translation: activeTranslation, text: verse.text })}
               title={`${activeTranslation} ${selectedBook} ${selectedChapter}:${verse.verse}`}
             >
               <div className="dock-bible-verse-row__main">
@@ -2919,7 +2921,7 @@ export default function DockBibleTab({
           overlayMode={overlayMode}
           onModeChange={setOverlayMode}
           morphing={modeMorphing}
-          clearLabel="Clear"
+          clearLabel={t("common.clear")}
           onClear={handleClearBible}
           clearDisabled={sending}
           collapsed={toolbarCollapsed}
@@ -2930,7 +2932,7 @@ export default function DockBibleTab({
             className={`dock-btm-toolbar__icon-btn${bibleBgOnly ? " dock-btm-toolbar__icon-btn--active" : ""}`}
             onClick={handleToggleBibleBgOnly}
             disabled={!staged || staged.type !== "bible" || overlayMode === "lower-third"}
-            title={bibleBgOnly ? "Show with text" : "Background only"}
+            title={bibleBgOnly ? t("bible.showWithText") : t("bible.backgroundOnly")}
           >
             <Icon name="image" size={14} />
           </button>
@@ -2945,14 +2947,14 @@ export default function DockBibleTab({
               onClick={() => setShowVerseLinePopover((current) => !current)}
               aria-haspopup="dialog"
               aria-expanded={showVerseLinePopover}
-              title="Lines per stage"
+              title={t("bible.linesPerStage")}
             >
               <Icon name="text_fields" size={14} />
             </button>
 
             {showVerseLinePopover && (
-              <div className="dock-line-popover__menu" role="dialog" aria-label="Bible line count">
-                <div className="dock-line-popover__title">Lines per stage</div>
+              <div className="dock-line-popover__menu" role="dialog" aria-label={t("bible.lineCount")}>
+                <div className="dock-line-popover__title">{t("bible.linesPerStage")}</div>
                 <div className="dock-line-popover__grid dock-line-popover__grid--compact">
                   {Array.from({ length: MAX_VERSE_LINES }, (_, index) => index + 1).map((count) => (
                     <button
@@ -2976,7 +2978,7 @@ export default function DockBibleTab({
             type="button"
             className="dock-btm-toolbar__icon-btn"
             onClick={() => setShowThemeSettings(true)}
-            title="Quick Edits"
+            title={t("bible.quickEdits")}
           >
             <Icon name="edit" size={14} />
           </button>
@@ -3001,14 +3003,14 @@ export default function DockBibleTab({
             >
               <div className="dock-dialog__header">
                 <div>
-                  <div className="dock-dialog__eyebrow">Settings</div>
-                  <h2 id="bible-options-title" className="dock-dialog__title">Options</h2>
+                  <div className="dock-dialog__eyebrow">{t("bible.settings")}</div>
+                  <h2 id="bible-options-title" className="dock-dialog__title">{t("bible.options")}</h2>
                 </div>
                 <button
                   type="button"
                   className="dock-dialog__close"
                   onClick={() => setShowOptionsModal(false)}
-                  aria-label="Close options"
+                  aria-label={t("bible.closeOptions")}
                 >
                   <Icon name="close" size={14} />
                 </button>
@@ -3017,11 +3019,11 @@ export default function DockBibleTab({
               <div className="dock-dialog__body">
                 {/* Overlay mode */}
                 <div className="dock-bible-options__section">
-                  <label className="dock-bible-options__label">Overlay Mode</label>
+                  <label className="dock-bible-options__label">{t("bible.overlayMode")}</label>
                   <div
                     className={`dock-console-segmented dock-console-segmented--compact${modeMorphing ? " dock-console-segmented--morphing" : ""}`}
                     role="group"
-                    aria-label="Bible overlay mode"
+                    aria-label={t("bible.overlayMode")}
                   >
                     <button
                       type="button"
@@ -3029,7 +3031,7 @@ export default function DockBibleTab({
                       onClick={() => setOverlayMode("fullscreen")}
                       aria-pressed={overlayMode === "fullscreen"}
                     >
-                      <span>Full</span>
+                      <span>{t("bible.full")}</span>
                     </button>
                     <button
                       type="button"
@@ -3037,14 +3039,14 @@ export default function DockBibleTab({
                       onClick={() => setOverlayMode("lower-third")}
                       aria-pressed={overlayMode === "lower-third"}
                     >
-                      <span>LT</span>
+                      <span>{t("bible.lt")}</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Theme settings */}
                 <div className="dock-bible-options__section">
-                  <label className="dock-bible-options__label">Theme</label>
+                  <label className="dock-bible-options__label">{t("bible.theme")}</label>
                   <button
                     type="button"
                     className="dock-btn dock-btn--ghost dock-btn--compact"
@@ -3052,13 +3054,13 @@ export default function DockBibleTab({
                     style={{ width: "100%" }}
                   >
                     <Icon name="palette" size={14} />
-                    Open Theme Settings
+                    {t("bible.openThemeSettings")}
                   </button>
                 </div>
 
                 {/* Lines per stage */}
                 <div className="dock-bible-options__section">
-                  <label className="dock-bible-options__label">Lines per Stage</label>
+                  <label className="dock-bible-options__label">{t("bible.linesPerStage")}</label>
                   <div className="dock-bible-options__line-grid">
                     {Array.from({ length: MAX_VERSE_LINES }, (_, index) => index + 1).map((count) => (
                       <button
@@ -3094,7 +3096,7 @@ export default function DockBibleTab({
             >
               <div className="dock-dialog__header">
                 <div>
-                  <div className="dock-dialog__eyebrow">Keyword Match</div>
+                  <div className="dock-dialog__eyebrow">{t("bible.keywordMatch")}</div>
                   <h2 id="dock-bible-keyword-action-title" className="dock-dialog__title">
                     {keywordActionResult.label}
                   </h2>
@@ -3103,7 +3105,7 @@ export default function DockBibleTab({
                   type="button"
                   className="dock-dialog__close"
                   onClick={() => setKeywordActionResult(null)}
-                  aria-label="Close keyword action dialog"
+                  aria-label={t("bible.closeKeywordActionDialog")}
                 >
                   <Icon name="close" size={14} />
                 </button>
@@ -3137,7 +3139,7 @@ export default function DockBibleTab({
                   }}
                 >
                   <Icon name="menu_book" size={14} />
-                  Go to Chapter
+                  {t("bible.goToChapter")}
                 </button>
                 <button
                   type="button"
@@ -3153,7 +3155,7 @@ export default function DockBibleTab({
                   }}
                 >
                   <Icon name="cast" size={14} />
-                  Show
+                  {t("common.show")}
                 </button>
               </div>
             </div>
@@ -3186,8 +3188,8 @@ export default function DockBibleTab({
             ? handlePreviewFullscreenQuickThemeSettings
             : handlePreviewLowerThirdQuickThemeSettings
         }
-        title="Quick Settings"
-        subtitle="Adjust verse text, spacing, and colors for your current overlay."
+        title={t("bible.quickSettings")}
+        subtitle={t("bible.quickSettingsSubtitle")}
         isOpen={showThemeSettings}
         onClose={() => setShowThemeSettings(false)}
         onBackgroundPresetChange={setBackgroundPreset}

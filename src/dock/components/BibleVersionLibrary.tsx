@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 
 // ---------------------------------------------------------------------------
@@ -33,6 +34,7 @@ export default function BibleVersionLibrary({
   onVersionChange,
   onTranslationsChanged: _onTranslationsChanged,
 }: BibleVersionLibraryProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -90,7 +92,7 @@ export default function BibleVersionLibrary({
       <button
         className="bible-version-library__trigger"
         onClick={() => setIsOpen(!isOpen)}
-        aria-label="Select Bible version"
+        aria-label={t("bible.selectBibleVersion")}
         aria-expanded={isOpen}
       >
         <span className="bible-version-library__trigger-abbr">
@@ -109,16 +111,16 @@ export default function BibleVersionLibrary({
               ref={searchInputRef}
               type="text"
               className="bible-version-library__search-input"
-              placeholder="Search versions..."
+              placeholder={t("bible.searchVersions")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search Bible versions"
+              aria-label={t("bible.searchVersions")}
             />
             {searchQuery && (
               <button
                 className="bible-version-library__search-clear"
                 onClick={() => setSearchQuery("")}
-                aria-label="Clear search"
+                aria-label={t("common.clear")}
               >
                 <Icon name="close" size={12} />
               </button>
@@ -131,7 +133,7 @@ export default function BibleVersionLibrary({
             {filteredTranslations.length > 0 && (
               <div className="bible-version-library__section">
                 <div className="bible-version-library__section-header">
-                  INSTALLED
+                  {t("bible.installed")}
                 </div>
                 <div className="bible-version-library__list">
                   {filteredTranslations.map((translation) => (
@@ -162,7 +164,7 @@ export default function BibleVersionLibrary({
             {filteredTranslations.length === 0 && (
               <div className="bible-version-library__empty">
                 <Icon name="search_off" size={20} />
-                <span>No versions found</span>
+                <span>{t("bible.noVersionsFound")}</span>
               </div>
             )}
           </div>

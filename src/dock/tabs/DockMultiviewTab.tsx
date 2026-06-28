@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { useDockObsReady } from "../useDockObsReady";
@@ -165,6 +166,7 @@ function SlotControl({
   onClear: () => void;
   obsScenes: string[];
 }) {
+  const { t } = useTranslation();
   if (isSceneType(slot.contentType)) {
     return (
       <div className="dock-mv-assign-row__control">
@@ -173,11 +175,11 @@ function SlotControl({
           value={value}
           onChange={(e) => onChange(e.target.value)}
         >
-          <option value="">— Select scene —</option>
+          <option value="">— {t('multiview.selectScene')} —</option>
           {obsScenes.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         {value && (
-          <button type="button" className="dock-mv-assign-row__clear" onClick={onClear} title="Clear">
+          <button type="button" className="dock-mv-assign-row__clear" onClick={onClear} title={t('common.clear')}>
             <Icon name="close" size={12} />
           </button>
         )}
@@ -193,10 +195,10 @@ function SlotControl({
           type="url"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="https://example.com"
+          placeholder={t('multiview.urlPlaceholder')}
         />
         {value && (
-          <button type="button" className="dock-mv-assign-row__clear" onClick={onClear} title="Clear">
+          <button type="button" className="dock-mv-assign-row__clear" onClick={onClear} title={t('common.clear')}>
             <Icon name="close" size={12} />
           </button>
         )}
@@ -212,10 +214,10 @@ function SlotControl({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Image path or URL"
+          placeholder={t('multiview.imagePathPlaceholder')}
         />
         {value && (
-          <button type="button" className="dock-mv-assign-row__clear" onClick={onClear} title="Clear">
+          <button type="button" className="dock-mv-assign-row__clear" onClick={onClear} title={t('common.clear')}>
             <Icon name="close" size={12} />
           </button>
         )}
@@ -230,10 +232,10 @@ function SlotControl({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Value"
+        placeholder={t('multiview.value')}
       />
       {value && (
-        <button type="button" className="dock-mv-assign-row__clear" onClick={onClear} title="Clear">
+        <button type="button" className="dock-mv-assign-row__clear" onClick={onClear} title={t('common.clear')}>
           <Icon name="close" size={12} />
         </button>
       )}
@@ -254,6 +256,7 @@ function DeleteModal({
   onConfirm: (deleteObsScene: boolean) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [deleteObs, setDeleteObs] = useState(false);
 
   return (
@@ -261,12 +264,12 @@ function DeleteModal({
       <div className="dock-mv-modal" onClick={(e) => e.stopPropagation()}>
         <div className="dock-mv-modal__header">
           <Icon name="warning" size={16} />
-          <span className="dock-mv-modal__title">Delete Multi-View Layout?</span>
+          <span className="dock-mv-modal__title">{t('multiview.deleteLayout')}</span>
         </div>
         <p className="dock-mv-modal__body">
-          Are you sure you want to delete <strong>{mvName}</strong>?
+          {t('multiview.areYouSure')} <strong>{mvName}</strong>?
           <br />
-          <span style={{ color: "var(--dock-text-dim)", fontSize: 10 }}>This action cannot be undone.</span>
+          <span style={{ color: "var(--dock-text-dim)", fontSize: 10 }}>{t('multiview.deleteConfirm')}</span>
         </p>
         <label className="dock-mv-modal__checkbox">
           <input
@@ -274,18 +277,18 @@ function DeleteModal({
             checked={deleteObs}
             onChange={(e) => setDeleteObs(e.target.checked)}
           />
-          <span>Also delete generated OBS scene</span>
+          <span>{t('multiview.alsoDeleteScene')}</span>
         </label>
         <div className="dock-mv-modal__actions">
           <button type="button" className="dock-btn dock-btn--sm" onClick={onCancel}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="button"
             className="dock-btn dock-btn--sm dock-btn--danger"
             onClick={() => onConfirm(deleteObs)}
           >
-            Delete
+            {t('common.delete')}
           </button>
         </div>
       </div>
@@ -313,9 +316,17 @@ function BackgroundPicker({
   onChange: (bg: MVBackground) => void;
   obsScenes: string[];
 }) {
+  const { t } = useTranslation();
   const imgInputRef = useRef<HTMLInputElement>(null);
   const vidInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+
+  const bgTypeLabels: Record<MVBgType, string> = {
+    color: t('multiview.color'),
+    image: t('multiview.image'),
+    video: t('multiview.video'),
+    scene: t('multiview.scene'),
+  };
 
   const handleFileUpload = useCallback(async (file: File, type: "image" | "video") => {
     setUploading(true);
@@ -335,7 +346,7 @@ function BackgroundPicker({
   return (
     <div className="dock-mv-bg">
       <div className="dock-mv-bg__header">
-        <span>Background</span>
+        <span>{t('multiview.background')}</span>
       </div>
       <div className="dock-mv-bg__types">
         {BG_TYPE_OPTIONS.map(opt => (
@@ -345,7 +356,7 @@ function BackgroundPicker({
             className={`dock-mv-bg__type-btn${background.type === opt.type ? " dock-mv-bg__type-btn--active" : ""}`}
             onClick={() => onChange({ ...background, type: opt.type })}
           >
-            {opt.label}
+            {bgTypeLabels[opt.type]}
           </button>
         ))}
       </div>
@@ -375,13 +386,13 @@ function BackgroundPicker({
             type="text"
             value={background.filePath}
             onChange={(e) => onChange({ ...background, filePath: e.target.value })}
-            placeholder="Absolute file path…"
+            placeholder={t('multiview.absolutePathPlaceholder')}
           />
           <button
             type="button"
             className="dock-mv-bg__browse-btn"
             onClick={() => imgInputRef.current?.click()}
-            title="Browse & upload"
+            title={t('multiview.browseAndUpload')}
             disabled={uploading}
           >
             {uploading ? <Icon name="hourglass_top" size={13} /> : <Icon name="folder_open" size={13} />}
@@ -407,13 +418,13 @@ function BackgroundPicker({
             type="text"
             value={background.filePath}
             onChange={(e) => onChange({ ...background, filePath: e.target.value })}
-            placeholder="Absolute file path…"
+            placeholder={t('multiview.absolutePathPlaceholder')}
           />
           <button
             type="button"
             className="dock-mv-bg__browse-btn"
             onClick={() => vidInputRef.current?.click()}
-            title="Browse & upload"
+            title={t('multiview.browseAndUpload')}
             disabled={uploading}
           >
             {uploading ? <Icon name="hourglass_top" size={13} /> : <Icon name="folder_open" size={13} />}
@@ -439,7 +450,7 @@ function BackgroundPicker({
             value={background.sceneName}
             onChange={(e) => onChange({ ...background, sceneName: e.target.value })}
           >
-            <option value="">— Select scene —</option>
+            <option value="">— {t('multiview.selectScene')} —</option>
             {obsScenes.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
@@ -487,6 +498,7 @@ function MVCard({
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(mv.name);
@@ -538,7 +550,7 @@ function MVCard({
           ) : (
             <span className="dock-mv-card__name">
               {mv.name}
-              {isActive && <span className="dock-mv-card__badge">ON</span>}
+              {isActive && <span className="dock-mv-card__badge">{t('multiview.on')}</span>}
             </span>
           )}
           <span className="dock-mv-card__id">{shortId(index)}</span>
@@ -550,7 +562,7 @@ function MVCard({
             type="button"
             className="dock-mv-card__menu-btn"
             onClick={() => setMenuOpen(!menuOpen)}
-            title="Actions"
+            title={t('multiview.actions')}
           >
             <Icon name="more_vert" size={14} />
           </button>
@@ -562,7 +574,7 @@ function MVCard({
                 onClick={() => { setRenaming(true); setRenameValue(mv.name); setMenuOpen(false); }}
               >
                 <Icon name="drive_file_rename_outline" size={13} />
-                <span>Rename</span>
+                <span>{t('multiview.rename')}</span>
               </button>
               <button
                 type="button"
@@ -570,7 +582,7 @@ function MVCard({
                 onClick={() => { onDuplicate(mv.id); setMenuOpen(false); }}
               >
                 <Icon name="content_copy" size={13} />
-                <span>Duplicate</span>
+                <span>{t('multiview.duplicate')}</span>
               </button>
               <div className="dock-mv-card__menu-divider" />
               <button
@@ -579,7 +591,7 @@ function MVCard({
                 onClick={() => { onDelete(mv.id); setMenuOpen(false); }}
               >
                 <Icon name="delete" size={13} />
-                <span>Delete</span>
+                <span>{t('multiview.delete')}</span>
               </button>
             </div>
           )}
@@ -588,7 +600,7 @@ function MVCard({
 
       {/* Template Dropdown */}
       <div className="dock-mv-card__template">
-        <label className="dock-mv-card__template-label">Template</label>
+        <label className="dock-mv-card__template-label">{t('multiview.template')}</label>
         <select
           className="dock-mv-field__select"
           value={mv.layoutId}
@@ -620,7 +632,7 @@ function MVCard({
           <div className="dock-mv-assign-section">
             <div className="dock-mv-assign-header">
               <Icon name="videocam" size={13} />
-              <span>Scene Assignments</span>
+              <span>{t('multiview.sceneAssignments')}</span>
               <span className="dock-mv-assign-count">
                 {assignedCount}/{layout.slots.length}
               </span>
@@ -659,7 +671,7 @@ function MVCard({
           style={{ flex: 1 }}
         >
           <Icon name="cast" size={14} />
-          <span>{isPushing ? "Pushing…" : "Push to OBS"}</span>
+          <span>{isPushing ? t('multiview.pushing') : t('multiview.pushToObs')}</span>
         </button>
         {isActive && (
           <button
@@ -674,7 +686,7 @@ function MVCard({
             }}
           >
             <Icon name="visibility_off" size={14} />
-            <span>{isClearing ? "Clearing…" : "Clear"}</span>
+            <span>{isClearing ? t('multiview.clearing') : t('common.clear')}</span>
           </button>
         )}
       </div>
@@ -687,6 +699,7 @@ function MVCard({
 // ---------------------------------------------------------------------------
 
 export default function DockMultiviewTab() {
+  const { t } = useTranslation();
   const [savedList, setSavedList] = useState<SavedMultiView[]>([]);
   const [activeNames, setActiveNames] = useState<Set<string>>(new Set());
   const [obsScenes, setObsScenes] = useState<string[]>([]);
@@ -768,8 +781,8 @@ export default function DockMultiviewTab() {
     const next = [mv, ...savedList];
     setSavedList(next);
     saveSaved(next);
-    showFeedback("success", "New Multi-View created");
-  }, [savedList, showFeedback]);
+    showFeedback("success", t('multiview.newCreated'));
+  }, [savedList, showFeedback, t]);
 
   const handleUpdateName = useCallback((id: string, name: string) => {
     const next = savedList.map(m => m.id === id ? { ...m, name, updatedAt: new Date().toISOString() } : m);
@@ -840,8 +853,8 @@ export default function DockMultiviewTab() {
       dockObsClient.call("RemoveScene", { sceneName }).catch(() => { });
     }
 
-    showFeedback("success", "Deleted");
-  }, [savedList, showFeedback]);
+    showFeedback("success", t('common.delete'));
+  }, [savedList, showFeedback, t]);
 
   // ════════════════════════════════════════════════════════════════════════
   // OBS Operations
@@ -862,10 +875,10 @@ export default function DockMultiviewTab() {
     if (!dockObsClient.isConnected) return;
 
     const layout = resolveLayout(mv.layoutId);
-    if (!layout) { showFeedback("error", "Layout template not found"); return; }
+    if (!layout) { showFeedback("error", t('multiview.layoutNotFound')); return; }
 
     const hasAny = Object.values(mv.assignments).some(v => v);
-    if (!hasAny) { showFeedback("error", "Assign at least one scene before pushing"); return; }
+    if (!hasAny) { showFeedback("error", t('multiview.assignBeforePush')); return; }
 
     setPushingId(mv.id);
     try {
@@ -971,11 +984,11 @@ export default function DockMultiviewTab() {
       showFeedback("success", `"${sceneName}" pushed to OBS`);
       scanObs();
     } catch (err) {
-      showFeedback("error", err instanceof Error ? err.message : "Push failed");
+      showFeedback("error", err instanceof Error ? err.message : t('multiview.pushFailed'));
     } finally {
       if (mountedRef.current) setPushingId(null);
     }
-  }, [ensureScene, scanObs, showFeedback]);
+  }, [ensureScene, scanObs, showFeedback, t]);
 
   const handleClear = useCallback(async (mv: SavedMultiView) => {
     await ensureObsConnected();
@@ -1019,7 +1032,7 @@ export default function DockMultiviewTab() {
       <div className="dock-mv-tab__header">
         <div className="dock-mv-tab__title-row">
           <Icon name="grid_view" size={16} />
-          <span className="dock-mv-tab__title">Multi-View</span>
+          <span className="dock-mv-tab__title">{t('multiview.title')}</span>
           {savedList.length > 0 && (
             <span className="dock-mv-tab__count">{savedList.length}</span>
           )}
@@ -1029,10 +1042,10 @@ export default function DockMultiviewTab() {
             type="button"
             className="dock-btn dock-btn--sm dock-btn--primary"
             onClick={handleAdd}
-            title="Add Multi-View"
+            title={t('multiview.addView')}
           >
             <Icon name="add" size={14} />
-            <span>Add</span>
+            <span>{t('common.add')}</span>
           </button>
         </div>
       </div>
@@ -1053,9 +1066,9 @@ export default function DockMultiviewTab() {
         {savedList.length === 0 ? (
           <div className="dock-mv-tab__empty">
             <Icon name="grid_view" size={28} />
-            <span className="dock-mv-tab__empty-title">No Multi-Views yet</span>
+            <span className="dock-mv-tab__empty-title">{t('multiview.noViews')}</span>
             <span className="dock-mv-tab__empty-text">
-              Click <strong>Add</strong> to create your first Multi-View.
+              {t('common.add')} — {t('multiview.addView')}
             </span>
           </div>
         ) : (

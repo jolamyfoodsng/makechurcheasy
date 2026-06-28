@@ -26,6 +26,7 @@ export interface AuthUser {
   entitlements?: Record<string, number | boolean>;
   trial?: {
     active?: boolean;
+    status?: string;
     startedAt?: string;
     endsAt?: string;
     durationDays?: number;
@@ -255,11 +256,20 @@ export async function refreshPlanFromServer(): Promise<void> {
     const roleChanged = remote.role && remote.role !== current.role;
     const remoteTrial = remote.trial || {};
     const currentTrial = current.trial || {};
-    const trialChanged =
+    const trialActiveChanged =
+      (remoteTrial.active ?? false) !== (currentTrial.active ?? false);
+    const trialDatesChanged =
       remoteTrial.endsAt !== currentTrial.endsAt ||
       remoteTrial.startedAt !== currentTrial.startedAt;
+    const trialChanged = trialActiveChanged || trialDatesChanged;
 
     if (planChanged || roleChanged || trialChanged) {
+      console.debug(
+        "[authService] refreshPlanFromServer: changes detected — plan=%s→%s role=%s trial.active=%s→%s trial.status=%s",
+        current.plan, remote.plan, remote.role ?? current.role,
+        currentTrial.active, remoteTrial.active,
+        remoteTrial.status ?? currentTrial.status,
+      );
       const updated: AuthSession = {
         ..._session,
         user: {
@@ -268,6 +278,7 @@ export async function refreshPlanFromServer(): Promise<void> {
           role: remote.role || current.role,
           trial: {
             active: remoteTrial.active ?? currentTrial.active,
+            status: remoteTrial.status ?? currentTrial.status,
             startedAt: remoteTrial.startedAt || currentTrial.startedAt,
             endsAt: remoteTrial.endsAt || currentTrial.endsAt,
             durationDays: remoteTrial.durationDays ?? currentTrial.durationDays,

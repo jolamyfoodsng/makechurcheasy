@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import { HexColorPicker } from "react-colorful";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { BibleTheme } from "../../bible/types";
 import type { MediaItem } from "../../library/libraryTypes";
 import Icon from "../DockIcon";
@@ -32,11 +33,11 @@ interface Props {
 const BG_TYPE_KEY = "dtb-bg-picker-type";
 
 const BG_OPTIONS: Array<{ id: BackgroundType; label: string; icon: string }> = [
-  { id: "off", label: "Off", icon: "block" },
-  { id: "theme", label: "Theme", icon: "palette" },
-  { id: "color", label: "Color", icon: "color_lens" },
-  { id: "image", label: "Image", icon: "image" },
-  { id: "video", label: "Video", icon: "videocam" },
+  { id: "off", label: "bgPicker.off", icon: "block" },
+  { id: "theme", label: "bgPicker.theme", icon: "palette" },
+  { id: "color", label: "common.color", icon: "color_lens" },
+  { id: "image", label: "common.image", icon: "image" },
+  { id: "video", label: "common.video", icon: "videocam" },
 ];
 
 /* ── Helpers ── */
@@ -88,6 +89,7 @@ export default function BackgroundPickerCard({
   showReferences = true,
   overlayMode = "fullscreen",
 }: Props) {
+  const { t } = useTranslation();
   const [bgType, setBgType] = useState<BackgroundType>(() => {
     try {
       const stored = localStorage.getItem(getUserScopedKey(BG_TYPE_KEY));
@@ -194,15 +196,15 @@ export default function BackgroundPickerCard({
 
   const modeLabel = useMemo(() => {
     switch (bgType) {
-      case "off": return "Background disabled";
-      case "theme": return "Using theme background";
+      case "off": return t('bgPicker.bgDisabled');
+      case "theme": return t('bgPicker.usingThemeBg');
       case "color": {
         const c = quickSettings.backgroundColor || "#0F172A";
         const end = quickSettings.backgroundColorEnd;
-        return end ? `Gradient · ${c} → ${end}` : `Solid · ${c}`;
+        return end ? `${t('bgPicker.gradient')} · ${c} → ${end}` : `${t('bgPicker.solid')} · ${c}`;
       }
-      case "image": return quickSettings.backgroundImage ? "Image background active" : "No image selected";
-      case "video": return quickSettings.backgroundVideo ? "Video background active" : "No video selected";
+      case "image": return quickSettings.backgroundImage ? t('bgPicker.imageBgActive') : t('bgPicker.noImageSelected');
+      case "video": return quickSettings.backgroundVideo ? t('bgPicker.videoBgActive') : t('bgPicker.noVideoSelected');
       default: return "";
     }
   }, [bgType, quickSettings.backgroundColor, quickSettings.backgroundColorEnd, quickSettings.backgroundImage, quickSettings.backgroundVideo]);
@@ -214,10 +216,10 @@ export default function BackgroundPickerCard({
         <div className="dtb-bg-picker__header">
           <div className="dtb-bg-picker__header-left">
             <Icon name="wallpaper" size={14} className="dtb-studio-card__icon" />
-            <span className="dtb-studio-card__title">Background</span>
+            <span className="dtb-studio-card__title">{t('bgPicker.background')}</span>
           </div>
         </div>
-        <p className="dtb-bg-picker__subtitle">Choose the background for your screen.</p>
+        <p className="dtb-bg-picker__subtitle">{t('bgPicker.chooseBackground')}</p>
 
         {/* Dropdown Selector */}
         <div className="dtb-bg-dropdown" ref={dropdownRef}>
@@ -229,7 +231,7 @@ export default function BackgroundPickerCard({
             aria-haspopup="listbox"
           >
             <Icon name={selectedOption.icon} size={15} className="dtb-bg-dropdown__icon" />
-            <span className="dtb-bg-dropdown__label">{selectedOption.label}</span>
+            <span className="dtb-bg-dropdown__label">{t(selectedOption.label)}</span>
             <Icon name={dropdownOpen ? "expand_less" : "expand_more"} size={16} className="dtb-bg-dropdown__chevron" />
           </button>
 
@@ -245,7 +247,7 @@ export default function BackgroundPickerCard({
                   onClick={() => handleTypeChange(option.id)}
                 >
                   <Icon name={option.icon} size={14} className="dtb-bg-dropdown__item-icon" />
-                  <span className="dtb-bg-dropdown__item-label">{option.label}</span>
+                  <span className="dtb-bg-dropdown__item-label">{t(option.label)}</span>
                   {bgType === option.id && (
                     <Icon name="check" size={14} className="dtb-bg-dropdown__check" />
                   )}
@@ -298,7 +300,7 @@ export default function BackgroundPickerCard({
           <div className="dtb-bg-picker__settings">
             <div className="dtb-slider-field">
               <div className="dtb-slider-field__head">
-                <span>Overlay darkness</span>
+                <span>{t('bgPicker.overlayDarkness')}</span>
                 <span className="dtb-slider-field__value">
                   {Math.round(quickSettings.fullscreenShadeOpacity * 100)}%
                 </span>
@@ -316,12 +318,12 @@ export default function BackgroundPickerCard({
                     fullscreenShadeOpacity: Number(e.target.value) / 100,
                   }))
                 }
-                aria-label="Overlay darkness"
+                aria-label={t('bgPicker.overlayDarkness')}
               />
             </div>
             <div className="dtb-slider-field">
               <div className="dtb-slider-field__head">
-                <span>Background opacity</span>
+                <span>{t('bgPicker.backgroundOpacity')}</span>
                 <span className="dtb-slider-field__value">
                   {Math.round(quickSettings.backgroundOpacity * 100)}%
                 </span>
@@ -339,7 +341,7 @@ export default function BackgroundPickerCard({
                     backgroundOpacity: Number(e.target.value) / 100,
                   }))
                 }
-                aria-label="Background opacity"
+                aria-label={t('bgPicker.backgroundOpacity')}
               />
             </div>
           </div>
@@ -347,11 +349,11 @@ export default function BackgroundPickerCard({
 
         {/* ── Text Section ── */}
         <div className="dtb-bg-picker__settings">
-          <div className="dtb-section-title">Text</div>
+          <div className="dtb-section-title">{t('bgPicker.text')}</div>
 
           {/* Text Color */}
           <div className="dtb-color-field">
-            <span className="dtb-color-field__label">Color</span>
+            <span className="dtb-color-field__label">{t('common.color')}</span>
             <InlineColorPicker
               value={quickSettings.fontColor ?? "#ffffff"}
               onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, fontColor: v }))}
@@ -361,7 +363,7 @@ export default function BackgroundPickerCard({
           {/* Font Size */}
           <div className="dtb-slider-field">
             <div className="dtb-slider-field__head">
-              <span>Font size</span>
+              <span>{t('bgPicker.fontSize')}</span>
               <span className="dtb-slider-field__value">{quickSettings.fontSize}px</span>
             </div>
             <input
@@ -372,13 +374,13 @@ export default function BackgroundPickerCard({
               step={1}
               value={quickSettings.fontSize}
               onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, fontSize: Number(e.target.value) }))}
-              aria-label="Font size"
+              aria-label={t('bgPicker.fontSize')}
             />
           </div>
 
           {/* Weight */}
           <div className="dtb-font-weight-row">
-            <span className="dtb-position-label">Weight</span>
+            <span className="dtb-position-label">{t('bgPicker.weight')}</span>
             <div className="dtb-position-options">
               {(["light", "normal", "bold"] as const).map((w) => (
                 <button
@@ -388,7 +390,7 @@ export default function BackgroundPickerCard({
                   onClick={() => onQuickSettingsChange((prev) => ({ ...prev, fontWeight: w }))}
                   style={{ fontWeight: w === "bold" ? 700 : w === "light" ? 300 : 500 }}
                 >
-                  {w === "light" ? "Light" : w === "bold" ? "Bold" : "Regular"}
+                  {w === "light" ? t('bgPicker.light') : w === "bold" ? t('bgPicker.bold') : t('bgPicker.regular')}
                 </button>
               ))}
             </div>
@@ -396,7 +398,7 @@ export default function BackgroundPickerCard({
 
           {/* Alignment */}
           <div className="dtb-font-weight-row">
-            <span className="dtb-position-label">Alignment</span>
+            <span className="dtb-position-label">{t('bgPicker.alignment')}</span>
             <div className="dtb-position-options">
               {(["left", "center", "right"] as const).map((a) => (
                 <button
@@ -405,7 +407,7 @@ export default function BackgroundPickerCard({
                   className={`dtb-position-btn${quickSettings.textAlign === a ? " dtb-position-btn--active" : ""}`}
                   onClick={() => onQuickSettingsChange((prev) => ({ ...prev, textAlign: a }))}
                 >
-                  {a.charAt(0).toUpperCase() + a.slice(1)}
+                  {a === "left" ? t('common.left') : a === "center" ? t('common.center') : t('common.right')}
                 </button>
               ))}
             </div>
@@ -414,7 +416,7 @@ export default function BackgroundPickerCard({
           {/* Line Height */}
           <div className="dtb-slider-field">
             <div className="dtb-slider-field__head">
-              <span>Line height</span>
+              <span>{t('bgPicker.lineHeight')}</span>
               <span className="dtb-slider-field__value">{quickSettings.lineHeight.toFixed(2)}x</span>
             </div>
             <input
@@ -425,13 +427,13 @@ export default function BackgroundPickerCard({
               step={0.01}
               value={quickSettings.lineHeight}
               onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, lineHeight: Number(e.target.value) }))}
-              aria-label="Line height"
+              aria-label={t('bgPicker.lineHeight')}
             />
           </div>
 
           {/* Text Case */}
           <div className="dtb-font-weight-row">
-            <span className="dtb-position-label">Text case</span>
+            <span className="dtb-position-label">{t('bgPicker.textCase')}</span>
             <div className="dtb-position-options">
               {(["none", "uppercase", "lowercase", "capitalize"] as const).map((tc) => (
                 <button
@@ -467,6 +469,7 @@ function ImageTab({
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
 }) {
+  const { t } = useTranslation();
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -564,7 +567,7 @@ function ImageTab({
           <input
             type="text"
             className="dtb-bg-picker__search-input"
-            placeholder="Search images..."
+            placeholder={t('bgPicker.searchImages')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -573,7 +576,7 @@ function ImageTab({
               type="button"
               className="dtb-bg-picker__search-clear"
               onClick={() => setSearch("")}
-              aria-label="Clear search"
+              aria-label={t('bgPicker.clearSearch')}
             >
               <Icon name="close" size={11} />
             </button>
@@ -585,7 +588,7 @@ function ImageTab({
           onClick={() => fileInputRef.current?.click()}
         >
           <Icon name="add_photo_alternate" size={13} />
-          Upload
+          {t('common.upload')}
         </button>
         <input
           ref={fileInputRef}
@@ -599,12 +602,12 @@ function ImageTab({
 
       {loading ? (
         <div className="dtb-bg-picker__empty">
-          <span>Loading images...</span>
+          <span>{t('bgPicker.loadingImages')}</span>
         </div>
       ) : filtered.length === 0 ? (
         <div className="dtb-bg-picker__empty">
           <Icon name="image" size={20} />
-          <span>{search ? "No images match this search." : "No images uploaded yet."}</span>
+          <span>{search ? t('bgPicker.noImagesMatch') : t('bgPicker.noImagesUploaded')}</span>
         </div>
       ) : (
         <div className="dtb-bg-picker__grid">
@@ -648,6 +651,7 @@ function VideoTab({
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
 }) {
+  const { t } = useTranslation();
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -745,7 +749,7 @@ function VideoTab({
           <input
             type="text"
             className="dtb-bg-picker__search-input"
-            placeholder="Search videos..."
+            placeholder={t('bgPicker.searchVideos')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -754,7 +758,7 @@ function VideoTab({
               type="button"
               className="dtb-bg-picker__search-clear"
               onClick={() => setSearch("")}
-              aria-label="Clear search"
+              aria-label={t('bgPicker.clearSearch')}
             >
               <Icon name="close" size={11} />
             </button>
@@ -766,7 +770,7 @@ function VideoTab({
           onClick={() => fileInputRef.current?.click()}
         >
           <Icon name="videocam" size={13} />
-          Upload
+          {t('common.upload')}
         </button>
         <input
           ref={fileInputRef}
@@ -780,12 +784,12 @@ function VideoTab({
 
       {loading ? (
         <div className="dtb-bg-picker__empty">
-          <span>Loading videos...</span>
+          <span>{t('bgPicker.loadingVideos')}</span>
         </div>
       ) : filtered.length === 0 ? (
         <div className="dtb-bg-picker__empty">
           <Icon name="videocam" size={20} />
-          <span>{search ? "No videos match this search." : "No videos uploaded yet."}</span>
+          <span>{search ? t('bgPicker.noVideosMatch') : t('bgPicker.noVideosUploaded')}</span>
         </div>
       ) : (
         <div className="dtb-bg-picker__grid">
@@ -839,6 +843,7 @@ function ColorSection({
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
 }) {
+  const { t } = useTranslation();
   const isGradient = !!(quickSettings.backgroundColor && quickSettings.backgroundColorEnd);
   const colorStart = quickSettings.backgroundColor || "#0F172A";
   const colorEnd = quickSettings.backgroundColorEnd || "#000000";
@@ -869,7 +874,7 @@ function ColorSection({
             }}
           >
             <Icon name="stop" size={13} />
-            Solid
+            {t('bgPicker.solid')}
           </button>
           <button
             type="button"
@@ -884,7 +889,7 @@ function ColorSection({
             }}
           >
             <Icon name="palette" size={13} />
-            Gradient
+            {t('bgPicker.gradient')}
           </button>
         </div>
       </div>
@@ -892,7 +897,7 @@ function ColorSection({
       {/* ── Solid mode: color swatch ── */}
       {!isGradient && (
         <div className="dtb-colors__section">
-          <span className="dtb-colors__label">Color</span>
+          <span className="dtb-colors__label">{t('common.color')}</span>
           <InlineColorPicker
             value={colorStart}
             onChange={(v) => pushChange((prev) => ({ ...prev, backgroundColor: v }))}
@@ -920,14 +925,14 @@ function ColorSection({
           <div className="dtb-colors__section">
             <div className="dtb-gradient-colors-row">
               <div className="dtb-gradient-colors-row__item">
-                <span className="dtb-colors__label">Start</span>
+                <span className="dtb-colors__label">{t('bgPicker.start')}</span>
                 <InlineColorPicker
                   value={colorStart}
                   onChange={(v) => pushChange((prev) => ({ ...prev, backgroundColor: v }))}
                 />
               </div>
               <div className="dtb-gradient-colors-row__item">
-                <span className="dtb-colors__label">End</span>
+                <span className="dtb-colors__label">{t('bgPicker.end')}</span>
                 <InlineColorPicker
                   value={colorEnd}
                   onChange={(v) => pushChange((prev) => ({ ...prev, backgroundColorEnd: v }))}
@@ -940,7 +945,7 @@ function ColorSection({
           <div className="dtb-colors__section">
             <div className="dtb-slider-field">
               <div className="dtb-slider-field__head">
-                <span>Angle</span>
+                <span>{t('bgPicker.angle')}</span>
                 <span className="dtb-slider-field__value">{angle}°</span>
               </div>
               <input
@@ -956,7 +961,7 @@ function ColorSection({
                     bgGradientAngle: Number(e.target.value),
                   }))
                 }
-                aria-label="Gradient angle"
+                aria-label={t('bgPicker.angle')}
               />
             </div>
           </div>
@@ -1003,7 +1008,7 @@ function ColorSection({
       <div className="dtb-colors__section">
         <div className="dtb-slider-field">
           <div className="dtb-slider-field__head">
-            <span>Darkness</span>
+            <span>{t('bgPicker.darkness')}</span>
             <span className="dtb-slider-field__value">
               {Math.round(quickSettings.fullscreenShadeOpacity * 100)}%
             </span>
@@ -1021,7 +1026,7 @@ function ColorSection({
                 fullscreenShadeOpacity: Number(e.target.value) / 100,
               }))
             }
-            aria-label="Darkness"
+            aria-label={t('bgPicker.darkness')}
           />
         </div>
       </div>
@@ -1030,7 +1035,7 @@ function ColorSection({
       <div className="dtb-colors__section">
         <div className="dtb-slider-field">
           <div className="dtb-slider-field__head">
-            <span>Opacity</span>
+            <span>{t('bgPicker.opacity')}</span>
             <span className="dtb-slider-field__value">
               {Math.round(quickSettings.backgroundOpacity * 100)}%
             </span>
@@ -1048,7 +1053,7 @@ function ColorSection({
                 backgroundOpacity: Number(e.target.value) / 100,
               }))
             }
-            aria-label="Opacity"
+            aria-label={t('bgPicker.opacity')}
           />
         </div>
       </div>
@@ -1084,6 +1089,7 @@ function ReferenceSection({
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
 }) {
+  const { t } = useTranslation();
   const refPosition = quickSettings.refPosition ?? "bottom";
   const refFontSize = quickSettings.refFontSize ?? 24;
   const refFontWeight = quickSettings.refFontWeight ?? "normal";
@@ -1095,11 +1101,11 @@ function ReferenceSection({
 
   return (
     <div className="dtb-bg-picker__settings">
-      <div className="dtb-section-title">Reference</div>
+      <div className="dtb-section-title">{t('bgPicker.reference')}</div>
 
       {/* Reference Position */}
       <div className="dtb-position-row">
-        <span className="dtb-position-label">Position</span>
+        <span className="dtb-position-label">{t('bgPicker.position')}</span>
         <div className="dtb-position-options">
           {(["top", "bottom"] as const).map((pos) => (
             <button
@@ -1108,7 +1114,7 @@ function ReferenceSection({
               className={`dtb-position-btn${refPosition === pos ? " dtb-position-btn--active" : ""}`}
               onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refPosition: pos }))}
             >
-              {pos === "top" ? "Above verse" : "Below verse"}
+              {pos === "top" ? t('bgPicker.aboveVerse') : t('bgPicker.belowVerse')}
             </button>
           ))}
         </div>
@@ -1117,7 +1123,7 @@ function ReferenceSection({
       {/* Reference Font Size */}
       <div className="dtb-slider-field">
         <div className="dtb-slider-field__head">
-          <span>Font size</span>
+          <span>{t('bgPicker.fontSize')}</span>
           <span className="dtb-slider-field__value">{refFontSize}px</span>
         </div>
         <input
@@ -1128,13 +1134,13 @@ function ReferenceSection({
           step={1}
           value={refFontSize}
           onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, refFontSize: Number(e.target.value) }))}
-          aria-label="Reference font size"
+          aria-label={t('bgPicker.refFontSize')}
         />
       </div>
 
       {/* Reference Font Weight */}
       <div className="dtb-font-weight-row">
-        <span className="dtb-position-label">Weight</span>
+        <span className="dtb-position-label">{t('bgPicker.weight')}</span>
         <div className="dtb-position-options">
           {(["light", "normal", "bold"] as const).map((w) => (
             <button
@@ -1144,7 +1150,7 @@ function ReferenceSection({
               onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refFontWeight: w }))}
               style={{ fontWeight: w === "bold" ? 700 : w === "light" ? 300 : 500 }}
             >
-              {w === "light" ? "Light" : w === "bold" ? "Bold" : "Normal"}
+              {w === "light" ? t('bgPicker.light') : w === "bold" ? t('bgPicker.bold') : t('bgPicker.normal')}
             </button>
           ))}
         </div>
@@ -1152,7 +1158,7 @@ function ReferenceSection({
 
       {/* Reference Color */}
       <div className="dtb-color-field">
-        <span className="dtb-color-field__label">Color</span>
+        <span className="dtb-color-field__label">{t('common.color')}</span>
         <InlineColorPicker
           value={quickSettings.refFontColor ?? "#cccccc"}
           onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, refFontColor: v }))}
@@ -1161,7 +1167,7 @@ function ReferenceSection({
 
       {/* Reference Text Case */}
       <div className="dtb-font-weight-row">
-        <span className="dtb-position-label">Text case</span>
+        <span className="dtb-position-label">{t('bgPicker.textCase')}</span>
         <div className="dtb-position-options">
           {(["none", "uppercase", "lowercase", "capitalize"] as const).map((tc) => (
             <button
@@ -1170,7 +1176,7 @@ function ReferenceSection({
               className={`dtb-position-btn${refTextTransform === tc ? " dtb-position-btn--active" : ""}`}
               onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refTextTransform: tc }))}
             >
-              {tc === "none" ? "Normal" : tc === "capitalize" ? "Title" : tc === "uppercase" ? "UPPER" : "lower"}
+              {tc === "none" ? t('bgPicker.normal') : tc === "capitalize" ? t('bgPicker.title') : tc === "uppercase" ? "UPPER" : "lower"}
             </button>
           ))}
         </div>
@@ -1178,7 +1184,7 @@ function ReferenceSection({
 
       {/* Reference Alignment */}
       <div className="dtb-font-weight-row">
-        <span className="dtb-position-label">Alignment</span>
+        <span className="dtb-position-label">{t('bgPicker.alignment')}</span>
         <div className="dtb-position-options">
           {(["match", "left", "center", "right"] as const).map((a) => (
             <button
@@ -1187,7 +1193,7 @@ function ReferenceSection({
               className={`dtb-position-btn${refTextAlign === a ? " dtb-position-btn--active" : ""}`}
               onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refTextAlign: a }))}
             >
-              {a === "match" ? "Match verse" : a.charAt(0).toUpperCase() + a.slice(1)}
+              {a === "match" ? t('bgPicker.matchVerse') : t(`common.${a}`)}
             </button>
           ))}
         </div>
@@ -1196,7 +1202,7 @@ function ReferenceSection({
       {/* Letter Spacing */}
       <div className="dtb-slider-field">
         <div className="dtb-slider-field__head">
-          <span>Letter spacing</span>
+          <span>{t('bgPicker.letterSpacing')}</span>
           <span className="dtb-slider-field__value">{refLetterSpacing}px</span>
         </div>
         <input
@@ -1207,14 +1213,14 @@ function ReferenceSection({
           step={0.5}
           value={refLetterSpacing}
           onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, refLetterSpacing: Number(e.target.value) }))}
-          aria-label="Reference letter spacing"
+          aria-label={t('bgPicker.letterSpacing')}
         />
       </div>
 
       {/* Spacing */}
       <div className="dtb-slider-field">
         <div className="dtb-slider-field__head">
-          <span>Spacing</span>
+          <span>{t('bgPicker.spacing')}</span>
           <span className="dtb-slider-field__value">{refSpacing}px</span>
         </div>
         <input
@@ -1225,14 +1231,14 @@ function ReferenceSection({
           step={1}
           value={refSpacing}
           onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, refSpacing: Number(e.target.value) }))}
-          aria-label="Reference spacing"
+          aria-label={t('bgPicker.spacing')}
         />
       </div>
 
       {/* Opacity */}
       <div className="dtb-slider-field">
         <div className="dtb-slider-field__head">
-          <span>Opacity</span>
+          <span>{t('common.opacity')}</span>
           <span className="dtb-slider-field__value">{Math.round(refOpacity * 100)}%</span>
         </div>
         <input
@@ -1243,7 +1249,7 @@ function ReferenceSection({
           step={1}
           value={Math.round(refOpacity * 100)}
           onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, refOpacity: Number(e.target.value) / 100 }))}
-          aria-label="Reference opacity"
+          aria-label={t('common.opacity')}
         />
       </div>
 
@@ -1264,13 +1270,14 @@ function ReferenceBackgroundSection({
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
 }) {
+  const { t } = useTranslation();
   const refBgEnabled = quickSettings.referenceBackgroundEnabled;
   const [styleOpen, setStyleOpen] = useState(true);
 
   return (
     <div className="dtb-colors__section">
       <div className="dtb-colors__toggle-row">
-        <span className="dtb-colors__label">Reference Background</span>
+        <span className="dtb-colors__label">{t('bgPicker.referenceBackground')}</span>
         <button
           type="button"
           className={`dtb-toggle${refBgEnabled ? " dtb-toggle--on" : ""}`}
@@ -1282,7 +1289,7 @@ function ReferenceBackgroundSection({
           }
           role="switch"
           aria-checked={refBgEnabled}
-          aria-label="Enable reference background"
+          aria-label={t('bgPicker.enableReferenceBackground')}
         >
           <span className="dtb-toggle__knob" />
         </button>
@@ -1301,15 +1308,15 @@ function ReferenceBackgroundSection({
             onClick={() => setStyleOpen((v) => !v)}
             aria-expanded={styleOpen}
           >
-            <span className="dtb-colors__sublabel">Style</span>
+            <span className="dtb-colors__sublabel">{t('bgPicker.style')}</span>
             <Icon name={styleOpen ? "expand_less" : "expand_more"} size={13} />
           </button>
           {styleOpen && (
             <div className="dtb-colors__style-cards">
               {([
-                { id: "solid" as const, label: "Solid", preview: "John 3:16" },
-                { id: "pill" as const, label: "Pill", preview: "John 3:16" },
-                { id: "outline" as const, label: "Outline", preview: "John 3:16" },
+                { id: "solid" as const, label: "bgPicker.solid", preview: "John 3:16" },
+                { id: "pill" as const, label: "bgPicker.pill", preview: "John 3:16" },
+                { id: "outline" as const, label: "bgPicker.outline", preview: "John 3:16" },
               ]).map((style) => {
                 const isActive = quickSettings.referenceBackgroundStyle === style.id;
                 const bg = quickSettings.referenceBackgroundColor;
@@ -1322,7 +1329,7 @@ function ReferenceBackgroundSection({
                       onQuickSettingsChange((prev) => ({ ...prev, referenceBackgroundStyle: style.id }))
                     }
                   >
-                    <span className="dtb-colors__style-card-label">{style.label}</span>
+                    <span className="dtb-colors__style-card-label">{t(style.label)}</span>
                     <span
                       className={`dtb-colors__style-card-preview dtb-colors__style-card-preview--${style.id}`}
                       style={{
@@ -1343,7 +1350,7 @@ function ReferenceBackgroundSection({
           <div className="dtb-colors__slider-row">
             <div className="dtb-slider-field">
               <div className="dtb-slider-field__head">
-                <span>Roundness</span>
+                <span>{t('common.cornerRadius')}</span>
                 <span className="dtb-slider-field__value">{quickSettings.referenceBackgroundRadius}px</span>
               </div>
               <input
@@ -1359,7 +1366,7 @@ function ReferenceBackgroundSection({
                     referenceBackgroundRadius: Number(e.target.value),
                   }))
                 }
-                aria-label="Reference background roundness"
+                aria-label={t('common.cornerRadius')}
               />
             </div>
           </div>
@@ -1383,6 +1390,7 @@ function ThemeSection({
 }) {
   const [themes, setThemes] = useState<BibleTheme[]>([]);
   const [loading, setLoading] = useState(true);
+  const { t } = useTranslation();
 
   useEffect(() => {
     let cancelled = false;
@@ -1418,8 +1426,8 @@ function ThemeSection({
   if (loading) {
     return (
       <div className="dtb-theme-section">
-        <span className="dtb-colors__label">Select Theme</span>
-        <div className="dtb-theme-section__loading">Loading themes…</div>
+        <span className="dtb-colors__label">{t('bgPicker.selectTheme')}</span>
+        <div className="dtb-theme-section__loading">{t('bgPicker.loadingThemes')}</div>
       </div>
     );
   }
@@ -1427,15 +1435,15 @@ function ThemeSection({
   if (themes.length === 0) {
     return (
       <div className="dtb-theme-section">
-        <span className="dtb-colors__label">Select Theme</span>
-        <div className="dtb-theme-section__empty">No themes found. Create one in the app.</div>
+        <span className="dtb-colors__label">{t('bgPicker.selectTheme')}</span>
+        <div className="dtb-theme-section__empty">{t('bgPicker.noThemesFound')}</div>
       </div>
     );
   }
 
   return (
     <div className="dtb-theme-section">
-      <span className="dtb-colors__label">Select Theme</span>
+      <span className="dtb-colors__label">{t('bgPicker.selectTheme')}</span>
       <div className="dtb-theme-section__grid">
         {themes.map((theme) => {
           const isActive = theme.id === selectedThemeId;
@@ -1533,6 +1541,7 @@ function PresetSection({
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const { t } = useTranslation();
 
   return (
     <div className="dtb-colors__section dtb-colors__section--collapsible">
@@ -1542,7 +1551,7 @@ function PresetSection({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <span className="dtb-colors__label">Theme Presets</span>
+        <span className="dtb-colors__label">{t('bgPicker.themePresets')}</span>
         <Icon name={open ? "expand_less" : "expand_more"} size={14} />
       </button>
       {open && (

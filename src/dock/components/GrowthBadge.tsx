@@ -4,6 +4,7 @@
  * Clicking opens the upgrade modal via dockEntitlement.
  */
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 
 interface GrowthBadgeProps {
   /** Feature label shown in tooltip */
@@ -15,6 +16,7 @@ interface GrowthBadgeProps {
 }
 
 export function GrowthBadge({ feature = "This feature", onClick, locked = false }: GrowthBadgeProps) {
+  const { t } = useTranslation();
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -45,7 +47,7 @@ export function GrowthBadge({ feature = "This feature", onClick, locked = false 
       <svg width="10" height="10" viewBox="0 0 16 16" fill="none" style={{ marginRight: 3 }}>
         <path d="M8 1L10 6L15 7L11.5 11L12.5 16L8 13.5L3.5 16L4.5 11L1 7L6 6L8 1Z" fill="currentColor" />
       </svg>
-      Growth+
+      {t('growth.tier')}
     </span>
   );
 }

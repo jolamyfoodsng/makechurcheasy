@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 import type {
   BibleHistoryItem,
@@ -38,20 +39,6 @@ interface Props {
 
 const PAGE_SIZE = 30;
 
-const FILTER_OPTIONS: Array<{ value: BibleHistoryFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "favorites", label: "Favorites" },
-  { value: "today", label: "Today" },
-  { value: "this-week", label: "This Week" },
-  { value: "this-month", label: "This Month" },
-];
-
-const SORT_OPTIONS: Array<{ value: BibleHistorySort; label: string }> = [
-  { value: "newest", label: "Newest First" },
-  { value: "oldest", label: "Oldest First" },
-  { value: "most-viewed", label: "Most Viewed" },
-];
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -78,6 +65,7 @@ function truncateText(text: string, max: number): string {
 // ---------------------------------------------------------------------------
 
 export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props) {
+  const { t } = useTranslation();
   const [allItems, setAllItems] = useState<BibleHistoryItem[]>(() => loadBibleHistory());
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<BibleHistoryFilter>("all");
@@ -87,6 +75,20 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const FILTER_OPTIONS: Array<{ value: BibleHistoryFilter; label: string }> = useMemo(() => [
+    { value: "all", label: t("bibleHistory.all") },
+    { value: "favorites", label: t("bibleHistory.favorites") },
+    { value: "today", label: t("bibleHistory.today") },
+    { value: "this-week", label: t("bibleHistory.thisWeek") },
+    { value: "this-month", label: t("bibleHistory.thisMonth") },
+  ], [t]);
+
+  const SORT_OPTIONS: Array<{ value: BibleHistorySort; label: string }> = useMemo(() => [
+    { value: "newest", label: t("bibleHistory.newestFirst") },
+    { value: "oldest", label: t("bibleHistory.oldestFirst") },
+    { value: "most-viewed", label: t("bibleHistory.mostViewed") },
+  ], [t]);
 
   // ── Refresh when screen opens ──
   useEffect(() => {
@@ -179,11 +181,11 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
           type="button"
           className="bible-history-header__back"
           onClick={onBack}
-          aria-label="Back to Bible"
+          aria-label={t("bibleHistory.backToBible")}
         >
           <Icon name="arrow_back" size={16} />
         </button>
-        <h2 className="bible-history-header__title">Bible History</h2>
+        <h2 className="bible-history-header__title">{t("bibleHistory.title")}</h2>
         <div className="bible-history-header__spacer" />
       </div>
 
@@ -193,7 +195,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
         <input
           className="bible-history-search__input"
           type="text"
-          placeholder="Search Bible history..."
+          placeholder={t("bibleHistory.searchPlaceholder")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           autoComplete="off"
@@ -206,7 +208,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
             type="button"
             className="bible-history-search__clear"
             onClick={() => setSearchQuery("")}
-            aria-label="Clear search"
+            aria-label={t("bibleHistory.clearSearch")}
           >
             <Icon name="close" size={13} />
           </button>
@@ -238,8 +240,8 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
         <div className="bible-history-sheet-backdrop" onClick={() => setShowFilterSheet(false)}>
           <div className="bible-history-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="bible-history-sheet__header">
-              <span className="bible-history-sheet__title">Filter</span>
-              <button type="button" className="bible-history-sheet__close" onClick={() => setShowFilterSheet(false)} aria-label="Close">
+              <span className="bible-history-sheet__title">{t("bibleHistory.filter")}</span>
+              <button type="button" className="bible-history-sheet__close" onClick={() => setShowFilterSheet(false)} aria-label={t("common.close")}>
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -263,8 +265,8 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
         <div className="bible-history-sheet-backdrop" onClick={() => setShowSortSheet(false)}>
           <div className="bible-history-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="bible-history-sheet__header">
-              <span className="bible-history-sheet__title">Sort</span>
-              <button type="button" className="bible-history-sheet__close" onClick={() => setShowSortSheet(false)} aria-label="Close">
+              <span className="bible-history-sheet__title">{t("bibleHistory.sort")}</span>
+              <button type="button" className="bible-history-sheet__close" onClick={() => setShowSortSheet(false)} aria-label={t("common.close")}>
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -290,9 +292,9 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
             <div className="bible-history-empty__icon">
               <Icon name="menu_book" size={36} />
             </div>
-            <div className="bible-history-empty__title">No Bible history yet</div>
+            <div className="bible-history-empty__title">{t("bibleHistory.noHistoryYet")}</div>
             <div className="bible-history-empty__text">
-              Scriptures you open will appear here.
+              {t("bibleHistory.scripturesAppear")}
             </div>
           </div>
         ) : (
@@ -327,8 +329,8 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
                     type="button"
                     className={`bible-history-card__fav${item.isFavorite ? " bible-history-card__fav--active" : ""}`}
                     onClick={(e) => handleToggleFavorite(e, item)}
-                    aria-label={item.isFavorite ? "Remove from favorites" : "Add to favorites"}
-                    title={item.isFavorite ? "Remove from favorites" : "Add to favorites"}
+                    aria-label={item.isFavorite ? t("bibleHistory.removeFromFavorites") : t("bibleHistory.addToFavorites")}
+                    title={item.isFavorite ? t("bibleHistory.removeFromFavorites") : t("bibleHistory.addToFavorites")}
                   >
                     <Icon name={item.isFavorite ? "star" : "star_border"} size={16} />
                   </button>

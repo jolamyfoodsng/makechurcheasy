@@ -17,6 +17,7 @@
 
 import { getUserScopedKey } from "./userScopedStorage";
 import { getDesktopConfig } from "./desktopConfig";
+import { getDeviceId, getDeviceSecret } from "./authService";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -299,8 +300,14 @@ export async function verify(): Promise<boolean> {
   notify();
 
   try {
-    const res = await fetch(`${API_BASE}/api/device/profile`, {
-      headers: { "X-App-Version": APP_VERSION },
+    const deviceId = getDeviceId();
+    const deviceSecret = getDeviceSecret();
+    const url = `${API_BASE}/api/device/profile${deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : ""}`;
+    const res = await fetch(url, {
+      headers: {
+        "X-App-Version": APP_VERSION,
+        ...(deviceSecret ? { "X-Device-Secret": deviceSecret } : {}),
+      },
     });
 
     if (!res.ok) {

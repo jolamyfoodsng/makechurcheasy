@@ -245,6 +245,14 @@ export function getUserPlan(user: AuthUser | null): PlanTier {
   const cached = getCachedPlan();
   if (cached && cached !== "free") {
     if (isOfflineValid()) {
+      // Safety net: if the cached plan is "pro" but the user's trial is not
+      // active (expired/stopped), don't serve the stale "pro" from cache.
+      // The trial check in isInTrial() already returned false to reach us.
+      if (cached === "pro" && user.plan !== "pro") {
+        // Cached "pro" likely came from a trial that has since expired.
+        // Trust the server's plan field instead.
+        return (user.plan || "free") as PlanTier;
+      }
       return cached as PlanTier;
     }
   }
@@ -254,8 +262,22 @@ export function getUserPlan(user: AuthUser | null): PlanTier {
 
 /** Whether the user's trial is currently active. */
 export function isInTrial(user: AuthUser | null): boolean {
-  if (!user?.trial?.active || !user?.trial?.endsAt) return false;
-  return Date.now() < new Date(user.trial.endsAt).getTime();
+  if (!user?.trial) return false;
+  // Check status first — the server derives active from status
+  const status = user.trial.status;
+  if (status && status !== "active") {
+    console.debug("[licenseService] isInTrial=false (status=%s)", status);
+    return false;
+  }
+  // Fallback: check the boolean active flag
+  if (!user.trial.active) return false;
+  // Must have a future end date
+  if (!user.trial.endsAt) return false;
+  const trialActive = Date.now() < new Date(user.trial.endsAt).getTime();
+  if (!trialActive) {
+    console.debug("[licenseService] isInTrial=false (endsAt=%s, now=%s)", user.trial.endsAt, new Date().toISOString());
+  }
+  return trialActive;
 }
 
 /** Whether the user's trial has expired (had a trial, but it's past end date). */
@@ -282,7 +304,12 @@ export function getEffectivePlan(user: AuthUser | null): PlanTier {
   if (isInTrial(user)) {
     return "pro";
   }
-  return getUserPlan(user);
+  const plan = getUserPlan(user);
+  console.debug(
+    "[licenseService] getEffectivePlan=%s (user.plan=%s, trial.active=%s, trial.status=%s, trial.endsAt=%s)",
+    plan, user.plan, user.trial?.active, user.trial?.status, user.trial?.endsAt,
+  );
+  return plan;
 }
 
 /**
@@ -577,12 +604,20 @@ export async function getRemainingLTThemeSlots(user: AuthUser | null): Promise<n
 
 // ── Restriction Info (for upgrade modal) ─────────────────────────────────────
 
+const PLAN_ORDER: Record<string, number> = {
+  free: 0, basic: 1, starter: 2, growth: 3, pro: 4, trial: 4,
+};
+
+function planAtLeast(plan: PlanTier, minimum: PlanTier): boolean {
+  return (PLAN_ORDER[plan] ?? 0) >= (PLAN_ORDER[minimum] ?? 0);
+}
+
 export function getRestrictionInfo(
   user: AuthUser | null,
   feature: string,
 ): RestrictionInfo {
-  const plan = getEffectivePlan(user);
-  const limits = getPlanLimits(plan);
+  const effectivePlan = getEffectivePlan(user);
+  const limits = getPlanLimits(effectivePlan);
 
   const featureRequiredPlan = getCurrentFeatureRequiredPlan();
   const required = (featureRequiredPlan[feature] || "basic") as PlanTier;
@@ -600,15 +635,31 @@ export function getRestrictionInfo(
   } else if (typeof limitValue === "number") {
     currentLimit = limitValue;
     locked = isUnlimited(limitValue) ? false : limitValue === 0;
-    if (!locked && plan === "free") {
+    if (!locked && effectivePlan === "free") {
       locked = true;
     }
   }
 
+  // Safety net: if the user's effective plan already meets or exceeds
+  // the required plan, never lock — regardless of what the config says.
+  // This prevents misconfigured plan_config documents from locking out
+  // entitled users (trial → pro, pro, growth, etc.).
+  if (locked && planAtLeast(effectivePlan, required)) {
+    console.info(
+      `[access] ${label}: plan "${effectivePlan}" >= required "${required}" — overriding lock`,
+    );
+    locked = false;
+  }
+
+  const inTrial = effectivePlan === "pro" && isInTrial(user);
+  console.info(
+    `[access] ${label}: plan=${effectivePlan}${inTrial ? " (trial→pro)" : ""} required=${required} locked=${locked} limit=${typeof limitValue === "boolean" ? limitValue : limitValue}`,
+  );
+
   return {
     locked,
     feature: label,
-    currentPlan: plan,
+    currentPlan: effectivePlan,
     requiredPlan: required,
     currentLimit,
     message: locked

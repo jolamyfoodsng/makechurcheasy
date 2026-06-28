@@ -7,6 +7,7 @@
 
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "../i18n";
 import DockLmTab from "./tabs/DockLmTab";
 import DockAuthGate from "./DockAuthGate";
 import { dockClient } from "../services/dockBridge";

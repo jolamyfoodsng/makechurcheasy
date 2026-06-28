@@ -1,7 +1,7 @@
 {
   "name": "makechurcheasy",
   "private": true,
-  "version": "2.26.0",
+  "version": "2.27.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -37,16 +37,19 @@
     "docx": "^9.7.1",
     "file-saver": "^2.0.5",
     "fuse.js": "^7.4.2",
+    "i18next": "^26.3.3",
     "idb": "^8.0.3",
     "jspdf": "^4.2.1",
     "konva": "^10.2.0",
     "lucide-react": "^0.577.0",
+    "mammoth": "^1.12.0",
     "nanoid": "^5.1.6",
     "obs-websocket-js": "^5.0.7",
     "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-colorful": "^5.7.0",
     "react-dom": "^19.1.0",
+    "react-i18next": "^17.0.8",
     "react-konva": "^19.2.2",
     "react-router-dom": "^7.13.0",
     "recharts": "^3.8.1"

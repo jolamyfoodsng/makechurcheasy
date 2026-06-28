@@ -16,6 +16,7 @@ import { dockObsClient } from "../dockObsClient";
 import type { DockStagedItem } from "../dockTypes";
 import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { useTranslation } from "react-i18next";
 
 const STORAGE_KEY = "ocs-dock-sermon-items-v1";
 const OLD_STORAGE_KEY = "ocs-dock-sermon";
@@ -294,7 +295,7 @@ function isSermonItem(value: unknown): value is SermonItem {
   );
 }
 
-function loadItems(): SermonItem[] {
+function loadItems(t?: (key: string) => string): SermonItem[] {
   try {
     const raw = localStorage.getItem(getUserScopedKey(STORAGE_KEY));
     if (raw) {
@@ -316,10 +317,11 @@ function loadItems(): SermonItem[] {
     if (!oldData.title && points.length === 0) return [];
     const now = Date.now();
     const type: SermonItemType = points.some((point) => point.type === "quote") ? "quote" : "point";
+    const fallbackTopic = t ? t('sermon.untitled') : "Imported sermon notes";
     return [{
       id: createId("sermon-item"),
       type,
-      topic: oldData.title || "Imported sermon notes",
+      topic: oldData.title || fallbackTopic,
       speakerName: type === "quote" ? (oldData.speaker || points.find((point) => point.attribution)?.attribution || null) : null,
       seriesName: type === "quote" ? (oldData.series || null) : null,
       themeTag: "general",
@@ -332,7 +334,7 @@ function loadItems(): SermonItem[] {
         })).filter((slide) => slide.content)
         : [{
           id: createId("sermon-slide"),
-          content: oldData.title || "Imported sermon notes",
+          content: oldData.title || fallbackTopic,
           createdAt: now,
           updatedAt: now,
         }],
@@ -454,16 +456,16 @@ function makeDraft(type: SermonItemType = "quote"): ItemDraft {
   };
 }
 
-function formatTimeAgo(timestamp: number): string {
+function formatTimeAgo(timestamp: number, t: (key: string, options?: Record<string, unknown>) => string): string {
   const diff = Date.now() - timestamp;
   const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return "Just now";
+  if (seconds < 60) return t('sermon.justNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t('sermon.minutesAgo', { minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t('sermon.hoursAgo', { hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t('sermon.daysAgo', { days });
 }
 
 function makeItemFromDraft(draft: ItemDraft, existing?: SermonItem): SermonItem {
@@ -491,10 +493,10 @@ function makeItemFromDraft(draft: ItemDraft, existing?: SermonItem): SermonItem 
   };
 }
 
-function validateDraft(draft: ItemDraft): string {
-  if (!draft.content.trim()) return draft.type === "quote" ? "Quote text is required." : "Point text is required.";
-  if (draft.type === "quote" && !draft.topic.trim()) return "Topic / message title is required.";
-  if (draft.type === "quote" && !draft.speakerName.trim()) return "Speaker name is required for quotes.";
+function validateDraft(draft: ItemDraft, t: (key: string) => string): string {
+  if (!draft.content.trim()) return draft.type === "quote" ? t('sermon.quoteTextRequired') : t('sermon.pointTextRequired');
+  if (draft.type === "quote" && !draft.topic.trim()) return t('sermon.topicRequired');
+  if (draft.type === "quote" && !draft.speakerName.trim()) return t('sermon.speakerRequired');
   return "";
 }
 
@@ -606,18 +608,19 @@ function getSlideStyleOverrides(slide: SermonSlide, theme: BibleTheme | null): R
 }
 
 export default function DockSermonTab({ staged, onStage }: Props) {
+  const { t } = useTranslation();
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewPrefsRef = useRef(loadViewPrefs());
   const themePrefsRef = useRef(loadThemePrefs());
   const savedThemeSettingsRef = useRef(loadSermonThemeSettings());
   const composerTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const [items, setItems] = useState<SermonItem[]>(() => loadItems());
+  const [items, setItems] = useState<SermonItem[]>(() => loadItems(t));
   const [activeItemId, setActiveItemId] = useState<string | null>(() => viewPrefsRef.current.activeItemId);
   const [selectedSlideId, setSelectedSlideId] = useState<string | null>(() => viewPrefsRef.current.selectedSlideId);
   const [sermonStep, setSermonStep] = useState<SermonStep>(() => {
     const saved = savedThemeSettingsRef.current.sermonStep;
     if (saved === "theme" || saved === "compose") return saved;
-    const hasItems = loadItems().length > 0;
+    const hasItems = loadItems(t).length > 0;
     return hasItems ? "compose" : "theme";
   });
   const [itemModal, setItemModal] = useState<ItemModalState | null>(null);
@@ -1109,7 +1112,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
   const saveItemModal = useCallback(async () => {
     if (!itemModal) return;
     if (!(await requireEntitlement("sermonExport", items.length))) return;
-    const error = validateDraft(itemModal.draft);
+    const error = validateDraft(itemModal.draft, t);
     if (error) {
       setFormError(error);
       return;
@@ -1126,7 +1129,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
     setSermonStep("compose");
     setFormError("");
     setItemModal(null);
-  }, [itemModal, items]);
+  }, [itemModal, items, t]);
 
   const openSlideModal = useCallback((item: SermonItem, slide?: SermonSlide) => {
     setFormError("");
@@ -1158,7 +1161,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
     if (!(await requireEntitlement("sermonExport", items.length))) return;
     const content = slideModal.content.trim();
     if (!content) {
-      setFormError("Slide text is required.");
+      setFormError(t('sermon.slideTextRequired'));
       return;
     }
 
@@ -1226,7 +1229,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
     if (!slideModal) return;
     const content = slideModal.content.trim();
     if (!content) {
-      setFormError("Slide text is required.");
+      setFormError(t('sermon.slideTextRequired'));
       return;
     }
 
@@ -1235,7 +1238,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
     try {
       const cleaned = await cleanupSermonSlideText(content, { semanticMode: "local" });
       if (!cleaned.trim()) {
-        setFormError("The AI helper returned an empty result.");
+        setFormError(t('sermon.emptyResultError'));
         return;
       }
       setSlideModal((current) => (current ? { ...current, content: cleaned } : current));
@@ -1509,10 +1512,10 @@ export default function DockSermonTab({ staged, onStage }: Props) {
 
   const renderThemeStep = () => {
     const themeCategories: { key: BibleThemeCategory | "all"; label: string }[] = [
-      { key: "all", label: "All" },
-      { key: "general", label: "General" },
-      { key: "bible", label: "Bible" },
-      { key: "worship", label: "Worship" },
+      { key: "all", label: t('sermon.allThemes') },
+      { key: "general", label: t('sermon.generalCategory') },
+      { key: "bible", label: t('sermon.bibleCategory') },
+      { key: "worship", label: t('sermon.worshipCategory') },
     ];
 
     const renderLtThemeCard = (theme: ThemeLike) => {
@@ -1557,9 +1560,9 @@ export default function DockSermonTab({ staged, onStage }: Props) {
               </span>
               {(bgVar || fgVar) && (
                 <div className="dock-sermon-theme-card__colors">
-                  {bgVar && <span className="dock-sermon-theme-card__color-dot" style={{ background: bgVar }} title="Background" />}
-                  {fgVar && <span className="dock-sermon-theme-card__color-dot" style={{ background: fgVar }} title="Text" />}
-                  {accentVar && <span className="dock-sermon-theme-card__color-dot" style={{ background: accentVar }} title="Accent" />}
+                  {bgVar && <span className="dock-sermon-theme-card__color-dot" style={{ background: bgVar }} title={t('sermon.colorVarBackground')} />}
+                  {fgVar && <span className="dock-sermon-theme-card__color-dot" style={{ background: fgVar }} title={t('sermon.colorVarText')} />}
+                  {accentVar && <span className="dock-sermon-theme-card__color-dot" style={{ background: accentVar }} title={t('sermon.colorVarAccent')} />}
                 </div>
               )}
             </div>
@@ -1649,9 +1652,9 @@ export default function DockSermonTab({ staged, onStage }: Props) {
       <div className="dock-sermon-view dock-sermon-view--theme">
         {/* Step Header */}
         <section className="dock-sermon-step-header">
-          <div className="dock-sermon-step-header__title">Choose Theme</div>
+          <div className="dock-sermon-step-header__title">{t('sermon.chooseTheme')}</div>
           <div className="dock-sermon-step-header__mode">
-            <div className="dock-console-segmented dock-console-segmented--compact" role="group" aria-label="Sermon overlay mode">
+            <div className="dock-console-segmented dock-console-segmented--compact" role="group" aria-label={t('sermon.overlayMode')}>
               <button
                 type="button"
                 className={`dock-console-segmented__item${overlayMode === "fullscreen" ? " dock-console-segmented__item--active" : ""}`}
@@ -1676,20 +1679,20 @@ export default function DockSermonTab({ staged, onStage }: Props) {
           <input
             type="text"
             className="dock-sermon-theme-search__input"
-            placeholder="Search themes..."
+            placeholder={t('sermon.searchThemes')}
             value={themeSearch}
             onChange={(e) => setThemeSearch(e.target.value)}
-            aria-label="Search themes"
+            aria-label={t('sermon.searchThemes')}
           />
           {themeSearch && (
-            <button type="button" className="dock-sermon-theme-search__clear" onClick={() => setThemeSearch("")} aria-label="Clear search">
+            <button type="button" className="dock-sermon-theme-search__clear" onClick={() => setThemeSearch("")} aria-label={t('sermon.clearSearchThemes')}>
               <Icon name="close" size={12} />
             </button>
           )}
         </div>
 
         {/* Category Tabs */}
-        <div className="dock-sermon-theme-categories" role="tablist" aria-label="Theme categories">
+        <div className="dock-sermon-theme-categories" role="tablist" aria-label={t('sermon.themeCategories')}>
           {themeCategories.map(({ key, label }) => (
             <button
               key={key}
@@ -1709,7 +1712,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
           {themesLoading ? (
             <div className="dock-sermon-theme-loading">
               <Icon name="hourglass_empty" size={20} />
-              <span>Loading themes...</span>
+              <span>{t('sermon.loadingThemesLabel')}</span>
             </div>
           ) : (
             <>
@@ -1718,7 +1721,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                   <div className="dock-sermon-theme-section__header">
                     <div className="dock-sermon-theme-section__title">
                       <Icon name="widgets" size={12} />
-                      <span>HTML Templates</span>
+                      <span>{t('sermon.htmlTemplates')}</span>
                       <span className="dock-sermon-theme-section__count">{ltThemes.length}</span>
                     </div>
                   </div>
@@ -1728,7 +1731,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                 </div>
               )}
 
-              {renderSection("Favorites", favoriteThemes, "star", true)}
+              {renderSection(t('sermon.favoritesLabel'), favoriteThemes, "star", true)}
               {/* {renderSection("Recently Used", recentThemes, "history", true)} */}
               {/* {renderSection("All Themes", filteredThemes.filter(
                 (t) => !favoriteThemes.includes(t) && !recentThemes.includes(t)
@@ -1737,9 +1740,9 @@ export default function DockSermonTab({ staged, onStage }: Props) {
               {filteredThemes.length === 0 && favoriteThemes.length === 0 && recentThemes.length === 0 && ltThemes.length === 0 && (
                 <div className="dock-sermon-theme-empty">
                   <Icon name="palette" size={24} />
-                  <div className="dock-sermon-theme-empty__title">No themes found</div>
+                  <div className="dock-sermon-theme-empty__title">{t('sermon.noThemesFoundLabel')}</div>
                   <div className="dock-sermon-theme-empty__text">
-                    {themeSearch ? "Try a different search term" : "No themes available for this mode"}
+                    {themeSearch ? t('sermon.tryDifferentSearch') : t('sermon.noThemesForMode')}
                   </div>
                 </div>
               )}
@@ -1751,7 +1754,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
         {activeTheme && (
           <div className="dock-sermon-theme-hint">
             <Icon name="arrow_forward" size={12} />
-            <span>Tap a theme to start composing</span>
+            <span>{t('sermon.tapThemeToStart')}</span>
           </div>
         )}
       </div>
@@ -1770,26 +1773,26 @@ export default function DockSermonTab({ staged, onStage }: Props) {
               type="button"
               className="dock-sermon-step-header__back"
               onClick={() => setSermonStep("theme")}
-              title="Back to themes"
+              title={t('sermon.backToThemes')}
             >
               <Icon name="arrow_back" size={14} />
             </button>
             <div>
-              <div className="dock-sermon-step-header__title">Compose</div>
-              <div className="dock-sermon-step-header__subtitle">Create and preview your message</div>
+              <div className="dock-sermon-step-header__title">{t('sermon.compose')}</div>
+              <div className="dock-sermon-step-header__subtitle">{t('sermon.composeSubtitle')}</div>
             </div>
           </div>
           <div className="dock-sermon-step-header__right">
             <button type="button" className="dock-sermon-step-header__new-btn" onClick={handleInstantNew}>
               <Icon name="add" size={14} />
-              New Message
+              {t('sermon.newMessage')}
             </button>
             <div className="dock-sermon-step-header__overflow-wrap">
               <button
                 type="button"
                 className="dock-sermon-step-header__overflow"
                 onClick={() => setShowOverflowMenu((v) => !v)}
-                title="More options"
+                title={t('sermon.overflow')}
               >
                 <Icon name="more_vert" size={16} />
               </button>
@@ -1801,7 +1804,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                     onClick={() => { setShowOverflowMenu(false); setShowHistoryDrawer(true); }}
                   >
                     <Icon name="history" size={14} />
-                    <span>History</span>
+                    <span>{t('sermon.history')}</span>
                     {history.length > 0 && <span className="dock-sermon-step-header__overflow-badge">{history.length}</span>}
                   </button>
                   {activeItem && themeSource === "lt-template" && (
@@ -1811,7 +1814,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                       onClick={() => { setShowOverflowMenu(false); setShowColorSettingsModal(true); }}
                     >
                       <Icon name="palette" size={14} />
-                      <span>Color Settings</span>
+                      <span>{t('sermon.colorSettings')}</span>
                     </button>
                   )}
                   {activeItem && selectedSlide && themeSource === "bible" && (
@@ -1821,7 +1824,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                       onClick={() => { setShowOverflowMenu(false); setShowTextStyleModal(true); }}
                     >
                       <Icon name="tune" size={14} />
-                      <span>Text Style</span>
+                      <span>{t('sermon.textStyle')}</span>
                     </button>
                   )}
                   <button
@@ -1830,7 +1833,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                     onClick={() => { setShowOverflowMenu(false); setSermonStep("theme"); }}
                   >
                     <Icon name="palette" size={14} />
-                    <span>Change Theme</span>
+                    <span>{t('sermon.changeTheme')}</span>
                   </button>
                 </div>
               )}
@@ -1841,11 +1844,11 @@ export default function DockSermonTab({ staged, onStage }: Props) {
         {items.length === 0 ? (
           <div className="dock-sermon-compose-empty">
             <Icon name="format_quote" size={24} />
-            <div className="dock-sermon-compose-empty__title">No sermon cues yet</div>
-            <div className="dock-sermon-compose-empty__text">Create a quote to begin sending content live.</div>
+            <div className="dock-sermon-compose-empty__title">{t('sermon.noCues')}</div>
+            <div className="dock-sermon-compose-empty__text">{t('sermon.createFirstQuote')}</div>
             <button type="button" className="dock-sermon-compose-empty__btn" onClick={handleInstantNew}>
               <Icon name="add" size={14} />
-              Create First Quote
+              {t('sermon.createFirstQuoteButton')}
             </button>
           </div>
         ) : (
@@ -1863,10 +1866,10 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                       type="button"
                       className="dock-sermon-compose-editor__theme-btn"
                       onClick={() => setSermonStep("theme")}
-                      title="Change theme"
+                      title={t('sermon.changeThemeLabel')}
                     >
                       <Icon name="palette" size={14} />
-                      <span>{activeTheme?.name ?? "Choose Theme"}</span>
+                      <span>{activeTheme?.name ?? t('sermon.chooseTheme')}</span>
                       <Icon name="chevron_right" size={14} />
                     </button>
                     <button
@@ -1904,7 +1907,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                         textShadow: activeTheme.settings.textShadow,
                       }}
                     >
-                      {selectedSlide ? displaySlideText(activeItem, selectedSlide) : "Your text here"}
+                      {selectedSlide ? displaySlideText(activeItem, selectedSlide) : t('sermon.yourTextHere')}
                     </span>
                     {activeItem.type === "quote" && attributionFor(activeItem) && (
                       <span
@@ -1925,7 +1928,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                   <textarea
                     ref={composerTextareaRef}
                     className="dock-sermon-compose-editor__textarea"
-                    placeholder="Type or paste content…"
+                    placeholder={t('sermon.slideTextPlaceholder')}
                     value={selectedSlide?.content ?? ""}
                     onChange={(event) => {
                       if (!activeItemId || !selectedSlideId) return;
@@ -1941,10 +1944,10 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                         };
                       }));
                     }}
-                    aria-label="Content editor"
+                    aria-label={t('sermon.contentEditor')}
                   />
                   <div className="dock-sermon-compose-editor__char-count">
-                    {(selectedSlide?.content ?? "").length} chars
+                    {t('sermon.charCount', { count: (selectedSlide?.content ?? "").length })}
                   </div>
                 </div>
 
@@ -1976,7 +1979,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                 onClick={() => setShowColorSettingsModal(true)}
               >
                 <Icon name="palette" size={16} />
-                <span>Color Settings</span>
+                <span>{t('sermon.colorSettingsLabel')}</span>
                 {Object.keys(ltColorOverrides).length > 0 && (
                   <div className="dock-sermon-color-settings-trigger__dot" />
                 )}
@@ -1991,7 +1994,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                 onClick={() => setShowTextStyleModal(true)}
               >
                 <Icon name="tune" size={16} />
-                <span>Text Style</span>
+                <span>{t('sermon.textStyleLabel')}</span>
                 {hasTypographyOverrides(selectedSlide) && (
                   <div className="dock-sermon-text-style-trigger__dot" />
                 )}
@@ -2004,13 +2007,13 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                 <div className="dock-sermon-lt-form__header">
                   <div className="dock-sermon-lt-form__title">
                     <Icon name="edit_note" size={14} />
-                    <span>Content Fields</span>
+                    <span>{t('sermon.contentFieldsLabel')}</span>
                   </div>
                   <button
                     type="button"
                     className="dock-sermon-lt-form__theme-btn"
                     onClick={() => setSermonStep("theme")}
-                    title="Change theme"
+                    title={t('sermon.changeThemeLabel')}
                   >
                     <Icon name="palette" size={14} />
                     <span>{selectedLtTheme.name}</span>
@@ -2100,9 +2103,9 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                 <div className="dock-sermon-lt-preview__header" onClick={() => setIsPreviewCollapsed((v) => !v)}>
                   <div className="dock-sermon-lt-preview__title">
                     <Icon name="visibility" size={14} />
-                    <span>Live Preview</span>
+                    <span>{t('sermon.livePreviewLabel')}</span>
                   </div>
-                  <button type="button" className="dock-sermon-lt-preview__toggle" title={isPreviewCollapsed ? "Expand preview" : "Collapse preview"}>
+                  <button type="button" className="dock-sermon-lt-preview__toggle" title={isPreviewCollapsed ? t('sermon.expandPreview') : t('sermon.collapsePreview')}>
                     <Icon name={isPreviewCollapsed ? "expand_more" : "expand_less"} size={16} />
                   </button>
                 </div>
@@ -2111,7 +2114,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                     <iframe
                       className="dock-sermon-lt-preview__iframe"
                       srcDoc={buildLtPreviewHtml(selectedLtTheme, ltVariableValues, ltColorOverrides, true)}
-                      title="Lower third preview"
+                      title={t('sermon.livePreviewFrame')}
                       sandbox="allow-same-origin"
                     />
                   </div>
@@ -2123,7 +2126,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
             {activeItem && activeItem.slides.length > 0 && (
               <section className="dock-sermon-compose-queue">
                 <div className="dock-sermon-compose-queue__header">
-                  <div className="dock-sermon-compose-queue__title">Queue</div>
+                  <div className="dock-sermon-compose-queue__title">{t('sermon.queueLabel')}</div>
                   <span className="dock-sermon-compose-queue__count">{activeItem.slides.length}</span>
                 </div>
 
@@ -2160,7 +2163,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                               event.stopPropagation();
                               handleShowSlide(activeItem, slide);
                             }}
-                            title="Show"
+                            title={t('sermon.showSlide')}
                           >
                             <Icon name="play_arrow" size={14} />
                           </button>
@@ -2168,7 +2171,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                         {isShowing && (
                           <div className="dock-sermon-queue-card__showing-indicator">
                             <Icon name="fiber_manual_record" size={8} />
-                            SHOWING
+                            {t('sermon.showingLabel')}
                           </div>
                         )}
                       </div>
@@ -2187,7 +2190,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                   onClick={() => activeItem && selectedSlide && pushSlide(activeItem, selectedSlide)}
                   disabled={!selectedSlide || sending}
                 >
-                  Preview
+                  {t('sermon.previewBtn')}
                 </button>
                 <button
                   type="button"
@@ -2200,7 +2203,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                   disabled={!selectedSlide || sending}
                 >
                   <Icon name="send" size={14} />
-                  {sending ? "Sending..." : "Send to Display"}
+                  {sending ? "Sending..." : t('sermon.sendToDisplayBtn')}
                 </button>
               </div>
 
@@ -2210,7 +2213,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                   className="dock-sermon-compose-output__clear"
                   onClick={handleClearSermon}
                 >
-                  Clear
+                  {t('sermon.clearBtn')}
                 </button>
               </div>
             </section>
@@ -2243,15 +2246,15 @@ export default function DockSermonTab({ staged, onStage }: Props) {
           <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-sermon-item-title">
             <div className="dock-dialog__header">
               <div>
-                <div className="dock-dialog__eyebrow">{itemModal.mode === "edit" ? "Edit Sermon Cue" : "Add Sermon Cue"}</div>
-                <h2 id="dock-sermon-item-title" className="dock-dialog__title">Quote or point list</h2>
+                <div className="dock-dialog__eyebrow">{itemModal.mode === "edit" ? t('sermon.cueEditEyebrow') : t('sermon.cueAddEyebrow')}</div>
+                <h2 id="dock-sermon-item-title" className="dock-dialog__title">{t('sermon.quoteOrPoint')}</h2>
               </div>
-              <button type="button" className="dock-dialog__close" onClick={closeItemModal} aria-label="Close sermon cue dialog">
+              <button type="button" className="dock-dialog__close" onClick={closeItemModal} aria-label={t('sermon.closeSermonCueDialog')}>
                 <Icon name="close" size={14} />
               </button>
             </div>
             <div className="dock-dialog__body">
-              <div className="dock-sermon-type-toggle" role="group" aria-label="Sermon cue type">
+              <div className="dock-sermon-type-toggle" role="group" aria-label={t('sermon.cueTypeLabel')}>
                 {(["quote", "point"] as SermonItemType[]).map((type) => (
                   <button
                     key={type}
@@ -2278,7 +2281,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
               {itemModal.draft.type === "quote" && (
                 <div className="dock-sermon-quote-meta-row">
                   <label className="dock-dialog-field">
-                    <span>Speaker name</span>
+                    <span>{t('sermon.speakerName')}</span>
                     <input
                       className="dock-input"
                       value={itemModal.draft.speakerName}
@@ -2289,7 +2292,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                     />
                   </label>
                   <label className="dock-dialog-field">
-                    <span>Topic / message title</span>
+                    <span>{t('sermon.topic')}</span>
                     <input
                       className="dock-input"
                       value={itemModal.draft.topic}
@@ -2304,7 +2307,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
 
               {itemModal.draft.type === "quote" && (
                 <label className="dock-dialog-field">
-                  <span>Series name optional</span>
+                  <span>{t('sermon.seriesName')}</span>
                   <input
                     className="dock-input"
                     value={itemModal.draft.seriesName}
@@ -2317,7 +2320,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
               )}
 
               <label className="dock-dialog-field">
-                <span>{itemModal.draft.type === "quote" ? "Quote text" : "Point text"}</span>
+                <span>{itemModal.draft.type === "quote" ? t('sermon.createQuote') : t('sermon.createPoint')}</span>
                 <textarea
                   className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
                   value={itemModal.draft.content}
@@ -2336,11 +2339,11 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                 className="dock-btn dock-btn--ghost"
                 onClick={clearItemModalFields}
               >
-                Clear Fields
+                {t('sermon.clearFieldsBtn')}
               </button>
-              <button type="button" className="dock-btn dock-btn--ghost" onClick={closeItemModal}>Cancel</button>
+              <button type="button" className="dock-btn dock-btn--ghost" onClick={closeItemModal}>{t('common.cancel')}</button>
               <button type="button" className="dock-btn dock-btn--primary" onClick={saveItemModal}>
-                Save
+                {t('common.save')}
               </button>
             </div>
           </div>
@@ -2352,16 +2355,16 @@ export default function DockSermonTab({ staged, onStage }: Props) {
           <div className="dock-dialog dock-dialog--compact" role="dialog" aria-modal="true" aria-labelledby="dock-sermon-slide-title">
             <div className="dock-dialog__header">
               <div>
-                <div className="dock-dialog__eyebrow">{slideModal.mode === "edit" ? "Edit Slide" : "Add Slide"}</div>
-                <h2 id="dock-sermon-slide-title" className="dock-dialog__title">Sermon slide text</h2>
+                <div className="dock-dialog__eyebrow">{slideModal.mode === "edit" ? t('sermon.editSlide') : t('sermon.addSlide')}</div>
+                <h2 id="dock-sermon-slide-title" className="dock-dialog__title">{t('sermon.slideTitle')}</h2>
               </div>
-              <button type="button" className="dock-dialog__close" onClick={closeSlideModal} aria-label="Close sermon slide dialog">
+              <button type="button" className="dock-dialog__close" onClick={closeSlideModal} aria-label={t('sermon.closeSlideDialog')}>
                 <Icon name="close" size={14} />
               </button>
             </div>
             <div className="dock-dialog__body">
               <label className="dock-dialog-field">
-                <span>Slide text</span>
+                <span>{t('sermon.slideText')}</span>
                 <textarea
                   className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
                   spellCheck
@@ -2378,18 +2381,18 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                 onClick={() => void cleanupSlideModal()}
                 disabled={slideCleanupPending}
               >
-                {slideCleanupPending ? "Cleaning..." : "Clean Text"}
+                {slideCleanupPending ? t('sermon.cleaningLabel') : t('sermon.cleanTextBtn')}
               </button>
               <button
                 type="button"
                 className="dock-btn dock-btn--ghost"
                 onClick={clearSlideModalFields}
               >
-                Clear Text
+                {t('sermon.clearTextBtn')}
               </button>
-              <button type="button" className="dock-btn dock-btn--ghost" onClick={closeSlideModal}>Cancel</button>
+              <button type="button" className="dock-btn dock-btn--ghost" onClick={closeSlideModal}>{t('common.cancel')}</button>
               <button type="button" className="dock-btn dock-btn--primary" onClick={saveSlideModal}>
-                Save
+                {t('common.save')}
               </button>
             </div>
           </div>
@@ -2406,10 +2409,10 @@ export default function DockSermonTab({ staged, onStage }: Props) {
             <div className="dock-dialog dock-dialog--text-style" role="dialog" aria-modal="true" aria-labelledby="dock-text-style-title" onClick={(e) => e.stopPropagation()}>
               <div className="dock-dialog__header">
                 <div>
-                  <div className="dock-dialog__eyebrow">Typography</div>
-                  <h2 id="dock-text-style-title" className="dock-dialog__title">Text Style</h2>
+                  <div className="dock-dialog__eyebrow">{t('sermon.typographyEyebrow')}</div>
+                  <h2 id="dock-text-style-title" className="dock-dialog__title">{t('sermon.textStyleTitle')}</h2>
                 </div>
-                <button type="button" className="dock-dialog__close" onClick={() => setShowTextStyleModal(false)} aria-label="Close text style dialog">
+                <button type="button" className="dock-dialog__close" onClick={() => setShowTextStyleModal(false)} aria-label={t('sermon.closeTextStyleDialog')}>
                   <Icon name="close" size={14} />
                 </button>
               </div>
@@ -2417,7 +2420,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
               <div className="dock-dialog__body dock-dialog__body--scrollable">
                 {/* Font Family */}
                 <div className="dock-sermon-text-style__group">
-                  <div className="dock-sermon-text-style__label">Font Family</div>
+                  <div className="dock-sermon-text-style__label">{t('sermon.fontFamily')}</div>
                   <div className="dock-sermon-text-style__fonts">
                     {SERMON_FONTS.map((font) => {
                       const isActive = slide.fontFamily === font.value;
@@ -2439,7 +2442,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                 {/* Font Size */}
                 <div className="dock-sermon-text-style__group">
                   <div className="dock-sermon-text-style__label">
-                    Font Size
+                    {t('sermon.fontSize')}
                     <span className="dock-sermon-text-style__value">{typo.fontSize}px</span>
                   </div>
                   <div className="dock-sermon-text-style__size-ctrl">
@@ -2472,11 +2475,11 @@ export default function DockSermonTab({ staged, onStage }: Props) {
 
                 {/* Font Weight */}
                 <div className="dock-sermon-text-style__group">
-                  <div className="dock-sermon-text-style__label">Weight</div>
+                  <div className="dock-sermon-text-style__label">{t('sermon.fontWeight')}</div>
                   <div className="dock-sermon-text-style__segmented">
                     {([
-                      { key: "normal", label: "Regular" },
-                      { key: "bold", label: "Bold" },
+                      { key: "normal", label: t('sermon.regular') },
+                      { key: "bold", label: t('sermon.bold') },
                     ] as const).map(({ key, label }) => (
                       <button
                         key={key}
@@ -2492,7 +2495,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
 
                 {/* Text Case */}
                 <div className="dock-sermon-text-style__group">
-                  <div className="dock-sermon-text-style__label">Case</div>
+                  <div className="dock-sermon-text-style__label">{t('sermon.caseLabel')}</div>
                   <div className="dock-sermon-text-style__segmented">
                     {([
                       { key: false, label: "Aa" },
@@ -2513,7 +2516,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                 {/* Line Height */}
                 <div className="dock-sermon-text-style__group">
                   <div className="dock-sermon-text-style__label">
-                    Line Height
+                    {t('sermon.lineHeight')}
                     <span className="dock-sermon-text-style__value">{typo.lineHeight.toFixed(2)}</span>
                   </div>
                   <input
@@ -2526,15 +2529,15 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                     onChange={(e) => updateSelectedSlideTypography({ lineHeight: Number(e.target.value) })}
                   />
                   <div className="dock-sermon-text-style__slider-labels">
-                    <span>Tight</span>
-                    <span>Loose</span>
+                    <span>{t('sermon.tight')}</span>
+                    <span>{t('sermon.loose')}</span>
                   </div>
                 </div>
 
                 {/* Letter Spacing */}
                 <div className="dock-sermon-text-style__group">
                   <div className="dock-sermon-text-style__label">
-                    Letter Spacing
+                    {t('sermon.letterSpacing')}
                     <span className="dock-sermon-text-style__value">{typo.letterSpacing}px</span>
                   </div>
                   <input
@@ -2547,15 +2550,15 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                     onChange={(e) => updateSelectedSlideTypography({ letterSpacing: Number(e.target.value) })}
                   />
                   <div className="dock-sermon-text-style__slider-labels">
-                    <span>Tight</span>
-                    <span>Wide</span>
+                    <span>{t('sermon.tight')}</span>
+                    <span>{t('sermon.wide')}</span>
                   </div>
                 </div>
 
                 {/* Text Width */}
                 <div className="dock-sermon-text-style__group">
                   <div className="dock-sermon-text-style__label">
-                    Text Width
+                    {t('sermon.textWidth')}
                     <span className="dock-sermon-text-style__value">{typo.textWidth}%</span>
                   </div>
                   <input
@@ -2568,14 +2571,14 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                     onChange={(e) => updateSelectedSlideTypography({ textWidth: Number(e.target.value) })}
                   />
                   <div className="dock-sermon-text-style__slider-labels">
-                    <span>Narrow</span>
-                    <span>Full</span>
+                    <span>{t('sermon.narrow')}</span>
+                    <span>{t('sermon.fullWidth')}</span>
                   </div>
                 </div>
 
                 {/* Vertical Position */}
                 <div className="dock-sermon-text-style__group">
-                  <div className="dock-sermon-text-style__label">Vertical Position</div>
+                  <div className="dock-sermon-text-style__label">{t('sermon.verticalPosition')}</div>
                   <div className="dock-sermon-text-style__position">
                     {(["top", "center", "bottom"] as const).map((pos) => (
                       <button
@@ -2585,7 +2588,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                         onClick={() => updateSelectedSlideTypography({ verticalPos: typo.verticalPos === pos ? undefined : pos })}
                       >
                         <Icon name={pos === "top" ? "arrow_upward" : pos === "center" ? "drag_handle" : "arrow_downward"} size={14} />
-                        <span>{pos === "top" ? "Top" : pos === "center" ? "Center" : "Bottom"}</span>
+                        <span>{pos === "top" ? t('sermon.top') : pos === "center" ? t('sermon.center') : t('sermon.bottom')}</span>
                       </button>
                     ))}
                   </div>
@@ -2593,7 +2596,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
 
                 {/* Horizontal Alignment */}
                 <div className="dock-sermon-text-style__group">
-                  <div className="dock-sermon-text-style__label">Alignment</div>
+                  <div className="dock-sermon-text-style__label">{t('sermon.alignmentLabel')}</div>
                   <div className="dock-sermon-text-style__segmented">
                     {(["left", "center", "right"] as const).map((align) => (
                       <button
@@ -2619,7 +2622,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                       <div className={`dock-sermon-text-style__toggle-track${typo.safeArea ? " dock-sermon-text-style__toggle-track--on" : ""}`}>
                         <div className="dock-sermon-text-style__toggle-thumb" />
                       </div>
-                      <span>Safe Area Guides</span>
+                      <span>{t('sermon.safeAreaGuides')}</span>
                     </button>
                   </div>
                 </div>
@@ -2633,11 +2636,11 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                     onClick={resetSelectedSlideTypography}
                   >
                     <Icon name="restart_alt" size={14} />
-                    Reset
+                    {t('sermon.resetBtn')}
                   </button>
                 )}
                 <button type="button" className="dock-btn dock-btn--primary" onClick={() => setShowTextStyleModal(false)}>
-                  Done
+                  {t('sermon.doneBtn')}
                 </button>
               </div>
             </div>
@@ -2651,10 +2654,10 @@ export default function DockSermonTab({ staged, onStage }: Props) {
           <div className="dock-dialog dock-dialog--color-settings" role="dialog" aria-modal="true" aria-labelledby="dock-color-settings-title" onClick={(e) => e.stopPropagation()}>
             <div className="dock-dialog__header">
               <div>
-                <div className="dock-dialog__eyebrow">Appearance</div>
-                <h2 id="dock-color-settings-title" className="dock-dialog__title">Color Settings</h2>
+                <div className="dock-dialog__eyebrow">{t('sermon.appearance')}</div>
+                <h2 id="dock-color-settings-title" className="dock-dialog__title">{t('sermon.colorSettingsTitle')}</h2>
               </div>
-              <button type="button" className="dock-dialog__close" onClick={() => setShowColorSettingsModal(false)} aria-label="Close color settings dialog">
+              <button type="button" className="dock-dialog__close" onClick={() => setShowColorSettingsModal(false)} aria-label={t('sermon.closeColorSettingsDialog')}>
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -2662,7 +2665,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
             <div className="dock-dialog__body dock-dialog__body--scrollable">
               <div className="dock-sermon-color-settings">
                 {extractCssColorVars(selectedLtTheme?.html || "", selectedLtTheme?.css || "").map((v) => {
-                  const label = v === "--fg" ? "Text" : v === "--accent" ? "Accent" : v === "--bg2" ? "Background 2" : v === "--bg1" ? "Background" : v === "--bg" ? "Background" : v === "--fw-white" ? "Top Bar BG" : v === "--fw-maroon" ? "Quote BG" : v === "--fw-text-dark" ? "Top Bar Text" : v === "--fw-text-white" ? "Quote Text" : v;
+                  const label = v === "--fg" ? t('sermon.colorVarText') : v === "--accent" ? t('sermon.colorVarAccent') : v === "--bg2" ? t('sermon.colorVarBackground2') : v === "--bg1" ? t('sermon.colorVarBackground') : v === "--bg" ? t('sermon.colorVarBackground') : v === "--fw-white" ? t('sermon.colorVarTopBarBG') : v === "--fw-maroon" ? t('sermon.colorVarQuoteBG') : v === "--fw-text-dark" ? t('sermon.colorVarTopBarText') : v === "--fw-text-white" ? t('sermon.colorVarQuoteText') : v;
                   const val = ltColorOverrides[v] || extractColorValue(selectedLtTheme?.html || "", v) || extractColorValue(selectedLtTheme?.css || "", v) || "#000";
                   return (
                     <div key={v} className="dock-sermon-color-settings__group">
@@ -2702,11 +2705,11 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                   onClick={resetLtColors}
                 >
                   <Icon name="restart_alt" size={14} />
-                  Reset
+                  {t('sermon.resetBtn')}
                 </button>
               )}
               <button type="button" className="dock-btn dock-btn--primary" onClick={() => setShowColorSettingsModal(false)}>
-                Done
+                {t('sermon.doneBtn')}
               </button>
             </div>
           </div>
@@ -2719,10 +2722,10 @@ export default function DockSermonTab({ staged, onStage }: Props) {
           <div className="dock-sermon-history-drawer" onClick={(e) => e.stopPropagation()}>
             <div className="dock-sermon-history-drawer__header">
               <div>
-                <div className="dock-sermon-history-drawer__eyebrow">Quick Recovery</div>
-                <h3 className="dock-sermon-history-drawer__title">History</h3>
+                <div className="dock-sermon-history-drawer__eyebrow">{t('sermon.quickRecovery')}</div>
+                <h3 className="dock-sermon-history-drawer__title">{t('sermon.historyLabel')}</h3>
               </div>
-              <button type="button" className="dock-sermon-history-drawer__close" onClick={() => setShowHistoryDrawer(false)} aria-label="Close history">
+              <button type="button" className="dock-sermon-history-drawer__close" onClick={() => setShowHistoryDrawer(false)} aria-label={t('sermon.closeHistory')}>
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -2730,8 +2733,8 @@ export default function DockSermonTab({ staged, onStage }: Props) {
               {history.length === 0 ? (
                 <div className="dock-sermon-history-drawer__empty">
                   <Icon name="history" size={20} />
-                  <p>No history yet</p>
-                  <span>Quotes sent live or previewed appear here</span>
+                  <p>{t('sermon.noHistoryYet')}</p>
+                  <span>{t('sermon.historyEmptyHint')}</span>
                 </div>
               ) : (
                 history.map((item) => (
@@ -2758,7 +2761,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                       </div>
                       <div className="dock-sermon-history-card__meta">
                         {item.speakerName && <span>{item.speakerName}</span>}
-                        <span className="dock-sermon-history-card__time">{formatTimeAgo(item.timestamp)}</span>
+                        <span className="dock-sermon-history-card__time">{formatTimeAgo(item.timestamp, t)}</span>
                       </div>
                     </div>
                     <div className="dock-sermon-history-card__actions">
@@ -2766,7 +2769,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                         type="button"
                         className="dock-sermon-history-card__action dock-sermon-history-card__action--restore"
                         onClick={() => restoreFromHistory(item)}
-                        title="Restore"
+                        title={t('sermon.restoreBtn')}
                       >
                         <Icon name="restore" size={14} />
                       </button>
@@ -2778,7 +2781,7 @@ export default function DockSermonTab({ staged, onStage }: Props) {
                           setHistory(next);
                           saveSermonHistory(next);
                         }}
-                        title="Delete"
+                        title={t('sermon.deleteTitle')}
                       >
                         <Icon name="delete" size={14} />
                       </button>

@@ -597,28 +597,7 @@ export default function BibleLibrary({
           </div>
 
           {/* Language pills */}
-          <div className="bible-library-lang-bar">
-            <div className="bible-library-lang-pills">
-              <button
-                className={`bible-library-lang-pill${language === "" ? " active" : ""}`}
-                onClick={() => setLanguage("")}
-              >
-                All
-              </button>
-              {allLanguages.slice(0, 15).map((lang) => (
-                <button
-                  key={lang}
-                  className={`bible-library-lang-pill${language === lang ? " active" : ""}`}
-                  onClick={() => setLanguage(lang)}
-                >
-                  {lang}
-                </button>
-              ))}
-              {allLanguages.length > 15 && (
-                <span className="bible-library-lang-more">Use the dropdown above to see all languages</span>
-              )}
-            </div>
-          </div>
+
 
           {catalogError && (
             <div className="bible-library-error">

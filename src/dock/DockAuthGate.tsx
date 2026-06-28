@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import { DEFAULT_PLAN_CONFIG } from "../services/planConfigTypes";
 
@@ -92,6 +93,7 @@ function getDeviceIdFromUrl(): string | null {
 }
 
 export default function DockAuthGate({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
@@ -175,16 +177,16 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
           <path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
-        <h2>Authentication Required</h2>
-        <p>Please open the MakeChurchEasy desktop app and log in first.</p>
+        <h2>{t('auth.title')}</h2>
+        <p>{t('auth.description')}</p>
         <button className="dock-auth-refresh" onClick={() => window.location.reload()}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="23 4 23 10 17 10" />
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
           </svg>
-          Refresh
+          {t('auth.refresh')}
         </button>
-        <p className="dock-auth-hint">The dock will auto-detect when you log in.</p>
+        <p className="dock-auth-hint">{t('auth.autoDetect')}</p>
       </div>
     );
   }

@@ -7,16 +7,34 @@
  * Fail-open: if offline or backend unreachable, let the user through.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Lock, ExternalLink } from "lucide-react";
 import {
   getRestrictionInfo,
+  refreshEntitlements,
   type RestrictionInfo,
 } from "../services/licenseService";
 import { useAuth } from "../contexts/AuthContext";
 
 const PRICING_URL =
   "https://makechurcheasy.creatorstudioslabs.stream/pricing";
+
+const PLAN_LABELS: Record<string, string> = {
+  free: "Free",
+  basic: "Basic",
+  starter: "Starter",
+  growth: "Growth",
+  pro: "Pro",
+  trial: "Trial",
+};
+
+/** Next plan tier above the given one. */
+const NEXT_PLAN: Record<string, string> = {
+  free: "starter",
+  basic: "starter",
+  starter: "growth",
+  growth: "pro",
+};
 
 interface FeatureGuardProps {
   /** Feature key matching licenseService names (e.g., "multiview", "tickers") */
@@ -28,12 +46,20 @@ export default function FeatureGuard({ feature, children }: FeatureGuardProps) {
   const { user } = useAuth();
   const [info, setInfo] = useState<RestrictionInfo | null>(null);
 
-  useEffect(() => {
+  const evaluate = useCallback(() => {
     if (!user) return;
-
     const restriction = getRestrictionInfo(user, feature);
     setInfo(restriction);
   }, [user, feature]);
+
+  useEffect(() => {
+    evaluate();
+  }, [evaluate]);
+
+  // Re-evaluate after plan config refreshes from server
+  useEffect(() => {
+    refreshEntitlements().then(() => evaluate());
+  }, [evaluate]);
 
   // No user yet — let children render (AuthGate handles auth)
   if (!user) return <>{children}</>;
@@ -43,6 +69,14 @@ export default function FeatureGuard({ feature, children }: FeatureGuardProps) {
 
   // Feature is not locked — pass through
   if (!info.locked) return <>{children}</>;
+
+  // Determine correct upgrade target — never suggest a plan the user
+  // already has or a lower tier.
+  const currentPlan = info.currentPlan;
+  const nextPlanKey = NEXT_PLAN[currentPlan] || "growth";
+  const upgradeLabel =
+    PLAN_LABELS[nextPlanKey] ||
+    nextPlanKey.charAt(0).toUpperCase() + nextPlanKey.slice(1);
 
   // Feature is locked — show inline upgrade prompt
   return (
@@ -56,7 +90,7 @@ export default function FeatureGuard({ feature, children }: FeatureGuardProps) {
           {info.message}
         </p>
         <p style={styles.currentPlan}>
-          Your plan: <strong>{info.currentPlan}</strong>
+          Your plan: <strong>{PLAN_LABELS[currentPlan] || currentPlan}</strong>
         </p>
         <a
           href={PRICING_URL}
@@ -64,7 +98,7 @@ export default function FeatureGuard({ feature, children }: FeatureGuardProps) {
           rel="noopener noreferrer"
           style={styles.cta}
         >
-          Upgrade to {info.requiredPlan.charAt(0).toUpperCase() + info.requiredPlan.slice(1)}
+          Upgrade to {upgradeLabel}
           <ExternalLink size={12} />
         </a>
       </div>

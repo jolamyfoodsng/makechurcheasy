@@ -221,6 +221,7 @@ export async function syncSongsToDock(): Promise<void> {
     const { invoke } = await import("@tauri-apps/api/core");
     const { getCurrentUser } = await import("../services/authService");
     const { checkEntitlementSync } = await import("../services/entitlementClient");
+    const { getEffectivePlan } = await import("../services/licenseService");
 
     const user = getCurrentUser();
     if (!user) {
@@ -229,7 +230,7 @@ export async function syncSongsToDock(): Promise<void> {
     }
 
     const allSongs = await getAllSongs();
-    const { allowed, limit } = checkEntitlementSync("songs", user.plan, allSongs.length);
+    const { allowed, limit } = checkEntitlementSync("songs", getEffectivePlan(user), allSongs.length);
     // If allowed (under limit or unlimited), write all songs; otherwise slice
     const songs = allowed ? allSongs : allSongs.slice(0, Math.max(0, limit));
     await invoke("save_dock_data", {

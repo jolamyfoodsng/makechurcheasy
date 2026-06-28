@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { dockClient, type DockStateMessage } from "../services/dockBridge";
 import { dockObsClient, type DockObsStatus } from "./dockObsClient";
 import { DOCK_TABS, type DockTab, type DockStagedItem } from "./dockTypes";
@@ -146,26 +147,27 @@ function saveDockShellPreferences(next: DockShellPreferences): void {
   }
 }
 
-function getCompactDockTabLabel(tab: DockTab): string {
+function getCompactDockTabLabel(tab: DockTab, t: (key: string) => string): string {
   switch (tab) {
     case "bible":
-      return "Bible";
+      return t('page.shortcutTabBible');
     case "worship":
-      return "Worship";
+      return t('page.shortcutTabWorship');
     case "media":
-      return "Media";
+      return t('page.shortcutTabMedia');
     case "ministry":
-      return "Ministry";
+      return t('page.shortcutTabMinistry');
     case "planner":
-      return "Planner";
+      return t('page.shortcutTabPlanner');
     case "multiview":
-      return "Multi-View";
+      return t('page.shortcutTabMultiview');
     default:
       return "Tab";
   }
 }
 
 export default function DockPage() {
+  const { t } = useTranslation();
   // Synchronous config reader (reads from cache, falls back to defaults)
   const cfg = readDesktopConfigCache() || DEFAULT_DESKTOP_CONFIG;
 
@@ -551,15 +553,15 @@ export default function DockPage() {
   }, [openCommandPalette]);
 
   const shortcuts: ShortcutDefinition[] = [
-    { key: "2", handler: () => setActiveTab("bible"), label: "Bible", category: "Navigation" },
-    { key: "3", handler: () => setActiveTab("worship"), label: "Worship", category: "Navigation" },
-    { key: "4", handler: () => setActiveTab("media"), label: "Media", category: "Navigation" },
-    { key: "5", handler: () => setActiveTab("planner"), label: "Planner", category: "Navigation" },
-    { key: "6", handler: () => setActiveTab("multiview"), label: "Multi-View", category: "Navigation" },
-    { key: "7", handler: () => setActiveTab("ministry"), label: "Ministry", category: "Navigation" },
-    { key: "k", handler: () => openCommandPalette(""), label: "Command Palette", category: "Utility" },
+    { key: "2", handler: () => setActiveTab("bible"), label: t('page.shortcutTabBible'), category: "Navigation" },
+    { key: "3", handler: () => setActiveTab("worship"), label: t('page.shortcutTabWorship'), category: "Navigation" },
+    { key: "4", handler: () => setActiveTab("media"), label: t('page.shortcutTabMedia'), category: "Navigation" },
+    { key: "5", handler: () => setActiveTab("planner"), label: t('page.shortcutTabPlanner'), category: "Navigation" },
+    { key: "6", handler: () => setActiveTab("multiview"), label: t('page.shortcutTabMultiview'), category: "Navigation" },
+    { key: "7", handler: () => setActiveTab("ministry"), label: t('page.shortcutTabMinistry'), category: "Navigation" },
+    { key: "k", handler: () => openCommandPalette(""), label: t('page.shortcutCommandPalette'), category: "Utility" },
     { key: "t", handler: () => setTheme(nextTheme), label: themeToggleLabel, category: "Utility" },
-    { key: "/", handler: () => setShowShortcutsHelp((v) => !v), label: "Shortcuts help", category: "Utility" },
+    { key: "/", handler: () => setShowShortcutsHelp((v) => !v), label: t('page.shortcutsHelp'), category: "Utility" },
   ];
 
   const { toasts } = useKeyboardShortcuts(shortcuts, true);
@@ -581,7 +583,7 @@ export default function DockPage() {
         <div className="dock-force-update-banner">
           <Icon name="warning" size={14} />
           <span>
-            Update required — your version is {versionAge.daysOld} days old.
+            {t('page.forceUpdate')} — {t('page.updateReady', { days: versionAge.daysOld })}
             {versionAge.currentVersion && versionAge.latestVersion && (
               <> v{versionAge.currentVersion} → v{versionAge.latestVersion}</>
             )}
@@ -592,7 +594,7 @@ export default function DockPage() {
             rel="noopener noreferrer"
             className="dock-force-update-banner__link"
           >
-            Download Update
+            {t('page.downloadUpdate')}
           </a>
         </div>
       )}
@@ -601,7 +603,7 @@ export default function DockPage() {
       {cfg.security.maintenanceMode && (
         <div className="dock-force-update-banner" style={{ background: "var(--accent, #f59e0b)", color: "#000" }}>
           <Icon name="build" size={14} />
-          <span>System maintenance in progress. Some features may be unavailable.</span>
+          <span>{t('page.maintenance')}</span>
         </div>
       )}
 
@@ -633,8 +635,8 @@ export default function DockPage() {
               type="button"
               className="dock-shell-icon-btn"
               onClick={() => void handleReloadDock()}
-              aria-label="Reload dock"
-              title={isReloadingDock ? "Reconnecting..." : "Reload dock"}
+              aria-label={t('page.reloadDock')}
+              title={isReloadingDock ? t('page.connecting') : t('page.reloadDock')}
               disabled={isReloadingDock}
             >
               <Icon name="refresh" size={14} />
@@ -653,7 +655,7 @@ export default function DockPage() {
                 type="button"
                 className="dock-shell-icon-btn"
                 onClick={() => setShowSettingsMenu(false)}
-                aria-label="Close menu"
+                aria-label={t('common.close')}
               >
                 <Icon name="close" size={14} />
               </button>
@@ -715,7 +717,7 @@ export default function DockPage() {
                 onClick={() => setShowTabVisibility(!showTabVisibility)}
               >
                 <Icon name="visibility" size={16} />
-                <span>Tab Visibility</span>
+                <span>{t('page.tabVisibility')}</span>
                 <Icon name={showTabVisibility ? "expand_less" : "expand_more"} size={14} />
               </button>
               {showTabVisibility && (() => {
@@ -813,17 +815,17 @@ export default function DockPage() {
                 onClick={() => setShowProjectionSettings(!showProjectionSettings)}
               >
                 <Icon name="videocam" size={16} />
-                <span>Projection Settings</span>
+                <span>{t('page.projectionSettings')}</span>
                 <Icon name={showProjectionSettings ? "expand_less" : "expand_more"} size={14} />
               </button>
               {showProjectionSettings && (
                 <div className="dock-sidebar__subpanel">
                   {/* Scene Handling */}
-                  <div className="dock-sidebar__section-label">Scene Handling</div>
+                  <div className="dock-sidebar__section-label">{t('page.sceneHandling')}</div>
                   <div className="dock-sidebar__radio-group">
                     {([
-                      { mode: "auto-duplicate" as const, icon: "content_copy", label: "Auto Duplicate Program Scene", desc: "Creates a temporary copy and inserts it in VC" },
-                      { mode: "no-clone" as const, icon: "block", label: "Don't Clone Program Scene", desc: "Projects directly without duplicating" },
+                      { mode: "auto-duplicate" as const, icon: "content_copy", label: t('page.autoDuplicateProgramScene'), desc: t('page.dedicatedSceneWithProgramBehind') },
+                      { mode: "no-clone" as const, icon: "block", label: t('page.dontCloneProgramScene'), desc: t('page.projectsDirectlyWithoutDuplicating') },
                     ]).map(({ mode, icon, label, desc }) => (
                       <button
                         key={mode}
@@ -904,10 +906,10 @@ export default function DockPage() {
                       checked={projectionSettings.restoreOriginalScene}
                       onChange={(e) => setProjectionSettings((s) => ({ ...s, restoreOriginalScene: e.target.checked }))}
                     />
-                    <span>Restore scene after projection</span>
+                    <span>{t('page.restoreSceneAfterProjection')}</span>
                   </label>
                   <div style={{ fontSize: 10, opacity: 0.5, padding: "2px 8px 0 22px", lineHeight: 1.4 }}>
-                    Returns OBS to its previous state after projection ends
+                    {t('page.returnsObsToPreviousState')}
                   </div>
                 </div>
               )}
@@ -939,7 +941,7 @@ export default function DockPage() {
                 }}
               >
                 <Icon name="link" size={16} />
-                <span>{obsConnected ? "Reconnect" : "Connect"} to OBS</span>
+                <span>{obsConnected ? t('page.reconnect') : t('page.connection')} to OBS</span>
               </button>
 
               <div className="dock-sidebar__divider" />
@@ -955,7 +957,7 @@ export default function DockPage() {
                 style={{ color: "var(--dock-red, #EF4444)" }}
               >
                 <Icon name="delete_sweep" size={16} />
-                <span>Clear All Scenes</span>
+                <span>{t('page.clearAllScenes')}</span>
               </button>
             </div>
           </div>
@@ -968,14 +970,14 @@ export default function DockPage() {
           <div className="dock-dialog dock-dialog--compact" onClick={(e) => e.stopPropagation()}>
             <div className="dock-dialog__header">
               <div>
-                <div className="dock-dialog__eyebrow" style={{ color: "var(--dock-red, #EF4444)" }}>Danger Zone</div>
-                <h2 className="dock-dialog__title">Clear All MCE Scenes?</h2>
+                <div className="dock-dialog__eyebrow" style={{ color: "var(--dock-red, #EF4444)" }}>{t('page.dangerZone')}</div>
+                <h2 className="dock-dialog__title">{t('page.clearAllScenesConfirm')}</h2>
               </div>
               <button
                 type="button"
                 className="dock-dialog__close"
                 onClick={() => { if (!clearScenesLoading) setShowClearScenesConfirm(false); }}
-                aria-label="Close"
+                aria-label={t('common.close')}
               >
                 <Icon name="close" size={14} />
               </button>
@@ -1001,7 +1003,7 @@ export default function DockPage() {
                 disabled={clearScenesLoading}
                 onClick={() => setShowClearScenesConfirm(false)}
               >
-                Cancel
+                {t('page.clearAllScenesCancel')}
               </button>
               <button
                 type="button"
@@ -1021,7 +1023,7 @@ export default function DockPage() {
                   }
                 }}
               >
-                {clearScenesLoading ? "Clearing…" : "Delete Everything"}
+                {clearScenesLoading ? t('common.loading') : t('page.clearAllScenesContinue')}
               </button>
             </div>
           </div>
@@ -1033,14 +1035,14 @@ export default function DockPage() {
           <div className="dock-dialog dock-dialog--compact" onClick={(e) => e.stopPropagation()}>
             <div className="dock-dialog__header">
               <div>
-                <div className="dock-dialog__eyebrow">Connection</div>
-                <h2 className="dock-dialog__title">OBS WebSocket</h2>
+                <div className="dock-dialog__eyebrow">{t('page.connection')}</div>
+                <h2 className="dock-dialog__title">{t('page.obsWebSocket')}</h2>
               </div>
               <button
                 type="button"
                 className="dock-dialog__close"
                 onClick={() => setShowReconnectModal(false)}
-                aria-label="Close"
+                aria-label={t('common.close')}
               >
                 <Icon name="close" size={14} />
               </button>
@@ -1075,11 +1077,11 @@ export default function DockPage() {
                   }}
                 >
                   <Icon name="link" size={16} />
-                  {obsConnected ? "Reconnect" : "Connect"}
+                  {obsConnected ? t('page.reconnect') : t('page.connection')}
                 </button>
               </div>
               <div className="dock-settings-panel__hint">
-                Make sure OBS → Tools → WebSocket Server Settings is enabled.
+                {t('page.makeSureEnabled')}
               </div>
             </div>
           </div>
@@ -1101,13 +1103,13 @@ export default function DockPage() {
               style={{ marginLeft: "auto", padding: "2px 6px", fontSize: 10, whiteSpace: "nowrap" }}
             >
               <Icon name="download" size={12} />
-              {moveUrlCopied ? "URL Copied!" : "Install"}
+              {moveUrlCopied ? t('common.done') : t('page.movePlugin')}
             </a>
             <button
               type="button"
               className="dock-toolbar__btn"
               onClick={() => setMoveNoticeDismissed(true)}
-              title="Dismiss"
+              title={t('common.close')}
               style={{ width: 20, height: 20, padding: 0, border: "none", flexShrink: 0 }}
             >
               <Icon name="close" size={12} />
@@ -1177,7 +1179,7 @@ export default function DockPage() {
             data-summary={tab.summary}
           >
             <Icon name={tab.icon} size={14} className="dock-bottom-nav__icon" />
-            <span className="dock-bottom-nav__label-short">{getCompactDockTabLabel(tab.id)}</span>
+            <span className="dock-bottom-nav__label-short">{getCompactDockTabLabel(tab.id, t)}</span>
           </button>
         ))}
       </nav>
@@ -1199,19 +1201,19 @@ export default function DockPage() {
           className="dock-shortcuts-overlay"
           onClick={() => setShowShortcutsHelp(false)}
           role="dialog"
-          aria-label="Keyboard shortcuts"
+          aria-label={t('page.keyboardShortcuts')}
         >
           <div className="dock-shortcuts-overlay__content" onClick={(e) => e.stopPropagation()}>
             <div className="dock-shortcuts-overlay__header">
               <div>
                 <div className="dock-shortcuts-overlay__eyebrow">Dock</div>
-                <div className="dock-shortcuts-overlay__title">Keyboard Shortcuts</div>
+                <div className="dock-shortcuts-overlay__title">{t('page.keyboardShortcuts')}</div>
               </div>
               <button
                 type="button"
                 className="dock-shortcuts-overlay__close"
                 onClick={() => setShowShortcutsHelp(false)}
-                aria-label="Close shortcuts"
+                aria-label={t('common.close')}
               >
                 <Icon name="close" size={14} />
               </button>
@@ -1222,11 +1224,11 @@ export default function DockPage() {
                 <div className="dock-shortcuts-section__label">Navigation</div>
                 <div className="dock-shortcuts-list">
                   {[
-                    { key: "2", label: "Bible" },
-                    { key: "3", label: "Worship" },
-                    { key: "4", label: "Media" },
-                    { key: "5", label: "Planner" },
-                    { key: "6", label: "Multi-View" },
+                    { key: "2", label: t('page.shortcutTabBible') },
+                    { key: "3", label: t('page.shortcutTabWorship') },
+                    { key: "4", label: t('page.shortcutTabMedia') },
+                    { key: "5", label: t('page.shortcutTabPlanner') },
+                    { key: "6", label: t('page.shortcutTabMultiview') },
                   ].map((s) => (
                     <div key={s.key} className="dock-shortcuts-item">
                       <span className="dock-shortcuts-item__key">{formatShortcut(s.key)}</span>
@@ -1240,10 +1242,10 @@ export default function DockPage() {
                 <div className="dock-shortcuts-section__label">Utility</div>
                 <div className="dock-shortcuts-list">
                   {[
-                    { key: "k", label: "Command Palette" },
+                    { key: "k", label: t('page.shortcutCommandPalette') },
                     { key: "t", label: "Toggle theme" },
                     { key: "s", label: "Toggle settings" },
-                    { key: "/", label: "This help overlay" },
+                    { key: "/", label: t('page.shortcutsHelp') },
                   ].map((s) => (
                     <div key={s.key} className="dock-shortcuts-item">
                       <span className="dock-shortcuts-item__key">{formatShortcut(s.key)}</span>
@@ -1255,7 +1257,7 @@ export default function DockPage() {
             </div>
 
             <div className="dock-shortcuts-overlay__footer">
-              Press <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>/</kbd> to toggle this overlay
+              Press <kbd>{t('page.shortcutAlt')}</kbd> + <kbd>{t('page.shortcutShift')}</kbd> + <kbd>/</kbd> to toggle this overlay
             </div>
           </div>
         </div>

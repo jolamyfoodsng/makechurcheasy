@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { flushSync } from "react-dom";
 import type { BibleTheme } from "../../bible/types";
 import Icon from "../DockIcon";
@@ -71,6 +72,7 @@ export default function DockThemeSettingsModal({
   overlayMode = "fullscreen",
   showReferences = true,
 }: Props) {
+  const { t } = useTranslation();
   const [internalView, setInternalView] = useState<StudioView>("closed");
   const view = externalIsOpen !== undefined
     ? (externalIsOpen ? (internalView === "closed" ? "settings" : internalView) : "closed")
@@ -113,7 +115,7 @@ export default function DockThemeSettingsModal({
   const EFFECT_DEFS = useMemo(() => [
     {
       id: "fadeIn",
-      label: "Fade In",
+      label: t('worship.fadeIn'),
       icon: "opacity",
       isActive: (s: DockFullscreenQuickThemeSettings) => s.animation === "fade",
       toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
@@ -124,7 +126,7 @@ export default function DockThemeSettingsModal({
     },
     {
       id: "glow",
-      label: "Glow",
+      label: t('worship.glow'),
       icon: "wb_sunny",
       isActive: (s: DockFullscreenQuickThemeSettings) => s.textShadow.includes("0 0"),
       toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
@@ -136,7 +138,7 @@ export default function DockThemeSettingsModal({
     },
     {
       id: "subtleZoom",
-      label: "Subtle Zoom",
+      label: t('worship.subtleZoom'),
       icon: "zoom_in",
       isActive: (s: DockFullscreenQuickThemeSettings) => s.animation === "scale-in",
       toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
@@ -147,7 +149,7 @@ export default function DockThemeSettingsModal({
     },
     {
       id: "verseReveal",
-      label: "Verse Reveal",
+      label: t('worship.verseReveal'),
       icon: "visibility",
       isActive: (s: DockFullscreenQuickThemeSettings) => s.animation === "reveal-bg-then-text",
       toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
@@ -158,7 +160,7 @@ export default function DockThemeSettingsModal({
     },
     {
       id: "textShadow",
-      label: "Text Shadow",
+      label: t('worship.textShadow'),
       icon: "blur_on",
       isActive: (s: DockFullscreenQuickThemeSettings) => s.textShadow !== "none" && s.textShadow !== "",
       toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
@@ -166,7 +168,7 @@ export default function DockThemeSettingsModal({
         textShadow: s.textShadow !== "none" && s.textShadow !== "" ? "none" : "0 2px 8px rgba(0,0,0,0.6)",
       }),
     },
-  ], []);
+  ], [t]);
 
   useEffect(() => {
     if (view === "closed") return undefined;
@@ -255,11 +257,11 @@ export default function DockThemeSettingsModal({
           className="dtb-studio__trigger dtb-studio__trigger--labeled"
           onClick={openSettings}
           aria-haspopup="dialog"
-          aria-label="Quick Edits"
-          title="Quick Edits"
+          aria-label={t('worship.quickEdits')}
+          title={t('worship.quickEdits')}
         >
           <Icon name="edit" size={13} />
-          <span>Quick Edits</span>
+          <span>{t('worship.quickEdits')}</span>
         </button>
       )}
 
@@ -277,14 +279,14 @@ export default function DockThemeSettingsModal({
             <div className="dtb-studio__header">
               <div className="dtb-studio__header-spacer" />
               <div className="dtb-studio__header-center">
-                <h2 className="dtb-studio__title">Theme Settings</h2>
+                <h2 className="dtb-studio__title">{t('worship.openThemeSettings')}</h2>
                 <p className="dtb-studio__subtitle">{subtitle}</p>
               </div>
               <button
                 type="button"
                 className="dtb-studio__close"
                 onClick={() => setView("closed")}
-                aria-label="Close"
+                aria-label={t('common.close')}
               >
                 <Icon name="close" size={16} />
               </button>
@@ -316,18 +318,18 @@ export default function DockThemeSettingsModal({
                       <div className="dtb-bg-picker__header">
                         <div className="dtb-bg-picker__header-left">
                           <Icon name="swap_vert" size={14} className="dtb-studio-card__icon" />
-                          <span className="dtb-studio-card__title">Lower Third Position</span>
+                          <span className="dtb-studio-card__title">{t('worship.lowerThirdPosition')}</span>
                         </div>
                       </div>
-                      <p className="dtb-bg-picker__subtitle">Control where the lower third appears on screen.</p>
+                      <p className="dtb-bg-picker__subtitle">{t('worship.adjustDescription')}</p>
 
                       <div className="dtb-align-group">
-                        <span className="dtb-align-group__label">Container position</span>
-                        <div className="dtb-segmented" role="group" aria-label="Lower third container position">
+                        <span className="dtb-align-group__label">{t('worship.containerPosition')}</span>
+                        <div className="dtb-segmented" role="group" aria-label={t('worship.containerPosition')}>
                           {([
-                            { value: "left" as const, icon: "format_align_left", label: "Left" },
-                            { value: "center" as const, icon: "format_align_center", label: "Center" },
-                            { value: "right" as const, icon: "format_align_right", label: "Right" },
+                            { value: "left" as const, icon: "format_align_left", label: t('worship.left') },
+                            { value: "center" as const, icon: "format_align_center", label: t('worship.center') },
+                            { value: "right" as const, icon: "format_align_right", label: t('worship.right') },
                           ]).map((opt) => (
                             <button
                               key={opt.value}
@@ -344,10 +346,10 @@ export default function DockThemeSettingsModal({
                       </div>
 
                       <div className="dtb-typo-row dtb-typo-row--inline">
-                        <span className="dtb-typo-row__label">Width</span>
-                        <div className="dtb-segmented dtb-segmented--compact" role="group" aria-label="Lower third width">
+                        <span className="dtb-typo-row__label">{t('worship.width')}</span>
+                        <div className="dtb-segmented dtb-segmented--compact" role="group" aria-label={t('worship.width')}>
                           {([
-                            { value: "full" as const, label: "Full" },
+                            { value: "full" as const, label: t('worship.full') },
                             { value: "xl" as const, label: "XL" },
                             { value: "lg" as const, label: "LG" },
                             { value: "md" as const, label: "MD" },
@@ -368,7 +370,7 @@ export default function DockThemeSettingsModal({
 
                       <div className="dtb-slider-field">
                         <div className="dtb-slider-field__head">
-                          <span>Horizontal offset</span>
+                          <span>{t('worship.horizontalOffset')}</span>
                           <span className="dtb-slider-field__value">{draftSettings.lowerThirdOffsetX}px</span>
                         </div>
                         <input
@@ -379,7 +381,7 @@ export default function DockThemeSettingsModal({
                           step={1}
                           value={draftSettings.lowerThirdOffsetX}
                           onChange={(e) => updateDraft((c) => withPatch(c, { lowerThirdOffsetX: Number(e.target.value) }))}
-                          aria-label="Lower third horizontal offset"
+                          aria-label={t('worship.horizontalOffset')}
                         />
                       </div>
                     </div>
@@ -396,7 +398,7 @@ export default function DockThemeSettingsModal({
                     onClick={() => setEffectsOpen((o) => !o)}
                     aria-expanded={effectsOpen}
                   >
-                    <SectionLabel icon="auto_awesome" label="Effects" />
+                    <SectionLabel icon="auto_awesome" label={t('worship.textStyle')} />
                     <Icon
                       name={effectsOpen ? "expand_less" : "expand_more"}
                       size={14}
@@ -439,7 +441,7 @@ export default function DockThemeSettingsModal({
                   className="dtb-studio__footer-btn dtb-studio__footer-btn--reset"
                   onClick={handleReset}
                 >
-                  Reset
+                  {t('common.reset')}
                 </button>
                 <button
                   type="button"
@@ -447,7 +449,7 @@ export default function DockThemeSettingsModal({
                   onClick={handleSave}
                   disabled={saving}
                 >
-                  {saving ? "Saving..." : "Save Changes"}
+                  {saving ? t('worship.saving') : t('worship.saveChanges')}
                 </button>
               </div>
             )}

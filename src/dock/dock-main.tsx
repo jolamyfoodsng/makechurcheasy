@@ -10,6 +10,7 @@
 
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "../i18n";
 import DockPage from "./DockPage";
 import DockAuthGate from "./DockAuthGate";
 import { dockClient } from "../services/dockBridge";

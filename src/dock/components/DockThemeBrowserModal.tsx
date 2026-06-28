@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import type { BibleTheme } from "../../bible/types";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
 import { dockEntitlementGuard, requireEntitlement } from "../dockEntitlement";
@@ -26,11 +27,13 @@ export default function DockThemeBrowserModal({
   selectedThemeId,
   onSelect,
   onClose,
-  title = "Select Theme",
+  title,
   templateType,
   allowedCategories,
   themeCount = 0,
 }: Props) {
+  const { t } = useTranslation();
+  const resolvedTitle = title || t('themes.selectTheme');
   const [allThemes, setAllThemes] = useState<BibleTheme[]>([]);
   const [search, setSearch] = useState("");
   const [themeLimit, setThemeLimit] = useState<number>(-1);
@@ -108,7 +111,7 @@ export default function DockThemeBrowserModal({
           onSelect(theme);
           onClose();
         }}
-        title={isLocked ? "Upgrade to use more themes" : (theme.description || theme.name)}
+        title={isLocked ? t('themes.upgradeToUnlock') : (theme.description || theme.name)}
       >
         <ThemePreviewSurface
           className="dtb-card__swatch"
@@ -146,12 +149,12 @@ export default function DockThemeBrowserModal({
             </span>
           </div>
           {theme.settings.logoUrl && (
-            <span className="dtb-card__logo-badge" title="Includes logo">
+            <span className="dtb-card__logo-badge" title={t('themes.includesLogo')}>
               <DockIcon name="image" size={9} />
             </span>
           )}
           {isLocked && (
-            <span className="dtb-card__lock-badge" title="Upgrade to unlock">
+            <span className="dtb-card__lock-badge" title={t('themes.upgradeToUnlock')}>
               <DockIcon name="lock" size={14} />
             </span>
           )}
@@ -172,7 +175,7 @@ export default function DockThemeBrowserModal({
             </span>
           ))}
           <span className={`dtb-card__badge dtb-card__badge--${theme.source}`}>
-            {theme.source === "custom" ? "Custom" : "Built-in"}
+            {theme.source === "custom" ? t('themes.custom') : t('themes.builtin')}
           </span>
         </div>
       </button>
@@ -198,9 +201,9 @@ export default function DockThemeBrowserModal({
     <div className="dtb-backdrop" onClick={onClose}>
       <div className="dtb-modal" onClick={(e) => e.stopPropagation()}>
         <div className="dtb-header">
-          <h3 className="dtb-title">{title}</h3>
+          <h3 className="dtb-title">{resolvedTitle}</h3>
           <div className="dtb-header__actions">
-            <button className="dtb-close-btn" onClick={onClose} aria-label="Close theme browser">
+            <button className="dtb-close-btn" onClick={onClose} aria-label={t('common.close')}>
               <DockIcon name="close" size={16} />
             </button>
           </div>
@@ -211,26 +214,26 @@ export default function DockThemeBrowserModal({
           <input
             type="text"
             className="dtb-search__input"
-            placeholder="Search themes..."
+            placeholder={t('themes.searchThemes')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search themes"
+            aria-label={t('common.search')}
             autoFocus
           />
           {search && (
-            <button type="button" className="dtb-search__clear" onClick={() => setSearch("")} aria-label="Clear search">
+            <button type="button" className="dtb-search__clear" onClick={() => setSearch("")} aria-label={t('common.clear')}>
               <DockIcon name="close" size={12} />
             </button>
           )}
         </div>
 
         <div className="dtb-body">
-          {renderSection("Favorite Themes", favorites)}
+          {renderSection(t('themes.favoriteThemes'), favorites)}
 
           {favorites.length === 0 && (
             <div className="dtb-empty">
               <DockIcon name="widgets" size={28} />
-              <span>No favorite themes available</span>
+              <span>{t('themes.noThemesFound')}</span>
             </div>
           )}
         </div>

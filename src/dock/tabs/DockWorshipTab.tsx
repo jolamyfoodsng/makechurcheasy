@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { DockStagedItem, DockWorshipSection } from "../dockTypes";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
@@ -506,6 +507,7 @@ function fuzzyMatch(query: string, target: string): boolean {
 }
 
 export default function DockWorshipTab({ staged, onStage, productionDefaults }: Props) {
+  const { t } = useTranslation();
   const [songs, setSongs] = useState<DockSong[]>([]);
   const rawSongsRef = useRef<DockSong[]>([]);
   // Initialize from localStorage so the limit is known immediately
@@ -1166,7 +1168,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
     setActionError("");
     try {
       await persistSong(songEditor.id, songDraft, songEditor);
-      showToast("Song saved", "success");
+      showToast(t('worship.songSaved'), "success");
       setSongEditor(null);
       track("song_created", { autoSplit: false });
     } catch (err) {
@@ -1190,7 +1192,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
       artist: fallback.artist,
       lyrics: fallback.lyrics,
     });
-    showToast("Default restored in editor");
+    showToast(t('worship.defaultRestored'));
   }, [showToast, songEditor]);
 
   const openNewSongModal = useCallback(async (draft?: Partial<DockSongDraft>) => {
@@ -1222,7 +1224,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
         setSelectedIdx(0);
         setVisibleIdx(null);
         setHiddenSectionIndexes(new Set());
-        showToast(newSong.importSourceType === "online" ? "Import saved" : "Song added", "success");
+        showToast(newSong.importSourceType === "online" ? t('worship.importSaved') : t('worship.songAdded'), "success");
         track("song_created", { autoSplit: false });
         track("song_imported", { source: newSong.importSourceType ?? "manual" });
       }
@@ -1368,7 +1370,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
         setSelectedSong(updatedSong);
         setSelectedIdx(slideEditor.index);
       }
-      showToast("Slide updated", "success");
+      showToast(t('worship.slideUpdated'), "success");
       setSlideEditor(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1430,7 +1432,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
         .then((results) => {
           if (cancelled) return;
           setOnlineResults(results);
-          if (results.length === 0) setOnlineSearchError("No online lyric matches found.");
+          if (results.length === 0) setOnlineSearchError(t('worship.noLyrics'));
         })
         .catch((err) => {
           if (cancelled) return;
@@ -1477,7 +1479,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
     setSelectedIdx(null);
     setShowWorshipBackgroundOnly(false);
     onStage(null);
-    showToast("Worship cleared");
+    showToast(t('worship.clearOverlay'));
 
     try {
       await ensureObsConnected();
@@ -1669,7 +1671,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 <div className="dock-console-header__eyebrow"></div>
                 <div className="dock-console-header__eyebrow"></div>
                 <div className="dock-console-header__eyebrow"></div>
-                <div className="dock-console-header__eyebrow">Song Browser</div>
+                <div className="dock-console-header__eyebrow">{t('worship.searchSongs')}</div>
                 <div className="dock-console-header__eyebrow"></div>
 
               </div>
@@ -1682,21 +1684,21 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                     setOnlineSearchOpen(true);
                     setOnlineSearchError("");
                   }}
-                  title="Search Online"
-                  aria-label="Search Online"
+                  title={t('worship.importOnline')}
+                  aria-label={t('worship.importOnline')}
                 >
                   <Icon name="travel_explore" size={13} />
-                  <span className="dock-console-toggle__label">Search Online</span>
+                  <span className="dock-console-toggle__label">{t('worship.importOnline')}</span>
                 </button>
                 <button
                   type="button"
                   className="dock-console-toggle"
                   onClick={() => openNewSongModal()}
-                  title="Add Song"
-                  aria-label="Add Song"
+                  title={t('worship.addSong')}
+                  aria-label={t('worship.addSong')}
                 >
                   <Icon name="add" size={13} />
-                  <span className="dock-console-toggle__label">Add Song</span>
+                  <span className="dock-console-toggle__label">{t('worship.addSong')}</span>
                 </button>
               </div>
             </div>
@@ -1704,7 +1706,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
               <Icon name="search" size={14} className="dock-search__icon" />
               <input
                 className="dock-input"
-                placeholder="Search title or artist..."
+                placeholder={t('worship.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(event) => {
                   const next = event.target.value;
@@ -1716,7 +1718,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                     setShowRecentSearches(true);
                   }
                 }}
-                aria-label="Search songs"
+                aria-label={t('worship.searchSongs')}
               />
               {searchQuery && (
                 <button
@@ -1726,15 +1728,15 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                     setSearchQuery("");
                     setShowRecentSearches(recentSearches.length > 0);
                   }}
-                  aria-label="Clear song search"
-                  title="Clear song search"
+                  aria-label={t('common.clear')}
+                  title={t('common.clear')}
                 >
                   <Icon name="close" size={13} />
                 </button>
               )}
               {showRecentSearches && !searchQuery.trim() && recentSearches.length > 0 && (
                 <div className="dock-search-dropdown dock-search-dropdown--recent">
-                  <div className="dock-search-dropdown__heading">Recent searches</div>
+                  <div className="dock-search-dropdown__heading">{t('worship.recentSearches')}</div>
                   {recentSearches.map((item) => (
                     <button
                       type="button"
@@ -1758,12 +1760,12 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
               <div className="dock-empty dock-worship-workspace__empty">
                 <Icon name={songs.length === 0 ? "music_off" : "search_off"} size={20} />
                 <div className="dock-empty__title">
-                  {songs.length === 0 ? "No Songs Yet" : "No Matches"}
+                  {songs.length === 0 ? t('worship.noSongs') : t('worship.noSongsMatch')}
                 </div>
                 <div className="dock-empty__text">
                   {songs.length === 0
-                    ? "Load songs in the main app to use them in the dock."
-                    : `No songs match "${searchQuery}".`}
+                    ? t('worship.loadSongsHint')
+                    : t('worship.noSongsMatchQuery', { query: searchQuery })}
                 </div>
               </div>
             ) : (
@@ -1788,7 +1790,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                       >
                         <span className="dock-card__title">{song.title}</span>
                         <span className="dock-card__subtitle">
-                          {song.artist || "Unknown artist"}
+                          {song.artist || t('worship.unknownArtist')}
                         </span>
                         {isLocked && (
                           <span className="dock-song-card__lock-badge">
@@ -1796,7 +1798,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                             </svg>
-                            Upgrade
+                            {t('worship.upgrade')}
                           </span>
                         )}
                       </button>
@@ -1808,8 +1810,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                             event.stopPropagation();
                             openSongEditor(song);
                           }}
-                          aria-label={`Edit ${song.title}`}
-                          title="Edit song"
+                          aria-label={`${t('common.edit')} ${song.title}`}
+                          title={t('worship.editSong')}
                         >
                           <Icon name="edit" size={13} />
                         </button>
@@ -1841,9 +1843,9 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                     <div className="dock-worship-summary__artist">{selectedSong.artist}</div>
                   )}
                   <div className="dock-worship-summary__meta">
-                    <span>{selectedSongSections.length} slides</span>
+                    <span>{t('worship.slideCount', { count: selectedSongSections.length })}</span>
                     <span className="dock-worship-summary__meta-dot">·</span>
-                    <span>{linesPerSlide} lines/slide</span>
+                    <span>{t('worship.linesPerSlide')} ({linesPerSlide})</span>
                   </div>
                 </div>
               </div>
@@ -1852,7 +1854,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                   type="button"
                   className="dock-shell-icon-btn"
                   onClick={() => openSongEditor(selectedSong)}
-                  title="Edit song"
+                  title={t('worship.editSong')}
                 >
                   <Icon name="edit" size={14} />
                 </button>
@@ -1866,17 +1868,17 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
               <Icon name="search" size={14} className="dock-media-search__icon" />
               <input
                 className="dock-media-search__input"
-                placeholder="Search lyrics..."
+                placeholder={t('worship.lyricsSearchPlaceholder')}
                 value={lyricsSearchQuery}
                 onChange={(e) => setLyricsSearchQuery(e.target.value)}
-                aria-label="Search lyrics"
+                aria-label={t('worship.lyricsSearchPlaceholder')}
               />
               {lyricsSearchQuery && (
                 <button
                   type="button"
                   className="dock-media-search__clear"
                   onClick={() => setLyricsSearchQuery("")}
-                  aria-label="Clear lyrics search"
+                  aria-label={t('common.clear')}
                 >
                   <Icon name="close" size={13} />
                 </button>
@@ -1893,15 +1895,15 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 <Icon name="lyrics" size={18} />
                 <div className="dock-empty__text">
                   {selectedSongSections.length === 0
-                    ? "This song does not have any slideable lyrics yet."
-                    : "All slides are hidden for this line setting."}
+                    ? t('worship.noLyrics')
+                    : t('worship.allSlidesHidden')}
                 </div>
               </div>
             ) : lyricsFilteredSectionIndexes.length === 0 ? (
               <div className="dock-empty dock-worship-workspace__empty">
                 <Icon name="search_off" size={18} />
                 <div className="dock-empty__text">
-                  {`No slides match "${lyricsSearchQuery}".`}
+                  {t('worship.noSlidesMatch', { query: lyricsSearchQuery })}
                 </div>
               </div>
             ) : (
@@ -1928,7 +1930,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                               <span className="dock-worship-slide-card__name">{displayLabel}</span>
                             ) : (
                               <span className="dock-worship-slide-card__name dock-worship-slide-card__name--muted">
-                                Slide {idx + 1}
+                                {t('worship.slideNumber', { number: idx + 1 })}
                               </span>
                             )}
                             <span className="dock-worship-slide-card__index">{idx + 1}</span>
@@ -1937,7 +1939,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                             {isVisible && (
                               <span className="dock-worship-slide-card__badge dock-worship-slide-card__badge--visible">
                                 <Icon name="visibility" size={8} />
-                                Showing
+                                {t('worship.showSection')}
                               </span>
                             )}
                           </div>
@@ -1949,7 +1951,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                           type="button"
                           className="dock-worship-slide-card__action"
                           onClick={() => openSlideEditor(idx)}
-                          title="Edit slide"
+                          title={t('worship.editSong')}
                         >
                           <Icon name="edit" size={12} />
                         </button>
@@ -1983,7 +1985,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 <DockBottomToolbar
                   overlayMode={overlayMode}
                   onModeChange={setOverlayMode}
-                  clearLabel="Clear"
+                  clearLabel={t('common.clear')}
                   onClear={handleClearLyrics}
                   collapsed={toolbarCollapsed}
                   onCollapseChange={setToolbarCollapsed}
@@ -1992,7 +1994,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                     type="button"
                     className={`dock-btm-toolbar__icon-btn${showWorshipBackgroundOnly ? " dock-btm-toolbar__icon-btn--active" : ""}`}
                     onClick={handleShowWorshipBackgroundOnly}
-                    title={showWorshipBackgroundOnly ? "Show with lyrics" : "Background only"}
+                    title={showWorshipBackgroundOnly ? t('worship.presentLyrics') : t('worship.backgroundOnly')}
                   >
                     <Icon name={showWorshipBackgroundOnly ? "visibility_off" : "visibility"} size={14} />
                   </button>
@@ -2007,14 +2009,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                       onClick={() => setShowLineCountPopover((current) => !current)}
                       aria-haspopup="dialog"
                       aria-expanded={showLineCountPopover}
-                      title="Lines per slide"
+                      title={t('worship.linesPerSlide')}
                     >
                       <Icon name="text_fields" size={14} />
                     </button>
 
                     {showLineCountPopover && (
-                      <div className="dock-line-popover__menu" role="dialog" aria-label="Worship line count">
-                        <div className="dock-line-popover__title">Lines per slide</div>
+                      <div className="dock-line-popover__menu" role="dialog" aria-label={t('worship.linesPerSlide')}>
+                        <div className="dock-line-popover__title">{t('worship.linesPerSlide')}</div>
                         <div className="dock-line-popover__grid">
                           {Array.from(
                             { length: MAX_LINES_PER_SLIDE - MIN_LINES_PER_SLIDE + 1 },
@@ -2038,7 +2040,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                     type="button"
                     className="dock-btm-toolbar__icon-btn"
                     onClick={() => setShowThemeSettings(true)}
-                    title="Quick Edits"
+                    title={t('worship.quickEdits')}
                   >
                     <Icon name="edit" size={14} />
                   </button>
@@ -2054,14 +2056,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
           <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-song-editor-title">
             <div className="dock-dialog__header">
               <div>
-                <div className="dock-dialog__eyebrow">Edit Song</div>
-                <h2 id="dock-song-editor-title" className="dock-dialog__title">Song details</h2>
+                <div className="dock-dialog__eyebrow">{t('worship.editSong')}</div>
+                <h2 id="dock-song-editor-title" className="dock-dialog__title">{t('worship.songDetails')}</h2>
               </div>
               <button
                 type="button"
                 className="dock-dialog__close"
                 onClick={() => setSongEditor(null)}
-                aria-label="Close song editor"
+                aria-label={t('common.close')}
               >
                 <Icon name="close" size={14} />
               </button>
@@ -2070,8 +2072,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
               <div className="dock-dialog__row dock-dialog__row--two">
                 <label className="dock-dialog-field">
                   <span className="dock-dialog-field__label">
-                    <span>Title</span>
-                    <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
+                    <span>{t('worship.songTitle')}</span>
+                    <span className="dock-dialog-field__tag dock-dialog-field__tag--required">{t('worship.required')}</span>
                   </span>
                   <input
                     className="dock-input"
@@ -2081,8 +2083,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 </label>
                 <label className="dock-dialog-field">
                   <span className="dock-dialog-field__label">
-                    <span>Artist</span>
-                    <span className="dock-dialog-field__tag">Optional</span>
+                    <span>{t('worship.artist')}</span>
+                    <span className="dock-dialog-field__tag">{t('worship.optional')}</span>
                   </span>
                   <input
                     className="dock-input"
@@ -2092,7 +2094,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 </label>
               </div>
               <label className="dock-dialog-field dock-dialog-field--lyrics">
-                <span>Lyrics</span>
+                <span>{t('worship.songLyrics')}</span>
                 <textarea
                   className="dock-input dock-dialog-textarea"
                   value={songDraft.lyrics}
@@ -2102,7 +2104,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
             </div>
             <div className="dock-dialog__footer">
               <button type="button" className="dock-btn dock-btn--ghost" onClick={handleResetSongEditor}>
-                Reset to Default
+                {t('worship.resetDefault')}
               </button>
               <button
                 type="button"
@@ -2110,7 +2112,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 onClick={() => void handleSaveSongEditor()}
                 disabled={savingSong || !songDraft.title.trim() || !songDraft.lyrics.trim()}
               >
-                {savingSong ? "Saving..." : "Save"}
+                {savingSong ? t('worship.saving') : t('common.save')}
               </button>
             </div>
           </div>
@@ -2122,21 +2124,21 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
           <div className="dock-dialog dock-dialog--compact" role="dialog" aria-modal="true" aria-labelledby="dock-slide-editor-title">
             <div className="dock-dialog__header">
               <div>
-                <div className="dock-dialog__eyebrow">Quick Edit</div>
+                <div className="dock-dialog__eyebrow">{t('worship.quickEdit')}</div>
                 <h2 id="dock-slide-editor-title" className="dock-dialog__title">{slideEditor.label}</h2>
               </div>
               <button
                 type="button"
                 className="dock-dialog__close"
                 onClick={() => setSlideEditor(null)}
-                aria-label="Close slide editor"
+                aria-label={t('common.close')}
               >
                 <Icon name="close" size={14} />
               </button>
             </div>
             <div className="dock-dialog__body">
               <label className="dock-dialog-field">
-                <span>Slide text</span>
+                <span>{t('worship.slideText')}</span>
                 <textarea
                   className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
                   value={slideEditor.text}
@@ -2146,7 +2148,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
             </div>
             <div className="dock-dialog__footer">
               <button type="button" className="dock-btn dock-btn--ghost" onClick={() => setSlideEditor(null)}>
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -2154,7 +2156,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 onClick={() => void handleSaveSlideEditor()}
                 disabled={savingSong || !slideEditor.text.trim()}
               >
-                {savingSong ? "Saving..." : "Save"}
+                {savingSong ? t('worship.saving') : t('common.save')}
               </button>
             </div>
           </div>
@@ -2166,9 +2168,9 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
           <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-new-song-title">
             <div className="dock-dialog__header">
               <div>
-                <div className="dock-dialog__eyebrow">{newSongSource?.importSourceType === "online" ? "Review Import" : "Add Song"}</div>
+                <div className="dock-dialog__eyebrow">{newSongSource?.importSourceType === "online" ? t('worship.reviewImport') : t('worship.addSong')}</div>
                 <h2 id="dock-new-song-title" className="dock-dialog__title">
-                  {newSongSource?.importSourceType === "online" ? "Review lyrics before saving" : "New worship song"}
+                  {newSongSource?.importSourceType === "online" ? t('worship.reviewLyricsBeforeSaving') : t('worship.newWorshipSong')}
                 </h2>
               </div>
               <button
@@ -2178,7 +2180,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                   setIsNewSongModalOpen(false);
                   setNewSongSource(null);
                 }}
-                aria-label="Close add song dialog"
+                aria-label={t('common.close')}
               >
                 <Icon name="close" size={14} />
               </button>
@@ -2187,8 +2189,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
               <div className="dock-dialog__row dock-dialog__row--two">
                 <label className="dock-dialog-field">
                   <span className="dock-dialog-field__label">
-                    <span>Title</span>
-                    <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
+                    <span>{t('worship.songTitle')}</span>
+                    <span className="dock-dialog-field__tag dock-dialog-field__tag--required">{t('worship.required')}</span>
                   </span>
                   <input
                     className="dock-input"
@@ -2198,8 +2200,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 </label>
                 <label className="dock-dialog-field">
                   <span className="dock-dialog-field__label">
-                    <span>Artist</span>
-                    <span className="dock-dialog-field__tag">Optional</span>
+                    <span>{t('worship.artist')}</span>
+                    <span className="dock-dialog-field__tag">{t('worship.optional')}</span>
                   </span>
                   <input
                     className="dock-input"
@@ -2209,7 +2211,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 </label>
               </div>
               <label className="dock-dialog-field dock-dialog-field--lyrics">
-                <span>Lyrics</span>
+                <span>{t('worship.songLyrics')}</span>
                 <textarea
                   className="dock-input dock-dialog-textarea"
                   value={newSongDraft.lyrics}
@@ -2226,7 +2228,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                   setNewSongSource(null);
                 }}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -2234,7 +2236,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 onClick={() => void handleSaveNewSong()}
                 disabled={savingSong || !newSongDraft.title.trim() || !newSongDraft.lyrics.trim()}
               >
-                {savingSong ? "Saving..." : "Save Song"}
+                {savingSong ? t('worship.saving') : t('worship.saveSong')}
               </button>
             </div>
           </div>
@@ -2246,14 +2248,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
           <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-online-song-title">
             <div className="dock-dialog__header">
               <div>
-                <div className="dock-dialog__eyebrow">Search Online</div>
-                <h2 id="dock-online-song-title" className="dock-dialog__title">Import lyrics</h2>
+                <div className="dock-dialog__eyebrow">{t('worship.importOnline')}</div>
+                <h2 id="dock-online-song-title" className="dock-dialog__title">{t('worship.importLyrics')}</h2>
               </div>
               <button
                 type="button"
                 className="dock-dialog__close"
                 onClick={() => setOnlineSearchOpen(false)}
-                aria-label="Close online search"
+                aria-label={t('common.close')}
               >
                 <Icon name="close" size={14} />
               </button>
@@ -2263,10 +2265,10 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 <Icon name="search" size={14} className="dock-search__icon" />
                 <input
                   className="dock-input"
-                  placeholder="Type to start searching..."
+                  placeholder={t('worship.typeToSearch')}
                   value={onlineSearchQuery}
                   onChange={(event) => setOnlineSearchQuery(event.target.value)}
-                  aria-label="Search online lyrics"
+                  aria-label={t('worship.searchOnline')}
                   autoFocus
                 />
                 {onlineSearchQuery && (
@@ -2274,8 +2276,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                     type="button"
                     className="dock-search__clear"
                     onClick={() => setOnlineSearchQuery("")}
-                    aria-label="Clear online lyrics search"
-                    title="Clear online lyrics search"
+                    aria-label={t('common.clear')}
+                    title={t('common.clear')}
                   >
                     <Icon name="close" size={13} />
                   </button>
@@ -2284,7 +2286,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
               {onlineSearchLoading && (
                 <div className="dock-dialog__status">
                   <Icon name="sync" size={13} />
-                  Searching online sources...
+                  {t('worship.searchingOnline')}
                 </div>
               )}
               {onlineSearchError && <div className="dock-dialog__error">{onlineSearchError}</div>}
@@ -2294,7 +2296,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                     <div className="dock-dialog-result__body">
                       <span className="dock-dialog-result__title">{result.title}</span>
                       <span className="dock-dialog-result__meta">
-                        {[result.artist, result.sourceName].filter(Boolean).join(" · ") || "Online lyrics"}
+                        {[result.artist, result.sourceName].filter(Boolean).join(" · ") || t('worship.onlineLyrics')}
                       </span>
                       {result.preview && <span className="dock-dialog-result__preview">{result.preview}</span>}
                     </div>
@@ -2303,7 +2305,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                       className="dock-btn dock-btn--ghost dock-dialog-result__action"
                       onClick={() => handleImportOnlineResult(result)}
                     >
-                      Import
+                      {t('worship.importSong')}
                     </button>
                   </div>
                 ))}
@@ -2342,8 +2344,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
             setLowerThirdQuickThemeSettings(next);
           }
         }}
-        title="Quick Settings"
-        subtitle="Adjust verse text, spacing, and colors for your worship overlay."
+        title={t('worship.quickEdits')}
+        subtitle={t('worship.adjustDescription')}
         isOpen={showThemeSettings}
         onClose={() => setShowThemeSettings(false)}
         overlayMode={overlayMode}

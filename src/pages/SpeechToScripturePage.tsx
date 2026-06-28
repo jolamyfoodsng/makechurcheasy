@@ -234,7 +234,8 @@ export default function SpeechToScripturePage() {
       void lmDockService.startListening(selectedMic || undefined);
     } catch (err) {
       console.warn("[SpeechToScripture] Access check failed:", err);
-      setAccessDenied({ reason: "internet_verification_required" });
+      const isNetworkError = err instanceof TypeError && /fetch|network/i.test(err.message);
+      setAccessDenied({ reason: isNetworkError ? "internet_verification_required" : "server_error" });
     } finally {
       setCheckingAccess(false);
     }
@@ -1288,7 +1289,37 @@ export default function SpeechToScripturePage() {
                 <Wifi size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
                 <h2 className="sts3-lock-title">Connection Required</h2>
                 <p className="sts3-lock-desc">
-                  Unable to verify your account. Please check your internet connection and try again.
+                  Unable to reach the server. Please check your internet connection and try again.
+                </p>
+                <button
+                  className="sts3-btn sts3-btn--primary"
+                  onClick={() => setAccessDenied(null)}
+                >
+                  Retry
+                </button>
+              </>
+            )}
+            {accessDenied.reason === "server_error" && (
+              <>
+                <AlertTriangle size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Server Error</h2>
+                <p className="sts3-lock-desc">
+                  Something went wrong on our end. Please try again shortly.
+                </p>
+                <button
+                  className="sts3-btn sts3-btn--primary"
+                  onClick={() => setAccessDenied(null)}
+                >
+                  Retry
+                </button>
+              </>
+            )}
+            {accessDenied.reason === "device_not_found" && (
+              <>
+                <ShieldAlert size={40} style={{ color: "var(--danger)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Device Not Found</h2>
+                <p className="sts3-lock-desc">
+                  This device is no longer registered. Please re-pair your device.
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
