@@ -162,28 +162,28 @@ describe("getEffectivePlan", () => {
     expect(getEffectivePlan(user)).toBe("free");
   });
 
-  it("returns 'starter' during active trial (even if user.plan is free)", () => {
+  it("returns 'pro' during active trial (even if user.plan is free)", () => {
     const user = makeUser({
       plan: "free",
       trial: { active: true, endsAt: futureDate(5) },
     });
-    expect(getEffectivePlan(user)).toBe("starter");
+    expect(getEffectivePlan(user)).toBe("pro");
   });
 
-  it("returns 'starter' during active trial (7-day trial)", () => {
+  it("returns 'pro' during active trial (7-day trial)", () => {
     const user = makeUser({
       plan: "free",
       trial: { active: true, startedAt: pastDate(2), endsAt: futureDate(5), durationDays: 7 },
     });
-    expect(getEffectivePlan(user)).toBe("starter");
+    expect(getEffectivePlan(user)).toBe("pro");
   });
 
-  it("returns 'starter' during active trial (10-day trial)", () => {
+  it("returns 'pro' during active trial (10-day trial)", () => {
     const user = makeUser({
       plan: "free",
       trial: { active: true, startedAt: pastDate(1), endsAt: futureDate(9), durationDays: 10 },
     });
-    expect(getEffectivePlan(user)).toBe("starter");
+    expect(getEffectivePlan(user)).toBe("pro");
   });
 
   it("returns user.plan when trial is expired", () => {
@@ -231,7 +231,7 @@ describe("getEffectivePlan", () => {
     });
     vi.mocked(getCachedPlan).mockReturnValue("growth");
     vi.mocked(isOfflineValid).mockReturnValue(true);
-    expect(getEffectivePlan(user)).toBe("starter");
+    expect(getEffectivePlan(user)).toBe("pro");
   });
 });
 
@@ -1143,5 +1143,408 @@ describe("Edge cases", () => {
     expect(canUseTickers(null)).toBe(false);
     expect(canUseEasyWorshipImport(null)).toBe(false);
     expect(canUseProPresenterImport(null)).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 8. Runtime Validation — Trial Expiration End-to-End
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("Runtime Validation: Trial Expiration End-to-End", () => {
+  // ── Test Case 1: Active Trial ─────────────────────────────────────────────
+  describe("Test Case 1: Active Trial (free + active trial → pro access)", () => {
+    it("resolves effectivePlan to 'pro' with active trial", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: {
+          active: true,
+          status: "active",
+          startedAt: pastDate(3),
+          endsAt: futureDate(4),
+          durationDays: 7,
+        },
+      });
+
+      // Core plan resolution
+      expect(isInTrial(user)).toBe(true);
+      expect(getEffectivePlan(user)).toBe("pro");
+      expect(getUserPlan(user)).toBe("free"); // base plan unchanged
+
+      // Premium features — all should be unlocked
+      expect(canUseMultiview(user)).toBe(true);
+      expect(canUseTranslation(user)).toBe(true);
+      expect(canUseSpeechToScripture(user)).toBe(true);
+      expect(canUseAI(user)).toBe(true);
+      expect(canUseTickers(user)).toBe(true);
+      expect(canUseMobileControl(user)).toBe(true);
+      expect(canUseCloudFeatures(user)).toBe(true);
+      expect(canUseMassImport(user)).toBe(true);
+      expect(canUseAdvancedAnalytics(user)).toBe(true);
+      expect(canUseSermonExport(user)).toBe(true);
+      expect(canUseEasyWorshipImport(user)).toBe(true);
+      expect(canUseProPresenterImport(user)).toBe(true);
+
+      // getRestrictionInfo should NOT lock any premium feature
+      const multiviewInfo = getRestrictionInfo(user, "multiview");
+      expect(multiviewInfo.locked).toBe(false);
+
+      const translationInfo = getRestrictionInfo(user, "translation");
+      expect(translationInfo.locked).toBe(false);
+
+      const speechInfo = getRestrictionInfo(user, "speechToScripture");
+      expect(speechInfo.locked).toBe(false);
+    });
+
+    it("isInTrial rejects inactive status even if active=true", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: {
+          active: true,
+          status: "inactive",
+          endsAt: futureDate(5),
+        },
+      });
+      expect(isInTrial(user)).toBe(false);
+      expect(getEffectivePlan(user)).toBe("free");
+      expect(canUseMultiview(user)).toBe(false);
+    });
+
+    it("isInTrial rejects expired status even if active=true", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: {
+          active: true,
+          status: "expired",
+          endsAt: futureDate(5),
+        },
+      });
+      expect(isInTrial(user)).toBe(false);
+      expect(getEffectivePlan(user)).toBe("free");
+    });
+
+    it("isInTrial rejects stopped status even if active=true", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: {
+          active: true,
+          status: "stopped",
+          endsAt: futureDate(5),
+        },
+      });
+      expect(isInTrial(user)).toBe(false);
+      expect(getEffectivePlan(user)).toBe("free");
+    });
+  });
+
+  // ── Test Case 2: Expired Trial ────────────────────────────────────────────
+  describe("Test Case 2: Expired Trial (free + expired trial → locked)", () => {
+    it("resolves effectivePlan to 'free' with expired trial", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: {
+          active: false,
+          status: "inactive",
+          startedAt: pastDate(14),
+          endsAt: pastDate(1),
+          durationDays: 7,
+        },
+      });
+
+      // Core plan resolution
+      expect(isInTrial(user)).toBe(false);
+      expect(isTrialExpired(user)).toBe(true);
+      expect(getEffectivePlan(user)).toBe("free");
+      expect(getUserPlan(user)).toBe("free");
+
+      // Premium features — all should be locked
+      expect(canUseMultiview(user)).toBe(false);
+      expect(canUseTranslation(user)).toBe(false);
+      expect(canUseSpeechToScripture(user)).toBe(false);
+      expect(canUseAI(user)).toBe(false);
+      expect(canUseTickers(user)).toBe(false);
+      expect(canUseMobileControl(user)).toBe(false);
+      expect(canUseCloudFeatures(user)).toBe(false);
+      expect(canUseMassImport(user)).toBe(false);
+
+      // getRestrictionInfo should lock premium features
+      const multiviewInfo = getRestrictionInfo(user, "multiview");
+      expect(multiviewInfo.locked).toBe(true);
+      expect(multiviewInfo.requiredPlan).toBeDefined();
+
+      const translationInfo = getRestrictionInfo(user, "translation");
+      expect(translationInfo.locked).toBe(true);
+
+      const speechInfo = getRestrictionInfo(user, "speechToScripture");
+      expect(speechInfo.locked).toBe(true);
+    });
+
+    it("handles trial.active=false with status='expired'", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: {
+          active: false,
+          status: "expired",
+          endsAt: pastDate(3),
+        },
+      });
+      expect(isInTrial(user)).toBe(false);
+      expect(getEffectivePlan(user)).toBe("free");
+      expect(canUseMultiview(user)).toBe(false);
+    });
+
+    it("handles trial.active=false with no status field (legacy)", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: {
+          active: false,
+          endsAt: pastDate(3),
+        },
+      });
+      expect(isInTrial(user)).toBe(false);
+      expect(getEffectivePlan(user)).toBe("free");
+      expect(canUseMultiview(user)).toBe(false);
+    });
+
+    it("handles trial with endsAt in the past even if active=true (date-based fallback)", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: {
+          active: true,
+          status: "active",
+          endsAt: pastDate(1),
+        },
+      });
+      expect(isInTrial(user)).toBe(false);
+      expect(getEffectivePlan(user)).toBe("free");
+      expect(canUseMultiview(user)).toBe(false);
+    });
+  });
+
+  // ── Test Case 3: Stale Cache Scenario ─────────────────────────────────────
+  describe("Test Case 3: Stale Cache (cached pro from expired trial → free)", () => {
+    it("ignores cached 'pro' when user.plan is free and trial is expired", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: {
+          active: false,
+          status: "inactive",
+          endsAt: pastDate(2),
+        },
+      });
+
+      // Simulate stale subscription cache that still says "pro"
+      vi.mocked(getCachedPlan).mockReturnValue("pro");
+      vi.mocked(isOfflineValid).mockReturnValue(true);
+
+      // getUserPlan should ignore cached "pro" because user.plan !== "pro"
+      expect(getUserPlan(user)).toBe("free");
+
+      // Full resolution chain
+      expect(isInTrial(user)).toBe(false);
+      expect(getEffectivePlan(user)).toBe("free");
+      expect(canUseMultiview(user)).toBe(false);
+      expect(canUseTranslation(user)).toBe(false);
+      expect(canUseSpeechToScripture(user)).toBe(false);
+    });
+
+    it("does NOT ignore cached 'pro' when user.plan IS 'pro' (paid subscriber)", () => {
+      const user = makeUser({
+        plan: "pro",
+        trial: {
+          active: false,
+          status: "inactive",
+          endsAt: pastDate(5),
+        },
+      });
+
+      vi.mocked(getCachedPlan).mockReturnValue("pro");
+      vi.mocked(isOfflineValid).mockReturnValue(true);
+
+      // Cached "pro" is valid because user.plan is also "pro"
+      expect(getUserPlan(user)).toBe("pro");
+      expect(getEffectivePlan(user)).toBe("pro");
+      expect(canUseMultiview(user)).toBe(true);
+    });
+
+    it("does NOT ignore cached 'growth' (non-pro cached plan works normally)", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: {
+          active: false,
+          status: "inactive",
+          endsAt: pastDate(2),
+        },
+      });
+
+      vi.mocked(getCachedPlan).mockReturnValue("growth");
+      vi.mocked(isOfflineValid).mockReturnValue(true);
+
+      // Non-pro cached plans are returned as-is (the safety net only targets "pro")
+      expect(getUserPlan(user)).toBe("growth");
+      expect(getEffectivePlan(user)).toBe("growth");
+    });
+
+    it("returns free when cache says 'pro' and offline window expired", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: {
+          active: false,
+          endsAt: pastDate(2),
+        },
+      });
+
+      vi.mocked(getCachedPlan).mockReturnValue("pro");
+      vi.mocked(isOfflineValid).mockReturnValue(false);
+
+      // Offline window expired → cache ignored entirely
+      expect(getUserPlan(user)).toBe("free");
+      expect(getEffectivePlan(user)).toBe("free");
+    });
+  });
+
+  // ── Test Case 4: Pro Subscriber ───────────────────────────────────────────
+  describe("Test Case 4: Pro Subscriber (pro plan → unlocked regardless of trial)", () => {
+    it("resolves effectivePlan to 'pro' with no trial", () => {
+      const user = makeUser({
+        plan: "pro",
+      });
+
+      expect(isInTrial(user)).toBe(false);
+      expect(getEffectivePlan(user)).toBe("pro");
+
+      // All premium features unlocked
+      expect(canUseMultiview(user)).toBe(true);
+      expect(canUseTranslation(user)).toBe(true);
+      expect(canUseSpeechToScripture(user)).toBe(true);
+      expect(canUseAI(user)).toBe(true);
+      expect(canUseTickers(user)).toBe(true);
+      expect(canUseMobileControl(user)).toBe(true);
+      expect(canUseCloudFeatures(user)).toBe(true);
+      expect(canUseMassImport(user)).toBe(true);
+
+      const multiviewInfo = getRestrictionInfo(user, "multiview");
+      expect(multiviewInfo.locked).toBe(false);
+    });
+
+    it("resolves effectivePlan to 'pro' even with expired trial", () => {
+      const user = makeUser({
+        plan: "pro",
+        trial: {
+          active: false,
+          status: "expired",
+          endsAt: pastDate(10),
+        },
+      });
+
+      expect(isInTrial(user)).toBe(false);
+      expect(getEffectivePlan(user)).toBe("pro");
+      expect(canUseMultiview(user)).toBe(true);
+      expect(canUseTranslation(user)).toBe(true);
+      expect(canUseSpeechToScripture(user)).toBe(true);
+    });
+
+    it("resolves effectivePlan to 'pro' even with inactive trial status", () => {
+      const user = makeUser({
+        plan: "pro",
+        trial: {
+          active: false,
+          status: "inactive",
+          endsAt: pastDate(5),
+        },
+      });
+
+      expect(isInTrial(user)).toBe(false);
+      expect(getEffectivePlan(user)).toBe("pro");
+      expect(canUseMultiview(user)).toBe(true);
+    });
+  });
+
+  // ── Status field integration ──────────────────────────────────────────────
+  describe("isInTrial status field integration", () => {
+    it("status='active' + active=true + future endsAt → in trial", () => {
+      const user = makeUser({
+        trial: { active: true, status: "active", endsAt: futureDate(3) },
+      });
+      expect(isInTrial(user)).toBe(true);
+    });
+
+    it("status='inactive' blocks trial even with active=true", () => {
+      const user = makeUser({
+        trial: { active: true, status: "inactive", endsAt: futureDate(3) },
+      });
+      expect(isInTrial(user)).toBe(false);
+    });
+
+    it("status='expired' blocks trial even with active=true", () => {
+      const user = makeUser({
+        trial: { active: true, status: "expired", endsAt: futureDate(3) },
+      });
+      expect(isInTrial(user)).toBe(false);
+    });
+
+    it("status='stopped' blocks trial even with active=true", () => {
+      const user = makeUser({
+        trial: { active: true, status: "stopped", endsAt: futureDate(3) },
+      });
+      expect(isInTrial(user)).toBe(false);
+    });
+
+    it("no status field falls back to active boolean check", () => {
+      const userActive = makeUser({
+        trial: { active: true, endsAt: futureDate(3) },
+      });
+      expect(isInTrial(userActive)).toBe(true);
+
+      const userInactive = makeUser({
+        trial: { active: false, endsAt: futureDate(3) },
+      });
+      expect(isInTrial(userInactive)).toBe(false);
+    });
+
+    it("no status + no active field → not in trial", () => {
+      const user = makeUser({
+        trial: { endsAt: futureDate(3) },
+      });
+      expect(isInTrial(user)).toBe(false);
+    });
+  });
+
+  // ── getRestrictionInfo end-to-end ─────────────────────────────────────────
+  describe("getRestrictionInfo end-to-end", () => {
+    it("active trial user: no feature is locked", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: { active: true, status: "active", endsAt: futureDate(5) },
+      });
+
+      const features = ["multiview", "translation", "speechToScripture", "ai", "tickers", "mobileControl"];
+      for (const feature of features) {
+        const info = getRestrictionInfo(user, feature);
+        expect(info.locked).toBe(false);
+      }
+    });
+
+    it("expired trial user: premium features are locked", () => {
+      const user = makeUser({
+        plan: "free",
+        trial: { active: false, status: "inactive", endsAt: pastDate(1) },
+      });
+
+      const premiumFeatures = ["multiview", "translation", "speechToScripture", "aiFeatures"];
+      for (const feature of premiumFeatures) {
+        const info = getRestrictionInfo(user, feature);
+        expect(info.locked).toBe(true);
+      }
+    });
+
+    it("pro user: no feature is locked", () => {
+      const user = makeUser({ plan: "pro" });
+
+      const features = ["multiview", "translation", "speechToScripture", "ai", "tickers", "mobileControl"];
+      for (const feature of features) {
+        const info = getRestrictionInfo(user, feature);
+        expect(info.locked).toBe(false);
+      }
+    });
   });
 });
