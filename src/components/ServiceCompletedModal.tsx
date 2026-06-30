@@ -99,11 +99,11 @@ export function ServiceCompletedModal({
 
         {/* Actions */}
         <div className="sc-actions">
-          <button className="sc-btn-new" onClick={onStartNew}>
+          <button className="sc-btn-new" onClick={onStartNew} title="Start">
             <Icon name="add_circle" size={20} />
             Start New Service
           </button>
-          <button className="sc-btn-dashboard" onClick={onDashboard}>
+          <button className="sc-btn-dashboard" onClick={onDashboard} title="Return to Dashboard">
             Return to Dashboard
           </button>
         </div>

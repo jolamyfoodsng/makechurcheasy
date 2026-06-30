@@ -84,7 +84,7 @@ export function ServiceGateModal({ open, onClose, onStartService, action }: Serv
               padding: 4,
               display: "flex",
             }}
-          >
+           title="Close">
             <Icon name="close" size={20} />
           </button>
         </div>
@@ -109,7 +109,7 @@ export function ServiceGateModal({ open, onClose, onStartService, action }: Serv
               fontWeight: 500,
               cursor: "pointer",
             }}
-          >
+           title="Cancel">
             Cancel
           </button>
           <button
@@ -127,7 +127,7 @@ export function ServiceGateModal({ open, onClose, onStartService, action }: Serv
               alignItems: "center",
               gap: 6,
             }}
-          >
+           title="Start service">
             <Icon name="play_arrow" size={16} />
             Start Service
           </button>

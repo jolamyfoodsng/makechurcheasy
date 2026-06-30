@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Mic,
@@ -24,7 +25,16 @@ import {
   Play,
   ChevronDown,
   ChevronRight,
+  HelpCircle,
+  RotateCcw,
+  AlertTriangle,
 } from "lucide-react";
+
+import DashboardTutorial, {
+  isDashboardTutorialCompleted,
+  markDashboardTutorialCompleted,
+  resetDashboardTutorial,
+} from "./DashboardTutorial";
 
 import { obsService, type ConnectionStatus } from "../services/obsService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
@@ -104,7 +114,7 @@ function DashboardHeader({
 
   return (
     <>
-      <header className="header-container">
+      <header className="header-container" data-dt-tutorial="header">
         <div className="header-left">
 
           <div>
@@ -132,7 +142,7 @@ function DashboardHeader({
         </div>
       </header>
 
-      <div className="status-panel">
+      <div className="status-panel" data-dt-tutorial="status-panel">
         <div className="status-group">
           <div className="status-item">
             <Monitor className="status-icon" />
@@ -186,7 +196,7 @@ function DashboardHeader({
               track("connect_obs_clicked");
               onConnectObs();
             }}
-          >
+            title="Connect">
             {obsConnected ? (
               <>
                 <Check className="btn-icon" /> OBS Connected
@@ -197,7 +207,7 @@ function DashboardHeader({
               </>
             )}
           </button>
-          <button className="btn-secondary" onClick={onOpenTutorials}>
+          <button className="btn-secondary" onClick={onOpenTutorials} title="Open in new tab">
             <Play className="btn-icon" /> Watch Tutorials <ExternalLink className="btn-icon" />
           </button>
         </div>
@@ -249,9 +259,9 @@ function FeatureGrid({
   }, [voiceBibleStatus, voiceBibleConnected]);
 
   return (
-    <div className="grid-container">
+    <div className="grid-container" data-dt-tutorial="feature-grid">
       {/* Voice Bible */}
-      <div className="feature-card group card-purple">
+      <div className="feature-card group card-purple" data-dt-tutorial="voice-bible">
         <div className="card-bg-purple" />
         <div className="icon-wrapper icon-wrapper-purple">
           <Mic className="feature-icon icon-purple" />
@@ -266,7 +276,7 @@ function FeatureGrid({
         <button
           className="card-btn card-btn-purple"
           onClick={onStartVoiceBible}
-        >
+          title="Start">
           <Mic className="card-btn-icon" />{" "}
           {voiceBibleStatus === "listening"
             ? "Stop Listening"
@@ -291,7 +301,7 @@ function FeatureGrid({
         <button
           className="card-btn card-btn-blue"
           onClick={() => { track("dashboard_card_clicked", { card: "bible" }); onNavigate("/resources?tab=bible"); }}
-        >
+          title="Open">
           <BookOpen className="card-btn-icon" /> Open Bible
         </button>
       </div>
@@ -312,7 +322,7 @@ function FeatureGrid({
         <button
           className="card-btn card-btn-green"
           onClick={() => { track("dashboard_card_clicked", { card: "worship" }); onNavigate("/resources?tab=worship"); }}
-        >
+          title="Open">
           <ListMusic className="card-btn-icon" /> Open Worship
         </button>
       </div>
@@ -333,7 +343,7 @@ function FeatureGrid({
         <button
           className="card-btn card-btn-orange"
           onClick={() => { track("dashboard_card_clicked", { card: "media" }); onNavigate("/resources?tab=media"); }}
-        >
+          title="Open">
           <Video className="card-btn-icon" /> Open Media
         </button>
       </div>
@@ -398,7 +408,7 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
             <button
               className="url-btn btn-indigo"
               onClick={() => handleCopy("overlay", overlayUrl)}
-            >
+              title="Copy">
               {copiedId === "overlay" ? (
                 <Check className="url-btn-icon" />
               ) : (
@@ -423,7 +433,7 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
             <button
               className="url-btn btn-green"
               onClick={() => handleCopy("dock", lmDockUrl)}
-            >
+              title="Copy">
               {copiedId === "dock" ? (
                 <Check className="url-btn-icon" />
               ) : (
@@ -447,7 +457,7 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
         <button
           className="urls-info-toggle"
           onClick={() => setShowInstructions(!showInstructions)}
-        >
+          title="Add">
           {showInstructions ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           <span className="urls-info-subtitle">How to Add a Dock in OBS</span>
         </button>
@@ -530,7 +540,7 @@ function ActivityAndStatus({
           <button
             className="btn-view-all"
             onClick={() => onNavigate("/settings")}
-          >
+            title="View All">
             View All
           </button>
         </div>
@@ -684,6 +694,7 @@ function ActivityAndStatus({
 export default function ProductionHomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   // ── Settings ──
   const [pastorName, setPastorName] = useState("");
@@ -721,6 +732,10 @@ export default function ProductionHomePage() {
 
   // ── Activity ──
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
+
+  // ── Tutorial state ──
+  const [tourActive, setTourActive] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // ── Add activity entry ──
   const addActivity = useCallback(
@@ -838,6 +853,15 @@ export default function ProductionHomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
+  // ── Auto-start tutorial on first visit ──
+  useEffect(() => {
+    if (!isDashboardTutorialCompleted() && !tourActive) {
+      const timer = setTimeout(() => setTourActive(true), 600);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Subscribe to OBS status ──
   useEffect(() => {
     const unsub = obsService.onStatusChange((status) => {
@@ -917,6 +941,38 @@ export default function ProductionHomePage() {
   return (
     <div className="app-page__inner">
       <OnboardingResumeBanner />
+
+      {/* ── Tutorial button ── */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        <button
+          className="btn-secondary"
+          onClick={() => { resetDashboardTutorial(); setTourActive(true); setBannerDismissed(false); }}
+          title={t("dt.button.tooltip")}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+        >
+          <HelpCircle size={16} /> {t("dt.button")}
+        </button>
+      </div>
+
+      {/* ── Incomplete tutorial banner ── */}
+      {!tourActive && !isDashboardTutorialCompleted() && !bannerDismissed && (
+        <div className="tst-tutorial-banner" style={{ marginBottom: 12 }}>
+          <AlertTriangle size={14} />
+          <span>{t("dt.banner")}</span>
+          <div className="tst-tutorial-banner-actions">
+            <button className="tst-banner-btn tst-banner-btn--primary" onClick={() => setTourActive(true)}>
+              {t("dt.banner.continue")}
+            </button>
+            <button className="tst-banner-btn" onClick={() => { resetDashboardTutorial(); setTourActive(true); setBannerDismissed(false); }}>
+              <RotateCcw size={12} /> {t("dt.banner.restart")}
+            </button>
+            <button className="tst-banner-btn" onClick={() => setBannerDismissed(true)}>
+              {t("dt.banner.dismiss")}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* <AppIdCard /> */}
       <DashboardHeader
         pastorName={pastorName}
@@ -937,20 +993,29 @@ export default function ProductionHomePage() {
         onStartVoiceBible={handleToggleVoiceBible}
         onNavigate={handleNavigate}
       />
-      <ConnectionUrls obsStatus={obsStatus} />
-      <ActivityAndStatus
-        activities={activities}
-        obsStatus={obsStatus}
-        dockAvailable={dockAvailable}
-        voiceBibleStatus={voiceBible.status}
-        translationCount={translationCount}
-        mediaCount={mediaCount}
-        songCount={songCount}
-        onNavigate={handleNavigate}
-      />
+      <div data-dt-tutorial="connection-urls">
+        <ConnectionUrls obsStatus={obsStatus} />
+      </div>
+      <div data-dt-tutorial="activity-log">
+        <ActivityAndStatus
+          activities={activities}
+          obsStatus={obsStatus}
+          dockAvailable={dockAvailable}
+          voiceBibleStatus={voiceBible.status}
+          translationCount={translationCount}
+          mediaCount={mediaCount}
+          songCount={songCount}
+          onNavigate={handleNavigate}
+        />
+      </div>
       <TutorialModal
         open={tutorialOpen}
         onClose={() => setTutorialOpen(false)}
+      />
+      <DashboardTutorial
+        isActive={tourActive}
+        onClose={() => setTourActive(false)}
+        onFinish={() => { markDashboardTutorialCompleted(); setTourActive(false); }}
       />
     </div>
   );

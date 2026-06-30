@@ -1137,7 +1137,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
           <button className="tc-toolbar-btn" onClick={handleDelete} title="Delete" disabled={!isEditing}>
             <Trash2 size={16} />
           </button>
-          <button className="tc-toolbar-btn tc-toolbar-btn--save" onClick={handleSave} disabled={saving}>
+          <button className="tc-toolbar-btn tc-toolbar-btn--save" onClick={handleSave} disabled={saving} title="Save">
             <Save size={16} />
             {saving ? "Saving\u2026" : "Save"}
           </button>
@@ -1224,15 +1224,15 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
           </div>
 
           <div className="tc-library-footer">
-            <button className="tc-library-action-btn" onClick={handleNewTheme}>
+            <button className="tc-library-action-btn" onClick={handleNewTheme} title="Add">
               <Plus size={14} />
               New
             </button>
-            <button className="tc-library-action-btn" onClick={handleImportTheme}>
+            <button className="tc-library-action-btn" onClick={handleImportTheme} title="Import">
               <Upload size={14} />
               Import
             </button>
-            <button className="tc-library-action-btn" onClick={handleExportTheme}>
+            <button className="tc-library-action-btn" onClick={handleExportTheme} title="Export">
               <Download size={14} />
               Export
             </button>
@@ -1279,7 +1279,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
 
           <div className="tc-zoom-controls">
             {(["fit", 50, 75, 100, 125] as const).map((mode) => (
-              <button key={mode} className={`tc-zoom-btn${previewZoom === mode ? " active" : ""}`} onClick={() => setPreviewZoom(mode)}>
+              <button key={mode} className={`tc-zoom-btn${previewZoom === mode ? " active" : ""}`} onClick={() => setPreviewZoom(mode)} title="%`">
                 {mode === "fit" ? "Fit" : `${mode}%`}
               </button>
             ))}
@@ -1326,19 +1326,19 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     )}
                   </div>
                   <div className="value-box" style={{ display: "flex", gap: 0, padding: 0, overflow: "hidden" }}>
-                    <button onClick={() => patch({ fontSize: Math.max(8, settings.fontSize - 2) })} style={{ background: "none", border: "none", color: "var(--on-surface)", cursor: "pointer", padding: "2px 6px", fontSize: 14, lineHeight: 1 }}>\u2212</button>
+                    <button onClick={() => patch({ fontSize: Math.max(8, settings.fontSize - 2) })} style={{ background: "none", border: "none", color: "var(--on-surface)", cursor: "pointer", padding: "2px 6px", fontSize: 14, lineHeight: 1 }} title="\u2212">\u2212</button>
                     <span style={{ fontSize: 13, minWidth: 28, textAlign: "center", lineHeight: "26px" }}>{settings.fontSize}</span>
-                    <button onClick={() => patch({ fontSize: Math.min(200, settings.fontSize + 2) })} style={{ background: "none", border: "none", color: "var(--on-surface)", cursor: "pointer", padding: "2px 6px", fontSize: 14, lineHeight: 1 }}>+</button>
+                    <button onClick={() => patch({ fontSize: Math.min(200, settings.fontSize + 2) })} style={{ background: "none", border: "none", color: "var(--on-surface)", cursor: "pointer", padding: "2px 6px", fontSize: 14, lineHeight: 1 }} title="Increase font size">+</button>
                   </div>
                 </div>
                 <div className="format-group">
-                  <button className={`format-btn${settings.fontWeight === "bold" ? " active" : ""}`} onClick={() => patch({ fontWeight: settings.fontWeight === "bold" ? "normal" : "bold" })}><Bold size={16} /></button>
+                  <button className={`format-btn${settings.fontWeight === "bold" ? " active" : ""}`} onClick={() => patch({ fontWeight: settings.fontWeight === "bold" ? "normal" : "bold" })} title="Bold"><Bold size={16} /></button>
                   <div className="format-divider" />
-                  <button className={`format-btn${settings.fontStyle === "italic" ? " active" : ""}`} onClick={() => patch({ fontStyle: settings.fontStyle === "italic" ? "normal" : "italic" })}><Italic size={16} /></button>
+                  <button className={`format-btn${settings.fontStyle === "italic" ? " active" : ""}`} onClick={() => patch({ fontStyle: settings.fontStyle === "italic" ? "normal" : "italic" })} title="Italic"><Italic size={16} /></button>
                   <div className="format-divider" />
-                  <button className="format-btn"><Underline size={16} /></button>
+                  <button className="format-btn" title="Underline"><Underline size={16} /></button>
                   <div className="format-divider" />
-                  <button className="format-btn"><Strikethrough size={16} /></button>
+                  <button className="format-btn" title="Strikethrough"><Strikethrough size={16} /></button>
                 </div>
                 <div className="case-group">
                   {([
@@ -1372,7 +1372,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     </React.Fragment>
                   ))}
                   <div className="format-divider" />
-                  <button className="format-btn"><AlignJustify size={16} /></button>
+                  <button className="format-btn" title="Justify"><AlignJustify size={16} /></button>
                 </div>
                 <div className="slider-row" style={{ marginTop: "8px" }}>
                   <div className="slider-wrapper" style={{ flex: 1 }}>
@@ -1444,7 +1444,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                 <div className="tc-inspector-divider">
                   <div className="tc-inspector-toggle-row">
                     <span className="tc-label-mono">REF BACKGROUND</span>
-                    <button className="tc-toggle-switch" data-active={settings.referenceBackgroundEnabled} onClick={() => patch({ referenceBackgroundEnabled: !settings.referenceBackgroundEnabled })}>
+                    <button className="tc-toggle-switch" data-active={settings.referenceBackgroundEnabled} onClick={() => patch({ referenceBackgroundEnabled: !settings.referenceBackgroundEnabled })} title="tc-toggle-knob">
                       <span className="tc-toggle-knob" />
                     </button>
                   </div>
@@ -1490,7 +1490,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     <div className="bg-subtitle">{backgroundPreviewNameLabel}</div>
                     <div className="bg-action-hint">Click to change background</div>
                   </div>
-                  <button className="bg-change-btn" onClick={(e) => { e.stopPropagation(); openBackgroundModal(); }}>Change</button>
+                  <button className="bg-change-btn" onClick={(e) => { e.stopPropagation(); openBackgroundModal(); }} title="Change">Change</button>
                 </div>
                 <div className="opacity-row">
                   <span>OPACITY</span>
@@ -1500,7 +1500,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                 <div className="tc-inspector-divider">
                   <div className="tc-inspector-toggle-row">
                     <span className="tc-label-mono">READABILITY SHADE</span>
-                    <button className="tc-toggle-switch" data-active={settings.fullscreenShadeEnabled} onClick={() => patch({ fullscreenShadeEnabled: !settings.fullscreenShadeEnabled })}>
+                    <button className="tc-toggle-switch" data-active={settings.fullscreenShadeEnabled} onClick={() => patch({ fullscreenShadeEnabled: !settings.fullscreenShadeEnabled })} title="tc-toggle-knob">
                       <span className="tc-toggle-knob" />
                     </button>
                   </div>
@@ -1647,7 +1647,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                 <div className="tc-inspector-divider">
                   <div className="tc-inspector-toggle-row">
                     <span className="tc-label-mono">TEXT OUTLINE</span>
-                    <button className="tc-toggle-switch" data-active={settings.textOutline} onClick={() => patch({ textOutline: !settings.textOutline })}>
+                    <button className="tc-toggle-switch" data-active={settings.textOutline} onClick={() => patch({ textOutline: !settings.textOutline })} title="tc-toggle-knob">
                       <span className="tc-toggle-knob" />
                     </button>
                   </div>
@@ -1734,7 +1734,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
           <div className="tc-modal-panel" onClick={(e) => e.stopPropagation()}>
             <div className="tc-modal-header">
               <span>Choose Background</span>
-              <button className="icon-btn" onClick={() => setShowBackgroundModal(false)}><X size={16} /></button>
+              <button className="icon-btn" onClick={() => setShowBackgroundModal(false)} title="Close"><X size={16} /></button>
             </div>
             <div className="tc-modal-tabs">
               {BACKGROUND_PICKER_TABS.map((t) => (
@@ -1756,12 +1756,12 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
               )}
               {bgTab === "transparent" && (
                 <div className="tc-transparent-option">
-                  <button className="tc-transparent-btn" onClick={handleBgTransparent}>Transparent Background</button>
+                  <button className="tc-transparent-btn" onClick={handleBgTransparent} title="Transparent Background">Transparent Background</button>
                 </div>
               )}
               {(bgTab === "my-images" || bgTab === "images") && (
                 <div className="tc-media-grid">
-                  <button className="tc-media-thumb tc-media-thumb--import" onClick={() => bgImportInputRef.current?.click()}>
+                  <button className="tc-media-thumb tc-media-thumb--import" onClick={() => bgImportInputRef.current?.click()} title="Import">
                     <Plus size={20} />
                     <span>Import</span>
                   </button>
@@ -1781,11 +1781,11 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                         <div key={asset.id} className="tc-media-thumb tc-media-thumb--video">
                           <TemplateVideoPreview asset={asset} />
                           {!downloaded ? (
-                            <button className="tc-media-download" onClick={() => handleTemplateVideoDownload(asset)}>
+                            <button className="tc-media-download" onClick={() => handleTemplateVideoDownload(asset)} title="Download">
                               <Icon name="download" size={16} />
                             </button>
                           ) : (
-                            <button className="tc-media-download tc-media-download--done" onClick={() => handleBgSelectVideo(downloaded.url)}>
+                            <button className="tc-media-download tc-media-download--done" onClick={() => handleBgSelectVideo(downloaded.url)} title="Confirm">
                               <Icon name="check" size={16} />
                             </button>
                           )}
@@ -1793,12 +1793,12 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                       );
                     })
                     : <>
-                      <button className="tc-media-thumb tc-media-thumb--import" onClick={() => bgImportInputRef.current?.click()}>
+                      <button className="tc-media-thumb tc-media-thumb--import" onClick={() => bgImportInputRef.current?.click()} title="Import">
                         <Plus size={20} />
                         <span>Import</span>
                       </button>
                       {backgroundMediaLibrary.filter((item) => item.type === "video").map((item) => (
-                        <button key={item.id} className="tc-media-thumb tc-media-thumb--video" onClick={() => handleBgSelectVideo(item.url)}>
+                        <button key={item.id} className="tc-media-thumb tc-media-thumb--video" onClick={() => handleBgSelectVideo(item.url)} title="item.thumbnailUrl ? ( ) : ( )">
                           {item.thumbnailUrl ? (
                             <img src={item.thumbnailUrl} alt={item.name} />
                           ) : (
@@ -1822,7 +1822,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
             </div>
             {bgTab === "color" && (
               <div className="tc-modal-footer">
-                <button className="tc-modal-confirm" onClick={handleBgColorPickerConfirm}>Apply Color</button>
+                <button className="tc-modal-confirm" onClick={handleBgColorPickerConfirm} title="Apply">Apply Color</button>
               </div>
             )}
           </div>

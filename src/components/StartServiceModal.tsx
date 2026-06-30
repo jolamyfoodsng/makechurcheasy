@@ -126,7 +126,7 @@ export function StartServiceModal({ open, onClose, onStart }: StartServiceModalP
             <h1 className="ssm-title">Prepare Today's Service</h1>
             <p className="ssm-subtitle">Configure scenes and layout before going live</p>
           </div>
-          <button className="ssm-close-btn" onClick={onClose}>
+          <button className="ssm-close-btn" onClick={onClose} title="Close">
             <Icon name="close" size={20} />
           </button>
         </div>
@@ -142,7 +142,7 @@ export function StartServiceModal({ open, onClose, onStart }: StartServiceModalP
                 <button
                   className={`ssm-toggle${useLast ? " is-on" : ""}`}
                   onClick={handleUseLast}
-                >
+                 title="ssm-toggle-thumb">
                   <span className="ssm-toggle-thumb" />
                 </button>
               </div>
@@ -206,7 +206,7 @@ export function StartServiceModal({ open, onClose, onStart }: StartServiceModalP
               <button
                 className={`ssm-layout-card${defaultLayout === "lower-third" ? " is-selected" : ""}`}
                 onClick={() => setDefaultLayout("lower-third")}
-              >
+               title="On">
                 {defaultLayout === "lower-third" && (
                   <Icon name="check_circle" size={20} className="ssm-layout-check" />
                 )}
@@ -221,7 +221,7 @@ export function StartServiceModal({ open, onClose, onStart }: StartServiceModalP
               <button
                 className={`ssm-layout-card${defaultLayout === "fullscreen" ? " is-selected" : ""}`}
                 onClick={() => setDefaultLayout("fullscreen")}
-              >
+               title="Confirm">
                 {defaultLayout === "fullscreen" && (
                   <Icon name="check_circle" size={20} className="ssm-layout-check" />
                 )}
@@ -253,12 +253,12 @@ export function StartServiceModal({ open, onClose, onStart }: StartServiceModalP
               {sceneWarning}
             </div>
           )}
-          <button className="ssm-btn-cancel" onClick={onClose}>Cancel</button>
+          <button className="ssm-btn-cancel" onClick={onClose} title="Cancel">Cancel</button>
           <button
             className="ssm-btn-start"
             disabled={!isValid}
             onClick={handleStart}
-          >
+           title="Start service">
             <Icon name="play_arrow" size={20} />
             Start Service
           </button>

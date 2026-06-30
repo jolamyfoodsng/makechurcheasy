@@ -602,7 +602,7 @@ export default function TemplatesLibraryPage() {
               setEditThemeData(null);
               setShowCreator(true);
             }}
-          >
+           title="Create">
             <Icon name="add" size={18} />
             Create Theme
           </button>
@@ -639,7 +639,7 @@ export default function TemplatesLibraryPage() {
             <button
               className={`tlib-sidebar-item${typeFilter === "all" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setTypeFilter("all")}
-            >
+             title="All Types">
               <Icon name="apps" size={20} />
               <span>All Types</span>
               <span className="tlib-sidebar-count">{totalCount}</span>
@@ -647,7 +647,7 @@ export default function TemplatesLibraryPage() {
             <button
               className={`tlib-sidebar-item${typeFilter === "lower-third" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setTypeFilter("lower-third")}
-            >
+             title="Lower Thirds">
               <Icon name="call_to_action" size={20} />
               <span>Lower Thirds</span>
               <span className="tlib-sidebar-count">{ltCount}</span>
@@ -655,7 +655,7 @@ export default function TemplatesLibraryPage() {
             <button
               className={`tlib-sidebar-item${typeFilter === "fullscreen" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setTypeFilter("fullscreen")}
-            >
+             title="Fullscreen">
               <Icon name="fullscreen" size={20} />
               <span>Fullscreen</span>
               <span className="tlib-sidebar-count">{fsCount}</span>
@@ -669,28 +669,28 @@ export default function TemplatesLibraryPage() {
             <button
               className={`tlib-sidebar-item${categoryFilter === "all" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setCategoryFilter("all")}
-            >
+             title="Grid view">
               <Icon name="grid_view" size={20} />
               <span>All Categories</span>
             </button>
             <button
               className={`tlib-sidebar-item${categoryFilter === "bible" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setCategoryFilter("bible")}
-            >
+             title="Bible">
               <Icon name="auto_stories" size={20} />
               <span>Bible</span>
             </button>
             <button
               className={`tlib-sidebar-item${categoryFilter === "worship" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setCategoryFilter("worship")}
-            >
+             title="Music">
               <Icon name="music_note" size={20} />
               <span>Worship</span>
             </button>
             <button
               className={`tlib-sidebar-item${categoryFilter === "general" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setCategoryFilter("general")}
-            >
+             title="General">
               <Icon name="dashboard" size={20} />
               <span>General</span>
             </button>
@@ -703,7 +703,7 @@ export default function TemplatesLibraryPage() {
             <button
               className={`tlib-sidebar-item${showMyThemesOnly ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setShowMyThemesOnly(!showMyThemesOnly)}
-            >
+             title="Create">
               <Icon name="person" size={20} />
               <span>Created by Me</span>
               <span className="tlib-sidebar-count">{myCount}</span>
@@ -722,7 +722,7 @@ export default function TemplatesLibraryPage() {
             <button
               className={`tlib-sidebar-item${showFavoritesOnly ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
-            >
+             title="Favorites Only">
               <Icon name="star" size={20} />
               <span>Favorites Only</span>
               <span className="tlib-sidebar-count">{favCount}</span>
@@ -730,7 +730,7 @@ export default function TemplatesLibraryPage() {
             <button
               className="tlib-sidebar-item"
               onClick={() => { setTypeFilter("all"); setCategoryFilter("all"); setSearchQuery(""); setShowFavoritesOnly(false); setShowMyThemesOnly(false); }}
-            >
+             title="Reset">
               <Icon name="restart_alt" size={20} />
               <span>Reset All Filters</span>
             </button>
@@ -751,7 +751,7 @@ export default function TemplatesLibraryPage() {
                   <span className="tlib-active-pill tlib-active-pill--my">
                     <Icon name="person" size={12} />
                     My Themes
-                    <button onClick={() => setShowMyThemesOnly(false)}>
+                    <button onClick={() => setShowMyThemesOnly(false)} title="Close">
                       <Icon name="close" size={20} />
                     </button>
                   </span>
@@ -760,7 +760,7 @@ export default function TemplatesLibraryPage() {
                   <span className="tlib-active-pill tlib-active-pill--fav">
                     <Icon name="star" size={12} />
                     Favorites
-                    <button onClick={() => setShowFavoritesOnly(false)}>
+                    <button onClick={() => setShowFavoritesOnly(false)} title="Close">
                       <Icon name="close" size={20} />
                     </button>
                   </span>
@@ -768,7 +768,7 @@ export default function TemplatesLibraryPage() {
                 {typeFilter !== "all" && (
                   <span className="tlib-active-pill">
                     {typeFilter === "lower-third" ? "Lower Thirds" : "Fullscreen"}
-                    <button onClick={() => setTypeFilter("all")}>
+                    <button onClick={() => setTypeFilter("all")} title="Close">
                       <Icon name="close" size={20} />
                     </button>
                   </span>
@@ -776,7 +776,7 @@ export default function TemplatesLibraryPage() {
                 {categoryFilter !== "all" && (
                   <span className="tlib-active-pill">
                     {categoryFilter}
-                    <button onClick={() => setCategoryFilter("all")}>
+                    <button onClick={() => setCategoryFilter("all")} title="Close">
                       <Icon name="close" size={20} />
                     </button>
                   </span>
@@ -926,7 +926,7 @@ export default function TemplatesLibraryPage() {
         <div className="tlib-preview-backdrop" onClick={() => setPreviewTheme(null)}>
           <div className="tlib-preview-modal" onClick={(e) => e.stopPropagation()}>
             {/* Close button */}
-            <button className="tlib-preview-close" onClick={() => setPreviewTheme(null)}>
+            <button className="tlib-preview-close" onClick={() => setPreviewTheme(null)} title="Close">
               <Icon name="close" size={20} />
             </button>
 
@@ -982,7 +982,7 @@ export default function TemplatesLibraryPage() {
                 <button
                   className={`tlib-preview-fav-btn${previewTheme.isFavorite ? " tlib-preview-fav-btn--active" : ""}`}
                   onClick={() => handleToggleFavorite(previewTheme)}
-                >
+                 title="Add">
                   <Icon name={previewTheme.isFavorite ? "star" : "star_border"} size={20} />
                   {previewTheme.isFavorite ? "Favorited" : "Add to Favorites"}
                 </button>
@@ -1051,7 +1051,7 @@ export default function TemplatesLibraryPage() {
             type="button"
             onClick={() => setToastMessage(null)}
             aria-label="Dismiss notification"
-          >
+           title="Close">
             <Icon name="close" size={20} />
           </button>
         </div>

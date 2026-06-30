@@ -309,7 +309,7 @@ export default function LoginPage() {
                 justifyContent: "center",
                 gap: "8px",
               }}
-            >
+             title="Scan QR Code">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="7" height="7" rx="1" />
                 <rect x="14" y="3" width="7" height="7" rx="1" />
@@ -361,7 +361,7 @@ export default function LoginPage() {
                 color: "#f0f0f5",
                 cursor: "pointer",
               }}
-            >
+             title="Continue">
               Continue in Browser
             </button>
 
@@ -394,7 +394,7 @@ export default function LoginPage() {
                 color: "#f0f0f5",
                 cursor: "pointer",
               }}
-            >
+             title="Enter Pairing Code">
               Enter Pairing Code
             </button>
 
@@ -476,7 +476,7 @@ export default function LoginPage() {
                     color: "#fff",
                     cursor: "pointer",
                   }}
-                >
+                 title="Open">
                   Open in Browser
                 </button>
                 <button
@@ -499,7 +499,7 @@ export default function LoginPage() {
                     cursor: "pointer",
                     transition: "all 0.15s",
                   }}
-                >
+                 title="Copy">
                   {copied ? "✓ Copied" : "Copy Link"}
                 </button>
               </div>
@@ -524,7 +524,7 @@ export default function LoginPage() {
                 color: "#9898a8",
                 cursor: "pointer",
               }}
-            >
+             title="Cancel">
               Cancel
             </button>
 
@@ -624,7 +624,7 @@ export default function LoginPage() {
                   color: "#9898a8",
                   cursor: "pointer",
                 }}
-              >
+               title="Go back">
                 Back
               </button>
               <button
@@ -642,7 +642,7 @@ export default function LoginPage() {
                   cursor: "pointer",
                   opacity: !manualCode || manualCode.length < 8 ? 0.5 : 1,
                 }}
-              >
+               title="Authorize">
                 Authorize
               </button>
             </div>
@@ -665,7 +665,7 @@ export default function LoginPage() {
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.color = "#9898a8")}
                 onMouseLeave={(e) => (e.currentTarget.style.color = "#6a6a7a")}
-              >
+               title="Open">
                 Open pairing page in browser ↗
               </button>
             )}
@@ -788,7 +788,7 @@ export default function LoginPage() {
                 color: "#9898a8",
                 cursor: "pointer",
               }}
-            >
+             title="Cancel">
               Cancel
             </button>
 
@@ -888,7 +888,7 @@ export default function LoginPage() {
                 color: "#6a6a7a",
                 cursor: "pointer",
               }}
-            >
+             title="Cancel">
               Cancel
             </button>
           </div>

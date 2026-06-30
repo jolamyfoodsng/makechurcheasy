@@ -296,7 +296,7 @@ export function MVSceneSync() {
             <button
               className="mv-btn mv-btn--outline"
               onClick={addSlot}
-            >
+             title="Add">
               <Icon name="add" size={16} />
               Add Scene Slot
             </button>
@@ -309,7 +309,7 @@ export function MVSceneSync() {
                 slots.filter((s) => s.layoutId && s.obsSceneName.trim()).length === 0
               }
               onClick={syncAll}
-            >
+             title="Upload">
               {syncing ? (
                 <>
                   <span className="loading-spinner-sm" />
@@ -341,7 +341,7 @@ export function MVSceneSync() {
               className="mv-btn mv-btn--sm mv-btn--outline"
               onClick={() => setBatchResult(null)}
               style={{ marginLeft: "auto" }}
-            >
+             title="Dismiss">
               Dismiss
             </button>
           </div>

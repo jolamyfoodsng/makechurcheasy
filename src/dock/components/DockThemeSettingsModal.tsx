@@ -287,7 +287,7 @@ export default function DockThemeSettingsModal({
                 className="dtb-studio__close"
                 onClick={() => setView("closed")}
                 aria-label={t('common.close')}
-              >
+               title="Close">
                 <Icon name="close" size={16} />
               </button>
             </div>
@@ -440,7 +440,7 @@ export default function DockThemeSettingsModal({
                   type="button"
                   className="dtb-studio__footer-btn dtb-studio__footer-btn--reset"
                   onClick={handleReset}
-                >
+                 title="Reset">
                   {t('common.reset')}
                 </button>
                 <button
@@ -448,7 +448,7 @@ export default function DockThemeSettingsModal({
                   className="dtb-studio__footer-btn dtb-studio__footer-btn--save"
                   onClick={handleSave}
                   disabled={saving}
-                >
+                 title="Saving">
                   {saving ? t('worship.saving') : t('worship.saveChanges')}
                 </button>
               </div>

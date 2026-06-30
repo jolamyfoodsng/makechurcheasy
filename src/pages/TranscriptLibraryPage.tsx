@@ -14,16 +14,25 @@ import {
   Download,
   FileText,
   Globe,
+  HelpCircle,
   LayoutGrid, List,
   Mic,
   MoreVertical,
+  RotateCcw,
   Tag,
   Timer,
   Trash2,
   Wand2,
-  X
+  X,
+  AlertTriangle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import TranscriptTutorial, {
+  isTutorialCompleted,
+  markTutorialCompleted,
+  resetTutorial,
+} from "./TranscriptTutorial";
 import "./TranscriptLibraryPage.css";
 
 import {
@@ -75,6 +84,7 @@ export default function TranscriptLibraryPage({
   onOpenTranscript,
   onNewSession,
 }: TranscriptLibraryPageProps) {
+  const { t } = useTranslation();
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [stats, setStats] = useState<TranscriptLibraryStats>({
     totalSessions: 0,
@@ -98,6 +108,10 @@ export default function TranscriptLibraryPage({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const perPage = 8;
 
+  // ── Tutorial state ────────────────────────────────────────────────────
+  const [tourActive, setTourActive] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
   // ── Load data ────────────────────────────────────────────────────────────
 
   const refresh = useCallback(async () => {
@@ -109,6 +123,15 @@ export default function TranscriptLibraryPage({
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // ── Auto-start tutorial on first visit ────────────────────────────────
+  useEffect(() => {
+    if (!loading && !isTutorialCompleted() && !tourActive) {
+      const timer = setTimeout(() => setTourActive(true), 600);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   // ── Filtering & sorting ──────────────────────────────────────────────────
 
@@ -203,13 +226,13 @@ export default function TranscriptLibraryPage({
       <div className="tl-container">
 
         {/* ── Header ── */}
-        <header className="tl-header">
+        <header className="tl-header" data-tutorial="welcome">
           <div>
             <h1 className="tl-title">My Transcripts</h1>
             <p className="tl-subtitle">Manage your sermon transcripts, export, and translate.</p>
           </div>
           <div className="tl-header-actions">
-            <div className="tl-search-wrapper">
+            <div className="tl-search-wrapper" data-tutorial="search">
               {/* <Search className="tl-search-icon" size={16} /> */}
               <input
                 type="text"
@@ -219,19 +242,45 @@ export default function TranscriptLibraryPage({
                 onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
               />
               {filters.search && (
-                <button className="tl-search-clear" onClick={() => setFilters((f) => ({ ...f, search: "" }))}>
+                <button className="tl-search-clear" onClick={() => setFilters((f) => ({ ...f, search: "" }))} title="Clear search">
                   <X size={14} />
                 </button>
               )}
             </div>
-            <button className="tl-btn tl-btn-primary" onClick={onNewSession}>
+            <button
+              className="tl-btn tl-btn-ghost"
+              onClick={() => { resetTutorial(); setTourActive(true); setBannerDismissed(false); }}
+              title={t("tutorial.button.tooltip")}
+            >
+              <HelpCircle size={16} /> {t("tutorial.button")}
+            </button>
+            <button className="tl-btn tl-btn-primary" onClick={onNewSession} data-tutorial="new-session" title="Microphone">
               <Mic size={16} /> New Session
             </button>
           </div>
         </header>
 
+        {/* ── Incomplete tutorial banner ── */}
+        {!tourActive && !isTutorialCompleted() && !bannerDismissed && (
+          <div className="tl-tutorial-banner">
+            <AlertTriangle size={14} />
+            <span>{t("tutorial.banner")}</span>
+            <div className="tl-tutorial-banner-actions">
+              <button className="tl-btn tl-btn-sm tl-btn-primary" onClick={() => setTourActive(true)}>
+                {t("tutorial.banner.continue")}
+              </button>
+              <button className="tl-btn tl-btn-sm tl-btn-ghost" onClick={() => { resetTutorial(); setTourActive(true); setBannerDismissed(false); }}>
+                <RotateCcw size={12} /> {t("tutorial.banner.restart")}
+              </button>
+              <button className="tl-btn tl-btn-sm tl-btn-ghost" onClick={() => setBannerDismissed(true)}>
+                {t("tutorial.banner.dismiss")}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ── Stats Grid ── */}
-        <section className="tl-stats-grid">
+        <section className="tl-stats-grid" data-tutorial="stats">
           {STAT_DEFS.map((def) => (
             <div key={def.key} className={`tl-stat-card tl-stat--${def.color}`}>
               <div className="tl-accent-bar" />
@@ -250,17 +299,17 @@ export default function TranscriptLibraryPage({
         <section className="tl-table-section">
 
           {/* Filters */}
-          <div className="tl-table-filters">
-            <button className="tl-filter-btn">
+          <div className="tl-table-filters" data-tutorial="filters">
+            <button className="tl-filter-btn" title="Expand">
               <Globe size={14} /> All Languages <ChevronDown size={12} />
             </button>
-            <button className="tl-filter-btn">
+            <button className="tl-filter-btn" title="Expand">
               <Calendar size={14} /> All Time <ChevronDown size={12} />
             </button>
-            <button className="tl-filter-btn">
+            <button className="tl-filter-btn" title="Expand">
               <Tag size={14} /> All Services <ChevronDown size={12} />
             </button>
-            <div className="tl-view-toggles">
+            <div className="tl-view-toggles" data-tutorial="view-toggle">
               <button
                 className={`tl-view-btn${view === "list" ? " active" : ""}`}
                 onClick={() => setView("list")}
@@ -270,7 +319,7 @@ export default function TranscriptLibraryPage({
               <button
                 className={`tl-view-btn${view === "grid" ? " active" : ""}`}
                 onClick={() => setView("grid")}
-              >
+                title="Grid">
                 <LayoutGrid size={16} />
               </button>
             </div>
@@ -289,7 +338,7 @@ export default function TranscriptLibraryPage({
           </div>
 
           {/* Table Body */}
-          <div className="tl-table-body">
+          <div className="tl-table-body" data-tutorial="table">
             {loading ? (
               <div className="tl-empty-state">
                 <Timer size={32} className="tl-empty-icon" />
@@ -347,6 +396,7 @@ export default function TranscriptLibraryPage({
                     <button
                       className="tl-action-icon"
                       title="Download"
+                      data-tutorial="download"
                       onClick={(e) => handleDownload(e, t)}
                       style={{ color: doneId === t.id ? "var(--success)" : undefined }}
                       disabled={downloadingId !== null || doneId === t.id}
@@ -360,7 +410,7 @@ export default function TranscriptLibraryPage({
                       )}
                     </button>
 
-                    <div className="tl-menu-wrapper">
+                    <div className="tl-menu-wrapper" data-tutorial="more-actions">
                       <button
                         className="tl-action-icon"
                         title="More"
@@ -370,7 +420,7 @@ export default function TranscriptLibraryPage({
                       </button>
                       {menuOpenId === t.id && (
                         <div className="tl-dropdown">
-                          <button className="tl-dropdown-item" onClick={(e) => handleDelete(e, t.id)}>
+                          <button className="tl-dropdown-item" onClick={(e) => handleDelete(e, t.id)} title="Delete">
                             <Trash2 size={14} /> Delete
                           </button>
                         </div>
@@ -393,7 +443,7 @@ export default function TranscriptLibraryPage({
                   className="tl-page-btn"
                   disabled={page <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
+                  title="Expand">
                   <ChevronDown size={16} style={{ transform: "rotate(90deg)" }} />
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
@@ -409,7 +459,7 @@ export default function TranscriptLibraryPage({
                   className="tl-page-btn"
                   disabled={page >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                >
+                  title="Expand">
                   <ChevronDown size={16} style={{ transform: "rotate(-90deg)" }} />
                 </button>
               </div>
@@ -429,7 +479,7 @@ export default function TranscriptLibraryPage({
               <p className="tl-promo-desc">Record a new sermon or talk and let AI detect Bible references in real time.</p>
             </div>
           </div>
-          <button className="tl-btn tl-btn-primary" onClick={onNewSession}>
+          <button className="tl-btn tl-btn-primary" onClick={onNewSession} title="Microphone">
             <Mic size={16} /> New Session
           </button>
         </div>
@@ -443,14 +493,23 @@ export default function TranscriptLibraryPage({
                 This will permanently remove the transcript and cannot be undone.
               </div>
               <div className="tl-confirm-actions">
-                <button className="tl-btn-cancel" onClick={cancelDelete}>Cancel</button>
-                <button className="tl-btn-danger" onClick={confirmDelete}>Delete</button>
+                <button className="tl-btn-cancel" onClick={cancelDelete} title="Cancel">Cancel</button>
+                <button className="tl-btn-danger" onClick={confirmDelete} title="Delete">Delete</button>
               </div>
             </div>
           </div>
         )}
 
       </div>
+
+      {/* ── Tutorial Tour ── */}
+      <TranscriptTutorial
+        isActive={tourActive}
+        onClose={() => setTourActive(false)}
+        onFinish={() => { markTutorialCompleted(); setTourActive(false); }}
+        hasTranscripts={transcripts.length > 0}
+        onStartRecording={onNewSession}
+      />
     </div>
   );
 }

@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { HelpCircle, RotateCcw, AlertTriangle } from "lucide-react";
+import ServicePlannerTutorial, {
+  isServicePlannerTutorialCompleted,
+  markServicePlannerTutorialCompleted,
+  resetServicePlannerTutorial,
+} from "./ServicePlannerTutorial";
 import Icon from "../components/Icon";
 import { getAllMedia } from "../library/libraryDb";
 import type { MediaItem } from "../library/libraryTypes";
@@ -172,6 +179,7 @@ function buildMediaCue(draft: CueDraft, media: MediaItem[]): ServicePlanItem | n
 }
 
 export default function ServicePlannerPage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const requestedPlanId = searchParams.get("planId") ?? "";
   const requestedCueId = searchParams.get("cueId") ?? "";
@@ -183,6 +191,19 @@ export default function ServicePlannerPage() {
   const [editingItemId, setEditingItemId] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+
+  // ── Tutorial state ──
+  const [tourActive, setTourActive] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // ── Auto-start tutorial on first visit ──
+  useEffect(() => {
+    if (!isServicePlannerTutorialCompleted() && !tourActive) {
+      const timer = setTimeout(() => setTourActive(true), 600);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const activePlan = useMemo(
     () => plans.find((plan) => plan.id === activePlanId) ?? plans[0] ?? null,
@@ -298,344 +319,383 @@ export default function ServicePlannerPage() {
   }, [activePlan, handleSavePlan]);
 
   return (
-    <main className="service-planner-page app-page">
-      <section className="service-planner-hero">
-        <div>
-          <p className="app-section-kicker">Service Planner</p>
-          <h1>Build the service run-down before you go live.</h1>
-          <p>
-            Plan Bible verses, worship cues, sermon quotes or points, and media as one ordered list shared with the MakeChurchEasy Dock.
-          </p>
-        </div>
-        <button type="button" className="app-button app-button--primary" onClick={handleCreatePlan}>
-          <Icon name="add" size={18} />
-          New plan
-        </button>
-      </section>
-
-      <div className="service-planner-layout">
-        <aside className="service-planner-list" aria-label="Service plans">
-          <div className="service-planner-list__header">
-            <span>Plans</span>
-            <button type="button" className="app-button app-button--ghost" onClick={() => void load()}>
-              Refresh
+    <>
+      <main className="service-planner-page app-page">
+        <section className="service-planner-hero" data-spt-tutorial="welcome">
+          <div>
+            <p className="app-section-kicker">Service Planner</p>
+            <h1>Build the service run-down before you go live.</h1>
+            <p>
+              Plan Bible verses, worship cues, sermon quotes or points, and media as one ordered list shared with the MakeChurchEasy Dock.
+            </p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              type="button"
+              className="production-btn production-btn--ghost"
+              onClick={() => { resetServicePlannerTutorial(); setTourActive(true); setBannerDismissed(false); }}
+              title={t("spt.button.tooltip")}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }}
+            >
+              <HelpCircle size={16} /> {t("spt.button")}
+            </button>
+            <button type="button" className="app-button app-button--primary" onClick={handleCreatePlan} title="New plan" data-spt-tutorial="new-plan">
+              <Icon name="add" size={18} />
+              New plan
             </button>
           </div>
-          {plans.length === 0 && (
-            <div className="service-planner-empty">
-              <strong>No plans yet</strong>
-              <span>Create a plan, then add cues for the dock operator.</span>
-            </div>
-          )}
-          {plans.map((plan) => (
-            <button
-              key={plan.id}
-              type="button"
-              className={`service-plan-row${activePlan?.id === plan.id ? " service-plan-row--active" : ""}`}
-              onClick={() => setActivePlanId(plan.id)}
-            >
-              <span className="service-plan-row__title">{plan.title}</span>
-              <span className="service-plan-row__meta">
-                {formatPlanDate(plan.serviceDate)} · {plan.items.length} cues
-              </span>
-            </button>
-          ))}
-        </aside>
+        </section>
 
-        <section className="service-planner-detail">
-          {!activePlan ? (
-            <div className="service-planner-empty service-planner-empty--large">
-              <strong>Create your first service plan</strong>
-              <span>The planner will keep the app and dock in sync from one shared store.</span>
-              <button type="button" className="app-button app-button--primary" onClick={handleCreatePlan}>
-                Create plan
+        {/* ── Incomplete tutorial banner ── */}
+        {!tourActive && !isServicePlannerTutorialCompleted() && !bannerDismissed && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", margin: "0 24px 16px", background: "rgba(var(--primary-rgb, 99, 102, 241), 0.08)", border: "1px solid rgba(var(--primary-rgb, 99, 102, 241), 0.2)", borderRadius: 8, fontSize: "0.8125rem", color: "var(--text-muted)" }}>
+            <AlertTriangle size={14} style={{ color: "var(--primary)", flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>{t("spt.banner")}</span>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "var(--primary)", color: "#fff", border: "1px solid var(--primary)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, cursor: "pointer" }} onClick={() => setTourActive(true)}>
+                {t("spt.banner.continue")}
+              </button>
+              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => { resetServicePlannerTutorial(); setTourActive(true); setBannerDismissed(false); }}>
+                <RotateCcw size={12} /> {t("spt.banner.restart")}
+              </button>
+              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => setBannerDismissed(true)}>
+                {t("spt.banner.dismiss")}
               </button>
             </div>
-          ) : (
-            <>
-              <div className="service-planner-editor">
-                <label>
-                  <span>Title</span>
-                  <input
-                    value={activePlan.title}
-                    onChange={(event) => handleSavePlan({ ...activePlan, title: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>Date</span>
-                  <input
-                    type="date"
-                    value={activePlan.serviceDate}
-                    onChange={(event) => handleSavePlan({ ...activePlan, serviceDate: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>Status</span>
-                  <select
-                    value={activePlan.status}
-                    onChange={(event) =>
-                      handleSavePlan({ ...activePlan, status: event.target.value as ServicePlan["status"] })
-                    }
-                  >
-                    <option value="active">Active</option>
-                    <option value="draft">Draft</option>
-                    <option value="archived">Archived</option>
-                  </select>
-                </label>
-                <div className="service-planner-editor__actions">
-                  <button
-                    type="button"
-                    className="app-button app-button--secondary"
-                    onClick={async () => {
-                      const copy = await duplicateServicePlan(activePlan.id);
-                      await load();
-                      if (copy) setActivePlanId(copy.id);
-                    }}
-                  >
-                    Duplicate
-                  </button>
-                  <button
-                    type="button"
-                    className="app-button app-button--danger"
-                    onClick={async () => {
-                      await deleteServicePlan(activePlan.id);
-                      await load();
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
+          </div>
+        )}
+
+        <div className="service-planner-layout">
+          <aside className="service-planner-list" aria-label="Service plans" data-spt-tutorial="plans-list">
+            <div className="service-planner-list__header">
+              <span>Plans</span>
+              <button type="button" className="app-button app-button--ghost" onClick={() => void load()} title="Refresh">
+                Refresh
+              </button>
+            </div>
+            {plans.length === 0 && (
+              <div className="service-planner-empty">
+                <strong>No plans yet</strong>
+                <span>Create a plan, then add cues for the dock operator.</span>
               </div>
+            )}
+            {plans.map((plan) => (
+              <button
+                key={plan.id}
+                type="button"
+                className={`service-plan-row${activePlan?.id === plan.id ? " service-plan-row--active" : ""}`}
+                onClick={() => setActivePlanId(plan.id)}
+                title="· cues">
+                <span className="service-plan-row__title">{plan.title}</span>
+                <span className="service-plan-row__meta">
+                  {formatPlanDate(plan.serviceDate)} · {plan.items.length} cues
+                </span>
+              </button>
+            ))}
+          </aside>
 
-              <div className="service-planner-workspace">
-                <div className="service-planner-cues">
-                  <div className="service-planner-section-head">
-                    <div>
-                      <p className="app-section-kicker">Run-down</p>
-                      <h2>{activePlan.items.length} cues</h2>
-                    </div>
-                    <span>Click a cue in the dock to preview. Double-click sends Program.</span>
-                  </div>
-
-                  {activePlan.items.length === 0 && (
-                    <div className="service-planner-empty">
-                      <strong>No cues in this plan</strong>
-                      <span>Add Bible, Worship, Sermon, or Media cues from the panel on the right.</span>
-                    </div>
-                  )}
-
-                  {activePlan.items.map((item, index) => (
-                    <article
-                      key={item.id}
-                      data-cue-id={item.id}
-                      className={`service-cue-card${editingItemId === item.id ? " service-cue-card--editing" : ""}${focusedCueId === item.id ? " service-cue-card--selected" : ""}`}
-                    >
-                      <div className="service-cue-card__index">{index + 1}</div>
-                      <div className="service-cue-card__body">
-                        <div className="service-cue-card__topline">
-                          <span className={`service-cue-card__badge service-cue-card__badge--${item.type}`}>
-                            {item.type}
-                          </span>
-                          <span>{item.sourceKind ?? "snapshot"}</span>
-                        </div>
-                        <input
-                          value={item.label}
-                          aria-label="Cue label"
-                          onFocus={() => setEditingItemId(item.id)}
-                          onChange={(event) => handlePatchItem(item.id, { label: event.target.value })}
-                        />
-                        <input
-                          value={item.subtitle ?? ""}
-                          aria-label="Cue subtitle"
-                          placeholder="Subtitle"
-                          onFocus={() => setEditingItemId(item.id)}
-                          onChange={(event) => handlePatchItem(item.id, { subtitle: event.target.value })}
-                        />
-                        <textarea
-                          value={item.notes ?? ""}
-                          aria-label="Cue notes"
-                          placeholder="Operator notes"
-                          onFocus={() => setEditingItemId(item.id)}
-                          onChange={(event) => handlePatchItem(item.id, { notes: event.target.value })}
-                        />
-                      </div>
-                      <div className="service-cue-card__actions">
-                        <button type="button" onClick={() => handleMoveItem(item.id, -1)} disabled={index === 0}>
-                          Up
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleMoveItem(item.id, 1)}
-                          disabled={index === activePlan.items.length - 1}
-                        >
-                          Down
-                        </button>
-                        <button type="button" onClick={() => handleRemoveItem(item.id)}>
-                          Remove
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-
-                <aside className="service-planner-add">
-                  <div className="service-planner-section-head">
-                    <div>
-                      <p className="app-section-kicker">Add cue</p>
-                      <h2>Snapshot item</h2>
-                    </div>
-                  </div>
+          <section className="service-planner-detail">
+            {!activePlan ? (
+              <div className="service-planner-empty service-planner-empty--large">
+                <strong>Create your first service plan</strong>
+                <span>The planner will keep the app and dock in sync from one shared store.</span>
+                <button type="button" className="app-button app-button--primary" onClick={handleCreatePlan} title="Create">
+                  Create plan
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="service-planner-editor" data-spt-tutorial="editor">
                   <label>
-                    <span>Type</span>
-                    <select
-                      value={cueDraft.type}
-                      onChange={(event) => setCueDraft({ ...emptyCueDraft, type: event.target.value as CueDraftType })}
-                    >
-                      <option value="bible">Bible</option>
-                      <option value="worship">Worship</option>
-                      <option value="sermon">Sermon</option>
-                      <option value="media">Media</option>
-                    </select>
-                  </label>
-
-                  {cueDraft.type === "bible" && (
-                    <>
-                      <label>
-                        <span>Reference</span>
-                        <input
-                          placeholder="John 3:16"
-                          value={cueDraft.bibleReference}
-                          onChange={(event) => setCueDraft({ ...cueDraft, bibleReference: event.target.value })}
-                        />
-                      </label>
-                      <label>
-                        <span>Translation</span>
-                        <input
-                          value={cueDraft.bibleTranslation}
-                          onChange={(event) => setCueDraft({ ...cueDraft, bibleTranslation: event.target.value })}
-                        />
-                      </label>
-                      <label>
-                        <span>Verse text</span>
-                        <textarea
-                          rows={4}
-                          value={cueDraft.bibleText}
-                          onChange={(event) => setCueDraft({ ...cueDraft, bibleText: event.target.value })}
-                        />
-                      </label>
-                    </>
-                  )}
-
-                  {cueDraft.type === "worship" && (
-                    <>
-                      <label>
-                        <span>Song</span>
-                        <select
-                          value={cueDraft.worshipSongId}
-                          onChange={(event) =>
-                            setCueDraft({ ...cueDraft, worshipSongId: event.target.value, worshipSlideId: "" })
-                          }
-                        >
-                          <option value="">Select song</option>
-                          {songs.map((song) => (
-                            <option key={song.id} value={song.id}>{song.metadata.title}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        <span>Section</span>
-                        <select
-                          value={cueDraft.worshipSlideId}
-                          onChange={(event) => setCueDraft({ ...cueDraft, worshipSlideId: event.target.value })}
-                        >
-                          <option value="">First section</option>
-                          {selectedSongSlides.map((slide) => (
-                            <option key={slide.id} value={slide.id}>{slide.label}</option>
-                          ))}
-                        </select>
-                      </label>
-                    </>
-                  )}
-
-                  {cueDraft.type === "sermon" && (
-                    <>
-                      <label>
-                        <span>Kind</span>
-                        <select
-                          value={cueDraft.sermonKind}
-                          onChange={(event) =>
-                            setCueDraft({ ...cueDraft, sermonKind: event.target.value as CueDraft["sermonKind"] })
-                          }
-                        >
-                          <option value="point">Point</option>
-                          <option value="quote">Quote</option>
-                        </select>
-                      </label>
-                      {cueDraft.sermonKind === "quote" && (
-                        <div className="service-planner-add__row">
-                          <label>
-                            <span>Speaker</span>
-                            <input
-                              value={cueDraft.sermonSpeaker}
-                              onChange={(event) => setCueDraft({ ...cueDraft, sermonSpeaker: event.target.value })}
-                            />
-                          </label>
-                          <label>
-                            <span>Series</span>
-                            <input
-                              value={cueDraft.sermonSeries}
-                              onChange={(event) => setCueDraft({ ...cueDraft, sermonSeries: event.target.value })}
-                            />
-                          </label>
-                        </div>
-                      )}
-                      <label>
-                        <span>{cueDraft.sermonKind === "quote" ? "Quote" : "Point"}</span>
-                        <textarea
-                          rows={5}
-                          value={cueDraft.sermonText}
-                          onChange={(event) => setCueDraft({ ...cueDraft, sermonText: event.target.value })}
-                        />
-                      </label>
-                    </>
-                  )}
-
-                  {cueDraft.type === "media" && (
-                    <label>
-                      <span>Media item</span>
-                      <select
-                        value={cueDraft.mediaId}
-                        onChange={(event) => setCueDraft({ ...cueDraft, mediaId: event.target.value })}
-                      >
-                        <option value="">Select media</option>
-                        {media.map((item) => (
-                          <option key={item.id} value={item.id}>{item.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-
-                  <label>
-                    <span>Notes</span>
-                    <textarea
-                      rows={3}
-                      value={cueDraft.notes}
-                      onChange={(event) => setCueDraft({ ...cueDraft, notes: event.target.value })}
+                    <span>Title</span>
+                    <input
+                      value={activePlan.title}
+                      onChange={(event) => handleSavePlan({ ...activePlan, title: event.target.value })}
                     />
                   </label>
+                  <label>
+                    <span>Date</span>
+                    <input
+                      type="date"
+                      value={activePlan.serviceDate}
+                      onChange={(event) => handleSavePlan({ ...activePlan, serviceDate: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    <span>Status</span>
+                    <select
+                      value={activePlan.status}
+                      onChange={(event) =>
+                        handleSavePlan({ ...activePlan, status: event.target.value as ServicePlan["status"] })
+                      }
+                    >
+                      <option value="active">Active</option>
+                      <option value="draft">Draft</option>
+                      <option value="archived">Archived</option>
+                    </select>
+                  </label>
+                  <div className="service-planner-editor__actions">
+                    <button
+                      type="button"
+                      className="app-button app-button--secondary"
+                      onClick={async () => {
+                        const copy = await duplicateServicePlan(activePlan.id);
+                        await load();
+                        if (copy) setActivePlanId(copy.id);
+                      }}
+                      title="Duplicate">
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      className="app-button app-button--danger"
+                      onClick={async () => {
+                        await deleteServicePlan(activePlan.id);
+                        await load();
+                      }}
+                      title="Delete">
+                      Delete
+                    </button>
+                  </div>
+                </div>
 
-                  {error && <div className="service-planner-inline-error">{error}</div>}
-                  {status && <div className="service-planner-inline-status">{status}</div>}
+                <div className="service-planner-workspace">
+                  <div className="service-planner-cues" data-spt-tutorial="cues">
+                    <div className="service-planner-section-head">
+                      <div>
+                        <p className="app-section-kicker">Run-down</p>
+                        <h2>{activePlan.items.length} cues</h2>
+                      </div>
+                      <span>Click a cue in the dock to preview. Double-click sends Program.</span>
+                    </div>
 
-                  <button type="button" className="app-button app-button--primary" onClick={handleAddCue}>
-                    Add cue
-                  </button>
-                </aside>
-              </div>
-            </>
-          )}
-        </section>
-      </div>
-    </main>
+                    {activePlan.items.length === 0 && (
+                      <div className="service-planner-empty">
+                        <strong>No cues in this plan</strong>
+                        <span>Add Bible, Worship, Sermon, or Media cues from the panel on the right.</span>
+                      </div>
+                    )}
+
+                    {activePlan.items.map((item, index) => (
+                      <article
+                        key={item.id}
+                        data-cue-id={item.id}
+                        className={`service-cue-card${editingItemId === item.id ? " service-cue-card--editing" : ""}${focusedCueId === item.id ? " service-cue-card--selected" : ""}`}
+                      >
+                        <div className="service-cue-card__index">{index + 1}</div>
+                        <div className="service-cue-card__body">
+                          <div className="service-cue-card__topline">
+                            <span className={`service-cue-card__badge service-cue-card__badge--${item.type}`}>
+                              {item.type}
+                            </span>
+                            <span>{item.sourceKind ?? "snapshot"}</span>
+                          </div>
+                          <input
+                            value={item.label}
+                            aria-label="Cue label"
+                            onFocus={() => setEditingItemId(item.id)}
+                            onChange={(event) => handlePatchItem(item.id, { label: event.target.value })}
+                          />
+                          <input
+                            value={item.subtitle ?? ""}
+                            aria-label="Cue subtitle"
+                            placeholder="Subtitle"
+                            onFocus={() => setEditingItemId(item.id)}
+                            onChange={(event) => handlePatchItem(item.id, { subtitle: event.target.value })}
+                          />
+                          <textarea
+                            value={item.notes ?? ""}
+                            aria-label="Cue notes"
+                            placeholder="Operator notes"
+                            onFocus={() => setEditingItemId(item.id)}
+                            onChange={(event) => handlePatchItem(item.id, { notes: event.target.value })}
+                          />
+                        </div>
+                        <div className="service-cue-card__actions">
+                          <button type="button" onClick={() => handleMoveItem(item.id, -1)} disabled={index === 0} title="Up">
+                            Up
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveItem(item.id, 1)}
+                            disabled={index === activePlan.items.length - 1}
+                            title="Down">
+                            Down
+                          </button>
+                          <button type="button" onClick={() => handleRemoveItem(item.id)} title="Remove">
+                            Remove
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+
+                  <aside className="service-planner-add" data-spt-tutorial="add-cue">
+                    <div className="service-planner-section-head">
+                      <div>
+                        <p className="app-section-kicker">Add cue</p>
+                        <h2>Snapshot item</h2>
+                      </div>
+                    </div>
+                    <label>
+                      <span>Type</span>
+                      <select
+                        value={cueDraft.type}
+                        onChange={(event) => setCueDraft({ ...emptyCueDraft, type: event.target.value as CueDraftType })}
+                      >
+                        <option value="bible">Bible</option>
+                        <option value="worship">Worship</option>
+                        <option value="sermon">Sermon</option>
+                        <option value="media">Media</option>
+                      </select>
+                    </label>
+
+                    {cueDraft.type === "bible" && (
+                      <>
+                        <label>
+                          <span>Reference</span>
+                          <input
+                            placeholder="John 3:16"
+                            value={cueDraft.bibleReference}
+                            onChange={(event) => setCueDraft({ ...cueDraft, bibleReference: event.target.value })}
+                          />
+                        </label>
+                        <label>
+                          <span>Translation</span>
+                          <input
+                            value={cueDraft.bibleTranslation}
+                            onChange={(event) => setCueDraft({ ...cueDraft, bibleTranslation: event.target.value })}
+                          />
+                        </label>
+                        <label>
+                          <span>Verse text</span>
+                          <textarea
+                            rows={4}
+                            value={cueDraft.bibleText}
+                            onChange={(event) => setCueDraft({ ...cueDraft, bibleText: event.target.value })}
+                          />
+                        </label>
+                      </>
+                    )}
+
+                    {cueDraft.type === "worship" && (
+                      <>
+                        <label>
+                          <span>Song</span>
+                          <select
+                            value={cueDraft.worshipSongId}
+                            onChange={(event) =>
+                              setCueDraft({ ...cueDraft, worshipSongId: event.target.value, worshipSlideId: "" })
+                            }
+                          >
+                            <option value="">Select song</option>
+                            {songs.map((song) => (
+                              <option key={song.id} value={song.id}>{song.metadata.title}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>Section</span>
+                          <select
+                            value={cueDraft.worshipSlideId}
+                            onChange={(event) => setCueDraft({ ...cueDraft, worshipSlideId: event.target.value })}
+                          >
+                            <option value="">First section</option>
+                            {selectedSongSlides.map((slide) => (
+                              <option key={slide.id} value={slide.id}>{slide.label}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </>
+                    )}
+
+                    {cueDraft.type === "sermon" && (
+                      <>
+                        <label>
+                          <span>Kind</span>
+                          <select
+                            value={cueDraft.sermonKind}
+                            onChange={(event) =>
+                              setCueDraft({ ...cueDraft, sermonKind: event.target.value as CueDraft["sermonKind"] })
+                            }
+                          >
+                            <option value="point">Point</option>
+                            <option value="quote">Quote</option>
+                          </select>
+                        </label>
+                        {cueDraft.sermonKind === "quote" && (
+                          <div className="service-planner-add__row">
+                            <label>
+                              <span>Speaker</span>
+                              <input
+                                value={cueDraft.sermonSpeaker}
+                                onChange={(event) => setCueDraft({ ...cueDraft, sermonSpeaker: event.target.value })}
+                              />
+                            </label>
+                            <label>
+                              <span>Series</span>
+                              <input
+                                value={cueDraft.sermonSeries}
+                                onChange={(event) => setCueDraft({ ...cueDraft, sermonSeries: event.target.value })}
+                              />
+                            </label>
+                          </div>
+                        )}
+                        <label>
+                          <span>{cueDraft.sermonKind === "quote" ? "Quote" : "Point"}</span>
+                          <textarea
+                            rows={5}
+                            value={cueDraft.sermonText}
+                            onChange={(event) => setCueDraft({ ...cueDraft, sermonText: event.target.value })}
+                          />
+                        </label>
+                      </>
+                    )}
+
+                    {cueDraft.type === "media" && (
+                      <label>
+                        <span>Media item</span>
+                        <select
+                          value={cueDraft.mediaId}
+                          onChange={(event) => setCueDraft({ ...cueDraft, mediaId: event.target.value })}
+                        >
+                          <option value="">Select media</option>
+                          {media.map((item) => (
+                            <option key={item.id} value={item.id}>{item.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+
+                    <label>
+                      <span>Notes</span>
+                      <textarea
+                        rows={3}
+                        value={cueDraft.notes}
+                        onChange={(event) => setCueDraft({ ...cueDraft, notes: event.target.value })}
+                      />
+                    </label>
+
+                    {error && <div className="service-planner-inline-error">{error}</div>}
+                    {status && <div className="service-planner-inline-status">{status}</div>}
+
+                    <button type="button" className="app-button app-button--primary" onClick={handleAddCue} title="Add">
+                      Add cue
+                    </button>
+                  </aside>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      </main>
+
+      {/* ── Tutorial Tour ── */}
+      <ServicePlannerTutorial
+        isActive={tourActive}
+        onClose={() => setTourActive(false)}
+        onFinish={() => { markServicePlannerTutorialCompleted(); setTourActive(false); }}
+      />
+    </>
   );
 }

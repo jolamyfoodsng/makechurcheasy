@@ -373,7 +373,7 @@ export default function DockFullscreenThemeQuickSettings({
                           type="button"
                           className={`dock-console-segmented__item${settings.fontWeight === weight ? " dock-console-segmented__item--active" : ""}`}
                           onClick={() => onChange(withPatch(settings, { fontWeight: weight }))}
-                        >
+                         title="No">
                           {weight === "normal" ? "Normal" : "Bold"}
                         </button>
                       ))}
@@ -539,7 +539,7 @@ export default function DockFullscreenThemeQuickSettings({
                         type="button"
                         className={`dock-console-segmented__item${settings.textAlign === align ? " dock-console-segmented__item--active" : ""}`}
                         onClick={() => onChange(withPatch(settings, { textAlign: align }))}
-                      >
+                       title="Center">
                         {align === "left" ? "Left" : align === "center" ? "Center" : "Right"}
                       </button>
                     ))}
@@ -589,7 +589,7 @@ export default function DockFullscreenThemeQuickSettings({
                 type="button"
                 className="dock-btn dock-btn--ghost dock-btn--compact dock-theme-quick__action"
                 onClick={onReset}
-              >
+               title="Reset">
                 Reset to Default
               </button>
               <button
@@ -597,7 +597,7 @@ export default function DockFullscreenThemeQuickSettings({
                 className="dock-btn dock-btn--preview dock-btn--compact dock-theme-quick__action"
                 onClick={() => void handleSave()}
                 disabled={saving}
-              >
+               title="Saving...">
                 {saving ? "Saving..." : "Save"}
               </button>
             </div>

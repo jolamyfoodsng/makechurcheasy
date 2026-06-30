@@ -201,14 +201,14 @@ export default function ForceUpdateModal({ result, daysOld, locked }: ForceUpdat
         {/* Actions */}
         <div className="force-update-actions">
           {status === "prompt" && (
-            <button className="force-update-btn force-update-btn--primary" onClick={handleUpdate}>
+            <button className="force-update-btn force-update-btn--primary" onClick={handleUpdate} title="Update now">
               <Icon name="system_update" size={14} />
               <span>Update Now</span>
             </button>
           )}
 
           {status === "error" && (
-            <button className="force-update-btn force-update-btn--primary" onClick={handleRetry}>
+            <button className="force-update-btn force-update-btn--primary" onClick={handleRetry} title="Refresh">
               <Icon name="refresh" size={14} />
               <span>Try Again</span>
             </button>

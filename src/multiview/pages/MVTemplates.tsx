@@ -99,7 +99,7 @@ export function MVTemplates() {
             className="mv-btn mv-btn--outline"
             type="button"
             onClick={() => navigate("/templates/themes")}
-          >
+           title="Palette">
             <Icon name="palette" size={16} />
             Broadcast Themes
           </button>
@@ -178,7 +178,7 @@ export function MVTemplates() {
               className="mv-btn mv-btn--primary mv-btn--sm mv-template-use-btn"
               onClick={() => handleUseTemplate(tpl)}
               disabled={creating === tpl.id}
-            >
+             title="Add">
               {creating === tpl.id ? (
                 <><span className="loading-spinner-sm" /> Creating...</>
               ) : (

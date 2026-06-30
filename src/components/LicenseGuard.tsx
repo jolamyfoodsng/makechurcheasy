@@ -183,7 +183,7 @@ function LicenseLockScreen({
                 className="license-guard-button license-guard-button--primary"
                 onClick={handleRetry}
                 disabled={verifying}
-              >
+               title="Refresh">
                 <Icon name="refresh" size={18} />
                 {config.primaryLabel}
               </button>
@@ -193,7 +193,7 @@ function LicenseLockScreen({
               <button
                 className="license-guard-button license-guard-button--primary"
                 onClick={handleManageSubscription}
-              >
+               title="Open">
                 <Icon name="open_in_new" size={18} />
                 {config.primaryLabel}
               </button>
@@ -203,7 +203,7 @@ function LicenseLockScreen({
               <button
                 className="license-guard-button license-guard-button--primary"
                 onClick={handleContactSupport}
-              >
+               title="support_agent">
                 <Icon name="support_agent" size={18} />
                 {config.primaryLabel}
               </button>
@@ -215,7 +215,7 @@ function LicenseLockScreen({
                 className="license-guard-button license-guard-button--secondary"
                 onClick={handleRetry}
                 disabled={verifying}
-              >
+               title="Retry">
                 <Icon name="refresh" size={18} />
                 Retry Verification
               </button>
@@ -225,7 +225,7 @@ function LicenseLockScreen({
             <button
               className="license-guard-button license-guard-button--ghost"
               onClick={handleQuit}
-            >
+             title="Quit Application">
               Quit Application
             </button>
           </div>

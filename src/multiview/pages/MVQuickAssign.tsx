@@ -160,7 +160,7 @@ export function MVQuickAssign() {
       <div className="mv-page mv-quick-assign-error">
         <Icon name="error_outline" size={48} style={{ color: "var(--error)" }} />
         <p>{error}</p>
-        <button className="mv-btn mv-btn--primary" onClick={() => navigate("/multiview/dashboard")}>
+        <button className="mv-btn mv-btn--primary" onClick={() => navigate("/multiview/dashboard")} title="Go back">
           Back to Dashboard
         </button>
       </div>
@@ -245,7 +245,7 @@ export function MVQuickAssign() {
             <button
               className={`mv-btn ${backgroundType === "color" ? "mv-btn--primary" : "mv-btn--ghost"}`}
               onClick={() => setBackgroundType("color")}
-            >
+             title="Color">
               <Icon name="format_color_fill" size={16} />
               Color
             </button>
@@ -253,7 +253,7 @@ export function MVQuickAssign() {
               className={`mv-btn ${backgroundType === "image" ? "mv-btn--primary" : "mv-btn--ghost"}`}
               onClick={() => setBackgroundType("image")}
               disabled={!obsConnected}
-            >
+             title="Image">
               <Icon name="image" size={16} />
               Image
             </button>
@@ -300,7 +300,7 @@ export function MVQuickAssign() {
             className="mv-btn mv-btn--primary mv-quick-assign-push"
             onClick={() => void handlePushToObs()}
             disabled={pushing || !obsConnected}
-          >
+           title="Sync">
             {pushing ? (
               <>
                 <Icon name="sync" size={16} />
@@ -317,7 +317,7 @@ export function MVQuickAssign() {
           <button
             className="mv-btn mv-btn--ghost mv-btn--sm"
             onClick={() => navigate(`/multiview/edit/${layoutId}`)}
-          >
+           title="Open">
             <Icon name="open_in_full" size={14} />
             Open Full Editor
           </button>

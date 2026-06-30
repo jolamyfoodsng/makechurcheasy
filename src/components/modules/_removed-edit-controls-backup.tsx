@@ -85,7 +85,7 @@
                       <Icon name="palette" size={16} style={{ color: "#C8102E" }} />
                       Customize Appearance
                     </h4>
-                    <button className="lt-customize-reset" onClick={resetCustomStyles}>
+                    <button className="lt-customize-reset" onClick={resetCustomStyles} title="Reset">
                       <Icon name="restart_alt" size={12} />
                       Reset
                     </button>
@@ -103,7 +103,7 @@
                           onChange={(e) => setCustomStyle({ bgColor: e.target.value })}
                           placeholder="#hex" />
                         {state.customStyles.bgColor && (
-                          <button className="lt-customize-clear" onClick={() => setCustomStyle({ bgColor: "" })}>
+                          <button className="lt-customize-clear" onClick={() => setCustomStyle({ bgColor: "" })} title="Close">
                             <Icon name="close" size={12} />
                           </button>
                         )}
@@ -121,7 +121,7 @@
                           onChange={(e) => setCustomStyle({ textColor: e.target.value })}
                           placeholder="#hex" />
                         {state.customStyles.textColor && (
-                          <button className="lt-customize-clear" onClick={() => setCustomStyle({ textColor: "" })}>
+                          <button className="lt-customize-clear" onClick={() => setCustomStyle({ textColor: "" })} title="Close">
                             <Icon name="close" size={12} />
                           </button>
                         )}
@@ -139,7 +139,7 @@
                           onChange={(e) => setCustomStyle({ accentColor: e.target.value })}
                           placeholder="#hex" />
                         {state.customStyles.accentColor && (
-                          <button className="lt-customize-clear" onClick={() => setCustomStyle({ accentColor: "" })}>
+                          <button className="lt-customize-clear" onClick={() => setCustomStyle({ accentColor: "" })} title="Close">
                             <Icon name="close" size={12} />
                           </button>
                         )}
@@ -156,7 +156,7 @@
                         onChange={(e) => setCustomStyle({ bgImage: e.target.value })}
                         style={{ flex: 1, fontSize: 11 }} />
                       {state.customStyles.bgImage && (
-                        <button className="lt-customize-clear" onClick={() => setCustomStyle({ bgImage: "" })}>
+                        <button className="lt-customize-clear" onClick={() => setCustomStyle({ bgImage: "" })} title="Close">
                           <Icon name="close" size={12} />
                         </button>
                       )}
@@ -187,7 +187,7 @@
                         value={state.customStyles.heightPx}
                         onChange={(e) => setCustomStyle({ heightPx: parseInt(e.target.value, 10) })} />
                       {state.customStyles.heightPx > 0 && (
-                        <button className="lt-customize-clear" onClick={() => setCustomStyle({ heightPx: 0 })}>
+                        <button className="lt-customize-clear" onClick={() => setCustomStyle({ heightPx: 0 })} title="Close">
                           <Icon name="close" size={12} />
                         </button>
                       )}
@@ -269,7 +269,7 @@
                 <Icon name="palette" size={15} />
                 Customize Appearance
               </span>
-              <button type="button" className="speaker-module-mini-btn" onClick={resetCustomStyles}>
+              <button type="button" className="speaker-module-mini-btn" onClick={resetCustomStyles} title="Reset">
                 <Icon name="restart_alt" size={13} />
                 Reset
               </button>

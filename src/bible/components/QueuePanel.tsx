@@ -110,7 +110,7 @@ export default function QueuePanel() {
                     onClick={() =>
                       dispatch({ type: "SET_ACTIVE_QUEUE_INDEX", index: qIdx })
                     }
-                  >
+                   title="Activate">
                     Activate
                   </button>
                 )}

@@ -1075,7 +1075,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                         className="ticker-add-btn"
                         onClick={handleAdd}
                         disabled={!newText.trim()}
-                      >
+                        title="Add">
                         <Icon name="add_circle" size={20} />
                         Add to Queue
                       </button>
@@ -1089,7 +1089,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                     type="button"
                     className="ticker-templates__toggle"
                     onClick={() => setShowTemplates(!showTemplates)}
-                  >
+                    title="Bookmark">
                     <Icon name="bookmark" size={14} />
                     Templates {templates.length > 0 && `(${templates.length})`}
                     <Icon name={showTemplates ? "expand_less" : "expand_more"} size={14} />
@@ -1120,7 +1120,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                               setTemplateLabel("");
                             }}
                             disabled={!templateLabel.trim() || !newText.trim()}
-                          >
+                            title="Save">
                             <Icon name="save" size={12} /> Save
                           </button>
                         </div>
@@ -1168,7 +1168,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                     </span>
                     <span className="ticker-list-drag-hint">Drag to reorder</span>
                     {messages.length > 0 && (
-                      <button type="button" className="ticker-clear-all-btn" onClick={handleClearAll}>
+                      <button type="button" className="ticker-clear-all-btn" onClick={handleClearAll} title="Clear">
                         Clear All
                       </button>
                     )}
@@ -1213,7 +1213,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                                     className="ticker-add-btn"
                                     onClick={() => handleSaveEdit(msg.id)}
                                     style={{ fontSize: 10, padding: "3px 8px" }}
-                                  >
+                                    title="Save">
                                     Save
                                   </button>
                                   <button
@@ -1221,7 +1221,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                                     className="ticker-clear-all-btn"
                                     onClick={handleCancelEdit}
                                     style={{ fontSize: 10 }}
-                                  >
+                                    title="Cancel">
                                     Cancel
                                   </button>
                                 </div>
@@ -1374,6 +1374,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                           }`}
                         onClick={() => handleSetDuration(seconds)}
                         disabled={settings.useSystemDefaults}
+                        title={`${formatDuration(seconds)}`}
                       >
                         {formatDuration(seconds)}
                       </button>
@@ -1418,14 +1419,14 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                       type="button"
                       className={`ticker-position-btn${settings.position === "top" ? " is-active" : ""}`}
                       onClick={() => handleSetPosition("top")}
-                    >
+                      title="Top">
                       Top
                     </button>
                     <button
                       type="button"
                       className={`ticker-position-btn${settings.position === "bottom" ? " is-active" : ""}`}
                       onClick={() => handleSetPosition("bottom")}
-                    >
+                      title="Bottom">
                       Bottom
                     </button>
                   </div>
@@ -1467,7 +1468,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                 className={`ticker-start-btn${running ? " is-running" : ""}`}
                 onClick={handleToggleTicker}
                 disabled={(!running && messages.length === 0) || (!running && !obsConnected) || liveToggleBusy}
-              >
+                title="Remove">
                 <Icon name={running ? "stop_circle" : "play_circle"} size={20} />
                 {liveToggleBusy ? (running ? "STOPPING..." : "STARTING...") : running ? "Remove From OBS" : "Push To OBS"}
               </button>

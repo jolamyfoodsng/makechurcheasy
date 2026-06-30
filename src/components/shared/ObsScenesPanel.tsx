@@ -161,7 +161,7 @@ export function ObsScenesPanel({
                       className="obs-scenes-panel-send-btn obs-scenes-panel-send-btn--scene"
                       onClick={() => { void safeSend(scene.sceneName, "scene", `scene:${scene.sceneName}`); }}
                       disabled={!connected || disabled || Boolean(busyKey)}
-                    >
+                     title="Send">
                       {sceneBusy ? "Sending…" : sendLabel}
                     </button>
                   </div>

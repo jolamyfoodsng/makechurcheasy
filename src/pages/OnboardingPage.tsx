@@ -265,10 +265,10 @@ export default function OnboardingPage() {
               <button
                 className="ob-btn ob-btn--ghost"
                 onClick={() => setShowSkipModal(false)}
-              >
+               title="Continue">
                 Continue Setup
               </button>
-              <button className="ob-btn ob-btn--primary" onClick={skip}>
+              <button className="ob-btn ob-btn--primary" onClick={skip} title="Skip">
                 Skip for Now
               </button>
             </div>
@@ -336,11 +336,11 @@ function StepWelcome({
       </div>
 
       <div className="ob-actions">
-        <button className="ob-btn ob-btn--primary" onClick={onNext}>
+        <button className="ob-btn ob-btn--primary" onClick={onNext} title="Get started">
           Get Started
           <ArrowRight size={16} />
         </button>
-        <button className="ob-btn ob-btn--secondary" onClick={onTutorial}>
+        <button className="ob-btn ob-btn--secondary" onClick={onTutorial} title="Open in new tab">
           <Play size={14} />
           Watch Tutorial
           <ExternalLink size={12} style={{ marginLeft: "auto" }} />
@@ -465,13 +465,13 @@ function StepConnectOBS({
 
       <div className="ob-actions">
         <div className="ob-actions-row">
-          <button className="ob-btn ob-btn--ghost" onClick={onBack}>
+          <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
             Back
           </button>
           <button
             className="ob-btn ob-btn--secondary"
             onClick={testConnection}
-          >
+           title="Play">
             {status === "checking" ? (
               <Loader2
                 size={14}
@@ -487,7 +487,7 @@ function StepConnectOBS({
           className="ob-btn ob-btn--primary"
           disabled={status !== "connected"}
           onClick={onNext}
-        >
+         title="Continue">
           Continue
           <ArrowRight size={16} />
         </button>
@@ -535,11 +535,11 @@ function StepFeatures({
 
       <div className="ob-actions">
         <div className="ob-actions-row">
-          <button className="ob-btn ob-btn--ghost" onClick={onBack}>
+          <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
             Back
           </button>
         </div>
-        <button className="ob-btn ob-btn--primary" onClick={onNext}>
+        <button className="ob-btn ob-btn--primary" onClick={onNext} title="Continue">
           Continue
           <ArrowRight size={16} />
         </button>
@@ -610,7 +610,7 @@ function StepInstallDock({
             className="ob-btn ob-btn--primary"
             style={{ flex: "none", padding: "0 16px" }}
             onClick={() => copyUrl(dockUrl, "dock")}
-          >
+           title="Copy">
             <Copy size={14} />
             {copied === "dock" ? "Copied" : "Copy"}
           </button>
@@ -636,7 +636,7 @@ function StepInstallDock({
             className="ob-btn ob-btn--primary"
             style={{ flex: "none", padding: "0 16px" }}
             onClick={() => copyUrl(aiUrl, "ai")}
-          >
+           title="Copy">
             <Copy size={14} />
             {copied === "ai" ? "Copied" : "Copy"}
           </button>
@@ -656,15 +656,15 @@ function StepInstallDock({
 
       <div className="ob-actions">
         <div className="ob-actions-row">
-          <button className="ob-btn ob-btn--ghost" onClick={onBack}>
+          <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
             Back
           </button>
-          <button className="ob-btn ob-btn--secondary" onClick={onTutorial}>
+          <button className="ob-btn ob-btn--secondary" onClick={onTutorial} title="Play">
             <Play size={14} />
             Watch Tutorial
           </button>
         </div>
-        <button className="ob-btn ob-btn--primary" onClick={onNext}>
+        <button className="ob-btn ob-btn--primary" onClick={onNext} title="Continue">
           Continue
           <ArrowRight size={16} />
         </button>
@@ -822,14 +822,14 @@ function StepTest({
 
       <div className="ob-actions">
         <div className="ob-actions-row">
-          <button className="ob-btn ob-btn--ghost" onClick={onBack}>
+          <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
             Back
           </button>
           <button
             className="ob-btn ob-btn--secondary"
             onClick={runDiagnostics}
             disabled={running}
-          >
+           title="Play">
             {running ? (
               <Loader2
                 size={14}
@@ -841,7 +841,7 @@ function StepTest({
             Run Diagnostics
           </button>
         </div>
-        <button className="ob-btn ob-btn--primary" onClick={onFinish}>
+        <button className="ob-btn ob-btn--primary" onClick={onFinish} title="Continue">
           Continue
           <ArrowRight size={16} />
         </button>
@@ -887,7 +887,7 @@ function StepReady({ onFinish }: { onFinish: () => void }) {
       <p className="ob-section-title">Quick Actions</p>
 
       <div className="ob-quick-actions">
-        <button className="ob-quick-btn" onClick={onFinish}>
+        <button className="ob-quick-btn" onClick={onFinish} title="Open">
           <LayoutDashboard size={16} />
           Open Dashboard
         </button>
@@ -897,7 +897,7 @@ function StepReady({ onFinish }: { onFinish: () => void }) {
             completeOnboarding();
             window.location.href = "/resources?tab=bible";
           }}
-        >
+         title="Open">
           <Library size={16} />
           Open Bible
         </button>
@@ -907,18 +907,18 @@ function StepReady({ onFinish }: { onFinish: () => void }) {
             completeOnboarding();
             window.location.href = "/resources?tab=worship";
           }}
-        >
+         title="Open">
           <ListMusic size={16} />
           Open Worship
         </button>
-        <button className="ob-quick-btn" onClick={() => openUrl(YOUTUBE_URL)}>
+        <button className="ob-quick-btn" onClick={() => openUrl(YOUTUBE_URL)} title="Watch Tutorials">
           <Video size={16} />
           Watch Tutorials
         </button>
         <button
           className="ob-quick-btn"
           onClick={() => openUrl("https://discord.gg/makechurcheasy")}
-        >
+         title="People">
           <Users size={16} />
           Join Community
         </button>

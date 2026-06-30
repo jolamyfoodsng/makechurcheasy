@@ -74,7 +74,7 @@ export function MVEditor() {
         <button
           className="mv-btn mv-btn--primary"
           onClick={() => navigate("/")}
-        >
+         title="Go back">
           Back to Dashboard
         </button>
       </div>
@@ -626,17 +626,17 @@ function MVEditorInner({
                 <div className="mv-bottom-tabs" role="tablist" aria-label="Bottom panels">
                   <button role="tab" aria-selected={bottomTab === "sources"}
                     className={`mv-bottom-tab${bottomTab === "sources" ? " mv-bottom-tab--active" : ""}`}
-                    onClick={() => setBottomTab("sources")}>
+                    onClick={() => setBottomTab("sources")} title="Sources">
                     <Icon name="playlist_play" size={16} /> Sources
                   </button>
                   <button role="tab" aria-selected={bottomTab === "history"}
                     className={`mv-bottom-tab${bottomTab === "history" ? " mv-bottom-tab--active" : ""}`}
-                    onClick={() => setBottomTab("history")}>
+                    onClick={() => setBottomTab("history")} title="History">
                     <Icon name="history" size={16} /> History
                   </button>
                   <button role="tab" aria-selected={bottomTab === "audio"}
                     className={`mv-bottom-tab${bottomTab === "audio" ? " mv-bottom-tab--active" : ""}`}
-                    onClick={() => setBottomTab("audio")}>
+                    onClick={() => setBottomTab("audio")} title="Audio">
                     <Icon name="equalizer" size={16} /> Audio
                   </button>
                   <span style={{ flex: 1 }} />
@@ -682,7 +682,7 @@ function MVEditorInner({
               </datalist>
             </div>
             <div className="mv-canvas-footer-right">
-              <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={handleSaveLayout} disabled={saving || !state.layout}>
+              <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={handleSaveLayout} disabled={saving || !state.layout} title="hourglass_empty">
                 <Icon name={saving ? "hourglass_empty" : "save"} size={16} />
                 {saving ? "Saving…" : "Save Layout"}
               </button>
@@ -758,13 +758,13 @@ function MVEditorInner({
               }}
             />
             <div className="mv-modal-actions" style={{ marginTop: 12 }}>
-              <button className="mv-btn mv-btn--ghost" onClick={() => setRenameModal(null)}>Cancel</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setRenameModal(null)} title="Cancel">Cancel</button>
               <button className="mv-btn mv-btn--primary" onClick={() => {
                 const input = document.querySelector<HTMLInputElement>(".mv-modal .mv-input");
                 const val = input?.value.trim();
                 if (val) renameRegion(renameModal.regionId as any, val);
                 setRenameModal(null);
-              }}>Rename</button>
+              }} title="Rename">Rename</button>
             </div>
           </div>
         </div>

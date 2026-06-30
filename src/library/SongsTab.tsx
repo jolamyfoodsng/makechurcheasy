@@ -36,6 +36,7 @@ import {
   searchOnlineSongLyrics,
   type OnlineLyricsSearchResult,
 } from "../worship/onlineLyricsService";
+import { unicodeSearchNormalize, unicodeStripDiacritics } from "../worship/unicodeUtils";
 import { generateSlides } from "../worship/slideEngine";
 import type { Song } from "../worship/types";
 import { archiveSong, getAllSongs, getArchivedSongs, restoreSong, saveSong } from "../worship/worshipDb";
@@ -55,8 +56,8 @@ const MIN_ONLINE_LYRICS_QUERY_LENGTH = 3;
 const ONLINE_LYRICS_SEARCH_DELAY_MS = 80;
 
 function fuzzyMatch(query: string, target: string): boolean {
-  const q = query.toLowerCase();
-  const t = target.toLowerCase();
+  const q = unicodeStripDiacritics(query);
+  const t = unicodeStripDiacritics(target);
   if (t.includes(q)) return true;
   let qi = 0;
   for (let ti = 0; ti < t.length && qi < q.length; ti++) {
@@ -66,11 +67,7 @@ function fuzzyMatch(query: string, target: string): boolean {
 }
 
 function normalizeSongLookupPart(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return unicodeSearchNormalize(value);
 }
 
 function buildSongLookupKeys(title: string, artist: string): string[] {
@@ -416,11 +413,11 @@ export function SongsTab() {
             type="button"
             className={`lib-add-btn ${hasReachedSongLimit ? "lib-add-btn--at-limit" : ""}`}
             onClick={handleAddSong}
-          >
+            title="Add">
             <Icon name="add" size={20} />
             Add Song
           </button>
-          <button type="button" className={`lib-add-btn ${!canImport ? "lib-add-btn--at-limit" : ""}`} onClick={handleBulkImport}>
+          <button type="button" className={`lib-add-btn ${!canImport ? "lib-add-btn--at-limit" : ""}`} onClick={handleBulkImport} title="Import">
             <Icon name="upload_file" size={20} />
             Bulk Import
           </button>
@@ -448,7 +445,7 @@ export function SongsTab() {
           </button>
         </div>
         <div className="lib-toolbar-actions">
-          <button type="button" className="lib-online-search-trigger" onClick={handleOpenOnlineSearch}>
+          <button type="button" className="lib-online-search-trigger" onClick={handleOpenOnlineSearch} title="Search">
             <Icon name="travel_explore" size={18} />
             Search Online
           </button>
@@ -473,7 +470,7 @@ export function SongsTab() {
             <div className="lib-empty">
               <Icon name="music_note" size={48} style={{ opacity: 0.3 }} />
               <p>No songs found</p>
-              <button type="button" className="lib-add-btn" onClick={() => setShowAddModal(true)}>
+              <button type="button" className="lib-add-btn" onClick={() => setShowAddModal(true)} title="Add">
                 <Icon name="add" size={20} />
                 Add Song
               </button>
@@ -621,7 +618,7 @@ export function SongsTab() {
                 className="lib-modal-close-btn"
                 aria-label="Close online lyrics search"
                 onClick={() => setShowOnlineSearchModal(false)}
-              >
+                title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -694,7 +691,7 @@ export function SongsTab() {
                         className="lib-online-action"
                         disabled={isImporting}
                         onClick={() => handleOpenOnlineImport(result)}
-                      >
+                        title="Saving…">
                         {isImporting ? "Saving…" : actionLabel}
                       </button>
                     </div>
@@ -713,8 +710,8 @@ export function SongsTab() {
             <h3>Archive the song?</h3>
             <p>This song and its lyrics will be archived and removed from the active library.</p>
             <div className="lib-confirm-actions">
-              <button className="lib-confirm-cancel" onClick={() => setDeleteConfirmId(null)}>Cancel</button>
-              <button className="lib-confirm-delete" onClick={() => handleArchive(deleteConfirmId)}>Archive</button>
+              <button className="lib-confirm-cancel" onClick={() => setDeleteConfirmId(null)} title="Cancel">Cancel</button>
+              <button className="lib-confirm-delete" onClick={() => handleArchive(deleteConfirmId)} title="Archive">Archive</button>
             </div>
           </div>
         </div>
@@ -725,7 +722,7 @@ export function SongsTab() {
           <div className="lib-song-modal lib-archive-modal" onClick={(e) => e.stopPropagation()}>
             <div className="lib-add-modal-header">
               <h3>Archived Songs</h3>
-              <button className="lib-modal-close-btn" onClick={() => setShowArchiveModal(false)}>
+              <button className="lib-modal-close-btn" onClick={() => setShowArchiveModal(false)} title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -785,7 +782,7 @@ export function SongsTab() {
             </div>
 
             <div className="lib-add-modal-footer">
-              <button className="lib-modal-cancel-btn" onClick={() => setShowArchiveModal(false)}>
+              <button className="lib-modal-cancel-btn" onClick={() => setShowArchiveModal(false)} title="Close">
                 Close
               </button>
             </div>
@@ -831,7 +828,7 @@ export function SongsTab() {
               className="um-close"
               onClick={() => setShowSongLimitModal(false)}
               aria-label="Close"
-            >
+              title="Close">
               <Icon name="close" size={18} />
             </button>
             <div className="dock-upgrade">
@@ -865,7 +862,7 @@ export function SongsTab() {
                 <button
                   className="dock-upgrade__btn dock-upgrade__btn--secondary"
                   onClick={() => setShowSongLimitModal(false)}
-                >
+                  title="Maybe Later">
                   Maybe Later
                 </button>
                 <button
@@ -874,7 +871,7 @@ export function SongsTab() {
                     window.open("https://makechurcheasy.creatorstudioslabs.stream/pricing", "_blank");
                     setShowSongLimitModal(false);
                   }}
-                >
+                  title="Upgrade">
                   Upgrade
                 </button>
               </div>

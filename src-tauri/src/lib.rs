@@ -17,6 +17,7 @@
 mod audio_capture;
 mod assemblyai_stream;
 mod local_llm;
+mod mobile_companion;
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 mod local_llm_stub;
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -2111,6 +2112,54 @@ fn translate_transcript(transcript_text: String, target_language: String) -> Res
     Ok(content)
 }
 
+/// Fix WinAnsi-mapped Twi/Akan text extracted from PDFs.
+///
+/// Mobile app PDFs use custom fonts (Capecoast, Wogyaf, TwiTimes) with WinAnsi
+/// encoding that map ASCII codes to Twi glyphs:
+///   - '4' (0x34) → ɔ (U+0254)
+///   - '1' (0x31) → ɛ (U+025B)
+///   - '$' (0x24) → ɛ (U+025B)  (at word start)
+///   - '!' (0x21) → Ɔ (U+0186)  (at word start, capital ɔ)
+///
+/// pdftotext extracts the raw ASCII codes, not the visual glyphs.
+/// This function replaces them when they appear in word-internal positions.
+fn fix_winansi_twi(text: String) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    let mut result = String::with_capacity(text.len());
+
+    for i in 0..len {
+        let ch = chars[i];
+        if ch == '4' || ch == '1' {
+            // Adjacent to lowercase letter → inside a Twi word
+            let prev_lower = i > 0 && chars[i - 1].is_ascii_lowercase();
+            let next_lower = i + 1 < len && chars[i + 1].is_ascii_lowercase();
+            if prev_lower || next_lower {
+                result.push(if ch == '4' { 'ɔ' } else { 'ɛ' });
+                continue;
+            }
+        } else if ch == '$' {
+            // '$' at start of word followed by lowercase → Twi 'ɛ'
+            let next_lower = i + 1 < len && chars[i + 1].is_ascii_lowercase();
+            let prev_not_letter = i == 0 || !chars[i - 1].is_ascii_alphabetic();
+            if next_lower && prev_not_letter {
+                result.push('ɛ');
+                continue;
+            }
+        } else if ch == '!' {
+            // '!' at start of word followed by lowercase → Twi 'Ɔ' (capital)
+            let next_lower = i + 1 < len && chars[i + 1].is_ascii_lowercase();
+            let prev_not_letter = i == 0 || !chars[i - 1].is_ascii_alphabetic();
+            if next_lower && prev_not_letter {
+                result.push('\u{0186}'); // Ɔ
+                continue;
+            }
+        }
+        result.push(ch);
+    }
+    result
+}
+
 #[tauri::command]
 fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
     use std::io::Write;
@@ -2119,7 +2168,62 @@ fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
     tmp.write_all(&file_data)
         .map_err(|e| format!("Failed to write temp file: {}", e))?;
     let path = tmp.into_temp_path();
+
+    // pdftotext (Poppler) handles CMap/Unicode encodings correctly for
+    // African-language fonts (Twi, Yoruba, Igbo) where the pdf-extract
+    // crate corrupts ɛ→1 and ɔ→4 by falling back to raw glyph indices.
+    //
+    // Tauri-packaged apps have a minimal PATH, so we probe known install
+    // locations on macOS and Linux before relying on bare PATH lookup.
+    let pdftotext_candidates: &[&str] = &[
+        "pdftotext",                                       // PATH lookup (dev mode)
+        "/opt/homebrew/bin/pdftotext",                     // Homebrew — Apple Silicon
+        "/usr/local/bin/pdftotext",                        // Homebrew — Intel Mac
+        "/usr/bin/pdftotext",                              // system / apt install
+        "/usr/bin/pdftotext",                              // Linux package manager
+        "/snap/bin/pdftotext",                             // Linux snap
+    ];
+
+    let mut last_error = String::new();
+
+    if let Some(path_str) = path.to_str() {
+        for candidate in pdftotext_candidates {
+            eprintln!("[pdf-extract] trying: {} on file {}", candidate, path_str);
+            match std::process::Command::new(candidate)
+                .arg("-enc").arg("UTF-8")
+                .arg(path_str)
+                .arg("-")
+                .output()
+            {
+                Ok(output) => {
+                    if output.status.success() {
+                        let text = String::from_utf8_lossy(&output.stdout).to_string();
+                        if !text.trim().is_empty() {
+                            eprintln!("[pdf-extract] SUCCESS with {} — {} bytes", candidate, text.len());
+                            return Ok(fix_winansi_twi(text));
+                        }
+                        last_error = format!("{} produced empty output", candidate);
+                        eprintln!("[pdf-extract] {} produced empty output", candidate);
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                        last_error = format!("{} failed (exit {:?}): {}", candidate, output.status.code(), stderr);
+                        eprintln!("[pdf-extract] {} failed: {}", candidate, stderr);
+                    }
+                }
+                Err(e) => {
+                    last_error = format!("{} not found: {}", candidate, e);
+                    eprintln!("[pdf-extract] {} not found: {}", candidate, e);
+                }
+            }
+        }
+    }
+
+    eprintln!("[pdf-extract] all pdftotext candidates failed ({}), falling back to pdf-extract crate", last_error);
+
+    // pdf-extract fallback — known to corrupt non-Latin Unicode characters
+    // when PDF fonts use non-standard glyph names. Last resort only.
     pdf_extract::extract_text(&path)
+        .map(fix_winansi_twi)
         .map_err(|e| format!("PDF extraction failed: {}", e))
 }
 
@@ -3109,6 +3213,58 @@ async fn set_app_icon(_icon_name: String) -> Result<bool, String> {
     Ok(false)
 }
 
+// ── Mobile Companion Commands ───────────────────────────────────────────────
+
+/// Generate a new pairing token and return pairing info for the QR code.
+#[tauri::command]
+async fn get_mobile_pairing_info() -> Result<serde_json::Value, String> {
+    let token = mobile_companion::generate_new_pairing_token().await;
+    let port = mobile_companion::mobile_server_port();
+
+    // Get local IP addresses
+    let local_ip = get_local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
+
+    Ok(serde_json::json!({
+        "ip": local_ip,
+        "port": port,
+        "pairingToken": token,
+    }))
+}
+
+/// Called by the dock when it connects to OBS — provides credentials
+/// so the mobile companion server can also connect to OBS.
+#[tauri::command]
+async fn save_obs_connection_for_mobile(url: String, password: String) -> Result<(), String> {
+    mobile_companion::set_obs_connection(mobile_companion::ObsConnectionInfo { url, password }).await;
+    Ok(())
+}
+
+/// Get the current mobile server status.
+#[tauri::command]
+async fn get_mobile_server_status() -> Result<serde_json::Value, String> {
+    let port = mobile_companion::mobile_server_port();
+    let token = mobile_companion::get_pairing_token().await;
+    let state = mobile_companion::get_mobile_state().await;
+
+    Ok(serde_json::json!({
+        "running": port > 0,
+        "port": port,
+        "hasToken": token.is_some(),
+        "obsConnected": state.obs_connected,
+        "currentSong": state.current_song,
+        "currentScripture": state.current_scripture,
+    }))
+}
+
+/// Get local IP addresses (first non-loopback IPv4).
+fn get_local_ip() -> Option<String> {
+    use std::net::UdpSocket;
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    let addr = socket.local_addr().ok()?;
+    Some(addr.ip().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Load .env file so Rust commands can read env vars (e.g. OPENCODE_API_KEY)
@@ -3183,6 +3339,15 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app_nap::prevent_app_nap();
 
+            // Start the mobile companion WebSocket server
+            let mobile_port = 8765u16;
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = mobile_companion::start_mobile_server(mobile_port).await {
+                    eprintln!("[MobileCompanion] Server failed: {}", e);
+                }
+            });
+            println!("[Tauri] Mobile companion server starting on port {}", mobile_port);
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -3211,6 +3376,9 @@ pub fn run() {
             local_llm::get_local_llm_runtime_status,
             local_llm::install_local_llm_model,
             local_llm::generate_local_llm_text,
+            get_mobile_pairing_info,
+            save_obs_connection_for_mobile,
+            get_mobile_server_status,
             #[cfg(target_os = "macos")]
             app_icon::set_app_icon
         ])

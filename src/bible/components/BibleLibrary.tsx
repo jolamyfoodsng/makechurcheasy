@@ -503,12 +503,12 @@ export default function BibleLibrary({
           )}
         </h2>
         {isPageMode ? (
-          <button className="bible-library-page-back" onClick={onClose}>
+          <button className="bible-library-page-back" onClick={onClose} title="Go back">
             <Icon name="arrow_back" size={18} />
             Back to Settings
           </button>
         ) : isEmbeddedMode ? null : (
-          <button className="bible-library-close" onClick={onClose}>
+          <button className="bible-library-close" onClick={onClose} title="Close">
             <Icon name="close" size={20} />
           </button>
         )}
@@ -519,21 +519,21 @@ export default function BibleLibrary({
         <button
           className={`bible-library-tab${tab === "browse" ? " active" : ""}`}
           onClick={() => setTab("browse")}
-        >
+         title="Download">
           <Icon name="explore" size={20} />
           Browse &amp; Download
         </button>
         <button
           className={`bible-library-tab${tab === "installed" ? " active" : ""}`}
           onClick={() => setTab("installed")}
-        >
+         title="Install">
           <Icon name="download_done" size={20} />
           Installed ({installed.length})
         </button>
         {/* <button
           className={`bible-library-tab${tab === "import" ? " active" : ""}`}
           onClick={() => setTab("import")}
-        >
+         title="Import">
           <Icon name="upload_file" size={20} />
           Import
         </button> */}
@@ -606,7 +606,7 @@ export default function BibleLibrary({
               <button
                 className="bible-library-retry-btn"
                 onClick={() => doSearch(page)}
-              >
+               title="Retry">
                 <Icon name="refresh" size={14} />
                 Retry
               </button>
@@ -706,7 +706,7 @@ export default function BibleLibrary({
                   <button
                     disabled={page <= 1}
                     onClick={() => doSearch(page - 1)}
-                  >
+                   title="Previous">
                     <Icon name="chevron_left" size={20} />
                     Previous
                   </button>
@@ -716,7 +716,7 @@ export default function BibleLibrary({
                   <button
                     disabled={page >= catalogResult.pages}
                     onClick={() => doSearch(page + 1)}
-                  >
+                   title="Next">
                     Next
                     <Icon name="chevron_right" size={20} />
                   </button>
@@ -864,13 +864,13 @@ export default function BibleLibrary({
               <button
                 className="bible-library-confirm-cancel"
                 onClick={() => setConfirmDelete(null)}
-              >
+               title="Cancel">
                 Cancel
               </button>
               <button
                 className="bible-library-confirm-delete"
                 onClick={handleDeleteConfirm}
-              >
+               title="Delete">
                 <Icon name="delete" size={20} />
                 Delete
               </button>
@@ -890,7 +890,7 @@ export default function BibleLibrary({
             </p>
             <p>Upgrade your plan to install more translations.</p>
             <div className="lib-confirm-actions">
-              <button className="lib-confirm-cancel" onClick={() => setShowBibleLimitModal(false)}>Close</button>
+              <button className="lib-confirm-cancel" onClick={() => setShowBibleLimitModal(false)} title="Close">Close</button>
               <a href="https://makechurcheasy.creatorstudioslabs.stream/pricing" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
                 Upgrade Plan
               </a>

@@ -83,25 +83,25 @@ export function MVContextMenu({ x, y, regionId, onClose }: ContextMenuProps) {
   return (
     <div ref={ref} className="mv-context-menu" style={style} role="menu" aria-label="Context menu">
       {region && !isSelected && (
-        <button className="mv-ctx-item" role="menuitem" onClick={action(() => dispatch({ type: "SELECT_REGION", regionId: region.id, additive: false }))}>
+        <button className="mv-ctx-item" role="menuitem" onClick={action(() => dispatch({ type: "SELECT_REGION", regionId: region.id, additive: false }))} title="Select">
           <span className="mv-ctx-label">Select "{region.name}"{slotIndex > 0 ? ` (Slot ${slotIndex})` : ""}</span>
         </button>
       )}
 
       {hasSelection && (
         <>
-          <button className="mv-ctx-item" role="menuitem" onClick={action(() => dispatch({ type: "COPY" }))}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(() => dispatch({ type: "COPY" }))} title="Copy">
             <span className="mv-ctx-label">Copy</span>
             <span className="mv-ctx-shortcut">{sc("copy")}</span>
           </button>
           <button className="mv-ctx-item" role="menuitem" onClick={action(() => {
             dispatch({ type: "COPY" });
             dispatch({ type: "DELETE_REGIONS", regionIds: state.selectedRegionIds });
-          })}>
+          })} title="Cut">
             <span className="mv-ctx-label">Cut</span>
             <span className="mv-ctx-shortcut">{sc("cut")}</span>
           </button>
-          <button className="mv-ctx-item" role="menuitem" onClick={action(duplicateSelected)}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(duplicateSelected)} title="Duplicate">
             <span className="mv-ctx-label">Duplicate</span>
             <span className="mv-ctx-shortcut">{sc("duplicate")}</span>
           </button>
@@ -110,7 +110,7 @@ export function MVContextMenu({ x, y, regionId, onClose }: ContextMenuProps) {
       )}
 
       {state.clipboard.length > 0 && (
-        <button className="mv-ctx-item" role="menuitem" onClick={action(() => { dispatch({ type: "SNAPSHOT" }); dispatch({ type: "PASTE" }); })}>
+        <button className="mv-ctx-item" role="menuitem" onClick={action(() => { dispatch({ type: "SNAPSHOT" }); dispatch({ type: "PASTE" }); })} title="Paste">
           <span className="mv-ctx-label">Paste</span>
           <span className="mv-ctx-shortcut">{sc("paste")}</span>
         </button>
@@ -119,7 +119,7 @@ export function MVContextMenu({ x, y, regionId, onClose }: ContextMenuProps) {
       {hasSelection && (
         <>
           <div className="mv-ctx-divider" />
-          <button className="mv-ctx-item" role="menuitem" onClick={action(deleteSelected)}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(deleteSelected)} title="mv-ctx-shortcut">
             <span className="mv-ctx-label">{isOBSScene ? removeLabel : "Delete"}</span>
             <span className="mv-ctx-shortcut">{sc("delete")}</span>
           </button>
@@ -129,16 +129,16 @@ export function MVContextMenu({ x, y, regionId, onClose }: ContextMenuProps) {
       {region && isSelected && (
         <>
           <div className="mv-ctx-divider" />
-          <button className="mv-ctx-item" role="menuitem" onClick={action(() => dispatch({ type: "TOGGLE_LOCK", regionId: region.id }))}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(() => dispatch({ type: "TOGGLE_LOCK", regionId: region.id }))} title="mv-ctx-shortcut">
             <span className="mv-ctx-label">{region.locked ? "Unlock" : "Lock"}</span>
             <span className="mv-ctx-shortcut">{sc("lock-region")}</span>
           </button>
-          <button className="mv-ctx-item" role="menuitem" onClick={action(() => dispatch({ type: "TOGGLE_VISIBILITY", regionId: region.id }))}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(() => dispatch({ type: "TOGGLE_VISIBILITY", regionId: region.id }))} title="mv-ctx-label">
             <span className="mv-ctx-label">{region.visible ? "Hide" : "Show"}</span>
           </button>
           <button className="mv-ctx-item" role="menuitem" onClick={action(() => {
             window.dispatchEvent(new CustomEvent("mv:rename-region", { detail: { regionId: region.id } }));
-          })}>
+          })} title="Rename">
             <span className="mv-ctx-label">Rename</span>
             <span className="mv-ctx-shortcut">{sc("rename-region")}</span>
           </button>
@@ -148,19 +148,19 @@ export function MVContextMenu({ x, y, regionId, onClose }: ContextMenuProps) {
       {region && isSelected && state.selectedRegionIds.length === 1 && (
         <>
           <div className="mv-ctx-divider" />
-          <button className="mv-ctx-item" role="menuitem" onClick={action(() => { dispatch({ type: "SNAPSHOT" }); dispatch({ type: "REORDER_REGION", regionId: region.id, direction: "top" }); })}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(() => { dispatch({ type: "SNAPSHOT" }); dispatch({ type: "REORDER_REGION", regionId: region.id, direction: "top" }); })} title="Bring to Front">
             <span className="mv-ctx-label">Bring to Front</span>
             <span className="mv-ctx-shortcut">{sc("bring-to-front")}</span>
           </button>
-          <button className="mv-ctx-item" role="menuitem" onClick={action(() => { dispatch({ type: "SNAPSHOT" }); dispatch({ type: "REORDER_REGION", regionId: region.id, direction: "up" }); })}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(() => { dispatch({ type: "SNAPSHOT" }); dispatch({ type: "REORDER_REGION", regionId: region.id, direction: "up" }); })} title="Bring Forward">
             <span className="mv-ctx-label">Bring Forward</span>
             <span className="mv-ctx-shortcut">{sc("bring-forward")}</span>
           </button>
-          <button className="mv-ctx-item" role="menuitem" onClick={action(() => { dispatch({ type: "SNAPSHOT" }); dispatch({ type: "REORDER_REGION", regionId: region.id, direction: "down" }); })}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(() => { dispatch({ type: "SNAPSHOT" }); dispatch({ type: "REORDER_REGION", regionId: region.id, direction: "down" }); })} title="Send">
             <span className="mv-ctx-label">Send Backward</span>
             <span className="mv-ctx-shortcut">{sc("send-backward")}</span>
           </button>
-          <button className="mv-ctx-item" role="menuitem" onClick={action(() => { dispatch({ type: "SNAPSHOT" }); dispatch({ type: "REORDER_REGION", regionId: region.id, direction: "bottom" }); })}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(() => { dispatch({ type: "SNAPSHOT" }); dispatch({ type: "REORDER_REGION", regionId: region.id, direction: "bottom" }); })} title="Go back">
             <span className="mv-ctx-label">Send to Back</span>
             <span className="mv-ctx-shortcut">{sc("send-to-back")}</span>
           </button>
@@ -170,22 +170,22 @@ export function MVContextMenu({ x, y, regionId, onClose }: ContextMenuProps) {
       {hasMultiSelection && (
         <>
           <div className="mv-ctx-divider" />
-          <button className="mv-ctx-item" role="menuitem" onClick={action(() => alignRegions("left"))}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(() => alignRegions("left"))} title="Align Left">
             <span className="mv-ctx-label">Align Left</span>
           </button>
-          <button className="mv-ctx-item" role="menuitem" onClick={action(() => alignRegions("center-h"))}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(() => alignRegions("center-h"))} title="Align Center H">
             <span className="mv-ctx-label">Align Center H</span>
           </button>
-          <button className="mv-ctx-item" role="menuitem" onClick={action(() => alignRegions("right"))}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(() => alignRegions("right"))} title="Align Right">
             <span className="mv-ctx-label">Align Right</span>
           </button>
           {state.selectedRegionIds.length >= 3 && (
             <>
               <div className="mv-ctx-divider" />
-              <button className="mv-ctx-item" role="menuitem" onClick={action(() => distributeRegions("horizontal"))}>
+              <button className="mv-ctx-item" role="menuitem" onClick={action(() => distributeRegions("horizontal"))} title="Distribute Horizontally">
                 <span className="mv-ctx-label">Distribute Horizontally</span>
               </button>
-              <button className="mv-ctx-item" role="menuitem" onClick={action(() => distributeRegions("vertical"))}>
+              <button className="mv-ctx-item" role="menuitem" onClick={action(() => distributeRegions("vertical"))} title="Distribute Vertically">
                 <span className="mv-ctx-label">Distribute Vertically</span>
               </button>
             </>
@@ -200,7 +200,7 @@ export function MVContextMenu({ x, y, regionId, onClose }: ContextMenuProps) {
               <span className="mv-ctx-label" style={{ opacity: 0.4 }}>No selection</span>
             </div>
           )}
-          <button className="mv-ctx-item" role="menuitem" onClick={action(() => dispatch({ type: "SELECT_ALL" }))}>
+          <button className="mv-ctx-item" role="menuitem" onClick={action(() => dispatch({ type: "SELECT_ALL" }))} title="Select">
             <span className="mv-ctx-label">Select All</span>
             <span className="mv-ctx-shortcut">{sc("select-all")}</span>
           </button>

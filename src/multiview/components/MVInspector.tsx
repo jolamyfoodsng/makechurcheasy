@@ -271,16 +271,16 @@ export function MVInspector() {
           </div>
         ) : (
           <div className="mv-content-type-selector">
-            <button className={`mv-content-type-btn ${contentType === "obs" ? "mv-content-type-btn--active" : ""}`} onClick={() => setContentType("obs")}>
+            <button className={`mv-content-type-btn ${contentType === "obs" ? "mv-content-type-btn--active" : ""}`} onClick={() => setContentType("obs")} title="OBS">
               <Icon name="videocam" size={16} /> OBS
             </button>
-            <button className={`mv-content-type-btn ${contentType === "bible" ? "mv-content-type-btn--active" : ""}`} onClick={() => setContentType("bible")}>
+            <button className={`mv-content-type-btn ${contentType === "bible" ? "mv-content-type-btn--active" : ""}`} onClick={() => setContentType("bible")} title="Book">
               <Icon name="menu_book" size={16} /> Bible
             </button>
-            <button className={`mv-content-type-btn ${contentType === "worship" ? "mv-content-type-btn--active" : ""}`} onClick={() => setContentType("worship")}>
+            <button className={`mv-content-type-btn ${contentType === "worship" ? "mv-content-type-btn--active" : ""}`} onClick={() => setContentType("worship")} title="Music">
               <Icon name="music_note" size={16} /> Worship
             </button>
-            <button className={`mv-content-type-btn ${contentType === "lower-third" ? "mv-content-type-btn--active" : ""}`} onClick={() => setContentType("lower-third")}>
+            <button className={`mv-content-type-btn ${contentType === "lower-third" ? "mv-content-type-btn--active" : ""}`} onClick={() => setContentType("lower-third")} title="Subtitles">
               <Icon name="subtitles" size={16} /> LT
             </button>
           </div>
@@ -334,7 +334,7 @@ export function MVInspector() {
                 <Icon name="palette" size={20} style={{ marginRight: 8, verticalAlign: "middle" }} />
                 Edit Theme: {editingThemeName}
               </h3>
-              <button className="mv-modal-close" onClick={() => setThemeEditorOpen(false)}>
+              <button className="mv-modal-close" onClick={() => setThemeEditorOpen(false)} title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -414,7 +414,7 @@ export function MVInspector() {
                 <div className="mv-text-transform-btns">
                   {(["left", "center", "right"] as const).map((a) => (
                     <button key={a} className={`mv-text-transform-btn ${editingSettings.textAlign === a ? "mv-text-transform-btn--active" : ""}`}
-                      onClick={() => setEditingSettings({ ...editingSettings, textAlign: a })}>
+                      onClick={() => setEditingSettings({ ...editingSettings, textAlign: a })} title="format_align_center">
                       <Icon name={a === "left" ? "format_align_left" : a === "center" ? "format_align_center" : "format_align_right"} size={16} />
                     </button>
                   ))}
@@ -424,9 +424,9 @@ export function MVInspector() {
               <div className="mv-field">
                 <label className="mv-field-label">Text Case</label>
                 <div className="mv-text-transform-btns">
-                  <button className={`mv-text-transform-btn ${editingSettings.textTransform === "none" ? "mv-text-transform-btn--active" : ""}`} onClick={() => setEditingSettings({ ...editingSettings, textTransform: "none" })}>Aa</button>
-                  <button className={`mv-text-transform-btn ${editingSettings.textTransform === "uppercase" ? "mv-text-transform-btn--active" : ""}`} onClick={() => setEditingSettings({ ...editingSettings, textTransform: "uppercase" })}>AA</button>
-                  <button className={`mv-text-transform-btn ${editingSettings.textTransform === "lowercase" ? "mv-text-transform-btn--active" : ""}`} onClick={() => setEditingSettings({ ...editingSettings, textTransform: "lowercase" })}>aa</button>
+                  <button className={`mv-text-transform-btn ${editingSettings.textTransform === "none" ? "mv-text-transform-btn--active" : ""}`} onClick={() => setEditingSettings({ ...editingSettings, textTransform: "none" })} title="Aa">Aa</button>
+                  <button className={`mv-text-transform-btn ${editingSettings.textTransform === "uppercase" ? "mv-text-transform-btn--active" : ""}`} onClick={() => setEditingSettings({ ...editingSettings, textTransform: "uppercase" })} title="AA">AA</button>
+                  <button className={`mv-text-transform-btn ${editingSettings.textTransform === "lowercase" ? "mv-text-transform-btn--active" : ""}`} onClick={() => setEditingSettings({ ...editingSettings, textTransform: "lowercase" })} title="aa">aa</button>
                 </div>
               </div>
               {/* Text Shadow */}
@@ -453,7 +453,7 @@ export function MVInspector() {
             </div>
 
             <div className="mv-modal-actions" style={{ marginTop: 16 }}>
-              <button className="mv-btn mv-btn--ghost" onClick={() => setThemeEditorOpen(false)}>Cancel</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setThemeEditorOpen(false)} title="Cancel">Cancel</button>
               <button className="mv-btn mv-btn--primary" onClick={async () => {
                 // Apply edited settings to the region
                 update({
@@ -464,7 +464,7 @@ export function MVInspector() {
                   await saveCustomTheme({ ...currentTheme, settings: editingSettings, updatedAt: new Date().toISOString() });
                 }
                 setThemeEditorOpen(false);
-              }}>
+              }} title="Apply">
                 <Icon name="save" size={16} /> Apply Changes
               </button>
             </div>
@@ -557,11 +557,11 @@ function ThemePanel({ contentType, currentTheme, themeList, showThemePicker, set
                   <Icon name="edit" size={14} />
                 </button>
               )}
-              <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={(e) => { e.stopPropagation(); setShowThemePicker(true); }}>Change</button>
+              <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={(e) => { e.stopPropagation(); setShowThemePicker(true); }} title="Change">Change</button>
             </div>
           </div>
         ) : (
-          <button className="mv-btn mv-btn--ghost" onClick={() => setShowThemePicker(true)} style={{ width: "100%" }}>
+          <button className="mv-btn mv-btn--ghost" onClick={() => setShowThemePicker(true)} style={{ width: "100%" }} title="Select">
             <Icon name="palette" size={16} /> Select Theme
           </button>
         )}
@@ -572,7 +572,7 @@ function ThemePanel({ contentType, currentTheme, themeList, showThemePicker, set
             <div className="mv-theme-picker-modal" onClick={(e) => e.stopPropagation()}>
               <div className="mv-theme-picker-header">
                 <h3>{label} Themes</h3>
-                <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={() => setShowThemePicker(false)}>
+                <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={() => setShowThemePicker(false)} title="Close">
                   <Icon name="close" size={18} />
                 </button>
               </div>
@@ -718,7 +718,7 @@ function LTInspectorPanel({ region, update }: { region: Region; update: (changes
           key={t.id}
           className={`mv-theme-card ${currentLTTheme?.id === t.id ? "mv-theme-card--active" : ""}`}
           onClick={() => selectLTTheme(t)}
-        >
+         title="mv-theme-card-preview">
           <div className="mv-theme-card-preview" style={{ background: t.accentColor, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Icon name={t.icon} size={16} style={{ color: "#fff" }} />
           </div>
@@ -750,10 +750,10 @@ function LTInspectorPanel({ region, update }: { region: Region; update: (changes
               <span className="mv-theme-current-name">{currentLTTheme.name}</span>
               <span className="mv-theme-current-desc">{currentLTTheme.description}</span>
             </div>
-            <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={(e) => { e.stopPropagation(); setShowPicker(true); }}>Change</button>
+            <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={(e) => { e.stopPropagation(); setShowPicker(true); }} title="Change">Change</button>
           </div>
         ) : (
-          <button className="mv-btn mv-btn--ghost" onClick={() => setShowPicker(true)} style={{ width: "100%" }}>
+          <button className="mv-btn mv-btn--ghost" onClick={() => setShowPicker(true)} style={{ width: "100%" }} title="Select">
             <Icon name="palette" size={16} /> Select Theme
           </button>
         )}
@@ -764,7 +764,7 @@ function LTInspectorPanel({ region, update }: { region: Region; update: (changes
             <div className="mv-theme-picker-modal" onClick={(e) => e.stopPropagation()}>
               <div className="mv-theme-picker-header">
                 <h3>Lower Third Themes</h3>
-                <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={() => setShowPicker(false)}>
+                <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={() => setShowPicker(false)} title="Close">
                   <Icon name="close" size={18} />
                 </button>
               </div>

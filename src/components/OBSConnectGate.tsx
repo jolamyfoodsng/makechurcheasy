@@ -117,7 +117,7 @@ export function OBSConnectGate({ children }: Props) {
               className="obs-connect-panel__close"
               onClick={() => setShowConnectPanel(false)}
               aria-label="Close"
-            >
+             title="Close">
               <Icon name="close" size={18} />
             </button>
 
@@ -194,7 +194,7 @@ export function OBSConnectGate({ children }: Props) {
                 />
               </div>
               {error && <div className="obs-error">{error}</div>}
-              <button type="submit" disabled={connecting} className="obs-connect-panel__connect-btn">
+              <button type="submit" disabled={connecting} className="obs-connect-panel__connect-btn" title="Connect">
                 {connecting ? "Connecting..." : "Connect to OBS"}
               </button>
             </form>

@@ -1243,7 +1243,7 @@ export default function PreServicePanel() {
                       type="button"
                       className={`ps-step-expand-btn${!isExpanded ? " is-collapsed" : ""}`}
                       onClick={(e) => { e.stopPropagation(); toggleStepExpanded(step.id); }}
-                    >
+                     title="Collapse">
                       <Icon name="expand_less" size={20} />
                     </button>
                   </div>
@@ -1303,7 +1303,7 @@ export default function PreServicePanel() {
                             className="ps-media-delete"
                             disabled={isRunning || isPaused}
                             onClick={(e) => { e.stopPropagation(); removeStep(step.id); }}
-                          >
+                           title="Delete">
                             <Icon name="delete" size={20} />
                           </button>
                         </div>
@@ -1561,7 +1561,7 @@ export default function PreServicePanel() {
             className={`ps-add-step-btn${isRunning || isPaused ? " is-disabled-state" : ""}`}
             disabled={isRunning || isPaused}
             onClick={openAddStep}
-          >
+           title="Add">
             <Icon name="add_circle" size={20} />
             <span>Add New Step</span>
           </button>
@@ -1654,12 +1654,12 @@ export default function PreServicePanel() {
                   className="ps-btn-start"
                   onClick={isPaused ? startSequence : () => setShowStartConfirm(true)}
                   disabled={!obsConnected || plan.steps.length === 0}
-                >
+                 title="Continue">
                   <Icon name="play_arrow" size={20} />
                   <span>{pausedAtManualHold ? "Continue Sequence" : isPaused ? "Resume Sequence" : "Start Sequence"}</span>
                 </button>
               ) : (
-                <button type="button" className="ps-btn-start" onClick={pauseSequence}>
+                <button type="button" className="ps-btn-start" onClick={pauseSequence} title="Pause">
                   <Icon name="pause" size={20} />
                   <span>Pause</span>
                 </button>
@@ -1670,7 +1670,7 @@ export default function PreServicePanel() {
                 className="ps-btn-stop"
                 onClick={stopAndReset}
                 disabled={runtime.status === "idle"}
-              >
+               title="Reset">
                 <Icon name="stop_circle" size={20} />
                 Stop / Reset
               </button>
@@ -1680,7 +1680,7 @@ export default function PreServicePanel() {
                 className="ps-btn-secondary"
                 onClick={skipStep}
                 disabled={!isRunning && !isPaused}
-              >
+               title="Skip">
                 <Icon name="skip_next" size={20} />
                 Skip Step
               </button>
@@ -1713,7 +1713,7 @@ export default function PreServicePanel() {
                     : `Configure ${selectedTypeOption?.title ?? "step"} details.`}
                 </p>
               </div>
-              <button type="button" onClick={closeAddStep}>
+              <button type="button" onClick={closeAddStep} title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -1743,7 +1743,7 @@ export default function PreServicePanel() {
                             durationMode: option.id === "video" ? "auto" : "manual",
                           }));
                         }}
-                      >
+                       title="Confirm">
                         {isSelected && !isDisabled && (
                           <span className="type-card-check">
                             <Icon name="check" size={20} />
@@ -1788,10 +1788,10 @@ export default function PreServicePanel() {
                       )}
                     </div>
                     <div className="cfg-filter-pills">
-                      <button className="cfg-pill is-active">All Media</button>
-                      <button className="cfg-pill">Countdowns</button>
-                      <button className="cfg-pill">Loops</button>
-                      <button className="cfg-pill">Promos</button>
+                      <button className="cfg-pill is-active" title="All Media">All Media</button>
+                      <button className="cfg-pill" title="Countdowns">Countdowns</button>
+                      <button className="cfg-pill" title="Loops">Loops</button>
+                      <button className="cfg-pill" title="Promos">Promos</button>
                     </div>
                   </div>
 
@@ -1808,7 +1808,7 @@ export default function PreServicePanel() {
                       type="button"
                       className="cfg-upload-btn"
                       onClick={() => videoUploadRef.current?.click()}
-                    >
+                     title="Browse">
                       Browse Files
                     </button>
                     <input
@@ -1842,7 +1842,7 @@ export default function PreServicePanel() {
                             type="button"
                             className={`cfg-media-card${isSelected ? " is-selected" : ""}`}
                             onClick={() => applyMediaPreset(item, "video")}
-                          >
+                           title="Confirm">
                             <div className="cfg-media-card__thumb">
                               {item.previewSrc ? (
                                 <img src={item.previewSrc} alt={item.name} />
@@ -1913,10 +1913,10 @@ export default function PreServicePanel() {
                       )}
                     </div>
                     <div className="cfg-filter-pills">
-                      <button className="cfg-pill is-active">All Assets</button>
-                      <button className="cfg-pill">Worship</button>
-                      <button className="cfg-pill">Giving</button>
-                      <button className="cfg-pill">Sermon</button>
+                      <button className="cfg-pill is-active" title="All Assets">All Assets</button>
+                      <button className="cfg-pill" title="Worship">Worship</button>
+                      <button className="cfg-pill" title="Giving">Giving</button>
+                      <button className="cfg-pill" title="Sermon">Sermon</button>
                     </div>
                   </div>
 
@@ -1933,7 +1933,7 @@ export default function PreServicePanel() {
                       type="button"
                       className="cfg-upload-btn"
                       onClick={() => imageUploadRef.current?.click()}
-                    >
+                     title="Browse">
                       Browse Files
                     </button>
                     <input
@@ -1967,7 +1967,7 @@ export default function PreServicePanel() {
                             type="button"
                             className={`cfg-media-card cfg-media-card--image${isSelected ? " is-selected" : ""}`}
                             onClick={() => applyMediaPreset(item, "image")}
-                          >
+                           title="Confirm">
                             <div className="cfg-media-card__thumb">
                               {item.previewSrc ? (
                                 <img src={item.previewSrc} alt={item.name} />
@@ -2169,7 +2169,7 @@ export default function PreServicePanel() {
                       )}
                     </div>
                     <div className="cfg-filter-pills">
-                      <button className="cfg-pill is-active">Audio Library</button>
+                      <button className="cfg-pill is-active" title="Audio Library">Audio Library</button>
                     </div>
                   </div>
                   <div
@@ -2184,7 +2184,7 @@ export default function PreServicePanel() {
                       type="button"
                       className="cfg-upload-btn"
                       onClick={() => audioUploadRef.current?.click()}
-                    >
+                     title="Browse">
                       Browse Audio
                     </button>
                     <input
@@ -2219,7 +2219,7 @@ export default function PreServicePanel() {
                               onClick={() => applyMediaPreset(item, "audio")}
                             >
                               <td>
-                                <button type="button" className={`cfg-audio-play-btn${isSelected ? " is-active" : ""}`}>
+                                <button type="button" className={`cfg-audio-play-btn${isSelected ? " is-active" : ""}`} title="check_circle">
                                   <Icon name={isSelected ? "check_circle" : "play_arrow"} size={20} />
                                 </button>
                               </td>
@@ -2420,23 +2420,23 @@ export default function PreServicePanel() {
             <div className="pre-service-modal-footer">
               {addModalStage === "select" ? (
                 <>
-                  <button type="button" className="ghost" onClick={closeAddStep}>Cancel</button>
+                  <button type="button" className="ghost" onClick={closeAddStep} title="Cancel">Cancel</button>
                   <button
                     type="button"
                     onClick={() => setAddModalStage("configure")}
                     disabled={!!STEP_TYPE_OPTIONS[selectedCardIndex]?.disabled}
-                  >
+                   title="Next">
                     Next
                     <Icon name="arrow_forward" size={20} />
                   </button>
                 </>
               ) : (
                 <>
-                  <button type="button" className="ghost" onClick={() => setAddModalStage("select")}>
+                  <button type="button" className="ghost" onClick={() => setAddModalStage("select")} title="Go back">
                     <Icon name="arrow_back" size={20} />
                     Back
                   </button>
-                  <button type="button" onClick={addStep}>
+                  <button type="button" onClick={addStep} title="Add">
                     Add Step
                     <Icon name="arrow_forward" size={20} />
                   </button>
@@ -2464,7 +2464,7 @@ export default function PreServicePanel() {
                 type="button"
                 className="ps-confirm-cancel"
                 onClick={() => setShowStartConfirm(false)}
-              >
+               title="Cancel">
                 Cancel
               </button>
               <button
@@ -2472,7 +2472,7 @@ export default function PreServicePanel() {
                 className="ps-confirm-go"
                 style={{ background: "#00E676", color: "#121212" }}
                 onClick={() => { setShowStartConfirm(false); startSequence(); }}
-              >
+               title="Start">
                 <Icon name="play_arrow" size={20} />
                 Start
               </button>
@@ -2498,7 +2498,7 @@ export default function PreServicePanel() {
                 type="button"
                 className="ps-confirm-cancel"
                 onClick={() => setShowCancelConfirm(false)}
-              >
+               title="Keep Going">
                 Keep Going
               </button>
               <button
@@ -2511,7 +2511,7 @@ export default function PreServicePanel() {
                   serviceStore.reset();
                   navigate("/");
                 }}
-              >
+               title="Cancel">
                 <Icon name="cancel" size={20} />
                 Yes, Cancel
               </button>

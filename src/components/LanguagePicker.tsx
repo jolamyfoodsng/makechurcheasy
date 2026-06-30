@@ -88,7 +88,7 @@ export default function LanguagePicker({ value, onChange }: LanguagePickerProps)
 
   return (
     <div className="lp-root">
-      <button className="lp-trigger" onClick={() => setOpen(true)} type="button">
+      <button className="lp-trigger" onClick={() => setOpen(true)} type="button" title="Select">
         <span className="lp-trigger-content">
           {selected ? (
             <>
@@ -117,7 +117,7 @@ export default function LanguagePicker({ value, onChange }: LanguagePickerProps)
                 onChange={e => setQuery(e.target.value)}
               />
               {query && (
-                <button className="lp-search-clear" onClick={() => setQuery('')} type="button">
+                <button className="lp-search-clear" onClick={() => setQuery('')} type="button" title="Clear search">
                   <X size={14} />
                 </button>
               )}

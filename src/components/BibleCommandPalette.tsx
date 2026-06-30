@@ -708,7 +708,7 @@ export default function BibleCommandPalette({
             aria-selected={filter === "all"}
             className={`bcp-tab${filter === "all" ? " is-active" : ""}`}
             onClick={() => setFilter("all")}
-          >
+           title="All">
             <span>All</span>
             <strong>{counts.all}</strong>
           </button>
@@ -718,7 +718,7 @@ export default function BibleCommandPalette({
             aria-selected={filter === "bible"}
             className={`bcp-tab${filter === "bible" ? " is-active" : ""}`}
             onClick={() => setFilter("bible")}
-          >
+           title="Bible">
             <span>Bible</span>
             <strong>{counts.bible}</strong>
           </button>
@@ -728,7 +728,7 @@ export default function BibleCommandPalette({
             aria-selected={filter === "media"}
             className={`bcp-tab${filter === "media" ? " is-active" : ""}`}
             onClick={() => setFilter("media")}
-          >
+           title="Media">
             <span>Media</span>
             <strong>{counts.media}</strong>
           </button>
@@ -738,7 +738,7 @@ export default function BibleCommandPalette({
             aria-selected={filter === "notes"}
             className={`bcp-tab${filter === "notes" ? " is-active" : ""}`}
             onClick={() => setFilter("notes")}
-          >
+           title="No">
             <span>Notes</span>
             <strong>{counts.notes}</strong>
           </button>
@@ -748,7 +748,7 @@ export default function BibleCommandPalette({
             aria-selected={filter === "template"}
             className={`bcp-tab${filter === "template" ? " is-active" : ""}`}
             onClick={() => setFilter("template")}
-          >
+           title="Templates">
             <span>Templates</span>
             <strong>{counts.template}</strong>
           </button>

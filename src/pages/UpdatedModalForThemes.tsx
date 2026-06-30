@@ -20,7 +20,7 @@ export default function App() {
                 <aside className="sidebar">
                     <div className="sidebar-header">
                         <span className="sidebar-title">PROPERTIES</span>
-                        <button className="icon-btn"><X size={15} /></button>
+                        <button className="icon-btn" title="Close"><X size={15} /></button>
                     </div>
 
                     <div className="sidebar-content">
@@ -33,8 +33,8 @@ export default function App() {
                             </div>
                             <div className="panel-body">
                                 <div className="btn-group">
-                                    <button className="btn-tab active">Fullscreen</button>
-                                    <button className="btn-tab">Lower Third</button>
+                                    <button className="btn-tab active" title="Fullscreen">Fullscreen</button>
+                                    <button className="btn-tab" title="Lower Third">Lower Third</button>
                                 </div>
                             </div>
                         </div>
@@ -47,9 +47,9 @@ export default function App() {
                             </div>
                             <div className="panel-body">
                                 <div className="btn-group" style={{ gap: '8px', padding: '0', border: 'none', backgroundColor: 'transparent' }}>
-                                    <button className="btn-tab active" style={{ width: '80px', flex: 'none' }}>Bible</button>
-                                    <button className="btn-tab">Worship</button>
-                                    <button className="btn-tab">General</button>
+                                    <button className="btn-tab active" style={{ width: '80px', flex: 'none' }} title="Bible">Bible</button>
+                                    <button className="btn-tab" title="Worship">Worship</button>
+                                    <button className="btn-tab" title="General">General</button>
                                 </div>
                             </div>
                         </div>
@@ -75,20 +75,20 @@ export default function App() {
 
                                 {/* Formats row */}
                                 <div className="format-group">
-                                    <button className="format-btn"><Bold size={16} /></button>
+                                    <button className="format-btn" title="Bold"><Bold size={16} /></button>
                                     <div className="format-divider"></div>
-                                    <button className="format-btn"><Italic size={16} /></button>
+                                    <button className="format-btn" title="Italic"><Italic size={16} /></button>
                                     <div className="format-divider"></div>
-                                    <button className="format-btn active"><Underline size={16} /></button>
+                                    <button className="format-btn active" title="Underline"><Underline size={16} /></button>
                                     <div className="format-divider"></div>
-                                    <button className="format-btn"><Strikethrough size={16} /></button>
+                                    <button className="format-btn" title="Strikethrough"><Strikethrough size={16} /></button>
                                 </div>
 
                                 {/* Casing row */}
                                 <div className="case-group">
-                                    <button className="case-btn active">Uppercase</button>
-                                    <button className="case-btn">lowercase</button>
-                                    <button className="case-btn">Title Case</button>
+                                    <button className="case-btn active" title="Uppercase">Uppercase</button>
+                                    <button className="case-btn" title="lowercase">lowercase</button>
+                                    <button className="case-btn" title="Title Case">Title Case</button>
                                 </div>
 
                                 {/* Sliders row */}
@@ -105,13 +105,13 @@ export default function App() {
 
                                 {/* Alignment row */}
                                 <div className="format-group" style={{ marginTop: '4px' }}>
-                                    <button className="format-btn"><AlignLeft size={16} /></button>
+                                    <button className="format-btn" title="Align left"><AlignLeft size={16} /></button>
                                     <div className="format-divider"></div>
-                                    <button className="format-btn active"><AlignCenter size={16} /></button>
+                                    <button className="format-btn active" title="Align center"><AlignCenter size={16} /></button>
                                     <div className="format-divider"></div>
-                                    <button className="format-btn"><AlignRight size={16} /></button>
+                                    <button className="format-btn" title="Align right"><AlignRight size={16} /></button>
                                     <div className="format-divider"></div>
-                                    <button className="format-btn"><AlignJustify size={16} /></button>
+                                    <button className="format-btn" title="Justify"><AlignJustify size={16} /></button>
                                 </div>
                             </div>
                         </div>
@@ -131,7 +131,7 @@ export default function App() {
                                         <div className="bg-title">Image Background</div>
                                         <div className="bg-subtitle">2026-06-13 23.09.14.jpg</div>
                                     </div>
-                                    <button className="bg-refresh">
+                                    <button className="bg-refresh" title="Refresh">
                                         <RefreshCw size={14} />
                                     </button>
                                 </div>
@@ -156,7 +156,7 @@ export default function App() {
 
                     {/* Save Button Fixed Area */}
                     <div className="save-area">
-                        <button className="save-btn">SAVE</button>
+                        <button className="save-btn" title="Save">SAVE</button>
                     </div>
                 </aside>
 

@@ -107,7 +107,7 @@ export default function DashboardPage() {
             <button
               className="dash-hero-cta"
               onClick={() => handleModuleNav("/speech-to-scripture", "AI Scripture", "auto_awesome")}
-            >
+             title="Auto arrange">
               <Icon name="auto_awesome" size={16} />
               Try AI Scripture Recognition
             </button>
@@ -117,7 +117,7 @@ export default function DashboardPage() {
             <button
               className="dash-mod-card"
               onClick={() => handleModuleNav("/hub?mode=live&tab=bible", "Bible", "menu_book")}
-            >
+             title="Book">
               <div className="dash-mod-icon dash-mod-icon--bible">
                 <Icon name="menu_book" size={24} />
               </div>
@@ -129,7 +129,7 @@ export default function DashboardPage() {
             <button
               className="dash-mod-card"
               onClick={() => handleModuleNav("/hub?mode=live&tab=worship", "Worship", "music_note")}
-            >
+             title="Start">
               <div className="dash-mod-icon dash-mod-icon--worship">
                 <Icon name="music_note" size={10} style={{ width: '12px', height: '12px' }} />
               </div>
@@ -141,7 +141,7 @@ export default function DashboardPage() {
             <button
               className="dash-mod-card"
               onClick={() => handleModuleNav("/hub?mode=live&tab=graphics", "Announcements", "campaign")}
-            >
+             title="Show">
               <div className="dash-mod-icon dash-mod-icon--announce">
                 <Icon name="campaign" size={24} />
               </div>
@@ -153,7 +153,7 @@ export default function DashboardPage() {
             <button
               className="dash-mod-card dash-mod-card--ai"
               onClick={() => handleModuleNav("/speech-to-scripture", "AI Scripture", "auto_awesome")}
-            >
+             title="Auto arrange">
               <div className="dash-mod-icon dash-mod-icon--ai">
                 <Icon name="auto_awesome" size={24} />
               </div>
@@ -175,7 +175,7 @@ export default function DashboardPage() {
                   <button
                     className="dash-action-card"
                     onClick={() => handleModuleNav("/templates/studio", "Create New Layout", "grid_view")}
-                  >
+                   title="Create">
                     <div className="dash-action-copy">
                       <div className="dash-action-icon">
                         <Icon name="grid_view" size={18} />
@@ -190,7 +190,7 @@ export default function DashboardPage() {
                   <button
                     className="dash-action-card"
                     onClick={() => handleModuleNav("/hub/quick-merge", "Quick Merge", "merge_type")}
-                  >
+                   title="Open">
                     <div className="dash-action-copy">
                       <div className="dash-action-icon">
                         <Icon name="merge_type" size={18} />

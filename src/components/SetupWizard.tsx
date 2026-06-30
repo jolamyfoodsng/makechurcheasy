@@ -160,7 +160,7 @@ export function SetupWizard({ inputs, onComplete }: Props) {
                             className="btn-primary"
                             onClick={() => setStep(2)}
                             disabled={!canProceedStep1}
-                        >
+                         title="Continue">
                             <Icon name="arrow_forward" size={20} className="btn-icon" />
                             Continue
                         </button>
@@ -211,7 +211,7 @@ export function SetupWizard({ inputs, onComplete }: Props) {
                             <button
                                 className="btn-secondary"
                                 onClick={() => setStep(1)}
-                            >
+                             title="Go back">
                                 <Icon name="arrow_back" size={20} className="btn-icon" />
                                 Back
                             </button>
@@ -219,7 +219,7 @@ export function SetupWizard({ inputs, onComplete }: Props) {
                                 className="btn-primary"
                                 onClick={() => setStep(3)}
                                 disabled={!canProceedStep2}
-                            >
+                             title="Continue">
                                 <Icon name="arrow_forward" size={20} className="btn-icon" />
                                 Continue
                             </button>
@@ -289,7 +289,7 @@ export function SetupWizard({ inputs, onComplete }: Props) {
                                 className="btn-secondary"
                                 onClick={() => setStep(2)}
                                 disabled={isGenerating}
-                            >
+                             title="Go back">
                                 <Icon name="arrow_back" size={20} className="btn-icon" />
                                 Back
                             </button>
@@ -297,7 +297,7 @@ export function SetupWizard({ inputs, onComplete }: Props) {
                                 className="btn-primary btn-generate"
                                 onClick={handleGenerate}
                                 disabled={isGenerating}
-                            >
+                             title="Generate Sunday Layouts">
                                 <Icon name={isGenerating ? "hourglass_empty" : "auto_awesome"} size={20} className="btn-icon" />
                                 {isGenerating ? "Generating..." : "Generate Sunday Layouts"}
                             </button>

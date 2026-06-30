@@ -307,7 +307,7 @@ export default function BibleSearch({ translation, onSelectPassage }: Props) {
           className="bible-search-go"
           onClick={mode === "search" ? () => handleKeywordSearch(query) : handleQuickSearch}
           disabled={!query.trim()}
-        >
+         title="Go">
           Go
         </button>
       </div>
@@ -317,13 +317,13 @@ export default function BibleSearch({ translation, onSelectPassage }: Props) {
         <button
           className={`bible-mode-btn ${mode === "browse" ? "active" : ""}`}
           onClick={() => setMode("browse")}
-        >
+         title="Browse">
           Browse
         </button>
         <button
           className={`bible-mode-btn ${mode === "search" ? "active" : ""}`}
           onClick={() => setMode("search")}
-        >
+         title="Search">
           Search
         </button>
       </div>
@@ -434,7 +434,7 @@ export default function BibleSearch({ translation, onSelectPassage }: Props) {
               <button
                 className="bible-select-passage-btn"
                 onClick={handleBrowseSelect}
-              >
+               title="Select">
                 {verseStart
                   ? `Select ${selectedBook} ${selectedChapter}:${verseStart}${verseEnd && verseEnd !== verseStart ? `–${verseEnd}` : ""}`
                   : `Select entire chapter ${selectedChapter}`}

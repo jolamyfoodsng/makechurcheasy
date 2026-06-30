@@ -292,32 +292,32 @@ export function MVObsThemes() {
           </div>
 
           <nav className="tpldash-module-nav" aria-label="Template module navigation">
-            <button className="tpldash-module-link" type="button" onClick={() => navigate("/service-hub")}>
+            <button className="tpldash-module-link" type="button" onClick={() => navigate("/service-hub")} title="Services">
               <Icon name="church" size={20} />
               <span>Services</span>
             </button>
 
-            <button className="tpldash-module-link" type="button" onClick={() => navigate("/hub?mode=live&tab=worship")}>
+            <button className="tpldash-module-link" type="button" onClick={() => navigate("/hub?mode=live&tab=worship")} title="Music">
               <Icon name="music_note" size={20} />
               <span>Lyrics</span>
             </button>
 
-            <button className="tpldash-module-link" type="button" onClick={() => navigate("/hub?mode=live&tab=bible")}>
+            <button className="tpldash-module-link" type="button" onClick={() => navigate("/hub?mode=live&tab=bible")} title="Book">
               <Icon name="menu_book" size={20} />
               <span>Scripture</span>
             </button>
 
-            <button className="tpldash-module-link" type="button" onClick={() => navigate("/resources")}>
+            <button className="tpldash-module-link" type="button" onClick={() => navigate("/resources")} title="Giving">
               <Icon name="volunteer_activism" size={20} />
               <span>Giving</span>
             </button>
 
-            <button className="tpldash-module-link is-active" type="button" aria-current="page">
+            <button className="tpldash-module-link is-active" type="button" aria-current="page" title="Palette">
               <Icon name="palette" size={20} />
               <span>Broadcast Themes</span>
             </button>
 
-            <button className="tpldash-module-link" type="button" onClick={() => navigate("/hub?mode=live&tab=graphics")}>
+            <button className="tpldash-module-link" type="button" onClick={() => navigate("/hub?mode=live&tab=graphics")} title="Announcements">
               <Icon name="campaign" size={20} />
               <span>Announcements</span>
             </button>
@@ -325,7 +325,7 @@ export function MVObsThemes() {
         </div>
 
         <div className="tpldash-sidebar-bottom">
-          <button className="tpldash-go-live-btn" type="button" onClick={() => navigate("/hub?mode=live")}>
+          <button className="tpldash-go-live-btn" type="button" onClick={() => navigate("/hub?mode=live")} title="Go Live">
             <Icon name="videocam" size={20} />
             <span>Go Live</span>
           </button>
@@ -341,15 +341,15 @@ export function MVObsThemes() {
             </div>
 
             <div className="tpldash-header-actions">
-              <button className="tpldash-action-btn" type="button" onClick={() => navigate("/resources")}>
+              <button className="tpldash-action-btn" type="button" onClick={() => navigate("/resources")} title="Go back">
                 <Icon name="arrow_back" size={20} />
                 <span>Back</span>
-              </button>              <button className="tpldash-action-btn" type="button" onClick={() => { void loadObsThemes(); }} disabled={obsThemeBusy}>
+              </button>              <button className="tpldash-action-btn" type="button" onClick={() => { void loadObsThemes(); }} disabled={obsThemeBusy} title="Reload">
                 <Icon name="refresh" size={20} />
                 <span>Reload</span>
               </button>
 
-              <button className="tpldash-action-btn" type="button" onClick={() => { void handleCreateObsTheme(); }} disabled={obsThemeBusy}>
+              <button className="tpldash-action-btn" type="button" onClick={() => { void handleCreateObsTheme(); }} disabled={obsThemeBusy} title="Add">
                 <Icon name="add" size={20} />
                 <span>New Theme</span>
               </button>
@@ -572,7 +572,7 @@ export function MVObsThemes() {
                           type="button"
                           onClick={() => bgUploadRef.current?.click()}
                           disabled={obsThemeBusy}
-                        >
+                         title="Upload">
                           <Icon name="upload" size={20} />
                           <span>Upload BG</span>
                         </button>
@@ -582,7 +582,7 @@ export function MVObsThemes() {
                           type="button"
                           onClick={() => updateObsThemeDraft({ backgroundImage: "" })}
                           disabled={!obsThemeDraft.backgroundImage || obsThemeBusy}
-                        >
+                         title="Clear">
                           <Icon name="image_not_supported" size={20} />
                           <span>Clear BG</span>
                         </button>
@@ -600,7 +600,7 @@ export function MVObsThemes() {
                             setConfirmDeleteTheme(selectedObsTheme);
                           }}
                           disabled={obsThemeBusy || selectedObsTheme?.source === "builtin"}
-                        >
+                         title="Delete">
                           <Icon name="delete" size={20} />
                           <span>Delete</span>
                         </button>
@@ -610,7 +610,7 @@ export function MVObsThemes() {
                           type="button"
                           onClick={() => { void handleSaveObsTheme(); }}
                           disabled={obsThemeBusy}
-                        >
+                         title="Save">
                           <Icon name="save" size={20} />
                           <span>{selectedObsTheme?.source === "builtin" ? "Save as Custom" : "Save Theme"}</span>
                         </button>
@@ -631,7 +631,7 @@ export function MVObsThemes() {
                 type="button"
                 onClick={() => setToastMessage(null)}
                 aria-label="Dismiss notification"
-              >
+               title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -650,7 +650,7 @@ export function MVObsThemes() {
                     className="end-confirm-btn-cancel"
                     onClick={() => setConfirmDeleteTheme(null)}
                     disabled={obsThemeBusy}
-                  >
+                   title="Cancel">
                     Cancel
                   </button>
                   <button
@@ -658,7 +658,7 @@ export function MVObsThemes() {
                     className="end-confirm-btn-end"
                     onClick={() => { void handleDeleteObsTheme(confirmDeleteTheme); }}
                     disabled={obsThemeBusy}
-                  >
+                   title="Delete">
                     Delete Theme
                   </button>
                 </div>

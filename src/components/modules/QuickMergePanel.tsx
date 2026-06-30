@@ -162,7 +162,7 @@ function LayoutTemplateDropdown({
         type="button"
         className={`qm-tpl-dropdown-trigger${open ? " is-open" : ""}`}
         onClick={() => setOpen(!open)}
-      >
+       title="Quick Merge Presets (2 built-in)">
         <Icon name="auto_awesome_mosaic" size={18} className="qm-tpl-dropdown-trigger-icon" />
         <span className="qm-tpl-dropdown-trigger-text">
           {selected ? selected.name : "Quick Merge Presets (2 built-in)"}
@@ -177,7 +177,7 @@ function LayoutTemplateDropdown({
             type="button"
             className={`qm-tpl-dropdown-item${!selectedId ? " is-active" : ""}`}
             onClick={() => { onSelect(""); setOpen(false); }}
-          >
+           title="Confirm">
             <div className="qm-tpl-dropdown-item-thumb qm-tpl-dropdown-item-thumb--default">
               <Icon name="grid_view" size={16} />
             </div>
@@ -194,7 +194,7 @@ function LayoutTemplateDropdown({
               type="button"
               className={`qm-tpl-dropdown-item${selectedId === option.id ? " is-active" : ""}`}
               onClick={() => { onSelect(option.id); setOpen(false); }}
-            >
+             title="Confirm">
               <div className="qm-tpl-dropdown-item-thumb">
                 <LayoutThumb regions={option.template.regions} size={56} />
               </div>
@@ -761,7 +761,7 @@ export function QuickMergePanel({ isActive }: Props) {
               ))}
 
               {layers.length < MAX_SLOTS && (
-                <button type="button" className="qm-add-layer-btn" onClick={addLayer}>
+                <button type="button" className="qm-add-layer-btn" onClick={addLayer} title="Add">
                   <Icon name="add_circle" size={20} />
                   Add Slot
                 </button>
@@ -867,7 +867,7 @@ export function QuickMergePanel({ isActive }: Props) {
                     setSelectedTemplateId("");
                     setPreset(p);
                   }}
-                >
+                 title="Confirm">
                   {!selectedTemplateLayout && preset === p && (
                     <Icon name="check_circle" size={20} className="qm-preset-check" />
                   )}
@@ -948,7 +948,7 @@ export function QuickMergePanel({ isActive }: Props) {
               className="qm-action-preview"
               disabled={applying || !obsConnected || activeCount === 0}
               onClick={handleApplyPreview}
-            >
+             title="Check multi-layer merge">
               <Icon name="preview" size={20} />
               <span className="qm-action-text">
                 <strong>{applying ? "Applying…" : "Apply to Preview"}</strong>
@@ -960,7 +960,7 @@ export function QuickMergePanel({ isActive }: Props) {
               className="qm-action-take"
               disabled={taking || !obsConnected || activeCount === 0}
               onClick={handleTakeLive}
-            >
+             title="Transition All Layers">
               <Icon name="bolt" size={20} />
               <span className="qm-action-text">
                 <strong>{taking ? "Going Live…" : "TAKE LIVE"}</strong>

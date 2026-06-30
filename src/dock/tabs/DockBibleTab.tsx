@@ -2757,7 +2757,7 @@ export default function DockBibleTab({
                       className={`dock-search-dropdown__item${i === activeIdx ? " dock-search-dropdown__item--active" : ""}`}
                       onClick={() => void handlePickResult(result)}
                       onMouseEnter={() => setActiveIdx(i)}
-                    >
+                     title="Search">
                       <Icon
                         name={
                           result.kind === "keyword"
@@ -2794,7 +2794,7 @@ export default function DockBibleTab({
                       className="dock-search-dropdown__item dock-search-dropdown__item--recent"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => applyRecentBibleSearch(item)}
-                    >
+                     title="Search">
                       <Icon name="refresh" size={13} style={{ opacity: 0.5 }} />
                       <span className="dock-search-dropdown__content">
                         <span className="dock-search-dropdown__label">{item}</span>
@@ -2910,7 +2910,7 @@ export default function DockBibleTab({
               type="button"
               onClick={() => setActionError("")}
               style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0 }}
-            >
+             title="Close">
               <Icon name="close" size={14} />
             </button>
           </div>
@@ -3011,7 +3011,7 @@ export default function DockBibleTab({
                   className="dock-dialog__close"
                   onClick={() => setShowOptionsModal(false)}
                   aria-label={t("bible.closeOptions")}
-                >
+                 title="Close">
                   <Icon name="close" size={14} />
                 </button>
               </div>
@@ -3030,7 +3030,7 @@ export default function DockBibleTab({
                       className={`dock-console-segmented__item${overlayMode === "fullscreen" ? " dock-console-segmented__item--active" : ""}`}
                       onClick={() => setOverlayMode("fullscreen")}
                       aria-pressed={overlayMode === "fullscreen"}
-                    >
+                     title="Full">
                       <span>{t("bible.full")}</span>
                     </button>
                     <button
@@ -3038,7 +3038,7 @@ export default function DockBibleTab({
                       className={`dock-console-segmented__item${overlayMode === "lower-third" ? " dock-console-segmented__item--active" : ""}`}
                       onClick={() => setOverlayMode("lower-third")}
                       aria-pressed={overlayMode === "lower-third"}
-                    >
+                     title="Lt">
                       <span>{t("bible.lt")}</span>
                     </button>
                   </div>
@@ -3052,7 +3052,7 @@ export default function DockBibleTab({
                     className="dock-btn dock-btn--ghost dock-btn--compact"
                     onClick={() => { setShowOptionsModal(false); setShowThemeSettings(true); }}
                     style={{ width: "100%" }}
-                  >
+                   title="Open Theme Settings">
                     <Icon name="palette" size={14} />
                     {t("bible.openThemeSettings")}
                   </button>
@@ -3106,7 +3106,7 @@ export default function DockBibleTab({
                   className="dock-dialog__close"
                   onClick={() => setKeywordActionResult(null)}
                   aria-label={t("bible.closeKeywordActionDialog")}
-                >
+                 title="Close">
                   <Icon name="close" size={14} />
                 </button>
               </div>
@@ -3137,7 +3137,7 @@ export default function DockBibleTab({
                       }
                     }, 150);
                   }}
-                >
+                 title="Go To Chapter">
                   <Icon name="menu_book" size={14} />
                   {t("bible.goToChapter")}
                 </button>
@@ -3153,7 +3153,7 @@ export default function DockBibleTab({
                     );
                     setKeywordActionResult(null);
                   }}
-                >
+                 title="Show">
                   <Icon name="cast" size={14} />
                   {t("common.show")}
                 </button>

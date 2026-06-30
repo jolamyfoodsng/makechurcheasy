@@ -187,7 +187,7 @@ export default function UpdateNotification({ result, onDismiss, onRemindLater }:
                   type="button"
                   className="update-notification__changelog-btn"
                   onClick={() => setShowChangelog(!showChangelog)}
-                >
+                 title="What's New">
                   <Icon name={showChangelog ? "expand_less" : "expand_more"} size={12} />
                   What's New
                 </button>
@@ -242,14 +242,14 @@ export default function UpdateNotification({ result, onDismiss, onRemindLater }:
               type="button"
               className="update-notification__btn update-notification__btn--later"
               onClick={handleRemindLater}
-            >
+             title="Later">
               Later
             </button>
             <button
               type="button"
               className="update-notification__btn update-notification__btn--update"
               onClick={handleUpdate}
-            >
+             title="Update now">
               Update Now
             </button>
           </div>
@@ -261,14 +261,14 @@ export default function UpdateNotification({ result, onDismiss, onRemindLater }:
               type="button"
               className="update-notification__btn update-notification__btn--later"
               onClick={handleDismiss}
-            >
+             title="Dismiss">
               Dismiss
             </button>
             <button
               type="button"
               className="update-notification__btn update-notification__btn--update"
               onClick={handleRetry}
-            >
+             title="Try Again">
               Try Again
             </button>
           </div>

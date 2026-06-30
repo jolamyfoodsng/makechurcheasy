@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { unicodeSearchNormalize } from "./unicodeUtils";
 
 export interface OnlineLyricsSearchResult {
   id: string;
@@ -303,9 +304,7 @@ function buildPreview(text: string): string {
 }
 
 function tokenize(value: string): string[] {
-  return cleanInlineText(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
+  return unicodeSearchNormalize(value)
     .split(" ")
     .filter((token) => token.length > 1);
 }

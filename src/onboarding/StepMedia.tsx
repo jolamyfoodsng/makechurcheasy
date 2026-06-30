@@ -38,10 +38,10 @@ export default function StepMedia({
 
       <div className="ob-actions">
         <div className="ob-actions-row">
-          <button className="ob-btn ob-btn--ghost" onClick={onBack}>
+          <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
             Back
           </button>
-          <button className="ob-btn ob-btn--primary" onClick={onNext}>
+          <button className="ob-btn ob-btn--primary" onClick={onNext} title="Continue">
             Continue
             <ChevronRight size={16} />
           </button>

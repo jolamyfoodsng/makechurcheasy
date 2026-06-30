@@ -258,13 +258,13 @@ export default function ServiceHubPage() {
             <button
               className={`service-hub-mode-toggle-btn${activeMode === "live" ? " is-active" : ""}`}
               onClick={() => handleModeChange("live")}
-            >
+             title="LIVE">
               LIVE
             </button>
             <button
               className={`service-hub-mode-toggle-btn${activeMode === "automation" ? " is-active" : ""}`}
               onClick={() => handleModeChange("automation")}
-            >
+             title="AUTOMATION">
               AUTOMATION
             </button>
           </div>
@@ -272,7 +272,7 @@ export default function ServiceHubPage() {
             type="button"
             className="service-hub-quickmerge-btn"
             onClick={() => navigate("/hub/quick-merge")}
-          >
+           title="QUICK MERGE">
             QUICK MERGE
           </button>
         </div>
@@ -360,10 +360,10 @@ export default function ServiceHubPage() {
                 aria-selected={automationSection === "pre-service"}
                 className={`service-hub-automation-tab${automationSection === "pre-service" ? " is-active" : ""}`}
                 onClick={() => setAutomationSection("pre-service")}
-              >
+               title="Pre-Service Sequence">
                 Pre-Service Sequence
               </button>
-              <button type="button" className="service-hub-automation-tab is-placeholder" disabled>
+              <button type="button" className="service-hub-automation-tab is-placeholder" disabled title="Post-Service (Soon)">
                 Post-Service (Soon)
               </button>
             </div>

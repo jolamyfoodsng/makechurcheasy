@@ -680,32 +680,32 @@ export function MVTemplatesDashboard() {
           </div>
 
           <nav className="tpldash-module-nav" aria-label="Template module navigation">
-            <button className="tpldash-module-link" type="button" onClick={() => navigate("/service-hub")}>
+            <button className="tpldash-module-link" type="button" onClick={() => navigate("/service-hub")} title="Services">
               <Icon name="church" size={20} />
               <span>Services</span>
             </button>
 
-            <button className="tpldash-module-link" type="button" onClick={() => navigate("/hub?mode=live&tab=worship")}>
+            <button className="tpldash-module-link" type="button" onClick={() => navigate("/hub?mode=live&tab=worship")} title="Music">
               <Icon name="music_note" size={20} />
               <span>Lyrics</span>
             </button>
 
-            <button className="tpldash-module-link" type="button" onClick={() => navigate("/hub?mode=live&tab=bible")}>
+            <button className="tpldash-module-link" type="button" onClick={() => navigate("/hub?mode=live&tab=bible")} title="Book">
               <Icon name="menu_book" size={20} />
               <span>Scripture</span>
             </button>
 
-            <button className="tpldash-module-link is-active" type="button" aria-current="page">
+            <button className="tpldash-module-link is-active" type="button" aria-current="page" title="Giving">
               <Icon name="volunteer_activism" size={20} />
               <span>Giving</span>
             </button>
 
-            <button className="tpldash-module-link" type="button" onClick={() => navigate("/templates/themes")}>
+            <button className="tpldash-module-link" type="button" onClick={() => navigate("/templates/themes")} title="Palette">
               <Icon name="palette" size={20} />
               <span>Broadcast Themes</span>
             </button>
 
-            <button className="tpldash-module-link" type="button" onClick={() => navigate("/hub?mode=live&tab=graphics")}>
+            <button className="tpldash-module-link" type="button" onClick={() => navigate("/hub?mode=live&tab=graphics")} title="Announcements">
               <Icon name="campaign" size={20} />
               <span>Announcements</span>
             </button>
@@ -713,7 +713,7 @@ export function MVTemplatesDashboard() {
         </div>
 
         <div className="tpldash-sidebar-bottom">
-          <button className="tpldash-go-live-btn" type="button" onClick={() => navigate("/hub?mode=live")}>
+          <button className="tpldash-go-live-btn" type="button" onClick={() => navigate("/hub?mode=live")} title="Go Live">
             <Icon name="videocam" size={20} />
             <span>Go Live</span>
           </button>
@@ -733,17 +733,17 @@ export function MVTemplatesDashboard() {
                 className="tpldash-action-btn"
                 type="button"
                 onClick={() => setShowFilters((value) => !value)}
-              >
+               title="Filter">
                 <Icon name="filter_list" size={20} />
                 <span>{showFilters ? "Hide Filter" : "Filter"}</span>
               </button>
 
-              <button className="tpldash-action-btn" type="button" onClick={openStudio}>
+              <button className="tpldash-action-btn" type="button" onClick={openStudio} title="Add">
                 <Icon name="add" size={20} />
                 <span>New</span>
               </button>
 
-              <button className="tpldash-action-btn" type="button" onClick={openObsThemesSection}>
+              <button className="tpldash-action-btn" type="button" onClick={openObsThemesSection} title="Palette">
                 <Icon name="palette" size={20} />
                 <span>Broadcast Themes</span>
               </button>
@@ -782,7 +782,7 @@ export function MVTemplatesDashboard() {
                     type="button"
                     onClick={() => { void loadObsThemes(); }}
                     disabled={obsThemeBusy}
-                  >
+                   title="Reload">
                     <Icon name="refresh" size={20} />
                     <span>Reload</span>
                   </button>
@@ -791,7 +791,7 @@ export function MVTemplatesDashboard() {
                     type="button"
                     onClick={() => { void handleCreateObsTheme(); }}
                     disabled={obsThemeBusy}
-                  >
+                   title="Add">
                     <Icon name="add" size={20} />
                     <span>New Theme</span>
                   </button>
@@ -937,7 +937,7 @@ export function MVTemplatesDashboard() {
                             type="button"
                             onClick={() => bgUploadRef.current?.click()}
                             disabled={obsThemeBusy}
-                          >
+                           title="Upload">
                             <Icon name="upload" size={20} />
                             <span>Upload BG</span>
                           </button>
@@ -947,7 +947,7 @@ export function MVTemplatesDashboard() {
                             type="button"
                             onClick={() => updateObsThemeDraft({ backgroundImage: "" })}
                             disabled={!obsThemeDraft.backgroundImage || obsThemeBusy}
-                          >
+                           title="Clear">
                             <Icon name="image_not_supported" size={20} />
                             <span>Clear BG</span>
                           </button>
@@ -959,7 +959,7 @@ export function MVTemplatesDashboard() {
                             type="button"
                             onClick={() => { void handleDeleteObsTheme(); }}
                             disabled={obsThemeBusy || selectedObsTheme?.source === "builtin"}
-                          >
+                           title="Delete">
                             <Icon name="delete" size={20} />
                             <span>Delete</span>
                           </button>
@@ -969,7 +969,7 @@ export function MVTemplatesDashboard() {
                             type="button"
                             onClick={() => { void handleSaveObsTheme(); }}
                             disabled={obsThemeBusy}
-                          >
+                           title="Save">
                             <Icon name="save" size={20} />
                             <span>{selectedObsTheme?.source === "builtin" ? "Save as Custom" : "Save Theme"}</span>
                           </button>
@@ -1044,7 +1044,7 @@ export function MVTemplatesDashboard() {
               );
             })}
 
-            <button className="tpldash-template-create" type="button" onClick={openStudio}>
+            <button className="tpldash-template-create" type="button" onClick={openStudio} title="Create">
               <Icon name="add_circle" size={20} />
               <span>Create Template</span>
             </button>
@@ -1066,7 +1066,7 @@ export function MVTemplatesDashboard() {
                 type="button"
                 onClick={() => setToastMessage(null)}
                 aria-label="Dismiss notification"
-              >
+               title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -1103,7 +1103,7 @@ export function MVTemplatesDashboard() {
                         role="switch"
                         aria-checked={isEnabled}
                         aria-label={`Toggle ${element.label}`}
-                      >
+                       title="tpldash-switch-thumb">
                         <span className="tpldash-switch-thumb" />
                       </button>
                     </div>
@@ -1151,7 +1151,7 @@ export function MVTemplatesDashboard() {
                   role="switch"
                   aria-checked={settings.autoShowQr}
                   aria-label="Toggle Auto-show QR"
-                >
+                 title="tpldash-switch-thumb">
                   <span className="tpldash-switch-thumb" />
                 </button>
               </div>
@@ -1168,7 +1168,7 @@ export function MVTemplatesDashboard() {
                   role="switch"
                   aria-checked={settings.loopAnimation}
                   aria-label="Toggle Loop Animation"
-                >
+                 title="tpldash-switch-thumb">
                   <span className="tpldash-switch-thumb" />
                 </button>
               </div>
@@ -1210,7 +1210,7 @@ export function MVTemplatesDashboard() {
                 </div>
               )}
 
-              <button className="tpldash-edit-btn" type="button" onClick={() => setEditingBank((value) => !value)}>
+              <button className="tpldash-edit-btn" type="button" onClick={() => setEditingBank((value) => !value)} title="Edit">
                 <Icon name={editingBank ? "check" : "edit"} size={20} />
                 <span>{editingBank ? "Done Editing" : "Edit Bank Details"}</span>
               </button>
@@ -1219,7 +1219,7 @@ export function MVTemplatesDashboard() {
             <section className="tpldash-settings-section tpldash-theme-section">
               <div className="tpldash-setting-row">
                 <label className="tpldash-label">Dashboard Look</label>
-                <button className="tpldash-theme-add-btn" type="button" onClick={handleCreateTheme}>
+                <button className="tpldash-theme-add-btn" type="button" onClick={handleCreateTheme} title="Add">
                   <Icon name="add" size={20} />
                   <span>New Theme</span>
                 </button>
@@ -1264,14 +1264,14 @@ export function MVTemplatesDashboard() {
                     className={`tpldash-theme-mode-btn${activeTheme.backgroundMode === "solid" ? " is-active" : ""}`}
                     type="button"
                     onClick={() => updateActiveTheme({ backgroundMode: "solid" })}
-                  >
+                   title="Solid">
                     Solid
                   </button>
                   <button
                     className={`tpldash-theme-mode-btn${activeTheme.backgroundMode === "gradient" ? " is-active" : ""}`}
                     type="button"
                     onClick={() => updateActiveTheme({ backgroundMode: "gradient" })}
-                  >
+                   title="Gradient">
                     Gradient
                   </button>
                 </div>
@@ -1330,11 +1330,11 @@ export function MVTemplatesDashboard() {
                 </div>
 
                 <div className="tpldash-theme-editor-actions">
-                  <button className="tpldash-theme-delete-btn" type="button" onClick={handleDeleteTheme}>
+                  <button className="tpldash-theme-delete-btn" type="button" onClick={handleDeleteTheme} title="Delete">
                     <Icon name="delete" size={20} />
                     <span>Delete Theme</span>
                   </button>
-                  <button className="tpldash-theme-save-btn" type="button" onClick={handleSaveTheme}>
+                  <button className="tpldash-theme-save-btn" type="button" onClick={handleSaveTheme} title="Save">
                     <Icon name="save" size={20} />
                     <span>Save Theme</span>
                   </button>
@@ -1344,7 +1344,7 @@ export function MVTemplatesDashboard() {
           </div>
 
           <div className="tpldash-settings-footer">
-            <button className="tpldash-footer-btn tpldash-footer-btn--secondary" type="button" onClick={openStudio}>
+            <button className="tpldash-footer-btn tpldash-footer-btn--secondary" type="button" onClick={openStudio} title="Open">
               Open Studio
             </button>
 
@@ -1353,7 +1353,7 @@ export function MVTemplatesDashboard() {
               type="button"
               onClick={handleSaveChanges}
               disabled={!selectedTemplate}
-            >
+             title="Save">
               Save Changes
             </button>
 
@@ -1362,7 +1362,7 @@ export function MVTemplatesDashboard() {
               type="button"
               onClick={handleCreateLayout}
               disabled={!selectedTemplate || creatingLayout}
-            >
+             title="Create">
               {creatingLayout ? "Creating..." : "Create Layout"}
             </button>
           </div>

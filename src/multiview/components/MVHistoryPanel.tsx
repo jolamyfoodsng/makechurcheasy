@@ -234,7 +234,7 @@ export default function MVHistoryPanel() {
           aria-selected={filter === "all"}
           className={`mv-history-chip${filter === "all" ? " mv-history-chip--active" : ""}`}
           onClick={() => setFilter("all")}
-        >
+         title="All">
           All
         </button>
         {(Object.keys(CATEGORY_META) as HistoryCategory[]).map((cat) => (

@@ -5,7 +5,27 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1920,height=1080">
   <title>Bible Overlay — Lower Third</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap"
+    rel="stylesheet">
   <style>
+    @font-face {
+      font-family: 'Charis SIL';
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url('/fonts/charis-sil/CharisSIL-Regular.ttf') format('truetype');
+    }
+
+    @font-face {
+      font-family: 'Charis SIL';
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url('/fonts/charis-sil/CharisSIL-Bold.ttf') format('truetype');
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -19,7 +39,7 @@
       height: 1080px;
       overflow: hidden;
       background: transparent;
-      font-family: var(--font-family, "CMG Sans", sans-serif);
+      font-family: var(--font-family, "Charis SIL", "CMG Sans", "Noto Sans", sans-serif);
     }
 
     /* Hardware acceleration helper */
@@ -435,7 +455,15 @@
 
     function ensureCmgSansFont(fontFamily) {
       const raw = String(fontFamily || "").trim();
-      return /cmg\s*sans/i.test(raw) ? raw : '"CMG Sans", sans-serif';
+      // Ensure Charis SIL is always present for Unicode/African language support
+      const hasCharis = /charis\s*sil/i.test(raw);
+      if (/cmg\s*sans/i.test(raw)) {
+        // Ensure Unicode fallbacks are present after CMG Sans
+        const base = hasCharis ? raw : raw.replace(/,\s*sans-serif\s*$/i, '') + ', "Charis SIL"';
+        if (/noto\s*sans/i.test(base)) return base;
+        return base.replace(/,\s*sans-serif\s*$/i, '') + ', "Noto Sans", sans-serif';
+      }
+      return hasCharis ? raw : '"Charis SIL", "CMG Sans", "Noto Sans", sans-serif';
     }
 
     function clamp(value, min, max) {

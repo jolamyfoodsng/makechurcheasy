@@ -156,7 +156,7 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
             </div>
             <h2 className="ws-modal-title">{isEdit ? "Edit Song" : "Add Song"}</h2>
           </div>
-          <button className="ws-modal-close" onClick={onClose} aria-label="Close">
+          <button className="ws-modal-close" onClick={onClose} aria-label="Close" title="Close">
             <X size={16} />
           </button>
         </header>
@@ -218,6 +218,7 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
             <div className="ws-lyrics-wrap">
               <textarea
                 className="ws-lyrics-textarea"
+                style={{ fontFamily: '"Charis SIL", "SF Mono", "Noto Sans Mono", "Fira Code", "Consolas", monospace' }}
                 placeholder={"Verse 1:\nLine 1\nLine 2\n\nChorus:\nChorus line 1\nChorus line 2"}
                 value={lyrics}
                 onChange={(e) => setLyrics(e.target.value)}
@@ -278,14 +279,14 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
 
         {/* ── Footer ── */}
         <footer className="ws-modal-footer">
-          <button className="ws-btn-secondary" onClick={onClose}>
+          <button className="ws-btn-secondary" onClick={onClose} title="Cancel">
             Cancel
           </button>
           <button
             className="ws-btn-primary"
             disabled={!title.trim() || saving}
             onClick={handleSave}
-          >
+            title="Update">
             <Save size={14} />
             {saving ? "Saving…" : isEdit ? "Update Song" : "Save Song"}
           </button>

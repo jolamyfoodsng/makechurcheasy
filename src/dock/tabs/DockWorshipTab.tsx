@@ -33,6 +33,7 @@ import {
   searchOnlineSongLyrics,
   type OnlineLyricsSearchResult,
 } from "../../worship/onlineLyricsService";
+import { unicodeStripDiacritics } from "../../worship/unicodeUtils";
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
 import Icon from "../DockIcon";
@@ -496,8 +497,8 @@ function stageItemLabel(song: DockSong, section: DockWorshipSection): string {
 }
 
 function fuzzyMatch(query: string, target: string): boolean {
-  const q = query.toLowerCase();
-  const t = target.toLowerCase();
+  const q = unicodeStripDiacritics(query);
+  const t = unicodeStripDiacritics(target);
   if (t.includes(q)) return true;
   let qi = 0;
   for (let ti = 0; ti < t.length && qi < q.length; ti++) {
@@ -1744,7 +1745,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                       className="dock-search-dropdown__item dock-search-dropdown__item--recent"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => applyRecentWorshipSearch(item)}
-                    >
+                      title="Search">
                       <span className="dock-search-dropdown__content">
                         <span className="dock-search-dropdown__label">{item}</span>
                       </span>
@@ -1787,7 +1788,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                           }
                           handleSelectSong(song);
                         }}
-                      >
+                        title="isLocked && ( )">
                         <span className="dock-card__title">{song.title}</span>
                         <span className="dock-card__subtitle">
                           {song.artist || t('worship.unknownArtist')}
@@ -1833,7 +1834,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                   type="button"
                   className="dock-worship-back-btn"
                   onClick={handleBackToSongList}
-                >
+                  title="Go back">
                   <Icon name="arrow_back" size={14} />
                   {/* <span>Back to Songs</span> */}
                 </button>
@@ -1879,7 +1880,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                   className="dock-media-search__clear"
                   onClick={() => setLyricsSearchQuery("")}
                   aria-label={t('common.clear')}
-                >
+                  title="Close">
                   <Icon name="close" size={13} />
                 </button>
               )}
@@ -1975,7 +1976,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                     type="button"
                     onClick={() => setActionError("")}
                     style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0 }}
-                  >
+                    title="Close">
                     <Icon name="close" size={14} />
                   </button>
                 </div>
@@ -2064,7 +2065,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 className="dock-dialog__close"
                 onClick={() => setSongEditor(null)}
                 aria-label={t('common.close')}
-              >
+                title="Close">
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -2103,7 +2104,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
               </label>
             </div>
             <div className="dock-dialog__footer">
-              <button type="button" className="dock-btn dock-btn--ghost" onClick={handleResetSongEditor}>
+              <button type="button" className="dock-btn dock-btn--ghost" onClick={handleResetSongEditor} title="Reset Default">
                 {t('worship.resetDefault')}
               </button>
               <button
@@ -2111,7 +2112,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 className="dock-btn dock-btn--primary"
                 onClick={() => void handleSaveSongEditor()}
                 disabled={savingSong || !songDraft.title.trim() || !songDraft.lyrics.trim()}
-              >
+                title="Saving">
                 {savingSong ? t('worship.saving') : t('common.save')}
               </button>
             </div>
@@ -2132,7 +2133,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 className="dock-dialog__close"
                 onClick={() => setSlideEditor(null)}
                 aria-label={t('common.close')}
-              >
+                title="Close">
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -2147,7 +2148,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
               </label>
             </div>
             <div className="dock-dialog__footer">
-              <button type="button" className="dock-btn dock-btn--ghost" onClick={() => setSlideEditor(null)}>
+              <button type="button" className="dock-btn dock-btn--ghost" onClick={() => setSlideEditor(null)} title="Cancel">
                 {t('common.cancel')}
               </button>
               <button
@@ -2155,7 +2156,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 className="dock-btn dock-btn--primary"
                 onClick={() => void handleSaveSlideEditor()}
                 disabled={savingSong || !slideEditor.text.trim()}
-              >
+                title="Saving">
                 {savingSong ? t('worship.saving') : t('common.save')}
               </button>
             </div>
@@ -2181,7 +2182,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                   setNewSongSource(null);
                 }}
                 aria-label={t('common.close')}
-              >
+                title="Close">
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -2227,7 +2228,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                   setIsNewSongModalOpen(false);
                   setNewSongSource(null);
                 }}
-              >
+                title="Cancel">
                 {t('common.cancel')}
               </button>
               <button
@@ -2235,7 +2236,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 className="dock-btn dock-btn--primary"
                 onClick={() => void handleSaveNewSong()}
                 disabled={savingSong || !newSongDraft.title.trim() || !newSongDraft.lyrics.trim()}
-              >
+                title="Saving">
                 {savingSong ? t('worship.saving') : t('worship.saveSong')}
               </button>
             </div>
@@ -2256,7 +2257,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                 className="dock-dialog__close"
                 onClick={() => setOnlineSearchOpen(false)}
                 aria-label={t('common.close')}
-              >
+                title="Close">
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -2304,7 +2305,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults }: 
                       type="button"
                       className="dock-btn dock-btn--ghost dock-dialog-result__action"
                       onClick={() => handleImportOnlineResult(result)}
-                    >
+                      title="Import Song">
                       {t('worship.importSong')}
                     </button>
                   </div>

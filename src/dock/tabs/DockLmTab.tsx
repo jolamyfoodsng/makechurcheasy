@@ -603,6 +603,7 @@ export default function DockLmTab() {
             ...(activeTab === "queue" ? styles.mainTabActive : {}),
           }}
           onClick={() => setActiveTab("queue")}
+          title="Queue & Suggestions"
         >
           <Icon name="cast" size={12} />
           <span>Queue & Suggestions</span>
@@ -616,7 +617,7 @@ export default function DockLmTab() {
             ...(activeTab === "transcript" ? styles.mainTabActive : {}),
           }}
           onClick={() => setActiveTab("transcript")}
-        >
+          title="Subtitles">
           <Icon name="subtitles" size={12} />
           <span>Transcript</span>
           {entries.length > 0 && (
@@ -725,7 +726,7 @@ export default function DockLmTab() {
                                 void handlePushVerse(c);
                               }}
                               disabled={pushing || obsStatus !== "connected"}
-                            >
+                              title="Send">
                               <Icon name="send" size={12} />
                               <span>{pushing ? "Pushing..." : "Push to Preview"}</span>
                             </button>
@@ -769,7 +770,7 @@ export default function DockLmTab() {
                                   void handlePushVerse(c);
                                 }}
                                 disabled={pushing || obsStatus !== "connected"}
-                              >
+                                title="Send">
                                 <Icon name="send" size={12} />
                                 <span>{pushing ? "Pushing..." : "Push to Preview"}</span>
                               </button>
@@ -884,13 +885,13 @@ export default function DockLmTab() {
                 <button
                   style={styles.modalBtnGhost}
                   onClick={() => setShowStopConfirm(false)}
-                >
+                  title="Cancel">
                   Cancel
                 </button>
                 <button
                   style={styles.modalBtnDanger}
                   onClick={confirmStop}
-                >
+                  title="Stop">
                   <Icon name="stop" size={12} />
                   <span>Stop Listening</span>
                 </button>

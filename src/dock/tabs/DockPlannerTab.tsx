@@ -336,7 +336,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
                 setActivePlanId((current) => current || payload.activePlan?.id || payload.plans[0]?.id || "");
               });
             }}
-          >
+           title="Refresh">
             Refresh planner
           </button>
         </div>
@@ -375,13 +375,13 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
           </div>
         </div>
         <div className="dock-planner-now__actions">
-          <button type="button" onClick={() => selectedCue && sendCue(selectedCue)} disabled={!selectedCue || sending}>
+          <button type="button" onClick={() => selectedCue && sendCue(selectedCue)} disabled={!selectedCue || sending} title="Send">
             Send
           </button>
-          <button type="button" onClick={() => moveSelection(-1)} disabled={selectedIndex <= 0}>
+          <button type="button" onClick={() => moveSelection(-1)} disabled={selectedIndex <= 0} title="Prev">
             Prev
           </button>
-          <button type="button" onClick={() => moveSelection(1)} disabled={!nextCue}>
+          <button type="button" onClick={() => moveSelection(1)} disabled={!nextCue} title="Next">
             Next
           </button>
         </div>
@@ -396,7 +396,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
           aria-label="Filter planner cues"
         />
         {filter && (
-          <button type="button" onClick={() => setFilter("")} aria-label="Clear planner filter">
+          <button type="button" onClick={() => setFilter("")} aria-label="Clear planner filter" title="Close">
             <Icon name="close" size={12} />
           </button>
         )}
@@ -442,7 +442,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
                   event.stopPropagation();
                   startEditCue(cue);
                 }}
-              >
+               title="Edit">
                 <Icon name="edit" size={13} />
               </button>
             </div>
@@ -461,7 +461,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
             placeholder="Quick point cue..."
             aria-label="Quick point cue"
           />
-          <button type="button" onClick={addQuickPoint} disabled={!quickPoint.trim()}>
+          <button type="button" onClick={addQuickPoint} disabled={!quickPoint.trim()} title="Add">
             Add
           </button>
         </div>
@@ -477,7 +477,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
                 <div className="dock-section-label">Planner cue</div>
                 <div className="dock-modal__title">Edit cue</div>
               </div>
-              <button type="button" className="dock-modal__close" onClick={() => setEditingCueId("")} aria-label="Close">
+              <button type="button" className="dock-modal__close" onClick={() => setEditingCueId("")} aria-label="Close" title="Close">
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -496,8 +496,8 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
               </label>
             </div>
             <div className="dock-modal__actions">
-              <button type="button" className="dock-btn dock-btn--ghost" onClick={() => setEditingCueId("")}>Cancel</button>
-              <button type="button" className="dock-btn dock-btn--preview" onClick={commitEditCue}>Save</button>
+              <button type="button" className="dock-btn dock-btn--ghost" onClick={() => setEditingCueId("")} title="Cancel">Cancel</button>
+              <button type="button" className="dock-btn dock-btn--preview" onClick={commitEditCue} title="Save">Save</button>
             </div>
           </div>
         </div>

@@ -94,7 +94,7 @@ export default function VerificationWarningBanner({ daysOffline, daysUntilNextTi
             type="button"
             className="verification-banner__btn verification-banner__btn--dismiss"
             onClick={handleDismiss}
-          >
+           title="Dismiss">
             Dismiss
           </button>
           <button
@@ -102,7 +102,7 @@ export default function VerificationWarningBanner({ daysOffline, daysUntilNextTi
             className="verification-banner__btn verification-banner__btn--retry"
             onClick={handleRetry}
             disabled={verifying}
-          >
+           title="Verifying...">
             {verifying ? "Verifying..." : "Verify Now"}
           </button>
         </div>

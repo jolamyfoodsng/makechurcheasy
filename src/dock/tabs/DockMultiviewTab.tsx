@@ -280,14 +280,14 @@ function DeleteModal({
           <span>{t('multiview.alsoDeleteScene')}</span>
         </label>
         <div className="dock-mv-modal__actions">
-          <button type="button" className="dock-btn dock-btn--sm" onClick={onCancel}>
+          <button type="button" className="dock-btn dock-btn--sm" onClick={onCancel} title="Cancel">
             {t('common.cancel')}
           </button>
           <button
             type="button"
             className="dock-btn dock-btn--sm dock-btn--danger"
             onClick={() => onConfirm(deleteObs)}
-          >
+           title="Delete">
             {t('common.delete')}
           </button>
         </div>
@@ -572,7 +572,7 @@ function MVCard({
                 type="button"
                 className="dock-mv-card__menu-item"
                 onClick={() => { setRenaming(true); setRenameValue(mv.name); setMenuOpen(false); }}
-              >
+               title="Rename">
                 <Icon name="drive_file_rename_outline" size={13} />
                 <span>{t('multiview.rename')}</span>
               </button>
@@ -580,7 +580,7 @@ function MVCard({
                 type="button"
                 className="dock-mv-card__menu-item"
                 onClick={() => { onDuplicate(mv.id); setMenuOpen(false); }}
-              >
+               title="Duplicate">
                 <Icon name="content_copy" size={13} />
                 <span>{t('multiview.duplicate')}</span>
               </button>
@@ -589,7 +589,7 @@ function MVCard({
                 type="button"
                 className="dock-mv-card__menu-item dock-mv-card__menu-item--danger"
                 onClick={() => { onDelete(mv.id); setMenuOpen(false); }}
-              >
+               title="Delete">
                 <Icon name="delete" size={13} />
                 <span>{t('multiview.delete')}</span>
               </button>
@@ -669,7 +669,7 @@ function MVCard({
           onClick={() => onPush(mv)}
           disabled={isPushing || isClearing}
           style={{ flex: 1 }}
-        >
+         title="Pushing">
           <Icon name="cast" size={14} />
           <span>{isPushing ? t('multiview.pushing') : t('multiview.pushToObs')}</span>
         </button>
@@ -684,7 +684,7 @@ function MVCard({
               border: "1px solid var(--dock-border)",
               color: "var(--dock-text-dim)",
             }}
-          >
+           title="Clearing">
             <Icon name="visibility_off" size={14} />
             <span>{isClearing ? t('multiview.clearing') : t('common.clear')}</span>
           </button>
@@ -1055,7 +1055,7 @@ export default function DockMultiviewTab() {
         <div className={`dock-mv-tab__feedback dock-mv-tab__feedback--${feedback.type}`}>
           <Icon name={feedback.type === "success" ? "check_circle" : "error"} size={14} />
           <span>{feedback.text}</span>
-          <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setFeedback(null)}>
+          <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setFeedback(null)} title="Close">
             <Icon name="close" size={12} />
           </button>
         </div>

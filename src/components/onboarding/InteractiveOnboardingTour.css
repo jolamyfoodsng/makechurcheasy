@@ -1,0 +1,449 @@
+/* ══════════════════════════════════════════════════════════════
+   INTERACTIVE ONBOARDING TOUR
+   Event-driven setup wizard with validation & auto-advance
+   Follows MakeChurchEasy design system
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Root container ── */
+
+.iob-tour-root {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  font-family: var(--font-body);
+}
+
+.iob-tour-root > * {
+  pointer-events: auto;
+}
+
+/* ── Overlay ── */
+
+.iob-tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+}
+
+.iob-tour-overlay--full {
+  background: rgba(0, 0, 0, 0.65);
+  pointer-events: auto;
+  animation: iobTourFadeIn 0.2s ease;
+}
+
+.iob-tour-overlay-darken {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  transition: clip-path 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+/* ── Spotlight border ── */
+
+.iob-tour-spotlight-border {
+  position: fixed;
+  border: 2px solid var(--primary);
+  box-shadow:
+    0 0 0 4px rgba(var(--primary-rgb), 0.15),
+    0 0 20px rgba(var(--primary-rgb), 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  animation: iobTourSpotlightPulse 2s ease-in-out infinite;
+}
+
+@keyframes iobTourSpotlightPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 4px rgba(var(--primary-rgb), 0.15),
+      0 0 20px rgba(var(--primary-rgb), 0.1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(var(--primary-rgb), 0.2),
+      0 0 30px rgba(var(--primary-rgb), 0.15);
+  }
+}
+
+/* ── Tour Card ── */
+
+.iob-tour-card {
+  position: fixed;
+  z-index: 9999;
+  width: 400px;
+  max-width: calc(100vw - 40px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: iobTourCardEnter 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: top 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.iob-tour-card--complete {
+  text-align: center;
+  align-items: center;
+}
+
+@keyframes iobTourCardEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ── Card Close Button ── */
+
+.iob-tour-card-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.iob-tour-card-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* ── Progress Indicator ── */
+
+.iob-tour-card-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.iob-tour-card-progress-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.iob-tour-card-progress-bar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.iob-tour-card-progress-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: all 0.2s ease;
+}
+
+.iob-tour-card-progress-dot--active {
+  background: var(--primary);
+  width: 18px;
+  border-radius: 3px;
+}
+
+.iob-tour-card-progress-dot--done {
+  background: var(--success);
+}
+
+/* ── Card Content ── */
+
+.iob-tour-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.iob-tour-card-content--animating {
+  opacity: 0;
+  transform: translateX(8px);
+}
+
+/* ── Icon ── */
+
+.iob-tour-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-soft-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+.iob-tour-card--complete .iob-tour-card-icon {
+  width: 56px;
+  height: 56px;
+  background: rgba(var(--success-rgb), 0.12);
+  border-color: var(--success-border);
+  color: var(--success);
+}
+
+/* ── Title ── */
+
+.iob-tour-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.3;
+  font-family: var(--font-heading);
+}
+
+/* ── Description ── */
+
+.iob-tour-card-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ── Features List ── */
+
+.iob-tour-card-features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.iob-tour-card-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.iob-tour-card-feature-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+/* ── Success Message ── */
+
+.iob-tour-card-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(var(--success-rgb), 0.08);
+  border: 1px solid rgba(var(--success-rgb), 0.2);
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 600;
+  animation: iobTourFadeIn 0.2s ease;
+}
+
+.iob-tour-card-success svg {
+  flex-shrink: 0;
+}
+
+/* ── Helper Message ── */
+
+.iob-tour-card-helper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(var(--primary-rgb), 0.06);
+  border: 1px solid rgba(var(--primary-rgb), 0.15);
+  color: var(--primary);
+  font-size: 12px;
+  animation: iobTourFadeIn 0.3s ease;
+}
+
+.iob-tour-card-helper svg {
+  flex-shrink: 0;
+  flex-shrink: 0;
+}
+
+/* ── Actions ── */
+
+.iob-tour-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.iob-tour-card-actions-right {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.iob-tour-card-actions-complete {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  align-items: center;
+}
+
+/* ── Buttons ── */
+
+.iob-tour-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--transition);
+  border: none;
+  white-space: nowrap;
+}
+
+.iob-tour-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.iob-tour-btn--primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.iob-tour-btn--primary:hover {
+  background: var(--primary-hover);
+}
+
+.iob-tour-btn--primary.iob-tour-btn--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.iob-tour-btn--success {
+  background: var(--success);
+  color: #fff;
+  width: 100%;
+  padding: 10px 20px;
+}
+
+.iob-tour-btn--success:hover {
+  background: var(--success-hover);
+}
+
+.iob-tour-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.iob-tour-btn--ghost:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.iob-tour-btn--text {
+  background: transparent;
+  color: var(--text-muted);
+  padding: 8px 12px;
+}
+
+.iob-tour-btn--text:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+/* ── Animations ── */
+
+@keyframes iobTourFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes iobTourFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 480px) {
+  .iob-tour-card {
+    width: calc(100vw - 32px);
+    padding: 20px;
+  }
+
+  .iob-tour-card-title {
+    font-size: 15px;
+  }
+
+  .iob-tour-card-description {
+    font-size: 12px;
+  }
+
+  .iob-tour-btn {
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+}
+
+/* ── Reduced motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .iob-tour-card,
+  .iob-tour-overlay-darken,
+  .iob-tour-spotlight-border,
+  .iob-tour-card-content,
+  .iob-tour-card-success,
+  .iob-tour-card-helper {
+    animation: none !important;
+    transition: none !important;
+  }
+}

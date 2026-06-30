@@ -533,7 +533,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
             <button
               className="lib-filter-btn"
               onClick={() => setShowFilter((v) => !v)}
-            >
+             title="Filter">
               <Icon name="filter_list" size={18} />
               <span>Filter: {filterLabel}</span>
               <Icon name="arrow_drop_down" size={18} />
@@ -545,7 +545,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                     key={f}
                     className={`lib-filter-option${filter === f ? " is-active" : ""}`}
                     onClick={() => { setFilter(f); setShowFilter(false); }}
-                  >
+                   title="Images">
                     {f === "all" ? "All" : f === "image" ? "Images" : "Videos"}
                   </button>
                 ))}
@@ -568,7 +568,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
             // Always open file picker — per-file quota is enforced after file selection
             fileInputRef.current?.click();
           }}
-        >
+         title="Upload">
           <Icon name="add" size={20} />
           {pageUploading ? "Uploading..." : "Add Media"}
         </button>
@@ -589,7 +589,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
               <button className="lib-add-btn" onClick={() => {
                 // Always open file picker — per-file quota is enforced after file selection
                 fileInputRef.current?.click();
-              }}>
+              }} title="Add">
                 <Icon name="add" size={20} />
                 Add Media
               </button>
@@ -712,7 +712,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                     setPreviewItem(m);
                   }}
                   aria-label={`View ${m.name}`}
-                >
+                 title="Show">
                   <Icon name="visibility" size={16} />
                   View
                 </button>
@@ -724,7 +724,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                       e.stopPropagation();
                       setMenuOpenId(menuOpenId === m.id ? null : m.id);
                     }}
-                  >
+                   title="More options">
                     <Icon name="more_vert" size={20} />
                   </button>
                   {menuOpenId === m.id && (
@@ -737,7 +737,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                           setRenameValue(m.name);
                           setMenuOpenId(null);
                         }}
-                      >
+                       title="Edit">
                         <Icon name="edit" size={16} />
                         Rename
                       </button>
@@ -748,7 +748,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                           setDeleteConfirmId(m.id);
                           setMenuOpenId(null);
                         }}
-                      >
+                       title="Delete">
                         <Icon name="delete" size={16} />
                         Delete
                       </button>
@@ -776,8 +776,8 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
             <h3>Delete Media?</h3>
             <p>This media item will be permanently removed from your library.</p>
             <div className="lib-confirm-actions">
-              <button className="lib-confirm-cancel" onClick={() => setDeleteConfirmId(null)}>Cancel</button>
-              <button className="lib-confirm-delete" onClick={() => handleDelete(deleteConfirmId)}>Delete</button>
+              <button className="lib-confirm-cancel" onClick={() => setDeleteConfirmId(null)} title="Cancel">Cancel</button>
+              <button className="lib-confirm-delete" onClick={() => handleDelete(deleteConfirmId)} title="Delete">Delete</button>
             </div>
           </div>
         </div>
@@ -804,7 +804,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
             </p>
             <p>Upgrade your plan to upload more media.</p>
             <div className="lib-confirm-actions">
-              <button className="lib-confirm-cancel" onClick={() => setShowMediaLimitModal(false)}>Close</button>
+              <button className="lib-confirm-cancel" onClick={() => setShowMediaLimitModal(false)} title="Close">Close</button>
               <a href="https://makechurcheasy.creatorstudioslabs.stream/pricing" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
                 Upgrade Plan
               </a>
@@ -891,7 +891,7 @@ function MediaPreviewModal({ item, onClose }: { item: MediaItem; onClose: () => 
             <Icon name={item.type === "video" ? "movie" : "image"} size={20} />
             <span>{item.name}</span>
           </div>
-          <button className="lib-preview-close" onClick={onClose} aria-label="Close preview">
+          <button className="lib-preview-close" onClick={onClose} aria-label="Close preview" title="Close">
             <Icon name="close" size={20} />
           </button>
         </div>
@@ -1024,7 +1024,7 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
         {/* Header */}
         <div className="lib-add-modal-header">
           <h3>Add Media to Library</h3>
-          <button className="lib-modal-close-btn" onClick={onClose}>
+          <button className="lib-modal-close-btn" onClick={onClose} title="Close">
             <Icon name="close" size={20} />
           </button>
         </div>
@@ -1113,12 +1113,12 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
 
         {/* Footer */}
         <div className="lib-add-modal-footer">
-          <button className="lib-modal-cancel-btn" onClick={onClose}>Cancel</button>
+          <button className="lib-modal-cancel-btn" onClick={onClose} title="Cancel">Cancel</button>
           <button
             className="lib-modal-save-btn"
             disabled={!file || !fileName.trim() || saving}
             onClick={handleSave}
-          >
+           title="Save">
             {saving ? "Saving…" : "Save to Library"}
           </button>
         </div>

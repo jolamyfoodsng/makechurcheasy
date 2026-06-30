@@ -182,7 +182,7 @@ export default function DevDashboard() {
         </div>
 
         <div className="dev-db-header-actions">
-          <button className="dev-db-btn" onClick={loadData} disabled={loading}>
+          <button className="dev-db-btn" onClick={loadData} disabled={loading} title="Refresh">
             <Icon name={loading ? "sync" : "refresh"} size={20} />
             Refresh
           </button>
@@ -190,7 +190,7 @@ export default function DevDashboard() {
             className="dev-db-btn dev-db-btn--accent"
             onClick={handleMigrate}
             disabled={migrating}
-          >
+           title="Migrate Legacy DBs">
             <Icon name="move_down" size={20} />
             {migrating ? "Migrating…" : "Migrate Legacy DBs"}
           </button>
@@ -235,7 +235,7 @@ export default function DevDashboard() {
           <button
             className="dev-db-dismiss"
             onClick={() => setMigrationResult(null)}
-          >
+           title="Close">
             <Icon name="close" size={20} />
           </button>
         </div>
@@ -277,7 +277,7 @@ export default function DevDashboard() {
                         <button
                           className="dev-db-store-header"
                           onClick={() => toggleExpand(store.name)}
-                        >
+                         title="store.indexes.length 0 && ( idx: )">
                           <Icon name={isExpanded ? "expand_more" : "chevron_right"} size={20} className="dev-db-store-icon" />
                           <code className="dev-db-store-name">{store.name}</code>
                           <span className="dev-db-store-count">{store.count}</span>
@@ -297,7 +297,7 @@ export default function DevDashboard() {
                               <button
                                 className="dev-db-btn dev-db-btn--sm"
                                 onClick={() => toggleJsonView(store.name)}
-                              >
+                               title="table_chart">
                                 <Icon name={jsonView[store.name] ? "table_chart" : "data_object"} size={14} />
                                 {jsonView[store.name] ? "Table" : "JSON"}
                               </button>

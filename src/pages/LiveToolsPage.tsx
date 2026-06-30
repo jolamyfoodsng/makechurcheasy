@@ -205,7 +205,7 @@ export default function LiveToolsPage() {
               className="live-tools-clear-btn"
               disabled={sending !== null}
               onClick={() => void handleClear("preview")}
-            >
+             title="Clear">
               Clear Preview
             </button>
             <button
@@ -213,7 +213,7 @@ export default function LiveToolsPage() {
               className="live-tools-clear-btn live-tools-clear-btn--danger"
               disabled={sending !== null}
               onClick={() => void handleClear("all")}
-            >
+             title="Clear">
               Clear All
             </button>
           </div>
@@ -265,7 +265,7 @@ export default function LiveToolsPage() {
                           className="live-tool-btn live-tool-btn--preview"
                           disabled={disabled}
                           onClick={() => void handleSend(tool, "preview")}
-                        >
+                         title="Send">
                           {sending === previewKey ? "Sending..." : "Preview"}
                         </button>
                         <button
@@ -273,14 +273,14 @@ export default function LiveToolsPage() {
                           className="live-tool-btn live-tool-btn--program"
                           disabled={disabled}
                           onClick={() => void handleSend(tool, "program")}
-                        >
+                         title="Send">
                           {sending === programKey ? "Sending..." : "Program"}
                         </button>
                         <button
                           type="button"
                           className="live-tool-btn live-tool-btn--ghost"
                           onClick={() => openEditor(tool)}
-                        >
+                         title="Edit">
                           Edit
                         </button>
                       </div>
@@ -301,7 +301,7 @@ export default function LiveToolsPage() {
                 <p>Edit template</p>
                 <h2>{editing.label}</h2>
               </div>
-              <button type="button" className="live-tools-modal__close" onClick={closeEditor} aria-label="Close editor">
+              <button type="button" className="live-tools-modal__close" onClick={closeEditor} aria-label="Close editor" title="Close">
                 <Icon name="close" size={18} />
               </button>
             </div>
@@ -398,14 +398,14 @@ export default function LiveToolsPage() {
             </div>
 
             <div className="live-tools-modal__actions">
-              <button type="button" className="live-tools-clear-btn" onClick={() => void handleReset()}>
+              <button type="button" className="live-tools-clear-btn" onClick={() => void handleReset()} title="Reset">
                 Reset to Default
               </button>
               <div className="live-tools-modal__action-group">
-                <button type="button" className="live-tool-btn live-tool-btn--ghost" onClick={closeEditor}>
+                <button type="button" className="live-tool-btn live-tool-btn--ghost" onClick={closeEditor} title="Cancel">
                   Cancel
                 </button>
-                <button type="button" className="live-tool-btn live-tool-btn--program" onClick={() => void handleSave()}>
+                <button type="button" className="live-tool-btn live-tool-btn--program" onClick={() => void handleSave()} title="Save">
                   Save
                 </button>
               </div>

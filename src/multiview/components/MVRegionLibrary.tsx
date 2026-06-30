@@ -608,22 +608,22 @@ export function MVRegionLibrary() {
       {/* ── Sidebar Tabs ── */}
       <div className="mv-sidebar-tabs">
         <button className={`mv-sidebar-tab ${activeTab === "main" ? "mv-sidebar-tab--active" : ""}`}
-          onClick={() => setActiveTab("main")}>
+          onClick={() => setActiveTab("main")} title="Main">
           <Icon name="dashboard" size={20} />
           Main
         </button>
         <button className={`mv-sidebar-tab ${activeTab === "templates" ? "mv-sidebar-tab--active" : ""}`}
-          onClick={() => setActiveTab("templates")}>
+          onClick={() => setActiveTab("templates")} title="Grid view">
           <Icon name="grid_view" size={20} />
           Templates
         </button>
         <button className={`mv-sidebar-tab ${activeTab === "logos" ? "mv-sidebar-tab--active" : ""}`}
-          onClick={() => setActiveTab("logos")}>
+          onClick={() => setActiveTab("logos")} title="Logos">
           <Icon name="branding_watermark" size={20} />
           Logos
         </button>
         <button className={`mv-sidebar-tab ${activeTab === "media" ? "mv-sidebar-tab--active" : ""}`}
-          onClick={() => setActiveTab("media")}>
+          onClick={() => setActiveTab("media")} title="Media">
           <Icon name="perm_media" size={20} />
           Media
         </button>
@@ -814,7 +814,7 @@ export function MVRegionLibrary() {
                     {background?.type === "color" ? (background.color ?? "#0a0a14") : bgLabel}
                   </span>
                 </div>
-                <button className="mv-btn mv-btn--sm mv-btn--outline mv-bg-change-btn" onClick={() => setShowBgModal(true)}>
+                <button className="mv-btn mv-btn--sm mv-btn--outline mv-bg-change-btn" onClick={() => setShowBgModal(true)} title="Change">
                   Change
                 </button>
               </div>
@@ -1005,11 +1005,11 @@ export function MVRegionLibrary() {
               {/* Sub-tabs: Templates | Past Layouts */}
               <div className="mv-tpl-sub-tabs">
                 <button className={`mv-tpl-sub-tab ${tplSubTab === "templates" ? "mv-tpl-sub-tab--active" : ""}`}
-                  onClick={() => setTplSubTab("templates")}>
+                  onClick={() => setTplSubTab("templates")} title="Templates )`">
                   Templates{filteredTemplates.length > 0 && ` (${filteredTemplates.length})`}
                 </button>
                 <button className={`mv-tpl-sub-tab ${tplSubTab === "layouts" ? "mv-tpl-sub-tab--active" : ""}`}
-                  onClick={() => setTplSubTab("layouts")}>
+                  onClick={() => setTplSubTab("layouts")} title="My Layouts )`">
                   My Layouts{filteredLayouts.length > 0 && ` (${filteredLayouts.length})`}
                 </button>
               </div>
@@ -1036,7 +1036,7 @@ export function MVRegionLibrary() {
                               name: tpl.name,
                               icon: tpl.icon,
                             });
-                          }}>
+                          }} title="slots">
                           <Icon name={tpl.icon} size={20} className="mv-tpl-list-item-icon" />
                           <div className="mv-tpl-list-item-info">
                             <span className="mv-tpl-list-item-name">{tpl.name}</span>
@@ -1173,12 +1173,12 @@ export function MVRegionLibrary() {
                           {/* Replace / Remove */}
                           <div className="mv-logo-edit-row" style={{ justifyContent: "flex-end", gap: 4 }}>
                             <button className="mv-btn mv-btn--sm mv-btn--outline"
-                              onClick={() => { setUploadTargetLogoId(lr.id); logoFileInputRef.current?.click(); }}>
+                              onClick={() => { setUploadTargetLogoId(lr.id); logoFileInputRef.current?.click(); }} title="Replace">
                               <Icon name="upload_file" size={14} /> Replace
                             </button>
                             {lrSrc && (
                               <button className="mv-btn mv-btn--sm mv-btn--ghost"
-                                onClick={() => updateRegion(lr.id, { src: "", filePath: undefined } as Partial<Region>)}>
+                                onClick={() => updateRegion(lr.id, { src: "", filePath: undefined } as Partial<Region>)} title="Delete">
                                 <Icon name="delete" size={14} />
                               </button>
                             )}
@@ -1195,7 +1195,7 @@ export function MVRegionLibrary() {
                 <p style={{ marginTop: 8, color: "var(--text-muted, #888)", fontSize: 12 }}>
                   No logo regions in this layout. Choose a logo overlay template from the Templates tab.
                 </p>
-                <button className="mv-btn mv-btn--sm mv-btn--outline" onClick={() => setActiveTab("templates")}>
+                <button className="mv-btn mv-btn--sm mv-btn--outline" onClick={() => setActiveTab("templates")} title="Browse">
                   <Icon name="grid_view" size={14} /> Browse Templates
                 </button>
               </div>
@@ -1343,26 +1343,26 @@ export function MVRegionLibrary() {
           <div className="mv-popover-header">
             <Icon name="playlist_add" size={14} />
             <span>Assign to Slot</span>
-            <button className="mv-popover-close" onClick={() => setSlotPopover(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+            <button className="mv-popover-close" onClick={() => setSlotPopover(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", padding: 2 }} title="Close">
               <Icon name="close" size={14} style={{ color: "rgba(255, 255, 255, 0.5)" }} />
             </button>
           </div>
           {/* Tabs */}
           <div className="mv-popover-tabs">
             <button className={`mv-popover-tab ${slotPopoverTab === "scenes" ? "mv-popover-tab--active" : ""}`}
-              onClick={() => setSlotPopoverTab("scenes")}>
+              onClick={() => setSlotPopoverTab("scenes")} title="Scenes">
               <Icon name="videocam" size={13} /> Scenes
             </button>
             <button className={`mv-popover-tab ${slotPopoverTab === "bible" ? "mv-popover-tab--active" : ""}`}
-              onClick={() => setSlotPopoverTab("bible")}>
+              onClick={() => setSlotPopoverTab("bible")} title="Book">
               <Icon name="menu_book" size={13} /> Bible
             </button>
             <button className={`mv-popover-tab ${slotPopoverTab === "worship" ? "mv-popover-tab--active" : ""}`}
-              onClick={() => setSlotPopoverTab("worship")}>
+              onClick={() => setSlotPopoverTab("worship")} title="Music">
               <Icon name="music_note" size={13} /> Worship
             </button>
             <button className={`mv-popover-tab ${slotPopoverTab === "lower-third" ? "mv-popover-tab--active" : ""}`}
-              onClick={() => setSlotPopoverTab("lower-third")}>
+              onClick={() => setSlotPopoverTab("lower-third")} title="Subtitles">
               <Icon name="subtitles" size={13} /> LT
             </button>
           </div>
@@ -1376,7 +1376,7 @@ export function MVRegionLibrary() {
                     onClick={() => {
                       assignSceneToRegion(slotPopover.regionId, scene.sceneName, scene.sceneIndex);
                       setSlotPopover(null);
-                    }}>
+                    }} title="videocam">
                     <Icon name="videocam" size={14} />
                     <span>{scene.sceneName}</span>
                   </button>
@@ -1403,7 +1403,7 @@ export function MVRegionLibrary() {
                       fontOverrides: undefined,
                     } as any);
                     setSlotPopover(null);
-                  }}>
+                  }} title="Aa">
                   <span style={{ width: 20, height: 20, borderRadius: 4, background: theme.settings.backgroundColor, color: theme.settings.fontColor, fontSize: 8, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>Aa</span>
                   <span>{theme.name}</span>
                 </button>
@@ -1421,7 +1421,7 @@ export function MVRegionLibrary() {
                           fontOverrides: undefined,
                         } as any);
                         setSlotPopover(null);
-                      }}>
+                      }} title="Aa">
                       <span style={{ width: 20, height: 20, borderRadius: 4, background: theme.settings.backgroundColor, color: theme.settings.fontColor, fontSize: 8, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>Aa</span>
                       <span>{theme.name}</span>
                     </button>
@@ -1444,7 +1444,7 @@ export function MVRegionLibrary() {
                       fontOverrides: undefined,
                     } as any);
                     setSlotPopover(null);
-                  }}>
+                  }} title="Aa">
                   <span style={{ width: 20, height: 20, borderRadius: 4, background: theme.settings.backgroundColor, color: theme.settings.fontColor, fontSize: 8, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>Aa</span>
                   <span>{theme.name}</span>
                 </button>
@@ -1477,7 +1477,7 @@ export function MVRegionLibrary() {
                           fontOverrides: undefined,
                         } as any);
                         setSlotPopover(null);
-                      }}>
+                      }} title="inline-flex">
                       <span style={{ width: 20, height: 20, borderRadius: 4, background: theme.accentColor || "#333", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <Icon name={theme.icon || "subtitles"} size={12} style={{ color: "#fff" }} />
                       </span>
@@ -1500,18 +1500,18 @@ export function MVRegionLibrary() {
                 <Icon name="wallpaper" size={24} style={{ color: "var(--primary)" }} />
                 <h3 className="mv-modal-title" style={{ margin: 0 }}>Background Selector</h3>
               </div>
-              <button className="mv-modal-close" onClick={() => setShowBgModal(false)}>
+              <button className="mv-modal-close" onClick={() => setShowBgModal(false)} title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
 
             <nav className="mv-modal-tabs">
               <button className={`mv-modal-tab ${bgModalTab === "upload" ? "mv-modal-tab--active" : ""}`}
-                onClick={() => setBgModalTab("upload")}>Upload</button>
+                onClick={() => setBgModalTab("upload")} title="Upload">Upload</button>
               <button className={`mv-modal-tab ${bgModalTab === "color" ? "mv-modal-tab--active" : ""}`}
-                onClick={() => setBgModalTab("color")}>Color</button>
+                onClick={() => setBgModalTab("color")} title="Color">Color</button>
               <button className={`mv-modal-tab ${bgModalTab === "library" ? "mv-modal-tab--active" : ""}`}
-                onClick={() => setBgModalTab("library")}>Library</button>
+                onClick={() => setBgModalTab("library")} title="Library">Library</button>
             </nav>
 
             <div className="mv-modal-body">
@@ -1573,11 +1573,11 @@ export function MVRegionLibrary() {
               {bgModalTab === "library" && (
                 <div className="mv-bg-library">
                   <div className="mv-bg-library-filters">
-                    <button className="mv-bg-filter-chip mv-bg-filter-chip--active">All</button>
-                    <button className="mv-bg-filter-chip">Abstract</button>
-                    <button className="mv-bg-filter-chip">Texture</button>
-                    <button className="mv-bg-filter-chip">Worship</button>
-                    <button className="mv-bg-filter-chip">Nature</button>
+                    <button className="mv-bg-filter-chip mv-bg-filter-chip--active" title="All">All</button>
+                    <button className="mv-bg-filter-chip" title="Abstract">Abstract</button>
+                    <button className="mv-bg-filter-chip" title="Texture">Texture</button>
+                    <button className="mv-bg-filter-chip" title="Worship">Worship</button>
+                    <button className="mv-bg-filter-chip" title="Nature">Nature</button>
                   </div>
                   <div className="mv-bg-library-empty">
                     <Icon name="photo_library" size={40} style={{ opacity: 0.2 }} />
@@ -1592,8 +1592,8 @@ export function MVRegionLibrary() {
                 Current: <strong>{bgLabel}</strong>
               </div>
               <div className="mv-modal-actions">
-                <button className="mv-btn mv-btn--ghost" onClick={() => setShowBgModal(false)}>Cancel</button>
-                <button className="mv-btn mv-btn--primary" onClick={() => setShowBgModal(false)}>
+                <button className="mv-btn mv-btn--ghost" onClick={() => setShowBgModal(false)} title="Cancel">Cancel</button>
+                <button className="mv-btn mv-btn--primary" onClick={() => setShowBgModal(false)} title="Done">
                   <Icon name="check" size={16} />
                   Done
                 </button>
@@ -1612,7 +1612,7 @@ export function MVRegionLibrary() {
                 <Icon name="add_photo_alternate" size={24} style={{ color: "var(--primary)" }} />
                 <h3 className="mv-modal-title" style={{ margin: 0 }}>Logo Overlays{logoRegions.length > 0 ? ` (${logoRegions.length})` : ""}</h3>
               </div>
-              <button className="mv-modal-close" onClick={() => setShowLogoModal(false)}>
+              <button className="mv-modal-close" onClick={() => setShowLogoModal(false)} title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -1694,7 +1694,7 @@ export function MVRegionLibrary() {
                 {logoRegions.length} logo region{logoRegions.length !== 1 ? "s" : ""}
               </div>
               <div className="mv-modal-actions">
-                <button className="mv-btn mv-btn--ghost" onClick={() => setShowLogoModal(false)}>Close</button>
+                <button className="mv-btn mv-btn--ghost" onClick={() => setShowLogoModal(false)} title="Close">Close</button>
               </div>
             </div>
           </div>
@@ -1721,7 +1721,7 @@ export function MVRegionLibrary() {
                     <strong>Cannot delete the live/program scene.</strong> Switch to a different scene in OBS first.
                   </p>
                   <div className="mv-modal-actions">
-                    <button className="mv-btn mv-btn--ghost" onClick={() => setShowSceneDeleteModal(false)}>OK</button>
+                    <button className="mv-btn mv-btn--ghost" onClick={() => setShowSceneDeleteModal(false)} title="OK">OK</button>
                   </div>
                 </>
               ) : (
@@ -1748,7 +1748,7 @@ export function MVRegionLibrary() {
                     </p>
                   )}
                   <div className="mv-modal-actions">
-                    <button className="mv-btn mv-btn--ghost" onClick={() => setShowSceneDeleteModal(false)}>Cancel</button>
+                    <button className="mv-btn mv-btn--ghost" onClick={() => setShowSceneDeleteModal(false)} title="Cancel">Cancel</button>
                     <button className="mv-btn mv-btn--danger" disabled={deletingScenes}
                       onClick={async () => {
                         setDeletingScenes(true);
@@ -1801,12 +1801,12 @@ export function MVRegionLibrary() {
               Would you like to remove it from this slot or substitute it with another source?
             </p>
             <div className="mv-modal-actions">
-              <button className="mv-btn mv-btn--ghost" onClick={() => setMissingScene(null)}>Dismiss</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setMissingScene(null)} title="Dismiss">Dismiss</button>
               <button className="mv-btn mv-btn--danger"
                 onClick={() => {
                   unassignSceneFromRegion(missingScene.regionId);
                   setMissingScene(null);
-                }}>
+                }} title="Remove">
                 <Icon name="delete" size={16} />
                 Remove
               </button>
@@ -1815,7 +1815,7 @@ export function MVRegionLibrary() {
                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                   setSubstitutePopover({ regionId: missingScene.regionId, x: rect.left, y: rect.bottom + 4 });
                   setMissingScene(null);
-                }}>
+                }} title="Swap">
                 <Icon name="swap_horiz" size={16} />
                 Substitute
               </button>
@@ -1839,7 +1839,7 @@ export function MVRegionLibrary() {
                   onClick={() => {
                     assignSceneToRegion(substitutePopover.regionId, scene.sceneName, scene.sceneIndex);
                     setSubstitutePopover(null);
-                  }}>
+                  }} title="videocam">
                   <Icon name="videocam" size={14} />
                   <span>{scene.sceneName}</span>
                 </button>
@@ -1897,13 +1897,13 @@ export function MVRegionLibrary() {
               return null;
             })()}
             <div className="mv-modal-actions">
-              <button className="mv-btn mv-btn--ghost" onClick={() => setPendingTemplate(null)}>Cancel</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setPendingTemplate(null)} title="Cancel">Cancel</button>
               {regions.some((r) => r.type === "obs-scene" && !!(r as OBSSceneRegion).sceneName) && (
-                <button className="mv-btn mv-btn--outline" onClick={() => applyPendingTemplate(false)}>
+                <button className="mv-btn mv-btn--outline" onClick={() => applyPendingTemplate(false)} title="Apply">
                   Apply Without Scenes
                 </button>
               )}
-              <button className="mv-btn mv-btn--primary" onClick={() => applyPendingTemplate(true)}>
+              <button className="mv-btn mv-btn--primary" onClick={() => applyPendingTemplate(true)} title="Apply">
                 <Icon name="auto_fix_high" size={16} />
                 {regions.some((r) => r.type === "obs-scene" && !!(r as OBSSceneRegion).sceneName)
                   ? "Apply & Keep Scenes"
@@ -1938,7 +1938,7 @@ export function MVRegionLibrary() {
               <button className="mv-btn mv-btn--primary" onClick={() => {
                 setShowOverflowModal(false);
                 setOverflowScenes([]);
-              }}>
+              }} title="Got it">
                 Got it
               </button>
             </div>

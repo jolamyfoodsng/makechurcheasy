@@ -37,7 +37,7 @@ export function TransitionPanel({ onError, onSuccess }: Props) {
 
     // Load current transition from OBS on mount
     useEffect(() => {
-        getCurrentTransition().then(setConfig).catch(() => {});
+        getCurrentTransition().then(setConfig).catch(() => { });
     }, []);
 
     const handleApply = useCallback(
@@ -104,6 +104,7 @@ export function TransitionPanel({ onError, onSuccess }: Props) {
                                 className={`duration-btn ${config.durationMs === preset.value ? "duration-btn-active" : ""}`}
                                 onClick={() => handleDurationChange(preset.value)}
                                 disabled={applying}
+                                title={`Set duration to ${preset.label}`}
                             >
                                 {preset.label}
                             </button>

@@ -73,7 +73,7 @@ function ThemePickerModal({
             <Icon name="subtitles" size={18} style={{ verticalAlign: "middle", marginRight: 6 }} />
             Choose a Lower Third Theme
           </h3>
-          <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={onClose}>
+          <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={onClose} title="Close">
             <Icon name="close" size={18} />
           </button>
         </div>
@@ -292,7 +292,7 @@ export function LowerThirdPanel() {
             <button
               className="lt-btn lt-btn--secondary lt-btn--sm"
               onClick={(e) => { e.stopPropagation(); setShowPicker(true); }}
-            >
+             title="Change">
               Change
             </button>
           </div>
@@ -301,7 +301,7 @@ export function LowerThirdPanel() {
             className="lt-btn lt-btn--secondary"
             onClick={() => setShowPicker(true)}
             style={{ width: "100%" }}
-          >
+           title="Select">
             <Icon name="palette" size={16} />
             Select Theme
           </button>
@@ -343,7 +343,7 @@ export function LowerThirdPanel() {
               className="lt-btn lt-btn--primary"
               disabled={state.isSending}
               onClick={sendToAll}
-            >
+             title="Send">
               <Icon name="send" size={16} />
               {state.isSending ? "Sending..." : "Send to All Lower Thirds"}
             </button>
@@ -377,7 +377,7 @@ export function LowerThirdPanel() {
                 className="lt-btn lt-btn--secondary lt-btn--sm"
                 disabled={!sendTarget || state.isSending}
                 onClick={handleSendToSpecific}
-              >
+               title="Send">
                 <Icon name="send" size={14} />
                 Send
               </button>
@@ -391,7 +391,7 @@ export function LowerThirdPanel() {
                 className="lt-btn lt-btn--secondary lt-btn--sm"
                 disabled={state.isSending}
                 onClick={blankAll}
-              >
+               title="Hide">
                 <Icon name="visibility_off" size={14} />
                 Blank All
               </button>
@@ -399,7 +399,7 @@ export function LowerThirdPanel() {
                 className="lt-btn lt-btn--danger lt-btn--sm"
                 disabled={state.isSending}
                 onClick={clearAll}
-              >
+               title="Clear">
                 <Icon name="delete_outline" size={14} />
                 Clear All
               </button>
@@ -459,7 +459,7 @@ export function LowerThirdPanel() {
               style={{ marginTop: 6, width: "100%" }}
               onClick={refreshSources}
               disabled={state.isRefreshing}
-            >
+             title="Refresh">
               <Icon name="refresh" size={14} />
               Refresh Sources
             </button>

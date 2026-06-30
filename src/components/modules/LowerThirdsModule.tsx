@@ -381,7 +381,7 @@ function ListVariableInput({
           style={{ width: "auto", padding: "4px 8px", fontSize: 10 }}
           onClick={addItem}
           disabled={!draft.trim()}
-        >
+          title="Add">
           Add
         </button>
       </div>
@@ -1358,7 +1358,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                   key={p.id}
                   className={"lt-page-card" + (isActive ? " lt-page-card--active" : "")}
                   onClick={() => setSelectedPresetId(p.id)}
-                >
+                  title="Delete">
                   <div
                     className="lt-page-card-preview"
                     style={{ background: cat?.color ?? matchedTheme?.accentColor ?? "#444" }}
@@ -1426,7 +1426,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                 <button
                   className="lt-version-panel-close"
                   onClick={() => { setShowVersionPanel(false); setPreviewingSnapshotId(null); }}
-                >
+                  title="Close">
                   <Icon name="close" size={16} />
                 </button>
               </div>
@@ -1465,7 +1465,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                             <button
                               className="lt-version-restore-btn"
                               onClick={(e) => { e.stopPropagation(); handleRestoreVersion(snap); }}
-                            >
+                              title="Restore">
                               Restore
                             </button>
                             <button
@@ -1487,7 +1487,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                   <button
                     className="lt-version-clear-btn"
                     onClick={() => ltVersionHistory.clearForPreset(selectedPresetId || "current")}
-                  >
+                    title="Clear">
                     Clear History
                   </button>
                 </div>
@@ -1649,7 +1649,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                       </button>
                     </div>
 
-                    <button className="lt-page-form-reset" onClick={resetValues}>
+                    <button className="lt-page-form-reset" onClick={resetValues} title="Reset">
                       <Icon name="restart_alt" size={12} />
                       Reset
                     </button>
@@ -1709,7 +1709,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                                     type="button"
                                     className="lt-page-slider-reset"
                                     onClick={() => setCustomStyle({ logoScale: LT_DEFAULT_CUSTOM_STYLE.logoScale })}
-                                  >
+                                    title="Reset">
                                     Reset
                                   </button>
                                 )}
@@ -1762,7 +1762,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                                     type="button"
                                     className="lt-page-slider-reset"
                                     onClick={() => setCustomStyle({ logoScale: LT_DEFAULT_CUSTOM_STYLE.logoScale })}
-                                  >
+                                    title="Reset">
                                     Reset
                                   </button>
                                 )}
@@ -1809,7 +1809,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                                 key={t.id}
                                 className={`lt-page-theme-option${selected ? " active" : ""}`}
                                 onClick={() => handleThemeSelectFromDropdown(t.id)}
-                              >
+                                title="Confirm">
                                 <div
                                   className="lt-page-theme-option-thumb"
                                   style={{ background: `linear-gradient(135deg, ${t.accentColor || "#4ADE80"} 0%, #111827 100%)` }}
@@ -1857,6 +1857,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                               className={`lt-duration-chip${durationConfig.durationSeconds === s && !durationConfig.isPinned ? " lt-duration-chip--active" : ""}`}
                               onClick={() => handleDurationChange(s)}
                               disabled={durationConfig.useDefaults}
+                              title={`${s}s`}
                             >
                               {s}s
                             </button>
@@ -1953,7 +1954,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                   className="lt-page-btn lt-page-btn--primary"
                   onClick={handleSendAll}
                   disabled={!theme || state.isSending || !obsService.isConnected}
-                >
+                  title="Update">
                   {state.isSending ? (
                     <>
                       <span className="lt-spinner" />
@@ -2039,7 +2040,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                 <Icon name="add_circle" size={18} style={{ color: "#C8102E" }} />
                 Add New Preset
               </h3>
-              <button className="lt-modal-close" onClick={() => setShowPresetPicker(false)}>
+              <button className="lt-modal-close" onClick={() => setShowPresetPicker(false)} title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -2055,7 +2056,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                     style={{ "--tile-color": cat.color } as React.CSSProperties}
                     onClick={() => handlePickCategory(cat.id)}
                     type="button"
-                  >
+                    title="lt-preset-picker-tile-label">
                     <div className="lt-preset-picker-tile-icon" style={{ background: cat.color }}>
                       <Icon name={cat.icon} size={22} style={{ color: "#fff" }} />
                     </div>
@@ -2088,7 +2089,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                   style={{ width: "auto", padding: "6px 12px", fontSize: 11 }}
                   onClick={handleAddPreset}
                   disabled={!newPresetLabel.trim()}
-                >
+                  title="Create">
                   Create
                 </button>
               </div>

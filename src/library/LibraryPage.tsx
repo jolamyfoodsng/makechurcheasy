@@ -64,14 +64,14 @@ export default function LibraryPage({ songsOnly = false }: Props) {
             <button
               className={`lib-tab-btn${tab === "media" ? " is-active" : ""}`}
               onClick={() => handleTab("media")}
-            >
+             title="Image">
               <Icon name="image" size={18} />
               Media
             </button>
             <button
               className={`lib-tab-btn${tab === "songs" ? " is-active" : ""}`}
               onClick={() => handleTab("songs")}
-            >
+             title="Music">
               <Icon name="music_note" size={18} />
               Songs
             </button>

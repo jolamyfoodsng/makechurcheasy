@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { HashRouter } from "react-router-dom";
+import "./fonts.css";
+import "./i18n";
 import App from "./App";
 import { LayoutStoreProvider } from "./hooks/useLayoutStore";
 import { AuthProvider } from "./contexts/AuthContext";

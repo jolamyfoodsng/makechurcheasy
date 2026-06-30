@@ -1778,6 +1778,7 @@ export function BibleModule({
               <button
                 className={`bible-utility-tab${activeUtilityTab === "favorites" ? " active" : ""}`}
                 onClick={() => toggleUtilityTab("favorites")}
+                title="Favorites"
               >
                 <Icon name="star" size={20} />
                 Favorites
@@ -1788,7 +1789,7 @@ export function BibleModule({
               <button
                 className={`bible-utility-tab${activeUtilityTab === "history" ? " active" : ""}`}
                 onClick={() => toggleUtilityTab("history")}
-              >
+                title="History">
                 <Icon name="history" size={20} />
                 History
                 {state.history.length > 0 && (
@@ -1798,7 +1799,7 @@ export function BibleModule({
               <button
                 className={`bible-utility-tab${activeUtilityTab === "search" || showCommandPalette ? " active" : ""}`}
                 onClick={() => openCommandPalette("")}
-              >
+                title="Search">
                 <Icon name="search" size={20} />
                 Search
               </button>
@@ -1845,7 +1846,7 @@ export function BibleModule({
               <div className="bible-utility-dropdown-header">
                 <span className="bible-utility-dropdown-title">History</span>
                 {state.history.length > 0 && (
-                  <button className="bible-utility-dropdown-action" onClick={handleClearHistory}>
+                  <button className="bible-utility-dropdown-action" onClick={handleClearHistory} title="Clear">
                     Clear All
                   </button>
                 )}
@@ -1920,7 +1921,7 @@ export function BibleModule({
                           setActiveUtilityTab("none");
                           sendVerseToObs(ref.book, chapter, verse);
                         }}
-                      >
+                        title="Go forward">
                         <Icon name="arrow_forward" size={14} />
                         {ref.label}
                       </button>
@@ -2018,14 +2019,14 @@ export function BibleModule({
               <button
                 className={`bible-layout-mode-btn${layoutMode === "fullscreen" ? " active" : ""}`}
                 onClick={() => handleLayoutClick("fullscreen")}
-              >
+                title="Fullscreen">
                 <Icon name="fullscreen" size={20} />
                 Full
               </button>
               <button
                 className={`bible-layout-mode-btn${layoutMode === "lower-third" ? " active" : ""}`}
                 onClick={() => handleLayoutClick("lower-third")}
-              >
+                title="Subtitles">
                 <Icon name="subtitles" size={20} />
                 Lower
               </button>
@@ -2183,7 +2184,7 @@ export function BibleModule({
             <div className="bible-modal-header">
               <Icon name={layoutMode === "lower-third" ? "subtitles" : "palette"} size={20} />
               <h3>{layoutMode === "lower-third" ? "Choose Lower Third Theme" : "Choose Theme"}</h3>
-              <button className="bible-modal-close" onClick={() => setShowThemeModal(false)}>
+              <button className="bible-modal-close" onClick={() => setShowThemeModal(false)} title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -2272,13 +2273,13 @@ export function BibleModule({
               )}
             </div>
             <div className="bible-modal-footer">
-              <button type="button" className="bible-modal-secondary" onClick={() => openThemeTemplates({ createNew: true })}>
+              <button type="button" className="bible-modal-secondary" onClick={() => openThemeTemplates({ createNew: true })} title="Create">
                 Create Theme
               </button>
-              <button type="button" className="bible-modal-secondary" onClick={() => openThemeTemplates()}>
+              <button type="button" className="bible-modal-secondary" onClick={() => openThemeTemplates()} title="Manage Themes">
                 Manage Themes
               </button>
-              <button type="button" className="bible-modal-done" onClick={() => setShowThemeModal(false)}>
+              <button type="button" className="bible-modal-done" onClick={() => setShowThemeModal(false)} title="Done">
                 Done
               </button>
             </div>
@@ -2294,14 +2295,14 @@ export function BibleModule({
               <button
                 className="bible-theme-context-item"
                 onClick={() => handleThemeEdit(themeContextMenu.themeId)}
-              >
+                title="Edit">
                 <Icon name="edit" size={20} />
                 Edit Theme
               </button>
               <button
                 className="bible-theme-context-item"
                 onClick={() => handleThemeToggleHidden(themeContextMenu.themeId)}
-              >
+                title="Hide">
                 <Icon name="visibility_off" size={20} />
                 Hide Theme
               </button>
@@ -2317,7 +2318,7 @@ export function BibleModule({
             <div className="bible-modal-header">
               <Icon name="view_quilt" size={20} />
               <h3>Change Layout</h3>
-              <button className="bible-modal-close" onClick={cancelLayoutChange}>
+              <button className="bible-modal-close" onClick={cancelLayoutChange} title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -2341,10 +2342,10 @@ export function BibleModule({
               </label>
             </div>
             <div className="bible-modal-footer">
-              <button className="bible-modal-done" onClick={cancelLayoutChange} style={{ background: "var(--b-tile)" }}>
+              <button className="bible-modal-done" onClick={cancelLayoutChange} style={{ background: "var(--b-tile)" }} title="Cancel">
                 Cancel
               </button>
-              <button className="bible-modal-done" onClick={confirmLayoutChange}>
+              <button className="bible-modal-done" onClick={confirmLayoutChange} title="Continue">
                 Yes, Continue
               </button>
             </div>
@@ -2359,7 +2360,7 @@ export function BibleModule({
             <div className="bible-modal-header">
               <Icon name="bolt" size={20} />
               <h3>Quick Service Setup</h3>
-              <button className="bible-modal-close" onClick={() => setShowQuickSetup(false)}>
+              <button className="bible-modal-close" onClick={() => setShowQuickSetup(false)} title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -2369,7 +2370,7 @@ export function BibleModule({
                 <div className="bible-setup-step-content">
                   <h4>OBS Scene</h4>
                   <p>Browser source will be created automatically</p>
-                  <button className="bible-setup-action" onClick={handleSetupObs}>
+                  <button className="bible-setup-action" onClick={handleSetupObs} title="Create">
                     <Icon name="add_circle" size={20} />
                     Create Bible Overlay in OBS
                   </button>
@@ -2380,7 +2381,7 @@ export function BibleModule({
                 <div className="bible-setup-step-content">
                   <h4>Theme</h4>
                   <p>Choose a visual theme for your overlay</p>
-                  <button type="button" className="bible-setup-action" onClick={() => openThemeTemplates()}>
+                  <button type="button" className="bible-setup-action" onClick={() => openThemeTemplates()} title="Select">
                     <Icon name="palette" size={20} />
                     Select Theme
                   </button>
@@ -2395,7 +2396,7 @@ export function BibleModule({
               </div>
             </div>
             <div className="bible-modal-footer">
-              <button className="bible-modal-done" onClick={() => setShowQuickSetup(false)}>
+              <button className="bible-modal-done" onClick={() => setShowQuickSetup(false)} title="Done">
                 Done
               </button>
             </div>

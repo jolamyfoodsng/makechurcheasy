@@ -1201,7 +1201,7 @@ export function SpeakerModule({
       <aside className="speaker-module-sidebar">
         <div className="speaker-module-sidebar-head">
           <span className="speaker-module-sidebar-title">Quick Select</span>
-          <button type="button" className="speaker-module-mini-btn" onClick={handleOpenAddPreset}>
+          <button type="button" className="speaker-module-mini-btn" onClick={handleOpenAddPreset} title="Add">
             <Icon name="add" size={14} />
           </button>
         </div>
@@ -1335,7 +1335,7 @@ export function SpeakerModule({
                         setMinistry("");
                         setTitleLabel("");
                       }}
-                    >
+                      title="Reset">
                       <Icon name="restart_alt" size={12} />
                       Reset
                     </button>
@@ -1485,6 +1485,7 @@ export function SpeakerModule({
                             className={`lt-duration-chip${spkDurationConfig.durationSeconds === s && !spkDurationConfig.isPinned ? " lt-duration-chip--active" : ""}`}
                             onClick={() => handleSpkDurationChange(s)}
                             disabled={spkDurationConfig.useDefaults}
+                            title={`${s}s`}
                           >
                             {s}s
                           </button>
@@ -1533,7 +1534,7 @@ export function SpeakerModule({
                       className="lt-duration-header"
                       style={{ background: "none", border: "none", cursor: "pointer", width: "100%", display: "flex", alignItems: "center", gap: 6, padding: 0, color: "inherit" }}
                       onClick={() => setDisplaySettingsOpen(!displaySettingsOpen)}
-                    >
+                      title="Settings">
                       <Icon name="tune" size={14} />
                       <h4 style={{ margin: 0, flex: 1, textAlign: "left" }}>Display Settings</h4>
                       <Icon name={displaySettingsOpen ? "expand_less" : "expand_more"} size={16} />
@@ -1548,6 +1549,7 @@ export function SpeakerModule({
                                 key={size}
                                 className={`lt-duration-chip${ltSize === size ? " lt-duration-chip--active" : ""}`}
                                 onClick={() => setLtSize(size)}
+                                title={`Size ${size.toUpperCase()}`}
                               >
                                 {size.toUpperCase()}
                               </button>
@@ -1562,6 +1564,7 @@ export function SpeakerModule({
                                 key={fs}
                                 className={`lt-duration-chip${ltFontSize === fs ? " lt-duration-chip--active" : ""}`}
                                 onClick={() => setLtFontSize(fs)}
+                                title={`Font size ${fs.toUpperCase()}`}
                               >
                                 {fs.toUpperCase()}
                               </button>
@@ -1628,7 +1631,7 @@ export function SpeakerModule({
               className={`speaker-module-btn speaker-module-btn--visibility ${speakerVisible ? "is-visible" : "is-hidden"}`}
               onClick={handleToggleVisibility}
               disabled={!selectedTheme || isSending || !obsConnected}
-            >
+              title="visibility_off">
               <Icon name={speakerVisible ? "visibility" : "visibility_off"} size={15} />
               {speakerVisible ? "Hide" : "Show"}
             </button>
@@ -1701,7 +1704,7 @@ export function SpeakerModule({
                 className="speaker-module-modal-close"
                 onClick={() => setShowAddPresetModal(false)}
                 aria-label="Close add preset"
-              >
+                title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -1748,10 +1751,10 @@ export function SpeakerModule({
             </div>
 
             <div className="speaker-module-modal-foot">
-              <button type="button" className="speaker-module-btn" onClick={() => setShowAddPresetModal(false)}>
+              <button type="button" className="speaker-module-btn" onClick={() => setShowAddPresetModal(false)} title="Cancel">
                 Cancel
               </button>
-              <button type="button" className="speaker-module-btn live" onClick={handleSaveNewPreset}>
+              <button type="button" className="speaker-module-btn live" onClick={handleSaveNewPreset} title="Save">
                 Save Preset
               </button>
             </div>

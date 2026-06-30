@@ -117,7 +117,7 @@ export default function BibleTemplatesPage() {
   return (
     <div className={rootClassName}>
       <div className="bible-templates-header">
-        <button type="button" className="bible-templates-back-btn" onClick={handleCancel}>
+        <button type="button" className="bible-templates-back-btn" onClick={handleCancel} title="Go back">
           <Icon name="arrow_back" size={20} />
           Back
         </button>
@@ -126,7 +126,7 @@ export default function BibleTemplatesPage() {
           type="button"
           className="bible-templates-create-btn"
           onClick={() => setIsCreating(true)}
-        >
+         title="Create">
           <Icon name="add" size={16} /> Create Theme
         </button>
       </div>
@@ -191,7 +191,7 @@ export default function BibleTemplatesPage() {
                     theme.id === selectedThemeId ? "active" : ""
                   }`}
                   onClick={(e) => { e.stopPropagation(); selectThemePreview(theme.id); }}
-                >
+                 title="radio_button_unchecked">
                   <Icon name={theme.id === selectedThemeId ? "check_circle" : "radio_button_unchecked"} size={14} />
                   {theme.id === selectedThemeId ? "Selected" : "Select"}
                 </button>
@@ -256,20 +256,20 @@ export default function BibleTemplatesPage() {
                       theme.id === selectedThemeId ? "active" : ""
                     }`}
                     onClick={(e) => { e.stopPropagation(); selectThemePreview(theme.id); }}
-                  >
+                   title="radio_button_unchecked">
                     <Icon name={theme.id === selectedThemeId ? "check_circle" : "radio_button_unchecked"} size={14} />
                     {theme.id === selectedThemeId ? "Selected" : "Select"}
                   </button>
                   <button
                     className="bible-template-btn edit"
                     onClick={(e) => { e.stopPropagation(); setEditingTheme(theme); }}
-                  >
+                   title="Edit">
                     <Icon name="edit" size={14} /> Edit
                   </button>
                   <button
                     className="bible-template-btn delete"
                     onClick={(e) => { e.stopPropagation(); handleDelete(theme); }}
-                  >
+                   title="Delete">
                     <Icon name="delete" size={14} /> Delete
                   </button>
                 </div>
@@ -309,7 +309,7 @@ export default function BibleTemplatesPage() {
                   <button
                     className="bible-template-btn"
                     onClick={() => dispatch({ type: "UPDATE_THEME", theme: { ...theme, hidden: false } })}
-                  >
+                   title="Show">
                     <Icon name="visibility" size={14} /> Unhide
                   </button>
                 </div>
@@ -321,11 +321,11 @@ export default function BibleTemplatesPage() {
 
       {/* Save / Cancel footer */}
       <div className="bible-templates-footer">
-        <button className="bible-templates-footer-btn cancel" onClick={handleCancel}>
+        <button className="bible-templates-footer-btn cancel" onClick={handleCancel} title="Cancel">
           <Icon name="close" size={16} />
           Cancel
         </button>
-        <button className="bible-templates-footer-btn save" onClick={handleSave}>
+        <button className="bible-templates-footer-btn save" onClick={handleSave} title="Save">
           <Icon name="check" size={16} />
           Save &amp; Return
         </button>

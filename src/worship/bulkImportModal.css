@@ -592,10 +592,12 @@
   border-radius: 4px;
   background: var(--bg-dark);
   color: var(--text-primary);
-  font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
-  font-size: 11px;
-  line-height: 1.6;
+  font-family: "Charis SIL", "SF Mono", "Noto Sans Mono", "Cascadia Code", "Fira Code", monospace !important;
+  font-size: 13px;
+  line-height: 1.7;
   resize: vertical;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .bulk-import-paste-textarea:focus {
@@ -628,7 +630,7 @@
 .bulk-import-text-preview pre {
   margin: 0;
   color: var(--text-secondary);
-  font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+  font-family: "Charis SIL", "SF Mono", "Noto Sans Mono", "Cascadia Code", "Fira Code", monospace;
   font-size: 10px;
   line-height: 1.6;
   white-space: pre-wrap;

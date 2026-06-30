@@ -188,7 +188,7 @@ export default function TrialModal({
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#4A4EB8")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "#1D4ED8")}
-        >
+         title="Start">
           {isExistingUser ? "Start Exploring" : "Get Started"}
         </button>
       </div>

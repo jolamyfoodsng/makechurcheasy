@@ -586,7 +586,7 @@ export function MVSettings() {
               triggerToast("Input gain reset to 100%", "accent");
             }
             else triggerToast("Reset options available for this section.", "accent");
-          }}>
+          }} title="Reset">
             <RotateCcw size={16} />
             <span>{activeTab === "bible" ? "Save Bible" : "Reset Defaults"}</span>
           </button>
@@ -745,11 +745,11 @@ export function MVSettings() {
                     ) : confirmClear ? (
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         <span style={{ color: "var(--danger-color)" }}>Are you sure?</span>
-                        <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClear}>Yes, Clear Everything</button>
-                        <button className="action-btn" onClick={() => setConfirmClear(false)}>Cancel</button>
+                        <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClear} title="Yes">Yes, Clear Everything</button>
+                        <button className="action-btn" onClick={() => setConfirmClear(false)} title="Cancel">Cancel</button>
                       </div>
                     ) : (
-                      <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClear(true)}>
+                      <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClear(true)} title="Clear">
                         <Trash2 size={14} /><span>Clear All Data</span>
                       </button>
                     )}
@@ -762,11 +762,11 @@ export function MVSettings() {
                       ) : confirmClearWorship ? (
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                           <span style={{ color: "var(--danger-color)" }}>Are you sure?</span>
-                          <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClearWorship}>Yes, Clear Worship</button>
-                          <button className="action-btn" onClick={() => setConfirmClearWorship(false)}>Cancel</button>
+                          <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClearWorship} title="Yes">Yes, Clear Worship</button>
+                          <button className="action-btn" onClick={() => setConfirmClearWorship(false)} title="Cancel">Cancel</button>
                         </div>
                       ) : (
-                        <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClearWorship(true)}>
+                        <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClearWorship(true)} title="Clear">
                           <Trash2 size={14} /><span>Clear Worship Songs</span>
                         </button>
                       )}
@@ -820,7 +820,7 @@ export function MVSettings() {
                       <label className="form-label">WebSocket Host Address</label>
                       <div className="custom-input-container">
                         <input type="text" className="custom-textbox" value={settings.obsUrl} onChange={(e) => update({ obsUrl: e.target.value })} placeholder="ws://localhost:4455" />
-                        <button className="action-btn btn-primary" onClick={handleTestObs} disabled={obsStatus === "connecting"}>
+                        <button className="action-btn btn-primary" onClick={handleTestObs} disabled={obsStatus === "connecting"} title="Refresh">
                           {obsStatus === "connecting" ? (<><RefreshCw size={14} className="animate-spin" /><span>Connecting...</span></>) : (<><CheckCircle size={14} /><span>Test Connection</span></>)}
                         </button>
                       </div>
@@ -1008,7 +1008,7 @@ export function MVSettings() {
                           onClick={runSync}
                           disabled={syncing}
                           style={{ fontSize: 11, padding: "2px 8px", gap: 4, flexShrink: 0 }}
-                        >
+                         title="Retry">
                           <RefreshCw size={12} />
                           Retry
                         </button>
@@ -1125,7 +1125,7 @@ export function MVSettings() {
                       <h3 className="section-title">First-Launch Setup</h3>
                       <p className="section-desc">Reopen the church profile setup flow for a new operator.</p>
                     </div>
-                    <button className="action-btn" onClick={handleResetChurchOnboarding}><RefreshCw size={14} /> Reset Onboarding</button>
+                    <button className="action-btn" onClick={handleResetChurchOnboarding} title="Reset"><RefreshCw size={14} /> Reset Onboarding</button>
                   </div>
                 </div>
               )}
@@ -1160,7 +1160,7 @@ export function MVSettings() {
                           </div>
                         </div>
                       </div>
-                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to upgrade", "accent")}>
+                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to upgrade", "accent")} title="Upgrade">
                         <ExternalLink size={12} /> Upgrade
                       </button>
                     </div>
@@ -1392,13 +1392,13 @@ export function MVSettings() {
 
                     {/* Connection actions */}
                     <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={handleReconnectNow}>
+                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={handleReconnectNow} title="Refresh">
                         <RefreshCw size={14} /><span>Force Reconnect</span>
                       </button>
-                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={() => setShowLogsPanel(!showLogsPanel)}>
+                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={() => setShowLogsPanel(!showLogsPanel)} title="Hide">
                         <FileText size={14} /><span>{showLogsPanel ? "Hide Logs" : "View Logs"}</span>
                       </button>
-                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600", color: "var(--danger-color)" }} onClick={() => { obsService.disconnect(); setObsStatus("disconnected"); setObsPasswordDraft(""); triggerToast("Disconnected.", "accent"); }}>
+                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600", color: "var(--danger-color)" }} onClick={() => { obsService.disconnect(); setObsStatus("disconnected"); setObsPasswordDraft(""); triggerToast("Disconnected.", "accent"); }} title="Disconnect">
                         <Trash2 size={14} /><span>Disconnect</span>
                       </button>
                     </div>
@@ -1491,7 +1491,7 @@ export function MVSettings() {
                             </li>
                           ))}
                         </ul>
-                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to view plans", "accent")}>
+                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to view plans", "accent")} title="Open in new tab">
                           <ExternalLink size={14} />
                           <span>View Plans</span>
                         </button>
@@ -1519,7 +1519,7 @@ export function MVSettings() {
                             </li>
                           ))}
                         </ul>
-                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to view plans", "accent")}>
+                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to view plans", "accent")} title="Open in new tab">
                           <ExternalLink size={14} />
                           <span>View Plans</span>
                         </button>
@@ -1569,7 +1569,7 @@ export function MVSettings() {
                             voiceBibleService.setInputGain(100);
                             lmDockService.setInputGain(100);
                           }}
-                        >
+                         title="Reset">
                           Reset
                         </button>
                       </div>

@@ -571,7 +571,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           type="button"
           className={`dock-ministry-tab${subTab === "ticker" ? " dock-ministry-tab--active" : ""}`}
           onClick={() => setSubTab("ticker")}
-        >
+         title="Ticker">
           <Icon name="campaign" size={12} />
           <span>Ticker</span>
         </button>
@@ -579,7 +579,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           type="button"
           className={`dock-ministry-tab${subTab === "lower-thirds" ? " dock-ministry-tab--active" : ""}`}
           onClick={() => setSubTab("lower-thirds")}
-        >
+         title="Subtitles">
           <Icon name="subtitles" size={12} />
           <span>Lower Thirds</span>
         </button>
@@ -593,7 +593,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             <div className="dock-mv-tab__feedback dock-mv-tab__feedback--error">
               <Icon name="error" size={14} />
               <span>{error}</span>
-              <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setError(null)}>
+              <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setError(null)} title="Close">
                 <Icon name="close" size={12} />
               </button>
             </div>
@@ -678,14 +678,14 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       type="button"
                       className={`dock-console-segmented__item${settings.position === "top" ? " dock-console-segmented__item--active" : ""}`}
                       onClick={() => setSettings((s) => ({ ...s, position: "top" }))}
-                    >
+                     title="Top">
                       Top
                     </button>
                     <button
                       type="button"
                       className={`dock-console-segmented__item${settings.position === "bottom" ? " dock-console-segmented__item--active" : ""}`}
                       onClick={() => setSettings((s) => ({ ...s, position: "bottom" }))}
-                    >
+                     title="Bottom">
                       Bottom
                     </button>
                   </div>
@@ -697,7 +697,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     className={`dock-console-segmented__item${settings.loop ? " dock-console-segmented__item--active" : ""}`}
                     onClick={() => setSettings((s) => ({ ...s, loop: !s.loop }))}
                     style={{ fontSize: 10, padding: "2px 10px", borderRadius: 3, border: "1px solid var(--dock-border)", background: settings.loop ? "var(--dock-accent)" : "transparent", color: settings.loop ? "#fff" : "var(--dock-text-dim)", cursor: "pointer" }}
-                  >
+                   title="Looping">
                     {settings.loop ? "Looping" : "Once"}
                   </button>
                 </div>
@@ -734,7 +734,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     onClick={handleAdd}
                     disabled={!newText.trim()}
                     style={{ alignSelf: "flex-end", height: 30 }}
-                  >
+                   title="Add">
                     <Icon name="add" size={14} />
                   </button>
                 </div>
@@ -848,7 +848,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   onClick={handlePush}
                   disabled={sending || activeMessages.length === 0 || !obsConnected || (tickerOutputMode === "scene" && tickerSceneExists)}
                   style={{ flex: 1 }}
-                >
+                 title="Play">
                   <Icon name="play_arrow" size={14} />
                   <span>Go Live</span>
                 </button>
@@ -860,7 +860,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--secondary"}`}
                     onClick={handlePause}
                     disabled={sending}
-                  >
+                   title="Play">
                     <Icon name={isPaused ? "play_arrow" : "pause"} size={14} />
                     <span>{isPaused ? "Resume" : "Pause"}</span>
                   </button>
@@ -873,7 +873,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--danger"}`}
                     onClick={handleClear}
                     disabled={sending}
-                  >
+                   title="Clear">
                     <Icon name="visibility_off" size={14} />
                     <span>Clear</span>
                   </button>
@@ -902,7 +902,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             <div className={`dock-mv-tab__feedback dock-mv-tab__feedback--${ltFeedbackTone}`}>
               <Icon name={ltFeedbackTone === "success" ? "check_circle" : "error"} size={14} />
               <span>{ltFeedback}</span>
-              <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setLtFeedback(null)}>
+              <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setLtFeedback(null)} title="Close">
                 <Icon name="close" size={12} />
               </button>
             </div>

@@ -229,7 +229,7 @@ export default function BackgroundPickerCard({
             onClick={() => setDropdownOpen((v) => !v)}
             aria-expanded={dropdownOpen}
             aria-haspopup="listbox"
-          >
+           title="dtb-bg-dropdown__chevron">
             <Icon name={selectedOption.icon} size={15} className="dtb-bg-dropdown__icon" />
             <span className="dtb-bg-dropdown__label">{t(selectedOption.label)}</span>
             <Icon name={dropdownOpen ? "expand_less" : "expand_more"} size={16} className="dtb-bg-dropdown__chevron" />
@@ -245,7 +245,7 @@ export default function BackgroundPickerCard({
                   role="option"
                   aria-selected={bgType === option.id}
                   onClick={() => handleTypeChange(option.id)}
-                >
+                 title="Confirm">
                   <Icon name={option.icon} size={14} className="dtb-bg-dropdown__item-icon" />
                   <span className="dtb-bg-dropdown__item-label">{t(option.label)}</span>
                   {bgType === option.id && (
@@ -389,7 +389,7 @@ export default function BackgroundPickerCard({
                   className={`dtb-position-btn${quickSettings.fontWeight === w ? " dtb-position-btn--active" : ""}`}
                   onClick={() => onQuickSettingsChange((prev) => ({ ...prev, fontWeight: w }))}
                   style={{ fontWeight: w === "bold" ? 700 : w === "light" ? 300 : 500 }}
-                >
+                 title="Light">
                   {w === "light" ? t('bgPicker.light') : w === "bold" ? t('bgPicker.bold') : t('bgPicker.regular')}
                 </button>
               ))}
@@ -406,7 +406,7 @@ export default function BackgroundPickerCard({
                   type="button"
                   className={`dtb-position-btn${quickSettings.textAlign === a ? " dtb-position-btn--active" : ""}`}
                   onClick={() => onQuickSettingsChange((prev) => ({ ...prev, textAlign: a }))}
-                >
+                 title="Left">
                   {a === "left" ? t('common.left') : a === "center" ? t('common.center') : t('common.right')}
                 </button>
               ))}
@@ -441,7 +441,7 @@ export default function BackgroundPickerCard({
                   type="button"
                   className={`dtb-position-btn${quickSettings.textTransform === tc ? " dtb-position-btn--active" : ""}`}
                   onClick={() => onQuickSettingsChange((prev) => ({ ...prev, textTransform: tc }))}
-                >
+                 title="capitalize">
                   {tc === "none" ? "Aa" : tc === "capitalize" ? "Ab" : tc === "uppercase" ? "AA" : "aa"}
                 </button>
               ))}
@@ -577,7 +577,7 @@ function ImageTab({
               className="dtb-bg-picker__search-clear"
               onClick={() => setSearch("")}
               aria-label={t('bgPicker.clearSearch')}
-            >
+             title="Close">
               <Icon name="close" size={11} />
             </button>
           )}
@@ -586,7 +586,7 @@ function ImageTab({
           type="button"
           className="dtb-bg-picker__upload-btn"
           onClick={() => fileInputRef.current?.click()}
-        >
+         title="Upload">
           <Icon name="add_photo_alternate" size={13} />
           {t('common.upload')}
         </button>
@@ -759,7 +759,7 @@ function VideoTab({
               className="dtb-bg-picker__search-clear"
               onClick={() => setSearch("")}
               aria-label={t('bgPicker.clearSearch')}
-            >
+             title="Close">
               <Icon name="close" size={11} />
             </button>
           )}
@@ -768,7 +768,7 @@ function VideoTab({
           type="button"
           className="dtb-bg-picker__upload-btn"
           onClick={() => fileInputRef.current?.click()}
-        >
+         title="Upload">
           <Icon name="videocam" size={13} />
           {t('common.upload')}
         </button>
@@ -872,7 +872,7 @@ function ColorSection({
                 bgGradientAngle: 135,
               }));
             }}
-          >
+           title="Solid">
             <Icon name="stop" size={13} />
             {t('bgPicker.solid')}
           </button>
@@ -887,7 +887,7 @@ function ColorSection({
                 bgGradientAngle: prev.bgGradientAngle || 135,
               }));
             }}
-          >
+           title="Gradient">
             <Icon name="palette" size={13} />
             {t('bgPicker.gradient')}
           </button>
@@ -1113,7 +1113,7 @@ function ReferenceSection({
               type="button"
               className={`dtb-position-btn${refPosition === pos ? " dtb-position-btn--active" : ""}`}
               onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refPosition: pos }))}
-            >
+             title="Above Verse">
               {pos === "top" ? t('bgPicker.aboveVerse') : t('bgPicker.belowVerse')}
             </button>
           ))}
@@ -1149,7 +1149,7 @@ function ReferenceSection({
               className={`dtb-position-btn${refFontWeight === w ? " dtb-position-btn--active" : ""}`}
               onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refFontWeight: w }))}
               style={{ fontWeight: w === "bold" ? 700 : w === "light" ? 300 : 500 }}
-            >
+             title="Light">
               {w === "light" ? t('bgPicker.light') : w === "bold" ? t('bgPicker.bold') : t('bgPicker.normal')}
             </button>
           ))}
@@ -1175,7 +1175,7 @@ function ReferenceSection({
               type="button"
               className={`dtb-position-btn${refTextTransform === tc ? " dtb-position-btn--active" : ""}`}
               onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refTextTransform: tc }))}
-            >
+             title="Normal">
               {tc === "none" ? t('bgPicker.normal') : tc === "capitalize" ? t('bgPicker.title') : tc === "uppercase" ? "UPPER" : "lower"}
             </button>
           ))}
@@ -1192,7 +1192,7 @@ function ReferenceSection({
               type="button"
               className={`dtb-position-btn${refTextAlign === a ? " dtb-position-btn--active" : ""}`}
               onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refTextAlign: a }))}
-            >
+             title="`)">
               {a === "match" ? t('bgPicker.matchVerse') : t(`common.${a}`)}
             </button>
           ))}
@@ -1290,7 +1290,7 @@ function ReferenceBackgroundSection({
           role="switch"
           aria-checked={refBgEnabled}
           aria-label={t('bgPicker.enableReferenceBackground')}
-        >
+         title="dtb-toggle__knob">
           <span className="dtb-toggle__knob" />
         </button>
       </div>
@@ -1307,7 +1307,7 @@ function ReferenceBackgroundSection({
             className="dtb-colors__collapsible-header dtb-colors__collapsible-header--sub"
             onClick={() => setStyleOpen((v) => !v)}
             aria-expanded={styleOpen}
-          >
+           title="Style">
             <span className="dtb-colors__sublabel">{t('bgPicker.style')}</span>
             <Icon name={styleOpen ? "expand_less" : "expand_more"} size={13} />
           </button>
@@ -1550,7 +1550,7 @@ function PresetSection({
         className="dtb-colors__collapsible-header"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-      >
+       title="Theme Presets">
         <span className="dtb-colors__label">{t('bgPicker.themePresets')}</span>
         <Icon name={open ? "expand_less" : "expand_more"} size={14} />
       </button>

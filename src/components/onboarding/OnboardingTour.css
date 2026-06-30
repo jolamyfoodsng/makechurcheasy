@@ -1,0 +1,401 @@
+/* ══════════════════════════════════════════════════════════════
+   ONBOARDING TOUR
+   Reusable spotlight onboarding system
+   Follows MakeChurchEasy design system
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Root container ── */
+
+.ob-tour-root {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  font-family: var(--font-body);
+}
+
+.ob-tour-root > * {
+  pointer-events: auto;
+}
+
+/* ── Overlay ── */
+
+.ob-tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+}
+
+.ob-tour-overlay--full {
+  background: rgba(0, 0, 0, 0.65);
+  pointer-events: auto;
+  animation: obTourFadeIn 0.2s ease;
+}
+
+.ob-tour-overlay-darken {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  transition: clip-path 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+/* ── Spotlight border ── */
+
+.ob-tour-spotlight-border {
+  position: fixed;
+  border: 2px solid var(--primary);
+  box-shadow: 
+    0 0 0 4px rgba(var(--primary-rgb), 0.15),
+    0 0 20px rgba(var(--primary-rgb), 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  animation: obTourSpotlightPulse 2s ease-in-out infinite;
+}
+
+@keyframes obTourSpotlightPulse {
+  0%, 100% {
+    box-shadow: 
+      0 0 0 4px rgba(var(--primary-rgb), 0.15),
+      0 0 20px rgba(var(--primary-rgb), 0.1);
+  }
+  50% {
+    box-shadow: 
+      0 0 0 6px rgba(var(--primary-rgb), 0.2),
+      0 0 30px rgba(var(--primary-rgb), 0.15);
+  }
+}
+
+/* ── Tour Card ── */
+
+.ob-tour-card {
+  position: fixed;
+  z-index: 9999;
+  width: 380px;
+  max-width: calc(100vw - 40px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 
+    0 20px 60px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: obTourCardEnter 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: top 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+              left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ob-tour-card--complete {
+  text-align: center;
+  align-items: center;
+}
+
+@keyframes obTourCardEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ── Card Close Button ── */
+
+.ob-tour-card-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.ob-tour-card-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* ── Progress Indicator ── */
+
+.ob-tour-card-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-tour-card-progress-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ob-tour-card-progress-bar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.ob-tour-card-progress-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: all 0.2s ease;
+}
+
+.ob-tour-card-progress-dot--active {
+  background: var(--primary);
+  width: 18px;
+  border-radius: 3px;
+}
+
+.ob-tour-card-progress-dot--done {
+  background: var(--success);
+}
+
+/* ── Card Content ── */
+
+.ob-tour-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.ob-tour-card-content--animating {
+  opacity: 0;
+  transform: translateX(8px);
+}
+
+/* ── Icon ── */
+
+.ob-tour-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-soft-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+.ob-tour-card--complete .ob-tour-card-icon {
+  width: 56px;
+  height: 56px;
+  background: rgba(var(--success-rgb), 0.12);
+  border-color: var(--success-border);
+  color: var(--success);
+}
+
+/* ── Title ── */
+
+.ob-tour-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.3;
+  font-family: var(--font-heading);
+}
+
+/* ── Description ── */
+
+.ob-tour-card-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ── Features List ── */
+
+.ob-tour-card-features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-tour-card-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.ob-tour-card-feature-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+/* ── Actions ── */
+
+.ob-tour-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.ob-tour-card-actions-right {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.ob-tour-card-actions-complete {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  align-items: center;
+}
+
+/* ── Buttons ── */
+
+.ob-tour-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--transition);
+  border: none;
+  white-space: nowrap;
+}
+
+.ob-tour-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.ob-tour-btn--primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.ob-tour-btn--primary:hover {
+  background: var(--primary-hover);
+}
+
+.ob-tour-btn--success {
+  background: var(--success);
+  color: #fff;
+  width: 100%;
+  padding: 10px 20px;
+}
+
+.ob-tour-btn--success:hover {
+  background: var(--success-hover);
+}
+
+.ob-tour-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.ob-tour-btn--ghost:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.ob-tour-btn--text {
+  background: transparent;
+  color: var(--text-muted);
+  padding: 8px 12px;
+}
+
+.ob-tour-btn--text:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+/* ── Animations ── */
+
+@keyframes obTourFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes obTourFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 480px) {
+  .ob-tour-card {
+    width: calc(100vw - 32px);
+    padding: 20px;
+  }
+
+  .ob-tour-card-title {
+    font-size: 15px;
+  }
+
+  .ob-tour-card-description {
+    font-size: 12px;
+  }
+
+  .ob-tour-btn {
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+}
+
+/* ── Reduced motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-tour-card,
+  .ob-tour-overlay-darken,
+  .ob-tour-spotlight-border,
+  .ob-tour-card-content {
+    animation: none !important;
+    transition: none !important;
+  }
+}

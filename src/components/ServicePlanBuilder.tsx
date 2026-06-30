@@ -157,7 +157,7 @@ export default function ServicePlanBuilder() {
           <button
             className="splan-new-btn"
             onClick={() => setShowNewPlan(true)}
-          >
+           title="New plan">
             <Icon name="add" size={20} />
             New Plan
           </button>
@@ -175,10 +175,10 @@ export default function ServicePlanBuilder() {
               autoFocus
             />
             <div className="splan-new-form-actions">
-              <button className="splan-btn splan-btn--secondary" onClick={() => setShowNewPlan(false)}>
+              <button className="splan-btn splan-btn--secondary" onClick={() => setShowNewPlan(false)} title="Cancel">
                 Cancel
               </button>
-              <button className="splan-btn splan-btn--primary" onClick={handleCreatePlan}>
+              <button className="splan-btn splan-btn--primary" onClick={handleCreatePlan} title="Create">
                 Create
               </button>
             </div>
@@ -232,7 +232,7 @@ export default function ServicePlanBuilder() {
         <button
           className="splan-back-btn"
           onClick={() => setActivePlan(null)}
-        >
+         title="Go back">
           <Icon name="arrow_back" size={20} />
           Back to Plans
         </button>
@@ -279,7 +279,7 @@ export default function ServicePlanBuilder() {
                   <button
                     className="splan-btn splan-btn--xs"
                     onClick={() => setEditingItemId(null)}
-                  >
+                   title="Done">
                     Done
                   </button>
                 </>
@@ -333,7 +333,7 @@ export default function ServicePlanBuilder() {
         <button
           className="splan-add-btn"
           onClick={() => setShowAddMenu(!showAddMenu)}
-        >
+         title="Add">
           <Icon name="add_circle" size={20} />
           Add Item
         </button>

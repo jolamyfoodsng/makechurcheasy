@@ -60,7 +60,7 @@ export function GraphicsModule({
           aria-selected={activeSubTab === "lower-third"}
           className={`graphics-module-subtab${activeSubTab === "lower-third" ? " is-active" : ""}`}
           onClick={() => handleSubTabChange("lower-third")}
-        >
+         title="Subtitles">
           <Icon name="subtitles" size={16} />
           Lower Third
         </button>
@@ -70,7 +70,7 @@ export function GraphicsModule({
           aria-selected={activeSubTab === "speaker"}
           className={`graphics-module-subtab${activeSubTab === "speaker" ? " is-active" : ""}`}
           onClick={() => handleSubTabChange("speaker")}
-        >
+         title="Microphone">
           <Icon name="mic" size={16} />
           Speaker
         </button>

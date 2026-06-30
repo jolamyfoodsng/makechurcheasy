@@ -79,7 +79,7 @@ function PanelSection({
           cursor: "pointer", color: "var(--text-primary)", fontSize: 13, fontWeight: 600,
           fontFamily: "inherit",
         }}
-      >
+       title="var(--text-muted)">
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name={icon} size={18} style={{ color: iconColor ?? "var(--primary)" }} />
           {title}
@@ -386,10 +386,10 @@ export default function BibleThemeEditor({ editTheme, onSave, onCancel }: Props)
             <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(0,0,0,0.15)" }}>
               <div style={{ display: "flex", gap: 16 }}>
                 {(["images", "solids", "gradients"] as const).map((tab) => (
-                  <button key={tab} onClick={() => setBgTab(tab)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, color: bgTab === tab ? "var(--text-primary)" : "var(--text-muted)", borderBottom: bgTab === tab ? "2px solid var(--primary)" : "2px solid transparent", paddingBottom: 6, textTransform: "capitalize", fontFamily: "inherit" }}>{tab}</button>
+                  <button key={tab} onClick={() => setBgTab(tab)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, color: bgTab === tab ? "var(--text-primary)" : "var(--text-muted)", borderBottom: bgTab === tab ? "2px solid var(--primary)" : "2px solid transparent", paddingBottom: 6, textTransform: "capitalize", fontFamily: "inherit" }} title="Confirm">{tab}</button>
                 ))}
               </div>
-              <button onClick={() => bgFileRef.current?.click()} style={{ background: "var(--primary)", color: "#fff", border: "none", borderRadius: "var(--radius)", padding: "4px 10px", fontSize: 11, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
+              <button onClick={() => bgFileRef.current?.click()} style={{ background: "var(--primary)", color: "#fff", border: "none", borderRadius: "var(--radius)", padding: "4px 10px", fontSize: 11, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontFamily: "inherit" }} title="Upload">
                 <Icon name="upload" size={14} /> Upload Media
               </button>
               <input ref={bgFileRef} type="file" accept={BIBLE_THEME_IMAGE_ACCEPT} style={{ display: "none" }} onChange={handleBgImageUpload} />
@@ -485,7 +485,7 @@ export default function BibleThemeEditor({ editTheme, onSave, onCancel }: Props)
               <FieldLabel>Text Align</FieldLabel>
               <div style={{ display: "flex", gap: 4 }}>
                 {(["left", "center", "right"] as const).map((a) => (
-                  <button key={a} onClick={() => update("textAlign", a)} style={{ flex: 1, padding: "4px 0", background: settings.textAlign === a ? "rgba(var(--primary-rgb),0.15)" : "var(--surface-hover)", border: settings.textAlign === a ? "1px solid var(--primary)" : "1px solid var(--border)", borderRadius: "var(--radius)", cursor: "pointer", color: settings.textAlign === a ? "var(--primary)" : "var(--text-muted)", fontSize: 10, fontWeight: 600, textTransform: "capitalize", fontFamily: "inherit" }}>{a}</button>
+                  <button key={a} onClick={() => update("textAlign", a)} style={{ flex: 1, padding: "4px 0", background: settings.textAlign === a ? "rgba(var(--primary-rgb),0.15)" : "var(--surface-hover)", border: settings.textAlign === a ? "1px solid var(--primary)" : "1px solid var(--border)", borderRadius: "var(--radius)", cursor: "pointer", color: settings.textAlign === a ? "var(--primary)" : "var(--text-muted)", fontSize: 10, fontWeight: 600, textTransform: "capitalize", fontFamily: "inherit" }} title="Confirm">{a}</button>
                 ))}
               </div>
             </div>

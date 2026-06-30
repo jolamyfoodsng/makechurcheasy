@@ -1706,7 +1706,7 @@ button.worship-online-action.at-limit {
   background: var(--b-bg, #121212);
   border: none;
   color: var(--b-text-1, #E0E0E0);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-family: "Charis SIL", "JetBrains Mono", "Noto Sans Mono", "Fira Code", monospace;
   font-size: 13px;
   line-height: 1.8;
   outline: none;
@@ -2009,7 +2009,7 @@ button.worship-online-action.at-limit {
   border: 1px solid var(--b-green, #00E676);
   border-radius: var(--b-radius, 2px);
   padding: 8px;
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-family: "Charis SIL", "JetBrains Mono", "Noto Sans Mono", "Fira Code", monospace;
   font-size: 13px;
   line-height: 1.6;
   color: var(--b-text-1, #E0E0E0);

@@ -92,7 +92,7 @@ function TranslationSlotButton({
               key={t.abbr}
               className={`translation-slot-popover-item${t.abbr === abbr ? " current" : ""}`}
               onClick={() => { onSwitch(t.abbr); setOpen(false); }}
-            >
+             title="Confirm">
               <span className="translation-slot-popover-abbr">{t.abbr}</span>
               <span className="translation-slot-popover-name">{t.name}</span>
               {t.abbr === abbr && <Icon name="check" size={14} style={{ color: "var(--b-green, #00E676)" }} />}
@@ -104,7 +104,7 @@ function TranslationSlotButton({
               <button
                 className="translation-slot-popover-item translation-slot-popover-library"
                 onClick={() => { onOpenLibrary(); setOpen(false); }}
-              >
+               title="Download">
                 <Icon name="add" size={15} />
                 <span>Download More…</span>
               </button>
@@ -221,7 +221,7 @@ export default function VerseListPanel({
   return (
     <div className="verse-panel" tabIndex={0}>
       {/* Header */}
-       {/* <button className="bible-nav-btn" onClick={() => navigate("/")}>
+       {/* <button className="bible-nav-btn" onClick={() => navigate("/")} title="Go back">
             <Icon name="arrow_back" size={20} />
             <span>Go to Dashboard</span>
           </button> */}
@@ -281,11 +281,11 @@ export default function VerseListPanel({
 
       {/* Chapter navigation */}
       {/* <div className="verse-panel-nav">
-        <button className="verse-panel-nav-btn" disabled={!canPrev} onClick={() => book && chapter && onChangeChapter(book, chapter - 1)}>
+        <button className="verse-panel-nav-btn" disabled={!canPrev} onClick={() => book && chapter && onChangeChapter(book, chapter - 1)} title="Previous">
           <Icon name="chevron_left" size={20} /> Prev Ch.
         </button>
         <span className="verse-panel-nav-label">Chapter {chapter}</span>
-        <button className="verse-panel-nav-btn" disabled={!canNext} onClick={() => book && chapter && onChangeChapter(book, chapter + 1)}>
+        <button className="verse-panel-nav-btn" disabled={!canNext} onClick={() => book && chapter && onChangeChapter(book, chapter + 1)} title="Next">
           Next Ch. <Icon name="chevron_right" size={20} />
         </button>
       </div> */}

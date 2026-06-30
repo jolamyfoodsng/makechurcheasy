@@ -71,7 +71,7 @@ export function BibleControls({
           aria-haspopup="listbox"
           aria-expanded={isBookDropdownOpen}
           aria-label={t("bible.chooseBook")}
-        >
+         title="Choose Book">
           <span className="dock-bible-controls__book-label"></span>
           <span className="dock-bible-controls__book-name">
             {selectedBook ?? t("bible.chooseBook")}
@@ -123,7 +123,7 @@ export function BibleControls({
             aria-haspopup="listbox"
             aria-expanded={isChapterDropdownOpen}
             aria-label={t("bible.chooseChapter")}
-          >
+           title="Expand">
             <span className="dock-bible-controls__compact-label">Ch</span>
             <span className="dock-bible-controls__compact-value">{selectedChapter ?? "--"}</span>
             <Icon name="expand_more" size={12} />
@@ -171,7 +171,7 @@ export function BibleControls({
             aria-haspopup="listbox"
             aria-expanded={isVerseDropdownOpen}
             aria-label={t("bible.chooseVerse")}
-          >
+           title="Expand">
             <span className="dock-bible-controls__compact-label">V</span>
             <span className="dock-bible-controls__compact-value">{selectedVerse ?? "--"}</span>
             <Icon name="expand_more" size={12} />

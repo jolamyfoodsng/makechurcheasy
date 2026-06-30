@@ -122,8 +122,10 @@
   border-radius: 4px;
   background: var(--bg-dark);
   color: var(--text-primary);
-  font: inherit;
+  font-family: "Charis SIL", "SF Mono", "Noto Sans Mono", "Fira Code", monospace;
   font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .online-lyrics-modal__field input {

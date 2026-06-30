@@ -421,7 +421,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
                 justifyContent: "center",
                 gap: 8,
               }}
-            >
+             title="Update now">
               <Icon name="system_update" size={14} />
               <span>Update Now</span>
             </button>
@@ -447,7 +447,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
                 justifyContent: "center",
                 gap: 8,
               }}
-            >
+             title="Refresh">
               <Icon name="refresh" size={14} />
               <span>Try Again</span>
             </button>
@@ -468,7 +468,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
                 fontSize: 14,
                 cursor: "pointer",
               }}
-            >
+             title="Close">
               Close
             </button>
           )}

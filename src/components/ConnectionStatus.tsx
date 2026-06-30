@@ -107,7 +107,7 @@ export function ConnectionStatus({
                         type="submit"
                         className="btn-primary"
                         disabled={isSubmitting || status === "connecting"}
-                    >
+                     title="power_settings_new">
                         <Icon name={isSubmitting ? "hourglass_empty" : "power_settings_new"} size={20} className="btn-icon" />
                         {isSubmitting ? "Connecting..." : "Connect to OBS"}
                     </button>
@@ -127,7 +127,7 @@ export function ConnectionStatus({
                         onClick={handleDisconnect}
                         className="btn-disconnect"
                         disabled={isSubmitting}
-                    >
+                     title="Disconnect">
                         <Icon name="power_off" size={20} className="btn-icon" />
                         Disconnect
                     </button>

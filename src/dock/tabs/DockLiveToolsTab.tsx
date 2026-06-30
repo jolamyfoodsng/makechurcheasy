@@ -174,7 +174,7 @@ export default function DockLiveToolsTab({ staged: _staged, onStage, initialSnap
                     className="dock-btn dock-btn--live dock-btn--compact"
                     disabled={disabled}
                     onClick={() => void handleSend(tool)}
-                  >
+                   title="Send">
                     {sending === tool.id ? "..." : "Send"}
                   </button>
                 </div>
@@ -189,7 +189,7 @@ export default function DockLiveToolsTab({ staged: _staged, onStage, initialSnap
             className="dock-btn dock-btn--danger dock-btn--compact"
             disabled={sending !== null}
             onClick={() => void handleClear()}
-          >
+           title="Clear">
             Clear
           </button>
         </div>

@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatLyricsFromSections, generateSlides, parseWorshipLyricSections } from "../../worship/slideEngine";
+import { unicodeSearchNormalize } from "../../worship/unicodeUtils";
 import { archiveSong, getAllSongs, saveSong, syncSongsToDock } from "../../worship/worshipDb";
 import { worshipObsService } from "../../worship/worshipObsService";
 import {
@@ -130,11 +131,7 @@ function fuzzyMatch(query: string, target: string): boolean {
 }
 
 function normalizeSongLookupPart(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return unicodeSearchNormalize(value);
 }
 
 function buildSongLookupKeys(title: string, artist: string): string[] {
@@ -1383,7 +1380,7 @@ export function WorshipModule({
         </div>
 
         <div className="worship-import-footer">
-          <button className="worship-btn-secondary" onClick={() => setView("dashboard")}>
+          <button className="worship-btn-secondary" onClick={() => setView("dashboard")} title="Go back">
             <Icon name="arrow_back" size={20} />
             Back
           </button>
@@ -1392,7 +1389,7 @@ export function WorshipModule({
               className="worship-btn-primary"
               disabled={!importMetadata.title.trim() || importSlides.length === 0 || hasReachedSongLimit}
               onClick={handleSaveImport}
-            >
+              title="Save">
               <Icon name="save" size={20} />
               Save to Library
             </button>
@@ -1442,6 +1439,7 @@ export function WorshipModule({
                   key={tab}
                   className={`worship-sidebar-tab${sidebarTab === tab ? " active" : ""}`}
                   onClick={() => setSidebarTab(tab)}
+                  title={tab.charAt(0).toUpperCase() + tab.slice(1)}
                 >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </button>
@@ -1561,7 +1559,7 @@ export function WorshipModule({
                               }
                               handleOpenOnlineImport(result);
                             }}
-                          >
+                            title="Limit Reached">
                             {isImporting ? "Saving…" : (hasReachedSongLimit && !importedSong ? "Limit Reached" : actionLabel)}
                           </button>
                         </div>
@@ -1586,7 +1584,7 @@ export function WorshipModule({
                   setImportMetadata({ title: "", artist: "" });
                   setView("import");
                 }}
-              >
+                title="Add">
                 {hasReachedSongLimit ? <Icon name="lock" size={20} /> : <Icon name="add" size={20} />}
                 {hasReachedSongLimit ? "Limit Reached" : "Add Song"}
               </button>
@@ -1767,14 +1765,14 @@ export function WorshipModule({
                 <button
                   className={`worship-layout-mode-btn${layoutMode === "fullscreen" ? " active" : ""}`}
                   onClick={() => handleLayoutClick("fullscreen")}
-                >
+                  title="Fullscreen">
                   <Icon name="fullscreen" size={20} />
                   Full
                 </button>
                 <button
                   className={`worship-layout-mode-btn${layoutMode === "lower-third" ? " active" : ""}`}
                   onClick={() => handleLayoutClick("lower-third")}
-                >
+                  title="Subtitles">
                   <Icon name="subtitles" size={20} />
                   Lower
                 </button>
@@ -1988,13 +1986,13 @@ export function WorshipModule({
               <button
                 className="end-confirm-btn-cancel"
                 onClick={() => setConfirmDeleteSong(null)}
-              >
+                title="Cancel">
                 Cancel
               </button>
               <button
                 className="end-confirm-btn-end"
                 onClick={() => { void handleArchiveSong(confirmDeleteSong.id); }}
-              >
+                title="Archive">
                 Archive
               </button>
             </div>
@@ -2010,7 +2008,7 @@ export function WorshipModule({
               className="ssm-close"
               onClick={() => setShowSongLimitModal(false)}
               aria-label="Close song limit modal"
-            >
+              title="Close">
               <Icon name="close" size={18} />
             </button>
             <div className="ssm-icon">
@@ -2028,7 +2026,7 @@ export function WorshipModule({
               <button
                 className="ssm-btn-cancel"
                 onClick={() => setShowSongLimitModal(false)}
-              >
+                title="Close">
                 Close
               </button>
               <a

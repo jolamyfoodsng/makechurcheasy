@@ -200,7 +200,7 @@ export default function DockEventTab({ staged, onStage }: Props) {
         onClick={handleAdd}
         disabled={!newName.trim()}
         style={{ width: "100%" }}
-      >
+       title="Add">
         <Icon name="add" size={20} />
         Add Event
       </button>

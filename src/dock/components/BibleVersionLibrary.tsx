@@ -94,7 +94,7 @@ export default function BibleVersionLibrary({
         onClick={() => setIsOpen(!isOpen)}
         aria-label={t("bible.selectBibleVersion")}
         aria-expanded={isOpen}
-      >
+       title="bible-version-library__trigger-abbr">
         <span className="bible-version-library__trigger-abbr">
           {activeTranslationInfo.abbr}
         </span>
@@ -121,7 +121,7 @@ export default function BibleVersionLibrary({
                 className="bible-version-library__search-clear"
                 onClick={() => setSearchQuery("")}
                 aria-label={t("common.clear")}
-              >
+               title="Close">
                 <Icon name="close" size={12} />
               </button>
             )}
@@ -142,7 +142,7 @@ export default function BibleVersionLibrary({
                       className={`bible-version-library__row${translation.value === activeTranslation ? " bible-version-library__row--active" : ""
                         }`}
                       onClick={() => handleSelectVersion(translation.value)}
-                    >
+                     title="Confirm">
                       <div className="bible-version-library__row-info">
                         <span className="bible-version-library__row-abbr">
                           {translation.value}

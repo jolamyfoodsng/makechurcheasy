@@ -114,7 +114,7 @@ export function OnlineLyricsImportModal({
             className="online-lyrics-modal__close"
             aria-label="Close lyrics import"
             onClick={onClose}
-          >
+           title="Close">
             x
           </button>
         </div>
@@ -162,7 +162,7 @@ export function OnlineLyricsImportModal({
             className="online-lyrics-modal__secondary"
             onClick={onClose}
             disabled={saving}
-          >
+           title="Cancel">
             Cancel
           </button>
           <button
@@ -177,7 +177,7 @@ export function OnlineLyricsImportModal({
                 lyrics: cleanedLyrics,
               });
             }}
-          >
+           title="Import">
             {saving ? "Importing..." : "Import to Worship"}
           </button>
         </div>

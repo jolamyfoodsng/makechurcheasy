@@ -774,7 +774,7 @@ export function MVCanvas() {
                     } else {
                       setDeleteModal({ regionId: region.id, sceneName: (region as OBSSceneRegion).sceneName });
                     }
-                  }}>
+                  }} title="Remove">
                   <Icon name="delete" size={20} />Remove {contentLabel}
                 </button>
                 <button className="mv-context-menu-item"
@@ -790,7 +790,7 @@ export function MVCanvas() {
                     } else {
                       unassignSceneFromRegion(region.id);
                     }
-                  }}>
+                  }} title="Swap">
                   <Icon name="swap_horiz" size={20} />Change {contentLabel}
                 </button>
                 <div className="mv-context-menu-divider" />
@@ -804,19 +804,19 @@ export function MVCanvas() {
                   onClick={() => {
                     setCtxMenu(null);
                     assignSceneToRegion(target.id, (region as OBSSceneRegion).sceneName, (region as OBSSceneRegion).sceneIndex ?? 0);
-                  }}>
+                  }} title="Substitute to Slot">
                   <Icon name="swap_calls" size={20} />Substitute to Slot {targetIdx}
                 </button>
               );
             })}
             {hasContent && <div className="mv-context-menu-divider" />}
             <button className="mv-context-menu-item"
-              onClick={() => { setCtxMenu(null); dispatch({ type: "TOGGLE_VISIBILITY", regionId: region.id }); }}>
+              onClick={() => { setCtxMenu(null); dispatch({ type: "TOGGLE_VISIBILITY", regionId: region.id }); }} title="visibility_off">
               <Icon name={region.visible ? "visibility_off" : "visibility"} size={20} />
               {region.visible ? "Hide Slot" : "Show Slot"}
             </button>
             <button className="mv-context-menu-item"
-              onClick={() => { setCtxMenu(null); dispatch({ type: "SELECT_REGION", regionId: region.id, additive: false }); }}>
+              onClick={() => { setCtxMenu(null); dispatch({ type: "SELECT_REGION", regionId: region.id, additive: false }); }} title="Info">
               <Icon name="info" size={20} />Inspect
             </button>
           </div>
@@ -849,7 +849,7 @@ export function MVCanvas() {
                 }
               </p>
               <div className="mv-modal-actions">
-                <button className="mv-btn mv-btn--ghost" onClick={() => setDeleteModal(null)}>{isLastScene ? "OK" : "Cancel"}</button>
+                <button className="mv-btn mv-btn--ghost" onClick={() => setDeleteModal(null)} title="Cancel">{isLastScene ? "OK" : "Cancel"}</button>
                 {!isLastScene && (
                   <button className="mv-btn mv-btn--danger"
                     onClick={() => {
@@ -869,7 +869,7 @@ export function MVCanvas() {
                         unassignSceneFromRegion(deleteModal.regionId);
                       }
                       setDeleteModal(null);
-                    }}>
+                    }} title="Remove">
                     Remove {isThemedDelete ? "Theme" : "Scene"}
                   </button>
                 )}
@@ -889,9 +889,9 @@ export function MVCanvas() {
               This slot already has content assigned. Do you want to replace it with <strong>"{overwriteModal.newSceneName}"</strong>?
             </p>
             <div className="mv-modal-actions">
-              <button className="mv-btn mv-btn--ghost" onClick={() => setOverwriteModal(null)}>Cancel</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setOverwriteModal(null)} title="Cancel">Cancel</button>
               <button className="mv-btn mv-btn--primary"
-                onClick={() => { assignSceneToRegion(overwriteModal.regionId, overwriteModal.newSceneName, overwriteModal.newSceneIndex); setOverwriteModal(null); }}>
+                onClick={() => { assignSceneToRegion(overwriteModal.regionId, overwriteModal.newSceneName, overwriteModal.newSceneIndex); setOverwriteModal(null); }} title="Yes">
                 Yes, Replace
               </button>
             </div>
@@ -906,26 +906,26 @@ export function MVCanvas() {
           <div className="mv-scene-picker-header">
             <Icon name="playlist_add" size={16} />
             <span>Assign to Slot</span>
-            <button className="mv-scene-picker-close" onClick={() => setScenePicker(null)}>
+            <button className="mv-scene-picker-close" onClick={() => setScenePicker(null)} title="Close">
               <Icon name="close" size={16} />
             </button>
           </div>
           {/* Tabs */}
           <div className="mv-scene-picker-tabs">
             <button className={`mv-scene-picker-tab ${pickerTab === "scenes" ? "mv-scene-picker-tab--active" : ""}`}
-              onClick={() => setPickerTab("scenes")}>
+              onClick={() => setPickerTab("scenes")} title="Scenes">
               <Icon name="videocam" size={14} /> Scenes
             </button>
             <button className={`mv-scene-picker-tab ${pickerTab === "bible" ? "mv-scene-picker-tab--active" : ""}`}
-              onClick={() => setPickerTab("bible")}>
+              onClick={() => setPickerTab("bible")} title="Book">
               <Icon name="menu_book" size={14} /> Bible
             </button>
             <button className={`mv-scene-picker-tab ${pickerTab === "worship" ? "mv-scene-picker-tab--active" : ""}`}
-              onClick={() => setPickerTab("worship")}>
+              onClick={() => setPickerTab("worship")} title="Music">
               <Icon name="music_note" size={14} /> Worship
             </button>
             <button className={`mv-scene-picker-tab ${pickerTab === "lower-third" ? "mv-scene-picker-tab--active" : ""}`}
-              onClick={() => setPickerTab("lower-third")}>
+              onClick={() => setPickerTab("lower-third")} title="Subtitles">
               <Icon name="subtitles" size={14} /> Lower Third
             </button>
           </div>
@@ -939,7 +939,7 @@ export function MVCanvas() {
                     onClick={() => {
                       assignSceneToRegion(scenePicker.regionId, scene.sceneName, scene.sceneIndex);
                       setScenePicker(null);
-                    }}>
+                    }} title="scene.thumbnail ? ( ) : ( )">
                     <div className="mv-scene-picker-thumb">
                       {scene.thumbnail ? (
                         <img src={scene.thumbnail} alt={scene.sceneName} draggable={false} />

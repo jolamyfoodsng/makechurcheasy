@@ -177,10 +177,10 @@ export function AppShell() {
               <button
                 className="end-confirm-btn-cancel"
                 onClick={() => setShowEndConfirm(false)}
-              >
+               title="Keep Going">
                 Keep Going
               </button>
-              <button className="end-confirm-btn-end" onClick={handleEndServiceConfirm}>
+              <button className="end-confirm-btn-end" onClick={handleEndServiceConfirm} title="End service">
                 End Service
               </button>
             </div>
@@ -198,10 +198,10 @@ export function AppShell() {
               <button
                 className="end-confirm-btn-cancel"
                 onClick={() => setShowCancelConfirm(false)}
-              >
+               title="Keep Going">
                 Keep Going
               </button>
-              <button className="end-confirm-btn-end" onClick={handleConfirmCancel}>
+              <button className="end-confirm-btn-end" onClick={handleConfirmCancel} title="Cancel">
                 Yes, Cancel
               </button>
             </div>
@@ -226,7 +226,7 @@ export function AppShell() {
           <div className="shortcuts-modal" onClick={(e) => e.stopPropagation()}>
             <div className="shortcuts-modal-head">
               <h2>Keyboard Shortcuts</h2>
-              <button className="shortcuts-modal-close" onClick={() => setShowShortcuts(false)}>
+              <button className="shortcuts-modal-close" onClick={() => setShowShortcuts(false)} title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>

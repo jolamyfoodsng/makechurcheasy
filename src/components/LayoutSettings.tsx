@@ -105,7 +105,7 @@ export function LayoutSettings({
                     </div>
                 </div>
 
-                <button className="btn-back" onClick={onBack}>
+                <button className="btn-back" onClick={onBack} title="Go back">
                     <Icon name="arrow_back" size={20} />
                     Back to Service
                 </button>
@@ -155,7 +155,7 @@ export function LayoutSettings({
                                     className={`ratio-btn ${localRatio === preset.value ? "ratio-btn-active" : ""
                                         }`}
                                     onClick={() => setLocalRatio(preset.value)}
-                                >
+                                 title="ratio-label">
                                     <span className="ratio-label">{preset.label}</span>
                                     <span className="ratio-desc">{preset.desc}</span>
                                 </button>
@@ -204,7 +204,7 @@ export function LayoutSettings({
                                 className="btn-primary"
                                 onClick={handleApply}
                                 disabled={isApplying}
-                            >
+                             title="hourglass_empty">
                                 <Icon name={isApplying ? "hourglass_empty" : "check"} size={20} className="btn-icon" />
                                 {isApplying ? "Applying..." : hasChanges ? "Apply Changes" : "Apply Layout"}
                             </button>
@@ -213,7 +213,7 @@ export function LayoutSettings({
                                 className="btn-secondary"
                                 onClick={handleRepair}
                                 disabled={isRepairing}
-                            >
+                             title="Repair All Layouts">
                                 <Icon name={isRepairing ? "hourglass_empty" : "build"} size={20} className="btn-icon" />
                                 {isRepairing ? "Repairing..." : "Repair All Layouts"}
                             </button>

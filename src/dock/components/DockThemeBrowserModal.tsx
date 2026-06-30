@@ -203,7 +203,7 @@ export default function DockThemeBrowserModal({
         <div className="dtb-header">
           <h3 className="dtb-title">{resolvedTitle}</h3>
           <div className="dtb-header__actions">
-            <button className="dtb-close-btn" onClick={onClose} aria-label={t('common.close')}>
+            <button className="dtb-close-btn" onClick={onClose} aria-label={t('common.close')} title="Close">
               <DockIcon name="close" size={16} />
             </button>
           </div>
@@ -221,7 +221,7 @@ export default function DockThemeBrowserModal({
             autoFocus
           />
           {search && (
-            <button type="button" className="dtb-search__clear" onClick={() => setSearch("")} aria-label={t('common.clear')}>
+            <button type="button" className="dtb-search__clear" onClick={() => setSearch("")} aria-label={t('common.clear')} title="Close">
               <DockIcon name="close" size={12} />
             </button>
           )}

@@ -115,7 +115,7 @@ export default function BibleSettingsPage() {
   return (
     <div className={rootClassName}>
       <div className="bible-templates-header">
-        <button className="bible-templates-back-btn" onClick={handleBack}>
+        <button className="bible-templates-back-btn" onClick={handleBack} title="Go back">
           <Icon name="arrow_back" size={20} />
           Back
         </button>
@@ -123,7 +123,7 @@ export default function BibleSettingsPage() {
           <Icon name="settings" size={20} />
           Bible Settings
         </h1>
-        <button className="bible-templates-create-btn" onClick={handleSave}>
+        <button className="bible-templates-create-btn" onClick={handleSave} title="Save">
           <Icon name="check" size={16} />
           {saved ? "Saved ✓" : "Save Settings"}
         </button>
@@ -144,7 +144,7 @@ export default function BibleSettingsPage() {
                 key={mode}
                 className={`bible-settings-color-mode-btn${colorMode === mode ? " active" : ""}`}
                 onClick={() => setColorMode(mode)}
-              >
+               title="settings_brightness">
                 <Icon name={mode === "dark" ? "dark_mode" : mode === "light" ? "light_mode" : "settings_brightness"} size={20} />
                 {mode.charAt(0).toUpperCase() + mode.slice(1)}
               </button>

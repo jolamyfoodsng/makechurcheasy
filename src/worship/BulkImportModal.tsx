@@ -322,7 +322,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
             aria-label="Close"
             onClick={onClose}
             disabled={importing}
-          >
+            title="Close">
             x
           </button>
         </div>
@@ -381,7 +381,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                     setPasting((p) => !p);
                     setError("");
                   }}
-                >
+                  title="Upload">
                   <Icon name={pasting ? "description" : "content_paste"} size={14} />
                   {pasting ? "Upload a file instead" : "Or paste text"}
                 </button>
@@ -392,6 +392,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                   <textarea
                     ref={textareaRef}
                     className="bulk-import-paste-textarea"
+                    style={{ fontFamily: '"Charis SIL", "SF Mono", "Noto Sans Mono", monospace' }}
                     placeholder="Paste song lyrics here...&#10;&#10;1. Amazing Grace&#10;Amazing grace how sweet the sound&#10;That saved a wretch like me&#10;&#10;2. How Great Thou Art&#10;O Lord my God when I in awesome wonder"
                     value={pasteText}
                     onChange={(e) => setPasteText(e.target.value)}
@@ -407,7 +408,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                         setPasteText("");
                         setError("");
                       }}
-                    >
+                      title="Cancel">
                       Cancel
                     </button>
                     <button
@@ -415,7 +416,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                       className="bulk-import-btn-primary"
                       disabled={!pasteText.trim()}
                       onClick={handlePasteSubmit}
-                    >
+                      title="Extract Songs">
                       Extract Songs
                     </button>
                   </div>
@@ -441,7 +442,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
               </div>
 
               <div className="bulk-import-text-preview">
-                <pre>{rawText}</pre>
+                <pre style={{ fontFamily: '"Charis SIL", "SF Mono", "Noto Sans Mono", monospace' }}>{rawText}</pre>
               </div>
 
               <p className="bulk-import-extract-hint">
@@ -650,12 +651,12 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                     : onClose
             }
             disabled={importing}
-          >
+            title="Close">
             {step === "done" ? "Close" : "Back"}
           </button>
 
           {step === "extract" && (
-            <button type="button" className="bulk-import-btn-primary" onClick={goToDetect}>
+            <button type="button" className="bulk-import-btn-primary" onClick={goToDetect} title="Detect Songs →">
               Detect Songs →
             </button>
           )}
@@ -666,7 +667,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
               className="bulk-import-btn-primary"
               disabled={songs.length === 0}
               onClick={goToPreview}
-            >
+              title="Review Song →">
               Review {songs.length} Song{songs.length !== 1 ? "s" : ""} →
             </button>
           )}
@@ -677,7 +678,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
               className="bulk-import-btn-primary"
               disabled={selected.size === 0}
               onClick={handleImport}
-            >
+              title="Import">
               Import {selected.size} Song{selected.size !== 1 ? "s" : ""}
             </button>
           )}

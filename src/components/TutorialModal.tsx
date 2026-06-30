@@ -78,6 +78,7 @@ export function TutorialModal({ open, onClose }: TutorialModalProps) {
             className="tutorial-modal-close"
             onClick={onClose}
             aria-label="Close"
+            title="Close"
           >
             <X size={18} />
           </button>

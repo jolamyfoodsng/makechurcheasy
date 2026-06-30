@@ -103,7 +103,7 @@ export default function VerificationModal({ daysOffline, daysUntilNextTier, onDi
               type="button"
               className="verification-modal__btn verification-modal__btn--secondary"
               onClick={onDismiss}
-            >
+             title="Continue">
               Continue Offline
             </button>
           )}
@@ -113,7 +113,7 @@ export default function VerificationModal({ daysOffline, daysUntilNextTier, onDi
               type="button"
               className="verification-modal__btn verification-modal__btn--primary"
               onClick={status === "error" ? handleRetry : handleVerify}
-            >
+             title="Verify Now">
               <Icon name={status === "error" ? "refresh" : "wifi"} size={14} />
               {status === "error" ? "Try Again" : "Verify Now"}
             </button>
@@ -122,7 +122,7 @@ export default function VerificationModal({ daysOffline, daysUntilNextTier, onDi
               type="button"
               className="verification-modal__btn verification-modal__btn--primary"
               disabled
-            >
+             title="Sync">
               <Icon name="sync" size={14} className="verification-modal__icon--spin" />
               Verifying...
             </button>

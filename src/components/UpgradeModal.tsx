@@ -89,7 +89,7 @@ export function UpgradeModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close */}
-        <button className="um-close" onClick={onClose} aria-label="Close">
+        <button className="um-close" onClick={onClose} aria-label="Close" title="Close">
           <Icon name="close" size={20} />
         </button>
 
@@ -202,7 +202,7 @@ export function UpgradeModal({
 
         {/* Footer */}
         <div className="ssm-footer">
-          <button className="ssm-btn-cancel" onClick={onClose}>
+          <button className="ssm-btn-cancel" onClick={onClose} title="Maybe Later">
             Maybe Later
           </button>
           <div className="um-footer-actions">
@@ -211,7 +211,7 @@ export function UpgradeModal({
               onClick={() => {
                 window.open("https://makechurcheasy.creatorstudioslabs.stream/pricing", "_blank");
               }}
-            >
+             title="Start">
               <Zap size={18} />
               <div className="um-btn-text">
                 <span>Upgrade to {required.label}</span>

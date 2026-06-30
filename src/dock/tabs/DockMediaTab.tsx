@@ -1797,7 +1797,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                           event.stopPropagation();
                           setOpenOptionsKey(openOptionsKey === entry.key ? null : entry.key);
                         }}
-                      >
+                       title="More options">
                         <Icon name="more_vert" size={14} />
                       </button>
                     </div>
@@ -1810,7 +1810,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                           event.stopPropagation();
                           void handleSendEntry(entry);
                         }}
-                      >
+                       title="Send">
                         <Icon name="open_in_new" size={14} />
                         {t('media.send')}
                       </button>
@@ -1825,7 +1825,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   type="button"
                   className="dock-media-gallery-card__context-item"
                   onClick={() => { setPreviewEntry(entry); setOpenOptionsKey(null); }}
-                >
+                 title="To Preview">
                   <Icon name="open_in_full" size={13} />
                   {t('media.toPreview')}
                 </button>
@@ -1833,7 +1833,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   type="button"
                   className="dock-media-gallery-card__context-item dock-media-gallery-card__context-item--danger"
                   onClick={() => { void deleteEntry(entry); setOpenOptionsKey(null); }}
-                >
+                 title="Delete Video">
                   <Icon name="delete" size={13} />
                   {entry.kind === "video" ? t('media.deleteVideo') : t('media.deleteImage')}
                 </button>
@@ -1956,7 +1956,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           aria-selected={browserTab === "uploads"}
           className={`dock-media-tab ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
           onClick={() => setBrowserTab("uploads")}
-        >
+         title="Upload">
           {compactTabs ? <Icon name="upload" size={12} /> : t('media.tabImages')}
           {!compactTabs && <span className="dock-media-tab__count">{mediaEntries.length}</span>}
         </button>
@@ -1976,7 +1976,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           aria-selected={browserTab === "patterns"}
           className={`dock-media-tab ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
           onClick={() => setBrowserTab("patterns")}
-        >
+         title="Grid view">
           {compactTabs ? <Icon name="grid_view" size={12} /> : t('media.patterns')}
           {!compactTabs && <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>}
         </button>
@@ -1986,7 +1986,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           aria-selected={browserTab === "text"}
           className={`dock-media-tab ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
           onClick={() => setBrowserTab("text")}
-        >
+         title="Tab Text">
           {compactTabs ? <Icon name="text_fields" size={12} /> : t('media.tabText')}
         </button>
       </div>
@@ -2038,7 +2038,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   type="button"
                   className="dock-btn dock-btn--primary dock-btn--compact"
                   onClick={() => openAddMediaModal("background")}
-                >
+                 title="Add Media">
                   <Icon name="add" size={12} />
                   {t('media.addMedia')}
                 </button>
@@ -2053,7 +2053,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     aria-selected={activeKind === "all"}
                     className={`dock-media-pill${activeKind === "all" ? " dock-media-pill--active" : ""}`}
                     onClick={() => setActiveKind("all")}
-                  >
+                   title="All">
                     {t('media.all')}
                     <span className="dock-media-pill__count">{mediaEntries.length}</span>
                   </button>
@@ -2063,7 +2063,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     aria-selected={activeKind === "video"}
                     className={`dock-media-pill${activeKind === "video" ? " dock-media-pill--active" : ""}`}
                     onClick={() => setActiveKind("video")}
-                  >
+                   title="Tab Videos">
                     {t('media.tabVideos')}
                     <span className="dock-media-pill__count">{videoEntries.length}</span>
                   </button>
@@ -2073,7 +2073,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     aria-selected={activeKind === "image"}
                     className={`dock-media-pill${activeKind === "image" ? " dock-media-pill--active" : ""}`}
                     onClick={() => setActiveKind("image")}
-                  >
+                   title="Tab Images">
                     {t('media.tabImages')}
                     <span className="dock-media-pill__count">{imageEntries.length}</span>
                   </button>
@@ -2087,7 +2087,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     aria-selected={viewMode === "recent"}
                     className={`dock-media-pill dock-media-pill--small${viewMode === "recent" ? " dock-media-pill--active" : ""}`}
                     onClick={() => setViewMode("recent")}
-                  >
+                   title="Recently Used">
                     {t('media.recentlyUsed')}
                   </button>
                   <button
@@ -2096,7 +2096,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     aria-selected={viewMode === "uploaded"}
                     className={`dock-media-pill dock-media-pill--small${viewMode === "uploaded" ? " dock-media-pill--active" : ""}`}
                     onClick={() => setViewMode("uploaded")}
-                  >
+                   title="Newly Uploaded">
                     {t('media.newlyUploaded')}
                   </button>
                 </div>
@@ -2111,7 +2111,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                       className="dock-media-send-error__dismiss"
                       onClick={() => setSendError(null)}
                       aria-label={t('media.dismiss')}
-                    >
+                     title="Close">
                       <Icon name="close" size={13} />
                     </button>
                   </div>
@@ -2151,7 +2151,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   type="button"
                   className="dock-btn dock-btn--preview dock-btn--compact"
                   onClick={() => openAddMediaModal("template-videos")}
-                >
+                 title="Add Animation">
                   <Icon name="download" size={12} />
                   {t('media.addAnimation')}
                 </button>
@@ -2203,7 +2203,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                               event.stopPropagation();
                               void handleSendPattern(entry);
                             }}
-                          >
+                           title="Show">
                             <Icon name="visibility" size={12} />
                             {t('media.show')}
                           </button>
@@ -2238,7 +2238,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 aria-selected={textTab === "content"}
                 className={`dock-overlay-tabs__btn${textTab === "content" ? " dock-overlay-tabs__btn--active" : ""}`}
                 onClick={() => setTextTab("content")}
-              >
+               title="Text Overlay Title">
                 <Icon name="title" size={12} />
                 {t('media.textOverlayTitle')}
               </button>
@@ -2248,7 +2248,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 aria-selected={textTab === "background"}
                 className={`dock-overlay-tabs__btn${textTab === "background" ? " dock-overlay-tabs__btn--active" : ""}`}
                 onClick={() => setTextTab("background")}
-              >
+               title="Background Type">
                 <Icon name="palette" size={12} />
                 {t('media.backgroundType')}
               </button>
@@ -2348,7 +2348,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
                 {/* ── Animation Bar ── */}
                 <div className="dock-overlay-anim-bar">
-                  <button type="button" className="dock-overlay-anim-bar__preview" onClick={triggerAnimPreview}>
+                  <button type="button" className="dock-overlay-anim-bar__preview" onClick={triggerAnimPreview} title="Add Animation">
                     <Icon name="play_arrow" size={12} />
                     {t('media.addAnimation')}
                   </button>
@@ -2397,11 +2397,11 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     <div className="dock-overlay-text-controls__size">
                       <label className="dock-overlay-text-controls__label">{t('media.fontSize')}</label>
                       <div className="dock-overlay-text-controls__size-ctrl">
-                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, headlineSize: Math.max(24, c.headlineSize - 4) }))}>
+                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, headlineSize: Math.max(24, c.headlineSize - 4) }))} title="Remove">
                           <Icon name="remove" size={12} />
                         </button>
                         <span className="dock-overlay-text-controls__size-value">{textOverlay.headlineSize}<small>px</small></span>
-                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, headlineSize: Math.min(120, c.headlineSize + 4) }))}>
+                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, headlineSize: Math.min(120, c.headlineSize + 4) }))} title="Add">
                           <Icon name="add" size={12} />
                         </button>
                       </div>
@@ -2421,11 +2421,11 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     <div className="dock-overlay-text-controls__size">
                       <label className="dock-overlay-text-controls__label">{t('media.fontSize')}</label>
                       <div className="dock-overlay-text-controls__size-ctrl">
-                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, sublineSize: Math.max(14, c.sublineSize - 2) }))}>
+                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, sublineSize: Math.max(14, c.sublineSize - 2) }))} title="Remove">
                           <Icon name="remove" size={12} />
                         </button>
                         <span className="dock-overlay-text-controls__size-value">{textOverlay.sublineSize}<small>px</small></span>
-                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, sublineSize: Math.min(60, c.sublineSize + 2) }))}>
+                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, sublineSize: Math.min(60, c.sublineSize + 2) }))} title="Add">
                           <Icon name="add" size={12} />
                         </button>
                       </div>
@@ -2437,29 +2437,29 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 <div className="dock-overlay-align-section">
                   <div className="dock-overlay-align-section__label">{t('media.alignmentAndPosition')}</div>
                   <div className="dock-overlay-align-section__row">
-                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "top" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "top" }))}>
+                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "top" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "top" }))} title="Up">
                       <Icon name="arrow_upward" size={14} />
                       {t('common.up')}
                     </button>
-                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "center" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "center" }))}>
+                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "center" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "center" }))} title="Center">
                       <Icon name="vertical_align_center" size={14} />
                       {t('common.center')}
                     </button>
-                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "bottom" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "bottom" }))}>
+                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "bottom" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "bottom" }))} title="Down">
                       <Icon name="arrow_downward" size={14} />
                       {t('common.down')}
                     </button>
                   </div>
                   <div className="dock-overlay-align-section__row">
-                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "left" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "left" }))}>
+                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "left" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "left" }))} title="Left">
                       <Icon name="format_align_left" size={14} />
                       {t('common.left')}
                     </button>
-                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "center" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "center" }))}>
+                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "center" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "center" }))} title="Center">
                       <Icon name="format_align_center" size={14} />
                       {t('common.center')}
                     </button>
-                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "right" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "right" }))}>
+                    <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.align === "right" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, align: "right" }))} title="Right">
                       <Icon name="format_align_right" size={14} />
                       {t('common.right')}
                     </button>
@@ -2498,7 +2498,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     className="dock-overlay-actions__btn dock-overlay-actions__btn--show"
                     onClick={() => void applyTextOverlay()}
                     disabled={applyingTextTarget !== null}
-                  >
+                   title="Applying">
                     <Icon name="visibility" size={14} />
                     {applyingTextTarget ? t('media.applying') : t('media.show')}
                   </button>
@@ -2507,7 +2507,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     className="dock-overlay-actions__btn dock-overlay-actions__btn--clear"
                     onClick={() => void clearTextOverlayEverywhere()}
                     disabled={applyingTextTarget !== null}
-                  >
+                   title="Clear">
                     <Icon name="delete" size={14} />
                     {t('common.clear')}
                   </button>
@@ -2529,7 +2529,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                         ...c,
                         background: { ...c.background, enabled: !c.background.enabled },
                       }))}
-                    >
+                     title="dock-overlay-bg-toggle__thumb">
                       <span className="dock-overlay-bg-toggle__thumb" />
                     </button>
                   </div>
@@ -2833,7 +2833,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     className="dock-overlay-actions__btn dock-overlay-actions__btn--show"
                     onClick={() => void applyTextOverlay()}
                     disabled={applyingTextTarget !== null}
-                  >
+                   title="Applying">
                     <Icon name="visibility" size={14} />
                     {applyingTextTarget ? t('media.applying') : t('media.apply')}
                   </button>
@@ -2842,7 +2842,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                     className="dock-overlay-actions__btn dock-overlay-actions__btn--clear"
                     onClick={() => void clearTextOverlayEverywhere()}
                     disabled={applyingTextTarget !== null}
-                  >
+                   title="Clear">
                     <Icon name="delete" size={14} />
                     {t('common.clear')}
                   </button>
@@ -2870,7 +2870,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 <div className="dock-dialog__eyebrow">{t('media.addMedia')}</div>
                 <h2 id="dock-media-add-title" className="dock-dialog__title">{t('media.chooseWhatToAdd')}</h2>
               </div>
-              <button type="button" className="dock-dialog__close" onClick={closeAddMediaModal} aria-label={t('media.closeAddMediaDialog')}>
+              <button type="button" className="dock-dialog__close" onClick={closeAddMediaModal} aria-label={t('media.closeAddMediaDialog')} title="Close">
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -2882,7 +2882,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   aria-selected={addMediaTab === "background"}
                   className={`dock-console-segmented__item${addMediaTab === "background" ? " dock-console-segmented__item--active" : ""}`}
                   onClick={() => setAddMediaTab("background")}
-                >
+                 title="Background">
                   {t('media.background')}
                 </button>
                 <button
@@ -2891,7 +2891,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   aria-selected={addMediaTab === "template-videos"}
                   className={`dock-console-segmented__item${addMediaTab === "template-videos" ? " dock-console-segmented__item--active" : ""}`}
                   onClick={() => setAddMediaTab("template-videos")}
-                >
+                 title="Template Videos">
                   {t('media.templateVideos')}
                 </button>
               </div>
@@ -2915,7 +2915,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                       uploadInputRef.current?.click();
                     }}
                     disabled={uploading}
-                  >
+                   title="Uploading">
                     <Icon name="upload" size={12} />
                     {uploading ? t('media.uploading') : t('media.chooseFiles')}
                   </button>
@@ -3046,7 +3046,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
               )}
             </div>
             <div className="dock-dialog__footer">
-              <button type="button" className="dock-btn dock-btn--compact" onClick={closeAddMediaModal}>
+              <button type="button" className="dock-btn dock-btn--compact" onClick={closeAddMediaModal} title="Close">
                 {t('common.close')}
               </button>
             </div>
@@ -3077,7 +3077,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
             type="button"
             className="dock-btn dock-btn--primary dock-btn--compact"
             onClick={() => setShowPlaylistModal(true)}
-          >
+           title="Play">
             <Icon name="playlist_add" size={12} />
 
           </button>
@@ -3092,7 +3092,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           onClick={() => void clearMedia()}
           disabled={clearingTarget !== null || (!activeTargets.active && !textOverlayTargets.active)}
           aria-label={t('media.clearMedia')}
-        >
+         title="Hide Media">
           <span>{activeTargets.active || textOverlayTargets.active ? t('media.hideMedia') : t('common.clear')}</span>
         </button>
       )}
@@ -3122,7 +3122,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
               onClick={(event) => event.stopPropagation()}
             >
               {/* Close button */}
-              <button type="button" className="dock-media-inspector__close" onClick={() => { setPreviewPlaying(false); closeEntryOptions(); }} aria-label={t('common.close')}>
+              <button type="button" className="dock-media-inspector__close" onClick={() => { setPreviewPlaying(false); closeEntryOptions(); }} aria-label={t('common.close')} title="Close">
                 <Icon name="close" size={14} />
               </button>
 
@@ -3140,7 +3140,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                           <Icon name="movie" size={32} />
                         </div>
                       )}
-                      <button type="button" className="dock-media-inspector__play-btn" onClick={() => setPreviewPlaying(true)}>
+                      <button type="button" className="dock-media-inspector__play-btn" onClick={() => setPreviewPlaying(true)} title="Play">
                         <Icon name="play_arrow" size={22} />
                       </button>
                     </>
@@ -3184,7 +3184,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   type="button"
                   className="dock-media-inspector__action-btn dock-media-inspector__action-btn--primary"
                   onClick={() => { void handleSendEntry(entry); closeEntryOptions(); }}
-                >
+                 title="Send To Preview">
                   <Icon name="play_arrow" size={14} />
                   {t('media.sendToPreview')}
                 </button>
@@ -3225,7 +3225,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                       className={`dock-media-inspector__chip${!(entryPrefs.videoMuted ?? true) ? " dock-media-inspector__chip--active" : ""}`}
                       disabled={sendingFile === entry.playingKey}
                       onClick={() => void toggleVideoMute(entry)}
-                    >
+                     title="Muted">
                       <Icon name={(entryPrefs.videoMuted ?? true) ? "volume_off" : "volume_up"} size={12} />
                       {(entryPrefs.videoMuted ?? true) ? t('media.muted') : t('media.audioOn')}
                     </button>
@@ -3234,7 +3234,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                       className={`dock-media-inspector__chip${(entryPrefs.loop ?? true) ? " dock-media-inspector__chip--active" : ""}`}
                       disabled={sendingFile === entry.playingKey}
                       onClick={() => void setEntryLoop(entry, !(entryPrefs.loop ?? true))}
-                    >
+                     title="Loop">
                       <Icon name="refresh" size={12} />
                       {(entryPrefs.loop ?? true) ? t('media.loop') : t('media.once')}
                     </button>
@@ -3251,7 +3251,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   type="button"
                   className="dock-media-inspector__delete-btn"
                   onClick={() => { void deleteEntry(entry); closeEntryOptions(); }}
-                >
+                 title="Delete">
                   <Icon name="delete" size={12} />
                   {t('media.delete')} {entry.kind === "video" ? t('media.video') : t('common.image')}
                 </button>
@@ -3277,7 +3277,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   <div className="dock-dialog__eyebrow">{t('media.mediaSource')}</div>
                   <h2 id="dock-playlist-title" className="dock-dialog__title">{t('media.createMediaPlaylist')}</h2>
                 </div>
-                <button type="button" className="dock-dialog__close" onClick={() => setShowPlaylistModal(false)} aria-label={t('common.close')}>
+                <button type="button" className="dock-dialog__close" onClick={() => setShowPlaylistModal(false)} aria-label={t('common.close')} title="Close">
                   <Icon name="close" size={14} />
                 </button>
               </div>
@@ -3348,7 +3348,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 </div>
               </div>
               <div className="dock-dialog__footer">
-                <button type="button" className="dock-btn dock-btn--compact" onClick={() => setShowPlaylistModal(false)}>
+                <button type="button" className="dock-btn dock-btn--compact" onClick={() => setShowPlaylistModal(false)} title="Cancel">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -3356,7 +3356,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   className="dock-btn dock-btn--primary dock-btn--compact"
                   onClick={() => void handleCreateVlcPlaylist()}
                   disabled={selectedKeys.size === 0}
-                >
+                 title="Create">
                   <Icon name="playlist_add" size={12} />
                   {t('media.create')}{selectedVideoEntries.length > 0 && selectedImageEntries.length > 0 ? t('media.createBoth') : selectedVideoEntries.length > 0 ? t('media.createVlcSource') : t('media.createSlideshow')}
                 </button>
@@ -3404,7 +3404,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   type="button"
                   onClick={() => setPreviewEntry(null)}
                   style={{ background: "none", border: "none", color: "var(--dock-text-dim)", cursor: "pointer", padding: 4, display: "flex" }}
-                >
+                 title="Close">
                   <Icon name="close" size={16} />
                 </button>
               </div>
@@ -3443,7 +3443,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
             >
               <div className="dock-dialog__header">
                 <h2 className="dock-dialog__title">{t('media.clearAllMedia')}</h2>
-                <button type="button" className="dock-dialog__close" onClick={() => setShowClearAllConfirm(false)} aria-label={t('common.close')}>
+                <button type="button" className="dock-dialog__close" onClick={() => setShowClearAllConfirm(false)} aria-label={t('common.close')} title="Close">
                   <Icon name="close" size={14} />
                 </button>
               </div>
@@ -3453,10 +3453,10 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                 </p>
               </div>
               <div className="dock-dialog__footer">
-                <button type="button" className="dock-btn dock-btn--compact" onClick={() => setShowClearAllConfirm(false)}>
+                <button type="button" className="dock-btn dock-btn--compact" onClick={() => setShowClearAllConfirm(false)} title="Cancel">
                   {t('common.cancel')}
                 </button>
-                <button type="button" className="dock-btn dock-btn--danger dock-btn--compact" onClick={() => void clearAllMedia()}>
+                <button type="button" className="dock-btn dock-btn--danger dock-btn--compact" onClick={() => void clearAllMedia()} title="Clear All">
                   <Icon name="delete_sweep" size={12} />
                   {t('media.clearAll')}
                 </button>

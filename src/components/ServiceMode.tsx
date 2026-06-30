@@ -448,7 +448,7 @@ export function ServiceMode({
                         {showMenu && (
                             <div className="sm-dropdown" onClick={(e) => e.stopPropagation()}>
                                 {!volunteerMode && (
-                                    <button className="sm-dropdown-item" onClick={handleOpenSettings}>
+                                    <button className="sm-dropdown-item" onClick={handleOpenSettings} title="Settings">
                                         <Icon name="tune" size={20} />
                                         Layout Settings
                                     </button>
@@ -458,7 +458,7 @@ export function ServiceMode({
                                         className="sm-dropdown-item"
                                         onClick={handleRepair}
                                         disabled={isRepairing || !config}
-                                    >
+                                     title="Repair">
                                         <Icon name="build" size={20} />
                                         {isRepairing ? "Repairing..." : "Repair Layouts"}
                                     </button>
@@ -474,12 +474,12 @@ export function ServiceMode({
                                             "success"
                                         );
                                     }}
-                                >
+                                 title="admin_panel_settings">
                                     <Icon name={volunteerMode ? "admin_panel_settings" : "person"} size={20} />
                                     {volunteerMode ? "Advanced Mode" : "Volunteer Mode"}
                                 </button>
                                 <div className="sm-dropdown-divider" />
-                                <button className="sm-dropdown-item sm-dropdown-danger" onClick={handleDisconnect}>
+                                <button className="sm-dropdown-item sm-dropdown-danger" onClick={handleDisconnect} title="Disconnect">
                                     <Icon name="power_settings_new" size={20} />
                                     Disconnect
                                 </button>
@@ -576,7 +576,7 @@ export function ServiceMode({
                                     <p className="overlay-subtitle">Controls real OBS scene transforms</p>
                                 </div>
                             </div>
-                            <button className="btn-back" onClick={handleCloseOverlay}>
+                            <button className="btn-back" onClick={handleCloseOverlay} title="Close">
                                 <Icon name="close" size={20} />
                                 Close
                             </button>
@@ -667,7 +667,7 @@ export function ServiceMode({
                                             onClick={() => {
                                                 updateLayout({ splitRatio: preset.value });
                                             }}
-                                        >
+                                         title="ratio-label">
                                             <span className="ratio-label">{preset.label}</span>
                                             <span className="ratio-desc">{preset.desc}</span>
                                         </button>
@@ -747,7 +747,7 @@ export function ServiceMode({
                                                 setLogoPreview(null);
                                                 updateLayout({ logoUrl: null });
                                             }}
-                                        >
+                                         title="Remove">
                                             <Icon name="delete" size={20} />
                                             Remove Logo
                                         </button>
@@ -814,14 +814,14 @@ export function ServiceMode({
 
                         {/* Footer / Actions */}
                         <div className="overlay-footer">
-                            <button className="btn-secondary" onClick={handleCloseOverlay}>
+                            <button className="btn-secondary" onClick={handleCloseOverlay} title="Cancel">
                                 Cancel
                             </button>
                             <button
                                 className="btn-primary"
                                 onClick={handleApplyLayout}
                                 disabled={isApplying || layoutState.autoSync}
-                            >
+                             title="Apply">
                                 <Icon name={isApplying ? "hourglass_empty" : "check"} size={20} className="btn-icon" />
                                 {isApplying
                                     ? "Applying..."

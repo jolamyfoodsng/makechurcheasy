@@ -14,7 +14,7 @@ export default function QuickMergePage() {
             type="button"
             className="quick-merge-page-back-btn"
             onClick={() => navigate("/hub?mode=live")}
-          >
+           title="Go back">
             <Icon name="arrow_back" size={20} />
             Service Hub
           </button>

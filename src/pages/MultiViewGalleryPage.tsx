@@ -8,7 +8,14 @@
  * Added layouts appear under the "Added" category filter.
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { HelpCircle, RotateCcw, AlertTriangle } from "lucide-react";
+import MultiViewGalleryTutorial, {
+  isMultiViewGalleryTutorialCompleted,
+  markMultiViewGalleryTutorialCompleted,
+  resetMultiViewGalleryTutorial,
+} from "./MultiViewGalleryTutorial";
 import {
   GALLERY_LAYOUTS,
   GALLERY_CATEGORIES,
@@ -162,7 +169,7 @@ function PreviewModal({
   return (
     <div className="mvg-modal-overlay" onClick={onClose}>
       <div className="mvg-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="mvg-modal-close" onClick={onClose} aria-label="Close">
+        <button className="mvg-modal-close" onClick={onClose} aria-label="Close" title="Close">
           <Icon name="close" size={20} />
         </button>
 
@@ -238,7 +245,7 @@ function PreviewModal({
               className={`mvg-btn ${isAdded ? "mvg-btn--added" : "mvg-btn--primary"}`}
               onClick={onAddToOBS}
               disabled={!obsConnected || installing}
-            >
+              title="Add">
               {installing ? (
                 <>
                   <span className="loading-spinner-sm" /> Installing...
@@ -272,7 +279,7 @@ function OBSDisconnectedModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="mvg-modal-overlay" onClick={onClose}>
       <div className="mvg-modal mvg-modal--small" onClick={(e) => e.stopPropagation()}>
-        <button className="mvg-modal-close" onClick={onClose} aria-label="Close">
+        <button className="mvg-modal-close" onClick={onClose} aria-label="Close" title="Close">
           <Icon name="close" size={20} />
         </button>
         <div className="mvg-disconnected-content">
@@ -280,7 +287,7 @@ function OBSDisconnectedModal({ onClose }: { onClose: () => void }) {
           <h3>OBS is not connected</h3>
           <p>Connect to OBS Studio to install multi-view layouts.</p>
           <div className="mvg-disconnected-actions">
-            <button className="mvg-btn mvg-btn--outline" onClick={onClose}>
+            <button className="mvg-btn mvg-btn--outline" onClick={onClose} title="Cancel">
               Cancel
             </button>
           </div>
@@ -293,6 +300,7 @@ function OBSDisconnectedModal({ onClose }: { onClose: () => void }) {
 // ── Main Gallery Page ──────────────────────────────────────────────────────
 
 export default function MultiViewGalleryPage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<GalleryLayoutCategory | "all">("all");
   const [previewLayout, setPreviewLayout] = useState<GalleryLayout | null>(null);
@@ -302,6 +310,19 @@ export default function MultiViewGalleryPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(() => loadAddedIds());
   const [, setRenderTick] = useState(0);
+
+  // ── Tutorial state ──
+  const [tourActive, setTourActive] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // ── Auto-start tutorial on first visit ──
+  useEffect(() => {
+    if (!isMultiViewGalleryTutorialCompleted() && !tourActive) {
+      const timer = setTimeout(() => setTourActive(true), 600);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Listen to OBS status ──
   useState(() => {
@@ -440,7 +461,7 @@ export default function MultiViewGalleryPage() {
     <div className="app-page mvg-page">
       <div className="app-page__inner mvg-inner">
         {/* Header */}
-        <header className="app-page__header mvg-header">
+        <header className="app-page__header mvg-header" data-mgt-tutorial="welcome">
           <div className="app-page__header-copy">
             <p className="app-page__eyebrow">Multi-View</p>
             <h1 className="app-page__title">Multi-View Layouts</h1>
@@ -449,10 +470,39 @@ export default function MultiViewGalleryPage() {
               translations, and other content in OBS.
             </p>
           </div>
+          <div className="app-page__actions">
+            <button
+              className="production-btn production-btn--ghost"
+              onClick={() => { resetMultiViewGalleryTutorial(); setTourActive(true); setBannerDismissed(false); }}
+              title={t("mgt.button.tooltip")}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }}
+            >
+              <HelpCircle size={16} /> {t("mgt.button")}
+            </button>
+          </div>
         </header>
 
+        {/* ── Incomplete tutorial banner ── */}
+        {!tourActive && !isMultiViewGalleryTutorialCompleted() && !bannerDismissed && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", margin: "0 24px 16px", background: "rgba(var(--primary-rgb, 99, 102, 241), 0.08)", border: "1px solid rgba(var(--primary-rgb, 99, 102, 241), 0.2)", borderRadius: 8, fontSize: "0.8125rem", color: "var(--text-muted)" }}>
+            <AlertTriangle size={14} style={{ color: "var(--primary)", flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>{t("mgt.banner")}</span>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "var(--primary)", color: "#fff", border: "1px solid var(--primary)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, cursor: "pointer" }} onClick={() => setTourActive(true)}>
+                {t("mgt.banner.continue")}
+              </button>
+              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => { resetMultiViewGalleryTutorial(); setTourActive(true); setBannerDismissed(false); }}>
+                <RotateCcw size={12} /> {t("mgt.banner.restart")}
+              </button>
+              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => setBannerDismissed(true)}>
+                {t("mgt.banner.dismiss")}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Search */}
-        <div className="mvg-search">
+        <div className="mvg-search" data-mgt-tutorial="search">
           <Icon name="search" size={16} className="mvg-search-icon" />
           <input
             type="text"
@@ -462,14 +512,14 @@ export default function MultiViewGalleryPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
           {search && (
-            <button className="mvg-search-clear" onClick={() => setSearch("")} aria-label="Clear">
+            <button className="mvg-search-clear" onClick={() => setSearch("")} aria-label="Clear" title="Close">
               <Icon name="close" size={14} />
             </button>
           )}
         </div>
 
         {/* Category filters */}
-        <div className="mvg-filters">
+        <div className="mvg-filters" data-mgt-tutorial="filters">
           {GALLERY_CATEGORIES.map((cat) => (
             <button
               key={cat.key}
@@ -487,7 +537,7 @@ export default function MultiViewGalleryPage() {
 
         {/* Layout grid */}
         {filtered.length > 0 ? (
-          <div className="mvg-grid">
+          <div className="mvg-grid" data-mgt-tutorial="grid">
             {filtered.map((layout) => {
               const isAdded = addedIds.has(layout.id);
               return (
@@ -515,11 +565,11 @@ export default function MultiViewGalleryPage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="mvg-card-actions">
+                  <div className="mvg-card-actions" data-mgt-tutorial="card-actions">
                     <button
                       className="mvg-btn mvg-btn--outline mvg-btn--sm"
                       onClick={() => setPreviewLayout(layout)}
-                    >
+                      title="Show">
                       <Icon name="visibility" size={14} /> Preview
                     </button>
                     <button
@@ -531,7 +581,7 @@ export default function MultiViewGalleryPage() {
                         }
                         handleAddToOBS(layout);
                       }}
-                    >
+                      title="Add">
                       {isAdded ? (
                         <>
                           <Icon name="check_circle" size={14} /> Added
@@ -591,6 +641,13 @@ export default function MultiViewGalleryPage() {
           </div>
         )}
       </div>
+
+      {/* ── Tutorial Tour ── */}
+      <MultiViewGalleryTutorial
+        isActive={tourActive}
+        onClose={() => setTourActive(false)}
+        onFinish={() => { markMultiViewGalleryTutorialCompleted(); setTourActive(false); }}
+      />
     </div>
   );
 }

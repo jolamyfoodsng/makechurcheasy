@@ -116,7 +116,7 @@ export function BroadcastHome() {
             <button
               className="mv-nav-link"
               onClick={() => navigate("/")}
-            >
+             title="Open">
               <Icon name="grid_view" size={18} style={{ marginRight: 6 }} />
               Open Multi-View Editor
             </button>

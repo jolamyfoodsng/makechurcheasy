@@ -54,7 +54,7 @@ export function TrialBanner({ onUpgrade }: TrialBannerProps) {
             padding: "4px 8px",
             borderRadius: 4,
           }}
-        >
+         title="Upgrade">
           Upgrade
         </button>
       </div>
@@ -98,7 +98,7 @@ export function TrialBanner({ onUpgrade }: TrialBannerProps) {
           padding: "5px 12px",
           borderRadius: 4,
         }}
-      >
+       title="Upgrade">
         Upgrade
       </button>
     </div>

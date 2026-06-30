@@ -183,17 +183,17 @@ export function MVDashboard() {
               <h2 className="mv-dash-card-title">Quick Actions</h2>
 
               <div className="mv-dash-quick-actions">
-                <button className="mv-dash-primary-btn" onClick={() => navigate("/service-hub")}>
+                <button className="mv-dash-primary-btn" onClick={() => navigate("/service-hub")} title="Open">
                   <Icon name="rocket_launch" size={20} />
                   Open Service Control Hub
                 </button>
 
-                <button className="mv-dash-secondary-btn" onClick={runPreServiceCheck}>
+                <button className="mv-dash-secondary-btn" onClick={runPreServiceCheck} title="Running Pre-Service Check">
                   <Icon name="playlist_play" size={20} />
                   {checkState === "running" ? "Running Pre-Service Check" : "Run Pre-Service Check"}
                 </button>
 
-                <button className="mv-dash-secondary-btn" onClick={() => navigate("/new")}>
+                <button className="mv-dash-secondary-btn" onClick={() => navigate("/new")} title="Create">
                   <Icon name="add_box" size={20} />
                   Create New Layout
                 </button>
@@ -281,7 +281,7 @@ export function MVDashboard() {
                       // no-op
                     });
                   }}
-                >
+                 title="Disconnect">
                   <Icon name="power_settings_new" size={20} />
                   Disconnect
                 </button>
@@ -324,7 +324,7 @@ export function MVDashboard() {
         <section className="mv-dash-section">
           <div className="mv-dash-section-head">
             <h2>Recent Templates</h2>
-            <button className="mv-dash-view-all" onClick={() => navigate("/resources")}>
+            <button className="mv-dash-view-all" onClick={() => navigate("/resources")} title="Go forward">
               View All
               <Icon name="arrow_forward" size={20} />
             </button>
@@ -359,7 +359,7 @@ export function MVDashboard() {
         <section className="mv-dash-section">
           <div className="mv-dash-section-head">
             <h2>Recent Layouts</h2>
-            <button className="mv-dash-view-all" onClick={() => navigate("/")}>
+            <button className="mv-dash-view-all" onClick={() => navigate("/")} title="Refresh">
               Refresh
               <Icon name="refresh" size={20} />
             </button>

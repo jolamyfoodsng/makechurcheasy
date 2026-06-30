@@ -72,7 +72,7 @@ export default function VerificationLockScreen({ daysOffline }: Props) {
           className="verification-lock__btn"
           onClick={handleVerify}
           disabled={status === "verifying"}
-        >
+         title="Sync">
           {status === "verifying" ? (
             <>
               <Icon name="sync" size={16} className="verification-lock__icon--spin" />

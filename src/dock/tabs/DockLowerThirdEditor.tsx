@@ -68,7 +68,7 @@ function Section({
         type="button"
         className="dock-lt-editor__section-header"
         onClick={onToggle}
-      >
+       title="expand_less">
         <Icon name={icon} size={12} />
         <span>{label}</span>
         <Icon name={open ? "expand_less" : "expand_more"} size={14} style={{ marginLeft: "auto" }} />
@@ -159,7 +159,7 @@ function VariableControl({
             cursor: "pointer",
             textAlign: "center",
           }}
-        >
+         title="true">
           {value === "true" ? "On" : "Off"}
         </button>
       );
@@ -508,7 +508,7 @@ export default function DockLowerThirdEditor({
                 lineHeight: 1,
                 flexShrink: 0,
               }}
-            >
+             title="Close">
               <Icon name="close" size={12} />
             </button>
           </div>
@@ -611,7 +611,7 @@ export default function DockLowerThirdEditor({
           onClick={handleSend}
           disabled={sending}
           style={{ flex: 1 }}
-        >
+         title="Play">
           <Icon name="play_arrow" size={14} />
           <span>Go Live</span>
         </button>
@@ -627,7 +627,7 @@ export default function DockLowerThirdEditor({
               border: "1px solid var(--dock-border)",
               color: "var(--dock-text-dim)",
             }}
-          >
+           title="Animate Out">
             <Icon name="animation" size={14} />
             <span>Animate Out</span>
           </button>

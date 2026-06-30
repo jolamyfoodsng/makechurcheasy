@@ -105,7 +105,7 @@ export function TestSceneCreator({ inputs, onCreateTestScene }: Props) {
                     type="submit"
                     className="btn-primary"
                     disabled={!selectedSource || isCreating}
-                >
+                 title="Generate Test Layout">
                     <Icon name={isCreating ? "hourglass_empty" : "add_circle"} size={20} className="btn-icon" />
                     {isCreating ? "Creating..." : "Generate Test Layout"}
                 </button>

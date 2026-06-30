@@ -214,10 +214,12 @@
   resize: none;
   outline: none;
   font-size: 13px;
-  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-family: "Charis SIL", "SF Mono", "Noto Sans Mono", "Fira Code", "Consolas", monospace;
   line-height: 1.7;
   color: var(--text-primary);
   box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .ws-lyrics-textarea::placeholder {

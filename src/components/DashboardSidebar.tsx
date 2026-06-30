@@ -187,13 +187,13 @@ export default function DashboardSidebar({
               <button
                 className="end-confirm-btn-cancel"
                 onClick={() => setShowLogoutConfirm(false)}
-              >
+               title="Cancel">
                 Cancel
               </button>
               <button
                 className="end-confirm-btn-end"
                 onClick={() => { setShowLogoutConfirm(false); logout(); }}
-              >
+               title="Sign out">
                 Sign Out
               </button>
             </div>

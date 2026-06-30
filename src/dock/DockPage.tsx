@@ -656,7 +656,7 @@ export default function DockPage() {
                 className="dock-shell-icon-btn"
                 onClick={() => setShowSettingsMenu(false)}
                 aria-label={t('common.close')}
-              >
+                title="Close">
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -670,6 +670,7 @@ export default function DockPage() {
                   setTheme(nextTheme);
                   setShowSettingsMenu(false);
                 }}
+                title={themeToggleLabel}
               >
                 <Icon name={themeToggleIcon} size={16} />
                 <span>{themeToggleLabel}</span>
@@ -680,7 +681,7 @@ export default function DockPage() {
                 type="button"
                 className="dock-sidebar__item"
                 onClick={() => setShowBibleOptions(!showBibleOptions)}
-              >
+                title="Book">
                 <Icon name="menu_book" size={16} />
                 <span>Bible Options</span>
                 <Icon name={showBibleOptions ? "expand_less" : "expand_more"} size={14} />
@@ -715,7 +716,7 @@ export default function DockPage() {
                 type="button"
                 className="dock-sidebar__item"
                 onClick={() => setShowTabVisibility(!showTabVisibility)}
-              >
+                title="Tab Visibility">
                 <Icon name="visibility" size={16} />
                 <span>{t('page.tabVisibility')}</span>
                 <Icon name={showTabVisibility ? "expand_less" : "expand_more"} size={14} />
@@ -795,7 +796,7 @@ export default function DockPage() {
                       fontSize: 11,
                       transition: "background 0.15s",
                     }}
-                  >
+                    title="Confirm">
                     <Icon name={icon} size={14} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600 }}>{label}</div>
@@ -813,7 +814,7 @@ export default function DockPage() {
                 type="button"
                 className="dock-sidebar__item"
                 onClick={() => setShowProjectionSettings(!showProjectionSettings)}
-              >
+                title="Projection Settings">
                 <Icon name="videocam" size={16} />
                 <span>{t('page.projectionSettings')}</span>
                 <Icon name={showProjectionSettings ? "expand_less" : "expand_more"} size={14} />
@@ -847,7 +848,7 @@ export default function DockPage() {
                           fontSize: 11,
                           transition: "background 0.15s",
                         }}
-                      >
+                        title="Confirm">
                         <Icon name={icon} size={14} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600 }}>{label}</div>
@@ -885,7 +886,7 @@ export default function DockPage() {
                           fontSize: 11,
                           transition: "background 0.15s",
                         }}
-                      >
+                        title="Confirm">
                         <Icon name={icon} size={14} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600 }}>{label}</div>
@@ -924,7 +925,7 @@ export default function DockPage() {
                   setShowHistory(true);
                   setShowSettingsMenu(false);
                 }}
-              >
+                title="History">
                 <Icon name="history" size={16} />
                 <span>History</span>
               </button>
@@ -939,7 +940,7 @@ export default function DockPage() {
                   setShowSettingsMenu(false);
                   setShowReconnectModal(true);
                 }}
-              >
+                title="Link">
                 <Icon name="link" size={16} />
                 <span>{obsConnected ? t('page.reconnect') : t('page.connection')} to OBS</span>
               </button>
@@ -955,7 +956,7 @@ export default function DockPage() {
                   setShowClearScenesConfirm(true);
                 }}
                 style={{ color: "var(--dock-red, #EF4444)" }}
-              >
+                title="Clear All Scenes">
                 <Icon name="delete_sweep" size={16} />
                 <span>{t('page.clearAllScenes')}</span>
               </button>
@@ -978,7 +979,7 @@ export default function DockPage() {
                 className="dock-dialog__close"
                 onClick={() => { if (!clearScenesLoading) setShowClearScenesConfirm(false); }}
                 aria-label={t('common.close')}
-              >
+                title="Close">
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -1002,7 +1003,7 @@ export default function DockPage() {
                 className="dock-btn dock-btn--sm"
                 disabled={clearScenesLoading}
                 onClick={() => setShowClearScenesConfirm(false)}
-              >
+                title="Clear All Scenes Cancel">
                 {t('page.clearAllScenesCancel')}
               </button>
               <button
@@ -1022,7 +1023,7 @@ export default function DockPage() {
                     setShowClearScenesConfirm(false);
                   }
                 }}
-              >
+                title="Loading">
                 {clearScenesLoading ? t('common.loading') : t('page.clearAllScenesContinue')}
               </button>
             </div>
@@ -1043,7 +1044,7 @@ export default function DockPage() {
                 className="dock-dialog__close"
                 onClick={() => setShowReconnectModal(false)}
                 aria-label={t('common.close')}
-              >
+                title="Close">
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -1075,7 +1076,7 @@ export default function DockPage() {
                     void handleManualConnect();
                     setShowReconnectModal(false);
                   }}
-                >
+                  title="Reconnect">
                   <Icon name="link" size={16} />
                   {obsConnected ? t('page.reconnect') : t('page.connection')}
                 </button>
@@ -1214,7 +1215,7 @@ export default function DockPage() {
                 className="dock-shortcuts-overlay__close"
                 onClick={() => setShowShortcutsHelp(false)}
                 aria-label={t('common.close')}
-              >
+                title="Close">
                 <Icon name="close" size={14} />
               </button>
             </div>

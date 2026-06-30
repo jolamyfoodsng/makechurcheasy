@@ -17,15 +17,24 @@ import {
   FileCode,
   FileText,
   Globe,
+  HelpCircle,
   Info,
   Languages,
+  RotateCcw,
   Search,
   ShieldCheck,
   Timer,
   X,
-  Zap
+  Zap,
+  AlertTriangle
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import TranscriptDetailTutorial, {
+  isDetailTutorialCompleted,
+  markDetailTutorialCompleted,
+  resetDetailTutorial,
+} from './TranscriptDetailTutorial';
 import LanguagePicker from '../components/LanguagePicker';
 import languageData from '../../full_langugae_list.json';
 import { checkPremiumAccess, getPremiumAccessDeniedMessage } from '../services/premiumActionGuard';
@@ -151,12 +160,49 @@ async function saveViaTauriDialog(defaultName: string, bytes: Uint8Array, filter
   }
 }
 
+/* ── Unicode font loading for jsPDF ── */
+
+let _charisFontLoaded = false;
+
+async function loadCharisSILFont(doc: jsPDF) {
+  if (_charisFontLoaded) return;
+  try {
+    const [regRes, boldRes] = await Promise.all([
+      fetch('/fonts/charis-sil/CharisSIL-Regular.ttf'),
+      fetch('/fonts/charis-sil/CharisSIL-Bold.ttf'),
+    ]);
+    const [regBuf, boldBuf] = await Promise.all([
+      regRes.arrayBuffer(),
+      boldRes.arrayBuffer(),
+    ]);
+    const toBase64 = (buf: ArrayBuffer) => {
+      const bytes = new Uint8Array(buf);
+      let bin = '';
+      for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+      return window.btoa(bin);
+    };
+    doc.addFileToVFS('CharisSIL-Regular.ttf', toBase64(regBuf));
+    doc.addFont('CharisSIL-Regular.ttf', 'CharisSIL', 'normal');
+    doc.addFileToVFS('CharisSIL-Bold.ttf', toBase64(boldBuf));
+    doc.addFont('CharisSIL-Bold.ttf', 'CharisSIL', 'bold');
+    _charisFontLoaded = true;
+  } catch (err) {
+    console.warn('[PDF Export] Failed to load Charis SIL font, falling back to helvetica:', err);
+  }
+}
+
 async function exportPDF(
   transcript: Transcript,
   lines: ParsedLine[],
   scriptures: DetectedScripture[],
 ): Promise<Uint8Array> {
   const doc = new jsPDF();
+  await loadCharisSILFont(doc);
+
+  const useFont = (style: 'bold' | 'normal') => {
+    doc.setFont(_charisFontLoaded ? 'CharisSIL' : 'helvetica', style);
+  };
+
   const pageW = doc.internal.pageSize.getWidth();
   const margin = 20;
   const maxW = pageW - margin * 2;
@@ -170,14 +216,14 @@ async function exportPDF(
   };
 
   // Title
-  doc.setFont('helvetica', 'bold');
+  useFont('bold');
   doc.setFontSize(16);
   const titleLines = doc.splitTextToSize(transcript.title, maxW);
   doc.text(titleLines, margin, y);
   y += titleLines.length * 7 + 4;
 
   // Metadata
-  doc.setFont('helvetica', 'normal');
+  useFont('normal');
   doc.setFontSize(9);
   doc.setTextColor(120, 120, 120);
   const meta: string[] = [];
@@ -195,13 +241,13 @@ async function exportPDF(
   y += 10;
 
   // Transcript heading
-  doc.setFont('helvetica', 'bold');
+  useFont('bold');
   doc.setFontSize(12);
   doc.text('Transcript', margin, y);
   y += 8;
 
   // Transcript lines
-  doc.setFont('helvetica', 'normal');
+  useFont('normal');
   doc.setFontSize(9);
   for (const line of lines) {
     const full = `${line.time}    ${line.text}`;
@@ -215,26 +261,26 @@ async function exportPDF(
   if (scriptures.length > 0) {
     y += 8;
     checkPage(16);
-    doc.setFont('helvetica', 'bold');
+    useFont('bold');
     doc.setFontSize(12);
     doc.text('Detected Scriptures', margin, y);
     y += 8;
-    doc.setFont('helvetica', 'normal');
+    useFont('normal');
     doc.setFontSize(9);
     for (const s of scriptures) {
       const line = `${s.ref}  —  ${s.text}`;
       const wrapped = doc.splitTextToSize(line, maxW);
       checkPage(wrapped.length * 4.2 + 3);
-      doc.setFont('helvetica', 'bold');
+      useFont('bold');
       doc.text(wrapped[0], margin, y);
       if (wrapped.length > 1) {
-        doc.setFont('helvetica', 'normal');
+        useFont('normal');
         doc.text(wrapped.slice(1), margin, y + 4);
         y += wrapped.length * 4.2;
       } else {
         y += 5;
       }
-      doc.setFont('helvetica', 'normal');
+      useFont('normal');
       doc.setTextColor(120, 120, 120);
       doc.text(s.time, margin, y);
       doc.setTextColor(0, 0, 0);
@@ -348,28 +394,28 @@ function AccessDeniedDialog({ isOpen, reason, onClose }: AccessDeniedDialogProps
             <ShieldCheck size={20} color="var(--error)" />
             <h2 className="modal-title">{msg.title}</h2>
           </div>
-          <button className="modal-close" onClick={onClose}><X size={18} /></button>
+          <button className="modal-close" onClick={onClose} title="Close"><X size={18} /></button>
         </div>
         <div className="modal-body">
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{msg.description}</p>
         </div>
         <div className="modal-footer" style={{ gap: 8 }}>
           {msg.action === 'upgrade' && (
-            <button className="btn btn-primary btn-block" onClick={onClose}>
+            <button className="btn btn-primary btn-block" onClick={onClose} title="Upgrade">
               <Zap size={16} /> Upgrade Plan
             </button>
           )}
           {msg.action === 'reconnect' && (
-            <button className="btn btn-primary btn-block" onClick={onClose}>
+            <button className="btn btn-primary btn-block" onClick={onClose} title="Search">
               <Search size={16} /> Check Connection
             </button>
           )}
           {msg.action === 'contact' && (
-            <button className="btn btn-primary btn-block" onClick={onClose}>
+            <button className="btn btn-primary btn-block" onClick={onClose} title="Info">
               <Info size={16} /> Contact Support
             </button>
           )}
-          <button className="btn btn-outline btn-block" onClick={onClose}>Close</button>
+          <button className="btn btn-outline btn-block" onClick={onClose} title="Close">Close</button>
         </div>
       </div>
     </div>
@@ -418,7 +464,7 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, savedTransl
 
         <div className="modal-header">
           <h2 className="modal-title">Translate Transcript</h2>
-          <button className="close-btn" onClick={onClose}>
+          <button className="close-btn" onClick={onClose} title="Close">
             <X size={20} />
           </button>
         </div>
@@ -532,7 +578,7 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, savedTransl
             }}
             disabled={!canAfford || verifyingAccess}
             style={!canAfford || verifyingAccess ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-          >
+            title="Language">
             {verifyingAccess ? (
               <><div className="btn-spinner" /> Verifying access...</>
             ) : (
@@ -548,7 +594,7 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, savedTransl
                 // Placeholder for future payment integration
                 alert('Credit purchase coming soon!');
               }}
-            >
+              title="Activate">
               <Zap size={16} /> Buy Credits
             </button>
           )}
@@ -682,7 +728,7 @@ function TranslationView({ onBack, lines, transcript, transcriptText, targetLang
   return (
     <div className="translation-view">
       <div className="t-header-row">
-        <button className="back-link" onClick={onBack} style={{ marginBottom: 0 }}>
+        <button className="back-link" onClick={onBack} style={{ marginBottom: 0 }} title="Go back">
           <ArrowLeft size={16} /> Back to Transcript
         </button>
       </div>
@@ -703,8 +749,8 @@ function TranslationView({ onBack, lines, transcript, transcriptText, targetLang
         <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '16px 20px', marginBottom: 24 }}>
           <p style={{ color: '#f87171', margin: 0, fontSize: '14px' }}>Translation failed: {error}</p>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button className="btn btn-outline" style={{ fontSize: '12px' }} onClick={onBack}>Go Back</button>
-            <button className="btn btn-primary" style={{ fontSize: '12px' }} onClick={handleRetry} disabled={isRetrying}>
+            <button className="btn btn-outline" style={{ fontSize: '12px' }} onClick={onBack} title="Go back">Go Back</button>
+            <button className="btn btn-primary" style={{ fontSize: '12px' }} onClick={handleRetry} disabled={isRetrying} title="Retry">
               {isRetrying ? (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite', display: 'inline-block' }} />
@@ -730,7 +776,7 @@ function TranslationView({ onBack, lines, transcript, transcriptText, targetLang
               {lines.map((line, i) => (
                 <div key={i} style={{ display: 'flex', gap: 16 }}>
                   <div style={{ width: 60, color: 'var(--app-text-accent)', fontSize: '12px', fontFamily: 'monospace' }}>{line.time}</div>
-                  <div style={{ flex: 1, fontSize: '14px', color: 'var(--app-text-main)' }}>{line.text}</div>
+                  <div style={{ flex: 1, fontSize: '14px', color: 'var(--app-text-main)', fontFamily: '"Charis SIL", "CMG Sans", sans-serif' }}>{line.text}</div>
                 </div>
               ))}
             </div>
@@ -747,7 +793,7 @@ function TranslationView({ onBack, lines, transcript, transcriptText, targetLang
                   <div style={{ width: 60, color: 'var(--app-text-accent)', fontSize: '12px', fontFamily: 'monospace' }}>{line.time || lines[i]?.time}</div>
                   <div
                     className="editable-line"
-                    style={{ flex: 1, fontSize: '14px', color: 'var(--app-text-main)' }}
+                    style={{ flex: 1, fontSize: '14px', color: 'var(--app-text-main)', fontFamily: '"Charis SIL", "CMG Sans", sans-serif' }}
                     contentEditable
                     suppressContentEditableWarning
                   >
@@ -777,7 +823,7 @@ function TranslationView({ onBack, lines, transcript, transcriptText, targetLang
                 <p style={{ color: 'var(--app-text-muted)', fontSize: '12px', letterSpacing: 1, textTransform: 'uppercase' }}>
                   Estimated time remaining: 0m 12s
                 </p>
-                <button className="btn btn-outline" style={{ marginTop: 24, borderRadius: 24 }} onClick={() => setProgress(100)}>Cancel</button>
+                <button className="btn btn-outline" style={{ marginTop: 24, borderRadius: 24 }} onClick={() => setProgress(100)} title="Cancel">Cancel</button>
               </div>
             </div>
           )}
@@ -838,7 +884,7 @@ function TranslationView({ onBack, lines, transcript, transcriptText, targetLang
                 }}
                 onClick={() => handleDownload('pdf')}
                 disabled={downloadState !== 'idle'}
-              >
+                title="Download">
                 {downloadState === 'pdf' ? (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -860,7 +906,7 @@ function TranslationView({ onBack, lines, transcript, transcriptText, targetLang
                 }}
                 onClick={() => handleDownload('docx')}
                 disabled={downloadState !== 'idle'}
-              >
+                title="Download">
                 {downloadState === 'docx' ? (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -899,6 +945,7 @@ interface TranscriptDetailProps {
 
 export default function TranscriptDetailPage({ transcriptId, onBack }: TranscriptDetailProps) {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<'idle' | 'pdf' | 'docx' | 'done_pdf' | 'done_docx'>('idle');
@@ -911,6 +958,10 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   const [sidebarTab, setSidebarTab] = useState<'scriptures' | 'translations'>('scriptures');
   const [accessDeniedDialog, setAccessDeniedDialog] = useState<{ open: boolean; reason: string }>({ open: false, reason: '' });
   const isLicenseUnlocked = useLicenseGuardState();
+
+  // ── Tutorial state ────────────────────────────────────────────────────
+  const [tourActive, setTourActive] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // Runtime license change: cancel in-progress work if license revoked
   const isTranslatingRef = useRef(isTranslating);
@@ -930,6 +981,15 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
       })
       .catch(() => setLoading(false));
   }, [transcriptId]);
+
+  // ── Auto-start tutorial on first visit ────────────────────────────────
+  useEffect(() => {
+    if (!loading && !isDetailTutorialCompleted() && !tourActive) {
+      const timer = setTimeout(() => setTourActive(true), 600);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   const parsedLines = useMemo(
     () => transcript ? parseTranscriptLines(transcript.transcriptText) : [],
@@ -1064,7 +1124,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
     return (
       <div className="detail-view">
         <div style={{ padding: 24 }}>
-          <button className="back-link" onClick={onBack}>
+          <button className="back-link" onClick={onBack} title="Go back">
             <ArrowLeft size={16} /> Back to Transcripts
           </button>
           <h2 className="main-title" style={{ marginTop: 24 }}>Transcript not found</h2>
@@ -1113,20 +1173,39 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   }
 
   return (
-    <div className="detail-view">
+    <div className="detail-view" data-detail-tutorial="welcome">
       {/* Header Section */}
       <div className="detail-header-section">
-        <button className="back-link" onClick={onBack}>
+        <button className="back-link" onClick={onBack} data-detail-tutorial="back" title="Go back">
           <ArrowLeft size={16} /> Back to Transcripts
         </button>
+
+        {/* ── Incomplete tutorial banner ── */}
+        {!tourActive && !isDetailTutorialCompleted() && !bannerDismissed && (
+          <div className="tdt-tutorial-banner">
+            <AlertTriangle size={14} />
+            <span>{t("detailTutorial.banner")}</span>
+            <div className="tdt-tutorial-banner-actions">
+              <button className="tdt-banner-btn tdt-banner-btn--primary" onClick={() => setTourActive(true)}>
+                {t("detailTutorial.banner.continue")}
+              </button>
+              <button className="tdt-banner-btn" onClick={() => { resetDetailTutorial(); setTourActive(true); setBannerDismissed(false); }}>
+                <RotateCcw size={12} /> {t("detailTutorial.banner.restart")}
+              </button>
+              <button className="tdt-banner-btn" onClick={() => setBannerDismissed(true)}>
+                {t("detailTutorial.banner.dismiss")}
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="detail-title-row">
           <div className="title-left">
             <div className="title-flex">
               <h1 className="main-title">{transcript.title}</h1>
-              <button className="edit-btn"><Edit2 size={12} /></button>
+              <button className="edit-btn" title="Edit title"><Edit2 size={12} /></button>
             </div>
-            <div className="meta-row">
+            <div className="meta-row" data-detail-tutorial="metadata">
               {transcript.church && <div className="meta-item"><Church size={14} /> {transcript.church}</div>}
               <div className="meta-item"><Calendar size={14} /> {dateLabel}</div>
               <div className="meta-item"><Clock size={14} /> {timeLabel}</div>
@@ -1139,7 +1218,14 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
           </div>
 
           <div className="title-actions">
-            <div className="btn-export" style={{ position: 'relative' }}>
+            <button
+              className="tdt-tutorial-btn"
+              onClick={() => { resetDetailTutorial(); setTourActive(true); setBannerDismissed(false); }}
+              title={t("detailTutorial.button.tooltip")}
+            >
+              <HelpCircle size={16} /> {t("detailTutorial.button")}
+            </button>
+            <div className="btn-export" style={{ position: 'relative' }} data-detail-tutorial="export">
               <button
                 className="btn-export-main"
                 style={{
@@ -1152,7 +1238,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                   setShowExportMenu(!showExportMenu);
                 }}
                 disabled={exporting !== 'idle' && !exporting.startsWith('done')}
-              >
+                title="Done">
                 {exporting !== 'idle' && !exporting.startsWith('done') ? (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -1174,7 +1260,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                     <button
                       className="export-popover-item"
                       onClick={() => { setShowExportMenu(false); doExport('pdf'); }}
-                    >
+                      title="Export">
                       <FileText size={15} />
                       <span>Export as PDF</span>
                     </button>
@@ -1182,7 +1268,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                     <button
                       className="export-popover-item"
                       onClick={() => { setShowExportMenu(false); doExport('docx'); }}
-                    >
+                      title="Export">
                       <FileCode size={15} />
                       <span>Export as DOCX</span>
                     </button>
@@ -1197,7 +1283,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                 return;
               }
               setIsTranslateOpen(true);
-            }} style={{ padding: '8px 16px', color: '#adc7ff', borderColor: 'rgba(173,199,255,0.3)' }}>
+            }} style={{ padding: '8px 16px', color: '#adc7ff', borderColor: 'rgba(173,199,255,0.3)' }} data-detail-tutorial="translate" title="Translate">
               <Languages size={16} /> Translate
             </button>
           </div>
@@ -1205,8 +1291,8 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
 
         {/* Tabs */}
         <div className="detail-tabs">
-          <button className="tab-btn active">Transcript</button>
-          <button className="tab-btn">Summary <span className="beta-tag">BETA</span></button>
+          <button className="tab-btn active" title="Transcript">Transcript</button>
+          <button className="tab-btn" title="Summary BETA">Summary <span className="beta-tag">BETA</span></button>
         </div>
       </div>
 
@@ -1216,8 +1302,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         {/* Left/Center Transcript Panel */}
         <div className="transcript-panel">
           <div className="transcript-toolbar">
-            <div className="search-input-wrapper">
-              <Search className="search-icon" size={16} />
+            <div className="search-input-wrapper" data-detail-tutorial="search">
               <input type="text" className="search-input" placeholder="Search in transcript…" />
             </div>
             <div className="toolbar-actions">
@@ -1228,13 +1313,14 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                   color: copyState === 'done' ? '#34d399' : undefined
                 }}
                 onClick={handleCopy}
-              >
+                data-detail-tutorial="copy"
+                title="Copy">
                 {copyState === 'done' ? <CheckCircle2 size={16} color="#34d399" /> : <Copy size={16} className="text-muted" />}
               </button>
             </div>
           </div>
 
-          <div className="transcript-scroll">
+          <div className="transcript-scroll" data-detail-tutorial="transcript-content">
             {displayLines.map((line, i) => (
               <div key={i} className={`t-line-wrapper ${line.highlight ? 'has-highlight' : ''}`}
                 style={line.highlight ? { borderLeftColor: `var(--hl-${line.highlight.type})` } : {}}>
@@ -1251,13 +1337,13 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         </div>
 
         {/* Right Sidebar - Scriptures & Translations */}
-        <div className="right-sidebar">
+        <div className="right-sidebar" data-detail-tutorial="sidebar">
           {/* Sidebar Tabs */}
           <div className="sidebar-tabs">
             <button
               className={`sidebar-tab ${sidebarTab === 'scriptures' ? 'active' : ''}`}
               onClick={() => setSidebarTab('scriptures')}
-            >
+              title="Scriptures detected.length 0 && ( )">
               <BookOpen size={14} />
               Scriptures
               {detected.length > 0 && (
@@ -1267,6 +1353,8 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
             <button
               className={`sidebar-tab ${sidebarTab === 'translations' ? 'active' : ''}`}
               onClick={() => setSidebarTab('translations')}
+              data-detail-tutorial="translations-tab"
+              title="Translations"
             >
               <Languages size={14} />
               Translations
@@ -1398,7 +1486,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                         }
                         setIsTranslateOpen(true);
                       }}
-                    >
+                      title="Add">
                       <Languages size={14} /> Add Translation
                     </button>
                   </div>
@@ -1439,6 +1527,15 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         isOpen={accessDeniedDialog.open}
         reason={accessDeniedDialog.reason}
         onClose={() => setAccessDeniedDialog({ open: false, reason: '' })}
+      />
+
+      {/* ── Tutorial Tour ── */}
+      <TranscriptDetailTutorial
+        isActive={tourActive}
+        onClose={() => setTourActive(false)}
+        onFinish={() => { markDetailTutorialCompleted(); setTourActive(false); }}
+        hasScriptures={transcript.scriptures.length > 0}
+        hasTranslations={transcript.translations.length > 0}
       />
 
     </div>

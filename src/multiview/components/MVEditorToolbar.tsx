@@ -403,9 +403,9 @@ export function MVEditorToolbar() {
               The slot will remain but the scene will be unassigned.
             </p>
             <div className="mv-modal-actions">
-              <button className="mv-btn mv-btn--ghost" onClick={() => setDeleteModal(null)}>Cancel</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setDeleteModal(null)} title="Cancel">Cancel</button>
               <button className="mv-btn mv-btn--danger"
-                onClick={() => { unassignSceneFromRegion(deleteModal.regionId as any); setDeleteModal(null); }}>
+                onClick={() => { unassignSceneFromRegion(deleteModal.regionId as any); setDeleteModal(null); }} title="Remove">
                 Remove Scene
               </button>
             </div>
@@ -423,9 +423,9 @@ export function MVEditorToolbar() {
               This will unassign all scenes from every slot and reset the canvas to its default state. This action can be undone.
             </p>
             <div className="mv-modal-actions">
-              <button className="mv-btn mv-btn--ghost" onClick={() => setShowResetModal(false)}>Cancel</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setShowResetModal(false)} title="Cancel">Cancel</button>
               <button className="mv-btn mv-btn--danger"
-                onClick={() => { resetCanvas(); setShowResetModal(false); }}>
+                onClick={() => { resetCanvas(); setShowResetModal(false); }} title="Reset">
                 <Icon name="restart_alt" size={16} />
                 Reset Canvas
               </button>
@@ -444,9 +444,9 @@ export function MVEditorToolbar() {
               Are you sure you want to undo? This may remove scene assignments from the canvas.
             </p>
             <div className="mv-modal-actions">
-              <button className="mv-btn mv-btn--ghost" onClick={() => setShowUndoConfirm(false)}>Cancel</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setShowUndoConfirm(false)} title="Cancel">Cancel</button>
               <button className="mv-btn mv-btn--primary"
-                onClick={() => { undo(); setShowUndoConfirm(false); }}>
+                onClick={() => { undo(); setShowUndoConfirm(false); }} title="Undo">
                 <Icon name="undo" size={16} />
                 Undo
               </button>
@@ -468,9 +468,9 @@ export function MVEditorToolbar() {
               Applying changes may cause a brief disruption to the broadcast. A staging scene will be used to minimise impact, but viewers may notice a momentary flicker.
             </p>
             <div className="mv-modal-actions">
-              <button className="mv-btn mv-btn--ghost" onClick={() => setShowLiveConfirm(false)}>Cancel</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setShowLiveConfirm(false)} title="Cancel">Cancel</button>
               <button className="mv-btn mv-btn--danger"
-                onClick={() => { setShowLiveConfirm(false); doApplyToOBS(); }}>
+                onClick={() => { setShowLiveConfirm(false); doApplyToOBS(); }} title="Apply">
                 <Icon name="cast_connected" size={16} />
                 Apply Anyway
               </button>

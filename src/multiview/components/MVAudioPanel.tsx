@@ -196,7 +196,7 @@ export default function MVAudioPanel() {
         <div className="mv-audio-empty">
           <Icon name="error" size={36} style={{ color: "var(--error)" }} />
           <p>{error}</p>
-          <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={fetchInputs}>Retry</button>
+          <button className="mv-btn mv-btn--ghost mv-btn--sm" onClick={fetchInputs} title="Retry">Retry</button>
         </div>
       </div>
     );

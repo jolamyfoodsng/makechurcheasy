@@ -1000,7 +1000,7 @@ function App() {
                 <button
                   onClick={handleFloorUpdate}
                   className="force-update-button"
-                >
+                 title="Update now">
                   <Icon name="system_update" size={18} />
                   Update Now
                 </button>
@@ -1053,7 +1053,7 @@ function App() {
                   <button
                     onClick={handleFloorUpdate}
                     className="force-update-button"
-                  >
+                   title="Retry">
                     Retry
                   </button>
                 </div>

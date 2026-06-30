@@ -21,14 +21,14 @@ export default function FavoritesPanel() {
         <button
           className={`favorites-tab ${tab === "favorites" ? "active" : ""}`}
           onClick={() => setTab("favorites")}
-        >
+         title="Favorites ( )">
           <Icon name="star" size={16} style={{ verticalAlign: "middle", marginRight: 4 }} />
           Favorites ({state.favorites.length})
         </button>
         <button
           className={`favorites-tab ${tab === "history" ? "active" : ""}`}
           onClick={() => setTab("history")}
-        >
+         title="History">
           <Icon name="history" size={16} style={{ verticalAlign: "middle", marginRight: 4 }} />
           History ({state.history.length})
         </button>

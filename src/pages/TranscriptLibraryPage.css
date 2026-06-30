@@ -761,3 +761,51 @@
     display: none;
   }
 }
+
+/* ── Button variants ──────────────────────────────────────────────────── */
+
+.tl-btn-ghost {
+  background: transparent;
+  color: var(--text-secondary, var(--text-muted));
+  border: 1px solid var(--border);
+}
+
+.tl-btn-ghost:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.05));
+  color: var(--text-primary);
+}
+
+.tl-btn-sm {
+  padding: 5px 10px;
+  font-size: 0.75rem;
+}
+
+/* ── Tutorial Banner ──────────────────────────────────────────────────── */
+
+.tl-tutorial-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin: 0 24px 16px;
+  background: rgba(var(--primary-rgb, 99, 102, 241), 0.08);
+  border: 1px solid rgba(var(--primary-rgb, 99, 102, 241), 0.2);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.tl-tutorial-banner svg:first-child {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.tl-tutorial-banner span {
+  flex: 1;
+}
+
+.tl-tutorial-banner-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
