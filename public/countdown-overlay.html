@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCE Countdown</title>
+  <style>
+    @import url('/fonts/fonts.css');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: transparent;
+      font-family: 'Inter', 'Google Sans', 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #ffffff;
+    }
+
+    /* ── Container ─────────────────────────────────── */
+    .countdown-root {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      isolation: isolate;
+    }
+
+    .countdown-root.is-lower-third {
+      align-items: flex-end; justify-content: flex-start;
+      padding: 0 0 80px 80px;
+    }
+
+    /* ── Background layers ─────────────────────────── */
+    .countdown-bg {
+      position: absolute; inset: 0; z-index: -3;
+    }
+    .countdown-bg-image,
+    .countdown-bg-video {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .countdown-bg-overlay {
+      position: absolute; inset: 0; z-index: -1;
+    }
+
+    /* ── Main content card ─────────────────────────── */
+    .countdown-card {
+      position: relative;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center;
+      z-index: 1;
+      padding: 40px;
+      max-width: 1200px;
+    }
+
+    .countdown-root.is-lower-third .countdown-card {
+      align-items: flex-start; text-align: left;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(16px);
+      border-radius: 12px;
+      border-left: 6px solid rgba(255,255,255,0.85);
+      padding: 28px 36px;
+      max-width: 700px;
+    }
+
+    /* ── Title / Subtitle ──────────────────────────── */
+    .countdown-title {
+      line-height: 1.15;
+      margin-bottom: 8px;
+    }
+    .countdown-subtitle {
+      opacity: 0.8;
+      margin-bottom: 20px;
+    }
+
+    /* ── Timer display ─────────────────────────────── */
+    .countdown-timer {
+      font-variant-numeric: tabular-nums;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      line-height: 1;
+    }
+
+    .countdown-root.is-lower-third .countdown-title {
+      font-size: 24px !important;
+    }
+    .countdown-root.is-lower-third .countdown-subtitle {
+      font-size: 14px !important;
+      margin-bottom: 8px;
+    }
+    .countdown-root.is-lower-third .countdown-timer {
+      font-size: 42px !important;
+    }
+
+    /* ── Circular ring ─────────────────────────────── */
+    .countdown-ring-container {
+      position: relative;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 20px;
+    }
+    .countdown-ring-svg {
+      transform: rotate(-90deg);
+    }
+    .countdown-ring-bg {
+      fill: none;
+      stroke: rgba(255,255,255,0.12);
+    }
+    .countdown-ring-progress {
+      fill: none;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.3s ease;
+    }
+    .countdown-ring-inner {
+      position: absolute;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* ── Animations ────────────────────────────────── */
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.85); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.03); }
+    }
+    @keyframes breathing {
+      0%, 100% { opacity: 0.85; }
+      50% { opacity: 1; }
+    }
+
+    .anim-fade-in { animation: fadeIn var(--anim-dur, 0.8s) ease-out both; }
+    .anim-slide-up { animation: slideUp var(--anim-dur, 0.8s) cubic-bezier(0.16,1,0.3,1) both; }
+    .anim-scale { animation: scaleIn var(--anim-dur, 0.8s) cubic-bezier(0.16,1,0.3,1) both; }
+    .anim-pulse { animation: pulse 2s ease-in-out infinite; }
+    .anim-breathing { animation: breathing 3s ease-in-out infinite; }
+
+    /* ── Background motion ─────────────────────────── */
+    @keyframes bgPan {
+      0% { transform: scale(var(--bg-zoom, 1.1)) translate(0, 0); }
+      25% { transform: scale(var(--bg-zoom, 1.1)) translate(-1%, 0.5%); }
+      50% { transform: scale(var(--bg-zoom, 1.1)) translate(-0.5%, -0.5%); }
+      75% { transform: scale(var(--bg-zoom, 1.1)) translate(0.5%, 0%); }
+      100% { transform: scale(var(--bg-zoom, 1.1)) translate(0, 0); }
+    }
+    @keyframes bgZoomPulse {
+      0%, 100% { transform: scale(var(--bg-zoom, 1)); }
+      50% { transform: scale(calc(var(--bg-zoom, 1) * 1.05)); }
+    }
+    .bg-motion-pan { animation: bgPan 30s ease-in-out infinite; }
+    .bg-motion-zoom-pulse { animation: bgZoomPulse 8s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+  <div id="root" class="countdown-root">
+    <div id="bg" class="countdown-bg"></div>
+    <div id="card" class="countdown-card">
+      <div id="title" class="countdown-title"></div>
+      <div id="subtitle" class="countdown-subtitle"></div>
+      <div id="ring-container" class="countdown-ring-container" style="display:none;">
+        <svg id="ring-svg" class="countdown-ring-svg"></svg>
+        <div id="ring-inner" class="countdown-ring-inner"></div>
+      </div>
+      <div id="timer" class="countdown-timer"></div>
+    </div>
+  </div>
+
+  <script>
+    const root = document.getElementById("root");
+    const bg = document.getElementById("bg");
+    const card = document.getElementById("card");
+    const titleEl = document.getElementById("title");
+    const subtitleEl = document.getElementById("subtitle");
+    const ringContainer = document.getElementById("ring-container");
+    const ringSvg = document.getElementById("ring-svg");
+    const ringInner = document.getElementById("ring-inner");
+    const timerEl = document.getElementById("timer");
+
+    let countdownTimer = null;
+    let totalDuration = 0;
+    let startedAt = 0;
+
+    function parsePayload() {
+      try {
+        const hash = window.location.hash || "";
+        const marker = "#data=";
+        if (!hash.startsWith(marker)) return null;
+        return JSON.parse(decodeURIComponent(hash.slice(marker.length)));
+      } catch { return null; }
+    }
+
+    function formatTime(seconds, showH, showM, showS) {
+      const s = Math.max(0, Math.floor(seconds));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      const parts = [];
+      if (showH) parts.push(String(h).padStart(2, "0"));
+      if (showM) parts.push(String(m).padStart(2, "0"));
+      if (showS) parts.push(String(sec).padStart(2, "0"));
+      return parts.join(":") || "00:00";
+    }
+
+    function applyBackground(cfg) {
+      const bgSettings = cfg.background || {};
+      bg.innerHTML = "";
+
+      // Base color / gradient
+      if (bgSettings.type === "gradient") {
+        bg.style.background = `linear-gradient(${bgSettings.gradientAngle || 135}deg, ${bgSettings.gradientStart || "#0f172a"}, ${bgSettings.gradientEnd || "#1e293b"})`;
+      } else {
+        bg.style.background = bgSettings.color || "#0f172a";
+      }
+
+      // Image
+      if (bgSettings.type === "image" && bgSettings.imageUrl) {
+        const img = document.createElement("img");
+        img.className = "countdown-bg-image";
+        img.src = bgSettings.imageUrl;
+        img.style.filter = `blur(${bgSettings.blur || 0}px) brightness(${(bgSettings.brightness || 100) / 100})`;
+        img.style.transform = `scale(${bgSettings.zoom || 1}) translate(${(bgSettings.positionX || 50) - 50}%, ${(bgSettings.positionY || 50) - 50}%)`;
+        bg.appendChild(img);
+      }
+
+      // Video
+      if (bgSettings.type === "video" && bgSettings.videoUrl) {
+        const vid = document.createElement("video");
+        vid.className = "countdown-bg-video";
+        vid.src = bgSettings.videoUrl;
+        vid.autoplay = true;
+        vid.loop = true;
+        vid.muted = true;
+        vid.playsInline = true;
+        vid.style.filter = `blur(${bgSettings.blur || 0}px) brightness(${(bgSettings.brightness || 100) / 100})`;
+        bg.appendChild(vid);
+      }
+
+      // Dark overlay
+      const overlayOpacity = bgSettings.overlayOpacity || 0;
+      if (overlayOpacity > 0) {
+        const overlay = document.createElement("div");
+        overlay.className = "countdown-bg-overlay";
+        overlay.style.background = `rgba(0,0,0,${overlayOpacity})`;
+        bg.appendChild(overlay);
+      }
+
+      // Background motion
+      bg.querySelectorAll(".countdown-bg-image, .countdown-bg-video").forEach(el => {
+        el.classList.remove("bg-motion-pan", "bg-motion-zoom-pulse");
+        const motion = (cfg.animation || {}).backgroundMotion || "none";
+        if (motion === "pan") el.classList.add("bg-motion-pan");
+        if (motion === "zoom-pulse") el.classList.add("bg-motion-zoom-pulse");
+        el.style.setProperty("--bg-zoom", String(bgSettings.zoom || 1));
+      });
+    }
+
+    function applyText(cfg) {
+      const text = cfg.text || {};
+      const style = (el, size) => {
+        el.style.fontFamily = text.fontFamily || "Inter, sans-serif";
+        el.style.fontWeight = text.fontWeight || 700;
+        el.style.color = text.color || "#ffffff";
+        el.style.fontSize = size;
+        el.style.letterSpacing = (text.letterSpacing || 0) + "px";
+        el.style.lineHeight = text.lineHeight || 1.2;
+        if (text.shadowEnabled) {
+          el.style.textShadow = `${text.shadowOffsetX || 0}px ${text.shadowOffsetY || 4}px ${text.shadowBlur || 12}px ${text.shadowColor || "rgba(0,0,0,0.5)"}`;
+        } else {
+          el.style.textShadow = "none";
+        }
+      };
+
+      const isLT = (cfg.templateId === "lower-third");
+      const titleSize = isLT ? "24px" : (text.fontSize || 48) + "px";
+      const subSize = isLT ? "14px" : Math.round((text.fontSize || 48) * 0.5) + "px";
+      const timerSize = isLT ? "42px" : Math.round((text.fontSize || 48) * 1.6) + "px";
+
+      titleEl.textContent = text.title || "";
+      titleEl.style.display = text.title ? "" : "none";
+      style(titleEl, titleSize);
+
+      subtitleEl.textContent = text.subtitle || "";
+      subtitleEl.style.display = text.subtitle ? "" : "none";
+      style(subtitleEl, subSize);
+
+      style(timerEl, timerSize);
+    }
+
+    function applyRing(cfg) {
+      const isCircular = cfg.templateId === "circular" || cfg.templateId === "modern";
+      if (!isCircular || (cfg.templateId === "lower-third")) {
+        ringContainer.style.display = "none";
+        return;
+      }
+
+      const size = 300;
+      const stroke = 8;
+      const radius = (size - stroke) / 2;
+      const circumference = 2 * Math.PI * radius;
+
+      ringSvg.setAttribute("width", size);
+      ringSvg.setAttribute("height", size);
+      ringSvg.style.width = size + "px";
+      ringSvg.style.height = size + "px";
+
+      ringSvg.innerHTML = `
+        <circle class="countdown-ring-bg" cx="${size/2}" cy="${size/2}" r="${radius}" stroke-width="${stroke}"/>
+        <circle id="ring-progress" class="countdown-ring-progress" cx="${size/2}" cy="${size/2}" r="${radius}" stroke-width="${stroke}"
+          stroke="${cfg.templateId === 'modern' ? 'url(#ring-gradient)' : 'rgba(255,255,255,0.9)'}"
+          stroke-dasharray="${circumference}"
+          stroke-dashoffset="0"/>
+        <defs>
+          <linearGradient id="ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#7c3aed"/>
+            <stop offset="100%" stop-color="#3b82f6"/>
+          </linearGradient>
+        </defs>
+      `;
+
+      ringContainer.style.display = "";
+      ringInner.style.width = (size - stroke * 4) + "px";
+      ringInner.style.height = (size - stroke * 4) + "px";
+
+      return { circumference, radius };
+    }
+
+    function updateRing(remaining) {
+      const progress = document.getElementById("ring-progress");
+      if (!progress) return;
+      const circumference = parseFloat(progress.getAttribute("stroke-dasharray"));
+      const fraction = totalDuration > 0 ? remaining / totalDuration : 1;
+      progress.setAttribute("stroke-dashoffset", String(circumference * (1 - fraction)));
+    }
+
+    function applyAnimation(cfg) {
+      const anim = cfg.animation || {};
+      card.classList.remove("anim-fade-in", "anim-slide-up", "anim-scale", "anim-pulse", "anim-breathing");
+      root.classList.remove("is-lower-third");
+
+      if (cfg.templateId === "lower-third") {
+        root.classList.add("is-lower-third");
+      }
+
+      if (anim.entrance && anim.entrance !== "none") {
+        const speed = anim.speed || 1;
+        const dur = Math.round(800 / speed);
+        card.style.setProperty("--anim-dur", dur + "ms");
+        card.classList.add("anim-" + anim.entrance);
+      }
+
+      if (anim.entrance === "pulse" || anim.entrance === "breathing") {
+        const speed = anim.speed || 1;
+        const dur = anim.entrance === "pulse" ? Math.round(2000 / speed) : Math.round(3000 / speed);
+        card.style.setProperty("--anim-dur", dur + "ms");
+      }
+    }
+
+    function tick() {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      const remaining = Math.max(0, totalDuration - elapsed);
+
+      timerEl.textContent = formatTime(
+        remaining,
+        currentCfg.timer.showHours,
+        currentCfg.timer.showMinutes,
+        currentCfg.timer.showSeconds,
+      );
+
+      updateRing(remaining);
+
+      if (remaining <= 0 && countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+        handleAutoAction();
+      }
+    }
+
+    function handleAutoAction() {
+      const obs = currentCfg.obs || {};
+      if (!obs.autoAction || obs.autoAction === "none") return;
+
+      // Send message to parent (MakeChurchEasy app) for auto-actions
+      try {
+        window.parent.postMessage({
+          type: "countdown-complete",
+          action: obs.autoAction,
+          scene: obs.autoActionScene,
+        }, "*");
+      } catch {}
+    }
+
+    let currentCfg = {};
+
+    function render() {
+      const payload = parsePayload();
+      if (!payload || !payload.config) return;
+
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+      }
+
+      currentCfg = payload.config;
+      const timer = currentCfg.timer || {};
+
+      // Calculate remaining time
+      if (timer.mode === "end-at-time" && timer.endAt) {
+        const endMs = new Date(timer.endAt).getTime();
+        totalDuration = Math.max(0, Math.floor((endMs - Date.now()) / 1000));
+      } else {
+        totalDuration = timer.durationSeconds || 600;
+      }
+      startedAt = Date.now();
+
+      applyBackground(currentCfg);
+      applyText(currentCfg);
+      applyRing(currentCfg);
+      applyAnimation(currentCfg);
+
+      tick();
+      countdownTimer = setInterval(tick, 250);
+    }
+
+    window.addEventListener("hashchange", render);
+    window.addEventListener("resize", () => {});
+    render();
+  </script>
+</body>
+</html>

@@ -252,3 +252,109 @@
     flex-shrink: 0;
   }
 }
+
+/* ══════════════════════════════════════════════════
+   Compact mode (panel ≤350px)
+   Layout: [ Full | LT ] ... [ Delete ] [ ⋯ ]
+   ══════════════════════════════════════════════════ */
+.dock-btm-toolbar--compact {
+  padding: 6px 10px;
+  min-height: auto;
+}
+
+.dock-btm-toolbar--compact .dock-btm-toolbar__row {
+  gap: 8px;
+}
+
+.dock-btm-toolbar--compact .dock-btm-segmented {
+  flex-shrink: 0;
+}
+
+.dock-btm-toolbar--compact .dock-btm-segmented__item {
+  padding: 0 10px;
+  height: 26px;
+}
+
+/* ── Inline delete/clear button ── */
+.dock-btm-toolbar__clear--inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border: 1px solid var(--error-border, #991B1B);
+  border-radius: var(--radius, 4px);
+  background: var(--error-bg, #7F1D1D);
+  color: var(--error, #DC2626);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.dock-btm-toolbar__clear--inline:hover {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: var(--error, #DC2626);
+}
+
+.dock-btm-toolbar__clear--inline:active {
+  background: rgba(220, 38, 38, 0.15);
+}
+
+.dock-btm-toolbar__clear--inline:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Overflow menu container ── */
+.dock-btm-overflow {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* ── Overflow dropdown ── */
+.dock-btm-overflow__menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 44px;
+  padding: 4px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  background: var(--dock-surface, #111827);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 100;
+  animation: dock-btm-overflow-open 0.15s ease;
+}
+
+@keyframes dock-btm-overflow-open {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Make children inside overflow menu full-width icon buttons ── */
+.dock-btm-overflow__menu .dock-btm-toolbar__icon-btn,
+.dock-btm-overflow__menu .dock-line-popover {
+  width: 100%;
+  min-width: 36px;
+  height: 32px;
+}
+
+.dock-btm-overflow__menu .dock-line-popover {
+  position: static;
+}
+
+.dock-btm-overflow__menu .dock-line-popover__menu {
+  bottom: calc(100% + 6px);
+  right: 0;
+  left: auto;
+}

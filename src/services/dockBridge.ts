@@ -87,6 +87,7 @@ export type DockStateType =
   | "state:lm-candidates"
   | "state:song-limit"
   | "state:plan-update"
+  | "state:countdowns"
   | "state:pong";
 
 export interface DockStateMessage {

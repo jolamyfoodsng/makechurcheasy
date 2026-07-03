@@ -60,7 +60,7 @@ export interface PlanLimits {
   speechToScripture: boolean;
   sermonExport: boolean;
   aiFeatures: boolean;
-  cloudFeatures: boolean;
+  cloudSync: boolean;
   advancedAnalytics: boolean;
   customReports: boolean;
   apiAccess: boolean;
@@ -104,7 +104,7 @@ function entitlementsToPlanLimits(
     speechToScripture: ent.speechToScripture,
     sermonExport: ent.sermonExport,
     aiFeatures: ent.aiFeatures,
-    cloudFeatures: ent.cloudSync,
+    cloudSync: ent.cloudSync,
     advancedAnalytics: ent.advancedAnalytics,
     customReports: ent.customReports,
     apiAccess: ent.apiAccess,
@@ -296,7 +296,7 @@ export function getTrialDaysRemaining(user: AuthUser | null): number {
 
 /**
  * Returns the effective plan considering trial status, pro key, and subscription cache.
- * During trial, user behaves like Pro — NOT Starter.
+ * During trial, user behaves like Pro.
  * If offline window expired, reverts to free regardless of cached plan.
  */
 export function getEffectivePlan(user: AuthUser | null): PlanTier {
@@ -378,7 +378,7 @@ export function canUseAI(user: AuthUser | null): boolean {
 }
 
 export function canUseCloudFeatures(user: AuthUser | null): boolean {
-  return getUserPlanLimits(user).cloudFeatures;
+  return getUserPlanLimits(user).cloudSync;
 }
 
 export function canUseAdvancedAnalytics(user: AuthUser | null): boolean {
@@ -538,8 +538,8 @@ export function getDowngradeWarnings(
     ["images", "images", "Images", "basic"],
     ["videos", "videos", "Videos", "basic"],
     ["bibleVersions", "bibleVersions", "Bible Versions", "basic"],
-    ["themes", "themes", "Themes", "starter"],
-    ["lowerThirdThemes", "lowerThirdThemes", "Lower Third Themes", "starter"],
+    ["themes", "themes", "Themes", "basic"],
+    ["lowerThirdThemes", "lowerThirdThemes", "Lower Third Themes", "basic"],
     ["devices", "devices", "Devices", "growth"],
   ];
 
@@ -605,7 +605,7 @@ export async function getRemainingLTThemeSlots(user: AuthUser | null): Promise<n
 // ── Restriction Info (for upgrade modal) ─────────────────────────────────────
 
 const PLAN_ORDER: Record<string, number> = {
-  free: 0, basic: 1, starter: 2, growth: 3, pro: 4, trial: 4,
+  free: 0, basic: 1, growth: 2, pro: 3, trial: 3,
 };
 
 function planAtLeast(plan: PlanTier, minimum: PlanTier): boolean {

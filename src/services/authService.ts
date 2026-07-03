@@ -11,7 +11,7 @@ const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheas
 const APP_VERSION: string =
   typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
 
-export type PlanTier = "free" | "trial" | "basic" | "starter" | "growth" | "pro";
+export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador";
 
 export interface AuthUser {
   id: string;
@@ -56,6 +56,7 @@ let _initialized = false;
 export async function initAuthStore(): Promise<void> {
   if (_initialized) return;
   _initialized = true;
+  console.debug("[authService] initAuthStore: starting");
 
   try {
     const { Store } = await import("@tauri-apps/plugin-store");
@@ -65,13 +66,18 @@ export async function initAuthStore(): Promise<void> {
       const parsed: AuthSession = JSON.parse(raw);
       if (Date.now() <= parsed.expiresAt) {
         _session = parsed;
+        console.debug("[authService] initAuthStore: loaded session from Tauri store, deviceId=%s", parsed.deviceId);
       } else {
+        console.debug("[authService] initAuthStore: Tauri session expired — clearing");
         await _store.delete(SESSION_KEY);
         await _store.save();
       }
+    } else {
+      console.debug("[authService] initAuthStore: no session in Tauri store");
     }
-  } catch {
+  } catch (err) {
     // Not in Tauri or store unavailable — fall through to localStorage fallback
+    console.debug("[authService] initAuthStore: Tauri store unavailable, falling back to localStorage", err);
     _store = null;
   }
 
@@ -83,9 +89,13 @@ export async function initAuthStore(): Promise<void> {
         const parsed: AuthSession = JSON.parse(raw);
         if (Date.now() <= parsed.expiresAt) {
           _session = parsed;
+          console.debug("[authService] initAuthStore: loaded session from localStorage, deviceId=%s", parsed.deviceId);
         } else {
+          console.debug("[authService] initAuthStore: localStorage session expired — clearing");
           localStorage.removeItem(SESSION_KEY);
         }
+      } else {
+        console.debug("[authService] initAuthStore: no session in localStorage");
       }
     } catch {
       localStorage.removeItem(SESSION_KEY);
@@ -213,6 +223,7 @@ export function isAuthenticated(): boolean {
 }
 
 export function logout() {
+  console.debug("[authService] logout: clearing session (deviceId=%s)", _session?.deviceId);
   _session = null;
   if (_store) {
     _store.delete(SESSION_KEY).then(() => _store.save()).catch(() => { });
@@ -240,13 +251,19 @@ export function getCurrentUser(): AuthUser | null {
  * Uses /api/device/profile which returns the current MongoDB user state.
  */
 export async function refreshPlanFromServer(): Promise<void> {
-  if (!_session?.deviceId) return;
+  if (!_session?.deviceId) {
+    console.debug("[authService] refreshPlanFromServer: no deviceId — skipping");
+    return;
+  }
   try {
     const res = await fetch(
       `${API_BASE}/api/device/profile?deviceId=${encodeURIComponent(_session.deviceId)}`,
       { headers: { "X-App-Version": APP_VERSION, "X-Device-Secret": _session.deviceSecret || "" } },
     );
-    if (!res.ok) return;
+    if (!res.ok) {
+      console.debug("[authService] refreshPlanFromServer: server returned %d — skipping", res.status);
+      return;
+    }
     const data = await res.json();
     const remote = data?.user;
     if (!remote?.plan) return;
@@ -321,8 +338,13 @@ function detectOS(): string {
   return "Unknown OS";
 }
 
+// Track the last generated pairing code so we can invalidate it
+// when the user generates a new one (only ONE active code per device).
+let _lastPairingCode: string | null = null;
+
 /**
  * Create a new pairing code. Returns the code for display.
+ * Invalidates any previous unused code on the server.
  */
 export async function createPairingCode(
   deviceName: string
@@ -334,7 +356,7 @@ export async function createPairingCode(
         "Content-Type": "application/json",
         "X-App-Version": APP_VERSION,
       },
-      body: JSON.stringify({ deviceName }),
+      body: JSON.stringify({ deviceName, previousCode: _lastPairingCode }),
     });
     if (res.status === 403) {
       const body = await res.json().catch(() => ({}));
@@ -343,9 +365,73 @@ export async function createPairingCode(
       }
     }
     if (!res.ok) return { error: "Failed to create pairing code" };
-    return await res.json();
+    const data = await res.json();
+    _lastPairingCode = data.code;
+    return data;
   } catch {
     return { error: "Connection failed. Is the server running?" };
+  }
+}
+
+/**
+ * Redeem a pairing code directly — no browser round-trip.
+ *
+ * The code was generated on the dashboard (which pre-binds it to a userId),
+ * so the desktop can exchange it for a session in one call.
+ */
+export async function redeemPairingCode(
+  code: string,
+): Promise<
+  | { success: true; user: AuthUser; deviceId: string }
+  | { success: false; error: string; code?: string }
+> {
+  try {
+    const os = detectOS();
+    const res = await fetch(`${API_BASE}/api/pairing/redeem`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-App-Version": APP_VERSION,
+      },
+      body: JSON.stringify({ code: code.toUpperCase(), deviceName: os }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (res.status === 404) return { success: false, error: "Invalid code. Please check and try again.", code: "invalid" };
+      if (res.status === 410) return { success: false, error: data.error === "Code already used" ? "This code has already been used. Generate a new one." : "This code has expired. Generate a new one.", code: data.error === "Code already used" ? "already_used" : "expired" };
+      if (res.status === 403 && data.error === "email_not_verified") return { success: false, error: "Please verify your email address before pairing.", code: "email_not_verified" };
+      if (res.status === 403 && data.error === "device_limit_reached") return { success: false, error: data.message || "Device limit reached.", code: "device_limit_reached" };
+      return { success: false, error: data.error || "Failed to pair device. Please try again." };
+    }
+
+    const authUser: AuthUser = {
+      id: data.user.id,
+      name: data.user.name,
+      email: data.user.email,
+      avatar: data.user.avatar || "",
+      appId: data.user.appId || "",
+      churchName: data.user.churchName || "",
+      createdAt: data.user.createdAt || "",
+      role: data.user.role || "user",
+      plan: data.user.plan || "free",
+      trial: data.user.trial || undefined,
+    };
+
+    await saveSession({
+      user: authUser,
+      deviceId: data.deviceId,
+      deviceSecret: data.deviceSecret || undefined,
+      expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
+    });
+
+    // Code consumed — clear tracked reference
+    _lastPairingCode = null;
+
+    return { success: true, user: authUser, deviceId: data.deviceId };
+  } catch {
+    return { success: false, error: "Connection failed. Is the server running?" };
   }
 }
 
@@ -391,6 +477,9 @@ export function watchPairingStatus(
       deviceSecret: data.deviceSecret || undefined,
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
     });
+
+    // Code consumed — clear tracked reference
+    _lastPairingCode = null;
 
     callbacks.onAuthorized(authUser, data.deviceId);
   });

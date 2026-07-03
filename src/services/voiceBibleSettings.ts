@@ -23,6 +23,7 @@ export const DEFAULT_VOICE_BIBLE_SETTINGS: VoiceBibleSettings = {
   ollamaBaseUrl: "http://127.0.0.1:11434",
   ollamaModel: "qwen3-embedding:4b",
   ollamaNormalizerModel: "qwen2.5:3b",
+  detectionSpeed: "balanced",
 };
 
 const OBS_AUDIO_INPUT_KINDS = new Set([
@@ -38,6 +39,7 @@ function normalizeVoiceBibleSettings(
   fallbackSemanticMode: VoiceBibleSettings["semanticMode"] = DEFAULT_VOICE_BIBLE_SETTINGS.semanticMode,
 ): VoiceBibleSettings {
   const semanticModeCandidate = raw?.semanticMode as string | undefined;
+  const detectionSpeedCandidate = raw?.detectionSpeed as string | undefined;
   return {
     audioSourceMode:
       raw?.audioSourceMode === "obs-input" ? "obs-input" : "system-mic",
@@ -58,6 +60,12 @@ function normalizeVoiceBibleSettings(
           : semanticModeCandidate === "off" || semanticModeCandidate === "lexical-only"
             ? "off"
             : fallbackSemanticMode,
+    detectionSpeed:
+      detectionSpeedCandidate === "fast"
+        ? "fast"
+        : detectionSpeedCandidate === "accurate"
+          ? "accurate"
+          : "balanced",
     ollamaBaseUrl:
       typeof raw?.ollamaBaseUrl === "string" && raw.ollamaBaseUrl.trim()
         ? raw.ollamaBaseUrl

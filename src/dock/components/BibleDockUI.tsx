@@ -7,7 +7,7 @@
  * - BibleControls: Pure presentational controls (book, chapter, verse, version)
  */
 
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 import BibleVersionLibrary from "./BibleVersionLibrary";
@@ -71,7 +71,7 @@ export function BibleControls({
           aria-haspopup="listbox"
           aria-expanded={isBookDropdownOpen}
           aria-label={t("bible.chooseBook")}
-         title="Choose Book">
+          title="Choose Book">
           <span className="dock-bible-controls__book-label"></span>
           <span className="dock-bible-controls__book-name">
             {selectedBook ?? t("bible.chooseBook")}
@@ -123,7 +123,7 @@ export function BibleControls({
             aria-haspopup="listbox"
             aria-expanded={isChapterDropdownOpen}
             aria-label={t("bible.chooseChapter")}
-           title="Expand">
+            title="Expand">
             <span className="dock-bible-controls__compact-label">Ch</span>
             <span className="dock-bible-controls__compact-value">{selectedChapter ?? "--"}</span>
             <Icon name="expand_more" size={12} />
@@ -171,7 +171,7 @@ export function BibleControls({
             aria-haspopup="listbox"
             aria-expanded={isVerseDropdownOpen}
             aria-label={t("bible.chooseVerse")}
-           title="Expand">
+            title="Expand">
             <span className="dock-bible-controls__compact-label">V</span>
             <span className="dock-bible-controls__compact-value">{selectedVerse ?? "--"}</span>
             <Icon name="expand_more" size={12} />
@@ -266,9 +266,10 @@ interface BibleDockContainerProps {
   searchSection: React.ReactNode;
   headerActions?: React.ReactNode;
   children: React.ReactNode;
+  isCompact?: boolean;
 }
 
-export function BibleDockContainer({
+export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerProps>(function BibleDockContainer({
   isTopbarExpanded,
   setIsTopbarExpanded,
   selectedBook,
@@ -296,8 +297,8 @@ export function BibleDockContainer({
   searchSection,
   headerActions,
   children,
-}: BibleDockContainerProps) {
-  // create a usestate that becomes true when the screen width is less than 200px, and false when it is greater than 200px
+  isCompact = false,
+}: BibleDockContainerProps, ref) {
   const [_isNarrowScreen, _setIsNarrowScreen] = useState(false);
 
   useEffect(() => {
@@ -313,8 +314,14 @@ export function BibleDockContainer({
     };
   }, []);
 
+  const rootClass = [
+    "dock-module",
+    "dock-module--bible",
+    isCompact ? "dock-module--bible--compact" : "",
+  ].filter(Boolean).join(" ");
+
   return (
-    <div className="dock-module dock-module--bible">
+    <div ref={ref} className={rootClass}>
       {/* Search bar + Translation select row */}
       <div className="dock-bible-search-row">
         <div className="dock-bible-search-row__input">{searchSection}</div>
@@ -325,33 +332,35 @@ export function BibleDockContainer({
             onVersionChange={onVersionChange}
             onTranslationsChanged={onTranslationsChanged}
           />
-          <BibleTopbar
-            isExpanded={isTopbarExpanded}
-            selectedBook={selectedBook}
-            onToggle={() => setIsTopbarExpanded((prev: boolean) => !prev)}
-            headerActions={headerActions}
-          >
-            <BibleControls
+          {!isCompact && (
+            <BibleTopbar
+              isExpanded={isTopbarExpanded}
               selectedBook={selectedBook}
-              selectedChapter={selectedChapter}
-              selectedVerse={selectedVerse}
-              chapterCount={chapterCount}
-              verseCount={verseCount}
-              isBookDropdownOpen={isBookDropdownOpen}
-              isChapterDropdownOpen={isChapterDropdownOpen}
-              isVerseDropdownOpen={isVerseDropdownOpen}
-              onBookToggle={onBookToggle}
-              onBookSelect={onBookSelect}
-              onChapterToggle={onChapterToggle}
-              onChapterSelect={onChapterSelect}
-              onVerseToggle={onVerseToggle}
-              onVerseSelect={onVerseSelect}
-              onOptionsClick={onOptionsClick}
-              onGoToChapter={onGoToChapter}
-              abbreviateBook={abbreviateBook}
-              BOOK_CHAPTERS={BOOK_CHAPTERS}
-            />
-          </BibleTopbar>
+              onToggle={() => setIsTopbarExpanded((prev: boolean) => !prev)}
+              headerActions={headerActions}
+            >
+              <BibleControls
+                selectedBook={selectedBook}
+                selectedChapter={selectedChapter}
+                selectedVerse={selectedVerse}
+                chapterCount={chapterCount}
+                verseCount={verseCount}
+                isBookDropdownOpen={isBookDropdownOpen}
+                isChapterDropdownOpen={isChapterDropdownOpen}
+                isVerseDropdownOpen={isVerseDropdownOpen}
+                onBookToggle={onBookToggle}
+                onBookSelect={onBookSelect}
+                onChapterToggle={onChapterToggle}
+                onChapterSelect={onChapterSelect}
+                onVerseToggle={onVerseToggle}
+                onVerseSelect={onVerseSelect}
+                onOptionsClick={onOptionsClick}
+                onGoToChapter={onGoToChapter}
+                abbreviateBook={abbreviateBook}
+                BOOK_CHAPTERS={BOOK_CHAPTERS}
+              />
+            </BibleTopbar>
+          )}
         </div>
 
 
@@ -363,4 +372,4 @@ export function BibleDockContainer({
       {children}
     </div>
   );
-}
+});

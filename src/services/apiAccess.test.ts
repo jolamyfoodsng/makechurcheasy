@@ -67,7 +67,6 @@ function isScopeAllowedForPlan(
   const PLAN_SCOPES: Record<string, string[]> = {
     free: [],
     basic: [],
-    starter: [],
     growth: [],
     pro: ["*", "read", "write", "songs", "media", "themes", "bible", "cloud-sync"],
   };

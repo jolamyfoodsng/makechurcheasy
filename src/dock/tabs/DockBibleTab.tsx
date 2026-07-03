@@ -69,6 +69,7 @@ interface Props {
   appConnected: boolean;
   showHistory?: boolean;
   onHistoryClose?: () => void;
+  compactToolbar?: boolean;
 }
 
 type OverlayMode = "fullscreen" | "lower-third";
@@ -582,6 +583,7 @@ export default function DockBibleTab({
   appConnected,
   showHistory,
   onHistoryClose,
+  compactToolbar,
 }: Props) {
   const { t } = useTranslation();
   const [selectedBook, setSelectedBook] = useState<string | null>(OT_BOOKS[0] ?? null);
@@ -656,6 +658,8 @@ export default function DockBibleTab({
   const latestStagedRef = useRef(staged);
   const liveTranscriptWordCounterRef = useRef(0);
   const lastTranscriptWordsRef = useRef<string[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [compactLayout, setCompactLayout] = useState(false);
   const [isBookDropdownOpen, setIsBookDropdownOpen] = useState(false);
   const [isChapterDropdownOpen, setIsChapterDropdownOpen] = useState(false);
   const [isVerseDropdownOpen, setIsVerseDropdownOpen] = useState(false);
@@ -663,6 +667,19 @@ export default function DockBibleTab({
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [showBibleHistory, setShowBibleHistory] = useState(false);
+
+  // Compact layout when container height ≤ 450px
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setCompactLayout(entry.contentRect.height <= 450);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Sync external showHistory prop with local state
   useEffect(() => {
@@ -1115,7 +1132,7 @@ export default function DockBibleTab({
             } catch (error) {
               errorMap.set(
                 version,
-                error instanceof Error ? error.message : "Unable to load this version.",
+                error instanceof Error ? error.message : t("bible.unableToLoadVersion"),
               );
             }
           }),
@@ -1132,7 +1149,7 @@ export default function DockBibleTab({
       } catch (error) {
         if (cancelled) return;
         const nextErrors = createEmptyErrors();
-        nextErrors[0] = error instanceof Error ? error.message : "Unable to load the selected chapter.";
+        nextErrors[0] = error instanceof Error ? error.message : t("bible.unableToLoad");
         setChapterPassages(createEmptyPassages());
         setChapterErrors(nextErrors);
       } finally {
@@ -2308,7 +2325,7 @@ export default function DockBibleTab({
         }
         return next;
       });
-      setActionError(error instanceof Error ? error.message : "Unable to update favorites.");
+      setActionError(error instanceof Error ? error.message : t("bible.unableToUpdateFavorites"));
     }
   }, [favoriteRefs, selectedPassageForFavorite]);
 
@@ -2681,6 +2698,8 @@ export default function DockBibleTab({
 
   return (
     <BibleDockContainer
+      ref={containerRef}
+      isCompact={compactLayout}
       isTopbarExpanded={isTopbarExpanded}
       setIsTopbarExpanded={setIsTopbarExpanded}
       selectedBook={selectedBook}
@@ -2757,7 +2776,7 @@ export default function DockBibleTab({
                       className={`dock-search-dropdown__item${i === activeIdx ? " dock-search-dropdown__item--active" : ""}`}
                       onClick={() => void handlePickResult(result)}
                       onMouseEnter={() => setActiveIdx(i)}
-                     title="Search">
+                      title={t("common.search")}>
                       <Icon
                         name={
                           result.kind === "keyword"
@@ -2794,7 +2813,7 @@ export default function DockBibleTab({
                       className="dock-search-dropdown__item dock-search-dropdown__item--recent"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => applyRecentBibleSearch(item)}
-                     title="Search">
+                      title={t("common.search")}>
                       <Icon name="refresh" size={13} style={{ opacity: 0.5 }} />
                       <span className="dock-search-dropdown__content">
                         <span className="dock-search-dropdown__label">{item}</span>
@@ -2808,8 +2827,8 @@ export default function DockBibleTab({
                 <div className="dock-search-dropdown">
                   <div className="dock-search-dropdown__empty">
                     {isKeywordSearching
-                      ? `Searching "${searchQuery}"...`
-                      : `No matches for "${searchQuery}"`}
+                      ? t("bible.searching")
+                      : t("bible.noMatches", { query: searchQuery })}
                   </div>
                 </div>
               )}
@@ -2910,7 +2929,7 @@ export default function DockBibleTab({
               type="button"
               onClick={() => setActionError("")}
               style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0 }}
-             title="Close">
+              title={t("common.close")}>
               <Icon name="close" size={14} />
             </button>
           </div>
@@ -2926,6 +2945,7 @@ export default function DockBibleTab({
           clearDisabled={sending}
           collapsed={toolbarCollapsed}
           onCollapseChange={setToolbarCollapsed}
+          compact={compactToolbar}
         >
           <button
             type="button"
@@ -3011,7 +3031,7 @@ export default function DockBibleTab({
                   className="dock-dialog__close"
                   onClick={() => setShowOptionsModal(false)}
                   aria-label={t("bible.closeOptions")}
-                 title="Close">
+                  title={t("common.close")}>
                   <Icon name="close" size={14} />
                 </button>
               </div>
@@ -3030,7 +3050,7 @@ export default function DockBibleTab({
                       className={`dock-console-segmented__item${overlayMode === "fullscreen" ? " dock-console-segmented__item--active" : ""}`}
                       onClick={() => setOverlayMode("fullscreen")}
                       aria-pressed={overlayMode === "fullscreen"}
-                     title="Full">
+                      title={t("bible.full")}>
                       <span>{t("bible.full")}</span>
                     </button>
                     <button
@@ -3038,7 +3058,7 @@ export default function DockBibleTab({
                       className={`dock-console-segmented__item${overlayMode === "lower-third" ? " dock-console-segmented__item--active" : ""}`}
                       onClick={() => setOverlayMode("lower-third")}
                       aria-pressed={overlayMode === "lower-third"}
-                     title="Lt">
+                      title={t("bible.lt")}>
                       <span>{t("bible.lt")}</span>
                     </button>
                   </div>
@@ -3052,7 +3072,7 @@ export default function DockBibleTab({
                     className="dock-btn dock-btn--ghost dock-btn--compact"
                     onClick={() => { setShowOptionsModal(false); setShowThemeSettings(true); }}
                     style={{ width: "100%" }}
-                   title="Open Theme Settings">
+                    title={t("bible.openThemeSettings")}>
                     <Icon name="palette" size={14} />
                     {t("bible.openThemeSettings")}
                   </button>
@@ -3106,7 +3126,7 @@ export default function DockBibleTab({
                   className="dock-dialog__close"
                   onClick={() => setKeywordActionResult(null)}
                   aria-label={t("bible.closeKeywordActionDialog")}
-                 title="Close">
+                  title={t("common.close")}>
                   <Icon name="close" size={14} />
                 </button>
               </div>
@@ -3120,11 +3140,11 @@ export default function DockBibleTab({
                   type="button"
                   className="dock-btn dock-btn--ghost dock-btn--compact"
                   onClick={() => {
-                    focusReference(keywordActionResult.book, keywordActionResult.chapter, 1);
+                    focusReference(keywordActionResult.book, keywordActionResult.chapter, keywordActionResult.verse);
                     setKeywordActionResult(null);
                     window.setTimeout(() => {
                       const verseRow = verseGridRef.current?.querySelector<HTMLElement>(
-                        `[data-verse-row="1"]`,
+                        `[data-verse-row="${keywordActionResult.verse}"]`,
                       );
                       if (verseRow) {
                         const container = verseGridRef.current;
@@ -3137,7 +3157,7 @@ export default function DockBibleTab({
                       }
                     }, 150);
                   }}
-                 title="Go To Chapter">
+                  title={t("bible.goToChapter")}>
                   <Icon name="menu_book" size={14} />
                   {t("bible.goToChapter")}
                 </button>
@@ -3153,7 +3173,7 @@ export default function DockBibleTab({
                     );
                     setKeywordActionResult(null);
                   }}
-                 title="Show">
+                  title={t("common.show")}>
                   <Icon name="cast" size={14} />
                   {t("common.show")}
                 </button>

@@ -550,7 +550,14 @@
       );
       root.setProperty('--lt-width-reduction', safeWidthReduction + 'px');
       root.setProperty('--lt-offset-x', safeOffset + 'px');
-      root.setProperty('--lt-min-height', Math.max(0, Number(s.lowerThirdHeight) || 0) + 'px');
+      // When lowerThirdHeight is 0 (auto), derive a sensible minimum bar height
+      // from the preset so short verses don't collapse to a tiny strip.
+      // Skipped for the "smallest" preset where compactness is intentional.
+      const explicitMinHeight = Math.max(0, Number(s.lowerThirdHeight) || 0);
+      const defaultMinHeight = sizeKey === 'smallest'
+        ? 0
+        : Math.max(80, Math.round(preset.maxHeight * 0.3));
+      root.setProperty('--lt-min-height', (explicitMinHeight || defaultMinHeight) + 'px');
 
       // Text transform
       root.setProperty('--text-transform', s.textTransform || 'none');
@@ -698,8 +705,10 @@
     }
 
     /**
-     * Auto-scale font size down so the bar never exceeds the visible OBS frame.
-     * Starts from the theme's baseFontSize and steps down until both height and width fit.
+     * Auto-scale font size so the bar fits the visible OBS frame.
+     * Phase 1 (shrink): starts from baseFontSize and steps down until content fits.
+     * Phase 2 (grow): if the bar is below its minimum height, grows font back up
+     * so short verses aren't rendered as a tiny strip.
      */
     function autoScaleFont() {
       if (!bar) return;
@@ -748,6 +757,43 @@
         reference.style.marginTop = reference.classList.contains("top") ? "0px" : referenceSpacing + "px";
         reference.style.marginBottom = reference.classList.contains("top") ? referenceSpacing + "px" : "0px";
         guard += 1;
+      }
+
+      // ── Phase 2: GROW ──
+      // When the bar has a minimum height and content fits with room to spare,
+      // grow font/spacing back up so short verses fill the bar instead of
+      // rendering as a tiny strip. This reverses unnecessary shrinking from Phase 1
+      // for short verses, while long verses that shrank a lot are unaffected
+      // (their bar already fills the available space).
+      const minBarHeight = Math.max(0, Number(getComputedStyle(document.documentElement).getPropertyValue("--lt-min-height")) || 0);
+      const viewH = window.innerHeight || 1080;
+      const safeArea = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--safe-area")) || 0;
+      const effectiveMax = Math.min(barMaxHeight, viewH - safeArea * 2);
+      const growTarget = Math.max(minBarHeight, Math.round(effectiveMax * 0.55));
+      const maxFont = Math.round(baseFontSize * 1.5);
+
+      if (bar.scrollHeight < growTarget && size < maxFont) {
+        guard = 0;
+        while (bar.scrollHeight < growTarget && size < maxFont && guard < 200) {
+          size += 2;
+          refSize = Math.max(REF_FONT_SIZE_MIN, Math.round(size * ratio));
+          padding = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding * (size / baseFontSize)));
+          lineHeight = Math.max(BAR_LINE_HEIGHT_MIN, Number(getComputedStyle(document.documentElement).getPropertyValue("--line-height")) || 1.5);
+          verseText.style.fontSize = size + 'px';
+          reference.style.fontSize = refSize + 'px';
+          verseText.style.lineHeight = String(lineHeight);
+          bar.style.padding = padding + 'px calc(' + padding + 'px + 20px)';
+          guard += 1;
+        }
+        // If we overshot, step back one increment
+        if (bar.scrollHeight > growTarget && size > baseFontSize) {
+          size -= 2;
+          refSize = Math.max(REF_FONT_SIZE_MIN, Math.round(size * ratio));
+          padding = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding * (size / baseFontSize)));
+          verseText.style.fontSize = size + 'px';
+          reference.style.fontSize = refSize + 'px';
+          bar.style.padding = padding + 'px calc(' + padding + 'px + 20px)';
+        }
       }
     }
 

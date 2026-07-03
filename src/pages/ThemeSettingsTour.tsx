@@ -345,8 +345,8 @@ export default function ThemeSettingsTour({
   }, [stepIndex]);
 
   const handleSkip = useCallback(() => {
-    onClose();
-  }, [onClose]);
+    onFinish();
+  }, [onFinish]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────
 
@@ -355,7 +355,7 @@ export default function ThemeSettingsTour({
 
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        onFinish();
       } else if (e.key === "Enter") {
         goNext();
       }
@@ -363,7 +363,7 @@ export default function ThemeSettingsTour({
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isActive, goNext, onClose]);
+  }, [isActive, goNext, onFinish]);
 
   // ── Nothing to render ─────────────────────────────────────────────────
 

@@ -18193,6 +18193,106 @@ sts3-transcript-item--active .sts3-transcript-item--interim {
   border-radius: 2px;
 }
 
+/* ── Detection Speed Toggle ── */
+.sts3-detection-speed {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.sts3-detection-speed-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.sts3-detection-speed-options {
+  display: flex;
+  gap: 4px;
+}
+
+.sts3-detection-speed-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sts3-detection-speed-btn:hover {
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.sts3-detection-speed-btn--active {
+  background: rgba(var(--primary-rgb, 99, 102, 241), 0.12);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.sts3-detection-speed-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.sts3-detection-speed-name {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.sts3-detection-speed-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  text-align: center;
+}
+
+/* ── Search Telemetry (dev mode) ── */
+.sts3-telemetry {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.85);
+  border-radius: 6px;
+  font-family: "SF Mono", "Menlo", "Monaco", monospace;
+  font-size: 10px;
+  color: #0f0;
+  z-index: 999;
+  pointer-events: none;
+}
+
+.sts3-telemetry-row {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.sts3-telemetry-label {
+  color: #888;
+  min-width: 90px;
+}
+
+.sts3-telemetry-value {
+  color: #0f0;
+  font-weight: 600;
+}
+
 /* ── Toasts ── */
 .sts3-toast {
   position: fixed;
@@ -18498,6 +18598,186 @@ sts3-transcript-item--active .sts3-transcript-item--interim {
   font-weight: 700;
   font-family: var(--font-mono);
   color: var(--text);
+}
+
+/* ── Transcript Accordion Toggle (hidden on desktop) ── */
+.sts3-transcript-toggle {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  transition: background 0.15s;
+}
+
+.sts3-transcript-toggle:hover {
+  background: var(--surface-hover);
+}
+
+.sts3-transcript-toggle svg {
+  transition: transform 0.2s;
+}
+
+.sts3-transcript-toggle--collapsed svg {
+  transform: rotate(-90deg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SpeechToScripture — Responsive Breakpoints
+   Stack, don't squeeze. Page becomes taller, never wider.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── ≤1400px: Tighten header & sidebar ── */
+@media (max-width: 1400px) {
+  .sts3-header {
+    padding: 6px 12px;
+  }
+
+  .sts3-header-right {
+    gap: 6px;
+  }
+
+  .sts3-sidebar {
+    width: 260px;
+    min-width: 220px;
+  }
+
+  .sts3-detection-speed {
+    padding: 8px 10px;
+  }
+
+  .sts3-detection-speed-btn {
+    padding: 5px 3px;
+  }
+
+  .sts3-transcript-list {
+    max-height: 250px;
+  }
+}
+
+/* ── ≤1100px: Header wraps, 3-col → 2-col ── */
+@media (max-width: 1100px) {
+  .sts3-header {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    row-gap: 6px;
+  }
+
+  .sts3-header-left {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .sts3-header-right {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .sts3-main-row1 {
+    flex-wrap: wrap;
+  }
+
+  .sts3-main-row1>.sts3-sidebar {
+    width: 30%;
+    min-width: 240px;
+  }
+
+  .sts3-main-row1>.sts3-main-card {
+    flex: 1;
+    min-width: 300px;
+  }
+
+  .sts3-main-row1>.sts3-right-panel {
+    width: 100%;
+    flex-basis: 100%;
+    order: 3;
+  }
+}
+
+/* ── ≤900px: Full vertical stack ── */
+@media (max-width: 900px) {
+  .sts3-main-row1 {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .sts3-main-row1>.sts3-sidebar {
+    width: 100%;
+    min-width: 0;
+    max-height: 350px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sts3-main-row1>.sts3-main-card {
+    min-width: 0;
+  }
+
+  .sts3-main-row1>.sts3-right-panel {
+    order: unset;
+  }
+
+  .sts3-header-mic-status {
+    padding-left: 10px;
+  }
+
+  .sts3-detection-speed {
+    padding: 8px 10px;
+  }
+
+  .sts3-detection-speed-btn {
+    flex-direction: row;
+    gap: 4px;
+    padding: 5px 8px;
+  }
+
+  .sts3-detection-speed-name {
+    font-size: 9px;
+  }
+
+  .sts3-transcript-list {
+    max-height: 200px;
+  }
+}
+
+/* ── ≤700px: Accordion for Live Transcript, height priority ── */
+@media (max-width: 700px) {
+  .sts3-main-row1>.sts3-sidebar {
+    max-height: none;
+  }
+
+  .sts3-transcript-toggle {
+    display: flex;
+  }
+
+  .sts3-transcript-collapsed {
+    display: none;
+  }
+
+  .sts3-candidate-card {
+    min-height: 200px;
+  }
+
+  .sts3-candidate-list {
+    max-height: 500px;
+  }
+
+  .sts3-detection-speed-hint {
+    display: none;
+  }
+
+  .sts3-header-mic-group {
+    gap: 4px;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

@@ -7,6 +7,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import i18n from "../../i18n";
 import { getBibleSettings, getInstalledTranslations, saveBibleSettings } from "../../bible/bibleDb";
 import { useBible } from "../../bible/bibleStore";
 import type { BibleTranslation } from "../../bible/types";
@@ -110,6 +112,7 @@ function resolveSpeakerProfiles(settings: MVSettingsType): SpeakerProfileSetting
 
 /* ── Main Component ── */
 export function MVSettings() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const validTabs: SettingsTab[] = ["general", "obs", "appearance", "branding", "bible", "usage", "audio"];
   const initialTab = searchParams.get("tab");
@@ -248,16 +251,11 @@ export function MVSettings() {
   const [highContrastUI, setHighContrastUI] = useState<boolean>(settings.highContrast ?? false);
   const [reduceMotion, setReduceMotion] = useState<boolean>(false);
   const [roundedCorners, setRoundedCorners] = useState<boolean>(true);
-  const ALL_LANGUAGES: string[] = ["Abkhaz", "Afar", "Afrikaans", "Akan", "Albanian", "Amharic", "Arabic", "Aragonese", "Armenian", "Assamese", "Avaric", "Aymara", "Azerbaijani", "Bambara", "Bashkir", "Basque", "Belarusian", "Bengali", "Bihari", "Bislama", "Bosnian", "Breton", "Bulgarian", "Burmese", "Catalan", "Chamorro", "Chechen", "Chichewa", "Chinese", "Corsican", "Croatian", "Czech", "Danish", "Divehi", "Dutch", "Dzongkha", "English", "Esperanto", "Estonian", "Ewe", "Faroese", "Fijian", "Finnish", "French", "Fula", "Galician", "Georgian", "German", "Greek", "Guarani", "Gujarati", "Haitian Creole", "Hausa", "Hebrew", "Herero", "Hindi", "Hiri Motu", "Hungarian", "Icelandic", "Ido", "Igbo", "Indonesian", "Interlingua", "Interlingue", "Inuktitut", "Inupiaq", "Irish", "Italian", "Japanese", "Javanese", "Kalaallisut", "Kannada", "Kanuri", "Kashmiri", "Kazakh", "Khmer", "Kikuyu", "Kinyarwanda", "Kirghiz", "Komi", "Kongo", "Korean", "Kurdish", "Kwanyama", "Lao", "Latin", "Latvian", "Limburgish", "Lingala", "Lithuanian", "Luba-Katanga", "Luxembourgish", "Macedonian", "Malagasy", "Malay", "Malayalam", "Maltese", "Manx", "Maori", "Marathi", "Marshallese", "Mongolian", "Nauru", "Navajo", "Ndonga", "Nepali", "Norwegian", "Occitan", "Ojibwe", "Old Church Slavonic", "Oromo", "Ossetian", "Panjabi", "Pashto", "Persian", "Polish", "Portuguese", "Quechua", "Romanian", "Romansh", "Rundi", "Russian", "Samoan", "Sango", "Sanskrit", "Sardinian", "Serbian", "Shona", "Sindhi", "Sinhala", "Slovak", "Slovenian", "Somali", "Southern Ndebele", "Southern Sotho", "Spanish", "Sundanese", "Swahili", "Swati", "Swedish", "Tagalog", "Tahitian", "Tajik", "Tamil", "Tatar", "Telugu", "Thai", "Tibetan", "Tigrinya", "Tonga", "Tsonga", "Tswana", "Turkish", "Turkmen", "Twi", "Ukrainian", "Urdu", "Uzbek", "Venda", "Vietnamese", "Volapük", "Walloon", "Welsh", "Western Frisian", "Wolof", "Xhosa", "Yiddish", "Yoruba", "Zhuang", "Zulu"];
-  const [interfaceLanguage, setInterfaceLanguage] = useState<string>("English");
-  const [allLanguages] = useState<string[]>(() => {
-    try {
-      const cached = localStorage.getItem("mce_languages");
-      if (cached) return JSON.parse(cached) as string[];
-    } catch { }
-    localStorage.setItem("mce_languages", JSON.stringify(ALL_LANGUAGES));
-    return ALL_LANGUAGES;
-  });
+  const ALL_LANGUAGES: string[] = ["English", "French", "Spanish", "Portuguese", "Yoruba", "Igbo", "Hausa", "Ghanaian"];
+  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => localStorage.getItem("mce_interface_language") || "English");
+  const [allLanguages] = useState<string[]>(ALL_LANGUAGES);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
 
   // ── Toast system ──
   const [toasts, setToasts] = useState<Array<{ id: number; message: string; type: "success" | "accent" }>>([]);
@@ -418,11 +416,11 @@ export function MVSettings() {
       await db.clearAll();
       setCleared(true);
       setConfirmClear(false);
-      triggerToast("Database cleared successfully.", "success");
+      triggerToast(t("mvSettings.toast.databaseCleared"), "success");
       setTimeout(() => setCleared(false), 3000);
     } catch (err) {
       console.error("Clear failed:", err);
-      triggerToast("Failed to clear data. Please try again.", "accent");
+      triggerToast(t("mvSettings.toast.failedClearData"), "accent");
     }
   };
 
@@ -431,11 +429,11 @@ export function MVSettings() {
       await clearAllSongs();
       setWorshipCleared(true);
       setConfirmClearWorship(false);
-      triggerToast("All worship songs cleared.", "success");
+      triggerToast(t("mvSettings.toast.worshipSongsCleared"), "success");
       setTimeout(() => setWorshipCleared(false), 3000);
     } catch (err) {
       console.error("Clear worship failed:", err);
-      triggerToast("Failed to clear worship data. Please try again.", "accent");
+      triggerToast(t("mvSettings.toast.failedClearWorship"), "accent");
     }
   };
 
@@ -445,13 +443,13 @@ export function MVSettings() {
     try {
       if (!obsService.isConnected) await obsService.connect(settings.obsUrl, obsPasswordDraft || undefined);
       const version = await obsService.call("GetVersion");
-      setObsTestResult(`Connected — OBS v${version.obsVersion}, WebSocket v${version.obsWebSocketVersion}`);
+      setObsTestResult(t("mvSettings.obs.testResultConnected", { obsVersion: version.obsVersion, wsVersion: version.obsWebSocketVersion }));
       setObsStatus("connected");
-      triggerToast("OBS connected successfully!", "success");
+      triggerToast(t("mvSettings.toast.obsConnected"), "success");
     } catch (err: any) {
-      setObsTestResult(`Failed: ${err.message || "Connection failed"}`);
+      setObsTestResult(t("mvSettings.obs.testResultFailed", { message: err.message || "Connection failed" }));
       setObsStatus("disconnected");
-      triggerToast("OBS connection failed.", "accent");
+      triggerToast(t("mvSettings.toast.obsConnectionFailed"), "accent");
     }
   };
 
@@ -462,7 +460,7 @@ export function MVSettings() {
     _setBrandLogoStatus(null);
     applyBrandingSettingsToDom({ brandColor: next.brandColor, churchName: next.churchName });
     applyLowerThirdDefaultDuration(next.lowerThirdDefaultDurationSec);
-    triggerToast("Settings reset to defaults.", "success");
+    triggerToast(t("mvSettings.toast.settingsResetToDefaults"), "success");
   };
 
   const handleResetBrandingSettings = () => {
@@ -479,7 +477,7 @@ export function MVSettings() {
     });
     setSpeakerProfiles([{ ...EMPTY_SPEAKER_PROFILE }]);
     _setBrandLogoStatus(null);
-    triggerToast("Branding settings reset.", "success");
+    triggerToast(t("mvSettings.toast.brandingSettingsReset"), "success");
   };
 
   const handleResetChurchOnboarding = useCallback(() => {
@@ -511,7 +509,7 @@ export function MVSettings() {
     });
     setBibleSettingsDirty(false);
     setBSaved(true);
-    triggerToast("Bible settings saved.", "success");
+    triggerToast(t("mvSettings.toast.bibleSettingsSaved"), "success");
     setTimeout(() => setBSaved(false), 2000);
   }, [bDefaultTranslation, bDefaultThemeId, bShowVerseNumbers, bMaxLines, bColorMode, bAutoSend, bReduceMotion, bHighContrast, bibleDispatch, bibleSetTheme, bibleState.slideConfig, triggerToast]);
 
@@ -525,16 +523,18 @@ export function MVSettings() {
     setReduceMotion(false);
     setRoundedCorners(true);
     setInterfaceLanguage("English");
+    localStorage.setItem("mce_interface_language", "English");
+    i18n.changeLanguage("en");
     update({ theme: "dark", highContrast: false });
-    triggerToast("Appearance reset to defaults.", "success");
+    triggerToast(t("mvSettings.toast.appearanceResetToDefaults"), "success");
   }, [update, triggerToast]);
 
   const handleReconnectNow = useCallback(() => {
-    triggerToast("Reconnecting to OBS...", "accent");
+    triggerToast(t("mvSettings.toast.reconnectingToObs"), "accent");
     const ts = new Date().toLocaleTimeString();
     setObsLogs((prev) => [...prev, { id: Date.now() + 10, timestamp: ts, message: "Manual reconnection triggered.", source: "System" }]);
     setTimeout(() => {
-      triggerToast("OBS reconnected!", "success");
+      triggerToast(t("mvSettings.toast.obsReconnected"), "success");
       setObsLogs((prev) => [...prev, { id: Date.now() + 20, timestamp: new Date().toLocaleTimeString(), message: "Handshake restored.", source: "Network" }]);
     }, 1500);
   }, [triggerToast]);
@@ -542,13 +542,13 @@ export function MVSettings() {
   /* ── Tab descriptions ── */
   const tabDescription = useMemo(() => {
     switch (activeTab) {
-      case "general": return "Configure general options for MakeChurchEasy operations.";
-      case "obs": return "Configure how MakeChurchEasy connects and communicates with OBS.";
-      case "appearance": return "Customize the look, scaling, and behavior of MakeChurchEasy.";
-      case "branding": return "Church profile, identity, and service defaults.";
-      case "bible": return "Bible module preferences and slide configuration.";
-      case "usage": return "Track your AI credits usage across all features and see your plan details.";
-      case "audio": return "Configure microphone input gain and monitor audio levels.";
+      case "general": return t("mvSettings.tabDesc.general");
+      case "obs": return t("mvSettings.tabDesc.obs");
+      case "appearance": return t("mvSettings.tabDesc.appearance");
+      case "branding": return t("mvSettings.tabDesc.branding");
+      case "bible": return t("mvSettings.tabDesc.bible");
+      case "usage": return t("mvSettings.tabDesc.usage");
+      case "audio": return t("mvSettings.tabDesc.audio");
     }
   }, [activeTab]);
 
@@ -570,7 +570,7 @@ export function MVSettings() {
       <main className="app-main settings-main">
         <header className="main-header">
           <div className="title-group">
-            <h2 className="main-title">Settings</h2>
+            <h2 className="main-title">{t("mvSettings.page.title")}</h2>
             <p className="main-description">{tabDescription}</p>
           </div>
           <button className="reset-button" onClick={() => {
@@ -583,24 +583,24 @@ export function MVSettings() {
               db.updateSettings({ inputGain: 100 });
               voiceBibleService.setInputGain(100);
               lmDockService.setInputGain(100);
-              triggerToast("Input gain reset to 100%", "accent");
+              triggerToast(t("mvSettings.toast.inputGainReset"), "accent");
             }
-            else triggerToast("Reset options available for this section.", "accent");
+            else triggerToast(t("mvSettings.toast.resetOptionsAvailable"), "accent");
           }} title="Reset">
             <RotateCcw size={16} />
-            <span>{activeTab === "bible" ? "Save Bible" : "Reset Defaults"}</span>
+            <span>{activeTab === "bible" ? t("mvSettings.page.saveBible") : t("mvSettings.page.resetDefaults")}</span>
           </button>
         </header>
 
         {/* Tab bar */}
         <div className="tabs-navigation">
           {([
-            ["general", Settings, "General"],
-            ["obs", Radio, "OBS"],
-            ["appearance", Palette, "Appearance"],
-            ["branding", Paintbrush, "Branding"],
-            ["audio", Mic, "Audio"],
-            ["usage", History, "Usage"],
+            ["general", Settings, t("mvSettings.tabs.general")],
+            ["obs", Radio, t("mvSettings.tabs.obs")],
+            ["appearance", Palette, t("mvSettings.tabs.appearance")],
+            ["branding", Paintbrush, t("mvSettings.tabs.branding")],
+            ["audio", Mic, t("mvSettings.tabs.audio")],
+            ["usage", History, t("mvSettings.tabs.usage")],
             // ["pro", ShieldCheck, "Pro License"],
             // ["developer", Key, "Developer"],
           ] as const).map(([id, IconComp, label]) => (
@@ -620,18 +620,18 @@ export function MVSettings() {
               {activeTab === "general" && (
                 <div className="settings-section">
                   <div className="section-header">
-                    <h3 className="section-title">Studio Preferences</h3>
-                    <p className="section-desc">Manage standard operations, language choices, and background behaviors.</p>
+                    <h3 className="section-title">{t("mvSettings.general.studioPreferences")}</h3>
+                    <p className="section-desc">{t("mvSettings.general.studioPreferencesDesc")}</p>
                   </div>
 
                   <div className="settings-card fields-rows-stack">
                     <div className="flex-between-center">
                       <div className="switch-left">
-                        <span className="switch-title">Global Interface Language</span>
-                        <span className="switch-subtitle">Choose the translation table for buttons and guides.</span>
+                        <span className="switch-title">{t("mvSettings.general.globalInterfaceLanguage")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.general.globalInterfaceLanguageDesc")}</span>
                       </div>
                       <div className="form-select-container" style={{ width: "180px" }}>
-                        <select className="custom-select" value={interfaceLanguage} onChange={(e) => { setInterfaceLanguage(e.target.value); triggerToast(`Language updated to ${e.target.value}`, "accent"); }}>
+                        <select className="custom-select" value={interfaceLanguage} onChange={(e) => { setPendingLanguage(e.target.value); setShowLanguageModal(true); }}>
                           {allLanguages.map((lang) => (
                             <option key={lang} value={lang}>{lang}</option>
                           ))}
@@ -644,14 +644,14 @@ export function MVSettings() {
                   {/* ── Global Module Defaults ── */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <div className="section-header">
-                      <h3 className="section-title">Global Module Defaults</h3>
-                      <p className="section-desc">Set default behaviors for Bible, Speaker, and Ticker modules across the app.</p>
+                      <h3 className="section-title">{t("mvSettings.general.globalModuleDefaults")}</h3>
+                      <p className="section-desc">{t("mvSettings.general.globalModuleDefaultsDesc")}</p>
                     </div>
                     <div className="settings-card fields-rows-stack">
                       <div className="flex-between-center">
                         <div className="switch-left">
-                          <span className="switch-title">Default Bible Overlay Mode</span>
-                          <span className="switch-subtitle">Choose which overlay mode the Bible module starts in.</span>
+                          <span className="switch-title">{t("mvSettings.general.defaultBibleOverlayMode")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.general.defaultBibleOverlayModeDesc")}</span>
                         </div>
                         <div className="form-select-container" style={{ width: "180px" }}>
                           <select
@@ -659,8 +659,8 @@ export function MVSettings() {
                             value={settings.defaultBibleOverlayMode}
                             onChange={(e) => update({ defaultBibleOverlayMode: e.target.value as "fullscreen" | "lower-third" })}
                           >
-                            <option value="fullscreen">Fullscreen</option>
-                            <option value="lower-third">Lower Third</option>
+                            <option value="fullscreen">{t("mvSettings.general.fullscreen")}</option>
+                            <option value="lower-third">{t("mvSettings.general.lowerThird")}</option>
                           </select>
                           <span className="select-arrow"><ChevronDown size={14} /></span>
                         </div>
@@ -668,8 +668,8 @@ export function MVSettings() {
 
                       <div className="flex-between-center">
                         <div className="switch-left">
-                          <span className="switch-title">Default Speaker Size</span>
-                          <span className="switch-subtitle">Default lower-third size for the Speaker module.</span>
+                          <span className="switch-title">{t("mvSettings.general.defaultSpeakerSize")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.general.defaultSpeakerSizeDesc")}</span>
                         </div>
                         <div className="form-select-container" style={{ width: "180px" }}>
                           <select
@@ -677,12 +677,12 @@ export function MVSettings() {
                             value={settings.defaultSpeakerSize}
                             onChange={(e) => update({ defaultSpeakerSize: e.target.value })}
                           >
-                            <option value="s">Small (S)</option>
-                            <option value="m">Medium (M)</option>
-                            <option value="l">Large (L)</option>
-                            <option value="xl">Extra Large (XL)</option>
-                            <option value="2xl">2XL</option>
-                            <option value="3xl">3XL</option>
+                            <option value="s">{t("mvSettings.general.smallS")}</option>
+                            <option value="m">{t("mvSettings.general.mediumM")}</option>
+                            <option value="l">{t("mvSettings.general.largeL")}</option>
+                            <option value="xl">{t("mvSettings.general.extraLargeXL")}</option>
+                            <option value="2xl">{t("mvSettings.general.xxl")}</option>
+                            <option value="3xl">{t("mvSettings.general.xxxl")}</option>
                           </select>
                           <span className="select-arrow"><ChevronDown size={14} /></span>
                         </div>
@@ -690,8 +690,8 @@ export function MVSettings() {
 
                       <div className="flex-between-center">
                         <div className="switch-left">
-                          <span className="switch-title">Default Ticker Scroll Speed</span>
-                          <span className="switch-subtitle">Default scrolling speed for the Ticker module (1 = slow, 5 = fast).</span>
+                          <span className="switch-title">{t("mvSettings.general.defaultTickerScrollSpeed")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.general.defaultTickerScrollSpeedDesc")}</span>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <input
@@ -714,7 +714,7 @@ export function MVSettings() {
                   {/* About */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <div className="section-header">
-                      <h3 className="section-title">About</h3>
+                      <h3 className="section-title">{t("mvSettings.general.aboutTitle")}</h3>
                     </div>
                     <div className="settings-card">
                       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
@@ -725,9 +725,9 @@ export function MVSettings() {
                         </div>
                       </div>
                       <p style={{ color: "var(--text-secondary)", fontSize: 13, lineHeight: 1.6, marginBottom: 8 }}>
-                        Complete Church Production Control for OBS — a smart layer built on top of OBS Studio for church broadcast teams.
+                        {t("mvSettings.general.aboutDescription")}
                       </p>
-                      <p style={{ color: "var(--text-muted)", fontSize: 12 }}>Built with Tauri v2 + React 19 + TypeScript</p>
+                      <p style={{ color: "var(--text-muted)", fontSize: 12 }}>{t("mvSettings.general.aboutBuiltWith")}</p>
                     </div>
                   </div>
 
@@ -736,38 +736,38 @@ export function MVSettings() {
 
                   {/* Danger Zone */}
                   <div className="settings-section" style={{ marginTop: "24px", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-lg)", padding: "24px" }}>
-                    <h3 className="section-title" style={{ color: "var(--danger-color)" }}><Trash2 size={18} style={{ verticalAlign: "text-bottom" }} /> Danger Zone</h3>
+                    <h3 className="section-title" style={{ color: "var(--danger-color)" }}><Trash2 size={18} style={{ verticalAlign: "text-bottom" }} /> {t("mvSettings.general.dangerZone")}</h3>
 
                     {/* Clear All Data */}
-                    <p className="section-desc">Clear all saved layouts, templates, and assets. This cannot be undone.</p>
+                    <p className="section-desc">{t("mvSettings.general.clearAllDataDesc")}</p>
                     {cleared ? (
-                      <p style={{ color: "var(--success-color)", fontSize: 13 }}><CheckCircle size={16} style={{ verticalAlign: "middle" }} /> Database cleared.</p>
+                      <p style={{ color: "var(--success-color)", fontSize: 13 }}><CheckCircle size={16} style={{ verticalAlign: "middle" }} /> {t("mvSettings.general.databaseCleared")}</p>
                     ) : confirmClear ? (
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <span style={{ color: "var(--danger-color)" }}>Are you sure?</span>
-                        <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClear} title="Yes">Yes, Clear Everything</button>
-                        <button className="action-btn" onClick={() => setConfirmClear(false)} title="Cancel">Cancel</button>
+                        <span style={{ color: "var(--danger-color)" }}>{t("mvSettings.general.areYouSure")}</span>
+                        <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClear} title="Yes">{t("mvSettings.general.yesClearEverything")}</button>
+                        <button className="action-btn" onClick={() => setConfirmClear(false)} title="Cancel">{t("mvSettings.general.cancel")}</button>
                       </div>
                     ) : (
                       <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClear(true)} title="Clear">
-                        <Trash2 size={14} /><span>Clear All Data</span>
+                        <Trash2 size={14} /><span>{t("mvSettings.general.clearAllData")}</span>
                       </button>
                     )}
 
                     {/* Clear Worship Songs */}
                     <div style={{ marginTop: 16, borderTop: "1px solid rgba(239,68,68,0.1)", paddingTop: 16 }}>
-                      <p className="section-desc">Remove all worship songs from the library. This cannot be undone.</p>
+                      <p className="section-desc">{t("mvSettings.general.clearWorshipSongsDesc")}</p>
                       {worshipCleared ? (
-                        <p style={{ color: "var(--success-color)", fontSize: 13 }}><CheckCircle size={16} style={{ verticalAlign: "middle" }} /> Worship songs cleared.</p>
+                        <p style={{ color: "var(--success-color)", fontSize: 13 }}><CheckCircle size={16} style={{ verticalAlign: "middle" }} /> {t("mvSettings.general.worshipSongsCleared")}</p>
                       ) : confirmClearWorship ? (
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <span style={{ color: "var(--danger-color)" }}>Are you sure?</span>
-                          <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClearWorship} title="Yes">Yes, Clear Worship</button>
-                          <button className="action-btn" onClick={() => setConfirmClearWorship(false)} title="Cancel">Cancel</button>
+                          <span style={{ color: "var(--danger-color)" }}>{t("mvSettings.general.areYouSure")}</span>
+                          <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClearWorship} title="Yes">{t("mvSettings.general.yesClearWorship")}</button>
+                          <button className="action-btn" onClick={() => setConfirmClearWorship(false)} title="Cancel">{t("mvSettings.general.cancel")}</button>
                         </div>
                       ) : (
                         <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClearWorship(true)} title="Clear">
-                          <Trash2 size={14} /><span>Clear Worship Songs</span>
+                          <Trash2 size={14} /><span>{t("mvSettings.general.clearWorshipSongs")}</span>
                         </button>
                       )}
                     </div>
@@ -779,14 +779,13 @@ export function MVSettings() {
               {activeTab === "obs" && (
                 <div className="settings-section">
                   <div className="section-header">
-                    {/* <h3 className="section-title">Primary Connection Methods</h3> */}
-                    <p className="section-desc">Connect to OBS Studio via the obs-websocket plugin (v5+).</p>
+                    <p className="section-desc">{t("mvSettings.obs.webSocketDesc")}</p>
                   </div>
 
                   <div className="settings-card fields-rows-stack">
                     {/* Connection method */}
                     <div className="form-group">
-                      <label className="form-label">Connection Method</label>
+                      <label className="form-label">{t("mvSettings.obs.connectionMethod")}</label>
                       <div className="grid-2-col" style={{ marginTop: "4px" }}>
                         <label className="option-select-card">
                           <input type="radio" name="obs_method" checked={obsMethod === "WebSocket"} onChange={() => setObsMethod("WebSocket")} />
@@ -794,8 +793,8 @@ export function MVSettings() {
                             <div className="checked-indicator"><Check size={10} /></div>
                             <div className="density-icon-box" style={{ background: obsMethod === "WebSocket" ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: obsMethod === "WebSocket" ? "var(--accent-color)" : "var(--text-secondary)" }}><Radio size={16} /></div>
                             <div style={{ marginTop: "8px" }}>
-                              <span className="option-title">WebSocket (Recommended)</span>
-                              <p className="option-desc" style={{ marginTop: "4px" }}>Direct live link with low latency.</p>
+                              <span className="option-title">{t("mvSettings.obs.webSocketRecommended")}</span>
+                              <p className="option-desc" style={{ marginTop: "4px" }}>{t("mvSettings.obs.webSocketDirectDesc")}</p>
                             </div>
                           </div>
                         </label>
@@ -805,8 +804,8 @@ export function MVSettings() {
                             <div className="checked-indicator"><Check size={10} /></div>
                             <div className="density-icon-box" style={{ background: obsMethod === "Remote" ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: obsMethod === "Remote" ? "var(--accent-color)" : "var(--text-secondary)" }}><ExternalLink size={16} /></div>
                             <div style={{ marginTop: "8px" }}>
-                              <span className="option-title">Alternative Remote API</span>
-                              <p className="option-desc" style={{ marginTop: "4px" }}>Fallback HTTP requests protocol.</p>
+                              <span className="option-title">{t("mvSettings.obs.alternativeRemoteApi")}</span>
+                              <p className="option-desc" style={{ marginTop: "4px" }}>{t("mvSettings.obs.alternativeRemoteApiDesc")}</p>
                             </div>
                           </div>
                         </label>
@@ -817,27 +816,27 @@ export function MVSettings() {
 
                     {/* Server address */}
                     <div className="form-group">
-                      <label className="form-label">WebSocket Host Address</label>
+                      <label className="form-label">{t("mvSettings.obs.webSocketHostAddress")}</label>
                       <div className="custom-input-container">
                         <input type="text" className="custom-textbox" value={settings.obsUrl} onChange={(e) => update({ obsUrl: e.target.value })} placeholder="ws://localhost:4455" />
                         <button className="action-btn btn-primary" onClick={handleTestObs} disabled={obsStatus === "connecting"} title="Refresh">
-                          {obsStatus === "connecting" ? (<><RefreshCw size={14} className="animate-spin" /><span>Connecting...</span></>) : (<><CheckCircle size={14} /><span>Test Connection</span></>)}
+                          {obsStatus === "connecting" ? (<><RefreshCw size={14} className="animate-spin" /><span>{t("mvSettings.obs.connecting")}</span></>) : (<><CheckCircle size={14} /><span>{t("mvSettings.obs.testConnection")}</span></>)}
                         </button>
                       </div>
                     </div>
 
                     {/* Password */}
                     <div className="form-group" style={{ marginTop: "12px" }}>
-                      <label className="form-label">Password (Optional)</label>
+                      <label className="form-label">{t("mvSettings.obs.passwordOptional")}</label>
                       <div className="custom-input-container">
-                        <input type="password" className="custom-textbox" value={obsPasswordDraft} onChange={(e) => setObsPasswordDraft(e.target.value)} placeholder="OBS authentication key" />
+                        <input type="password" className="custom-textbox" value={obsPasswordDraft} onChange={(e) => setObsPasswordDraft(e.target.value)} placeholder={t("mvSettings.obs.obsAuthKey")} />
                       </div>
-                      <span className="mv-settings-hint" style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>Stored in memory for this session only.</span>
+                      <span className="mv-settings-hint" style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>{t("mvSettings.obs.storedInSession")}</span>
                     </div>
 
                     {obsTestResult && (
-                      <p style={{ fontSize: 12, color: obsTestResult.includes("Connected") ? "var(--success-color)" : "var(--danger-color)" }}>
-                        {obsTestResult.startsWith("Connected") ? "✓" : "✗"} {obsTestResult}
+                      <p style={{ fontSize: 12, color: obsStatus === "connected" ? "var(--success-color)" : "var(--danger-color)" }}>
+                        {obsStatus === "connected" ? "✓" : "✗"} {obsTestResult}
                       </p>
                     )}
 
@@ -845,11 +844,11 @@ export function MVSettings() {
 
                     {/* Connection rules */}
                     <div>
-                      <h4 className="form-label" style={{ marginBottom: "16px" }}>Connection Rules</h4>
+                      <h4 className="form-label" style={{ marginBottom: "16px" }}>{t("mvSettings.obs.connectionRules")}</h4>
                       <div className="switch-row" style={{ padding: "10px 0" }}>
                         <div className="switch-left">
-                          <span className="switch-title">Auto-reconnect fallback</span>
-                          <span className="switch-subtitle">Retry connections if server drops.</span>
+                          <span className="switch-title">{t("mvSettings.obs.autoReconnectFallback")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.obs.autoReconnectDesc")}</span>
                         </div>
                         <label className="switch-toggle-label">
                           <input type="checkbox" checked={settings.obsAutoReconnect} onChange={() => update({ obsAutoReconnect: !settings.obsAutoReconnect })} />
@@ -858,14 +857,14 @@ export function MVSettings() {
                       </div>
                       <div className="flex-between-center" style={{ padding: "10px 0" }}>
                         <div className="switch-left">
-                          <span className="switch-title">Reconnect Interval</span>
-                          <span className="switch-subtitle">Wait time between attempts.</span>
+                          <span className="switch-title">{t("mvSettings.obs.reconnectInterval")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.obs.reconnectIntervalDesc")}</span>
                         </div>
                         <div className="form-select-container" style={{ width: "130px" }}>
-                          <select className="custom-select" value={obsReconnectInterval} onChange={(e) => { setObsReconnectInterval(e.target.value); triggerToast(`Interval set to ${e.target.value}`, "accent"); }}>
-                            <option>5 seconds</option>
-                            <option>10 seconds</option>
-                            <option>30 seconds</option>
+                          <select className="custom-select" value={obsReconnectInterval} onChange={(e) => { setObsReconnectInterval(e.target.value); triggerToast(t("mvSettings.obs.intervalSetTo", { interval: e.target.value }), "accent"); }}>
+                            <option>{t("mvSettings.obs.fiveSeconds")}</option>
+                            <option>{t("mvSettings.obs.tenSeconds")}</option>
+                            <option>{t("mvSettings.obs.thirtySeconds")}</option>
                           </select>
                           <span className="select-arrow"><ChevronDown size={14} /></span>
                         </div>
@@ -881,19 +880,19 @@ export function MVSettings() {
               {activeTab === "appearance" && (
                 <div className="settings-section">
                   <div className="section-header">
-                    <h3 className="section-title">Design & Layout</h3>
-                    <p className="section-desc">Customize the look, scaling, and behavior of MakeChurchEasy.</p>
+                    <h3 className="section-title">{t("mvSettings.appearance.designAndLayout")}</h3>
+                    <p className="section-desc">{t("mvSettings.tabDesc.appearance")}</p>
                   </div>
 
                   <div className="settings-card fields-rows-stack">
                     {/* Theme mode */}
                     <div className="form-group">
-                      <label className="form-label">Interface Theme</label>
+                      <label className="form-label">{t("mvSettings.appearance.interfaceTheme")}</label>
                       <div className="grid-3-col" style={{ marginTop: "4px" }}>
                         {([
-                          ["dark", Moon, "Dark"],
-                          ["light", Sun, "Light"],
-                          ["system", Monitor, "System"],
+                          ["dark", Moon, t("mvSettings.appearance.dark")],
+                          ["light", Sun, t("mvSettings.appearance.light")],
+                          ["system", Monitor, t("mvSettings.appearance.system")],
                         ] as const).map(([id, IconComp, label]) => (
                           <label key={id} className="option-select-card">
                             <input type="radio" name="theme_mode" checked={theme === id} onChange={() => { setTheme(id); update({ theme: id } as any); }} />
@@ -909,19 +908,10 @@ export function MVSettings() {
                       </div>
                     </div>
 
-                    <hr className="settings-divider" />
+
 
                     {/* Accent color */}
-                    <div className="form-group">
-                      <label className="form-label">Accent Color</label>
-                      <div className="accent-swatches-container" style={{ marginTop: "8px" }}>
-                        {SWATCHES.map((swatch) => (
-                          <button key={swatch.id} className={`accent-swatch-btn ${accentColor === swatch.id ? "active" : ""}`} style={{ backgroundColor: swatch.hex }} title={swatch.name} onClick={() => setAccentColor(swatch.id)}>
-                            {accentColor === swatch.id && <Check size={14} color="#fff" />}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+
 
                     <hr className="settings-divider" />
 
@@ -932,53 +922,35 @@ export function MVSettings() {
 
                     {/* Font size */}
                     <div className="form-group">
-                      <label className="form-label">Font Scale</label>
+                      <label className="form-label">{t("mvSettings.appearance.fontScale")}</label>
                       <div className="grid-3-col" style={{ marginTop: "4px" }}>
                         {([1, 2, 3] as const).map((v) => (
                           <label key={v} className="option-select-card">
                             <input type="radio" name="font_size" checked={fontSizeRange === v} onChange={() => setFontSizeRange(v)} />
                             <div className="option-select-inner" style={{ padding: "12px", textAlign: "center" }}>
                               <div className="checked-indicator"><Check size={10} /></div>
-                              <span className="option-title">{v === 1 ? "Small" : v === 2 ? "Medium" : "Large"}</span>
+                              <span className="option-title">{v === 1 ? t("mvSettings.appearance.small") : v === 2 ? t("mvSettings.appearance.medium") : t("mvSettings.appearance.large")}</span>
                             </div>
                           </label>
                         ))}
                       </div>
                     </div>
 
-                    <hr className="settings-divider" />
+
 
                     {/* Toggles */}
                     <div className="switch-row">
                       <div className="switch-left">
-                        <span className="switch-title">High contrast mode</span>
-                        <span className="switch-subtitle">Increase text & border contrast for better readability.</span>
+                        <span className="switch-title">{t("mvSettings.appearance.highContrastMode")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.appearance.highContrastDesc")}</span>
                       </div>
                       <label className="switch-toggle-label">
                         <input type="checkbox" checked={highContrastUI} onChange={() => { setHighContrastUI(!highContrastUI); update({ highContrast: !highContrastUI }); }} />
                         <span className="switch-slider"></span>
                       </label>
                     </div>
-                    <div className="switch-row">
-                      <div className="switch-left">
-                        <span className="switch-title">Reduce motion & animations</span>
-                        <span className="switch-subtitle">Disables CSS transitions and animations.</span>
-                      </div>
-                      <label className="switch-toggle-label">
-                        <input type="checkbox" checked={reduceMotion} onChange={() => setReduceMotion(!reduceMotion)} />
-                        <span className="switch-slider"></span>
-                      </label>
-                    </div>
-                    <div className="switch-row">
-                      <div className="switch-left">
-                        <span className="switch-title">Rounded corners</span>
-                        <span className="switch-subtitle">Toggle rounded corner style globally.</span>
-                      </div>
-                      <label className="switch-toggle-label">
-                        <input type="checkbox" checked={roundedCorners} onChange={() => setRoundedCorners(!roundedCorners)} />
-                        <span className="switch-slider"></span>
-                      </label>
-                    </div>
+
+
                   </div>
                 </div>
               )}
@@ -1008,7 +980,7 @@ export function MVSettings() {
                           onClick={runSync}
                           disabled={syncing}
                           style={{ fontSize: 11, padding: "2px 8px", gap: 4, flexShrink: 0 }}
-                         title="Retry">
+                          title="Retry">
                           <RefreshCw size={12} />
                           Retry
                         </button>
@@ -1569,7 +1541,7 @@ export function MVSettings() {
                             voiceBibleService.setInputGain(100);
                             lmDockService.setInputGain(100);
                           }}
-                         title="Reset">
+                          title="Reset">
                           Reset
                         </button>
                       </div>
@@ -1669,6 +1641,45 @@ export function MVSettings() {
           </div>
         </div>
       </main>
+
+      {/* Language Change Confirmation Modal */}
+      {showLanguageModal && pendingLanguage && (
+        <div className="mv-modal-backdrop" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
+          <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mv-modal-title">Change Language</h3>
+            <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.85rem", lineHeight: 1.5, margin: "0 0 4px" }}>
+              Switch interface language to <strong>{pendingLanguage}</strong>?
+            </p>
+            <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.8rem", lineHeight: 1.5 }}>
+              The interface will update immediately.
+            </p>
+            <div className="mv-modal-actions" style={{ marginTop: 12 }}>
+              <button className="mv-btn mv-btn--ghost" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>Cancel</button>
+              <button
+                className="mv-btn mv-btn--primary"
+                onClick={() => {
+                  const lang = pendingLanguage!;
+                  const langToCode: Record<string, string> = {
+                    English: "en", French: "fr", Spanish: "es", Portuguese: "pt",
+                    Yoruba: "yo", Igbo: "ig", Hausa: "ha", Ghanaian: "gh",
+                  };
+                  const code = langToCode[lang] || "en";
+                  console.log(`[MCE-i18n] User clicked Change Language → "${lang}" → code="${code}", current lng=${i18n.language}`);
+                  localStorage.setItem("mce_interface_language", lang);
+                  i18n.changeLanguage(code).then(() => {
+                    console.log(`[MCE-i18n] changeLanguage resolved. New lng=${i18n.language}`);
+                  });
+                  setInterfaceLanguage(lang);
+                  setShowLanguageModal(false);
+                  setPendingLanguage(null);
+                }}
+              >
+                Change Language
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

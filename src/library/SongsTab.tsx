@@ -13,8 +13,8 @@
  *
  * Plan enforcement:
  *   • Free: max 3 songs, no bulk import
- *   • Basic: max 30 songs, no bulk import
- *   • Starter+: unlimited songs, bulk import allowed
+ *   • Basic: max 70 songs, bulk import, translation, tickers
+ *   • Growth+: unlimited songs, unlimited multiview
  *   • Existing songs are NEVER hidden or deleted on downgrade.
  */
 
@@ -107,6 +107,8 @@ export function SongsTab() {
   const [showSongLimitModal, setShowSongLimitModal] = useState(false);
   const [songLimitModalType, setSongLimitModalType] = useState<"songs" | "import">("songs");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
+  const overflowMenuRef = useRef<HTMLDivElement>(null);
   const onlineSearchRequestRef = useRef(0);
   const spotifyAutoImportRef = useRef<string | null>(null);
 
@@ -163,6 +165,18 @@ export function SongsTab() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [showAddModal, editSong, deleteConfirmId, showOnlineSearchModal, showArchiveModal, bulkImportOpen]);
+
+  // Close overflow menu on outside click
+  useEffect(() => {
+    if (!overflowMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (overflowMenuRef.current && !overflowMenuRef.current.contains(e.target as Node)) {
+        setOverflowMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [overflowMenuOpen]);
 
   const visible = useMemo(() => {
     const filtered = songs.filter((s) => {
@@ -409,18 +423,6 @@ export function SongsTab() {
               Songs {songCount} / {songLimit}
             </span>
           )}
-          <button
-            type="button"
-            className={`lib-add-btn ${hasReachedSongLimit ? "lib-add-btn--at-limit" : ""}`}
-            onClick={handleAddSong}
-            title="Add">
-            <Icon name="add" size={20} />
-            Add Song
-          </button>
-          <button type="button" className={`lib-add-btn ${!canImport ? "lib-add-btn--at-limit" : ""}`} onClick={handleBulkImport} title="Import">
-            <Icon name="upload_file" size={20} />
-            Bulk Import
-          </button>
           {availableLanguages.length > 0 && (
             <select
               className="lib-lang-filter"
@@ -436,19 +438,62 @@ export function SongsTab() {
               ))}
             </select>
           )}
-          <button type="button" className="lib-archive-btn" onClick={() => setShowArchiveModal(true)}>
-            <Icon name="archive" size={18} />
-            View Archive
-            {archivedSongs.length > 0 && (
-              <span className="lib-archive-count">{archivedSongs.length}</span>
+          <button
+            type="button"
+            className={`lib-add-btn ${hasReachedSongLimit ? "lib-add-btn--at-limit" : ""}`}
+            onClick={handleAddSong}
+            title="Add">
+            <Icon name="add" size={20} />
+            Add Song
+          </button>
+          <div className="lib-overflow-wrapper" ref={overflowMenuRef}>
+            <button
+              type="button"
+              className="lib-overflow-btn"
+              onClick={() => setOverflowMenuOpen(!overflowMenuOpen)}
+              title="More actions"
+              aria-label="More actions"
+              aria-expanded={overflowMenuOpen}>
+              <Icon name="more_vert" size={20} />
+            </button>
+            {overflowMenuOpen && (
+              <div className="lib-overflow-menu">
+                <button
+                  type="button"
+                  className="lib-overflow-item"
+                  onClick={() => {
+                    setOverflowMenuOpen(false);
+                    handleBulkImport();
+                  }}>
+                  <Icon name="upload_file" size={18} />
+                  <span>Bulk Import</span>
+                </button>
+                <button
+                  type="button"
+                  className="lib-overflow-item"
+                  onClick={() => {
+                    setOverflowMenuOpen(false);
+                    setShowArchiveModal(true);
+                  }}>
+                  <Icon name="archive" size={18} />
+                  <span>View Archive</span>
+                  {archivedSongs.length > 0 && (
+                    <span className="lib-overflow-badge">{archivedSongs.length}</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="lib-overflow-item"
+                  onClick={() => {
+                    setOverflowMenuOpen(false);
+                    handleOpenOnlineSearch();
+                  }}>
+                  <Icon name="travel_explore" size={18} />
+                  <span>Search Online</span>
+                </button>
+              </div>
             )}
-          </button>
-        </div>
-        <div className="lib-toolbar-actions">
-          <button type="button" className="lib-online-search-trigger" onClick={handleOpenOnlineSearch} title="Search">
-            <Icon name="travel_explore" size={18} />
-            Search Online
-          </button>
+          </div>
         </div>
       </div>
 
@@ -841,7 +886,7 @@ export function SongsTab() {
               <p className="dock-upgrade__message">
                 {songLimitModalType === "import" ? (
                   <>
-                    Mass Import is available on <strong>Starter</strong> and above.
+                    Mass Import is available on <strong>Basic</strong> and above.
                     Upgrade to unlock bulk import, translation, and more.
                   </>
                 ) : (
@@ -854,7 +899,7 @@ export function SongsTab() {
                         ? " You've reached your limit."
                         : ""}
                     <br />
-                    Upgrade to <strong>Starter</strong> for unlimited songs and mass import.
+                    Upgrade to <strong>Growth</strong> for unlimited songs and mass import.
                   </>
                 )}
               </p>
@@ -885,7 +930,7 @@ export function SongsTab() {
           open={showUpgradeModal}
           onClose={() => setShowUpgradeModal(false)}
           feature="songs"
-          requiredPlan={effectivePlan === "free" ? "basic" : effectivePlan === "basic" ? "starter" : effectivePlan === "starter" ? "growth" : "pro"}
+          requiredPlan={effectivePlan === "free" ? "basic" : effectivePlan === "basic" ? "growth" : "pro"}
           currentPlan={effectivePlan}
           message={`Your ${effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)} plan allows up to ${songLimit} songs. Upgrade for more.`}
         />

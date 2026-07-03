@@ -316,7 +316,7 @@ describe("Scheduled downgrade processing (cron 5a)", () => {
         _id: "user3",
         email: "c@test.com",
         name: "C",
-        plan: "starter",
+        plan: "basic",
         credits: 500,
         scheduledDowngradeAt: "2026-03-01T00:00:00Z", // past
       },

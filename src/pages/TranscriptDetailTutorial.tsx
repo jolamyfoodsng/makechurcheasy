@@ -391,8 +391,8 @@ export default function TranscriptDetailTutorial({
   }, [stepIndex]);
 
   const handleSkip = useCallback(() => {
-    onClose();
-  }, [onClose]);
+    onFinish();
+  }, [onFinish]);
 
   // ── Keyboard ──────────────────────────────────────────────────────────
 
@@ -400,13 +400,13 @@ export default function TranscriptDetailTutorial({
     if (!isActive) return;
 
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onFinish();
       else if (e.key === "Enter" && stepCompleted) goNext();
     };
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isActive, stepCompleted, goNext, onClose]);
+  }, [isActive, stepCompleted, goNext, onFinish]);
 
   // ── Render ────────────────────────────────────────────────────────────
 

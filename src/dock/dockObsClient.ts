@@ -330,6 +330,8 @@ class DockObsClient {
   private _worshipInitialized = false;
   /** Short-lived cache for GetSceneItemList results to avoid redundant round-trips within a single operation */
   private _sceneItemListCache: { sceneName: string; items: Array<{ sourceName: string; sceneItemId: number }>; expiresAt: number } | null = null;
+  /** Active image-slideshow rotation timers keyed by source name */
+  private _slideshowTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
   /** Performance telemetry: recent call latencies (ms) */
   private _callLatencies: number[] = [];
   private _callLatencyWindowStart = 0;
@@ -1214,29 +1216,6 @@ class DockObsClient {
     return {
       url: "https://github.com/exeldro/obs-move-transition/releases/latest",
       filename: "move-transition",
-      instructions: "Download the installer for your OS from the GitHub releases page, then restart MakeChurchEasy.",
-    };
-  }
-
-  /**
-   * Check if the Image Slideshow plugin (exeldro/obs-slideshow) is installed.
-   */
-  async isSlideshowPluginInstalled(): Promise<boolean> {
-    try {
-      const resp = await this.call("GetInputKindList") as { inputKinds?: string[] };
-      return Array.isArray(resp.inputKinds) && resp.inputKinds.includes("image_slideshow");
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Returns platform-specific download info for the Slideshow plugin.
-   */
-  getSlideshowPluginDownloadInfo(): { url: string; filename: string; instructions: string } {
-    return {
-      url: "https://github.com/exeldro/obs-slideshow/releases/latest",
-      filename: "obs-slideshow",
       instructions: "Download the installer for your OS from the GitHub releases page, then restart MakeChurchEasy.",
     };
   }
@@ -5443,34 +5422,30 @@ class DockObsClient {
   }
 
   /**
-   * Create an OBS Image Slide Show source with a list of images.
+   * Create a native OBS image_source and rotate through images on a timer.
+   *
+   * A single image_source is created with the first image; a per-source
+   * interval timer updates the file path via SetInputSettings on each tick.
+   * If the source already exists it is reused (settings are updated).
    */
   async pushImageSlideshow(options: {
     sourceName: string;
     images: string[];
     loop?: boolean;
-    transitionTime?: number;
+    slideTime?: number;
   }): Promise<void> {
-    const { sourceName, images, loop = true, transitionTime = 3000 } = options;
+    const { sourceName, images, loop = true, slideTime = 3000 } = options;
+    if (images.length === 0) return;
 
-    // Pre-flight: check slideshow plugin is installed
-    if (!(await this.isSlideshowPluginInstalled())) {
-      throw new Error(
-        "The Image Slideshow plugin is not installed in OBS. " +
-        "Please install obs-slideshow from https://github.com/exeldro/obs-slideshow/releases/latest " +
-        "and restart OBS."
-      );
-    }
+    // Stop any existing rotation timer for this source
+    this.stopImageSlideshow(sourceName);
 
     // Get the current scene
     const target = await this.getTargetScene("media");
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
 
-    // Build slideshow items — OBS expects { value: "<path>" } objects
-    const slideshowItems = images.map((path) => ({ value: path }));
-
-    // Remove existing slideshow source with same name if present
+    // Remove existing scene item with same name if present
     try {
       const existing = await this.call("GetSceneItemList", { sceneName }) as {
         sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
@@ -5488,24 +5463,60 @@ class DockObsClient {
       await new Promise((r) => setTimeout(r, 100));
     } catch { /* ignore */ }
 
-    // Create Image Slide Show source
+    // Create native image_source with the first image
     await this.call("CreateInput", {
       sceneName,
       inputName: sourceName,
-      inputKind: "image_slideshow",
-      inputSettings: {
-        files: slideshowItems,
-        loop,
-        transition_speed: transitionTime,
-        slide_time: transitionTime,
-        randomize: false,
-        hide: false,
-        behavior: "always_play",
-        transition: "fade",
-      },
+      inputKind: "image_source",
+      inputSettings: { file: images[0] },
       sceneItemEnabled: true,
     });
 
+    // If only one image, nothing to rotate
+    if (images.length === 1 || slideTime <= 0) return;
+
+    // Set up rotation timer
+    let currentIndex = 0;
+    const timer = setInterval(async () => {
+      currentIndex = (currentIndex + 1) % images.length;
+      if (!loop && currentIndex === 0) {
+        // Reached the end without loop — stop on last image
+        this.stopImageSlideshow(sourceName);
+        return;
+      }
+      try {
+        await this.call("SetInputSettings", {
+          inputName: sourceName,
+          inputSettings: { file: images[currentIndex] },
+        });
+      } catch {
+        // Source may have been removed — stop the timer
+        this.stopImageSlideshow(sourceName);
+      }
+    }, slideTime);
+
+    this._slideshowTimers.set(sourceName, timer);
+  }
+
+  /**
+   * Stop a running image-slideshow rotation timer.
+   */
+  stopImageSlideshow(sourceName: string): void {
+    const timer = this._slideshowTimers.get(sourceName);
+    if (timer) {
+      clearInterval(timer);
+      this._slideshowTimers.delete(sourceName);
+    }
+  }
+
+  /**
+   * Stop all running image-slideshow rotation timers.
+   */
+  stopAllImageSlideshows(): void {
+    for (const [, timer] of this._slideshowTimers) {
+      clearInterval(timer);
+    }
+    this._slideshowTimers.clear();
   }
 
   async pushPatternBackground(patternSrc: string, patternLabel: string): Promise<void> {

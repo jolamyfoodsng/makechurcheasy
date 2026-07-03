@@ -77,35 +77,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const APP_VERSION: string =
       typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
 
+    // ── Grace period & retry constants ──────────────────────────────────────
+    // On first connect the device may not have fully replicated in MongoDB yet,
+    // or the server may still be cold.  Give it time before we treat
+    // `exists: false` as a hard logout.
+    const STARTUP_GRACE_MS = 15_000;          // 15 s — no logout during this window
+    const CHECK_RETRY_ATTEMPTS = 3;           // retries on exists:false before logout
+    const CHECK_RETRY_DELAY_MS = 3_000;      // 3 s between retries
+    const mountTimestamp = Date.now();
+
     async function checkDevice(): Promise<boolean> {
       const session = getSession();
-      if (!session?.deviceId) return false;
+      if (!session?.deviceId) {
+        console.debug("[AuthContext] checkDevice: no session/deviceId — skipping");
+        return false;
+      }
       if (session.deviceId === "dev-browser") return false;
 
-      try {
-        const res = await fetch(
-          `${API_BASE}/api/device/check?deviceId=${encodeURIComponent(session.deviceId)}`,
-          { headers: { "X-App-Version": APP_VERSION } }
-        );
+      const duringGracePeriod = Date.now() - mountTimestamp < STARTUP_GRACE_MS;
 
-        // Server rejected this version — force logout
-        if (res.status === 403) {
-          const body = await res.json().catch(() => ({}));
-          if (body.error === "VERSION_TOO_OLD") {
+      for (let attempt = 1; attempt <= CHECK_RETRY_ATTEMPTS; attempt++) {
+        try {
+          const res = await fetch(
+            `${API_BASE}/api/device/check?deviceId=${encodeURIComponent(session.deviceId)}`,
+            { headers: { "X-App-Version": APP_VERSION } }
+          );
+
+          // Server rejected this version — only force logout after grace period
+          if (res.status === 403) {
+            const body = await res.json().catch(() => ({}));
+            if (body.error === "VERSION_TOO_OLD") {
+              if (duringGracePeriod) {
+                console.warn(
+                  "[AuthContext] checkDevice: VERSION_TOO_OLD during startup grace — deferring logout",
+                );
+                return true; // treat as OK during grace
+              }
+              console.warn("[AuthContext] checkDevice: VERSION_TOO_OLD — forcing logout");
+              logout();
+              return false;
+            }
+          }
+
+          if (res.ok) {
+            const { exists } = await res.json();
+            if (exists) return true;
+
+            // exists === false — retry unless this is the last attempt
+            console.warn(
+              `[AuthContext] checkDevice: device exists=false (attempt ${attempt}/${CHECK_RETRY_ATTEMPTS}, grace=${duringGracePeriod})`,
+            );
+            if (attempt < CHECK_RETRY_ATTEMPTS) {
+              await new Promise((r) => setTimeout(r, CHECK_RETRY_DELAY_MS));
+              continue;
+            }
+
+            // Final attempt failed — only logout after grace period
+            if (duringGracePeriod) {
+              console.warn(
+                "[AuthContext] checkDevice: exists=false during startup grace — skipping logout this cycle",
+              );
+              return true; // don't kill the session during grace
+            }
+            console.warn("[AuthContext] checkDevice: exists=false after retries — forcing logout");
             logout();
             return false;
           }
+        } catch (err) {
+          // Network error — skip (don't retry network failures, just skip this cycle)
+          console.debug("[AuthContext] checkDevice: network error — skipping", err);
+          return true;
         }
-
-        if (res.ok) {
-          const { exists } = await res.json();
-          if (!exists) {
-            logout();
-            return false;
-          }
-        }
-      } catch {
-        // Network error — skip
       }
       return true;
     }
@@ -121,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     }, HEARTBEAT_MS);
 
-    // Also check immediately when app regains focus
+    // Also check immediately when app regains focus, but respect grace period
     function onVisibilityChange() {
       if (document.visibilityState === "visible") {
         void checkDevice().then((ok) => {

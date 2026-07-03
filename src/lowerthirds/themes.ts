@@ -508,7 +508,7 @@ export const MERGED_ALL_THEMES: ThemeLike[] = [{
     {
       "key": "qrUrl",
       "label": "QR URL",
-      "type": "text",
+      "type": "image",
       "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurch.org/give",
       "placeholder": "QR image URL",
       "group": "Content"

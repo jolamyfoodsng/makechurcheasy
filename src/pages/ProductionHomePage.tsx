@@ -143,74 +143,68 @@ function DashboardHeader({
       </header>
 
       <div className="status-panel" data-dt-tutorial="status-panel">
-        <div className="status-group">
-          <div className="status-item">
-            <Monitor className="status-icon" />
-            <div>
-              <p className="status-title">
-                OBS {obsConnected ? "Connected" : "Disconnected"}{" "}
-                <span
-                  className="status-dot"
-                  style={{
-                    backgroundColor: obsConnected
-                      ? "var(--success)"
-                      : "var(--error)",
-                  }}
-                />
-              </p>
-              <p className="status-desc">
-                {obsConnected
-                  ? "Studio is online and ready"
-                  : "Not connected to OBS"}
-              </p>
-            </div>
-          </div>
-
-          <div className="status-divider" />
-          <div className="status-item">
-            <MonitorSmartphone className="status-icon" />
-            <div>
-              <p className="status-title">
-                Dock {dockAvailable ? "Connected" : "Unavailable"}{" "}
-                <span
-                  className="status-dot"
-                  style={{
-                    backgroundColor: dockAvailable
-                      ? "var(--success)"
-                      : "var(--text-muted)",
-                  }}
-                />
-              </p>
-              <p className="status-desc">
-                {dockAvailable
-                  ? "MakeChurchEasy Dock detected"
-                  : "Dock not detected"}
-              </p>
-            </div>
+        <div className="status-item">
+          <Monitor className="status-icon" />
+          <div>
+            <p className="status-title">
+              OBS {obsConnected ? "Connected" : "Disconnected"}{" "}
+              <span
+                className="status-dot"
+                style={{
+                  backgroundColor: obsConnected
+                    ? "var(--success)"
+                    : "var(--error)",
+                }}
+              />
+            </p>
+            <p className="status-desc">
+              {obsConnected
+                ? "Studio is online and ready"
+                : "Not connected to OBS"}
+            </p>
           </div>
         </div>
-        <div className="header-actions">
-          <button
-            className="btn-primary"
-            onClick={() => {
-              track("connect_obs_clicked");
-              onConnectObs();
-            }}
-            title="Connect">
-            {obsConnected ? (
-              <>
-                <Check className="btn-icon" /> OBS Connected
-              </>
-            ) : (
-              <>
-                <Monitor className="btn-icon" /> Connect to OBS
-              </>
-            )}
-          </button>
-          <button className="btn-secondary" onClick={onOpenTutorials} title="Open in new tab">
-            <Play className="btn-icon" /> Watch Tutorials <ExternalLink className="btn-icon" />
-          </button>
+        <div className="status-item">
+          <MonitorSmartphone className="status-icon" />
+          <div>
+            <p className="status-title">
+              Dock {dockAvailable ? "Connected" : "Unavailable"}{" "}
+              <span
+                className="status-dot"
+                style={{
+                  backgroundColor: dockAvailable
+                    ? "var(--success)"
+                    : "var(--text-muted)",
+                }}
+              />
+            </p>
+            <p className="status-desc">
+              {dockAvailable
+                ? "MakeChurchEasy Dock detected"
+                : "Dock not detected"}
+            </p>
+          </div>
         </div>
+        <button
+          className="btn-primary"
+          onClick={() => {
+            track("connect_obs_clicked");
+            onConnectObs();
+          }}
+          title="Connect">
+          {obsConnected ? (
+            <>
+              <Check className="btn-icon" /> OBS Connected
+            </>
+          ) : (
+            <>
+              <Monitor className="btn-icon" /> Connect to OBS
+            </>
+          )}
+        </button>
+        <button className="btn-secondary" onClick={onOpenTutorials} title="Open in new tab">
+          <Play className="btn-icon" /> Watch Tutorials <ExternalLink className="btn-icon" />
+        </button>
       </div>
     </>
   );
@@ -716,6 +710,7 @@ export default function ProductionHomePage() {
     suggestions: [],
     matching: false,
     inputLevel: 0,
+    detectionSpeed: "balanced",
   });
 
   // ── Bible ──
@@ -935,7 +930,7 @@ export default function ProductionHomePage() {
 
   const handleOpenTutorials = useCallback(() => {
     track("tutorial_modal_opened");
-    openUrl("https://www.youtube.com/watch?v=aaF7_BhfC7o&list=PLKAqdarZMn35-DSSxdUw_8IzhPKh6YzSI&pp=sAgC");
+    openUrl("https://www.youtube.com/watch?v=08UjSYtjmLU");
   }, []);
 
   return (

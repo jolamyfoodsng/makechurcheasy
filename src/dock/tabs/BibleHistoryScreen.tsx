@@ -182,7 +182,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
           className="bible-history-header__back"
           onClick={onBack}
           aria-label={t("bibleHistory.backToBible")}
-         title="Go back">
+          title={t("common.back")}>
           <Icon name="arrow_back" size={16} />
         </button>
         <h2 className="bible-history-header__title">{t("bibleHistory.title")}</h2>
@@ -209,7 +209,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
             className="bible-history-search__clear"
             onClick={() => setSearchQuery("")}
             aria-label={t("bibleHistory.clearSearch")}
-           title="Close">
+            title={t("common.close")}>
             <Icon name="close" size={13} />
           </button>
         )}
@@ -221,7 +221,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
           type="button"
           className={`bible-history-filter-btn${filter !== "all" ? " bible-history-filter-btn--active" : ""}`}
           onClick={() => { setShowFilterSheet(true); setShowSortSheet(false); }}
-         title="Filter">
+          title={t("common.filter")}>
           <Icon name="filter_list" size={13} />
           <span>{activeFilterLabel}</span>
         </button>
@@ -229,7 +229,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
           type="button"
           className={`bible-history-filter-btn${sort !== "newest" ? " bible-history-filter-btn--active" : ""}`}
           onClick={() => { setShowSortSheet(true); setShowFilterSheet(false); }}
-         title="sort">
+          title={t("common.sort")}>
           <Icon name="sort" size={13} />
           <span>{activeSortLabel}</span>
         </button>
@@ -241,7 +241,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
           <div className="bible-history-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="bible-history-sheet__header">
               <span className="bible-history-sheet__title">{t("bibleHistory.filter")}</span>
-              <button type="button" className="bible-history-sheet__close" onClick={() => setShowFilterSheet(false)} aria-label={t("common.close")} title="Close">
+              <button type="button" className="bible-history-sheet__close" onClick={() => setShowFilterSheet(false)} aria-label={t("common.close")} title={t("common.close")}>
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -251,7 +251,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
                 type="button"
                 className={`bible-history-sheet__item${filter === opt.value ? " bible-history-sheet__item--active" : ""}`}
                 onClick={() => handleFilterSelect(opt.value)}
-               title="Confirm">
+                title={t("common.confirm")}>
                 <span>{opt.label}</span>
                 {filter === opt.value && <Icon name="check" size={14} />}
               </button>
@@ -266,7 +266,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
           <div className="bible-history-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="bible-history-sheet__header">
               <span className="bible-history-sheet__title">{t("bibleHistory.sort")}</span>
-              <button type="button" className="bible-history-sheet__close" onClick={() => setShowSortSheet(false)} aria-label={t("common.close")} title="Close">
+              <button type="button" className="bible-history-sheet__close" onClick={() => setShowSortSheet(false)} aria-label={t("common.close")} title={t("common.close")}>
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -276,7 +276,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
                 type="button"
                 className={`bible-history-sheet__item${sort === opt.value ? " bible-history-sheet__item--active" : ""}`}
                 onClick={() => handleSortSelect(opt.value)}
-               title="Confirm">
+                title={t("common.confirm")}>
                 <span>{opt.label}</span>
                 {sort === opt.value && <Icon name="check" size={14} />}
               </button>
@@ -307,7 +307,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
                   type="button"
                   className="bible-history-card"
                   onClick={() => handleNavigate(item)}
-                 title="Book">
+                  title={t("common.open")}>
                   <div className="bible-history-card__icon">
                     <Icon name="menu_book" size={16} />
                   </div>
@@ -320,7 +320,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
                       {formatTimeAgo(item.timestamp)}
                       {item.visitCount > 1 && (
                         <span className="bible-history-card__count">
-                          · {item.visitCount} visits
+                          · {item.visitCount} {t("common.visits")}
                         </span>
                       )}
                     </div>

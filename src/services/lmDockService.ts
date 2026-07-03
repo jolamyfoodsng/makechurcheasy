@@ -18,7 +18,9 @@ import { ScriptureDetectionEngine } from "./scriptureEngine";
 import { parseScriptureReference } from "./scriptureParser";
 import { getOverlayBaseUrl } from "./overlayUrl";
 import { getSettings as getMvSettings } from "../multiview/mvStore";
-import type { VoiceBibleCandidate, TranscriptEntry } from "./voiceBibleTypes";
+import type { VoiceBibleCandidate, TranscriptEntry, DetectionSpeed, LmDockTelemetry } from "./voiceBibleTypes";
+import { DETECTION_SPEED_CONFIG } from "./voiceBibleTypes";
+import { getVoiceBibleSettings } from "./voiceBibleSettings";
 
 /**
  * Detect hallucinated transcripts from AssemblyAI.
@@ -62,6 +64,8 @@ export interface LmDockSnapshot {
   matching: boolean;
   error?: string;
   inputLevel: number;
+  detectionSpeed: DetectionSpeed;
+  telemetry?: LmDockTelemetry;
 }
 
 type SnapshotListener = (snapshot: LmDockSnapshot) => void;
@@ -92,6 +96,7 @@ class LmDockService {
     suggestions: [],
     matching: false,
     inputLevel: 0,
+    detectionSpeed: "balanced",
   };
 
   // Audio refs — Rust-side AssemblyAI streaming (via Tauri commands)
@@ -127,10 +132,28 @@ class LmDockService {
   private interimSearchTimer: ReturnType<typeof setTimeout> | null = null;
   /** Last interim text that was submitted for provisional search */
   private lastInterimSearched = "";
-  /** Minimum word count in interim text to trigger provisional search */
-  private static readonly INTERIM_SEARCH_MIN_WORDS = 8;
-  /** Debounce delay for interim provisional search */
-  private static readonly INTERIM_SEARCH_DEBOUNCE_MS = 300;
+
+  // ── Detection speed ───────────────────────────────────────────────────────
+  /** Current detection speed mode */
+  private detectionSpeed: DetectionSpeed = "balanced";
+  /** Cached detection speed config */
+  private get speedConfig() {
+    return DETECTION_SPEED_CONFIG[this.detectionSpeed];
+  }
+
+  // ── Telemetry ─────────────────────────────────────────────────────────────
+  private telemetry: LmDockTelemetry = {
+    lastSpeechAt: 0,
+    lastSearchAt: 0,
+    lastResultsAt: 0,
+    speechToSearchMs: 0,
+    searchToResultsMs: 0,
+    totalLatencyMs: 0,
+    searchCount: 0,
+    avgLatencyMs: 0,
+  };
+  /** Rolling latency accumulator for average calculation */
+  private latencySum = 0;
 
   init(): () => void {
     if (this.initialized) return () => { };
@@ -402,6 +425,8 @@ class LmDockService {
   private onTranscriptFinal(text: string): void {
     const now = Date.now();
 
+    // Record speech timestamp for telemetry
+    this.telemetry.lastSpeechAt = now;
 
     // Skip quote search for Bible references — processChunk handles these.
     // Running quote search on reference text (e.g. "1 corinthians 1:1") would
@@ -506,11 +531,20 @@ class LmDockService {
         return;
       }
 
+      // Record telemetry — search completed
+      const searchCompletedAt = Date.now();
+      this.telemetry.searchToResultsMs = searchCompletedAt - this.telemetry.lastSearchAt;
+      this.telemetry.searchCount++;
+      this.latencySum += this.telemetry.searchToResultsMs;
+      this.telemetry.avgLatencyMs = Math.round(this.latencySum / this.telemetry.searchCount);
+
       if (quoteMatches.length > 0) {
         // REPLACE suggestions — every new search represents the latest quote.
         const suggestions = quoteMatches.map((m) => m.candidate).slice(0, 20);
         const candidates = [...this.snapshot.queue, ...suggestions].slice(0, 20);
         this.snapshot = { ...this.snapshot, suggestions, candidates };
+        this.telemetry.lastResultsAt = Date.now();
+        this.telemetry.totalLatencyMs = this.telemetry.searchToResultsMs;
         this.pushCandidates();
       } else {
         // Clear stale suggestions — the new query found nothing, so the
@@ -598,6 +632,27 @@ class LmDockService {
   async startListening(micId?: string): Promise<void> {
     if (this.snapshot.status === "listening" || this.snapshot.status === "connecting") return;
 
+    // Load detection speed from settings
+    try {
+      const settings = await getVoiceBibleSettings();
+      this.detectionSpeed = settings.detectionSpeed;
+    } catch {
+      // Use default "balanced" if settings load fails
+    }
+
+    // Reset telemetry for new session
+    this.telemetry = {
+      lastSpeechAt: 0,
+      lastSearchAt: 0,
+      lastResultsAt: 0,
+      speechToSearchMs: 0,
+      searchToResultsMs: 0,
+      totalLatencyMs: 0,
+      searchCount: 0,
+      avgLatencyMs: 0,
+    };
+    this.latencySum = 0;
+
     this.snapshot = {
       status: "requesting-mic",
       candidates: [],
@@ -606,6 +661,7 @@ class LmDockService {
       matching: false,
       inputLevel: 0,
       entries: this.snapshot.entries,
+      detectionSpeed: this.detectionSpeed,
     };
     this.scriptureEngine.reset();
     this.hasAutoPushed = false;
@@ -671,23 +727,34 @@ class LmDockService {
             void this.processChunk(text, false);
           }
 
-          // Provisional quote search on long interim text — surfaces Bible
+          // Provisional quote search on interim text — surfaces Bible
           // matches before the sentence is finalized by AssemblyAI.
           // Uses debounce to avoid excessive searches during continuous speech.
           // Skip quote search for Bible references — processChunk handles these.
           // Running quote search on reference text would always return 0 results
           // and clear suggestions, making the reference appear to show "nothing".
+          //
+          // Word minimum and debounce are controlled by detection speed mode:
+          //   fast:      3 words, 250ms debounce
+          //   balanced:  5 words, 300ms debounce
+          //   accurate:  8 words, 400ms debounce
           const interimRef = parseScriptureReference(text);
           const interimWordCount = text.split(/\s+/).filter(Boolean).length;
-          if (!interimRef && interimWordCount >= LmDockService.INTERIM_SEARCH_MIN_WORDS && text !== this.lastInterimSearched) {
+          const minWords = this.speedConfig.minWords;
+          const debounceMs = this.speedConfig.debounceMs;
+          if (!interimRef && interimWordCount >= minWords && text !== this.lastInterimSearched) {
             if (this.interimSearchTimer) clearTimeout(this.interimSearchTimer);
             const searchText = text;
             this.interimSearchTimer = setTimeout(() => {
               this.lastInterimSearched = searchText;
+              // Record speech timestamp for telemetry
+              this.telemetry.lastSpeechAt = Date.now();
+              this.telemetry.lastSearchAt = Date.now();
+              this.telemetry.speechToSearchMs = this.telemetry.lastSpeechAt - this.telemetry.lastSpeechAt;
               this.matchingQueue = this.matchingQueue.then(() =>
                 this.runQuoteSearchWithText(searchText.trim(), Date.now()),
               );
-            }, LmDockService.INTERIM_SEARCH_DEBOUNCE_MS);
+            }, debounceMs);
           }
         }
       });
@@ -849,7 +916,29 @@ class LmDockService {
   }
 
   getSnapshot(): LmDockSnapshot {
-    return { ...this.snapshot, entries: [...this.snapshot.entries] };
+    return {
+      ...this.snapshot,
+      entries: [...this.snapshot.entries],
+      detectionSpeed: this.detectionSpeed,
+      telemetry: { ...this.telemetry },
+    };
+  }
+
+  /**
+   * Change detection speed mode at runtime.
+   * Takes effect immediately — no restart needed.
+   */
+  setDetectionSpeed(speed: DetectionSpeed): void {
+    this.detectionSpeed = speed;
+    this.snapshot = { ...this.snapshot, detectionSpeed: speed };
+    this.pushStatus();
+  }
+
+  /**
+   * Get current detection speed.
+   */
+  getDetectionSpeed(): DetectionSpeed {
+    return this.detectionSpeed;
   }
 }
 

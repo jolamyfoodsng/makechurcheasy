@@ -384,6 +384,91 @@
   transform: none;
 }
 
+/* ── Overflow menu ── */
+.lib-overflow-wrapper {
+  position: relative;
+}
+
+.lib-overflow-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.lib-overflow-btn:hover {
+  border-color: rgba(var(--primary-rgb), 0.35);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.lib-overflow-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.lib-overflow-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.lib-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  text-align: left;
+}
+
+.lib-overflow-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.lib-overflow-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.lib-overflow-badge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius);
+  background: rgba(var(--primary-rgb), 0.14);
+  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 /* ── Empty state ── */
 .lib-empty {
   grid-column: 1 / -1;

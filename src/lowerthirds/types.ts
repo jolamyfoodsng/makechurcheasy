@@ -15,7 +15,7 @@
 // Variable Definitions — editable fields per theme
 // ---------------------------------------------------------------------------
 
-export type LTVariableType = "text" | "number" | "color" | "select" | "toggle" | "list";
+export type LTVariableType = "text" | "number" | "color" | "select" | "toggle" | "list" | "image";
 
 export interface LTVariable {
   /** Unique key used in the template as {{key}} */

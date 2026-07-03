@@ -54,7 +54,7 @@ import { getCurrentUser } from "./authService";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 export const CENTRAL_DB_NAME = "obs-church-studio";
-export const CENTRAL_DB_VERSION = 6;
+export const CENTRAL_DB_VERSION = 7;
 
 // All object-store names in one place:
 export const STORES = {
@@ -93,6 +93,9 @@ export const STORES = {
 
   // Transcripts (MongoDB-backed, IndexedDB as offline cache)
   TRANSCRIPTS: "transcripts",
+
+  // Countdowns
+  COUNTDOWNS: "countdowns",
 } as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];
@@ -112,6 +115,7 @@ export const USER_STORES = new Set<StoreName>([
   STORES.SERVICE_PLANS,
   STORES.LIVE_TOOL_TEMPLATES,
   STORES.TRANSCRIPTS,
+  STORES.COUNTDOWNS,
 ]);
 
 /** Returns the current authenticated user's MongoDB _id, or null. */
@@ -224,6 +228,12 @@ export function getCentralDb(): Promise<IDBPDatabase> {
         if (!db.objectStoreNames.contains(STORES.TRANSCRIPTS)) {
           const transcripts = db.createObjectStore(STORES.TRANSCRIPTS, { keyPath: "id" });
           transcripts.createIndex("updatedAt", "updatedAt");
+        }
+
+        // ── Countdowns ──
+        if (!db.objectStoreNames.contains(STORES.COUNTDOWNS)) {
+          const countdowns = db.createObjectStore(STORES.COUNTDOWNS, { keyPath: "id" });
+          countdowns.createIndex("updatedAt", "updatedAt");
         }
 
         if (oldVersion < 3 || oldVersion === 3) {

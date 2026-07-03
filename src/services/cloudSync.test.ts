@@ -12,7 +12,6 @@ import { describe, it, expect } from "vitest";
 const ENTITLEMENTS = {
   free: { cloudSync: false, cloudStorageGB: 0 },
   basic: { cloudSync: false, cloudStorageGB: 1 },
-  starter: { cloudSync: false, cloudStorageGB: 5 },
   growth: { cloudSync: true, cloudStorageGB: 20 },
   pro: { cloudSync: true, cloudStorageGB: 200 },
 };
@@ -59,10 +58,6 @@ describe("Cloud sync entitlement checks", () => {
 
   it("blocks basic plan", () => {
     expect(checkCloudEntitlement("basic").allowed).toBe(false);
-  });
-
-  it("blocks starter plan", () => {
-    expect(checkCloudEntitlement("starter").allowed).toBe(false);
   });
 
   it("allows growth plan", () => {

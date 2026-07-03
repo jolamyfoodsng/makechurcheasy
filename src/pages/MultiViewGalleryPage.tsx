@@ -8,7 +8,7 @@
  * Added layouts appear under the "Added" category filter.
  */
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { HelpCircle, RotateCcw, AlertTriangle } from "lucide-react";
 import MultiViewGalleryTutorial, {
@@ -244,7 +244,7 @@ function PreviewModal({
             <button
               className={`mvg-btn ${isAdded ? "mvg-btn--added" : "mvg-btn--primary"}`}
               onClick={onAddToOBS}
-              disabled={!obsConnected || installing}
+              disabled={installing}
               title="Add">
               {installing ? (
                 <>
@@ -310,6 +310,7 @@ export default function MultiViewGalleryPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(() => loadAddedIds());
   const [, setRenderTick] = useState(0);
+  const autoConnectingRef = useRef(false);
 
   // ── Tutorial state ──
   const [tourActive, setTourActive] = useState(false);
@@ -374,12 +375,30 @@ export default function MultiViewGalleryPage() {
     setRenderTick(t => t + 1);
   }, []);
 
+  // ── Try auto-connecting to OBS if not already connected ──
+  const tryAutoConnect = useCallback(async (): Promise<boolean> => {
+    if (obsService.isConnected) return true;
+    if (autoConnectingRef.current) return false;
+    autoConnectingRef.current = true;
+    try {
+      await obsService.connect();
+    } catch {
+      return false;
+    } finally {
+      autoConnectingRef.current = false;
+    }
+    return obsService.isConnected;
+  }, []);
+
   // ── Install layout to OBS ──
   const handleAddToOBS = useCallback(
     async (layout: GalleryLayout) => {
       if (!obsConnected) {
-        setShowDisconnected(true);
-        return;
+        const connected = await tryAutoConnect();
+        if (!connected) {
+          setShowDisconnected(true);
+          return;
+        }
       }
 
       setInstalling(true);
@@ -447,7 +466,7 @@ export default function MultiViewGalleryPage() {
         setInstalling(false);
       }
     },
-    [obsConnected, showToast, markAdded]
+    [tryAutoConnect, showToast, markAdded]
   );
 
   // ── Handle preview → install ──
@@ -574,13 +593,7 @@ export default function MultiViewGalleryPage() {
                     </button>
                     <button
                       className={`mvg-btn mvg-btn--sm ${isAdded ? "mvg-btn--added" : "mvg-btn--primary"}`}
-                      onClick={() => {
-                        if (!obsConnected) {
-                          setShowDisconnected(true);
-                          return;
-                        }
-                        handleAddToOBS(layout);
-                      }}
+                      onClick={() => handleAddToOBS(layout)}
                       title="Add">
                       {isAdded ? (
                         <>

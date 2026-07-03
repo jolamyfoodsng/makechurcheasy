@@ -171,19 +171,21 @@ export function hymnsToSongs(
     switch (mode) {
       case "two-songs": {
         if (hymn.yoruba) {
+          const yTitle = `${hymn.title} (Yoruba)`;
           results.push({
-            title: `${hymn.title} (Yoruba)`,
+            title: yTitle,
             artist: "CCC Hymnal",
             language: "yoruba",
-            lyrics: `${sectionPrefix}${hymn.yoruba}`,
+            lyrics: `${sectionPrefix}${yTitle}\n${hymn.yoruba}`,
           });
         }
         if (hymn.english) {
+          const eTitle = `${hymn.title} (English)`;
           results.push({
-            title: `${hymn.title} (English)`,
+            title: eTitle,
             artist: "CCC Hymnal",
             language: "english",
-            lyrics: `${sectionPrefix}${hymn.english}`,
+            lyrics: `${sectionPrefix}${eTitle}\n${hymn.english}`,
           });
         }
         break;
@@ -197,7 +199,7 @@ export function hymnsToSongs(
           title: hymn.title,
           artist: "CCC Hymnal",
           language: "bilingual",
-          lyrics: `${sectionPrefix}${parts.join("\n\n")}`,
+          lyrics: `${sectionPrefix}${hymn.title}\n${parts.join("\n\n")}`,
         });
         break;
       }
@@ -218,7 +220,7 @@ export function hymnsToSongs(
           title: hymn.title,
           artist: "CCC Hymnal",
           language: "bilingual",
-          lyrics: `${sectionPrefix}${pairs.join("\n\n")}`,
+          lyrics: `${sectionPrefix}${hymn.title}\n${pairs.join("\n\n")}`,
         });
         break;
       }

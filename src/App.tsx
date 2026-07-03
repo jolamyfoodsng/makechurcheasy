@@ -28,11 +28,12 @@ import SplashScreen from "./components/SplashScreen";
 import UpdateNotification from "./components/UpdateNotification";
 import ForceUpdateModal from "./components/ForceUpdateModal";
 import ForcedUpdateOverlay from "./components/ForcedUpdateOverlay";
+import VersionFloorWarningBanner from "./components/VersionFloorWarningBanner";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
 import VerificationGate from "./components/VerificationGate";
 import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
-import { checkForUpdate, downloadAndInstallUpdate, getVersionAge, fetchVersionFloor, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
+import { checkForUpdate, downloadAndInstallUpdate, downloadAndInstallFromGitHub, getVersionAge, fetchVersionFloor, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
 import {
   fetchAppSettings,
   getForcedUpdateState,
@@ -66,6 +67,7 @@ import { syncInstalledTranslationsToDock } from "./bible/bibleDb";
 import ResourcesPage from "./pages/ResourcesPage";
 import ProductionHomePage from "./pages/ProductionHomePage";
 import MultiViewGalleryPage from "./pages/MultiViewGalleryPage";
+import CountdownsPage from "./pages/CountdownsPage";
 import ProductionThemeSettingsPage from "./pages/ProductionThemeSettingsPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import ServicePlannerPage from "./pages/ServicePlannerPage";
@@ -541,7 +543,12 @@ function App() {
     blocked: boolean;
     currentVersion: string;
     minimumVersion: string;
+    gracePeriodHours: number;
   } | null>(null);
+
+  // ── Version floor grace period countdown ──
+  const [versionFloorGraceStartedAt, setVersionFloorGraceStartedAt] = useState<string | null>(null);
+  const [versionFloorGraceDismissed, setVersionFloorGraceDismissed] = useState(false);
 
   // ── In-app update state for version floor screen ──
   const [floorUpdateStatus, setFloorUpdateStatus] = useState<
@@ -565,6 +572,27 @@ function App() {
 
   const startupDone = useRef(false);
   const updatePollBusyRef = useRef(false);
+
+  // ── Version floor grace period countdown → hard lock transition ──
+  useEffect(() => {
+    if (!versionFloorGraceStartedAt || !versionFloorBlocked || versionFloorBlocked.blocked) return;
+
+    const graceHours = versionFloorBlocked.gracePeriodHours;
+    if (!graceHours || graceHours <= 0) return;
+
+    const check = () => {
+      const endMs = new Date(versionFloorGraceStartedAt).getTime() + graceHours * 60 * 60 * 1000;
+      if (Date.now() >= endMs) {
+        setVersionFloorBlocked((prev) => prev ? { ...prev, blocked: true } : prev);
+        setVersionFloorGraceStartedAt(null);
+      }
+    };
+
+    // Check immediately, then every 30 seconds
+    check();
+    const id = window.setInterval(check, 30_000);
+    return () => window.clearInterval(id);
+  }, [versionFloorGraceStartedAt, versionFloorBlocked?.blocked, versionFloorBlocked?.gracePeriodHours]);
 
   // ── Startup: load resources + check for updates in parallel ──
   useEffect(() => {
@@ -607,9 +635,53 @@ function App() {
       });
 
     // Fetch version floor from server (admin-configured minimum)
+    const FLOOR_GRACE_KEY = "ocs-version-floor-grace-v1";
     fetchVersionFloor()
       .then((result) => {
-        if (result) setVersionFloorBlocked(result);
+        if (!result) return;
+
+        if (result.gracePeriodHours > 0) {
+          // Grace period configured — track it in localStorage
+          let startedAt: string;
+          try {
+            const existing = localStorage.getItem(FLOOR_GRACE_KEY);
+            if (existing) {
+              const rec = JSON.parse(existing) as { startedAt: string; minimumVersion: string };
+              // If the minimum version changed, reset the grace period
+              if (rec.minimumVersion === result.minimumVersion) {
+                startedAt = rec.startedAt;
+              } else {
+                startedAt = new Date().toISOString();
+              }
+            } else {
+              startedAt = new Date().toISOString();
+            }
+          } catch {
+            startedAt = new Date().toISOString();
+          }
+
+          // Persist the grace record
+          try {
+            localStorage.setItem(
+              FLOOR_GRACE_KEY,
+              JSON.stringify({ startedAt, minimumVersion: result.minimumVersion })
+            );
+          } catch { /* non-critical */ }
+
+          // Check if grace period has already expired
+          const endMs = new Date(startedAt).getTime() + result.gracePeriodHours * 60 * 60 * 1000;
+          if (Date.now() >= endMs) {
+            // Grace period expired — show hard lock
+            setVersionFloorBlocked(result);
+          } else {
+            // Still in grace — show warning banner
+            setVersionFloorBlocked({ ...result, blocked: false });
+            setVersionFloorGraceStartedAt(startedAt);
+          }
+        } else {
+          // No grace period — immediate hard lock (original behavior)
+          setVersionFloorBlocked(result);
+        }
       })
       .catch(() => {
         // If fetch fails, don't block — proceed normally
@@ -921,35 +993,31 @@ function App() {
   }, [handleGlobalMediaUpload, splashVisible, updateResult]);
 
   // ── In-app update handler for version floor screen ──
-  const DOWNLOAD_URL = "https://makechurcheasy.creatorstudioslabs.stream";
-
   const handleFloorUpdate = useCallback(async () => {
     setFloorUpdateStatus("checking");
     setFloorUpdateError(null);
     try {
+      // Try Tauri auto-updater first (works when signed binary exists)
       const result = await checkForUpdate();
-      if (!result.available || !result.update) {
-        // No newer release found on GitHub — fall back to download page
-        window.open(DOWNLOAD_URL, "_blank");
-        setFloorUpdateError(
-          "No auto-update available for your platform. The download page has been opened in your browser."
+      if (result.available && result.update) {
+        setFloorUpdateStatus("downloading");
+        await downloadAndInstallUpdate(
+          result.update,
+          (progress) => setFloorUpdateProgress(progress),
+          (status) => setFloorUpdateStatus(status === "relaunching" ? "relaunching" : status as "downloading" | "installing"),
         );
-        setFloorUpdateStatus("error");
         return;
       }
-      setFloorUpdateStatus("downloading");
-      await downloadAndInstallUpdate(
-        result.update,
+
+      // No signed binary from Tauri updater — download platform installer
+      // directly from GitHub Releases and launch it in-app
+      await downloadAndInstallFromGitHub(
         (progress) => setFloorUpdateProgress(progress),
-        (status) => setFloorUpdateStatus(status === "relaunching" ? "relaunching" : status as "downloading" | "installing"),
+        (status) => setFloorUpdateStatus(status),
       );
     } catch (err: any) {
       console.error("[App] Floor update failed:", err);
-      // On any error, fall back to download page
-      window.open(DOWNLOAD_URL, "_blank");
-      setFloorUpdateError(
-        "Auto-update failed. The download page has been opened in your browser."
-      );
+      setFloorUpdateError(err?.message || "Update failed. Please try again.");
       setFloorUpdateStatus("error");
     }
   }, []);
@@ -975,7 +1043,7 @@ function App() {
       )}
 
       {/* 2a. Version floor block — server-configured minimum, no self-update possible */}
-      {!splashVisible && versionFloorBlocked && (
+      {!splashVisible && versionFloorBlocked?.blocked && (
         <div className="force-update-overlay">
           <div className="force-update-modal">
             <div className="force-update-banner force-update-banner--locked">
@@ -1000,7 +1068,7 @@ function App() {
                 <button
                   onClick={handleFloorUpdate}
                   className="force-update-button"
-                 title="Update now">
+                  title="Update now">
                   <Icon name="system_update" size={18} />
                   Update Now
                 </button>
@@ -1053,7 +1121,7 @@ function App() {
                   <button
                     onClick={handleFloorUpdate}
                     className="force-update-button"
-                   title="Retry">
+                    title="Retry">
                     Retry
                   </button>
                 </div>
@@ -1063,8 +1131,25 @@ function App() {
         </div>
       )}
 
+      {/* Version floor grace period countdown — shown while grace window is active */}
+      {!splashVisible &&
+        versionFloorBlocked &&
+        !versionFloorBlocked.blocked &&
+        versionFloorGraceStartedAt &&
+        !versionFloorGraceDismissed && (
+          <VersionFloorWarningBanner
+            currentVersion={versionFloorBlocked.currentVersion}
+            minimumVersion={versionFloorBlocked.minimumVersion}
+            startedAt={versionFloorGraceStartedAt}
+            gracePeriodHours={versionFloorBlocked.gracePeriodHours}
+            onUpdate={handleFloorUpdate}
+            onDismiss={() => setVersionFloorGraceDismissed(true)}
+            updateStatus={floorUpdateStatus}
+          />
+        )}
+
       {/* 2a-b. Server-driven forced update overlay (admin-controlled) — countdown or locked */}
-      {!splashVisible && !versionFloorBlocked && forcedUpdateState.active &&
+      {!splashVisible && !versionFloorBlocked?.blocked && forcedUpdateState.active &&
         (forcedUpdateState.blocked || shouldReshowOverlay(forcedUpdateState.hoursRemaining)) && (
           <ForcedUpdateOverlay
             state={forcedUpdateState}
@@ -1129,6 +1214,7 @@ function App() {
                       <Route path="settings" element={<BibleProvider><MVSettings /></BibleProvider>} />
                       <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
                       <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
+                      <Route path="countdowns" element={<CountdownsPage />} />
                       <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
                       <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />
                       <Route path="library" element={<Navigate to="/resources" replace />} />

@@ -145,86 +145,86 @@ export default function TranscriptTutorial({
 
   const allSteps: TutorialStep[] = useMemo(() => [
     {
-      target: "[data-tutorial='welcome']",
-      titleKey: "tutorial.step1.title",
-      descKey: "tutorial.step1.desc",
-      actionKey: "tutorial.step1.action",
+      target: "[data-transcript-tutorial='welcome']",
+      titleKey: "transcript.tour.step1.title",
+      descKey: "transcript.tour.step1.desc",
+      actionKey: "transcript.tour.step1.action",
       trigger: "none",
       panelPosition: "right",
     },
     {
-      target: "[data-tutorial='search']",
-      titleKey: "tutorial.step2.title",
-      descKey: "tutorial.step2.desc",
-      actionKey: "tutorial.step2.action",
+      target: "[data-transcript-tutorial='search']",
+      titleKey: "transcript.tour.step2.title",
+      descKey: "transcript.tour.step2.desc",
+      actionKey: "transcript.tour.step2.action",
       trigger: "focus",
-      triggerSelector: "[data-tutorial='search'] input",
+      triggerSelector: "[data-transcript-tutorial='search'] input",
       panelPosition: "right",
     },
     {
-      target: "[data-tutorial='stats']",
-      titleKey: "tutorial.step3.title",
-      descKey: "tutorial.step3.desc",
-      actionKey: "tutorial.step3.action",
+      target: "[data-transcript-tutorial='stats']",
+      titleKey: "transcript.tour.step3.title",
+      descKey: "transcript.tour.step3.desc",
+      actionKey: "transcript.tour.step3.action",
       trigger: "click",
-      triggerSelector: "[data-tutorial='stats'] .tl-stat-card",
+      triggerSelector: "[data-transcript-tutorial='stats'] .tl-stat-card",
       panelPosition: "right",
     },
     {
-      target: "[data-tutorial='filters']",
-      titleKey: "tutorial.step4.title",
-      descKey: "tutorial.step4.desc",
-      actionKey: "tutorial.step4.action",
+      target: "[data-transcript-tutorial='filters']",
+      titleKey: "transcript.tour.step4.title",
+      descKey: "transcript.tour.step4.desc",
+      actionKey: "transcript.tour.step4.action",
       trigger: "click",
-      triggerSelector: "[data-tutorial='filters'] .tl-filter-btn",
+      triggerSelector: "[data-transcript-tutorial='filters'] .tl-filter-btn",
       panelPosition: "right",
     },
     {
-      target: "[data-tutorial='table']",
-      titleKey: "tutorial.step5.title",
-      descKey: "tutorial.step5.desc",
-      actionKey: "tutorial.step5.action",
+      target: "[data-transcript-tutorial='table']",
+      titleKey: "transcript.tour.step5.title",
+      descKey: "transcript.tour.step5.desc",
+      actionKey: "transcript.tour.step5.action",
       trigger: "click",
-      triggerSelector: "[data-tutorial='table'] .tl-table-row",
+      triggerSelector: "[data-transcript-tutorial='table'] .tl-table-row",
       panelPosition: "right",
       skipIf: () => !hasTranscripts,
     },
     {
-      target: "[data-tutorial='download']",
-      titleKey: "tutorial.step6.title",
-      descKey: "tutorial.step6.desc",
-      actionKey: "tutorial.step6.action",
+      target: "[data-transcript-tutorial='download']",
+      titleKey: "transcript.tour.step6.title",
+      descKey: "transcript.tour.step6.desc",
+      actionKey: "transcript.tour.step6.action",
       trigger: "click",
-      triggerSelector: "[data-tutorial='download']",
+      triggerSelector: "[data-transcript-tutorial='download']",
       panelPosition: "right",
       skipIf: () => !hasTranscripts,
     },
     {
-      target: "[data-tutorial='more-actions']",
-      titleKey: "tutorial.step7.title",
-      descKey: "tutorial.step7.desc",
-      actionKey: "tutorial.step7.action",
+      target: "[data-transcript-tutorial='more-actions']",
+      titleKey: "transcript.tour.step7.title",
+      descKey: "transcript.tour.step7.desc",
+      actionKey: "transcript.tour.step7.action",
       trigger: "click",
-      triggerSelector: "[data-tutorial='more-actions']",
+      triggerSelector: "[data-transcript-tutorial='more-actions']",
       panelPosition: "right",
       skipIf: () => !hasTranscripts,
     },
     {
-      target: "[data-tutorial='view-toggle']",
-      titleKey: "tutorial.step8.title",
-      descKey: "tutorial.step8.desc",
-      actionKey: "tutorial.step8.action",
+      target: "[data-transcript-tutorial='view-toggle']",
+      titleKey: "transcript.tour.step8.title",
+      descKey: "transcript.tour.step8.desc",
+      actionKey: "transcript.tour.step8.action",
       trigger: "view-change",
-      triggerSelector: "[data-tutorial='view-toggle'] .tl-view-btn",
+      triggerSelector: "[data-transcript-tutorial='view-toggle'] .tl-view-btn",
       panelPosition: "right",
     },
     {
-      target: "[data-tutorial='new-session']",
-      titleKey: "tutorial.step9.title",
-      descKey: "tutorial.step9.desc",
-      actionKey: "tutorial.step9.action",
+      target: "[data-transcript-tutorial='new-session']",
+      titleKey: "transcript.tour.step9.title",
+      descKey: "transcript.tour.step9.desc",
+      actionKey: "transcript.tour.step9.action",
       trigger: "click",
-      triggerSelector: "[data-tutorial='new-session']",
+      triggerSelector: "[data-transcript-tutorial='new-session']",
       panelPosition: "right",
     },
   ], [hasTranscripts]);
@@ -398,8 +398,8 @@ export default function TranscriptTutorial({
   }, [stepIndex]);
 
   const handleSkip = useCallback(() => {
-    onClose();
-  }, [onClose]);
+    onFinish();
+  }, [onFinish]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────
 
@@ -408,7 +408,7 @@ export default function TranscriptTutorial({
 
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        onFinish();
       } else if (e.key === "Enter" && stepCompleted) {
         goNext();
       }
@@ -416,7 +416,7 @@ export default function TranscriptTutorial({
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isActive, stepCompleted, goNext, onClose]);
+  }, [isActive, stepCompleted, goNext, onFinish]);
 
   // ── Nothing to render ─────────────────────────────────────────────────
 
@@ -436,17 +436,17 @@ export default function TranscriptTutorial({
             <div className="tt-final-icon">
               <Sparkles size={24} />
             </div>
-            <h2 className="tt-final-title">{t("tutorial.final.title")}</h2>
-            <p className="tt-final-desc">{t("tutorial.final.desc")}</p>
+            <h2 className="tt-final-title">{t("transcript.tour.final.title")}</h2>
+            <p className="tt-final-desc">{t("transcript.tour.final.desc")}</p>
           </div>
 
           <div className="tt-final-checklist">
             {[
-              "tutorial.final.check1",
-              "tutorial.final.check2",
-              "tutorial.final.check3",
-              "tutorial.final.check4",
-              "tutorial.final.check5",
+              "transcript.tour.final.check1",
+              "transcript.tour.final.check2",
+              "transcript.tour.final.check3",
+              "transcript.tour.final.check4",
+              "transcript.tour.final.check5",
             ].map((key) => (
               <div key={key} className="tt-final-check-item">
                 <CheckCircle2 size={16} className="tt-check-icon" />
@@ -457,11 +457,11 @@ export default function TranscriptTutorial({
 
           <div className="tt-final-actions">
             <button className="tt-btn tt-btn-primary" onClick={onFinish} title="Finish tutorial">
-              {t("tutorial.final.finish")}
+              {t("transcript.tour.final.finish")}
             </button>
             {onStartRecording && (
               <button className="tt-btn tt-btn-accent" onClick={onStartRecording} title="Start">
-                <Mic size={14} /> {t("tutorial.final.startRecording")}
+                <Mic size={14} /> {t("transcript.tour.final.startRecording")}
               </button>
             )}
           </div>
@@ -512,7 +512,7 @@ export default function TranscriptTutorial({
           {stepCompleted && (
             <div className="tt-step-complete">
               <CheckCircle2 size={16} />
-              <span>{t("tutorial.common.done")}</span>
+              <span>{t("transcript.tour.common.done")}</span>
             </div>
           )}
         </div>
@@ -522,7 +522,7 @@ export default function TranscriptTutorial({
             className="tt-btn tt-btn-ghost"
             onClick={handleSkip}
             title="Skip tutorial">
-            <SkipForward size={14} /> {t("tutorial.common.skip")}
+            <SkipForward size={14} /> {t("transcript.tour.common.skip")}
           </button>
 
           <div className="tt-nav-buttons">
@@ -538,7 +538,7 @@ export default function TranscriptTutorial({
               disabled={!stepCompleted && currentStep.trigger !== "none"}
               onClick={goNext}
               title="Next step">
-              {t("tutorial.common.next")} <ChevronRight size={14} />
+              {t("transcript.tour.common.next")} <ChevronRight size={14} />
             </button>
           </div>
         </div>

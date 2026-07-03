@@ -2,6 +2,7 @@ import { AppLogo } from "@/components/AppLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   createPairingCode,
+  redeemPairingCode,
   watchPairingStatus
 } from "@/services/authService";
 import { DEFAULT_DESKTOP_CONFIG, readDesktopConfigCache } from "@/services/desktopConfig";
@@ -35,6 +36,7 @@ export default function LoginPage() {
   const [welcomeBack, setWelcomeBack] = useState(false);
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
 
   // Email verification modal state
   const [showVerificationModal, setShowVerificationModal] = useState(false);
@@ -112,6 +114,9 @@ export default function LoginPage() {
     cleanupRef.current = watchPairingStatus(pairingCode, {
       onAuthorized(user) {
         cleanupRef.current = null;
+        // Stop countdown immediately — code is redeemed, expiration is irrelevant
+        setCountdown(0);
+        setCode("");
         trackLogin("pairing");
         trackDevicePaired();
         const hasVisited = localStorage.getItem("mce_has_visited");
@@ -153,9 +158,29 @@ export default function LoginPage() {
     }
 
     setError("");
-    setCode(manualCode.toUpperCase());
-    setView("pairing");
-    startWatching(manualCode.toUpperCase());
+    setRedeeming(true);
+
+    try {
+      const result = await redeemPairingCode(manualCode);
+
+      if (result.success) {
+        trackLogin("pairing");
+        trackDevicePaired();
+        const hasVisited = localStorage.getItem("mce_has_visited");
+        if (hasVisited) {
+          setWelcomeBack(true);
+          setTimeout(() => setWelcomeBack(false), 3000);
+        }
+        localStorage.setItem("mce_has_visited", "1");
+        setUser(result.user);
+      } else {
+        setError(result.error);
+      }
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setRedeeming(false);
+    }
   }
 
   function formatCountdown(seconds: number) {
@@ -309,7 +334,7 @@ export default function LoginPage() {
                 justifyContent: "center",
                 gap: "8px",
               }}
-             title="Scan QR Code">
+              title="Scan QR Code">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="7" height="7" rx="1" />
                 <rect x="14" y="3" width="7" height="7" rx="1" />
@@ -361,7 +386,7 @@ export default function LoginPage() {
                 color: "#f0f0f5",
                 cursor: "pointer",
               }}
-             title="Continue">
+              title="Continue">
               Continue in Browser
             </button>
 
@@ -394,7 +419,7 @@ export default function LoginPage() {
                 color: "#f0f0f5",
                 cursor: "pointer",
               }}
-             title="Enter Pairing Code">
+              title="Enter Pairing Code">
               Enter Pairing Code
             </button>
 
@@ -476,7 +501,7 @@ export default function LoginPage() {
                     color: "#fff",
                     cursor: "pointer",
                   }}
-                 title="Open">
+                  title="Open">
                   Open in Browser
                 </button>
                 <button
@@ -499,7 +524,7 @@ export default function LoginPage() {
                     cursor: "pointer",
                     transition: "all 0.15s",
                   }}
-                 title="Copy">
+                  title="Copy">
                   {copied ? "✓ Copied" : "Copy Link"}
                 </button>
               </div>
@@ -524,7 +549,7 @@ export default function LoginPage() {
                 color: "#9898a8",
                 cursor: "pointer",
               }}
-             title="Cancel">
+              title="Cancel">
               Cancel
             </button>
 
@@ -564,7 +589,7 @@ export default function LoginPage() {
                 marginBottom: "6px",
               }}
             >
-              Enter pairing code from your browser
+              Enter pairing code
             </label>
             <p
               style={{
@@ -574,11 +599,11 @@ export default function LoginPage() {
                 lineHeight: "1.5",
               }}
             >
-              Go to{" "}
+              Generate a code from{" "}
               <span style={{ color: "#9898a8" }}>
                 MakeChurchEasy
               </span>{" "}
-              in your browser, sign in, then copy the code shown on the Devices page.
+              in your browser, then enter it here.
             </p>
             <input
               type="text"
@@ -587,22 +612,24 @@ export default function LoginPage() {
               placeholder="ABCD-1234"
               maxLength={9}
               autoFocus
+              disabled={redeeming}
               onKeyDown={(e) => e.key === "Enter" && handleManualSubmit()}
               style={{
                 width: "100%",
                 height: "42px",
                 borderRadius: "4px",
                 border: "1px solid #2a2a3a",
-                background: "#12121a",
+                background: redeeming ? "#18181f" : "#12121a",
                 padding: "0 14px",
                 fontSize: "18px",
                 fontFamily: "monospace",
                 fontWeight: 700,
                 letterSpacing: "0.15em",
-                color: "#f0f0f5",
+                color: redeeming ? "#6a6a7a" : "#f0f0f5",
                 outline: "none",
                 textAlign: "center",
                 marginBottom: "12px",
+                opacity: redeeming ? 0.7 : 1,
               }}
             />
 
@@ -624,51 +651,39 @@ export default function LoginPage() {
                   color: "#9898a8",
                   cursor: "pointer",
                 }}
-               title="Go back">
+                title="Go back">
                 Back
               </button>
               <button
                 onClick={handleManualSubmit}
-                disabled={!manualCode || manualCode.length < 8}
+                disabled={!manualCode || manualCode.length < 8 || redeeming}
                 style={{
                   flex: 2,
                   height: "38px",
                   borderRadius: "4px",
                   border: "none",
-                  background: "#1D4ED8",
+                  background: redeeming ? "#3a3a5a" : "#1D4ED8",
                   fontSize: "13px",
                   fontWeight: 600,
                   color: "#fff",
-                  cursor: "pointer",
+                  cursor: !manualCode || manualCode.length < 8 || redeeming ? "default" : "pointer",
                   opacity: !manualCode || manualCode.length < 8 ? 0.5 : 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
                 }}
-               title="Authorize">
-                Authorize
+                title="Authorize">
+                {redeeming ? (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ animation: "spin 1s linear infinite" }}>
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="56" strokeDashoffset="14" />
+                    </svg>
+                    Pairing…
+                  </>
+                ) : "Authorize"}
               </button>
             </div>
-
-            {manualCode && manualCode.length >= 8 && (
-              <button
-                onClick={() => openPairingInBrowser(manualCode.toUpperCase())}
-                style={{
-                  width: "100%",
-                  height: "36px",
-                  borderRadius: "4px",
-                  border: "none",
-                  background: "transparent",
-                  fontSize: "12px",
-                  fontWeight: 400,
-                  color: "#6a6a7a",
-                  cursor: "pointer",
-                  marginTop: "8px",
-                  transition: "color 0.15s",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#9898a8")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "#6a6a7a")}
-               title="Open">
-                Open pairing page in browser ↗
-              </button>
-            )}
           </div>
         )}
 
@@ -788,7 +803,7 @@ export default function LoginPage() {
                 color: "#9898a8",
                 cursor: "pointer",
               }}
-             title="Cancel">
+              title="Cancel">
               Cancel
             </button>
 
@@ -888,7 +903,7 @@ export default function LoginPage() {
                 color: "#6a6a7a",
                 cursor: "pointer",
               }}
-             title="Cancel">
+              title="Cancel">
               Cancel
             </button>
           </div>

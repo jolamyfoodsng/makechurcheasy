@@ -21,7 +21,7 @@ export function DockUpgradeModal({ open, onClose, message }: DockUpgradeModalPro
   return (
     <div className="ssm-backdrop" onClick={onClose}>
       <div className="ssm-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="um-close" onClick={onClose} aria-label={t('common.close')} title="Close">
+        <button className="um-close" onClick={onClose} aria-label={t('common.close')} title={t('common.close')}>
           <span className="material-icons" style={{ fontSize: 18 }}>close</span>
         </button>
 
@@ -35,13 +35,13 @@ export function DockUpgradeModal({ open, onClose, message }: DockUpgradeModalPro
           </p>
 
           <div className="dock-upgrade__actions">
-            <button className="dock-upgrade__btn dock-upgrade__btn--secondary" onClick={onClose} title="Cancel">
+            <button className="dock-upgrade__btn dock-upgrade__btn--secondary" onClick={onClose} title={t('common.cancel')}>
               {t('common.cancel')}
             </button>
             <button
               className="dock-upgrade__btn dock-upgrade__btn--primary"
               onClick={() => window.open("https://makechurcheasy.creatorstudioslabs.stream/pricing", "_blank")}
-             title="Upgrade">
+              title={t('upgrade.upgrade')}>
               <Zap size={15} />
               <span>{t('upgrade.upgrade')}</span>
             </button>

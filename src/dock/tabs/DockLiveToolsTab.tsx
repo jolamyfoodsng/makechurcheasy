@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { dockObsClient } from "../dockObsClient";
 import type { DockStagedItem } from "../dockTypes";
 import Icon from "../DockIcon";
@@ -37,6 +38,7 @@ function getConfigurationMessage(tool: LiveToolTemplate): string {
 }
 
 export default function DockLiveToolsTab({ staged: _staged, onStage, initialSnapshot }: Props) {
+  const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState<LiveToolsSnapshot>(() => initialSnapshot ?? createDefaultSnapshot());
   const [activeMoment, setActiveMoment] = useState<LiveToolMoment>("pre-service");
   const [sending, setSending] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export default function DockLiveToolsTab({ staged: _staged, onStage, initialSnap
   const handleSend = useCallback(async (tool: LiveToolTemplate) => {
     if (!(await requireEntitlement("lowerThirds", 0))) return;
     setSending(tool.id);
-    setMessage("Sending...");
+    setMessage(t("liveTools.sending"));
     try {
       await dockObsClient.pushLiveTool(tool);
       onStage({
@@ -86,7 +88,7 @@ export default function DockLiveToolsTab({ staged: _staged, onStage, initialSnap
           _dockLive: true,
         },
       });
-      setMessage("Sent");
+      setMessage(t("liveTools.sent"));
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -98,7 +100,7 @@ export default function DockLiveToolsTab({ staged: _staged, onStage, initialSnap
     setSending("clear");
     try {
       await dockObsClient.clearLiveTool();
-      setMessage("Cleared");
+      setMessage(t("liveTools.cleared"));
       onStage(null);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err));
@@ -112,21 +114,21 @@ export default function DockLiveToolsTab({ staged: _staged, onStage, initialSnap
       <section className="dock-console-panel dock-console-panel--workspace dock-live-tools-shell">
         <div className="dock-console-header">
           <div>
-            <div className="dock-console-header__eyebrow">Live Tools</div>
-            <div className="dock-console-header__title">Service flow controls</div>
+            <div className="dock-console-header__eyebrow">{t("liveTools.title")}</div>
+            <div className="dock-console-header__title">{t("liveTools.subtitle")}</div>
           </div>
           <button
             type="button"
             className="dock-shell-icon-btn"
             onClick={() => void loadSnapshot()}
-            aria-label="Refresh Live Tools"
-            title="Refresh Live Tools"
+            aria-label={t("liveTools.sections")}
+            title={t("liveTools.refreshLiveTools")}
           >
             <Icon name="refresh" size={12} />
           </button>
         </div>
 
-        <div className="dock-console-segmented dock-live-tools-moments" role="tablist" aria-label="Live Tool sections">
+        <div className="dock-console-segmented dock-live-tools-moments" role="tablist" aria-label={t("liveTools.sections")}>
           {LIVE_TOOL_MOMENTS.map((moment) => (
             <button
               key={moment}
@@ -174,8 +176,8 @@ export default function DockLiveToolsTab({ staged: _staged, onStage, initialSnap
                     className="dock-btn dock-btn--live dock-btn--compact"
                     disabled={disabled}
                     onClick={() => void handleSend(tool)}
-                   title="Send">
-                    {sending === tool.id ? "..." : "Send"}
+                    title={t("common.send")}>
+                    {sending === tool.id ? "..." : t("liveTools.send")}
                   </button>
                 </div>
               </div>
@@ -189,8 +191,8 @@ export default function DockLiveToolsTab({ staged: _staged, onStage, initialSnap
             className="dock-btn dock-btn--danger dock-btn--compact"
             disabled={sending !== null}
             onClick={() => void handleClear()}
-           title="Clear">
-            Clear
+            title={t("common.clear")}>
+            {t("common.clear")}
           </button>
         </div>
       </section>

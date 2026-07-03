@@ -28,20 +28,6 @@ const PLAN_CONFIG = {
     },
     basic: {
       label: "Basic",
-      credits: 50,
-      entitlements: {
-        songs: 30, images: 20, videos: 10, themes: 3, lowerThirds: 1, devices: 2,
-        bibleVersions: 20, multiviewTemplates: 0, tickerThemes: 0, themePresets: 3,
-        cloudStorageGB: 1,
-        multiview: false, tickers: false, massImport: false, easyWorshipImport: false,
-        proPresenterImport: false, translation: false, speechToScripture: false,
-        sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
-        customReports: false, mobileControl: false, apiAccess: false, slideshow: true,
-        teamManagement: false, campusManagement: false,
-      },
-    },
-    starter: {
-      label: "Starter",
       credits: 500,
       entitlements: {
         songs: -1, images: -1, videos: -1, themes: 10, lowerThirds: -1, devices: 5,
@@ -111,7 +97,7 @@ function checkEntitlement(
 
 function getEffectivePlan(userPlan: string, trialEndsAt?: string | null): string {
   if (userPlan === "free" && trialEndsAt && new Date(trialEndsAt).getTime() > Date.now()) {
-    return "starter";
+    return "basic";
   }
   return userPlan;
 }
@@ -125,13 +111,8 @@ describe("Plan enforcement — numeric resource limits", () => {
       expect(checkEntitlement("free", "songs", 3).allowed).toBe(false);
     });
 
-    it("basic: allows up to 30", () => {
-      expect(checkEntitlement("basic", "songs", 29).allowed).toBe(true);
-      expect(checkEntitlement("basic", "songs", 30).allowed).toBe(false);
-    });
-
-    it("starter: unlimited", () => {
-      expect(checkEntitlement("starter", "songs", 99999).allowed).toBe(true);
+    it("basic: unlimited", () => {
+      expect(checkEntitlement("basic", "songs", 99999).allowed).toBe(true);
     });
 
     it("growth: unlimited", () => {
@@ -149,12 +130,8 @@ describe("Plan enforcement — numeric resource limits", () => {
       expect(checkEntitlement("free", "images", 2).allowed).toBe(false);
     });
 
-    it("basic: allows up to 20", () => {
-      expect(checkEntitlement("basic", "images", 20).allowed).toBe(false);
-    });
-
-    it("starter and above: unlimited", () => {
-      for (const tier of ["starter", "growth", "pro"]) {
+    it("growth and above: unlimited", () => {
+      for (const tier of ["growth", "pro"]) {
         expect(checkEntitlement(tier, "images", 99999).allowed).toBe(true);
       }
     });
@@ -166,12 +143,8 @@ describe("Plan enforcement — numeric resource limits", () => {
       expect(checkEntitlement("free", "cloudStorageGB").allowed).toBe(false);
     });
 
-    it("basic: 1 GB", () => {
-      expect(checkEntitlement("basic", "cloudStorageGB").limit).toBe(1);
-    });
-
-    it("starter: 5 GB", () => {
-      expect(checkEntitlement("starter", "cloudStorageGB").limit).toBe(5);
+    it("basic: 5 GB", () => {
+      expect(checkEntitlement("basic", "cloudStorageGB").limit).toBe(5);
     });
 
     it("growth: 20 GB", () => {
@@ -191,21 +164,20 @@ describe("Plan enforcement — numeric resource limits", () => {
 
 describe("Plan enforcement — boolean feature gating", () => {
   describe("multiview", () => {
-    it("blocked on free and basic", () => {
+    it("blocked on free", () => {
       expect(checkEntitlement("free", "multiview").allowed).toBe(false);
-      expect(checkEntitlement("basic", "multiview").allowed).toBe(false);
     });
 
-    it("allowed on starter and above", () => {
-      for (const tier of ["starter", "growth", "pro"]) {
+    it("allowed on basic and above", () => {
+      for (const tier of ["basic", "growth", "pro"]) {
         expect(checkEntitlement(tier, "multiview").allowed).toBe(true);
       }
     });
   });
 
   describe("aiFeatures", () => {
-    it("blocked on free, basic, starter", () => {
-      for (const tier of ["free", "basic", "starter"]) {
+    it("blocked on free and basic", () => {
+      for (const tier of ["free", "basic"]) {
         expect(checkEntitlement(tier, "aiFeatures").allowed).toBe(false);
       }
     });
@@ -218,7 +190,7 @@ describe("Plan enforcement — boolean feature gating", () => {
 
   describe("cloudSync", () => {
     it("blocked below Growth", () => {
-      for (const tier of ["free", "basic", "starter"]) {
+      for (const tier of ["free", "basic"]) {
         expect(checkEntitlement(tier, "cloudSync").allowed).toBe(false);
       }
     });
@@ -231,7 +203,7 @@ describe("Plan enforcement — boolean feature gating", () => {
 
   describe("teamManagement", () => {
     it("blocked below Pro", () => {
-      for (const tier of ["free", "basic", "starter", "growth"]) {
+      for (const tier of ["free", "basic", "growth"]) {
         expect(checkEntitlement(tier, "teamManagement").allowed).toBe(false);
       }
     });
@@ -243,7 +215,7 @@ describe("Plan enforcement — boolean feature gating", () => {
 
   describe("campusManagement", () => {
     it("blocked below Pro", () => {
-      for (const tier of ["free", "basic", "starter", "growth"]) {
+      for (const tier of ["free", "basic", "growth"]) {
         expect(checkEntitlement(tier, "campusManagement").allowed).toBe(false);
       }
     });
@@ -259,7 +231,7 @@ describe("Plan enforcement — boolean feature gating", () => {
     });
 
     it("allowed on basic and above", () => {
-      for (const tier of ["basic", "starter", "growth", "pro"]) {
+      for (const tier of ["basic", "growth", "pro"]) {
         expect(checkEntitlement(tier, "slideshow").allowed).toBe(true);
       }
     });
@@ -267,7 +239,7 @@ describe("Plan enforcement — boolean feature gating", () => {
 
   describe("advancedAnalytics", () => {
     it("blocked below Growth", () => {
-      for (const tier of ["free", "basic", "starter"]) {
+      for (const tier of ["free", "basic"]) {
         expect(checkEntitlement(tier, "advancedAnalytics").allowed).toBe(false);
       }
     });
@@ -280,7 +252,7 @@ describe("Plan enforcement — boolean feature gating", () => {
 
   describe("mobileControl", () => {
     it("blocked below Pro", () => {
-      for (const tier of ["free", "basic", "starter", "growth"]) {
+      for (const tier of ["free", "basic", "growth"]) {
         expect(checkEntitlement(tier, "mobileControl").allowed).toBe(false);
       }
     });
@@ -292,7 +264,7 @@ describe("Plan enforcement — boolean feature gating", () => {
 
   describe("apiAccess", () => {
     it("blocked below Pro", () => {
-      for (const tier of ["free", "basic", "starter", "growth"]) {
+      for (const tier of ["free", "basic", "growth"]) {
         expect(checkEntitlement(tier, "apiAccess").allowed).toBe(false);
       }
     });
@@ -304,9 +276,9 @@ describe("Plan enforcement — boolean feature gating", () => {
 });
 
 describe("Plan enforcement — trial users", () => {
-  it("free user with active trial gets starter entitlements", () => {
+  it("free user with active trial gets basic entitlements", () => {
     const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    expect(getEffectivePlan("free", futureDate)).toBe("starter");
+    expect(getEffectivePlan("free", futureDate)).toBe("basic");
   });
 
   it("free user with expired trial stays free", () => {
@@ -319,13 +291,13 @@ describe("Plan enforcement — trial users", () => {
     expect(getEffectivePlan("growth", futureDate)).toBe("growth");
   });
 
-  it("trial user can use multiview (starter entitlement)", () => {
+  it("trial user can use multiview (basic entitlement)", () => {
     const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const effectivePlan = getEffectivePlan("free", futureDate);
     expect(checkEntitlement(effectivePlan, "multiview").allowed).toBe(true);
   });
 
-  it("trial user cannot use AI features (starter doesn't have them)", () => {
+  it("trial user cannot use AI features (basic doesn't have them)", () => {
     const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const effectivePlan = getEffectivePlan("free", futureDate);
     expect(checkEntitlement(effectivePlan, "aiFeatures").allowed).toBe(false);

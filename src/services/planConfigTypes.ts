@@ -11,10 +11,10 @@
 
 // ── Core Types ───────────────────────────────────────────────────────────────
 
-export type PlanTier = "free" | "trial" | "basic" | "starter" | "growth" | "pro";
+export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador";
 
 /** Ordered list of tiers from lowest to highest (excludes "trial" — it's a temporary state, not a purchasable tier). */
-export const ALL_TIERS: PlanTier[] = ["free", "basic", "starter", "growth", "pro"];
+export const ALL_TIERS: PlanTier[] = ["free", "basic", "growth", "pro", "ambassador"];
 
 /**
  * Entitlements define what a plan tier can access.
@@ -104,7 +104,7 @@ export interface EntitlementResult {
   current?: number;
   /** How many more items the user can add (-1 = unlimited, undefined for boolean). */
   remaining?: number;
-  /** Minimum plan tier required when denied (e.g. "basic", "starter"). */
+  /** Minimum plan tier required when denied (e.g. "basic", "growth"). */
   requiredPlan?: string;
 }
 
@@ -195,7 +195,7 @@ export function deriveFeatureRequiredPlan(
  * and caches it in localStorage with a 5-minute TTL.
  */
 export const DEFAULT_PLAN_CONFIG: PlanConfig = {
-  version: 2,
+  version: 3,
   plans: {
     free: {
       label: "Free",
@@ -204,10 +204,10 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         USD: { monthly: 0, yearly: 0 },
       },
       paystack: { monthlyPlanCode: "", yearlyPlanCode: "" },
-      credits: 50,
+      credits: 20,
       entitlements: {
-        songs: 3, images: 2, videos: 1, themes: 1, lowerThirds: 1, devices: 1,
-        bibleVersions: 4, multiviewTemplates: 0, tickerThemes: 0, themePresets: 0,
+        songs: 3, images: 3, videos: 3, themes: 2, lowerThirds: 1, devices: 1,
+        bibleVersions: 3, multiviewTemplates: 0, tickerThemes: 0, themePresets: 0,
         cloudStorageGB: 0,
         multiview: false, tickers: false, massImport: false, easyWorshipImport: false,
         proPresenterImport: false, translation: false, speechToScripture: false,
@@ -245,36 +245,14 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         monthlyPlanCode: "mce_basic_monthly",
         yearlyPlanCode: "mce_basic_yearly",
       },
-      credits: 50,
+      credits: 250,
       entitlements: {
-        songs: 30, images: 20, videos: 10, themes: 3, lowerThirds: 1, devices: 2,
-        bibleVersions: 20, multiviewTemplates: 0, tickerThemes: 0, themePresets: 3,
+        songs: 70, images: 70, videos: 70, themes: 3, lowerThirds: 2, devices: 5,
+        bibleVersions: 10, multiviewTemplates: 0, tickerThemes: 0, themePresets: 3,
         cloudStorageGB: 1,
-        multiview: false, tickers: false, massImport: false, easyWorshipImport: false,
-        proPresenterImport: false, translation: false, speechToScripture: false,
+        multiview: false, tickers: true, massImport: false, easyWorshipImport: false,
+        proPresenterImport: false, translation: true, speechToScripture: false,
         sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
-        customReports: false, mobileControl: false, apiAccess: false,
-        teamManagement: false, campusManagement: false, slideshow: true,
-      },
-    },
-    starter: {
-      label: "Starter",
-      pricing: {
-        NGN: { monthly: 8500, yearly: 102000 },
-        USD: { monthly: 10, yearly: 120 },
-      },
-      paystack: {
-        monthlyPlanCode: "mce_starter_monthly",
-        yearlyPlanCode: "mce_starter_yearly",
-      },
-      credits: 500,
-      entitlements: {
-        songs: -1, images: -1, videos: -1, themes: 10, lowerThirds: -1, devices: 5,
-        bibleVersions: -1, multiviewTemplates: 2, tickerThemes: 5, themePresets: 10,
-        cloudStorageGB: 5,
-        multiview: true, tickers: true, massImport: true, easyWorshipImport: true,
-        proPresenterImport: true, translation: true, speechToScripture: true,
-        sermonExport: true, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
         customReports: false, mobileControl: false, apiAccess: false,
         teamManagement: false, campusManagement: false, slideshow: true,
       },
@@ -289,7 +267,7 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         monthlyPlanCode: "mce_growth_monthly",
         yearlyPlanCode: "mce_growth_yearly",
       },
-      credits: 2000,
+      credits: 500,
       entitlements: {
         songs: -1, images: -1, videos: -1, themes: -1, lowerThirds: -1, devices: -1,
         bibleVersions: -1, multiviewTemplates: -1, tickerThemes: -1, themePresets: -1,
@@ -297,8 +275,8 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         multiview: true, tickers: true, massImport: true, easyWorshipImport: true,
         proPresenterImport: true, translation: true, speechToScripture: true,
         sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,
-        customReports: false, mobileControl: false, apiAccess: false,
-        teamManagement: false, campusManagement: false, slideshow: true,
+        customReports: false, mobileControl: true, apiAccess: false,
+        teamManagement: true, campusManagement: false, slideshow: true,
       },
     },
     pro: {
@@ -312,6 +290,25 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         yearlyPlanCode: "mce_pro_yearly",
       },
       credits: -1,
+      entitlements: {
+        songs: -1, images: -1, videos: -1, themes: -1, lowerThirds: -1, devices: -1,
+        bibleVersions: -1, multiviewTemplates: -1, tickerThemes: -1, themePresets: -1,
+        cloudStorageGB: 200,
+        multiview: true, tickers: true, massImport: true, easyWorshipImport: true,
+        proPresenterImport: true, translation: true, speechToScripture: true,
+        sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,
+        customReports: true, mobileControl: true, apiAccess: true,
+        teamManagement: true, campusManagement: true, slideshow: true,
+      },
+    },
+    ambassador: {
+      label: "Ambassador",
+      pricing: {
+        NGN: { monthly: 0, yearly: 0 },
+        USD: { monthly: 0, yearly: 0 },
+      },
+      paystack: { monthlyPlanCode: "", yearlyPlanCode: "" },
+      credits: 2000,
       entitlements: {
         songs: -1, images: -1, videos: -1, themes: -1, lowerThirds: -1, devices: -1,
         bibleVersions: -1, multiviewTemplates: -1, tickerThemes: -1, themePresets: -1,

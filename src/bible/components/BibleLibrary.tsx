@@ -257,7 +257,7 @@ export default function BibleLibrary({
       lang: string,
       filesize: number
     ) => {
-      const isInstalled = installed.some((i) => i.abbr === abbr);
+      const isInstalled = installed.some((i) => i.id === catalogId);
       if (isInstalled) return;
 
       const existing = downloads.get(catalogId);
@@ -441,9 +441,9 @@ export default function BibleLibrary({
     [handleImportFile]
   );
 
-  // ── Installed abbrs set for quick lookup ──
-  const installedAbbrs = useMemo(
-    () => new Set(installed.map((i) => i.abbr)),
+  // ── Installed IDs set for quick lookup (by catalog UUID, not abbreviation) ──
+  const installedIds = useMemo(
+    () => new Set(installed.map((i) => i.id)),
     [installed]
   );
 
@@ -519,14 +519,14 @@ export default function BibleLibrary({
         <button
           className={`bible-library-tab${tab === "browse" ? " active" : ""}`}
           onClick={() => setTab("browse")}
-         title="Download">
+          title="Download">
           <Icon name="explore" size={20} />
           Browse &amp; Download
         </button>
         <button
           className={`bible-library-tab${tab === "installed" ? " active" : ""}`}
           onClick={() => setTab("installed")}
-         title="Install">
+          title="Install">
           <Icon name="download_done" size={20} />
           Installed ({installed.length})
         </button>
@@ -606,7 +606,7 @@ export default function BibleLibrary({
               <button
                 className="bible-library-retry-btn"
                 onClick={() => doSearch(page)}
-               title="Retry">
+                title="Retry">
                 <Icon name="refresh" size={14} />
                 Retry
               </button>
@@ -631,7 +631,7 @@ export default function BibleLibrary({
               <div className="bible-library-list">
                 {catalogResult.items.map((bible) => {
                   const abbr = deriveAbbr(bible);
-                  const isInst = installedAbbrs.has(abbr);
+                  const isInst = installedIds.has(bible.id);
                   const dl = downloads.get(bible.id);
 
                   return (
@@ -706,7 +706,7 @@ export default function BibleLibrary({
                   <button
                     disabled={page <= 1}
                     onClick={() => doSearch(page - 1)}
-                   title="Previous">
+                    title="Previous">
                     <Icon name="chevron_left" size={20} />
                     Previous
                   </button>
@@ -716,7 +716,7 @@ export default function BibleLibrary({
                   <button
                     disabled={page >= catalogResult.pages}
                     onClick={() => doSearch(page + 1)}
-                   title="Next">
+                    title="Next">
                     Next
                     <Icon name="chevron_right" size={20} />
                   </button>
@@ -864,13 +864,13 @@ export default function BibleLibrary({
               <button
                 className="bible-library-confirm-cancel"
                 onClick={() => setConfirmDelete(null)}
-               title="Cancel">
+                title="Cancel">
                 Cancel
               </button>
               <button
                 className="bible-library-confirm-delete"
                 onClick={handleDeleteConfirm}
-               title="Delete">
+                title="Delete">
                 <Icon name="delete" size={20} />
                 Delete
               </button>

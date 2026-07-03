@@ -13,41 +13,41 @@ const PLAN_DISPLAY: Record<PlanTier, { label: string; color: string }> = {
   free: { label: "Free", color: "#8a8a8a" },
   trial: { label: "Trial", color: "#7b68ee" },
   basic: { label: "Basic", color: "#5b9bd5" },
-  starter: { label: "Starter", color: "#70ad47" },
   growth: { label: "Growth", color: "#c55a11" },
   pro: { label: "Pro", color: "#7b68ee" },
+  ambassador: { label: "Ambassador", color: "#d4af37" },
 };
 
 type PlanFeatureRow = Record<PlanTier, string>;
 
 const PLAN_FEATURES: Record<string, PlanFeatureRow> = {
-  songs: { free: "3 songs", trial: "∞ songs", basic: "30 songs", starter: "∞ songs", growth: "∞ songs", pro: "∞ songs" },
-  images: { free: "2 images", trial: "∞ images", basic: "20 images", starter: "∞ images", growth: "∞ images", pro: "∞ images" },
-  videos: { free: "1 video", trial: "∞ videos", basic: "10 videos", starter: "∞ videos", growth: "∞ videos", pro: "∞ videos" },
-  bibleVersions: { free: "4 versions", trial: "∞ versions", basic: "20 versions", starter: "∞ versions", growth: "∞ versions", pro: "∞ versions" },
-  themes: { free: "1 theme", trial: "∞ themes", basic: "3 themes", starter: "10 themes", growth: "∞ themes", pro: "∞ themes" },
-  patterns: { free: "1 pattern", trial: "∞ patterns", basic: "3 patterns", starter: "10 patterns", growth: "∞ patterns", pro: "∞ patterns" },
-  lowerThirdThemes: { free: "1 theme", trial: "∞ themes", basic: "1 theme", starter: "10 themes", growth: "∞ themes", pro: "∞ themes" },
-  devices: { free: "1 device", trial: "∞ devices", basic: "2 devices", starter: "5 devices", growth: "∞ devices", pro: "∞ devices" },
-  easyWorshipImport: { free: "—", trial: "✓", basic: "—", starter: "✓", growth: "✓", pro: "✓" },
-  proPresenterImport: { free: "—", trial: "✓", basic: "—", starter: "✓", growth: "✓", pro: "✓" },
-  massImport: { free: "—", trial: "✓", basic: "—", starter: "✓", growth: "✓", pro: "✓" },
-  translation: { free: "—", trial: "✓", basic: "—", starter: "✓", growth: "✓", pro: "✓" },
-  multiview: { free: "—", trial: "✓", basic: "—", starter: "✓ (limited)", growth: "✓", pro: "✓" },
-  tickers: { free: "—", trial: "✓", basic: "—", starter: "✓", growth: "✓", pro: "✓" },
-  speechToScripture: { free: "—", trial: "✓", basic: "—", starter: "✓", growth: "✓", pro: "✓" },
-  sermonExport: { free: "—", trial: "✓", basic: "—", starter: "✓", growth: "✓", pro: "✓" },
-  aiFeatures: { free: "—", trial: "✓", basic: "—", starter: "—", growth: "✓", pro: "✓" },
-  cloudFeatures: { free: "—", trial: "✓", basic: "—", starter: "—", growth: "✓", pro: "✓" },
-  advancedAnalytics: { free: "—", trial: "✓", basic: "—", starter: "—", growth: "✓", pro: "✓" },
-  customReports: { free: "—", trial: "✓", basic: "—", starter: "—", growth: "—", pro: "✓" },
-  unlimitedDevices: { free: "1 device", trial: "∞", basic: "2 devices", starter: "5 devices", growth: "∞", pro: "∞" },
-  unlimitedMultiview: { free: "—", trial: "∞", basic: "—", starter: "limited", growth: "∞", pro: "∞" },
-  mobileControl: { free: "—", trial: "✓", basic: "—", starter: "—", growth: "—", pro: "✓" },
-  apiAccess: { free: "—", trial: "✓", basic: "—", starter: "—", growth: "—", pro: "✓" },
-  teamManagement: { free: "—", trial: "✓", basic: "—", starter: "—", growth: "—", pro: "✓" },
-  campusManagement: { free: "—", trial: "✓", basic: "—", starter: "—", growth: "—", pro: "✓" },
-  cloudStorageGB: { free: "0 GB", trial: "∞", basic: "1 GB", starter: "5 GB", growth: "20 GB", pro: "∞" },
+  songs: { free: "3 songs", trial: "∞ songs", basic: "70 songs", growth: "∞ songs", pro: "∞ songs", ambassador: "∞ songs" },
+  images: { free: "3 images", trial: "∞ images", basic: "70 images", growth: "∞ images", pro: "∞ images", ambassador: "∞ images" },
+  videos: { free: "3 videos", trial: "∞ videos", basic: "70 videos", growth: "∞ videos", pro: "∞ videos", ambassador: "∞ videos" },
+  bibleVersions: { free: "3 versions", trial: "∞ versions", basic: "10 versions", growth: "∞ versions", pro: "∞ versions", ambassador: "∞ versions" },
+  themes: { free: "2 themes", trial: "∞ themes", basic: "3 themes", growth: "∞ themes", pro: "∞ themes", ambassador: "∞ themes" },
+  patterns: { free: "0 patterns", trial: "∞ patterns", basic: "3 patterns", growth: "∞ patterns", pro: "∞ patterns", ambassador: "∞ patterns" },
+  lowerThirdThemes: { free: "1 theme", trial: "∞ themes", basic: "2 themes", growth: "∞ themes", pro: "∞ themes", ambassador: "∞ themes" },
+  devices: { free: "1 device", trial: "∞ devices", basic: "5 devices", growth: "∞ devices", pro: "∞ devices", ambassador: "∞ devices" },
+  easyWorshipImport: { free: "—", trial: "✓", basic: "—", growth: "✓", pro: "✓", ambassador: "✓" },
+  proPresenterImport: { free: "—", trial: "✓", basic: "—", growth: "✓", pro: "✓", ambassador: "✓" },
+  massImport: { free: "—", trial: "✓", basic: "—", growth: "✓", pro: "✓", ambassador: "✓" },
+  translation: { free: "—", trial: "✓", basic: "✓", growth: "✓", pro: "✓", ambassador: "✓" },
+  multiview: { free: "—", trial: "✓", basic: "—", growth: "✓", pro: "✓", ambassador: "✓" },
+  tickers: { free: "—", trial: "✓", basic: "✓", growth: "✓", pro: "✓", ambassador: "✓" },
+  speechToScripture: { free: "—", trial: "✓", basic: "—", growth: "✓", pro: "✓", ambassador: "✓" },
+  sermonExport: { free: "—", trial: "✓", basic: "—", growth: "✓", pro: "✓", ambassador: "✓" },
+  aiFeatures: { free: "—", trial: "✓", basic: "—", growth: "✓", pro: "✓", ambassador: "✓" },
+  cloudFeatures: { free: "—", trial: "✓", basic: "—", growth: "✓", pro: "✓", ambassador: "✓" },
+  advancedAnalytics: { free: "—", trial: "✓", basic: "—", growth: "✓", pro: "✓", ambassador: "✓" },
+  customReports: { free: "—", trial: "✓", basic: "—", growth: "—", pro: "✓", ambassador: "✓" },
+  unlimitedDevices: { free: "1 device", trial: "∞", basic: "5 devices", growth: "∞", pro: "∞", ambassador: "∞" },
+  unlimitedMultiview: { free: "—", trial: "∞", basic: "—", growth: "∞", pro: "∞", ambassador: "∞" },
+  mobileControl: { free: "—", trial: "✓", basic: "—", growth: "✓", pro: "✓", ambassador: "✓" },
+  apiAccess: { free: "—", trial: "✓", basic: "—", growth: "—", pro: "✓", ambassador: "✓" },
+  teamManagement: { free: "—", trial: "✓", basic: "—", growth: "✓", pro: "✓", ambassador: "✓" },
+  campusManagement: { free: "—", trial: "✓", basic: "—", growth: "—", pro: "✓", ambassador: "✓" },
+  cloudStorageGB: { free: "0 GB", trial: "∞", basic: "1 GB", growth: "20 GB", pro: "200 GB", ambassador: "200 GB" },
 };
 
 const FEATURE_ICONS: Record<string, typeof Music> = {
@@ -148,7 +148,7 @@ export function UpgradeModal({
                 <span>{feature} Limits by Plan</span>
               </div>
 
-              {(["free", "basic", "starter", "growth", "pro"] as PlanTier[]).map((plan) => {
+              {(["free", "basic", "growth", "pro", "ambassador"] as PlanTier[]).map((plan) => {
                 const display = PLAN_DISPLAY[plan];
                 const val = featureData[plan];
                 const isRequired = plan === requiredPlan;
@@ -211,7 +211,7 @@ export function UpgradeModal({
               onClick={() => {
                 window.open("https://makechurcheasy.creatorstudioslabs.stream/pricing", "_blank");
               }}
-             title="Start">
+              title="Start">
               <Zap size={18} />
               <div className="um-btn-text">
                 <span>Upgrade to {required.label}</span>

@@ -19,8 +19,8 @@
           "key": "logoUrl",
           "label": "Logo URL",
           "type": "text",
-          "defaultValue": "https://example.com/logo.png",
-          "placeholder": "https://.../logo.png",
+          "defaultValue": "https://pub-670c665df90946a6b6292589e7c83911.r2.dev/make_church_easy.png",
+          "placeholder": "https://pub-670c665df90946a6b6292589e7c83911.r2.dev/make_church_easy.png",
           "required": true,
           "group": "Branding"
         },

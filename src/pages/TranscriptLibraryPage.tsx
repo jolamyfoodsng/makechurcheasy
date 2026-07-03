@@ -15,7 +15,9 @@ import {
   FileText,
   Globe,
   HelpCircle,
-  LayoutGrid, List,
+  LayoutGrid,
+  List,
+  Lock,
   Mic,
   MoreVertical,
   RotateCcw,
@@ -47,31 +49,21 @@ import type {
   TranscriptLibraryStats,
 } from "../transcripts/transcriptTypes";
 
-// ── Stat card config ─────────────────────────────────────────────────────────
-
-interface StatDef {
-  key: string;
-  label: string;
-  icon: React.ReactNode;
-  color: string;
-  getValue: (s: TranscriptLibraryStats) => string;
-}
-
-const STAT_DEFS: StatDef[] = [
-  { key: "total", label: "TOTAL SESSIONS", icon: <FileText size={22} />, color: "indigo", getValue: (s) => String(s.totalSessions) },
-  { key: "used", label: "USED THIS MONTH", icon: <Clock size={22} />, color: "blue", getValue: (s) => s.usedThisMonth },
-  { key: "scriptures", label: "SCRIPTURES DETECTED", icon: <BookOpen size={22} />, color: "green", getValue: (s) => String(s.totalScriptures) },
-  { key: "duration", label: "TOTAL DURATION", icon: <Timer size={22} />, color: "purple", getValue: (s) => s.totalDurationFormatted },
-];
+import { useAuth } from "../contexts/AuthContext";
+import { checkEntitlementSync, getEffectivePlan } from "../services/entitlementClient";
+import { onCreditChange, syncCreditsWithBackend } from "../services/credits";
+import CreditsDisplay from "../components/CreditsDisplay";
 
 // ── Source type labels ───────────────────────────────────────────────────────
 
-const SOURCE_LABELS: Record<string, string> = {
-  "imported-audio": "Audio Import",
-  "imported-video": "Video Import",
-  uploaded: "Uploaded",
-  transcription: "Live Session",
-};
+function useSourceLabels(t: (key: string) => string): Record<string, string> {
+  return useMemo(() => ({
+    "imported-audio": t("transcript.source.importedAudio"),
+    "imported-video": t("transcript.source.importedVideo"),
+    uploaded: t("transcript.source.uploaded"),
+    transcription: t("transcript.source.liveSession"),
+  }), [t]);
+}
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -85,6 +77,10 @@ export default function TranscriptLibraryPage({
   onNewSession,
 }: TranscriptLibraryPageProps) {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const effectivePlan = getEffectivePlan(user);
+  const sourceLabels = useSourceLabels(t);
+
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [stats, setStats] = useState<TranscriptLibraryStats>({
     totalSessions: 0,
@@ -111,6 +107,38 @@ export default function TranscriptLibraryPage({
   // ── Tutorial state ────────────────────────────────────────────────────
   const [tourActive, setTourActive] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // ── Plan enforcement ──────────────────────────────────────────────────
+  const entitlementResult = useMemo(
+    () => checkEntitlementSync("speechToScripture", effectivePlan),
+    [effectivePlan],
+  );
+  const canStartSession = entitlementResult.allowed;
+  const requiredPlan = entitlementResult.requiredPlan;
+  const [showUpgradeOverlay, setShowUpgradeOverlay] = useState(false);
+
+  // ── Credits tracking ──────────────────────────────────────────────────
+  const isPro = effectivePlan === "pro";
+  const [creditRefreshKey, setCreditRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (isPro) return;
+    void syncCreditsWithBackend().then(() => {
+      setCreditRefreshKey((k) => k + 1);
+    });
+    const unsub = onCreditChange(() => {
+      setCreditRefreshKey((k) => k + 1);
+    });
+    return unsub;
+  }, [isPro]);
+
+  // ── Stat card config ──────────────────────────────────────────────────
+  const statDefs = useMemo(() => [
+    { key: "total", label: t("transcript.stats.totalSessions"), icon: <FileText size={22} />, color: "indigo", getValue: (s: TranscriptLibraryStats) => String(s.totalSessions) },
+    { key: "used", label: t("transcript.stats.usedThisMonth"), icon: <Clock size={22} />, color: "blue", getValue: (s: TranscriptLibraryStats) => s.usedThisMonth },
+    { key: "scriptures", label: t("transcript.stats.scripturesDetected"), icon: <BookOpen size={22} />, color: "green", getValue: (s: TranscriptLibraryStats) => String(s.totalScriptures) },
+    { key: "duration", label: t("transcript.stats.totalDuration"), icon: <Timer size={22} />, color: "purple", getValue: (s: TranscriptLibraryStats) => s.totalDurationFormatted },
+  ], [t]);
 
   // ── Load data ────────────────────────────────────────────────────────────
 
@@ -141,17 +169,17 @@ export default function TranscriptLibraryPage({
     if (filters.search) {
       const q = filters.search.toLowerCase();
       list = list.filter(
-        (t) =>
-          t.title.toLowerCase().includes(q) ||
-          t.church.toLowerCase().includes(q) ||
-          t.transcriptText.toLowerCase().includes(q),
+        (tr) =>
+          tr.title.toLowerCase().includes(q) ||
+          tr.church.toLowerCase().includes(q) ||
+          tr.transcriptText.toLowerCase().includes(q),
       );
     }
     if (filters.language) {
-      list = list.filter((t) => t.language === filters.language);
+      list = list.filter((tr) => tr.language === filters.language);
     }
     if (filters.sourceType) {
-      list = list.filter((t) => t.sourceType === filters.sourceType);
+      list = list.filter((tr) => tr.sourceType === filters.sourceType);
     }
 
     list.sort((a, b) => {
@@ -173,23 +201,23 @@ export default function TranscriptLibraryPage({
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
-  const handleDownload = useCallback(async (e: React.MouseEvent, t: Transcript) => {
+  const handleDownload = useCallback(async (e: React.MouseEvent, tr: Transcript) => {
     e.stopPropagation();
-    setDownloadingId(t.id);
+    setDownloadingId(tr.id);
 
     try {
-      const blob = new Blob([t.transcriptText || ""], { type: "text/plain" });
+      const blob = new Blob([tr.transcriptText || ""], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${t.title.replace(/[^a-zA-Z0-9 ]/g, "_").replace(/\s+/g, "_")}.txt`;
+      a.download = `${tr.title.replace(/[^a-zA-Z0-9 ]/g, "_").replace(/\s+/g, "_")}.txt`;
       a.click();
       URL.revokeObjectURL(url);
     } catch { /* noop */ }
 
     setTimeout(() => {
       setDownloadingId(null);
-      setDoneId(t.id);
+      setDoneId(tr.id);
       setTimeout(() => setDoneId(null), 2000);
     }, 800);
   }, []);
@@ -219,6 +247,14 @@ export default function TranscriptLibraryPage({
     }));
   }, []);
 
+  const handleNewSessionClick = useCallback(() => {
+    if (!canStartSession) {
+      setShowUpgradeOverlay(true);
+      return;
+    }
+    onNewSession?.();
+  }, [canStartSession, onNewSession]);
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -226,23 +262,23 @@ export default function TranscriptLibraryPage({
       <div className="tl-container">
 
         {/* ── Header ── */}
-        <header className="tl-header" data-tutorial="welcome">
+        <header className="tl-header" data-transcript-tutorial="welcome">
           <div>
-            <h1 className="tl-title">My Transcripts</h1>
-            <p className="tl-subtitle">Manage your sermon transcripts, export, and translate.</p>
+            <h1 className="tl-title">{t("transcript.title")}</h1>
+            <p className="tl-subtitle">{t("transcript.subtitle")}</p>
           </div>
           <div className="tl-header-actions">
-            <div className="tl-search-wrapper" data-tutorial="search">
-              {/* <Search className="tl-search-icon" size={16} /> */}
+            {!isPro && <CreditsDisplay userId={user?.id} refreshKey={creditRefreshKey} />}
+            <div className="tl-search-wrapper" data-transcript-tutorial="search">
               <input
                 type="text"
                 className="tl-search-input"
-                placeholder="Search transcripts..."
+                placeholder={t("transcript.searchPlaceholder")}
                 value={filters.search}
                 onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
               />
               {filters.search && (
-                <button className="tl-search-clear" onClick={() => setFilters((f) => ({ ...f, search: "" }))} title="Clear search">
+                <button className="tl-search-clear" onClick={() => setFilters((f) => ({ ...f, search: "" }))} title={t("transcript.tooltip.clearSearch")}>
                   <X size={14} />
                 </button>
               )}
@@ -250,12 +286,18 @@ export default function TranscriptLibraryPage({
             <button
               className="tl-btn tl-btn-ghost"
               onClick={() => { resetTutorial(); setTourActive(true); setBannerDismissed(false); }}
-              title={t("tutorial.button.tooltip")}
+              title={t("transcript.tour.button.tooltip")}
             >
-              <HelpCircle size={16} /> {t("tutorial.button")}
+              <HelpCircle size={16} /> {t("transcript.tour.button")}
             </button>
-            <button className="tl-btn tl-btn-primary" onClick={onNewSession} data-tutorial="new-session" title="Microphone">
-              <Mic size={16} /> New Session
+            <button
+              className={`tl-btn tl-btn-primary${!canStartSession ? " tl-btn--locked" : ""}`}
+              onClick={handleNewSessionClick}
+              data-transcript-tutorial="new-session"
+              title={canStartSession ? t("transcript.tooltip.newSession") : t("transcript.tooltip.upgradeRequired")}
+            >
+              {!canStartSession && <Lock size={14} />}
+              <Mic size={16} /> {t("transcript.newSession")}
             </button>
           </div>
         </header>
@@ -264,24 +306,24 @@ export default function TranscriptLibraryPage({
         {!tourActive && !isTutorialCompleted() && !bannerDismissed && (
           <div className="tl-tutorial-banner">
             <AlertTriangle size={14} />
-            <span>{t("tutorial.banner")}</span>
+            <span>{t("transcript.tour.banner")}</span>
             <div className="tl-tutorial-banner-actions">
               <button className="tl-btn tl-btn-sm tl-btn-primary" onClick={() => setTourActive(true)}>
-                {t("tutorial.banner.continue")}
+                {t("transcript.tour.banner.continue")}
               </button>
               <button className="tl-btn tl-btn-sm tl-btn-ghost" onClick={() => { resetTutorial(); setTourActive(true); setBannerDismissed(false); }}>
-                <RotateCcw size={12} /> {t("tutorial.banner.restart")}
+                <RotateCcw size={12} /> {t("transcript.tour.banner.restart")}
               </button>
               <button className="tl-btn tl-btn-sm tl-btn-ghost" onClick={() => setBannerDismissed(true)}>
-                {t("tutorial.banner.dismiss")}
+                {t("transcript.tour.banner.dismiss")}
               </button>
             </div>
           </div>
         )}
 
         {/* ── Stats Grid ── */}
-        <section className="tl-stats-grid" data-tutorial="stats">
-          {STAT_DEFS.map((def) => (
+        <section className="tl-stats-grid" data-transcript-tutorial="stats">
+          {statDefs.map((def) => (
             <div key={def.key} className={`tl-stat-card tl-stat--${def.color}`}>
               <div className="tl-accent-bar" />
               <div className="tl-stat-icon">
@@ -299,27 +341,29 @@ export default function TranscriptLibraryPage({
         <section className="tl-table-section">
 
           {/* Filters */}
-          <div className="tl-table-filters" data-tutorial="filters">
-            <button className="tl-filter-btn" title="Expand">
-              <Globe size={14} /> All Languages <ChevronDown size={12} />
+          <div className="tl-table-filters" data-transcript-tutorial="filters">
+            <button className="tl-filter-btn" title={t("transcript.tooltip.filterLanguage")}>
+              <Globe size={14} /> {t("transcript.filter.allLanguages")} <ChevronDown size={12} />
             </button>
-            <button className="tl-filter-btn" title="Expand">
-              <Calendar size={14} /> All Time <ChevronDown size={12} />
+            <button className="tl-filter-btn" title={t("transcript.tooltip.filterTime")}>
+              <Calendar size={14} /> {t("transcript.filter.allTime")} <ChevronDown size={12} />
             </button>
-            <button className="tl-filter-btn" title="Expand">
-              <Tag size={14} /> All Services <ChevronDown size={12} />
+            <button className="tl-filter-btn" title={t("transcript.tooltip.filterService")}>
+              <Tag size={14} /> {t("transcript.filter.allServices")} <ChevronDown size={12} />
             </button>
-            <div className="tl-view-toggles" data-tutorial="view-toggle">
+            <div className="tl-view-toggles" data-transcript-tutorial="view-toggle">
               <button
                 className={`tl-view-btn${view === "list" ? " active" : ""}`}
                 onClick={() => setView("list")}
+                title={t("transcript.tooltip.listView")}
               >
                 <List size={16} />
               </button>
               <button
                 className={`tl-view-btn${view === "grid" ? " active" : ""}`}
                 onClick={() => setView("grid")}
-                title="Grid">
+                title={t("transcript.tooltip.gridView")}
+              >
                 <LayoutGrid size={16} />
               </button>
             </div>
@@ -327,34 +371,39 @@ export default function TranscriptLibraryPage({
 
           {/* Table Header */}
           <div className="tl-table-header">
-            <div className="tl-th-name">SESSION NAME</div>
+            <div className="tl-th-name">{t("transcript.table.sessionName")}</div>
             <div className="tl-th-date" onClick={() => toggleSort("createdAt")}>
-              DATE <ChevronDown size={10} />
+              {t("transcript.table.date")} <ChevronDown size={10} />
             </div>
-            <div className="tl-th-duration">DURATION</div>
-            <div className="tl-th-scriptures">SCRIPTURES</div>
-            <div className="tl-th-language">LANGUAGE</div>
-            <div className="tl-th-actions">ACTIONS</div>
+            <div className="tl-th-duration">{t("transcript.table.duration")}</div>
+            <div className="tl-th-scriptures">{t("transcript.table.scriptures")}</div>
+            <div className="tl-th-language">{t("transcript.table.language")}</div>
+            <div className="tl-th-actions">{t("transcript.table.actions")}</div>
           </div>
 
           {/* Table Body */}
-          <div className="tl-table-body" data-tutorial="table">
+          <div className="tl-table-body" data-transcript-tutorial="table">
             {loading ? (
               <div className="tl-empty-state">
                 <Timer size={32} className="tl-empty-icon" />
-                <span>Loading transcripts…</span>
+                <span>{t("transcript.loading")}</span>
               </div>
             ) : paged.length === 0 ? (
               <div className="tl-empty-state">
                 <FileText size={32} className="tl-empty-icon" />
-                <span>{filters.search ? "No transcripts match your search." : "No transcripts yet. Start a new session to begin."}</span>
+                <span>{filters.search ? t("transcript.empty.noMatch") : t("transcript.empty.noTranscripts")}</span>
+                {!filters.search && (
+                  <button className="tl-btn tl-btn-primary tl-empty-action" onClick={handleNewSessionClick}>
+                    <Mic size={16} /> {t("transcript.newSession")}
+                  </button>
+                )}
               </div>
             ) : (
-              paged.map((t) => (
+              paged.map((tr) => (
                 <div
-                  key={t.id}
+                  key={tr.id}
                   className="tl-table-row"
-                  onClick={() => onOpenTranscript?.(t.id)}
+                  onClick={() => onOpenTranscript?.(tr.id)}
                 >
                   {/* Name */}
                   <div className="tl-cell-name">
@@ -362,32 +411,32 @@ export default function TranscriptLibraryPage({
                       <Mic size={16} />
                     </div>
                     <div className="tl-name-block">
-                      <div className="tl-name-text">{t.title}</div>
-                      <div className="tl-sub-text">{t.church || SOURCE_LABELS[t.sourceType] || t.sourceType}</div>
+                      <div className="tl-name-text">{tr.title}</div>
+                      <div className="tl-sub-text">{tr.church || sourceLabels[tr.sourceType] || tr.sourceType}</div>
                     </div>
                   </div>
 
                   {/* Date */}
                   <div className="tl-cell-date">
-                    <div>{new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
-                    <div className="tl-sub-text">{new Date(t.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>
+                    <div>{new Date(tr.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                    <div className="tl-sub-text">{new Date(tr.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>
                   </div>
 
                   {/* Duration */}
                   <div className="tl-cell-duration">
-                    {formatDuration(t.durationSeconds)}
+                    {formatDuration(tr.durationSeconds)}
                   </div>
 
                   {/* Scriptures */}
                   <div className="tl-cell-scriptures">
-                    <div className="tl-matches-count">{t.scriptures.length}</div>
-                    <div className="tl-matches-label">matches</div>
+                    <div className="tl-matches-count">{tr.scriptures.length}</div>
+                    <div className="tl-matches-label">{t("transcript.matches")}</div>
                   </div>
 
                   {/* Language */}
                   <div className="tl-cell-language">
                     <div className="tl-dot" />
-                    {t.language || "English"}
+                    {tr.language || t("transcript.defaultLanguage")}
                   </div>
 
                   {/* Actions */}
@@ -395,33 +444,33 @@ export default function TranscriptLibraryPage({
 
                     <button
                       className="tl-action-icon"
-                      title="Download"
-                      data-tutorial="download"
-                      onClick={(e) => handleDownload(e, t)}
-                      style={{ color: doneId === t.id ? "var(--success)" : undefined }}
-                      disabled={downloadingId !== null || doneId === t.id}
+                      title={t("transcript.tooltip.download")}
+                      data-transcript-tutorial="download"
+                      onClick={(e) => handleDownload(e, tr)}
+                      style={{ color: doneId === tr.id ? "var(--success)" : undefined }}
+                      disabled={downloadingId !== null || doneId === tr.id}
                     >
-                      {downloadingId === t.id ? (
+                      {downloadingId === tr.id ? (
                         <div className="tl-spinner" />
-                      ) : doneId === t.id ? (
+                      ) : doneId === tr.id ? (
                         <CheckCircle2 size={16} />
                       ) : (
                         <Download size={16} />
                       )}
                     </button>
 
-                    <div className="tl-menu-wrapper" data-tutorial="more-actions">
+                    <div className="tl-menu-wrapper" data-transcript-tutorial="more-actions">
                       <button
                         className="tl-action-icon"
-                        title="More"
-                        onClick={() => setMenuOpenId(menuOpenId === t.id ? null : t.id)}
+                        title={t("transcript.tooltip.moreActions")}
+                        onClick={() => setMenuOpenId(menuOpenId === tr.id ? null : tr.id)}
                       >
                         <MoreVertical size={16} />
                       </button>
-                      {menuOpenId === t.id && (
+                      {menuOpenId === tr.id && (
                         <div className="tl-dropdown">
-                          <button className="tl-dropdown-item" onClick={(e) => handleDelete(e, t.id)} title="Delete">
-                            <Trash2 size={14} /> Delete
+                          <button className="tl-dropdown-item" onClick={(e) => handleDelete(e, tr.id)} title={t("transcript.tooltip.delete")}>
+                            <Trash2 size={14} /> {t("transcript.delete")}
                           </button>
                         </div>
                       )}
@@ -436,14 +485,19 @@ export default function TranscriptLibraryPage({
           {filtered.length > 0 && (
             <div className="tl-table-footer">
               <div className="tl-pagination-info">
-                SHOWING {Math.min((page - 1) * perPage + 1, filtered.length)} TO {Math.min(page * perPage, filtered.length)} OF {filtered.length}
+                {t("transcript.pagination.showing", {
+                  from: Math.min((page - 1) * perPage + 1, filtered.length),
+                  to: Math.min(page * perPage, filtered.length),
+                  total: filtered.length,
+                })}
               </div>
               <div className="tl-pagination-controls">
                 <button
                   className="tl-page-btn"
                   disabled={page <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  title="Expand">
+                  title={t("transcript.tooltip.prevPage")}
+                >
                   <ChevronDown size={16} style={{ transform: "rotate(90deg)" }} />
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
@@ -459,7 +513,8 @@ export default function TranscriptLibraryPage({
                   className="tl-page-btn"
                   disabled={page >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  title="Expand">
+                  title={t("transcript.tooltip.nextPage")}
+                >
                   <ChevronDown size={16} style={{ transform: "rotate(-90deg)" }} />
                 </button>
               </div>
@@ -475,12 +530,17 @@ export default function TranscriptLibraryPage({
               <Wand2 size={22} />
             </div>
             <div>
-              <h3 className="tl-promo-title">Start a new transcription session</h3>
-              <p className="tl-promo-desc">Record a new sermon or talk and let AI detect Bible references in real time.</p>
+              <h3 className="tl-promo-title">{t("transcript.promo.title")}</h3>
+              <p className="tl-promo-desc">{t("transcript.promo.desc")}</p>
             </div>
           </div>
-          <button className="tl-btn tl-btn-primary" onClick={onNewSession} title="Microphone">
-            <Mic size={16} /> New Session
+          <button
+            className={`tl-btn tl-btn-primary${!canStartSession ? " tl-btn--locked" : ""}`}
+            onClick={handleNewSessionClick}
+            title={canStartSession ? t("transcript.tooltip.newSession") : t("transcript.tooltip.upgradeRequired")}
+          >
+            {!canStartSession && <Lock size={14} />}
+            <Mic size={16} /> {t("transcript.newSession")}
           </button>
         </div>
 
@@ -488,13 +548,37 @@ export default function TranscriptLibraryPage({
         {deletingId && (
           <div className="tl-confirm-overlay" onClick={cancelDelete}>
             <div className="tl-confirm-dialog" onClick={(e) => e.stopPropagation()}>
-              <div className="tl-confirm-title">Delete transcript?</div>
+              <div className="tl-confirm-title">{t("transcript.deleteConfirm.title")}</div>
               <div className="tl-confirm-message">
-                This will permanently remove the transcript and cannot be undone.
+                {t("transcript.deleteConfirm.message")}
               </div>
               <div className="tl-confirm-actions">
-                <button className="tl-btn-cancel" onClick={cancelDelete} title="Cancel">Cancel</button>
-                <button className="tl-btn-danger" onClick={confirmDelete} title="Delete">Delete</button>
+                <button className="tl-btn-cancel" onClick={cancelDelete} title={t("transcript.tooltip.cancelDelete")}>{t("common.cancel")}</button>
+                <button className="tl-btn-danger" onClick={confirmDelete} title={t("transcript.tooltip.confirmDelete")}>{t("transcript.delete")}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Upgrade Overlay ── */}
+        {showUpgradeOverlay && (
+          <div className="tl-confirm-overlay" onClick={() => setShowUpgradeOverlay(false)}>
+            <div className="tl-confirm-dialog" onClick={(e) => e.stopPropagation()}>
+              <Lock size={32} style={{ color: "var(--primary)", marginBottom: 12 }} />
+              <div className="tl-confirm-title">{t("transcript.upgrade.title")}</div>
+              <div className="tl-confirm-message">
+                {t("transcript.upgrade.message")}
+                {requiredPlan && (
+                  <> {t("transcript.upgrade.requiredPlan", { plan: requiredPlan.charAt(0).toUpperCase() + requiredPlan.slice(1) })}</>
+                )}
+              </div>
+              <div className="tl-confirm-actions">
+                <button className="tl-btn-cancel" onClick={() => setShowUpgradeOverlay(false)} title={t("transcript.tooltip.close")}>
+                  {t("common.cancel")}
+                </button>
+                <a href="/subscription/plans" className="tl-btn tl-btn-primary" title={t("transcript.tooltip.managePlan")}>
+                  {t("transcript.upgrade.managePlan")}
+                </a>
               </div>
             </div>
           </div>
@@ -508,7 +592,7 @@ export default function TranscriptLibraryPage({
         onClose={() => setTourActive(false)}
         onFinish={() => { markTutorialCompleted(); setTourActive(false); }}
         hasTranscripts={transcripts.length > 0}
-        onStartRecording={onNewSession}
+        onStartRecording={handleNewSessionClick}
       />
     </div>
   );

@@ -108,9 +108,9 @@ describe("getUserPlan", () => {
   });
 
   it("returns user.plan when no cache is active", () => {
-    const user = makeUser({ plan: "starter" });
+    const user = makeUser({ plan: "basic" });
     vi.mocked(getCachedPlan).mockReturnValue("free");
-    expect(getUserPlan(user)).toBe("starter");
+    expect(getUserPlan(user)).toBe("basic");
   });
 
   it("returns cached plan when offline window is valid", () => {
@@ -121,23 +121,10 @@ describe("getUserPlan", () => {
   });
 
   it("falls back to user.plan when offline window expired", () => {
-    const user = makeUser({ plan: "starter" });
+    const user = makeUser({ plan: "basic" });
     vi.mocked(getCachedPlan).mockReturnValue("growth");
     vi.mocked(isOfflineValid).mockReturnValue(false);
-    expect(getUserPlan(user)).toBe("starter");
-  });
-
-  it("returns 'pro' when pro key is unlocked (bypasses everything)", () => {
-    vi.mocked(isProUnlocked).mockReturnValue(true);
-    const user = makeUser({ plan: "free" });
-    expect(getUserPlan(user)).toBe("pro");
-  });
-
-  it("returns 'pro' even when cached plan is free", () => {
-    vi.mocked(isProUnlocked).mockReturnValue(true);
-    vi.mocked(getCachedPlan).mockReturnValue("free");
-    const user = makeUser({ plan: "free" });
-    expect(getUserPlan(user)).toBe("pro");
+    expect(getUserPlan(user)).toBe("basic");
   });
 
   it("returns cached plan over user.plan when cache is valid", () => {
@@ -195,18 +182,9 @@ describe("getEffectivePlan", () => {
   });
 
   it("returns user.plan when no trial exists", () => {
-    expect(getEffectivePlan(makeUser({ plan: "starter" }))).toBe("starter");
+    expect(getEffectivePlan(makeUser({ plan: "basic" }))).toBe("basic");
     expect(getEffectivePlan(makeUser({ plan: "growth" }))).toBe("growth");
     expect(getEffectivePlan(makeUser({ plan: "pro" }))).toBe("pro");
-  });
-
-  it("returns 'pro' when pro key is unlocked (ignores trial and plan)", () => {
-    vi.mocked(isProUnlocked).mockReturnValue(true);
-    const user = makeUser({
-      plan: "free",
-      trial: { active: true, endsAt: futureDate(5) },
-    });
-    expect(getEffectivePlan(user)).toBe("pro");
   });
 
   it("returns 'growth' for growth subscriber", () => {
@@ -255,11 +233,6 @@ describe("isInTrial", () => {
   it("returns false when trial.endsAt is in the past", () => {
     expect(isInTrial(makeUser({ trial: { active: true, endsAt: pastDate(1) } }))).toBe(false);
   });
-
-  it("returns false when pro key is unlocked", () => {
-    vi.mocked(isProUnlocked).mockReturnValue(true);
-    expect(isInTrial(makeUser({ trial: { active: true, endsAt: futureDate(3) } }))).toBe(false);
-  });
 });
 
 describe("isTrialExpired", () => {
@@ -277,11 +250,6 @@ describe("isTrialExpired", () => {
 
   it("returns false when trial.endsAt is in the future", () => {
     expect(isTrialExpired(makeUser({ trial: { endsAt: futureDate(1) } }))).toBe(false);
-  });
-
-  it("returns false when pro key is unlocked", () => {
-    vi.mocked(isProUnlocked).mockReturnValue(true);
-    expect(isTrialExpired(makeUser({ trial: { endsAt: pastDate(1) } }))).toBe(false);
   });
 });
 
@@ -315,11 +283,6 @@ describe("getTrialDaysRemaining", () => {
     expect(days).toBeGreaterThanOrEqual(2);
     expect(days).toBeLessThanOrEqual(4);
   });
-
-  it("returns 0 when pro key is unlocked", () => {
-    vi.mocked(isProUnlocked).mockReturnValue(true);
-    expect(getTrialDaysRemaining(makeUser({ trial: { active: true, endsAt: futureDate(5) } }))).toBe(0);
-  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -327,25 +290,26 @@ describe("getTrialDaysRemaining", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("Feature gates — all plans", () => {
-  const ALL_PLANS: PlanTier[] = ["free", "trial", "basic", "starter", "growth", "pro"];
+  const ALL_PLANS: PlanTier[] = ["free", "trial", "basic", "growth", "pro", "ambassador"];
 
   // Feature → expected results per plan
+  // Trial users behave like Pro (getEffectivePlan returns "pro" during trial).
   const FEATURE_MATRIX: Record<string, Record<PlanTier, boolean>> = {
-    translation: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
-    massImport: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
-    multiview: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
-    easyWorshipImport: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
-    proPresenterImport: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
-    tickers: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
-    speechToScripture: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
-    sermonExport: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
-    aiFeatures: { free: false, trial: true, basic: false, starter: true, growth: true, pro: true },
-    cloudFeatures: { free: false, trial: true, basic: false, starter: false, growth: true, pro: true },
-    advancedAnalytics: { free: false, trial: true, basic: false, starter: false, growth: true, pro: true },
-    customReports: { free: false, trial: true, basic: false, starter: false, growth: true, pro: true },
-    unlimitedDevices: { free: false, trial: true, basic: false, starter: false, growth: true, pro: true },
-    unlimitedMultiview: { free: false, trial: true, basic: false, starter: false, growth: true, pro: true },
-    mobileControl: { free: false, trial: true, basic: false, starter: false, growth: false, pro: true },
+    translation: { free: false, trial: true, basic: true, growth: true, pro: true, ambassador: true },
+    massImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    multiview: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    easyWorshipImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    proPresenterImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    tickers: { free: false, trial: true, basic: true, growth: true, pro: true, ambassador: true },
+    speechToScripture: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    sermonExport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    aiFeatures: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    cloudSync: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    advancedAnalytics: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    customReports: { free: false, trial: true, basic: false, growth: false, pro: true, ambassador: true },
+    unlimitedDevices: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    unlimitedMultiview: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    mobileControl: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
   };
 
   const FEATURE_FN_MAP: Record<string, (user: AuthUser | null) => boolean> = {
@@ -358,7 +322,7 @@ describe("Feature gates — all plans", () => {
     speechToScripture: canUseSpeechToScripture,
     sermonExport: canUseSermonExport,
     aiFeatures: canUseAI,
-    cloudFeatures: canUseCloudFeatures,
+    cloudSync: canUseCloudFeatures,
     advancedAnalytics: canUseAdvancedAnalytics,
     customReports: canUseCustomReports,
     unlimitedDevices: canUseUnlimitedDevices,
@@ -400,10 +364,10 @@ describe("getPlanLimits", () => {
     it("has correct resource limits", () => {
       const l = getPlanLimits("free");
       expect(l.songs).toBe(3);
-      expect(l.images).toBe(2);
-      expect(l.videos).toBe(1);
+      expect(l.images).toBe(3);
+      expect(l.videos).toBe(3);
       expect(l.bibleVersions).toBe(3);
-      expect(l.themes).toBe(1);
+      expect(l.themes).toBe(2);
       expect(l.lowerThirdThemes).toBe(1);
       expect(l.devices).toBe(1);
       expect(l.credits).toBe(20);
@@ -421,7 +385,7 @@ describe("getPlanLimits", () => {
       expect(l.speechToScripture).toBe(false);
       expect(l.sermonExport).toBe(false);
       expect(l.aiFeatures).toBe(false);
-      expect(l.cloudFeatures).toBe(false);
+      expect(l.cloudSync).toBe(false);
       expect(l.advancedAnalytics).toBe(false);
       expect(l.customReports).toBe(false);
       expect(l.unlimitedDevices).toBe(false);
@@ -432,59 +396,30 @@ describe("getPlanLimits", () => {
   describe("basic", () => {
     it("has correct resource limits", () => {
       const l = getPlanLimits("basic");
-      expect(l.songs).toBe(30);
-      expect(l.images).toBe(20);
-      expect(l.videos).toBe(10);
-      expect(l.bibleVersions).toBe(20);
-      expect(l.themes).toBe(3);
-      expect(l.lowerThirdThemes).toBe(1);
-      expect(l.devices).toBe(2);
-      expect(l.credits).toBe(50);
-    });
-
-    it("has all features disabled", () => {
-      const l = getPlanLimits("basic");
-      expect(l.translation).toBe(false);
-      expect(l.massImport).toBe(false);
-      expect(l.multiview).toBe(false);
-      expect(l.cloudFeatures).toBe(false);
-      expect(l.mobileControl).toBe(false);
-    });
-  });
-
-  describe("starter", () => {
-    it("has unlimited songs/images/videos/bibleVersions", () => {
-      const l = getPlanLimits("starter");
-      expect(l.songs).toBe(Infinity);
-      expect(l.images).toBe(Infinity);
-      expect(l.videos).toBe(Infinity);
-      expect(l.bibleVersions).toBe(Infinity);
-    });
-
-    it("has correct finite limits", () => {
-      const l = getPlanLimits("starter");
-      expect(l.themes).toBe(10);
-      expect(l.lowerThirdThemes).toBe(10);
+      expect(l.songs).toBe(70);
+      expect(l.images).toBe(70);
+      expect(l.videos).toBe(70);
+      expect(l.bibleVersions).toBe(10);
       expect(l.devices).toBe(5);
-      expect(l.credits).toBe(500);
+      expect(l.credits).toBe(250);
     });
 
-    it("has starter-level features enabled", () => {
-      const l = getPlanLimits("starter");
-      expect(l.easyWorshipImport).toBe(true);
-      expect(l.proPresenterImport).toBe(true);
-      expect(l.massImport).toBe(true);
+    it("has mid-tier features enabled", () => {
+      const l = getPlanLimits("basic");
+      expect(l.easyWorshipImport).toBe(false);
+      expect(l.proPresenterImport).toBe(false);
+      expect(l.massImport).toBe(false);
       expect(l.translation).toBe(true);
-      expect(l.multiview).toBe(true);
+      expect(l.multiview).toBe(false);
       expect(l.tickers).toBe(true);
-      expect(l.speechToScripture).toBe(true);
-      expect(l.sermonExport).toBe(true);
-      expect(l.aiFeatures).toBe(true);
+      expect(l.speechToScripture).toBe(false);
+      expect(l.sermonExport).toBe(false);
+      expect(l.aiFeatures).toBe(false);
     });
 
     it("has growth/pro features disabled", () => {
-      const l = getPlanLimits("starter");
-      expect(l.cloudFeatures).toBe(false);
+      const l = getPlanLimits("basic");
+      expect(l.cloudSync).toBe(false);
       expect(l.advancedAnalytics).toBe(false);
       expect(l.customReports).toBe(false);
       expect(l.unlimitedDevices).toBe(false);
@@ -505,8 +440,8 @@ describe("getPlanLimits", () => {
       expect(l.devices).toBe(Infinity);
     });
 
-    it("has 2000 credits", () => {
-      expect(getPlanLimits("growth").credits).toBe(2000);
+    it("has 500 credits", () => {
+      expect(getPlanLimits("growth").credits).toBe(500);
     });
 
     it("has all growth-level features enabled", () => {
@@ -520,15 +455,15 @@ describe("getPlanLimits", () => {
       expect(l.speechToScripture).toBe(true);
       expect(l.sermonExport).toBe(true);
       expect(l.aiFeatures).toBe(true);
-      expect(l.cloudFeatures).toBe(true);
+      expect(l.cloudSync).toBe(true);
       expect(l.advancedAnalytics).toBe(true);
-      expect(l.customReports).toBe(true);
+      expect(l.customReports).toBe(false);
       expect(l.unlimitedDevices).toBe(true);
       expect(l.unlimitedMultiview).toBe(true);
     });
 
-    it("has mobileControl disabled (pro-only)", () => {
-      expect(getPlanLimits("growth").mobileControl).toBe(false);
+    it("has mobileControl enabled", () => {
+      expect(getPlanLimits("growth").mobileControl).toBe(true);
     });
   });
 
@@ -550,7 +485,7 @@ describe("getPlanLimits", () => {
       expect(l.translation).toBe(true);
       expect(l.massImport).toBe(true);
       expect(l.multiview).toBe(true);
-      expect(l.cloudFeatures).toBe(true);
+      expect(l.cloudSync).toBe(true);
       expect(l.advancedAnalytics).toBe(true);
       expect(l.customReports).toBe(true);
       expect(l.unlimitedDevices).toBe(true);
@@ -569,16 +504,12 @@ describe("Credit allocation", () => {
     expect(getPlanLimits("free").credits).toBe(20);
   });
 
-  it("basic plan has 50 credits", () => {
-    expect(getPlanLimits("basic").credits).toBe(50);
+  it("basic plan has 250 credits", () => {
+    expect(getPlanLimits("basic").credits).toBe(250);
   });
 
-  it("starter plan has 500 credits", () => {
-    expect(getPlanLimits("starter").credits).toBe(500);
-  });
-
-  it("growth plan has 2000 credits", () => {
-    expect(getPlanLimits("growth").credits).toBe(2000);
+  it("growth plan has 500 credits", () => {
+    expect(getPlanLimits("growth").credits).toBe(500);
   });
 
   it("pro plan has unlimited credits", () => {
@@ -588,13 +519,11 @@ describe("Credit allocation", () => {
   it("credits are strictly increasing across tiers", () => {
     const free = getPlanLimits("free").credits;
     const basic = getPlanLimits("basic").credits;
-    const starter = getPlanLimits("starter").credits;
     const growth = getPlanLimits("growth").credits;
     const pro = getPlanLimits("pro").credits;
 
     expect(free).toBeLessThan(basic);
-    expect(basic).toBeLessThan(starter);
-    expect(starter).toBeLessThan(growth);
+    expect(basic).toBeLessThan(growth);
     expect(growth).toBeLessThan(pro);
   });
 });
@@ -605,13 +534,13 @@ describe("Credit allocation", () => {
 
 describe("getDowngradeWarnings", () => {
   it("returns no warnings when within limits", () => {
-    const user = makeUser({ plan: "starter" });
+    const user = makeUser({ plan: "basic" });
     const warnings = getDowngradeWarnings(user, { devices: 3 });
     expect(warnings).toHaveLength(0);
   });
 
-  it("returns warning when devices exceed starter limit (5)", () => {
-    const user = makeUser({ plan: "starter" });
+  it("returns warning when devices exceed basic limit (5)", () => {
+    const user = makeUser({ plan: "basic" });
     const warnings = getDowngradeWarnings(user, { devices: 7 });
     expect(warnings).toHaveLength(1);
     expect(warnings[0].feature).toBe("devices");
@@ -631,7 +560,7 @@ describe("getDowngradeWarnings", () => {
   });
 
   it("returns no warnings when usage is exactly at limit", () => {
-    const user = makeUser({ plan: "starter" });
+    const user = makeUser({ plan: "basic" });
     const warnings = getDowngradeWarnings(user, { devices: 5 });
     expect(warnings).toHaveLength(0);
   });
@@ -643,12 +572,12 @@ describe("getDowngradeWarnings", () => {
     expect(warnings[0].requiredPlan).toBe("growth");
   });
 
-  it("returns warning when downgrading from growth to starter with excess devices", () => {
-    // User was on growth, had 10 devices, downgraded to starter
-    const user = makeUser({ plan: "starter" });
+  it("returns warning when downgrading from growth to basic with excess devices", () => {
+    // User was on growth, had 10 devices, downgraded to basic
+    const user = makeUser({ plan: "basic" });
     const warnings = getDowngradeWarnings(user, { devices: 10 });
     expect(warnings).toHaveLength(1);
-    expect(warnings[0].message).toContain("Device limit exceeded");
+    expect(warnings[0].message).toContain("Devices limit exceeded");
     expect(warnings[0].message).toContain("Upgrade to Growth");
   });
 });
@@ -666,21 +595,13 @@ describe("canAddDevice", () => {
     expect(canAddDevice(makeUser({ plan: "free" }), 1)).toBe(false);
   });
 
-  it("basic: allows up to 1 device", () => {
+  it("basic: allows up to 4 devices", () => {
     expect(canAddDevice(makeUser({ plan: "basic" }), 0)).toBe(true);
-    expect(canAddDevice(makeUser({ plan: "basic" }), 1)).toBe(true);
+    expect(canAddDevice(makeUser({ plan: "basic" }), 4)).toBe(true);
   });
 
-  it("basic: blocks at 2 devices", () => {
-    expect(canAddDevice(makeUser({ plan: "basic" }), 2)).toBe(false);
-  });
-
-  it("starter: allows up to 4 devices", () => {
-    expect(canAddDevice(makeUser({ plan: "starter" }), 4)).toBe(true);
-  });
-
-  it("starter: blocks at 5 devices", () => {
-    expect(canAddDevice(makeUser({ plan: "starter" }), 5)).toBe(false);
+  it("basic: blocks at 5 devices", () => {
+    expect(canAddDevice(makeUser({ plan: "basic" }), 5)).toBe(false);
   });
 
   it("growth: allows unlimited devices", () => {
@@ -706,16 +627,12 @@ describe("getRemainingDeviceSlots", () => {
     expect(getRemainingDeviceSlots(makeUser({ plan: "free" }), 2)).toBe(0);
   });
 
-  it("basic: 2 slots when 0 used", () => {
-    expect(getRemainingDeviceSlots(makeUser({ plan: "basic" }), 0)).toBe(2);
+  it("basic: 5 slots when 0 used", () => {
+    expect(getRemainingDeviceSlots(makeUser({ plan: "basic" }), 0)).toBe(5);
   });
 
-  it("starter: 5 slots when 0 used", () => {
-    expect(getRemainingDeviceSlots(makeUser({ plan: "starter" }), 0)).toBe(5);
-  });
-
-  it("starter: 2 slots when 3 used", () => {
-    expect(getRemainingDeviceSlots(makeUser({ plan: "starter" }), 3)).toBe(2);
+  it("basic: 2 slots when 3 used", () => {
+    expect(getRemainingDeviceSlots(makeUser({ plan: "basic" }), 3)).toBe(2);
   });
 
   it("growth: Infinity for unlimited", () => {
@@ -732,39 +649,38 @@ describe("getRemainingDeviceSlots", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("getRestrictionInfo", () => {
-  it("free user sees translation as locked requiring starter", () => {
+  it("free user sees translation as locked requiring basic", () => {
     const info = getRestrictionInfo(makeUser({ plan: "free" }), "translation");
     expect(info.locked).toBe(true);
-    expect(info.requiredPlan).toBe("starter");
+    expect(info.requiredPlan).toBe("basic");
     expect(info.feature).toBe("Translation");
   });
 
-  it("starter user sees translation as unlocked", () => {
-    const info = getRestrictionInfo(makeUser({ plan: "starter" }), "translation");
+  it("basic user sees translation as unlocked", () => {
+    const info = getRestrictionInfo(makeUser({ plan: "basic" }), "translation");
     expect(info.locked).toBe(false);
   });
 
-  it("free user sees cloudFeatures as locked requiring growth", () => {
-    const info = getRestrictionInfo(makeUser({ plan: "free" }), "cloudFeatures");
+  it("free user sees cloudSync as locked requiring growth", () => {
+    const info = getRestrictionInfo(makeUser({ plan: "free" }), "cloudSync");
     expect(info.locked).toBe(true);
     expect(info.requiredPlan).toBe("growth");
   });
 
-  it("starter user sees cloudFeatures as locked requiring growth", () => {
-    const info = getRestrictionInfo(makeUser({ plan: "starter" }), "cloudFeatures");
+  it("basic user sees cloudSync as locked requiring growth", () => {
+    const info = getRestrictionInfo(makeUser({ plan: "basic" }), "cloudSync");
     expect(info.locked).toBe(true);
     expect(info.requiredPlan).toBe("growth");
   });
 
-  it("growth user sees cloudFeatures as unlocked", () => {
-    const info = getRestrictionInfo(makeUser({ plan: "growth" }), "cloudFeatures");
+  it("growth user sees cloudSync as unlocked", () => {
+    const info = getRestrictionInfo(makeUser({ plan: "growth" }), "cloudSync");
     expect(info.locked).toBe(false);
   });
 
-  it("growth user sees mobileControl as locked requiring pro", () => {
+  it("growth user sees mobileControl as unlocked", () => {
     const info = getRestrictionInfo(makeUser({ plan: "growth" }), "mobileControl");
-    expect(info.locked).toBe(true);
-    expect(info.requiredPlan).toBe("pro");
+    expect(info.locked).toBe(false);
   });
 
   it("pro user sees mobileControl as unlocked", () => {
@@ -772,10 +688,10 @@ describe("getRestrictionInfo", () => {
     expect(info.locked).toBe(false);
   });
 
-  it("free user sees songs as locked (resource limit)", () => {
+  it("free user sees songs as limited (resource limit, but not locked)", () => {
     const info = getRestrictionInfo(makeUser({ plan: "free" }), "songs");
-    expect(info.locked).toBe(true);
-    expect(info.requiredPlan).toBe("basic");
+    expect(info.locked).toBe(false);
+    expect(info.requiredPlan).toBe("free");
   });
 });
 
@@ -788,7 +704,7 @@ describe("getUserPlanLimits", () => {
     expect(getUserPlanLimits(null).songs).toBe(3);
   });
 
-  it("returns starter limits during trial", () => {
+  it("returns pro limits during trial", () => {
     const user = makeUser({
       plan: "free",
       trial: { active: true, endsAt: futureDate(5) },
@@ -799,15 +715,8 @@ describe("getUserPlanLimits", () => {
 
   it("returns growth limits for growth subscriber", () => {
     const user = makeUser({ plan: "growth" });
-    expect(getUserPlanLimits(user).cloudFeatures).toBe(true);
-    expect(getUserPlanLimits(user).credits).toBe(2000);
-  });
-
-  it("returns pro limits when pro key is unlocked", () => {
-    vi.mocked(isProUnlocked).mockReturnValue(true);
-    const user = makeUser({ plan: "free" });
-    expect(getUserPlanLimits(user).mobileControl).toBe(true);
-    expect(getUserPlanLimits(user).credits).toBe(Infinity);
+    expect(getUserPlanLimits(user).cloudSync).toBe(true);
+    expect(getUserPlanLimits(user).credits).toBe(500);
   });
 });
 
@@ -815,68 +724,69 @@ describe("getUserPlanLimits", () => {
 // 11. Subscription upgrade flow
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe("Subscription upgrade flow: Free → Starter", () => {
-  it("effective plan changes from free to starter", () => {
+describe("Subscription upgrade flow: Free → Basic", () => {
+  it("effective plan changes from free to basic", () => {
     const user = makeUser({ plan: "free" });
     expect(getEffectivePlan(user)).toBe("free");
 
     // Simulate upgrade — server would update user.plan
-    user.plan = "starter";
-    expect(getEffectivePlan(user)).toBe("starter");
+    user.plan = "basic";
+    expect(getEffectivePlan(user)).toBe("basic");
   });
 
-  it("credits increase from 20 to 500", () => {
+  it("credits increase from 20 to 250", () => {
     const freeLimits = getPlanLimits("free");
-    const starterLimits = getPlanLimits("starter");
+    const basicLimits = getPlanLimits("basic");
     expect(freeLimits.credits).toBe(20);
-    expect(starterLimits.credits).toBe(500);
+    expect(basicLimits.credits).toBe(250);
   });
 
   it("features unlock after upgrade", () => {
     const freeUser = makeUser({ plan: "free" });
-    const starterUser = makeUser({ plan: "starter" });
+    const basicUser = makeUser({ plan: "basic" });
 
     expect(canUseTranslation(freeUser)).toBe(false);
-    expect(canUseTranslation(starterUser)).toBe(true);
+    expect(canUseTranslation(basicUser)).toBe(true);
 
+    // massImport and multiview are NOT available on basic (require growth+)
     expect(canUseMassImport(freeUser)).toBe(false);
-    expect(canUseMassImport(starterUser)).toBe(true);
+    expect(canUseMassImport(basicUser)).toBe(false);
 
     expect(canUseMultiview(freeUser)).toBe(false);
-    expect(canUseMultiview(starterUser)).toBe(true);
+    expect(canUseMultiview(basicUser)).toBe(false);
   });
 
   it("device limit increases from 1 to 5", () => {
     expect(getPlanLimits("free").devices).toBe(1);
-    expect(getPlanLimits("starter").devices).toBe(5);
+    expect(getPlanLimits("basic").devices).toBe(5);
   });
 });
 
-describe("Subscription upgrade flow: Starter → Growth", () => {
-  it("effective plan changes from starter to growth", () => {
-    const user = makeUser({ plan: "starter" });
-    expect(getEffectivePlan(user)).toBe("starter");
+describe("Subscription upgrade flow: Basic → Growth", () => {
+  it("effective plan changes from basic to growth", () => {
+    const user = makeUser({ plan: "basic" });
+    expect(getEffectivePlan(user)).toBe("basic");
     user.plan = "growth";
     expect(getEffectivePlan(user)).toBe("growth");
   });
 
-  it("credits increase from 500 to 2000", () => {
-    expect(getPlanLimits("starter").credits).toBe(500);
-    expect(getPlanLimits("growth").credits).toBe(2000);
+  it("credits increase from 250 to 500", () => {
+    expect(getPlanLimits("basic").credits).toBe(250);
+    expect(getPlanLimits("growth").credits).toBe(500);
   });
 
   it("cloud features unlock", () => {
-    expect(canUseCloudFeatures(makeUser({ plan: "starter" }))).toBe(false);
+    expect(canUseCloudFeatures(makeUser({ plan: "basic" }))).toBe(false);
     expect(canUseCloudFeatures(makeUser({ plan: "growth" }))).toBe(true);
   });
 
   it("devices become unlimited", () => {
-    expect(getPlanLimits("starter").devices).toBe(5);
+    expect(getPlanLimits("basic").devices).toBe(5);
     expect(getPlanLimits("growth").devices).toBe(Infinity);
   });
 
   it("multiview becomes unlimited", () => {
-    expect(getPlanLimits("starter").unlimitedMultiview).toBe(false);
+    expect(getPlanLimits("basic").unlimitedMultiview).toBe(false);
     expect(getPlanLimits("growth").unlimitedMultiview).toBe(true);
   });
 });
@@ -889,41 +799,41 @@ describe("Subscription upgrade flow: Growth → Pro", () => {
   });
 
   it("credits become unlimited", () => {
-    expect(getPlanLimits("growth").credits).toBe(2000);
+    expect(getPlanLimits("growth").credits).toBe(500);
     expect(getPlanLimits("pro").credits).toBe(Infinity);
   });
 
-  it("mobile control unlocks", () => {
-    expect(canUseMobileControl(makeUser({ plan: "growth" }))).toBe(false);
+  it("mobile control already enabled on growth, remains on pro", () => {
+    expect(canUseMobileControl(makeUser({ plan: "growth" }))).toBe(true);
     expect(canUseMobileControl(makeUser({ plan: "pro" }))).toBe(true);
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 12. Subscription downgrade flow: Growth → Starter
+// 12. Subscription downgrade flow: Growth → Basic
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe("Subscription downgrade flow: Growth → Starter", () => {
-  it("effective plan changes from growth to starter", () => {
+describe("Subscription downgrade flow: Growth → Basic", () => {
+  it("effective plan changes from growth to basic", () => {
     const user = makeUser({ plan: "growth" });
     expect(getEffectivePlan(user)).toBe("growth");
-    user.plan = "starter";
-    expect(getEffectivePlan(user)).toBe("starter");
+    user.plan = "basic";
+    expect(getEffectivePlan(user)).toBe("basic");
   });
 
   it("cloud features become restricted", () => {
-    const user = makeUser({ plan: "starter" });
+    const user = makeUser({ plan: "basic" });
     expect(canUseCloudFeatures(user)).toBe(false);
   });
 
   it("analytics become restricted", () => {
-    const user = makeUser({ plan: "starter" });
+    const user = makeUser({ plan: "basic" });
     expect(canUseAdvancedAnalytics(user)).toBe(false);
     expect(canUseCustomReports(user)).toBe(false);
   });
 
   it("devices limited to 5 (downgrade protection triggers)", () => {
-    const user = makeUser({ plan: "starter" });
+    const user = makeUser({ plan: "basic" });
     const warnings = getDowngradeWarnings(user, { devices: 10 });
     expect(warnings.length).toBeGreaterThan(0);
     expect(warnings[0].feature).toBe("devices");
@@ -931,14 +841,14 @@ describe("Subscription downgrade flow: Growth → Starter", () => {
 
   it("data is NOT deleted on downgrade", () => {
     // Downgrade only changes the plan field — content stays
-    const user = makeUser({ plan: "starter" });
-    // The user object still has all fields — plan is just "starter"
-    expect(user.plan).toBe("starter");
+    const user = makeUser({ plan: "basic" });
+    // The user object still has all fields — plan is just "basic"
+    expect(user.plan).toBe("basic");
   });
 
-  it("unlimited multiview becomes limited (2 layouts)", () => {
+  it("unlimited multiview becomes limited", () => {
     expect(getPlanLimits("growth").unlimitedMultiview).toBe(true);
-    expect(getPlanLimits("starter").unlimitedMultiview).toBe(false);
+    expect(getPlanLimits("basic").unlimitedMultiview).toBe(false);
   });
 });
 
@@ -1011,46 +921,39 @@ describe("Billing cycle calculations", () => {
 
 describe("Desktop license cache", () => {
   it("returns user.plan when no cache exists", () => {
-    const user = makeUser({ plan: "starter" });
+    const user = makeUser({ plan: "basic" });
     vi.mocked(getCachedPlan).mockReturnValue("free");
     vi.mocked(isOfflineValid).mockReturnValue(false);
-    expect(getUserPlan(user)).toBe("starter");
+    expect(getUserPlan(user)).toBe("basic");
   });
 
   it("returns cached plan when cache is valid (simulates payment success)", () => {
     const user = makeUser({ plan: "free" });
-    vi.mocked(getCachedPlan).mockReturnValue("starter");
+    vi.mocked(getCachedPlan).mockReturnValue("basic");
     vi.mocked(isOfflineValid).mockReturnValue(true);
-    expect(getUserPlan(user)).toBe("starter");
+    expect(getUserPlan(user)).toBe("basic");
   });
 
   it("returns free when cache is expired (offline window passed)", () => {
-    const user = makeUser({ plan: "starter" });
-    vi.mocked(getCachedPlan).mockReturnValue("starter");
+    const user = makeUser({ plan: "basic" });
+    vi.mocked(getCachedPlan).mockReturnValue("basic");
     vi.mocked(isOfflineValid).mockReturnValue(false);
-    // Falls back to user.plan, which is "starter" in this case
+    // Falls back to user.plan, which is "basic" in this case
     // The cache expiry means we use user.plan, not cache
-    expect(getUserPlan(user)).toBe("starter");
+    expect(getUserPlan(user)).toBe("basic");
   });
 
-  it("pro key overrides cache and plan", () => {
-    vi.mocked(isProUnlocked).mockReturnValue(true);
-    vi.mocked(getCachedPlan).mockReturnValue("free");
-    const user = makeUser({ plan: "free" });
-    expect(getUserPlan(user)).toBe("pro");
-  });
-
-  it("payment success flow: free user becomes starter via cache", () => {
+  it("payment success flow: free user becomes basic via cache", () => {
     const user = makeUser({ plan: "free" });
 
     // Before payment
     expect(getEffectivePlan(user)).toBe("free");
 
     // After payment — cache gets updated
-    vi.mocked(getCachedPlan).mockReturnValue("starter");
+    vi.mocked(getCachedPlan).mockReturnValue("basic");
     vi.mocked(isOfflineValid).mockReturnValue(true);
 
-    expect(getEffectivePlan(user)).toBe("starter");
+    expect(getEffectivePlan(user)).toBe("basic");
     expect(canUseTranslation(user)).toBe(true);
   });
 });
@@ -1060,7 +963,7 @@ describe("Desktop license cache", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("Plan tier ordering invariant", () => {
-  const tiers: PlanTier[] = ["free", "basic", "starter", "growth", "pro"];
+  const tiers: PlanTier[] = ["free", "basic", "growth", "pro"];
 
   it("each higher tier has >= resources than the tier below", () => {
     for (let i = 1; i < tiers.length; i++) {
@@ -1083,7 +986,7 @@ describe("Plan tier ordering invariant", () => {
     const booleanFeatures = [
       "translation", "massImport", "multiview", "mobileControl",
       "tickers", "speechToScripture", "sermonExport", "aiFeatures",
-      "cloudFeatures", "advancedAnalytics", "customReports",
+      "cloudSync", "advancedAnalytics", "customReports",
       "unlimitedDevices", "unlimitedMultiview",
     ] as const;
 

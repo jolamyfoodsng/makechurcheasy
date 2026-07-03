@@ -22,17 +22,16 @@ const PRICING_URL =
 const PLAN_LABELS: Record<string, string> = {
   free: "Free",
   basic: "Basic",
-  starter: "Starter",
   growth: "Growth",
   pro: "Pro",
   trial: "Trial",
+  ambassador: "Ambassador",
 };
 
 /** Next plan tier above the given one. */
 const NEXT_PLAN: Record<string, string> = {
-  free: "starter",
-  basic: "starter",
-  starter: "growth",
+  free: "basic",
+  basic: "growth",
   growth: "pro",
 };
 

@@ -644,7 +644,7 @@ export function MVTemplatesDashboard() {
   const handleCreateLayout = async () => {
     if (!selectedTemplate) return;
 
-    // Enforce layout limit for non-unlimited plans (e.g. Starter = 2 layouts)
+    // Enforce layout limit for non-unlimited plans (e.g. Basic = 2 layouts)
     const user = getCurrentUser();
     const plan = getEffectivePlan(user);
     const { allowed: unlimitedMultiview } = checkEntitlementSync("multiview", plan);
@@ -733,7 +733,7 @@ export function MVTemplatesDashboard() {
                 className="tpldash-action-btn"
                 type="button"
                 onClick={() => setShowFilters((value) => !value)}
-               title="Filter">
+                title="Filter">
                 <Icon name="filter_list" size={20} />
                 <span>{showFilters ? "Hide Filter" : "Filter"}</span>
               </button>
@@ -782,7 +782,7 @@ export function MVTemplatesDashboard() {
                     type="button"
                     onClick={() => { void loadObsThemes(); }}
                     disabled={obsThemeBusy}
-                   title="Reload">
+                    title="Reload">
                     <Icon name="refresh" size={20} />
                     <span>Reload</span>
                   </button>
@@ -791,7 +791,7 @@ export function MVTemplatesDashboard() {
                     type="button"
                     onClick={() => { void handleCreateObsTheme(); }}
                     disabled={obsThemeBusy}
-                   title="Add">
+                    title="Add">
                     <Icon name="add" size={20} />
                     <span>New Theme</span>
                   </button>
@@ -937,7 +937,7 @@ export function MVTemplatesDashboard() {
                             type="button"
                             onClick={() => bgUploadRef.current?.click()}
                             disabled={obsThemeBusy}
-                           title="Upload">
+                            title="Upload">
                             <Icon name="upload" size={20} />
                             <span>Upload BG</span>
                           </button>
@@ -947,7 +947,7 @@ export function MVTemplatesDashboard() {
                             type="button"
                             onClick={() => updateObsThemeDraft({ backgroundImage: "" })}
                             disabled={!obsThemeDraft.backgroundImage || obsThemeBusy}
-                           title="Clear">
+                            title="Clear">
                             <Icon name="image_not_supported" size={20} />
                             <span>Clear BG</span>
                           </button>
@@ -959,7 +959,7 @@ export function MVTemplatesDashboard() {
                             type="button"
                             onClick={() => { void handleDeleteObsTheme(); }}
                             disabled={obsThemeBusy || selectedObsTheme?.source === "builtin"}
-                           title="Delete">
+                            title="Delete">
                             <Icon name="delete" size={20} />
                             <span>Delete</span>
                           </button>
@@ -969,7 +969,7 @@ export function MVTemplatesDashboard() {
                             type="button"
                             onClick={() => { void handleSaveObsTheme(); }}
                             disabled={obsThemeBusy}
-                           title="Save">
+                            title="Save">
                             <Icon name="save" size={20} />
                             <span>{selectedObsTheme?.source === "builtin" ? "Save as Custom" : "Save Theme"}</span>
                           </button>
@@ -1066,7 +1066,7 @@ export function MVTemplatesDashboard() {
                 type="button"
                 onClick={() => setToastMessage(null)}
                 aria-label="Dismiss notification"
-               title="Close">
+                title="Close">
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -1103,7 +1103,7 @@ export function MVTemplatesDashboard() {
                         role="switch"
                         aria-checked={isEnabled}
                         aria-label={`Toggle ${element.label}`}
-                       title="tpldash-switch-thumb">
+                        title="tpldash-switch-thumb">
                         <span className="tpldash-switch-thumb" />
                       </button>
                     </div>
@@ -1151,7 +1151,7 @@ export function MVTemplatesDashboard() {
                   role="switch"
                   aria-checked={settings.autoShowQr}
                   aria-label="Toggle Auto-show QR"
-                 title="tpldash-switch-thumb">
+                  title="tpldash-switch-thumb">
                   <span className="tpldash-switch-thumb" />
                 </button>
               </div>
@@ -1168,7 +1168,7 @@ export function MVTemplatesDashboard() {
                   role="switch"
                   aria-checked={settings.loopAnimation}
                   aria-label="Toggle Loop Animation"
-                 title="tpldash-switch-thumb">
+                  title="tpldash-switch-thumb">
                   <span className="tpldash-switch-thumb" />
                 </button>
               </div>
@@ -1264,14 +1264,14 @@ export function MVTemplatesDashboard() {
                     className={`tpldash-theme-mode-btn${activeTheme.backgroundMode === "solid" ? " is-active" : ""}`}
                     type="button"
                     onClick={() => updateActiveTheme({ backgroundMode: "solid" })}
-                   title="Solid">
+                    title="Solid">
                     Solid
                   </button>
                   <button
                     className={`tpldash-theme-mode-btn${activeTheme.backgroundMode === "gradient" ? " is-active" : ""}`}
                     type="button"
                     onClick={() => updateActiveTheme({ backgroundMode: "gradient" })}
-                   title="Gradient">
+                    title="Gradient">
                     Gradient
                   </button>
                 </div>
@@ -1353,7 +1353,7 @@ export function MVTemplatesDashboard() {
               type="button"
               onClick={handleSaveChanges}
               disabled={!selectedTemplate}
-             title="Save">
+              title="Save">
               Save Changes
             </button>
 
@@ -1362,7 +1362,7 @@ export function MVTemplatesDashboard() {
               type="button"
               onClick={handleCreateLayout}
               disabled={!selectedTemplate || creatingLayout}
-             title="Create">
+              title="Create">
               {creatingLayout ? "Creating..." : "Create Layout"}
             </button>
           </div>

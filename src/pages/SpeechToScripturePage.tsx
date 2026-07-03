@@ -43,16 +43,16 @@ import CreditsDisplay from "../components/CreditsDisplay";
 import { useAuth } from "../contexts/AuthContext";
 import { track } from "../services/analytics";
 import { getDeviceId, getDeviceSecret } from "../services/authService";
-import { calculateTranscriptionCredits, deductCreditsWithSync } from "../services/credits";
-import { checkEntitlement } from "../services/entitlementClient";
+import { calculateTranscriptionCredits, deductCreditsWithSync, getCreditsBalance, onCreditChange, syncCreditsWithBackend } from "../services/credits";
+import { checkEntitlement, checkEntitlementSync } from "../services/entitlementClient";
 import { getEffectivePlan } from "../services/licenseService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { loadData } from "../services/store";
 import { trackVoiceSessionCompleted, trackVoiceSessionStarted } from "../services/tracking";
-import type { VoiceBibleCandidate } from "../services/voiceBibleTypes";
-import { MATCH_SOURCE_LABEL } from "../services/voiceBibleTypes";
+import type { VoiceBibleCandidate, DetectionSpeed } from "../services/voiceBibleTypes";
+import { DETECTION_SPEED_CONFIG, MATCH_SOURCE_LABEL } from "../services/voiceBibleTypes";
 import { isWhisperReady, loadWhisperModel } from "../services/whisperService";
 import { createTranscript, saveTranscript } from "../transcripts/transcriptService";
 
@@ -130,6 +130,33 @@ export default function SpeechToScripturePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Upfront plan gate — block immediately if plan doesn't include Verse AI ──
+  useEffect(() => {
+    const result = checkEntitlementSync("speechToScripture", effectivePlan);
+    if (!result.allowed) {
+      setAccessDenied({
+        reason: "feature_not_available",
+        requiredPlan: result.requiredPlan,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectivePlan]);
+
+  // ── Track credit balance for Start button gating ──
+  const [creditBalance, setCreditBalance] = useState(() => getCreditsBalance());
+  const isPro = effectivePlan === "pro";
+
+  useEffect(() => {
+    if (isPro) return;
+    void syncCreditsWithBackend().then((bal) => {
+      if (bal >= 0) setCreditBalance(bal);
+    });
+    const unsub = onCreditChange((bal) => setCreditBalance(bal));
+    return unsub;
+  }, [isPro]);
+
+  const hasCredits = isPro || creditBalance > 0;
 
   // ── LM state ──
   const [snapshot, setSnapshot] = useState<LmDockSnapshot>(lmDockService.getSnapshot());
@@ -345,6 +372,10 @@ export default function SpeechToScripturePage() {
             console.warn("[Credits] Transcription credit deduction error:", err);
             setSaveToast("Credit sync failed — check connection");
             setTimeout(() => setSaveToast(null), 4000);
+          } finally {
+            // Backend deduction is done — clear the pending session offset so
+            // the display reflects the real balance from here on.
+            setPendingSessionCredits(0);
           }
         })();
       }).catch(() => {
@@ -467,16 +498,23 @@ export default function SpeechToScripturePage() {
   const [elapsed, setElapsed] = useState(0);
   const elapsedRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // After listening stops, hold the session credit count until the backend
+  // deduction is confirmed, preventing the display from jumping back.
+  const [pendingSessionCredits, setPendingSessionCredits] = useState(0);
 
   useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
 
   useEffect(() => {
     if (isListening) {
+      setPendingSessionCredits(0);
       setElapsed(0);
       timerRef.current = setInterval(() => setElapsed((t) => t + 1), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
+      // Capture the credit count at the moment listening stopped so the
+      // display stays consistent until the backend deduction is confirmed.
+      setPendingSessionCredits(Math.max(1, Math.ceil(elapsedRef.current / 60)));
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -521,12 +559,45 @@ export default function SpeechToScripturePage() {
 
   // ── Transcript search ──
   const [transcriptSearch, setTranscriptSearch] = useState("");
+  const [transcriptCollapsed, setTranscriptCollapsed] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   const [whisperStatus, setWhisperStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [assemblyAIError, setAssemblyAIError] = useState(false);
   const [wasListening, setWasListening] = useState(false);
   const [connectionLostBanner, setConnectionLostBanner] = useState(false);
+
+  // ── Detection Speed ──
+  const [detectionSpeed, setDetectionSpeedState] = useState<DetectionSpeed>("balanced");
+
+  // Load detection speed from settings on mount
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { getVoiceBibleSettings } = await import("../services/voiceBibleSettings");
+        const settings = await getVoiceBibleSettings();
+        setDetectionSpeedState(settings.detectionSpeed);
+        lmDockService.setDetectionSpeed(settings.detectionSpeed);
+      } catch {
+        // Use default "balanced"
+      }
+    })();
+  }, []);
+
+  const handleDetectionSpeedChange = useCallback((speed: DetectionSpeed) => {
+    setDetectionSpeedState(speed);
+    lmDockService.setDetectionSpeed(speed);
+    // Persist to settings
+    void (async () => {
+      try {
+        const { getVoiceBibleSettings, saveVoiceBibleSettings } = await import("../services/voiceBibleSettings");
+        const current = await getVoiceBibleSettings();
+        await saveVoiceBibleSettings({ ...current, detectionSpeed: speed });
+      } catch {
+        // Best effort — don't block UI
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (isListening) {
@@ -728,11 +799,11 @@ export default function SpeechToScripturePage() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
           </div>
           <div>
-            <div className="sts3-header-title">Live Transcription &amp; Scripture Detection</div>
+            <div className="sts3-header-title">Verse AI</div>
             <div className="sts3-header-sub">Real-time speech to scripture detection</div>
           </div>
         </div>
-        <CreditsDisplay userId={user?.id} sessionCreditsUsed={isListening ? Math.ceil(elapsed / 60) : 0} />
+        <CreditsDisplay userId={user?.id} sessionCreditsUsed={isListening ? Math.ceil(elapsed / 60) : pendingSessionCredits} />
         <div className="sts3-header-right">
           <button
             className="production-btn production-btn--ghost"
@@ -753,14 +824,16 @@ export default function SpeechToScripturePage() {
             <button
               className={`sts3-btn ${isListening ? "sts3-btn--red" : ""}`}
               onClick={isListening ? handleStop : handleStart}
-              disabled={isConnecting || checkingAccess}
-              title="Start">
+              disabled={isConnecting || checkingAccess || (!isListening && !hasCredits)}
+              title={!isListening && !hasCredits ? "No credits remaining" : "Start"}>
               {isListening ? (
                 <><StopCircle size={16} /> Stop Listening</>
               ) : checkingAccess ? (
                 <><span className="sts3-spinner" /> Checking access…</>
               ) : isConnecting ? (
                 <><span className="sts3-spinner" /> Connecting…</>
+              ) : !hasCredits ? (
+                <><Lock size={16} /> No Credits</>
               ) : (
                 <><Mic size={16} /> Start Listening</>
               )}
@@ -909,6 +982,30 @@ export default function SpeechToScripturePage() {
               </div>
             </div>
 
+            {/* Detection Speed Toggle */}
+            <div className="sts3-detection-speed">
+              <div className="sts3-detection-speed-label">Detection Speed</div>
+              <div className="sts3-detection-speed-options">
+                {(["fast", "balanced", "accurate"] as DetectionSpeed[]).map((speed) => {
+                  const config = DETECTION_SPEED_CONFIG[speed];
+                  return (
+                    <button
+                      key={speed}
+                      className={`sts3-detection-speed-btn ${detectionSpeed === speed ? "sts3-detection-speed-btn--active" : ""}`}
+                      onClick={() => handleDetectionSpeedChange(speed)}
+                      title={config.description}
+                    >
+                      <span className="sts3-detection-speed-icon">{config.icon}</span>
+                      <span className="sts3-detection-speed-name">{speed.charAt(0).toUpperCase() + speed.slice(1)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="sts3-detection-speed-hint">
+                {DETECTION_SPEED_CONFIG[detectionSpeed].description}
+              </div>
+            </div>
+
             {/* Search */}
             <div className="sts3-search-box">
               {/* <Search size={14} className="sts3-search-icon" /> */}
@@ -926,7 +1023,15 @@ export default function SpeechToScripturePage() {
               LIVE TRANSCRIPT
             </div>
 
-            <div className="sts3-transcript-list" ref={transcriptRef} data-stt-tutorial="transcript">
+            <div
+              className={`sts3-transcript-toggle${transcriptCollapsed ? " sts3-transcript-toggle--collapsed" : ""}`}
+              onClick={() => setTranscriptCollapsed((c) => !c)}
+            >
+              <span>Live Transcript</span>
+              <ChevronDown size={14} />
+            </div>
+
+            <div className={`sts3-transcript-list${transcriptCollapsed ? " sts3-transcript-collapsed" : ""}`} ref={transcriptRef} data-stt-tutorial="transcript">
               {/* Empty state */}
               {filteredEntries.length === 0 && !isListening && (
                 <div className="sts3-transcript-empty">
@@ -1112,6 +1217,28 @@ export default function SpeechToScripturePage() {
         </div>
       )}
 
+      {/* ── Search Telemetry (dev mode only) ── */}
+      {isListening && import.meta.env.DEV && snapshot.telemetry && snapshot.telemetry.searchCount > 0 && (
+        <div className="sts3-telemetry">
+          <div className="sts3-telemetry-row">
+            <span className="sts3-telemetry-label">Searches:</span>
+            <span className="sts3-telemetry-value">{snapshot.telemetry.searchCount}</span>
+          </div>
+          <div className="sts3-telemetry-row">
+            <span className="sts3-telemetry-label">Search→Results:</span>
+            <span className="sts3-telemetry-value">{snapshot.telemetry.searchToResultsMs}ms</span>
+          </div>
+          <div className="sts3-telemetry-row">
+            <span className="sts3-telemetry-label">Avg Latency:</span>
+            <span className="sts3-telemetry-value">{snapshot.telemetry.avgLatencyMs}ms</span>
+          </div>
+          <div className="sts3-telemetry-row">
+            <span className="sts3-telemetry-label">Mode:</span>
+            <span className="sts3-telemetry-value">{DETECTION_SPEED_CONFIG[detectionSpeed].icon} {detectionSpeed}</span>
+          </div>
+        </div>
+      )}
+
       {/* ── Toasts ── */}
       {pushSuccess && (
         <div className="sts3-toast sts3-toast--success">
@@ -1244,11 +1371,11 @@ export default function SpeechToScripturePage() {
                 <CreditCard size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
                 <h2 className="sts3-lock-title">Subscription Required</h2>
                 <p className="sts3-lock-desc">
-                  Your subscription is no longer active. Renew your subscription to use Speech to Scripture.
+                  Your subscription is no longer active. Renew your subscription to use Verse AI.
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
-                  onClick={() => setAccessDenied(null)}
+                  onClick={() => navigate("/pricing")}
                   title="Manage Subscription">
                   Manage Subscription
                 </button>
@@ -1259,11 +1386,11 @@ export default function SpeechToScripturePage() {
                 <Zap size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
                 <h2 className="sts3-lock-title">Free Trial Ended</h2>
                 <p className="sts3-lock-desc">
-                  Your trial has expired. Subscribe to continue using Speech to Scripture.
+                  Your trial has expired. Subscribe to continue using Verse AI.
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
-                  onClick={() => setAccessDenied(null)}
+                  onClick={() => navigate("/pricing")}
                   title="Choose a Plan">
                   Choose a Plan
                 </button>
@@ -1307,27 +1434,39 @@ export default function SpeechToScripturePage() {
                 <Zap size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
                 <h2 className="sts3-lock-title">Insufficient Credits</h2>
                 <p className="sts3-lock-desc">
-                  You do not have enough credits to start a transcription session. Purchase more credits to continue.
+                  You do not have enough credits to use Verse AI. Purchase more credits or upgrade your plan to continue.
                 </p>
-                <button
-                  className="sts3-btn sts3-btn--primary"
-                  onClick={() => setAccessDenied(null)}
-                  title="Buy Credits">
-                  Buy Credits
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    className="sts3-btn sts3-btn--primary"
+                    onClick={() => navigate("/pricing")}
+                    title="Upgrade Plan">
+                    Upgrade Plan
+                  </button>
+                  <button
+                    className="sts3-btn sts3-btn--ghost"
+                    onClick={() => setAccessDenied(null)}
+                    title="Dismiss">
+                    Dismiss
+                  </button>
+                </div>
               </>
             )}
             {accessDenied.reason === "feature_not_available" && (
               <>
-                <AlertTriangle size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">Feature Not Available</h2>
+                <Lock size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Verse AI Not Available</h2>
                 <p className="sts3-lock-desc">
-                  Speech to Scripture is not available on your current plan.
-                  {accessDenied.requiredPlan && ` Upgrade to ${accessDenied.requiredPlan} or higher to use this feature.`}
+                  Verse AI is not included in your current plan.
+                  {accessDenied.requiredPlan && (
+                    <>
+                      {" "}Upgrade to <strong>{accessDenied.requiredPlan.charAt(0).toUpperCase() + accessDenied.requiredPlan.slice(1)}</strong> or higher to unlock Verse AI.
+                    </>
+                  )}
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
-                  onClick={() => setAccessDenied(null)}
+                  onClick={() => navigate("/pricing")}
                   title="View Plans">
                   View Plans
                 </button>

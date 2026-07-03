@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import type { DockStagedItem, DockEvent } from "../dockTypes";
 import { dockObsClient, type DockLTThemeRef } from "../dockObsClient";
 import DockLTThemePicker from "../components/DockLTThemePicker";
@@ -20,6 +21,7 @@ interface Props {
 let nextEventId = 1;
 
 export default function DockEventTab({ staged, onStage }: Props) {
+  const { t } = useTranslation();
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [events, setEvents] = useState<DockEvent[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -116,14 +118,14 @@ export default function DockEventTab({ staged, onStage }: Props) {
   return (
     <>
       {/* Event list */}
-      <div className="dock-section-label">Events</div>
+      <div className="dock-section-label">{t("event.title")}</div>
 
       {events.length === 0 && (
         <div className="dock-empty" style={{ padding: 16 }}>
           <Icon name="event" size={20} />
-          <div className="dock-empty__title">No Events</div>
+          <div className="dock-empty__title">{t("event.noEvents")}</div>
           <div className="dock-empty__text">
-            Add an event below to display on screen.
+            {t("event.addDescription")}
           </div>
         </div>
       )}
@@ -149,7 +151,7 @@ export default function DockEventTab({ staged, onStage }: Props) {
                 e.stopPropagation();
                 handleRemove(ev.id);
               }}
-              title="Remove"
+              title={t("event.remove")}
             >
               <Icon name="close" size={14} />
             </button>
@@ -164,10 +166,10 @@ export default function DockEventTab({ staged, onStage }: Props) {
 
       {/* Quick-add form */}
       <div className="dock-spacer" />
-      <div className="dock-section-label">Add Event</div>
+      <div className="dock-section-label">{t("event.addEvent")}</div>
       <input
         className="dock-input"
-        placeholder="Event Name"
+        placeholder={t("event.eventName")}
         value={newName}
         onChange={(e) => setNewName(e.target.value)}
         style={{ marginBottom: 6 }}
@@ -175,14 +177,14 @@ export default function DockEventTab({ staged, onStage }: Props) {
       <div className="dock-row" style={{ gap: 6, marginBottom: 6 }}>
         <input
           className="dock-input"
-          placeholder="Date"
+          placeholder={t("event.date")}
           value={newDate}
           onChange={(e) => setNewDate(e.target.value)}
           style={{ flex: 1 }}
         />
         <input
           className="dock-input"
-          placeholder="Location"
+          placeholder={t("event.location")}
           value={newLocation}
           onChange={(e) => setNewLocation(e.target.value)}
           style={{ flex: 1 }}
@@ -190,7 +192,7 @@ export default function DockEventTab({ staged, onStage }: Props) {
       </div>
       <input
         className="dock-input"
-        placeholder="Description (optional)"
+        placeholder={t("event.descriptionOptional")}
         value={newDescription}
         onChange={(e) => setNewDescription(e.target.value)}
         style={{ marginBottom: 8 }}
@@ -200,16 +202,16 @@ export default function DockEventTab({ staged, onStage }: Props) {
         onClick={handleAdd}
         disabled={!newName.trim()}
         style={{ width: "100%" }}
-       title="Add">
+        title={t("common.add")}>
         <Icon name="add" size={20} />
-        Add Event
+        {t("event.addEvent")}
       </button>
 
       {/* Theme picker */}
       <DockLTThemePicker
         selectedThemeId={selectedTheme?.id ?? null}
         onSelect={handleSelectTheme}
-        label="Event Theme"
+        label={t("event.theme")}
         tags={["event", "announcement", "highlight", "reminder", "date", "celebration"]}
       />
 
@@ -221,7 +223,7 @@ export default function DockEventTab({ staged, onStage }: Props) {
             <div className="dock-preview__header">
               <span className="dock-preview__badge">
                 <Icon name="fiber_manual_record" size={10} />
-                Staged
+                {t("common.staged")}
               </span>
             </div>
             <div className="dock-preview__ref">{staged.label}</div>

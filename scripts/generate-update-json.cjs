@@ -62,6 +62,7 @@ function downloadUrl(filename) {
 // Maps filename patterns to Tauri updater platform keys.
 
 const PLATFORMS = [
+  // ── Auto-updater (Tauri) ──
   {
     key: "windows-x86_64-nsis",
     match: (f) => f.endsWith("-setup.exe") && !f.endsWith(".sig"),
@@ -78,19 +79,25 @@ const PLATFORMS = [
     sig: (f) => f + ".sig",
   },
   {
-    key: "darwin-aarch64",
-    match: (f) => f.includes("aarch64") && f.endsWith(".dmg") && !f.endsWith(".sig"),
-    sig: (f) => f + ".sig",
-  },
-  {
     key: "darwin-x86_64",
     match: (f) => f.includes("x64") && f.endsWith(".app.tar.gz") && !f.endsWith(".sig"),
     sig: (f) => f + ".sig",
   },
+  // ── Dashboard downloads ──
   {
-    key: "darwin-x86_64",
+    key: "darwin-aarch64-dmg",
+    match: (f) => f.includes("aarch64") && f.endsWith(".dmg") && !f.endsWith(".sig"),
+    sig: (f) => f + ".sig",
+  },
+  {
+    key: "darwin-x86_64-dmg",
     match: (f) => f.includes("x64") && f.endsWith(".dmg") && !f.endsWith(".sig"),
     sig: (f) => f + ".sig",
+  },
+  {
+    key: "windows-x86_64-exe",
+    match: (f) => f.endsWith("-setup.exe") && !f.endsWith(".sig"),
+    sig: (f) => f.replace(/-setup\.exe$/, "-setup.exe.sig"),
   },
 ];
 

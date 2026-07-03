@@ -130,7 +130,7 @@ export default function MobileCompanionModal({ onClose }: MobileCompanionModalPr
             </div>
             <h2 className="mc-modal-title">{t("dock.mobileCompanion.mobileCompanion")}</h2>
           </div>
-          <button className="mc-modal-close" onClick={onClose} aria-label={t("dock.mobileCompanion.close")} title="Close">
+          <button className="mc-modal-close" onClick={onClose} aria-label={t("dock.mobileCompanion.close")} title={t("common.close")}>
             <X size={16} />
           </button>
         </header>
@@ -145,7 +145,7 @@ export default function MobileCompanionModal({ onClose }: MobileCompanionModalPr
           ) : error ? (
             <div className="mc-error">
               <p>{error}</p>
-              <button className="mc-btn-secondary" onClick={fetchPairingInfo} title="Retry pairing">
+              <button className="mc-btn-secondary" onClick={fetchPairingInfo} title={t("dock.mobileCompanion.retry")}>
                 {t("dock.mobileCompanion.retry")}
               </button>
             </div>
@@ -166,27 +166,27 @@ export default function MobileCompanionModal({ onClose }: MobileCompanionModalPr
               {/* Connection Details */}
               <div className="mc-details">
                 <div className="mc-detail-row">
-                  <span className="mc-detail-label">Server</span>
+                  <span className="mc-detail-label">{t("dock.mobileCompanion.server")}</span>
                   <span className="mc-detail-value mc-mono">{wsUrl}</span>
                 </div>
                 <div className="mc-detail-row">
-                  <span className="mc-detail-label">Token</span>
+                  <span className="mc-detail-label">{t("dock.mobileCompanion.token")}</span>
                   <span className="mc-detail-value mc-mono">{pairing.pairingToken}</span>
                 </div>
               </div>
 
               {/* Status */}
               <div className="mc-status-section">
-                <h3 className="mc-status-heading">Connection Status</h3>
+                <h3 className="mc-status-heading">{t("dock.mobileCompanion.connectionStatus")}</h3>
                 {status ? (
                   <div className="mc-status-grid">
                     <div className="mc-status-item">
                       {status.obsConnected ? <Wifi size={14} className="mc-green" /> : <WifiOff size={14} className="mc-red" />}
-                      <span>OBS {status.obsConnected ? "Connected" : "Disconnected"}</span>
+                      <span>OBS {status.obsConnected ? t("dock.mobileCompanion.obsConnected") : t("dock.mobileCompanion.obsDisconnected")}</span>
                     </div>
                     <div className="mc-status-item">
                       <span className="mc-dot" />
-                      <span>Server {status.running ? "Running" : "Stopped"}</span>
+                      <span>Server {status.running ? t("dock.mobileCompanion.serverRunning") : t("dock.mobileCompanion.serverStopped")}</span>
                     </div>
                     {status.currentSong && (
                       <div className="mc-status-item">
@@ -202,18 +202,18 @@ export default function MobileCompanionModal({ onClose }: MobileCompanionModalPr
                     )}
                   </div>
                 ) : (
-                  <p className="mc-muted">Checking status…</p>
+                  <p className="mc-muted">{t("dock.mobileCompanion.checkingStatus")}</p>
                 )}
               </div>
 
               {/* Instructions */}
               <div className="mc-instructions">
-                <h3 className="mc-instructions-title">How to pair</h3>
+                <h3 className="mc-instructions-title">{t("dock.mobileCompanion.howToPair")}</h3>
                 <ol>
-                  <li>Install the MakeChurchEasy mobile app</li>
-                  <li>Open the app and tap <strong>Scan QR Code</strong></li>
-                  <li>Point your camera at the QR code above</li>
-                  <li>Done — your phone is now connected</li>
+                  <li>{t("dock.mobileCompanion.step1")}</li>
+                  <li>{t("dock.mobileCompanion.step2")}</li>
+                  <li>{t("dock.mobileCompanion.step3")}</li>
+                  <li>{t("dock.mobileCompanion.step4")}</li>
                 </ol>
               </div>
             </>

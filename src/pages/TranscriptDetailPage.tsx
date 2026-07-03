@@ -26,9 +26,11 @@ import {
   Timer,
   X,
   Zap,
-  AlertTriangle
+  AlertTriangle,
+  AlertCircle
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import TranscriptDetailTutorial, {
   isDetailTutorialCompleted,
@@ -40,7 +42,7 @@ import languageData from '../../full_langugae_list.json';
 import { checkPremiumAccess, getPremiumAccessDeniedMessage } from '../services/premiumActionGuard';
 import { useLicenseGuardState } from '../services/licenseGuard';
 import { useAuth } from '../contexts/AuthContext';
-import { calculateTranslationCredits, countWords, deductCreditsWithSync, fetchCreditsFromBackend, isProUnlocked } from '../services/credits';
+import { calculateTranslationCredits, countWords, fetchCreditsFromBackend, isProUnlocked, reserveTranslationCredits, commitTranslationCredits, refundTranslationCredits } from '../services/credits';
 import { trackTranscriptExported } from '../services/tracking';
 import { translateTranscript } from '../services/translationService';
 import { addTranslationToTranscript, loadTranscripts, saveTranscript } from '../transcripts/transcriptService';
@@ -141,8 +143,30 @@ function formatDurationLabel(sec: number): string {
 
 /* ── Export Helpers ── */
 
-function sanitizeFilename(title: string): string {
-  return title.replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'Transcript';
+function sanitizeFilename(name: string): string {
+  return name
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+}
+
+function buildFilename(transcript: Transcript, type: 'Transcript' | 'Summary' = 'Transcript'): string {
+  const date = new Date(transcript.createdAt).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  });
+  const duration = formatDurationLabel(transcript.durationSeconds).replace(/\s+/g, '');
+
+  const title = transcript.title?.trim();
+  const church = transcript.church?.trim();
+
+  if (title) {
+    return sanitizeFilename(`${title} - ${date} - ${type}`);
+  }
+  if (church) {
+    return sanitizeFilename(`${church} - ${date} - ${type}`);
+  }
+  return sanitizeFilename(`${type} - ${date} - ${duration}`);
 }
 
 async function saveViaTauriDialog(defaultName: string, bytes: Uint8Array, filterName: string, extensions: string[]): Promise<boolean> {
@@ -429,6 +453,7 @@ interface TranslationModalProps {
   onClose: () => void;
   onStart: (language: string) => void;
   onBeforeStart?: () => Promise<boolean>;
+  onNavigateToSettings?: () => void;
   savedTranslations: { language: string; createdAt: string }[];
   transcriptTitle: string;
   transcriptText: string;
@@ -439,7 +464,7 @@ const languageLookup = new Map(
   (languageData as { code: string; name: string }[]).map(l => [l.code, l.name]),
 );
 
-function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, savedTranslations, transcriptTitle, transcriptText, userId }: TranslationModalProps) {
+function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onNavigateToSettings, savedTranslations, transcriptTitle, transcriptText, userId }: TranslationModalProps) {
   const [targetLanguage, setTargetLanguage] = useState('yo');
   const [transOption, setTransOption] = useState<'full' | 'detected'>('full');
   const [estimatedCredits, setEstimatedCredits] = useState(0);
@@ -590,10 +615,7 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, savedTransl
             <button
               className="btn btn-outline btn-block"
               style={{ marginTop: 8 }}
-              onClick={() => {
-                // Placeholder for future payment integration
-                alert('Credit purchase coming soon!');
-              }}
+              onClick={() => onNavigateToSettings?.()}
               title="Activate">
               <Zap size={16} /> Buy Credits
             </button>
@@ -633,9 +655,10 @@ interface TranslationViewProps {
   transcriptText: string;
   targetLanguage: string;
   onComplete: (translatedText: string) => void;
+  onError?: (error: string) => void;
 }
 
-function TranslationView({ onBack, lines, transcript, transcriptText, targetLanguage, onComplete }: TranslationViewProps) {
+function TranslationView({ onBack, lines, transcript, transcriptText, targetLanguage, onComplete, onError }: TranslationViewProps) {
   const [progress, setProgress] = useState(0);
   const [translatedText, setTranslatedText] = useState('');
   const [error, setError] = useState('');
@@ -671,8 +694,10 @@ function TranslationView({ onBack, lines, transcript, transcriptText, targetLang
         const msg = err instanceof Error ? err.message
           : typeof err === 'string' ? err
             : JSON.stringify(err);
-        setError(msg || 'Translation failed');
+        const errorMsg = msg || 'Translation failed';
+        setError(errorMsg);
         setProgress(0);
+        onError?.(errorMsg);
       }
     })();
 
@@ -693,12 +718,14 @@ function TranslationView({ onBack, lines, transcript, transcriptText, targetLang
       const msg = err instanceof Error ? err.message
         : typeof err === 'string' ? err
           : JSON.stringify(err);
-      setError(msg || 'Translation failed');
+      const errorMsg = msg || 'Translation failed';
+      setError(errorMsg);
       setProgress(0);
+      onError?.(errorMsg);
     } finally {
       setIsRetrying(false);
     }
-  }, [transcriptText, targetLanguage, onComplete]);
+  }, [transcriptText, targetLanguage, onComplete, onError]);
 
   const translatedLines = translatedText
     ? translatedText.split('\n').filter(l => l.trim()).map(l => {
@@ -958,6 +985,17 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   const [sidebarTab, setSidebarTab] = useState<'scriptures' | 'translations'>('scriptures');
   const [accessDeniedDialog, setAccessDeniedDialog] = useState<{ open: boolean; reason: string }>({ open: false, reason: '' });
   const isLicenseUnlocked = useLicenseGuardState();
+  const navigate = useNavigate();
+
+  // ── Translation monetization state ────────────────────────────────────
+  const [userPlan, setUserPlan] = useState<string>('free');
+  const [userCredits, setUserCredits] = useState<number>(0);
+  const [creditReservationId, setCreditReservationId] = useState<string | null>(null);
+  const [translationStatus, setTranslationStatus] = useState<'idle' | 'reserving' | 'translating' | 'committing' | 'success' | 'error'>('idle');
+  const [translationError, setTranslationError] = useState<string | null>(null);
+
+  // Derived plan flags
+  const canTranslate = ['basic', 'growth', 'pro'].includes(userPlan);
 
   // ── Tutorial state ────────────────────────────────────────────────────
   const [tourActive, setTourActive] = useState(false);
@@ -981,6 +1019,21 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
       })
       .catch(() => setLoading(false));
   }, [transcriptId]);
+
+  // ── Fetch plan & credits on mount ─────────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      const access = await checkPremiumAccess('translation');
+      if (access.allowed) {
+        setUserPlan(access.plan ?? 'free');
+        setUserCredits(access.credits ?? 0);
+      } else if (access.plan) {
+        // Blocked but we still got plan info
+        setUserPlan(access.plan);
+        setUserCredits(access.credits ?? 0);
+      }
+    })();
+  }, []);
 
   // ── Auto-start tutorial on first visit ────────────────────────────────
   useEffect(() => {
@@ -1015,7 +1068,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
     }
     setExporting(type);
     try {
-      const filename = sanitizeFilename(transcript.title);
+      const filename = buildFilename(transcript, 'Transcript');
       let bytes: Uint8Array;
       if (type === 'pdf') {
         bytes = await exportPDF(transcript, displayLines, detected);
@@ -1054,7 +1107,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         return { time: m?.[1] || '', text: m?.[2] || l };
       });
       const exportTranscript = { ...transcript, title: `${transcript.title} (${language})`, transcriptText: translatedText };
-      const filename = sanitizeFilename(exportTranscript.title);
+      const filename = buildFilename(exportTranscript, 'Transcript');
       let bytes: Uint8Array;
       if (type === 'pdf') {
         bytes = await exportPDF(exportTranscript, lines, []);
@@ -1149,24 +1202,40 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         transcript={transcript}
         transcriptText={transcript.transcriptText}
         targetLanguage={targetLanguage}
-        onComplete={(translatedText) => {
+        onComplete={async (translatedText) => {
           const updated = addTranslationToTranscript(transcript, targetLanguage, translatedText);
           setTranscript(updated);
           saveTranscript(updated).catch(() => { });
-          // Deduct translation credits (1 credit per 150 words) — synced to MongoDB
-          void (async () => {
-            try {
-              const creditsNeeded = await calculateTranslationCredits(countWords(transcript.transcriptText));
-              if (creditsNeeded > 0 && user?.id) {
-                const ok = await deductCreditsWithSync(user.id, creditsNeeded, "translation", `Translation to ${targetLanguage}: ${countWords(transcript.transcriptText)} words`);
-                if (!ok) {
-                  console.warn("[Credits] Translation completed but credit deduction failed — check backend");
-                }
-              }
-            } catch (err) {
-              console.warn("[Credits] Translation credit deduction error:", err);
+
+          // Commit reserved credits (or deduct directly if no reservation)
+          if (creditReservationId) {
+            setTranslationStatus('committing');
+            const committed = await commitTranslationCredits(creditReservationId);
+            setCreditReservationId(null);
+            if (committed) {
+              const newBal = await fetchCreditsFromBackend();
+              if (newBal >= 0) setUserCredits(newBal);
+              setTranslationStatus('success');
+            } else {
+              console.warn("[Credits] Translation completed but commit failed");
+              setTranslationStatus('success'); // translation succeeded, treat as success
             }
-          })();
+          } else {
+            // Pro user or zero-cost — no reservation to commit
+            setTranslationStatus('success');
+          }
+          setIsTranslating(false);
+        }}
+        onError={async (error) => {
+          // Refund reserved credits on failure
+          if (creditReservationId) {
+            const result = await refundTranslationCredits(creditReservationId);
+            setCreditReservationId(null);
+            if (result) setUserCredits(result.credits);
+          }
+          setTranslationStatus('error');
+          setTranslationError(error);
+          setIsTranslating(false);
         }}
       />
     );
@@ -1399,99 +1468,187 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
           {/* Translations Tab */}
           {sidebarTab === 'translations' && (
             <div className="sidebar-tab-content">
-              <div className="translation-cards">
-                {transcript.translations.map((t) => {
-                  const expState = translationExporting[t.id] || 'idle';
-                  const isExporting = expState !== 'idle' && !expState.startsWith('done');
-                  return (
-                    <div key={t.id} className="translation-card">
-                      <div className="translation-card-header">
-                        <div className="translation-lang">
-                          <Languages size={14} />
-                          <span>{t.language}</span>
-                        </div>
-                        <div className="translation-date">
-                          {new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </div>
-                      </div>
-                      <div className="translation-preview">
-                        {t.translatedText.substring(0, 150)}...
-                      </div>
-                      <div className="translation-actions">
-                        <button
-                          className="btn-icon-small"
-                          title="View translation"
-                        >
-                          <ArrowUpRight size={12} />
-                        </button>
-                        <button
-                          className="btn-icon-small"
-                          title="Copy translation"
-                          onClick={async () => {
-                            const access = await checkPremiumAccess('translationExport');
-                            if (!access.allowed) {
-                              setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
-                              return;
-                            }
-                            navigator.clipboard.writeText(t.translatedText);
-                          }}
-                        >
-                          <Copy size={12} />
-                        </button>
-                        <div className="translation-export-group">
-                          <button
-                            className={`btn-icon-small ${expState === 'done_pdf' ? 'export-success' : ''}`}
-                            title="Export as PDF"
-                            disabled={isExporting}
-                            onClick={() => doExportTranslation(t.id, t.translatedText, t.language, 'pdf')}
-                          >
-                            {isExporting && expState === 'pdf' ? (
-                              <div className="btn-spinner" />
-                            ) : expState === 'done_pdf' ? (
-                              <CheckCircle2 size={12} />
-                            ) : (
-                              <FileText size={12} />
-                            )}
-                          </button>
-                          <button
-                            className={`btn-icon-small ${expState === 'done_docx' ? 'export-success' : ''}`}
-                            title="Export as Word"
-                            disabled={isExporting}
-                            onClick={() => doExportTranslation(t.id, t.translatedText, t.language, 'docx')}
-                          >
-                            {isExporting && expState === 'docx' ? (
-                              <div className="btn-spinner" />
-                            ) : expState === 'done_docx' ? (
-                              <CheckCircle2 size={12} />
-                            ) : (
-                              <FileCode size={12} />
-                            )}
-                          </button>
-                        </div>
-                      </div>
+              {/* Plan gate: Free/Basic users see upgrade prompt */}
+              {!canTranslate && (
+                <div className="sidebar-upgrade-gate" style={{ textAlign: 'center', padding: '24px 16px' }}>
+                  <Languages size={32} style={{ opacity: 0.3, marginBottom: 12 }} />
+                  <p style={{ fontWeight: 600, marginBottom: 4 }}>Available on Growth Plan</p>
+                  <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 16 }}>
+                    Translate transcripts into multiple languages with a Growth plan or higher.
+                  </p>
+                  <button
+                    className="btn btn-primary btn-small"
+                    onClick={() => navigate('/settings')}
+                  >
+                    Upgrade Plan
+                  </button>
+                </div>
+              )}
+
+              {/* Growth+: translate controls + credit info */}
+              {canTranslate && (
+                <>
+                  {/* Critical credits banner */}
+                  {translationStatus === 'idle' && userCredits >= 0 && userCredits <= 5 && (
+                    <div className="credit-warning-banner" style={{
+                      padding: '10px 12px', marginBottom: 12, borderRadius: 8,
+                      background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)',
+                      display: 'flex', alignItems: 'center', gap: 8, fontSize: 13
+                    }}>
+                      <AlertCircle size={16} style={{ color: '#ef4444', flexShrink: 0 }} />
+                      <span style={{ flex: 1 }}>Low credits — <button
+                        style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}
+                        onClick={() => navigate('/settings')}
+                      >Buy Credits</button></span>
                     </div>
-                  );
-                })}
-                {transcript.translations.length === 0 && (
-                  <div className="sidebar-empty-state">
-                    <Languages size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
-                    <p>No translations yet.</p>
-                    <button
-                      className="btn btn-outline btn-small"
-                      onClick={async () => {
-                        const access = await checkPremiumAccess('translation');
-                        if (!access.allowed) {
-                          setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
-                          return;
-                        }
-                        setIsTranslateOpen(true);
-                      }}
-                      title="Add">
-                      <Languages size={14} /> Add Translation
-                    </button>
+                  )}
+
+                  {/* Translation status messages */}
+                  {translationStatus === 'success' && (
+                    <div className="translation-status-message" style={{
+                      padding: '10px 12px', marginBottom: 12, borderRadius: 8,
+                      background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.2)',
+                      fontSize: 13, color: '#22c55e'
+                    }}>
+                      <CheckCircle2 size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                      Translation complete. Credits used will be shown below.
+                    </div>
+                  )}
+                  {translationStatus === 'error' && (
+                    <div className="translation-status-message" style={{
+                      padding: '10px 12px', marginBottom: 12, borderRadius: 8,
+                      background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)',
+                      fontSize: 13
+                    }}>
+                      <AlertCircle size={14} style={{ color: '#ef4444', verticalAlign: 'middle', marginRight: 6 }} />
+                      <span style={{ color: '#ef4444' }}>{translationError || 'Translation failed.'} No credits were used.</span>
+                    </div>
+                  )}
+
+                  <div className="translation-cards">
+                    {transcript.translations.map((t) => {
+                      const expState = translationExporting[t.id] || 'idle';
+                      const isExporting = expState !== 'idle' && !expState.startsWith('done');
+                      return (
+                        <div key={t.id} className="translation-card">
+                          <div className="translation-card-header">
+                            <div className="translation-lang">
+                              <Languages size={14} />
+                              <span>{t.language}</span>
+                            </div>
+                            <div className="translation-date">
+                              {new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </div>
+                          </div>
+                          <div className="translation-preview">
+                            {t.translatedText.substring(0, 150)}...
+                          </div>
+                          <div className="translation-actions">
+                            <button
+                              className="btn-icon-small"
+                              title="View translation"
+                            >
+                              <ArrowUpRight size={12} />
+                            </button>
+                            <button
+                              className="btn-icon-small"
+                              title="Copy translation"
+                              onClick={async () => {
+                                const access = await checkPremiumAccess('translationExport');
+                                if (!access.allowed) {
+                                  setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
+                                  return;
+                                }
+                                navigator.clipboard.writeText(t.translatedText);
+                              }}
+                            >
+                              <Copy size={12} />
+                            </button>
+                            {canTranslate && (
+                              <div className="translation-export-group">
+                                <button
+                                  className={`btn-icon-small ${expState === 'done_pdf' ? 'export-success' : ''}`}
+                                  title="Export as PDF"
+                                  disabled={isExporting}
+                                  onClick={() => doExportTranslation(t.id, t.translatedText, t.language, 'pdf')}
+                                >
+                                  {isExporting && expState === 'pdf' ? (
+                                    <div className="btn-spinner" />
+                                  ) : expState === 'done_pdf' ? (
+                                    <CheckCircle2 size={12} />
+                                  ) : (
+                                    <FileText size={12} />
+                                  )}
+                                </button>
+                                <button
+                                  className={`btn-icon-small ${expState === 'done_docx' ? 'export-success' : ''}`}
+                                  title="Export as Word"
+                                  disabled={isExporting}
+                                  onClick={() => doExportTranslation(t.id, t.translatedText, t.language, 'docx')}
+                                >
+                                  {isExporting && expState === 'docx' ? (
+                                    <div className="btn-spinner" />
+                                  ) : expState === 'done_docx' ? (
+                                    <CheckCircle2 size={12} />
+                                  ) : (
+                                    <FileCode size={12} />
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
+
+                  {/* Translate button + credits info */}
+                  {translationStatus === 'idle' && (
+                    <div style={{ padding: '8px 0' }}>
+                      {userCredits >= 0 && userCredits <= 20 && userCredits > 5 && (
+                        <p style={{ fontSize: 12, color: '#f59e0b', marginBottom: 8 }}>
+                          <AlertCircle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                          Low credits ({userCredits} remaining)
+                        </p>
+                      )}
+                      <button
+                        className="btn btn-outline btn-small"
+                        onClick={async () => {
+                          setTranslationError(null);
+                          setIsTranslateOpen(true);
+                        }}
+                        disabled={userCredits === 0}
+                        title="Add Translation"
+                        style={userCredits === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                      >
+                        <Languages size={14} /> Add Translation
+                        {userCredits > 0 && <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>{userCredits} credits</span>}
+                      </button>
+                      {userCredits === 0 && (
+                        <p style={{ fontSize: 12, color: '#ef4444', marginTop: 8 }}>
+                          No credits remaining. <button
+                            style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}
+                            onClick={() => navigate('/settings')}
+                          >Buy Credits</button>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {(translationStatus === 'reserving' || translationStatus === 'committing') && (
+                    <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 13, opacity: 0.7 }}>
+                      <div className="btn-spinner" style={{ marginBottom: 8 }} />
+                      <p>{translationStatus === 'reserving' ? 'Reserving credits...' : 'Finalizing...'}</p>
+                    </div>
+                  )}
+
+                  {transcript.translations.length === 0 && translationStatus === 'idle' && (
+                    <div className="sidebar-empty-state">
+                      <Languages size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+                      <p>No translations yet.</p>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1505,18 +1662,37 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
           setTargetLanguage(language);
           setIsTranslateOpen(false);
           setIsTranslating(true);
+          setTranslationStatus('translating');
         }}
         onBeforeStart={async () => {
           const wordCount = countWords(transcript?.transcriptText ?? '');
-          const isPro = isProUnlocked();
-          const credits = isPro ? 0 : Math.ceil(wordCount / 150);
+          const credits = userPlan === 'pro' ? 0 : Math.ceil(wordCount / 150);
           const access = await checkPremiumAccess('translation', { requiredCredits: credits });
           if (!access.allowed) {
             setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
             return false;
           }
+
+          if (credits > 0) {
+            setTranslationStatus('reserving');
+            const reserved = await reserveTranslationCredits(
+              credits,
+              'translation',
+              `Translation reservation: ${wordCount} words`,
+              { transcriptId: transcript?.id, wordCount }
+            );
+            if (!reserved) {
+              setTranslationStatus('error');
+              setTranslationError('Failed to reserve credits. Please try again.');
+              return false;
+            }
+            setCreditReservationId(reserved.reservationId);
+            setUserCredits(reserved.credits);
+          }
+
           return true;
         }}
+        onNavigateToSettings={() => navigate('/settings')}
         savedTranslations={transcript?.translations ?? []}
         transcriptTitle={transcript?.title ?? ''}
         transcriptText={transcript?.transcriptText ?? ''}

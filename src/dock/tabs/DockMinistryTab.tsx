@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import type { DockStagedItem } from "../dockTypes";
@@ -128,6 +129,7 @@ function saveSettings(s: TickerSettings) {
 // ---------------------------------------------------------------------------
 
 export default function DockMinistryTab({ staged: _staged, onStage: _onStage, tickerOutputMode }: Props) {
+  const { t } = useTranslation();
   const [subTab, setSubTab] = useState<MinistrySubTab>("ticker");
   const [messages, setMessages] = useState<TickerMessage[]>(loadMessages);
   const [newText, setNewText] = useState("");
@@ -154,8 +156,6 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const [ltLive, setLtLive] = useState(false);
   // BibleTheme lower-third text input (used when a BibleTheme is selected)
   const [bibleLtText, setBibleLtText] = useState("");
-  // Track whether "MCE Ticker Scene" already exists in OBS
-  const [tickerSceneExists, setTickerSceneExists] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mountedRef = useRef(true);
@@ -173,19 +173,6 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     if (mountedRef.current) setObsConnected(dockObsClient.isConnected);
     return () => { mountedRef.current = false; unsub(); };
   }, []);
-
-  // Detect MCE Ticker Scene on OBS connect
-  useEffect(() => {
-    if (!obsConnected || tickerOutputMode !== "scene") return;
-    dockObsClient.call("GetSceneList")
-      .then((res) => {
-        const { scenes } = res as { scenes: Array<{ sceneName: string }> };
-        if (mountedRef.current) {
-          setTickerSceneExists(scenes.some((s) => s.sceneName === "MCE Ticker Scene"));
-        }
-      })
-      .catch(() => { });
-  }, [obsConnected, tickerOutputMode]);
 
   // Clear feedback after 3s
   useEffect(() => {
@@ -291,7 +278,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const handlePush = useCallback(async () => {
     if (!(await requireEntitlement("tickers", 0))) return;
     if (activeMessages.length === 0) {
-      setError("Add at least one active message");
+      setError(t("ministry.addAtLeastOne"));
       return;
     }
     setSending(true);
@@ -339,7 +326,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number }>;
         };
         if (programSceneName === tickerSceneName) {
-          setError("Cannot nest MCE Ticker Scene within itself. Switch to a different scene in OBS and try again, or delete the MCE Ticker Scene.");
+          setError(t("ministry.cannotNestTicker"));
           setSending(false);
           return;
         }
@@ -456,17 +443,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
 
       setRunning(true);
       setIsPaused(false);
-      setSuccess(tickerOutputMode === "scene" ? "Ticker live (scene mode) ✓" : "Ticker live ✓");
-      // Re-check for MCE Ticker Scene after successful push
-      if (tickerOutputMode === "scene") {
-        try {
-          const res = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
-          setTickerSceneExists(res.scenes.some((s) => s.sceneName === "MCE Ticker Scene"));
-        } catch { /* ignore */ }
-      }
+      setSuccess(tickerOutputMode === "scene" ? t("ministry.tickerLiveScene") : t("ministry.tickerLive"));
     } catch (err) {
       console.warn("[DockMinistry] Push failed:", err);
-      setError(err instanceof Error ? err.message : "Push failed");
+      setError(err instanceof Error ? err.message : t("ministry.pushFailed"));
     } finally {
       setSending(false);
     }
@@ -486,7 +466,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
         settings.speed,
         settings.position,
         settings.loop,
-        !isPaused, // toggle
+        !isPaused,
       );
       const video = await dockObsClient.call("GetVideoSettings") as { baseWidth: number; baseHeight: number };
       const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
@@ -495,9 +475,9 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
         inputSettings: { url: dataUrl, width: video.baseWidth, height: TICKER_HEIGHT },
       });
       setIsPaused((p) => !p);
-      setSuccess(isPaused ? "Resumed ✓" : "Paused ✓");
+      setSuccess(isPaused ? t("ministry.resumed") : t("ministry.paused"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Pause failed");
+      setError(err instanceof Error ? err.message : t("ministry.pauseFailed"));
     } finally {
       setSending(false);
     }
@@ -516,7 +496,6 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
         if (sceneExists) {
           await dockObsClient.call("RemoveScene", { sceneName: "MCE Ticker Scene" });
         }
-        setTickerSceneExists(false);
 
         // Restore original scene in preview
         let originalScene = "";
@@ -544,9 +523,9 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
 
       setRunning(false);
       setIsPaused(false);
-      setSuccess("Ticker cleared ✓");
+      setSuccess(t("ministry.tickerCleared"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Clear failed");
+      setError(err instanceof Error ? err.message : t("ministry.clearFailed"));
     } finally {
       setSending(false);
     }
@@ -558,9 +537,9 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       <div className="dock-mv-tab__header">
         <div className="dock-mv-tab__title-row">
           <Icon name="campaign" size={16} />
-          <span className="dock-mv-tab__title">Ministry</span>
+          <span className="dock-mv-tab__title">{t("ministry.title")}</span>
           {subTab === "ticker" && running && (
-            <span className="dock-mv-tab__count" style={{ background: "var(--dock-red)", color: "#fff" }}>LIVE</span>
+            <span className="dock-mv-tab__count" style={{ background: "var(--dock-red)", color: "#fff" }}>{t("ministry.live")}</span>
           )}
         </div>
       </div>
@@ -571,17 +550,17 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           type="button"
           className={`dock-ministry-tab${subTab === "ticker" ? " dock-ministry-tab--active" : ""}`}
           onClick={() => setSubTab("ticker")}
-         title="Ticker">
+          title={t("ministry.ticker")}>
           <Icon name="campaign" size={12} />
-          <span>Ticker</span>
+          <span>{t("ministry.ticker")}</span>
         </button>
         <button
           type="button"
           className={`dock-ministry-tab${subTab === "lower-thirds" ? " dock-ministry-tab--active" : ""}`}
           onClick={() => setSubTab("lower-thirds")}
-         title="Subtitles">
+          title={t("ministry.lowerThirds")}>
           <Icon name="subtitles" size={12} />
-          <span>Lower Thirds</span>
+          <span>{t("ministry.lowerThirds")}</span>
         </button>
       </div>
 
@@ -593,7 +572,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             <div className="dock-mv-tab__feedback dock-mv-tab__feedback--error">
               <Icon name="error" size={14} />
               <span>{error}</span>
-              <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setError(null)} title="Close">
+              <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setError(null)} title={t("common.close")}>
                 <Icon name="close" size={12} />
               </button>
             </div>
@@ -634,16 +613,16 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
 
             {/* Settings */}
             <div className="dock-mv-tab__section">
-              <div className="dock-mv-tab__section-label">Settings</div>
+              <div className="dock-mv-tab__section-label">{t("ministry.settings")}</div>
               <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "block", alignItems: "center", gap: 6 }}>
-                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>Heading</label>
+                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.heading")}</label>
                   <div>
                     <input
                       type="text"
                       value={settings.heading}
                       onChange={(e) => setSettings((s) => ({ ...s, heading: e.target.value.slice(0, 20) }))}
-                      placeholder="Type in the ticker header"
+                      placeholder={t("ministry.typeHeading")}
                       maxLength={20}
                       style={{
                         minHeight: '30px',
@@ -660,7 +639,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>Speed</label>
+                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.speed")}</label>
                   <input
                     type="range"
                     min={1}
@@ -672,33 +651,33 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 24, textAlign: "right" }}>{settings.speed}</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>Position</label>
+                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.position")}</label>
                   <div className="dock-console-segmented dock-console-segmented--compact">
                     <button
                       type="button"
                       className={`dock-console-segmented__item${settings.position === "top" ? " dock-console-segmented__item--active" : ""}`}
                       onClick={() => setSettings((s) => ({ ...s, position: "top" }))}
-                     title="Top">
-                      Top
+                      title={t("ministry.top")}>
+                      {t("ministry.top")}
                     </button>
                     <button
                       type="button"
                       className={`dock-console-segmented__item${settings.position === "bottom" ? " dock-console-segmented__item--active" : ""}`}
                       onClick={() => setSettings((s) => ({ ...s, position: "bottom" }))}
-                     title="Bottom">
-                      Bottom
+                      title={t("ministry.bottom")}>
+                      {t("ministry.bottom")}
                     </button>
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>Loop</label>
+                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.loop")}</label>
                   <button
                     type="button"
                     className={`dock-console-segmented__item${settings.loop ? " dock-console-segmented__item--active" : ""}`}
                     onClick={() => setSettings((s) => ({ ...s, loop: !s.loop }))}
                     style={{ fontSize: 10, padding: "2px 10px", borderRadius: 3, border: "1px solid var(--dock-border)", background: settings.loop ? "var(--dock-accent)" : "transparent", color: settings.loop ? "#fff" : "var(--dock-text-dim)", cursor: "pointer" }}
-                   title="Looping">
-                    {settings.loop ? "Looping" : "Once"}
+                    title={settings.loop ? t("ministry.looping") : t("ministry.once")}>
+                    {settings.loop ? t("ministry.looping") : t("ministry.once")}
                   </button>
                 </div>
               </div>
@@ -706,18 +685,20 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
 
             {/* Compose */}
             <div className="dock-mv-tab__section">
-              <div className="dock-mv-tab__section-label">Messages</div>
+              <div className="dock-mv-tab__section-label">{t("ministry.messages")}</div>
               <div style={{ padding: "4px 0" }}>
-                <div style={{ display: "flex", gap: 4 }}>
+                <div style={{ display: "block", gap: 4 }}>
                   <textarea
                     ref={textareaRef}
                     value={newText}
                     onChange={(e) => setNewText(e.target.value.slice(0, MAX_CHARS))}
                     onKeyDown={handleKeyDown}
-                    placeholder="Type a ticker message…"
+                    placeholder={t("ministry.typeMessage")}
                     rows={2}
                     style={{
                       flex: 1,
+                      width: "95%",
+                      minHeight: '50px',
                       background: "var(--dock-surface)",
                       border: "1px solid var(--dock-border)",
                       borderRadius: 3,
@@ -734,7 +715,8 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     onClick={handleAdd}
                     disabled={!newText.trim()}
                     style={{ alignSelf: "flex-end", height: 30 }}
-                   title="Add">
+                    title={t("common.add")}>
+                    Add Message
                     <Icon name="add" size={14} />
                   </button>
                 </div>
@@ -747,7 +729,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
               <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 200, overflowY: "auto" }}>
                 {messages.length === 0 && (
                   <div style={{ fontSize: 11, color: "var(--dock-text-dim)", padding: "8px 0", textAlign: "center" }}>
-                    No messages yet. Add one above.
+                    {t("ministry.noMessages")}
                   </div>
                 )}
                 {messages.map((msg) => (
@@ -766,7 +748,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     <button
                       type="button"
                       onClick={() => handleToggleMessage(msg.id)}
-                      title={msg.active ? "Deactivate" : "Activate"}
+                      title={msg.active ? t("ministry.deactivate") : t("ministry.activate")}
                       style={{
                         width: 14,
                         height: 14,
@@ -782,6 +764,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       }}
                     >
                       {msg.active && <Icon name="check" size={9} style={{ color: "#fff" }} />}
+
                     </button>
 
                     {editingId === msg.id ? (
@@ -807,7 +790,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       <span
                         style={{ flex: 1, fontSize: 11, color: "var(--dock-text)", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                         onDoubleClick={() => handleStartEdit(msg.id, msg.text)}
-                        title="Double-click to edit"
+                        title={t("ministry.doubleClickToEdit")}
                       >
                         {msg.text}
                       </span>
@@ -815,8 +798,29 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
 
                     <button
                       type="button"
+                      onClick={() => handleStartEdit(msg.id, msg.text)}
+                      title={t("ministry.doubleClickToEdit")}
+                      style={{
+                        width: 16,
+                        height: 16,
+                        border: "none",
+                        background: "transparent",
+                        color: "var(--dock-text-dim)",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 0,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Icon name="edit" size={10} />
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => handleDelete(msg.id)}
-                      title="Delete"
+                      title={t("common.delete")}
                       style={{
                         width: 16,
                         height: 16,
@@ -846,11 +850,11 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   type="button"
                   className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--primary"}`}
                   onClick={handlePush}
-                  disabled={sending || activeMessages.length === 0 || !obsConnected || (tickerOutputMode === "scene" && tickerSceneExists)}
+                  disabled={sending || activeMessages.length === 0 || !obsConnected}
                   style={{ flex: 1 }}
-                 title="Play">
+                  title={t("ministry.goLive")}>
                   <Icon name="play_arrow" size={14} />
-                  <span>Go Live</span>
+                  <span>{t("ministry.goLive")}</span>
                 </button>
 
                 {/* Pause / Resume — only when running */}
@@ -860,9 +864,9 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--secondary"}`}
                     onClick={handlePause}
                     disabled={sending}
-                   title="Play">
+                    title={isPaused ? t("ministry.resume") : t("ministry.pause")}>
                     <Icon name={isPaused ? "play_arrow" : "pause"} size={14} />
-                    <span>{isPaused ? "Resume" : "Pause"}</span>
+                    <span>{isPaused ? t("ministry.resume") : t("ministry.pause")}</span>
                   </button>
                 )}
 
@@ -873,20 +877,15 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--danger"}`}
                     onClick={handleClear}
                     disabled={sending}
-                   title="Clear">
+                    title={t("common.clear")}>
                     <Icon name="visibility_off" size={14} />
-                    <span>Clear</span>
+                    <span>{t("common.clear")}</span>
                   </button>
                 )}
               </div>
               {!obsConnected && (
                 <div style={{ fontSize: 10, color: "var(--dock-red)", textAlign: "center" }}>
-                  Connect to OBS to use the ticker
-                </div>
-              )}
-              {tickerOutputMode === "scene" && tickerSceneExists && (
-                <div style={{ fontSize: 10, color: "var(--dock-red)", textAlign: "center", marginTop: 4 }}>
-                  MCE Ticker Scene exists in OBS — delete it before pushing the ticker
+                  {t("ministry.connectToObs")}
                 </div>
               )}
             </div>
@@ -902,7 +901,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             <div className={`dock-mv-tab__feedback dock-mv-tab__feedback--${ltFeedbackTone}`}>
               <Icon name={ltFeedbackTone === "success" ? "check_circle" : "error"} size={14} />
               <span>{ltFeedback}</span>
-              <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setLtFeedback(null)} title="Close">
+              <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setLtFeedback(null)} title={t("common.close")}>
                 <Icon name="close" size={12} />
               </button>
             </div>
@@ -913,14 +912,14 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
               <div className="dock-mv-tab__section">
                 <div style={{ fontSize: 11, color: "var(--dock-text-dim)", textAlign: "center", padding: "12px 0" }}>
                   <Icon name="subtitles" size={24} style={{ color: "var(--dock-border)", display: "block", margin: "0 auto 8px" }} />
-                  Star a theme in Theme Settings to use it here
+                  {t("ministry.starThemeHint")}
                 </div>
               </div>
             ) : (
               <>
                 {/* Theme Picker Dropdown */}
                 <div className="dock-mv-tab__section">
-                  <div className="dock-mv-tab__section-label">Theme</div>
+                  <div className="dock-mv-tab__section-label">{t("ministry.theme")}</div>
                   <div style={{ padding: "4px 0" }}>
                     <select
                       value={ltSelectedIdx}
@@ -940,7 +939,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     >
                       {ltFavorites.map((entry, i) => (
                         <option key={`${entry.kind}-${entry.label}-${i}`} value={i}>
-                          {entry.label}{entry.kind === "bible" ? " (Custom)" : ""}
+                          {entry.label}{entry.kind === "bible" ? ` ${t("ministry.custom")}` : ""}
                         </option>
                       ))}
                     </select>
@@ -949,7 +948,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
 
                 {/* Size Multiplier */}
                 <div className="dock-mv-tab__section">
-                  <div className="dock-mv-tab__section-label">Size</div>
+                  <div className="dock-mv-tab__section-label">{t("ministry.size")}</div>
                   <div style={{ padding: "4px 0", display: "flex", gap: 4 }}>
                     {(["xl", "x2", "x3"] as LTSize[]).map((s) => (
                       <button
@@ -1028,10 +1027,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                         await dockObsClient.call("SetSceneItemIndex", { sceneName, sceneItemId, sceneItemIndex: allItems.sceneItems.length - 1 });
                         setLtLive(true);
                         setLtFeedbackTone("success");
-                        setLtFeedback("Lower third live ✓");
+                        setLtFeedback(t("ministry.lowerThirdLive"));
                       } catch (err) {
                         setLtFeedbackTone("error");
-                        setLtFeedback(err instanceof Error ? err.message : "Send failed");
+                        setLtFeedback(err instanceof Error ? err.message : t("ministry.sendFailed"));
                       } finally {
                         setLtSending(false);
                       }
@@ -1074,10 +1073,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                         }
                         setLtLive(false);
                         setLtFeedbackTone("success");
-                        setLtFeedback("Lower third cleared ✓");
+                        setLtFeedback(t("ministry.lowerThirdCleared"));
                       } catch (err) {
                         setLtFeedbackTone("error");
-                        setLtFeedback(err instanceof Error ? err.message : "Blank failed");
+                        setLtFeedback(err instanceof Error ? err.message : t("ministry.blankFailed"));
                       } finally {
                         setLtSending(false);
                       }
@@ -1109,10 +1108,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                         }
                         setLtLive(false);
                         setLtFeedbackTone("success");
-                        setLtFeedback("Lower third animated out ✓");
+                        setLtFeedback(t("ministry.lowerThirdAnimatedOut"));
                       } catch (err) {
                         setLtFeedbackTone("error");
-                        setLtFeedback(err instanceof Error ? err.message : "Animate out failed");
+                        setLtFeedback(err instanceof Error ? err.message : t("ministry.animateOutFailed"));
                       } finally {
                         setLtSending(false);
                       }
@@ -1121,12 +1120,12 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                 ) : ltSelectedEntry?.kind === "bible" ? (
                   /* BibleTheme lower-third: simple text input + send via pushBible */
                   <div className="dock-mv-tab__section">
-                    <div className="dock-mv-tab__section-label">Content</div>
+                    <div className="dock-mv-tab__section-label">{t("ministry.content")}</div>
                     <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
                       <textarea
                         value={bibleLtText}
                         onChange={(e) => setBibleLtText(e.target.value)}
-                        placeholder="Type text to display…"
+                        placeholder={t("ministry.typeText")}
                         rows={3}
                         style={{
                           width: "100%",
@@ -1144,7 +1143,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
 
                     {/* BibleTheme preview note */}
                     <div style={{ fontSize: 9, color: "var(--dock-text-dim)", marginTop: 4 }}>
-                      Using custom theme: {ltSelectedEntry.theme.name}
+                      {t("ministry.usingCustomTheme")} {ltSelectedEntry.theme.name}
                     </div>
 
                     {/* Action buttons */}
@@ -1170,10 +1169,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                             });
                             setLtLive(true);
                             setLtFeedbackTone("success");
-                            setLtFeedback("Lower third live ✓");
+                            setLtFeedback(t("ministry.lowerThirdLive"));
                           } catch (err) {
                             setLtFeedbackTone("error");
-                            setLtFeedback(err instanceof Error ? err.message : "Send failed");
+                            setLtFeedback(err instanceof Error ? err.message : t("ministry.sendFailed"));
                           } finally {
                             setLtSending(false);
                           }
@@ -1181,7 +1180,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                         style={{ flex: 1 }}
                       >
                         <Icon name="play_arrow" size={14} />
-                        <span>Go Live</span>
+                        <span>{t("ministry.goLive")}</span>
                       </button>
                       {ltLive && (
                         <button
@@ -1218,10 +1217,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                               }
                               setLtLive(false);
                               setLtFeedbackTone("success");
-                              setLtFeedback("Lower third animated out ✓");
+                              setLtFeedback(t("ministry.lowerThirdAnimatedOut"));
                             } catch (err) {
                               setLtFeedbackTone("error");
-                              setLtFeedback(err instanceof Error ? err.message : "Animate out failed");
+                              setLtFeedback(err instanceof Error ? err.message : t("ministry.animateOutFailed"));
                             } finally {
                               setLtSending(false);
                             }
@@ -1234,7 +1233,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                           }}
                         >
                           <Icon name="animation" size={14} />
-                          <span>Animate Out</span>
+                          <span>{t("ministry.animateOut")}</span>
                         </button>
                       )}
                       <button
@@ -1271,10 +1270,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                             }
                             setLtLive(false);
                             setLtFeedbackTone("success");
-                            setLtFeedback("Lower third cleared ✓");
+                            setLtFeedback(t("ministry.lowerThirdCleared"));
                           } catch (err) {
                             setLtFeedbackTone("error");
-                            setLtFeedback(err instanceof Error ? err.message : "Blank failed");
+                            setLtFeedback(err instanceof Error ? err.message : t("ministry.blankFailed"));
                           } finally {
                             setLtSending(false);
                           }
@@ -1287,7 +1286,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                         }}
                       >
                         <Icon name="visibility_off" size={14} />
-                        <span>Blank</span>
+                        <span>{t("ministry.blank")}</span>
                       </button>
                     </div>
                   </div>

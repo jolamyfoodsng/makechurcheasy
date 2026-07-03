@@ -10,6 +10,50 @@ export type VoiceBibleAudioSourceMode = "system-mic" | "obs-input";
 export type VoiceBibleSemanticMode = "off" | "ollama" | "local";
 export type VoiceBibleModel = "large-v3";
 
+/**
+ * Detection speed mode — controls how aggressively the system searches
+ * for scripture matches during live speech.
+ *
+ * - "fast": 3-word minimum, no sentence gate, 250ms debounce (live services)
+ * - "balanced": 5-word minimum, 300ms debounce (default)
+ * - "accurate": 8-word minimum, sentence boundary preferred (recordings)
+ */
+export type DetectionSpeed = "fast" | "balanced" | "accurate";
+
+export const DETECTION_SPEED_CONFIG: Record<DetectionSpeed, {
+  minWords: number;
+  debounceMs: number;
+  requireSentenceBoundary: boolean;
+  label: string;
+  icon: string;
+  description: string;
+}> = {
+  fast: {
+    minWords: 3,
+    debounceMs: 250,
+    requireSentenceBoundary: false,
+    label: "Fast",
+    icon: "",
+    description: "Live services — searches after 3 words",
+  },
+  balanced: {
+    minWords: 5,
+    debounceMs: 300,
+    requireSentenceBoundary: false,
+    label: " Balanced",
+    icon: "",
+    description: "Default — searches after 5 words",
+  },
+  accurate: {
+    minWords: 8,
+    debounceMs: 400,
+    requireSentenceBoundary: true,
+    label: " Accurate",
+    icon: "",
+    description: "Recordings — waits for complete sentences",
+  },
+};
+
 export interface VoiceBibleSettings {
   audioSourceMode: VoiceBibleAudioSourceMode;
   audioDeviceId?: string;
@@ -19,6 +63,7 @@ export interface VoiceBibleSettings {
   ollamaBaseUrl?: string;
   ollamaModel?: string;
   ollamaNormalizerModel?: string;
+  detectionSpeed: DetectionSpeed;
 }
 
 export interface VoiceBibleRuntimeStatus {
@@ -80,6 +125,25 @@ export interface VoiceBibleResult {
   chapter?: number;
   verse?: number;
   translation?: string;
+}
+
+export interface LmDockTelemetry {
+  /** Timestamp of last speech received */
+  lastSpeechAt: number;
+  /** Timestamp of last search triggered */
+  lastSearchAt: number;
+  /** Timestamp of last results displayed */
+  lastResultsAt: number;
+  /** Latency: speech → search trigger (ms) */
+  speechToSearchMs: number;
+  /** Latency: search → results (ms) */
+  searchToResultsMs: number;
+  /** Total: speech → display (ms) */
+  totalLatencyMs: number;
+  /** Number of searches performed this session */
+  searchCount: number;
+  /** Average total latency (rolling) */
+  avgLatencyMs: number;
 }
 
 export interface VoiceBibleSnapshot {

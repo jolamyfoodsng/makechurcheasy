@@ -45,7 +45,7 @@ import "./OnboardingPage.css";
 const STORAGE_KEY = "mce-onboarding-complete";
 const STEP_KEY = "mce-onboarding-step";
 const TOTAL_STEPS = 6;
-const YOUTUBE_URL = "https://www.youtube.com/@MakeChurchEasy";
+const YOUTUBE_URL = "https://www.youtube.com/watch?v=08UjSYtjmLU";
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
   "https://api.makechurcheasy.creatorstudioslabs.stream";
@@ -265,7 +265,7 @@ export default function OnboardingPage() {
               <button
                 className="ob-btn ob-btn--ghost"
                 onClick={() => setShowSkipModal(false)}
-               title="Continue">
+                title="Continue">
                 Continue Setup
               </button>
               <button className="ob-btn ob-btn--primary" onClick={skip} title="Skip">
@@ -471,7 +471,7 @@ function StepConnectOBS({
           <button
             className="ob-btn ob-btn--secondary"
             onClick={testConnection}
-           title="Play">
+            title="Play">
             {status === "checking" ? (
               <Loader2
                 size={14}
@@ -487,7 +487,7 @@ function StepConnectOBS({
           className="ob-btn ob-btn--primary"
           disabled={status !== "connected"}
           onClick={onNext}
-         title="Continue">
+          title="Continue">
           Continue
           <ArrowRight size={16} />
         </button>
@@ -610,7 +610,7 @@ function StepInstallDock({
             className="ob-btn ob-btn--primary"
             style={{ flex: "none", padding: "0 16px" }}
             onClick={() => copyUrl(dockUrl, "dock")}
-           title="Copy">
+            title="Copy">
             <Copy size={14} />
             {copied === "dock" ? "Copied" : "Copy"}
           </button>
@@ -636,7 +636,7 @@ function StepInstallDock({
             className="ob-btn ob-btn--primary"
             style={{ flex: "none", padding: "0 16px" }}
             onClick={() => copyUrl(aiUrl, "ai")}
-           title="Copy">
+            title="Copy">
             <Copy size={14} />
             {copied === "ai" ? "Copied" : "Copy"}
           </button>
@@ -829,7 +829,7 @@ function StepTest({
             className="ob-btn ob-btn--secondary"
             onClick={runDiagnostics}
             disabled={running}
-           title="Play">
+            title="Play">
             {running ? (
               <Loader2
                 size={14}
@@ -897,7 +897,7 @@ function StepReady({ onFinish }: { onFinish: () => void }) {
             completeOnboarding();
             window.location.href = "/resources?tab=bible";
           }}
-         title="Open">
+          title="Open">
           <Library size={16} />
           Open Bible
         </button>
@@ -907,7 +907,7 @@ function StepReady({ onFinish }: { onFinish: () => void }) {
             completeOnboarding();
             window.location.href = "/resources?tab=worship";
           }}
-         title="Open">
+          title="Open">
           <ListMusic size={16} />
           Open Worship
         </button>
@@ -918,7 +918,7 @@ function StepReady({ onFinish }: { onFinish: () => void }) {
         <button
           className="ob-quick-btn"
           onClick={() => openUrl("https://discord.gg/makechurcheasy")}
-         title="People">
+          title="People">
           <Users size={16} />
           Join Community
         </button>

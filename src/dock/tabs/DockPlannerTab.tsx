@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import i18next from "i18next";
 import { dockClient, type DockStateMessage } from "../../services/dockBridge";
 import { dockObsClient } from "../dockObsClient";
 import type { DockStagedItem } from "../dockTypes";
@@ -59,7 +61,7 @@ function legacyPlanToSnapshot(plans: LegacyDockPlan[]): ServicePlannerSnapshot {
 
     return {
       id: plan.id ?? `legacy-plan-${planIndex}`,
-      title: plan.name?.trim() || "Legacy Service Plan",
+      title: plan.name?.trim() || i18next.t("planner.legacyPlanTitle"),
       serviceDate: plan.createdAt ? plan.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
       status: planIndex === 0 ? "active" : "draft",
       items,
@@ -102,16 +104,16 @@ async function loadPlannerSnapshotFromUploads(): Promise<ServicePlannerSnapshot 
   }
 }
 
-function planDateLabel(date: string): string {
-  if (!date) return "No date";
+function planDateLabel(date: string, t: (key: string) => string): string {
+  if (!date) return t("planner.noDate");
   return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function cueKindLabel(type: ServicePlanItem["type"]): string {
-  if (type === "bible") return "Bible";
-  if (type === "worship") return "Song";
-  if (type === "sermon") return "Sermon";
-  return "Media";
+function cueKindLabel(type: ServicePlanItem["type"], t: (key: string) => string): string {
+  if (type === "bible") return t("planner.typeBible");
+  if (type === "worship") return t("planner.typeSong");
+  if (type === "sermon") return t("planner.typeSermon");
+  return t("planner.typeMedia");
 }
 
 function mediaPayload(payload: Record<string, unknown>): { filePath: string; fileName: string } | null {
@@ -122,6 +124,7 @@ function mediaPayload(payload: Record<string, unknown>): { filePath: string; fil
 }
 
 export default function DockPlannerTab({ staged: _staged, onStage, initialSnapshot }: DockPlannerTabProps) {
+  const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState<ServicePlannerSnapshot | null>(initialSnapshot ?? null);
   const [activePlanId, setActivePlanId] = useState(initialSnapshot?.activePlan?.id ?? "");
   const [filter, setFilter] = useState("");
@@ -219,7 +222,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
   const commitEditCue = useCallback(() => {
     if (!editingCueId) return;
     patchCue(editingCueId, {
-      label: draftLabel.trim() || "Untitled cue",
+      label: draftLabel.trim() || t("planner.untitledCue"),
       subtitle: draftSubtitle.trim(),
       notes: draftNotes.trim(),
     });
@@ -242,7 +245,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
         await dockObsClient.pushSermonCue(payload as Parameters<typeof dockObsClient.pushSermonCue>[0]);
       } else {
         const media = mediaPayload(payload);
-        if (!media) throw new Error("This media cue is missing a file path.");
+        if (!media) throw new Error(t("planner.mediaCueMissingFile"));
         await dockObsClient.pushMedia(media.filePath, media.fileName);
       }
 
@@ -321,9 +324,9 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
       <div className="dock-module dock-planner">
         <div className="dock-planner-empty">
           <Icon name="event_note" size={22} />
-          <div className="dock-planner-empty__title">No active service plan</div>
+          <div className="dock-planner-empty__title">{t("planner.emptyTitle")}</div>
           <div className="dock-planner-empty__body">
-            Create a plan in the main app, then it will appear here for live operation.
+            {t("planner.emptyBody")}
           </div>
           <button
             type="button"
@@ -336,8 +339,8 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
                 setActivePlanId((current) => current || payload.activePlan?.id || payload.plans[0]?.id || "");
               });
             }}
-           title="Refresh">
-            Refresh planner
+            title={t("common.refresh")}>
+            {t("planner.refresh")}
           </button>
         </div>
       </div>
@@ -348,17 +351,17 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
     <div className="dock-module dock-planner">
       <div className="dock-planner-header">
         <div>
-          <div className="dock-section-label">Service Planner</div>
+          <div className="dock-section-label">{t("planner.title")}</div>
           <div className="dock-planner-title">{activePlan.title}</div>
           <div className="dock-planner-meta">
-            {planDateLabel(activePlan.serviceDate)} · {activePlan.items.length} cues
+            {planDateLabel(activePlan.serviceDate, t)} · {t("planner.cueCount", { count: activePlan.items.length })}
           </div>
         </div>
         <select
           className="dock-planner-select"
           value={activePlan.id}
           onChange={(event) => setActivePlanId(event.target.value)}
-          aria-label="Select service plan"
+          aria-label={t("planner.selectPlan")}
         >
           {plans.map((plan) => (
             <option key={plan.id} value={plan.id}>{plan.title}</option>
@@ -368,21 +371,21 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
 
       <div className="dock-planner-now">
         <div>
-          <div className="dock-planner-now__label">Current</div>
-          <div className="dock-planner-now__title">{selectedCue?.label ?? "No cue selected"}</div>
+          <div className="dock-planner-now__label">{t("planner.current")}</div>
+          <div className="dock-planner-now__title">{selectedCue?.label ?? t("planner.noCueSelected")}</div>
           <div className="dock-planner-now__meta">
-            {selectedCue ? `${cueKindLabel(selectedCue.type)} · ${selectedCue.subtitle || "Snapshot cue"}` : "Select a cue below"}
+            {selectedCue ? `${cueKindLabel(selectedCue.type, t)} · ${selectedCue.subtitle || t("planner.snapshotCue")}` : t("planner.selectCueBelow")}
           </div>
         </div>
         <div className="dock-planner-now__actions">
-          <button type="button" onClick={() => selectedCue && sendCue(selectedCue)} disabled={!selectedCue || sending} title="Send">
-            Send
+          <button type="button" onClick={() => selectedCue && sendCue(selectedCue)} disabled={!selectedCue || sending} title={t("common.send")}>
+            {t("common.send")}
           </button>
-          <button type="button" onClick={() => moveSelection(-1)} disabled={selectedIndex <= 0} title="Prev">
-            Prev
+          <button type="button" onClick={() => moveSelection(-1)} disabled={selectedIndex <= 0} title={t("common.prev")}>
+            {t("common.prev")}
           </button>
-          <button type="button" onClick={() => moveSelection(1)} disabled={!nextCue} title="Next">
-            Next
+          <button type="button" onClick={() => moveSelection(1)} disabled={!nextCue} title={t("common.next")}>
+            {t("common.next")}
           </button>
         </div>
       </div>
@@ -392,19 +395,19 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
         <input
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
-          placeholder="Filter cues..."
-          aria-label="Filter planner cues"
+          placeholder={t("planner.filterCues")}
+          aria-label={t("planner.filterCuesAria")}
         />
         {filter && (
-          <button type="button" onClick={() => setFilter("")} aria-label="Clear planner filter" title="Close">
+          <button type="button" onClick={() => setFilter("")} aria-label={t("planner.clearFilterAria")} title={t("common.close")}>
             <Icon name="close" size={12} />
           </button>
         )}
       </div>
 
-      <div className="dock-planner-cues" aria-label="Service plan cues">
+      <div className="dock-planner-cues" aria-label={t("planner.cuesAria")}>
         {filteredItems.length === 0 && (
-          <div className="dock-planner-empty dock-planner-empty--compact">No cues match this filter.</div>
+          <div className="dock-planner-empty dock-planner-empty--compact">{t("planner.noCuesMatch")}</div>
         )}
         {filteredItems.map((cue, index) => {
           const isSelected = activePlan.selectedItemId === cue.id || (!activePlan.selectedItemId && index === 0);
@@ -427,22 +430,22 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
               <span className="dock-planner-cue__body">
                 <span className="dock-planner-cue__top">
                   <span className={`dock-planner-cue__type dock-planner-cue__type--${cue.type}`}>
-                    {cueKindLabel(cue.type)}
+                    {cueKindLabel(cue.type, t)}
                   </span>
-                  {isCompleted && <span className="dock-planner-cue__done">Done</span>}
+                  {isCompleted && <span className="dock-planner-cue__done">{t("common.done")}</span>}
                 </span>
                 <span className="dock-planner-cue__title">{cue.label}</span>
-                <span className="dock-planner-cue__subtitle">{cue.subtitle || cue.notes || "Snapshot cue"}</span>
+                <span className="dock-planner-cue__subtitle">{cue.subtitle || cue.notes || t("planner.snapshotCue")}</span>
               </span>
               <button
                 type="button"
                 className="dock-planner-cue__edit"
-                aria-label={`Edit ${cue.label}`}
+                aria-label={t("planner.editCueAria", { label: cue.label })}
                 onClick={(event) => {
                   event.stopPropagation();
                   startEditCue(cue);
                 }}
-               title="Edit">
+                title={t("common.edit")}>
                 <Icon name="edit" size={13} />
               </button>
             </div>
@@ -452,52 +455,52 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
 
       <div className="dock-planner-footer">
         <div className="dock-planner-hint">
-          Click to send · Next/Prev moves selection
+          {t("planner.hint")}
         </div>
         <div className="dock-planner-quickadd">
           <input
             value={quickPoint}
             onChange={(event) => setQuickPoint(event.target.value)}
-            placeholder="Quick point cue..."
-            aria-label="Quick point cue"
+            placeholder={t("planner.quickPointPlaceholder")}
+            aria-label={t("planner.quickPointAria")}
           />
-          <button type="button" onClick={addQuickPoint} disabled={!quickPoint.trim()} title="Add">
-            Add
+          <button type="button" onClick={addQuickPoint} disabled={!quickPoint.trim()} title={t("common.add")}>
+            {t("common.add")}
           </button>
         </div>
         {actionError && <div className="dock-error-msg">{actionError}</div>}
-        {sending && <div className="dock-planner-sending">Sending cue...</div>}
+        {sending && <div className="dock-planner-sending">{t("planner.sendingCue")}</div>}
       </div>
 
       {editingCueId && (
         <div className="dock-modal-backdrop" role="presentation">
-          <div className="dock-modal dock-planner-edit-modal" role="dialog" aria-modal="true" aria-label="Edit cue">
+          <div className="dock-modal dock-planner-edit-modal" role="dialog" aria-modal="true" aria-label={t("planner.editCueTitle")}>
             <div className="dock-modal__header">
               <div>
-                <div className="dock-section-label">Planner cue</div>
-                <div className="dock-modal__title">Edit cue</div>
+                <div className="dock-section-label">{t("planner.modalSectionLabel")}</div>
+                <div className="dock-modal__title">{t("planner.editCueTitle")}</div>
               </div>
-              <button type="button" className="dock-modal__close" onClick={() => setEditingCueId("")} aria-label="Close" title="Close">
+              <button type="button" className="dock-modal__close" onClick={() => setEditingCueId("")} aria-label={t("common.close")} title={t("common.close")}>
                 <Icon name="close" size={14} />
               </button>
             </div>
             <div className="dock-planner-edit-form">
               <label>
-                <span>Label</span>
+                <span>{t("planner.labelField")}</span>
                 <input value={draftLabel} onChange={(event) => setDraftLabel(event.target.value)} />
               </label>
               <label>
-                <span>Subtitle</span>
+                <span>{t("planner.subtitleField")}</span>
                 <input value={draftSubtitle} onChange={(event) => setDraftSubtitle(event.target.value)} />
               </label>
               <label>
-                <span>Notes</span>
+                <span>{t("planner.notesField")}</span>
                 <textarea value={draftNotes} onChange={(event) => setDraftNotes(event.target.value)} rows={4} />
               </label>
             </div>
             <div className="dock-modal__actions">
-              <button type="button" className="dock-btn dock-btn--ghost" onClick={() => setEditingCueId("")} title="Cancel">Cancel</button>
-              <button type="button" className="dock-btn dock-btn--preview" onClick={commitEditCue} title="Save">Save</button>
+              <button type="button" className="dock-btn dock-btn--ghost" onClick={() => setEditingCueId("")} title={t("common.cancel")}>{t("common.cancel")}</button>
+              <button type="button" className="dock-btn dock-btn--preview" onClick={commitEditCue} title={t("common.save")}>{t("common.save")}</button>
             </div>
           </div>
         </div>

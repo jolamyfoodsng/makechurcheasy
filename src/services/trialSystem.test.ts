@@ -50,9 +50,9 @@ function isTrialActive(user: TrialUser, now: Date): boolean {
   return new Date(user.trial.endsAt).getTime() > now.getTime();
 }
 
-/** Get effective plan — trial users on "free" get "starter" entitlements. */
+/** Get effective plan — trial users on "free" get "basic" entitlements. */
 function getEffectivePlan(user: TrialUser, now: Date): string {
-  if (user.plan === "free" && isTrialActive(user, now)) return "starter";
+  if (user.plan === "free" && isTrialActive(user, now)) return "basic";
   return user.plan;
 }
 
@@ -150,12 +150,12 @@ describe("Trial active check", () => {
 });
 
 describe("Effective plan during trial", () => {
-  it("free user with active trial gets starter", () => {
+  it("free user with active trial gets basic", () => {
     const user: TrialUser = {
       _id: "u1", email: "a@test.com", name: "A", plan: "free", credits: 25,
       trial: { endsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() },
     };
-    expect(getEffectivePlan(user, new Date())).toBe("starter");
+    expect(getEffectivePlan(user, new Date())).toBe("basic");
   });
 
   it("free user with expired trial stays free", () => {

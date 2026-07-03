@@ -11,7 +11,7 @@ import { Music, Save, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
 import { DEFAULT_THEME_SETTINGS, type BibleTheme, type BibleThemeSettings } from "../bible/types";
-import { generateSlides } from "./slideEngine";
+import { generateSlides, parseWorshipLyricSections } from "./slideEngine";
 import { nextAutoSongTitle } from "./songTitleAutoGen";
 import type { Slide, Song } from "./types";
 import { saveSong } from "./worshipDb";
@@ -40,13 +40,42 @@ function themeBackgroundStyle(s: BibleThemeSettings): React.CSSProperties {
   return { backgroundColor: s.backgroundColor };
 }
 
-/** Build inline style for a theme gallery thumbnail */
+/** Slide layout presets — user picks a formatting strategy, not a raw number */
+const LAYOUT_PRESETS = [
+  { key: "1", label: "1 Line", linesPerSlide: 1, autoSplit: true },
+  { key: "2", label: "2 Lines", linesPerSlide: 2, autoSplit: true },
+  { key: "3", label: "3 Lines", linesPerSlide: 3, autoSplit: true },
+  { key: "4", label: "4 Lines", linesPerSlide: 4, autoSplit: true },
+  { key: "manual", label: "Manual", linesPerSlide: 2, autoSplit: false },
+] as const;
 
 /* ── Fullscreen themes only ─────────────────────────────────────────────── */
 
 const FULLSCREEN_THEMES: BibleTheme[] = BUILTIN_THEMES.filter(
   (t) => t.templateType === "fullscreen" && !t.hidden,
 );
+
+/* ── Auto-split helper ──────────────────────────────────────────────────── */
+
+/** Reformat raw lyrics text so each slide group is separated by a blank line. */
+function reformatLyrics(text: string, linesPerSlide: number): string {
+  if (!text.trim()) return text;
+  const raw = text.replace(/\n{2,}/g, "\n").trim();
+  const sections = parseWorshipLyricSections(raw, linesPerSlide);
+  if (sections.length === 0) return text;
+  const formatted = sections
+    .map((section) => {
+      const label = section.label ? `${section.label}:` : "";
+      const chunks: string[] = [];
+      for (let i = 0; i < section.lines.length; i += linesPerSlide) {
+        chunks.push(section.lines.slice(i, i + linesPerSlide).join("\n"));
+      }
+      return [label, ...chunks].filter(Boolean).join("\n\n");
+    })
+    .filter(Boolean)
+    .join("\n\n");
+  return formatted || text;
+}
 
 /* ── Component ───────────────────────────────────────────────────────────── */
 
@@ -62,13 +91,15 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
   const [lyrics, setLyrics] = useState(song?.lyrics ?? "");
   const [autoSplit, setAutoSplit] = useState(song?.autoSplit ?? true);
   const [linesPerSlide, setLinesPerSlide] = useState(song?.linesPerSlide ?? 2);
-  const [selectedThemeId] = useState<string>(
+  const [selectedThemeId, setSelectedThemeId] = useState<string>(
     song?.themeId ?? FULLSCREEN_THEMES[0]?.id ?? "",
   );
   const [saving, setSaving] = useState(false);
 
   const titleRef = useRef<HTMLInputElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
+  const lyricsRef = useRef(lyrics);
+  lyricsRef.current = lyrics;
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -83,6 +114,18 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  /* ── Format lyrics on mount when editing an existing song ── */
+  useEffect(() => {
+    if (autoSplit && lyrics.trim()) {
+      const formatted = reformatLyrics(lyrics, linesPerSlide);
+      if (formatted !== lyrics) {
+        setLyrics(formatted);
+      }
+    }
+    // Only run on mount — layout changes are handled by handleLayoutChange
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* ── Live slide generation ── */
   const slides: Slide[] = useMemo(
     () => (lyrics.trim() ? generateSlides(lyrics, linesPerSlide, autoSplit) : []),
@@ -96,6 +139,35 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
   }, [selectedThemeId]);
 
   const bgStyle = useMemo(() => themeBackgroundStyle(resolvedTheme), [resolvedTheme]);
+
+  /* ── Cycle to next theme ── */
+  const cycleTheme = useCallback(() => {
+    setSelectedThemeId((prev) => {
+      const idx = FULLSCREEN_THEMES.findIndex((t) => t.id === prev);
+      return FULLSCREEN_THEMES[(idx + 1) % FULLSCREEN_THEMES.length].id;
+    });
+  }, []);
+
+  /* ── Layout preset selection ── */
+  const activeLayoutKey = useMemo(() => {
+    if (!autoSplit) return "manual";
+    const match = LAYOUT_PRESETS.find(
+      (p) => p.autoSplit && p.linesPerSlide === linesPerSlide,
+    );
+    return match?.key ?? "manual";
+  }, [autoSplit, linesPerSlide]);
+
+  const handleLayoutChange = useCallback(
+    (preset: (typeof LAYOUT_PRESETS)[number]) => {
+      if (preset.autoSplit) {
+        const formatted = reformatLyrics(lyricsRef.current, preset.linesPerSlide);
+        setLyrics(formatted);
+      }
+      setLinesPerSlide(preset.linesPerSlide);
+      setAutoSplit(preset.autoSplit);
+    },
+    [],
+  );
 
   /* ── Line / slide counts ── */
   const lineCount = useMemo(() => {
@@ -189,30 +261,23 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
               </div>
             </div>
 
-            <div className="ws-autosplit-bar">
-              <label className="ws-autosplit-label">
-                <input
-                  type="checkbox"
-                  checked={autoSplit}
-                  onChange={(e) => setAutoSplit(e.target.checked)}
-                />
-                Auto-split
-              </label>
-              {autoSplit && (
-                <div className="ws-autosplit-controls">
-                  <span className="ws-autosplit-hint">Lines:</span>
-                  <input
-                    type="number"
-                    className="ws-autosplit-num"
-                    min={1}
-                    max={20}
-                    value={linesPerSlide}
-                    onChange={(e) =>
-                      setLinesPerSlide(Math.max(1, parseInt(e.target.value) || 1))
-                    }
-                  />
-                </div>
-              )}
+            <div className="ws-layout-bar">
+              <label className="ws-layout-label" htmlFor="ws-layout-select">Slide Layout</label>
+              <select
+                id="ws-layout-select"
+                className="ws-field-input ws-layout-select"
+                value={activeLayoutKey}
+                onChange={(e) => {
+                  const preset = LAYOUT_PRESETS.find((p) => p.key === e.target.value);
+                  if (preset) handleLayoutChange(preset);
+                }}
+              >
+                {LAYOUT_PRESETS.map((preset) => (
+                  <option key={preset.key} value={preset.key}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="ws-lyrics-wrap">
@@ -272,7 +337,20 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
 
             {/* Theme gallery strip */}
             <div className="ws-theme-strip">
-
+              <button
+                type="button"
+                className="ws-theme-cycle"
+                onClick={cycleTheme}
+                title="Click to cycle theme"
+              >
+                <div
+                  className="ws-theme-cycle-preview"
+                  style={bgStyle}
+                />
+                <span className="ws-theme-cycle-name">
+                  {FULLSCREEN_THEMES.find((t) => t.id === selectedThemeId)?.name ?? "Theme"}
+                </span>
+              </button>
             </div>
           </div>
         </div>

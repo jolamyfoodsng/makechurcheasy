@@ -30,7 +30,6 @@ export interface CountryPricing {
   currencySymbol: string;
   plans: {
     basic: PlanPrice;
-    starter: PlanPrice;
     growth: PlanPrice;
     pro: PlanPrice;
   };
@@ -117,11 +116,11 @@ interface UseCountryPricingResult {
   retry: () => void;
   formatPrice: (amount: number) => string;
   getPlanPrice: (
-    planId: "basic" | "starter" | "growth" | "pro",
+    planId: "basic" | "growth" | "pro",
     cycle: "monthly" | "yearly"
   ) => number;
   getFormattedPlanPrice: (
-    planId: "basic" | "starter" | "growth" | "pro",
+    planId: "basic" | "growth" | "pro",
     cycle: "monthly" | "yearly"
   ) => string;
   currency: string;
@@ -143,7 +142,7 @@ export function useCountryPricing(): UseCountryPricingResult {
         // Background refresh
         fetchPricing()
           .then((fresh) => setPricing(fresh))
-          .catch(() => {});
+          .catch(() => { });
         return;
       }
     }
@@ -184,7 +183,7 @@ export function useCountryPricing(): UseCountryPricingResult {
 
   const getPlanPrice = useCallback(
     (
-      planId: "basic" | "starter" | "growth" | "pro",
+      planId: "basic" | "growth" | "pro",
       cycle: "monthly" | "yearly"
     ): number => {
       if (!pricing) return 0;
@@ -195,7 +194,7 @@ export function useCountryPricing(): UseCountryPricingResult {
 
   const getFormattedPlanPrice = useCallback(
     (
-      planId: "basic" | "starter" | "growth" | "pro",
+      planId: "basic" | "growth" | "pro",
       cycle: "monthly" | "yearly"
     ): string => {
       const amount = getPlanPrice(planId, cycle);

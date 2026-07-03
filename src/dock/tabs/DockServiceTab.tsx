@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,7 @@ function iconFor(type: string): string {
 // ---------------------------------------------------------------------------
 
 export default function DockServiceTab() {
+  const { t } = useTranslation();
   const [plans, setPlans] = useState<ServicePlan[]>([]);
   const [activePlan, setActivePlan] = useState<ServicePlan | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
@@ -93,22 +95,22 @@ export default function DockServiceTab() {
   if (!activePlan) {
     return (
       <div className="dock-service-tab">
-        <div className="dock-section-label">Load Service Plan</div>
+        <div className="dock-section-label">{t("service.loadPlan")}</div>
 
         {loading && (
           <div className="dock-service-empty">
             <Icon name="sync" size={20} className="dock-spin" />
-            <span>Loading plans…</span>
+            <span>{t("service.loadingPlans")}</span>
           </div>
         )}
 
         {!loading && plans.length === 0 && (
           <div className="dock-service-empty">
             <Icon name="playlist_add" size={28} style={{ opacity: 0.3 }} />
-            <span>No service plans found.<br />Create one in MakeChurchEasy → Dashboard.</span>
-            <button className="dock-btn dock-btn--preview" onClick={loadPlans} style={{ marginTop: 8, width: "100%" }} title="Refresh">
+            <span>{t("service.noPlans")}<br />{t("service.createPlanHint")}</span>
+            <button className="dock-btn dock-btn--preview" onClick={loadPlans} style={{ marginTop: 8, width: "100%" }} title={t("common.refresh")}>
               <Icon name="refresh" size={20} />
-              Refresh
+              {t("common.refresh")}
             </button>
           </div>
         )}
@@ -120,7 +122,7 @@ export default function DockServiceTab() {
                 key={plan.id}
                 className="dock-service-plan-btn"
                 onClick={() => { setActivePlan(plan); setCheckedIds(new Set()); }}
-               title="Next">
+                title={t("common.next")}>
                 <Icon name="assignment" size={16} />
                 <div className="dock-service-plan-info">
                   <span className="dock-service-plan-name">{plan.name}</span>
@@ -131,9 +133,9 @@ export default function DockServiceTab() {
                 <Icon name="chevron_right" size={14} style={{ opacity: 0.4 }} />
               </button>
             ))}
-            <button className="dock-btn dock-btn--preview" onClick={loadPlans} style={{ marginTop: 6, width: "100%" }} title="Refresh">
+            <button className="dock-btn dock-btn--preview" onClick={loadPlans} style={{ marginTop: 6, width: "100%" }} title={t("common.refresh")}>
               <Icon name="refresh" size={20} />
-              Refresh
+              {t("common.refresh")}
             </button>
           </div>
         )}
@@ -150,7 +152,7 @@ export default function DockServiceTab() {
     <div className="dock-service-tab">
       {/* Header */}
       <div className="dock-service-header">
-        <button className="dock-service-back" onClick={() => setActivePlan(null)} title="Go back">
+        <button className="dock-service-back" onClick={() => setActivePlan(null)} title={t("common.back")}>
           <Icon name="arrow_back" size={14} />
         </button>
         <div className="dock-service-header-info">
@@ -175,7 +177,7 @@ export default function DockServiceTab() {
               key={item.id}
               className={`dock-service-item${checked ? " dock-service-item--done" : ""}`}
               onClick={() => toggleCheck(item.id)}
-             title="item.details && ( )">
+              title={t("common.preview")}>
               <span className="dock-service-item-num">{idx + 1}</span>
               <Icon name={checked ? "check_circle" : iconFor(item.type)} size={14} className="dock-service-item-icon" />
               <div className="dock-service-item-text">
@@ -195,9 +197,9 @@ export default function DockServiceTab() {
           className="dock-btn dock-btn--preview"
           onClick={() => setCheckedIds(new Set())}
           style={{ marginTop: 8, width: "100%" }}
-         title="Reset">
+          title={t("common.reset")}>
           <Icon name="replay" size={20} />
-          Reset Checklist
+          {t("service.resetChecklist")}
         </button>
       )}
     </div>

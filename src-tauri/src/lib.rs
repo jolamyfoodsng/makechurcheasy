@@ -3,6 +3,9 @@
 // Commands:
 //   save_bg_image      — persist background image to disk (for OBS image_source)
 //   save_upload_file   — persist uploaded logo to disk
+//   save_countdown_asset — save countdown background asset to managed storage
+//   delete_countdown_asset — delete countdown background asset by assetId
+//   cleanup_unused_countdown_assets — remove orphaned countdown assets
 //   load_app_data      — read app_data.json (or return "{}" if missing)
 //   save_app_data      — write app_data.json
 //   get_overlay_port   — return the port of the local overlay HTTP server
@@ -605,6 +608,95 @@ fn save_upload_file(file_name: String, file_data: Vec<u8>) -> Result<String, Str
         file_data.len()
     );
     Ok(abs_path)
+}
+
+/// Save a countdown background asset to ~/Documents/MakeChurchEasy/uploads/countdowns/
+/// The caller generates the assetId (nanoid) and passes it along with the original file name.
+#[tauri::command]
+fn save_countdown_asset(
+    asset_id: String,
+    file_name: String,
+    file_data: Vec<u8>,
+) -> Result<String, String> {
+    let countdowns_dir = app_dir()?.join("uploads").join("countdowns");
+    fs::create_dir_all(&countdowns_dir)
+        .map_err(|e| format!("Failed to create countdowns directory: {}", e))?;
+
+    let safe_file_name = sanitize_filename_for_storage(&file_name)?;
+    let ext = Path::new(&safe_file_name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("bin");
+    let stored_name = format!("{}.{}", asset_id, ext);
+    let file_path = countdowns_dir.join(&stored_name);
+    fs::write(&file_path, &file_data)
+        .map_err(|e| format!("Failed to write countdown asset '{}': {}", stored_name, e))?;
+
+    let abs_path = file_path
+        .to_str()
+        .ok_or("File path contains invalid UTF-8")?
+        .to_string();
+
+    println!(
+        "[Tauri] Saved countdown asset: {} ({} bytes)",
+        abs_path,
+        file_data.len()
+    );
+    Ok(abs_path)
+}
+
+/// Delete a countdown background asset by assetId from ~/Documents/MakeChurchEasy/uploads/countdowns/
+#[tauri::command]
+fn delete_countdown_asset(asset_id: String) -> Result<(), String> {
+    let countdowns_dir = app_dir()?.join("uploads").join("countdowns");
+    if !countdowns_dir.exists() {
+        return Ok(());
+    }
+
+    let entries = fs::read_dir(&countdowns_dir)
+        .map_err(|e| format!("Failed to read countdowns directory: {}", e))?;
+
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with(&format!("{}.", asset_id)) {
+            fs::remove_file(entry.path())
+                .map_err(|e| format!("Failed to delete countdown asset '{}': {}", name, e))?;
+            println!("[Tauri] Deleted countdown asset: {}", name);
+            return Ok(());
+        }
+    }
+
+    // Not found — not an error, asset may have already been cleaned up
+    Ok(())
+}
+
+/// Clean up unused countdown assets.
+/// `used_asset_ids` is a list of assetIds that are still referenced by active countdowns.
+/// Any file in the countdowns/ folder not matching a used assetId is deleted.
+#[tauri::command]
+fn cleanup_unused_countdown_assets(used_asset_ids: Vec<String>) -> Result<u32, String> {
+    let countdowns_dir = app_dir()?.join("uploads").join("countdowns");
+    if !countdowns_dir.exists() {
+        return Ok(0);
+    }
+
+    let entries = fs::read_dir(&countdowns_dir)
+        .map_err(|e| format!("Failed to read countdowns directory: {}", e))?;
+
+    let mut deleted = 0u32;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        // Asset files are named <assetId>.<ext> — extract the ID before the first dot
+        let file_asset_id = name.split('.').next().unwrap_or("");
+        if !file_asset_id.is_empty() && !used_asset_ids.contains(&file_asset_id.to_string()) {
+            fs::remove_file(entry.path())
+                .map_err(|e| format!("Failed to cleanup asset '{}': {}", name, e))?;
+            println!("[Tauri] Cleaned up unused countdown asset: {}", name);
+            deleted += 1;
+        }
+    }
+
+    Ok(deleted)
 }
 
 /// Save a remote template background video to the local uploads/backgrounds/videos/
@@ -3353,6 +3445,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_bg_image,
             save_upload_file,
+            save_countdown_asset,
+            delete_countdown_asset,
+            cleanup_unused_countdown_assets,
             save_background_video_file,
             load_app_data,
             save_app_data,

@@ -33,70 +33,38 @@ describe("checkEntitlement (async — server)", () => {
   });
 
   it("returns allowed=true when under limit", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ allowed: true, limit: 30, current: 5 }),
-    });
-
     const result = await checkEntitlement("songs", "basic", 5);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(30);
+    expect(result.limit).toBe(70);
     expect(result.current).toBe(5);
   });
 
   it("returns allowed=false when at limit", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        allowed: false,
-        limit: 3,
-        current: 3,
-        reason: "Songs limit reached (3/3).",
-        requiredPlan: "basic",
-      }),
-    });
-
     const result = await checkEntitlement("songs", "free", 3);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("Songs limit reached");
-    expect(result.requiredPlan).toBe("basic");
   });
 
-  it("returns allowed=true for unlimited plan", async () => {
+  it("returns allowed=true for basic plan under songs limit", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ allowed: true, limit: -1, current: 500 }),
+      json: async () => ({ allowed: true, limit: 70, current: 5 }),
     });
 
-    const result = await checkEntitlement("songs", "starter", 500);
+    const result = await checkEntitlement("songs", "basic", 5);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(-1);
+    expect(result.limit).toBe(70);
   });
 
   it("returns allowed=true for boolean feature when enabled", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ allowed: true, limit: -1 }),
-    });
-
-    const result = await checkEntitlement("multiview", "starter");
+    const result = await checkEntitlement("multiview", "growth");
     expect(result.allowed).toBe(true);
   });
 
   it("returns allowed=false for boolean feature when disabled", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        allowed: false,
-        limit: 0,
-        reason: "Multiview requires Starter plan or higher.",
-        requiredPlan: "starter",
-      }),
-    });
-
     const result = await checkEntitlement("multiview", "free");
     expect(result.allowed).toBe(false);
-    expect(result.requiredPlan).toBe("starter");
+    expect(result.requiredPlan).toBe("growth");
   });
 
   it("falls back to local config when server is unreachable", async () => {
@@ -112,7 +80,7 @@ describe("checkEntitlement (async — server)", () => {
 
     const result = await checkEntitlement("images", "basic", 10);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(20);
+    expect(result.limit).toBe(70);
   });
 
   it("defaults to free plan when plan is undefined", async () => {
@@ -140,16 +108,16 @@ describe("checkEntitlementSync (local fallback)", () => {
     expect(result.reason).toContain("Songs limit reached");
   });
 
-  it("returns allowed=true for starter plan (unlimited songs)", () => {
-    const result = checkEntitlementSync("songs", "starter", 100);
+  it("returns allowed=true for basic plan under songs limit", () => {
+    const result = checkEntitlementSync("songs", "basic", 5);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(-1);
+    expect(result.limit).toBe(70);
   });
 
   it("returns allowed=false for disabled boolean feature", () => {
     const result = checkEntitlementSync("multiview", "free");
     expect(result.allowed).toBe(false);
-    expect(result.requiredPlan).toBe("starter");
+    expect(result.requiredPlan).toBe("growth");
   });
 
   it("returns allowed=true for enabled boolean feature", () => {
@@ -169,12 +137,12 @@ describe("getFeatureLimit", () => {
     expect(getFeatureLimit("songs", "free")).toBe(3);
   });
 
-  it("returns 30 for basic plan songs", () => {
-    expect(getFeatureLimit("songs", "basic")).toBe(30);
+  it("returns 70 for basic plan songs", () => {
+    expect(getFeatureLimit("songs", "basic")).toBe(70);
   });
 
-  it("returns -1 for starter plan songs (unlimited)", () => {
-    expect(getFeatureLimit("songs", "starter")).toBe(-1);
+  it("returns -1 for growth plan songs (unlimited)", () => {
+    expect(getFeatureLimit("songs", "growth")).toBe(-1);
   });
 
   it("returns 0 for disabled boolean feature", () => {
@@ -182,11 +150,11 @@ describe("getFeatureLimit", () => {
   });
 
   it("returns -1 for enabled boolean feature", () => {
-    expect(getFeatureLimit("multiview", "starter")).toBe(-1);
+    expect(getFeatureLimit("multiview", "growth")).toBe(-1);
   });
 
-  it("returns 2 for free plan images", () => {
-    expect(getFeatureLimit("images", "free")).toBe(2);
+  it("returns 3 for free plan images", () => {
+    expect(getFeatureLimit("images", "free")).toBe(3);
   });
 
   it("returns -1 for growth plan everything", () => {

@@ -1,6 +1,6 @@
 import { ChevronDown, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import languageData from '../../full_langugae_list.json';
+import allLanguageData from '../../full_langugae_list.json';
 import './LanguagePicker.css';
 
 export interface LanguageEntry {
@@ -11,7 +11,25 @@ export interface LanguageEntry {
   popular: boolean;
 }
 
-const languages: LanguageEntry[] = languageData as LanguageEntry[];
+/**
+ * Only languages that have a translation file in src/locales/ are shown.
+ * Keep this in sync with `ls src/locales/app-*.json`.
+ */
+const SUPPORTED_LOCALE_CODES = ["en", "es", "fr", "gh", "ha", "ig", "pt", "yo"];
+
+const allLanguages: LanguageEntry[] = allLanguageData as LanguageEntry[];
+
+/** Fallback entries for codes missing from full_langugae_list.json */
+const FALLBACK_ENTRIES: Record<string, { name: string; nativeName: string; region: string }> = {
+  gh: { name: "Akan (Twi)", nativeName: "Twi", region: "Africa" },
+};
+
+const languages: LanguageEntry[] = SUPPORTED_LOCALE_CODES.map((code) => {
+  const found = allLanguages.find((l) => l.code === code);
+  if (found) return found;
+  const fb = FALLBACK_ENTRIES[code];
+  return { code, name: fb?.name ?? code, nativeName: fb?.nativeName ?? code, region: fb?.region ?? "Global", popular: true };
+});
 
 const REGION_ORDER = [
   'Africa',

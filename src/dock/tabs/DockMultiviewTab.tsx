@@ -28,13 +28,13 @@ const STORAGE_KEY = "dock-mv-saved";
 const CANVAS_W = 1920;
 const CANVAS_H = 1080;
 
-const CONTENT_TYPE_INFO: Record<string, { label: string; icon: string; color: string }> = {
-  camera: { label: "Camera", icon: "videocam", color: "#0078d4" },
-  scripture: { label: "Scripture", icon: "menu_book", color: "#3B82F6" },
-  translation: { label: "Translation", icon: "translate", color: "#00bcd4" },
-  "lower-third": { label: "Lower Third", icon: "subtitles", color: "#ff9800" },
-  browser: { label: "Browser", icon: "language", color: "#ff5722" },
-  image: { label: "Image", icon: "image", color: "#9c27b0" },
+const CONTENT_TYPE_INFO: Record<string, { labelKey: string; icon: string; color: string }> = {
+  camera: { labelKey: "multiview.camera", icon: "videocam", color: "#0078d4" },
+  scripture: { labelKey: "multiview.scripture", icon: "menu_book", color: "#3B82F6" },
+  translation: { labelKey: "multiview.translation", icon: "translate", color: "#00bcd4" },
+  "lower-third": { labelKey: "multiview.lowerThird", icon: "subtitles", color: "#ff9800" },
+  browser: { labelKey: "multiview.browser", icon: "language", color: "#ff5722" },
+  image: { labelKey: "multiview.image", icon: "image", color: "#9c27b0" },
 };
 
 const SCENE_TYPES = new Set(["camera", "scripture", "translation", "lower-third"]);
@@ -124,9 +124,10 @@ function isSceneType(ct: GallerySlot["contentType"]): boolean {
 }
 
 function SlotTypeIcon({ contentType }: { contentType: GallerySlot["contentType"] }) {
+  const { t } = useTranslation();
   const info = CONTENT_TYPE_INFO[contentType] || CONTENT_TYPE_INFO.camera;
   return (
-    <span className="dock-mv-slot-icon" style={{ color: info.color }} title={info.label}>
+    <span className="dock-mv-slot-icon" style={{ color: info.color }} title={t(info.labelKey)}>
       <Icon name={info.icon} size={12} />
     </span>
   );
@@ -280,14 +281,14 @@ function DeleteModal({
           <span>{t('multiview.alsoDeleteScene')}</span>
         </label>
         <div className="dock-mv-modal__actions">
-          <button type="button" className="dock-btn dock-btn--sm" onClick={onCancel} title="Cancel">
+          <button type="button" className="dock-btn dock-btn--sm" onClick={onCancel} title={t('common.cancel')}>
             {t('common.cancel')}
           </button>
           <button
             type="button"
             className="dock-btn dock-btn--sm dock-btn--danger"
             onClick={() => onConfirm(deleteObs)}
-           title="Delete">
+            title={t('common.delete')}>
             {t('common.delete')}
           </button>
         </div>
@@ -300,11 +301,11 @@ function DeleteModal({
 // Background Picker — compact background type selector per card
 // ---------------------------------------------------------------------------
 
-const BG_TYPE_OPTIONS: Array<{ type: MVBgType; label: string }> = [
-  { type: "color", label: "Color" },
-  { type: "image", label: "Image" },
-  { type: "video", label: "Video" },
-  { type: "scene", label: "Scene" },
+const BG_TYPE_OPTIONS: Array<{ type: MVBgType; labelKey: string }> = [
+  { type: "color", labelKey: "multiview.bgColor" },
+  { type: "image", labelKey: "multiview.bgImage" },
+  { type: "video", labelKey: "multiview.bgVideo" },
+  { type: "scene", labelKey: "multiview.bgScene" },
 ];
 
 function BackgroundPicker({
@@ -320,13 +321,6 @@ function BackgroundPicker({
   const imgInputRef = useRef<HTMLInputElement>(null);
   const vidInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
-
-  const bgTypeLabels: Record<MVBgType, string> = {
-    color: t('multiview.color'),
-    image: t('multiview.image'),
-    video: t('multiview.video'),
-    scene: t('multiview.scene'),
-  };
 
   const handleFileUpload = useCallback(async (file: File, type: "image" | "video") => {
     setUploading(true);
@@ -356,7 +350,7 @@ function BackgroundPicker({
             className={`dock-mv-bg__type-btn${background.type === opt.type ? " dock-mv-bg__type-btn--active" : ""}`}
             onClick={() => onChange({ ...background, type: opt.type })}
           >
-            {bgTypeLabels[opt.type]}
+            {t(opt.labelKey)}
           </button>
         ))}
       </div>
@@ -572,7 +566,7 @@ function MVCard({
                 type="button"
                 className="dock-mv-card__menu-item"
                 onClick={() => { setRenaming(true); setRenameValue(mv.name); setMenuOpen(false); }}
-               title="Rename">
+                title={t('common.rename')}>
                 <Icon name="drive_file_rename_outline" size={13} />
                 <span>{t('multiview.rename')}</span>
               </button>
@@ -580,7 +574,7 @@ function MVCard({
                 type="button"
                 className="dock-mv-card__menu-item"
                 onClick={() => { onDuplicate(mv.id); setMenuOpen(false); }}
-               title="Duplicate">
+                title={t('common.duplicate')}>
                 <Icon name="content_copy" size={13} />
                 <span>{t('multiview.duplicate')}</span>
               </button>
@@ -589,7 +583,7 @@ function MVCard({
                 type="button"
                 className="dock-mv-card__menu-item dock-mv-card__menu-item--danger"
                 onClick={() => { onDelete(mv.id); setMenuOpen(false); }}
-               title="Delete">
+                title={t('common.delete')}>
                 <Icon name="delete" size={13} />
                 <span>{t('multiview.delete')}</span>
               </button>
@@ -645,7 +639,7 @@ function MVCard({
                   <div className="dock-mv-assign-row__label">
                     <SlotTypeIcon contentType={slot.contentType} />
                     <span className="dock-mv-assign-row__name">{slot.label}</span>
-                    <span className="dock-mv-assign-row__type">{info.label}</span>
+                    <span className="dock-mv-assign-row__type">{t(info.labelKey)}</span>
                   </div>
                   <SlotControl
                     slot={slot}
@@ -669,7 +663,7 @@ function MVCard({
           onClick={() => onPush(mv)}
           disabled={isPushing || isClearing}
           style={{ flex: 1 }}
-         title="Pushing">
+          title={t('multiview.pushing')}>
           <Icon name="cast" size={14} />
           <span>{isPushing ? t('multiview.pushing') : t('multiview.pushToObs')}</span>
         </button>
@@ -684,7 +678,7 @@ function MVCard({
               border: "1px solid var(--dock-border)",
               color: "var(--dock-text-dim)",
             }}
-           title="Clearing">
+            title={t('multiview.clearing')}>
             <Icon name="visibility_off" size={14} />
             <span>{isClearing ? t('multiview.clearing') : t('common.clear')}</span>
           </button>
@@ -771,7 +765,7 @@ export default function DockMultiviewTab() {
     const now = new Date().toISOString();
     const mv: SavedMultiView = {
       id: genId(),
-      name: `Multi-View ${savedList.length + 1}`,
+      name: `${t('multiview.title')} ${savedList.length + 1}`,
       layoutId: GALLERY_LAYOUTS[0]?.id ?? "",
       assignments: {},
       background: { ...DEFAULT_MV_BG },
@@ -829,7 +823,7 @@ export default function DockMultiviewTab() {
     const dupe: SavedMultiView = {
       ...src,
       id: genId(),
-      name: `${src.name} (Copy)`,
+      name: `${src.name} (${t('multiview.copy')})`,
       assignments: { ...src.assignments },
       background: { ...(src.background ?? DEFAULT_MV_BG) },
       createdAt: now,
@@ -1055,7 +1049,7 @@ export default function DockMultiviewTab() {
         <div className={`dock-mv-tab__feedback dock-mv-tab__feedback--${feedback.type}`}>
           <Icon name={feedback.type === "success" ? "check_circle" : "error"} size={14} />
           <span>{feedback.text}</span>
-          <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setFeedback(null)} title="Close">
+          <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setFeedback(null)} title={t('common.close')}>
             <Icon name="close" size={12} />
           </button>
         </div>

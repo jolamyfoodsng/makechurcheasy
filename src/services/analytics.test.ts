@@ -12,7 +12,6 @@ import { describe, it, expect } from "vitest";
 const ENTITLEMENTS = {
   free: { advancedAnalytics: false },
   basic: { advancedAnalytics: false },
-  starter: { advancedAnalytics: false },
   growth: { advancedAnalytics: true },
   pro: { advancedAnalytics: true },
 };
@@ -63,8 +62,8 @@ function validateEvent(event: string): { valid: boolean; error?: string } {
 // ── Tests ──
 
 describe("Analytics entitlement checks", () => {
-  it("blocks free, basic, and starter", () => {
-    for (const tier of ["free", "basic", "starter"]) {
+  it("blocks free and basic", () => {
+    for (const tier of ["free", "basic"]) {
       expect(checkAnalyticsEntitlement(tier).allowed).toBe(false);
     }
   });

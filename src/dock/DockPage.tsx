@@ -15,6 +15,7 @@ import DockWorshipTab from "./tabs/DockWorshipTab";
 import DockPlannerTab from "./tabs/DockPlannerTab";
 import DockMultiviewTab from "./tabs/DockMultiviewTab";
 import DockMinistryTab from "./tabs/DockMinistryTab";
+import DockCountdownsTab from "./tabs/DockCountdownsTab";
 import { useAppTheme } from "../hooks/useAppTheme";
 import {
   type DockProductionSettingsPayload,
@@ -23,7 +24,7 @@ import {
 } from "../services/productionSettings";
 import type { ServicePlannerSnapshot } from "../service-planner/types";
 import { installDockTextShortcuts } from "./dockTextShortcuts";
-import { useKeyboardShortcuts, type ShortcutDefinition, formatShortcut } from "./useKeyboardShortcuts";
+import { useKeyboardShortcuts, type ShortcutDefinition, type ShortcutCategory, formatShortcut } from "./useKeyboardShortcuts";
 import BibleCommandPalette from "../components/BibleCommandPalette";
 import { BibleProvider } from "../bible/bibleStore";
 import { useDockDragDrop } from "./useDockDragDrop";
@@ -84,7 +85,7 @@ function saveProjectionSettings(next: ProjectionSettings): void {
 }
 
 function resolveDockTab(tab?: DockTab | "live" | null): DockTab {
-  if (tab === "planner" || tab === "bible" || tab === "worship" || tab === "media" || tab === "multiview" || tab === "ministry") {
+  if (tab === "planner" || tab === "bible" || tab === "worship" || tab === "media" || tab === "multiview" || tab === "ministry" || tab === "countdowns") {
     return tab;
   }
   return "bible";
@@ -161,8 +162,10 @@ function getCompactDockTabLabel(tab: DockTab, t: (key: string) => string): strin
       return t('page.shortcutTabPlanner');
     case "multiview":
       return t('page.shortcutTabMultiview');
+    case "countdowns":
+      return t('page.shortcutTabCountdowns');
     default:
-      return "Tab";
+      return t('dock.defaultTab');
   }
 }
 
@@ -176,6 +179,9 @@ export default function DockPage() {
   const { effective, setTheme } = useAppTheme();
   const [activeTab, setActiveTab] = useState<DockTab>(() => resolveDockTab(shellPreferences.activeTab));
   const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() => shellPreferences.disabledTabs ?? []);
+  const [dockHeight, setDockHeight] = useState(0);
+  const verticalTabs = dockHeight > 0 && dockHeight < 550;
+  const compactToolbar = dockHeight > 0 && dockHeight <= 550;
   const [tickerOutputMode, setTickerOutputMode] = useState<"source" | "scene">(() => {
     try { return (localStorage.getItem("dock-ticker-output-mode") as "source" | "scene") || "source"; } catch { return "source"; }
   });
@@ -253,6 +259,19 @@ export default function DockPage() {
   }, [projectionSettings]);
 
   useEffect(() => installDockTextShortcuts(), []);
+
+  // ── Track dock height for responsive tab layout ──
+  useEffect(() => {
+    const el = dockRootRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setDockHeight(entry.contentRect.height);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     void loadDockProductionSettings().then(setProductionSettings).catch(() => { });
@@ -377,7 +396,7 @@ export default function DockPage() {
 
     const unsubObs = dockObsClient.onStatusChange((status: DockObsStatus, err?: string) => {
       setObsConnected(status === "connected");
-      setObsError(status === "error" ? (err || "Connection failed") : "");
+      setObsError(status === "error" ? (err || t('dock.connectionFailed')) : "");
 
       if (status === "connected") {
         // Stop auto-reconnect — we're connected
@@ -396,7 +415,7 @@ export default function DockPage() {
                 compare?.columns?.map((column) => column.translation).filter(Boolean).join(" · ") || "";
               return {
                 type: "bible",
-                label: compareLabel || recovered.bible.reference || "Bible Verse",
+                label: compareLabel || recovered.bible.reference || t('dock.bibleVerseFallback'),
                 subtitle: compareSubtitle || recovered.bible.text || "",
                 data: {
                   book: leftColumn?.book ?? "",
@@ -418,7 +437,7 @@ export default function DockPage() {
               setActiveTab("worship");
               return {
                 type: "worship",
-                label: recovered.worship.sectionLabel || "Worship",
+                label: recovered.worship.sectionLabel || t('dock.worshipFallback'),
                 subtitle: recovered.worship.songTitle || "",
                 data: {
                   sectionText: recovered.worship.sectionText,
@@ -500,13 +519,13 @@ export default function DockPage() {
     try {
       await ensureObsConnected(obsUrlInput, obsPwInput || undefined);
     } catch (err) {
-      setObsError(err instanceof Error ? err.message : "Connection failed");
+      setObsError(err instanceof Error ? err.message : t('dock.connectionFailed'));
     }
   }, [obsPwInput, obsUrlInput]);
 
   const activeTabDef = DOCK_TABS.find((tab) => tab.id === activeTab) ?? DOCK_TABS[0];
   const nextTheme = effective === "dark" ? "light" : "dark";
-  const themeToggleLabel = nextTheme === "dark" ? "Switch to dark mode" : "Switch to light mode";
+  const themeToggleLabel = nextTheme === "dark" ? t('dock.switchToDarkMode') : t('dock.switchToLightMode');
   const themeToggleIcon = nextTheme === "dark" ? "moon" : "sun";
 
   // ── Keyboard Shortcuts ──────────────────────────────────────────────────
@@ -553,15 +572,16 @@ export default function DockPage() {
   }, [openCommandPalette]);
 
   const shortcuts: ShortcutDefinition[] = [
-    { key: "2", handler: () => setActiveTab("bible"), label: t('page.shortcutTabBible'), category: "Navigation" },
-    { key: "3", handler: () => setActiveTab("worship"), label: t('page.shortcutTabWorship'), category: "Navigation" },
-    { key: "4", handler: () => setActiveTab("media"), label: t('page.shortcutTabMedia'), category: "Navigation" },
-    { key: "5", handler: () => setActiveTab("planner"), label: t('page.shortcutTabPlanner'), category: "Navigation" },
-    { key: "6", handler: () => setActiveTab("multiview"), label: t('page.shortcutTabMultiview'), category: "Navigation" },
-    { key: "7", handler: () => setActiveTab("ministry"), label: t('page.shortcutTabMinistry'), category: "Navigation" },
-    { key: "k", handler: () => openCommandPalette(""), label: t('page.shortcutCommandPalette'), category: "Utility" },
-    { key: "t", handler: () => setTheme(nextTheme), label: themeToggleLabel, category: "Utility" },
-    { key: "/", handler: () => setShowShortcutsHelp((v) => !v), label: t('page.shortcutsHelp'), category: "Utility" },
+    { key: "2", handler: () => setActiveTab("bible"), label: t('page.shortcutTabBible'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
+    { key: "3", handler: () => setActiveTab("worship"), label: t('page.shortcutTabWorship'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
+    { key: "4", handler: () => setActiveTab("media"), label: t('page.shortcutTabMedia'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
+    { key: "5", handler: () => setActiveTab("planner"), label: t('page.shortcutTabPlanner'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
+    { key: "6", handler: () => setActiveTab("multiview"), label: t('page.shortcutTabMultiview'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
+    { key: "7", handler: () => setActiveTab("ministry"), label: t('page.shortcutTabMinistry'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
+    { key: "8", handler: () => setActiveTab("countdowns"), label: t('page.shortcutTabCountdowns'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
+    { key: "k", handler: () => openCommandPalette(""), label: t('page.shortcutCommandPalette'), category: t('page.shortcutCategoryUtility') as ShortcutCategory },
+    { key: "t", handler: () => setTheme(nextTheme), label: themeToggleLabel, category: t('page.shortcutCategoryUtility') as ShortcutCategory },
+    { key: "/", handler: () => setShowShortcutsHelp((v) => !v), label: t('page.shortcutsHelp'), category: t('page.shortcutCategoryUtility') as ShortcutCategory },
   ];
 
   const { toasts } = useKeyboardShortcuts(shortcuts, true);
@@ -577,613 +597,643 @@ export default function DockPage() {
   const [clearScenesLoading, setClearScenesLoading] = useState(false);
 
   return (
-    <div className="dock-root" ref={dockRootRef}>
-      {/* ── Force Update Banner ── */}
-      {versionAge.forceUpdate && (
-        <div className="dock-force-update-banner">
-          <Icon name="warning" size={14} />
-          <span>
-            {t('page.forceUpdate')} — {t('page.updateReady', { days: versionAge.daysOld })}
-            {versionAge.currentVersion && versionAge.latestVersion && (
-              <> v{versionAge.currentVersion} → v{versionAge.latestVersion}</>
-            )}
-          </span>
-          <a
-            href="https://github.com/nicholasracisz/makechurcheasy/releases/latest"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="dock-force-update-banner__link"
-          >
-            {t('page.downloadUpdate')}
-          </a>
-        </div>
+    <div className={`dock-root${verticalTabs ? " dock-root--vertical-tabs" : ""}`} ref={dockRootRef}>
+      {/* ═══ VERTICAL NAV (left side when dock is short) ═══ */}
+      {verticalTabs && (
+        <nav className="dock-vertical-nav" aria-label={t('page.dockSections')}>
+          {DOCK_TABS.filter((tab) => !disabledTabs.includes(tab.id)).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`dock-vertical-nav__item${activeTab === tab.id ? " dock-vertical-nav__item--active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
+              aria-label={tab.label}
+              title={tab.label}
+              data-label={tab.label}
+            >
+              <Icon name={tab.icon} size={18} />
+            </button>
+          ))}
+        </nav>
       )}
 
-      {/* ── Maintenance Mode Banner ── */}
-      {cfg.security.maintenanceMode && (
-        <div className="dock-force-update-banner" style={{ background: "var(--accent, #f59e0b)", color: "#000" }}>
-          <Icon name="build" size={14} />
-          <span>{t('page.maintenance')}</span>
-        </div>
-      )}
-
-      <div className="dock-shell-header">
-        <div className="dock-shell-status">
-          <div className="dock-shell-status__left">
-            <button
-              type="button"
-              className="dock-shell-icon-btn"
-              onClick={() => setShowSettingsMenu(true)}
-              aria-label="Menu"
-              title="Menu"
+      <div className="dock-main-column">
+        {/* ── Force Update Banner ── */}
+        {versionAge.forceUpdate && (
+          <div className="dock-force-update-banner">
+            <Icon name="warning" size={14} />
+            <span>
+              {t('page.forceUpdate')} — {t('page.updateReady', { days: versionAge.daysOld })}
+              {versionAge.currentVersion && versionAge.latestVersion && (
+                <> v{versionAge.currentVersion} → v{versionAge.latestVersion}</>
+              )}
+            </span>
+            <a
+              href="https://github.com/nicholasracisz/makechurcheasy/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="dock-force-update-banner__link"
             >
-              <Icon name="menu" size={14} />
-            </button>
-            <div className="dock-shell-status__center">
-              <div className="dock-shell-titleline">
-                <span className="dock-shell-titleline__app">VC Studio</span>
-                <span className="dock-shell-titleline__divider">/</span>
-                <span className="dock-shell-titleline__section">{activeTabDef.label}</span>
-              </div>
-            </div>
+              {t('page.downloadUpdate')}
+            </a>
           </div>
+        )}
 
-
-
-          <div className="dock-shell-status__right">
-            <button
-              type="button"
-              className="dock-shell-icon-btn"
-              onClick={() => void handleReloadDock()}
-              aria-label={t('page.reloadDock')}
-              title={isReloadingDock ? t('page.connecting') : t('page.reloadDock')}
-              disabled={isReloadingDock}
-            >
-              <Icon name="refresh" size={14} />
-            </button>
+        {/* ── Maintenance Mode Banner ── */}
+        {cfg.security.maintenanceMode && (
+          <div className="dock-force-update-banner" style={{ background: "var(--accent, #f59e0b)", color: "#000" }}>
+            <Icon name="build" size={14} />
+            <span>{t('page.maintenance')}</span>
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* ── Sidebar ── */}
-      {showSettingsMenu && (
-        <div className="dock-sidebar-backdrop" onClick={() => setShowSettingsMenu(false)}>
-          <div className="dock-sidebar" onClick={(e) => e.stopPropagation()}>
-            <div className="dock-sidebar__header">
-              <span className="dock-sidebar__title">Menu</span>
+        <div className="dock-shell-header">
+          <div className="dock-shell-status">
+            <div className="dock-shell-status__left">
               <button
                 type="button"
                 className="dock-shell-icon-btn"
-                onClick={() => setShowSettingsMenu(false)}
-                aria-label={t('common.close')}
-                title="Close">
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-
-            <div className="dock-sidebar__content">
-              {/* Theme */}
-              <button
-                type="button"
-                className="dock-sidebar__item"
-                onClick={() => {
-                  setTheme(nextTheme);
-                  setShowSettingsMenu(false);
-                }}
-                title={themeToggleLabel}
+                onClick={() => setShowSettingsMenu(true)}
+                aria-label={t('dock.menu')}
+                title={t('dock.menu')}
               >
-                <Icon name={themeToggleIcon} size={16} />
-                <span>{themeToggleLabel}</span>
+                <Icon name="menu" size={14} />
               </button>
-
-              {/* Bible Options */}
-              <button
-                type="button"
-                className="dock-sidebar__item"
-                onClick={() => setShowBibleOptions(!showBibleOptions)}
-                title="Book">
-                <Icon name="menu_book" size={16} />
-                <span>Bible Options</span>
-                <Icon name={showBibleOptions ? "expand_less" : "expand_more"} size={14} />
-              </button>
-              {showBibleOptions && (
-                <div className="dock-sidebar__subpanel">
-                  <label className="dock-sidebar__check">
-                    <input type="checkbox" defaultChecked /> Show Bible version
-                  </label>
-                  <label className="dock-sidebar__check">
-                    <input type="checkbox" defaultChecked /> Shorten version
-                  </label>
-                  <label className="dock-sidebar__check">
-                    <input type="checkbox" /> Shorten book names
-                  </label>
-                  <label className="dock-sidebar__check">
-                    <input type="checkbox" /> Show verse numbers
-                  </label>
-                  <label className="dock-sidebar__check">
-                    <input type="checkbox" defaultChecked /> Capitalized references
-                  </label>
-                  <label className="dock-sidebar__check">
-                    <input type="checkbox" defaultChecked /> Version switch updates output
-                  </label>
+              <div className="dock-shell-status__center">
+                <div className="dock-shell-titleline">
+                  <span className="dock-shell-titleline__app">{t('dock.mceStudio')}</span>
+                  <span className="dock-shell-titleline__divider">/</span>
+                  <span className="dock-shell-titleline__section">{activeTabDef.label}</span>
                 </div>
-              )}
-
-              <div className="dock-sidebar__divider" />
-
-              {/* Tab Visibility */}
-              <button
-                type="button"
-                className="dock-sidebar__item"
-                onClick={() => setShowTabVisibility(!showTabVisibility)}
-                title="Tab Visibility">
-                <Icon name="visibility" size={16} />
-                <span>{t('page.tabVisibility')}</span>
-                <Icon name={showTabVisibility ? "expand_less" : "expand_more"} size={14} />
-              </button>
-              {showTabVisibility && (() => {
-                const toggleableTabs: Array<{ tab: DockTab; label: string; icon: string }> = [
-                  { tab: "multiview", label: "Multi-View", icon: "grid_view" },
-                  { tab: "ministry", label: "Ministry", icon: "campaign" },
-                ];
-                return (
-                  <div className="dock-sidebar__subpanel">
-                    {toggleableTabs.map(({ tab, label, icon }) => {
-                      const isDisabled = disabledTabs.includes(tab);
-                      return (
-                        <label
-                          key={tab}
-                          className="dock-sidebar__check"
-                          style={{ cursor: "pointer" }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={!isDisabled}
-                            onChange={() => {
-                              setDisabledTabs((prev) => {
-                                const next = isDisabled
-                                  ? prev.filter((t) => t !== tab)
-                                  : [...prev, tab];
-                                return next;
-                              });
-                              // If the user is on a tab that just got disabled, switch away
-                              if (!isDisabled && activeTab === tab) {
-                                setActiveTab("bible");
-                              }
-                            }}
-                          />
-                          <Icon name={icon} size={13} />
-                          <span>{label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-
-              <div className="dock-sidebar__divider" />
-
-              {/* Ticker Output */}
-              <div className="dock-sidebar__item" style={{ cursor: "default" }}>
-                <Icon name="campaign" size={16} />
-                <span>Ticker Output</span>
               </div>
-              <div className="dock-sidebar__subpanel">
-                {([
-                  { mode: "source" as const, icon: "view_module", label: "Source", desc: "Inside current scene" },
-                  { mode: "scene" as const, icon: "dashboard", label: "Scene", desc: "Dedicated scene with program behind" },
-                ]).map(({ mode, icon, label, desc }) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    className="dock-sidebar__radio"
-                    onClick={() => {
-                      setTickerOutputMode(mode);
-                      try { localStorage.setItem("dock-ticker-output-mode", mode); } catch { /* ignore */ }
-                    }}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      width: "100%",
-                      padding: "6px 8px",
-                      border: "none",
-                      borderRadius: 3,
-                      background: tickerOutputMode === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                      color: tickerOutputMode === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
-                      cursor: "pointer",
-                      textAlign: "left",
-                      fontSize: 11,
-                      transition: "background 0.15s",
-                    }}
-                    title="Confirm">
-                    <Icon name={icon} size={14} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600 }}>{label}</div>
-                      <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
-                    </div>
-                    {tickerOutputMode === mode && <Icon name="check" size={12} />}
-                  </button>
-                ))}
-              </div>
+            </div>
 
-              <div className="dock-sidebar__divider" />
 
-              {/* Projection Settings */}
+
+            <div className="dock-shell-status__right">
               <button
                 type="button"
-                className="dock-sidebar__item"
-                onClick={() => setShowProjectionSettings(!showProjectionSettings)}
-                title="Projection Settings">
-                <Icon name="videocam" size={16} />
-                <span>{t('page.projectionSettings')}</span>
-                <Icon name={showProjectionSettings ? "expand_less" : "expand_more"} size={14} />
-              </button>
-              {showProjectionSettings && (
-                <div className="dock-sidebar__subpanel">
-                  {/* Scene Handling */}
-                  <div className="dock-sidebar__section-label">{t('page.sceneHandling')}</div>
-                  <div className="dock-sidebar__radio-group">
-                    {([
-                      { mode: "auto-duplicate" as const, icon: "content_copy", label: t('page.autoDuplicateProgramScene'), desc: t('page.dedicatedSceneWithProgramBehind') },
-                      { mode: "no-clone" as const, icon: "block", label: t('page.dontCloneProgramScene'), desc: t('page.projectsDirectlyWithoutDuplicating') },
-                    ]).map(({ mode, icon, label, desc }) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        className="dock-sidebar__radio"
-                        onClick={() => setProjectionSettings((s) => ({ ...s, sceneMode: mode }))}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          width: "100%",
-                          padding: "6px 8px",
-                          border: "none",
-                          borderRadius: 3,
-                          background: projectionSettings.sceneMode === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                          color: projectionSettings.sceneMode === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
-                          cursor: "pointer",
-                          textAlign: "left",
-                          fontSize: 11,
-                          transition: "background 0.15s",
-                        }}
-                        title="Confirm">
-                        <Icon name={icon} size={14} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600 }}>{label}</div>
-                          <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
-                        </div>
-                        {projectionSettings.sceneMode === mode && <Icon name="check" size={12} />}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Ticker Layer Priority */}
-                  <div className="dock-sidebar__section-label" style={{ marginTop: 8 }}>Ticker Layer Priority</div>
-                  <div className="dock-sidebar__radio-group">
-                    {([
-                      { mode: "content-above" as const, icon: "flip_to_back", label: "Content Above Ticker", desc: "MakeChurchEasy content takes priority over ticker" },
-                      { mode: "ticker-above" as const, icon: "flip_to_front", label: "Ticker Above Content", desc: "Ticker remains visible on top" },
-                    ]).map(({ mode, icon, label, desc }) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        className="dock-sidebar__radio"
-                        onClick={() => setProjectionSettings((s) => ({ ...s, tickerLayerPriority: mode }))}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          width: "100%",
-                          padding: "6px 8px",
-                          border: "none",
-                          borderRadius: 3,
-                          background: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                          color: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
-                          cursor: "pointer",
-                          textAlign: "left",
-                          fontSize: 11,
-                          transition: "background 0.15s",
-                        }}
-                        title="Confirm">
-                        <Icon name={icon} size={14} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600 }}>{label}</div>
-                          <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
-                        </div>
-                        {projectionSettings.tickerLayerPriority === mode && <Icon name="check" size={12} />}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Restore Original Scene */}
-                  <label
-                    className="dock-sidebar__check"
-                    style={{ marginTop: 8, cursor: "pointer" }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={projectionSettings.restoreOriginalScene}
-                      onChange={(e) => setProjectionSettings((s) => ({ ...s, restoreOriginalScene: e.target.checked }))}
-                    />
-                    <span>{t('page.restoreSceneAfterProjection')}</span>
-                  </label>
-                  <div style={{ fontSize: 10, opacity: 0.5, padding: "2px 8px 0 22px", lineHeight: 1.4 }}>
-                    {t('page.returnsObsToPreviousState')}
-                  </div>
-                </div>
-              )}
-
-              <div className="dock-sidebar__divider" />
-
-              {/* History */}
-              <button
-                type="button"
-                className="dock-sidebar__item"
-                onClick={() => {
-                  setShowHistory(true);
-                  setShowSettingsMenu(false);
-                }}
-                title="History">
-                <Icon name="history" size={16} />
-                <span>History</span>
-              </button>
-
-              <div className="dock-sidebar__divider" />
-
-              {/* OBS Connection */}
-              <button
-                type="button"
-                className="dock-sidebar__item"
-                onClick={() => {
-                  setShowSettingsMenu(false);
-                  setShowReconnectModal(true);
-                }}
-                title="Link">
-                <Icon name="link" size={16} />
-                <span>{obsConnected ? t('page.reconnect') : t('page.connection')} to OBS</span>
-              </button>
-
-              <div className="dock-sidebar__divider" />
-
-              {/* Clear All MCE Scenes */}
-              <button
-                type="button"
-                className="dock-sidebar__item"
-                onClick={() => {
-                  setShowSettingsMenu(false);
-                  setShowClearScenesConfirm(true);
-                }}
-                style={{ color: "var(--dock-red, #EF4444)" }}
-                title="Clear All Scenes">
-                <Icon name="delete_sweep" size={16} />
-                <span>{t('page.clearAllScenes')}</span>
+                className="dock-shell-icon-btn"
+                onClick={() => void handleReloadDock()}
+                aria-label={t('page.reloadDock')}
+                title={isReloadingDock ? t('page.connecting') : t('page.reloadDock')}
+                disabled={isReloadingDock}
+              >
+                <Icon name="refresh" size={14} />
               </button>
             </div>
           </div>
         </div>
-      )}
 
-      {/* ── Clear All MCE Scenes Confirmation ── */}
-      {showClearScenesConfirm && (
-        <div className="dock-dialog-backdrop" onClick={() => { if (!clearScenesLoading) setShowClearScenesConfirm(false); }}>
-          <div className="dock-dialog dock-dialog--compact" onClick={(e) => e.stopPropagation()}>
-            <div className="dock-dialog__header">
-              <div>
-                <div className="dock-dialog__eyebrow" style={{ color: "var(--dock-red, #EF4444)" }}>{t('page.dangerZone')}</div>
-                <h2 className="dock-dialog__title">{t('page.clearAllScenesConfirm')}</h2>
-              </div>
-              <button
-                type="button"
-                className="dock-dialog__close"
-                onClick={() => { if (!clearScenesLoading) setShowClearScenesConfirm(false); }}
-                aria-label={t('common.close')}
-                title="Close">
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-            <div className="dock-dialog__body">
-              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5 }}>
-                This will <strong>permanently delete</strong> all scenes and sources created by MakeChurchEasy from OBS:
-              </p>
-              <ul style={{ margin: "8px 0", paddingLeft: 20, fontSize: 12, lineHeight: 1.6, color: "var(--dock-text-secondary, #94A3B8)" }}>
-                <li>MCE Presentation, MCE Lower Thirds</li>
-                <li>MCE_PreService, MCE Ticker Scene</li>
-                <li>MV: layouts, Sunday scenes</li>
-                <li>MCE-prefixed sources in your scenes</li>
-              </ul>
-              <p style={{ margin: 0, fontSize: 11, color: "var(--dock-text-dim, #64748B)", lineHeight: 1.4 }}>
-                Your own scenes and sources will not be deleted.
-              </p>
-            </div>
-            <div className="dock-dialog__actions">
-              <button
-                type="button"
-                className="dock-btn dock-btn--sm"
-                disabled={clearScenesLoading}
-                onClick={() => setShowClearScenesConfirm(false)}
-                title="Clear All Scenes Cancel">
-                {t('page.clearAllScenesCancel')}
-              </button>
-              <button
-                type="button"
-                className="dock-btn dock-btn--sm dock-btn--danger"
-                disabled={clearScenesLoading}
-                onClick={async () => {
-                  if (!obsConnected) return;
-                  setClearScenesLoading(true);
-                  try {
-                    const result = await dockObsClient.clearAllMCEScenes();
-                    console.log(`[DockOBS] Cleared ${result.deletedScenes} scenes, cleaned ${result.cleanedSources} sources`);
-                  } catch (err) {
-                    console.error("[DockOBS] Failed to clear MCE scenes:", err);
-                  } finally {
-                    setClearScenesLoading(false);
-                    setShowClearScenesConfirm(false);
-                  }
-                }}
-                title="Loading">
-                {clearScenesLoading ? t('common.loading') : t('page.clearAllScenesContinue')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showReconnectModal && (
-        <div className="dock-dialog-backdrop" onClick={() => setShowReconnectModal(false)}>
-          <div className="dock-dialog dock-dialog--compact" onClick={(e) => e.stopPropagation()}>
-            <div className="dock-dialog__header">
-              <div>
-                <div className="dock-dialog__eyebrow">{t('page.connection')}</div>
-                <h2 className="dock-dialog__title">{t('page.obsWebSocket')}</h2>
-              </div>
-              <button
-                type="button"
-                className="dock-dialog__close"
-                onClick={() => setShowReconnectModal(false)}
-                aria-label={t('common.close')}
-                title="Close">
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-            <div className="dock-dialog__body">
-              {obsError && (
-                <div className="dock-error-msg">
-                  <Icon name="error" size={14} />
-                  {obsError}
-                </div>
-              )}
-              <div className="dock-settings-form">
-                <input
-                  className="dock-input"
-                  placeholder="ws://localhost:4455"
-                  value={obsUrlInput}
-                  onChange={(event) => setObsUrlInput(event.target.value)}
-                />
-                <input
-                  className="dock-input"
-                  type="password"
-                  placeholder="Password (optional)"
-                  value={obsPwInput}
-                  onChange={(event) => setObsPwInput(event.target.value)}
-                />
+        {/* ── Sidebar ── */}
+        {showSettingsMenu && (
+          <div className="dock-sidebar-backdrop" onClick={() => setShowSettingsMenu(false)}>
+            <div className="dock-sidebar" onClick={(e) => e.stopPropagation()}>
+              <div className="dock-sidebar__header">
+                <span className="dock-sidebar__title">{t('dock.menu')}</span>
                 <button
                   type="button"
-                  className="dock-btn dock-btn--preview dock-btn--block"
-                  onClick={() => {
-                    void handleManualConnect();
-                    setShowReconnectModal(false);
-                  }}
-                  title="Reconnect">
-                  <Icon name="link" size={16} />
-                  {obsConnected ? t('page.reconnect') : t('page.connection')}
+                  className="dock-shell-icon-btn"
+                  onClick={() => setShowSettingsMenu(false)}
+                  aria-label={t('common.close')}
+                  title={t('common.close')}>
+                  <Icon name="close" size={14} />
                 </button>
               </div>
-              <div className="dock-settings-panel__hint">
-                {t('page.makeSureEnabled')}
+
+              <div className="dock-sidebar__content">
+                {/* Theme */}
+                <button
+                  type="button"
+                  className="dock-sidebar__item"
+                  onClick={() => {
+                    setTheme(nextTheme);
+                    setShowSettingsMenu(false);
+                  }}
+                  title={themeToggleLabel}
+                >
+                  <Icon name={themeToggleIcon} size={16} />
+                  <span>{themeToggleLabel}</span>
+                </button>
+
+                {/* Bible Options */}
+                <button
+                  type="button"
+                  className="dock-sidebar__item"
+                  onClick={() => setShowBibleOptions(!showBibleOptions)}
+                  title={t('dock.bibleOptions')}>
+                  <Icon name="menu_book" size={16} />
+                  <span>{t('dock.bibleOptions')}</span>
+                  <Icon name={showBibleOptions ? "expand_less" : "expand_more"} size={14} />
+                </button>
+                {showBibleOptions && (
+                  <div className="dock-sidebar__subpanel">
+                    <label className="dock-sidebar__check">
+                      <input type="checkbox" defaultChecked /> {t('dock.showBibleVersion')}
+                    </label>
+                    <label className="dock-sidebar__check">
+                      <input type="checkbox" defaultChecked /> {t('dock.shortenVersion')}
+                    </label>
+                    <label className="dock-sidebar__check">
+                      <input type="checkbox" /> {t('dock.shortenBookNames')}
+                    </label>
+                    <label className="dock-sidebar__check">
+                      <input type="checkbox" /> {t('dock.showVerseNumbers')}
+                    </label>
+                    <label className="dock-sidebar__check">
+                      <input type="checkbox" defaultChecked /> {t('dock.capitalizedReferences')}
+                    </label>
+                    <label className="dock-sidebar__check">
+                      <input type="checkbox" defaultChecked /> {t('dock.versionSwitchUpdatesOutput')}
+                    </label>
+                  </div>
+                )}
+
+                <div className="dock-sidebar__divider" />
+
+                {/* Tab Visibility */}
+                <button
+                  type="button"
+                  className="dock-sidebar__item"
+                  onClick={() => setShowTabVisibility(!showTabVisibility)}
+                  title={t('page.tabVisibility')}>
+                  <Icon name="visibility" size={16} />
+                  <span>{t('page.tabVisibility')}</span>
+                  <Icon name={showTabVisibility ? "expand_less" : "expand_more"} size={14} />
+                </button>
+                {showTabVisibility && (() => {
+                  const toggleableTabs: Array<{ tab: DockTab; label: string; icon: string }> = [
+                    { tab: "multiview", label: t('page.shortcutTabMultiview'), icon: "grid_view" },
+                    { tab: "ministry", label: t('page.shortcutTabMinistry'), icon: "campaign" },
+                  ];
+                  return (
+                    <div className="dock-sidebar__subpanel">
+                      {toggleableTabs.map(({ tab, label, icon }) => {
+                        const isDisabled = disabledTabs.includes(tab);
+                        return (
+                          <label
+                            key={tab}
+                            className="dock-sidebar__check"
+                            style={{ cursor: "pointer" }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!isDisabled}
+                              onChange={() => {
+                                setDisabledTabs((prev) => {
+                                  const next = isDisabled
+                                    ? prev.filter((t) => t !== tab)
+                                    : [...prev, tab];
+                                  return next;
+                                });
+                                // If the user is on a tab that just got disabled, switch away
+                                if (!isDisabled && activeTab === tab) {
+                                  setActiveTab("bible");
+                                }
+                              }}
+                            />
+                            <Icon name={icon} size={13} />
+                            <span>{label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+                <div className="dock-sidebar__divider" />
+
+                {/* Ticker Output */}
+                <div className="dock-sidebar__item" style={{ cursor: "default" }}>
+                  <Icon name="campaign" size={16} />
+                  <span>{t('dock.tickerOutput')}</span>
+                </div>
+                <div className="dock-sidebar__subpanel">
+                  {([
+                    { mode: "source" as const, icon: "view_module", label: t('dock.source'), desc: t('dock.insideCurrentScene') },
+                    { mode: "scene" as const, icon: "dashboard", label: t('dock.scene'), desc: t('dock.dedicatedSceneWithProgramBehind') },
+                  ]).map(({ mode, icon, label, desc }) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className="dock-sidebar__radio"
+                      onClick={() => {
+                        setTickerOutputMode(mode);
+                        try { localStorage.setItem("dock-ticker-output-mode", mode); } catch { /* ignore */ }
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        width: "100%",
+                        padding: "6px 8px",
+                        border: "none",
+                        borderRadius: 3,
+                        background: tickerOutputMode === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
+                        color: tickerOutputMode === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        fontSize: 11,
+                        transition: "background 0.15s",
+                      }}
+                      title={t('common.confirm')}>
+                      <Icon name={icon} size={14} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600 }}>{label}</div>
+                        <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
+                      </div>
+                      {tickerOutputMode === mode && <Icon name="check" size={12} />}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="dock-sidebar__divider" />
+
+                {/* Projection Settings */}
+                <button
+                  type="button"
+                  className="dock-sidebar__item"
+                  onClick={() => setShowProjectionSettings(!showProjectionSettings)}
+                  title={t('page.projectionSettings')}>
+                  <Icon name="videocam" size={16} />
+                  <span>{t('page.projectionSettings')}</span>
+                  <Icon name={showProjectionSettings ? "expand_less" : "expand_more"} size={14} />
+                </button>
+                {showProjectionSettings && (
+                  <div className="dock-sidebar__subpanel">
+                    {/* Scene Handling */}
+                    <div className="dock-sidebar__section-label">{t('page.sceneHandling')}</div>
+                    <div className="dock-sidebar__radio-group">
+                      {([
+                        { mode: "auto-duplicate" as const, icon: "content_copy", label: t('page.autoDuplicateProgramScene'), desc: t('page.dedicatedSceneWithProgramBehind') },
+                        { mode: "no-clone" as const, icon: "block", label: t('page.dontCloneProgramScene'), desc: t('page.projectsDirectlyWithoutDuplicating') },
+                      ]).map(({ mode, icon, label, desc }) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          className="dock-sidebar__radio"
+                          onClick={() => setProjectionSettings((s) => ({ ...s, sceneMode: mode }))}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            width: "100%",
+                            padding: "6px 8px",
+                            border: "none",
+                            borderRadius: 3,
+                            background: projectionSettings.sceneMode === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
+                            color: projectionSettings.sceneMode === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            fontSize: 11,
+                            transition: "background 0.15s",
+                          }}
+                          title={t('common.confirm')}>
+                          <Icon name={icon} size={14} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600 }}>{label}</div>
+                            <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
+                          </div>
+                          {projectionSettings.sceneMode === mode && <Icon name="check" size={12} />}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Ticker Layer Priority */}
+                    <div className="dock-sidebar__section-label" style={{ marginTop: 8 }}>{t('dock.tickerLayerPriority')}</div>
+                    <div className="dock-sidebar__radio-group">
+                      {([
+                        { mode: "content-above" as const, icon: "flip_to_back", label: t('ministry.contentAboveTicker'), desc: t('ministry.mceContentPriority') },
+                        { mode: "ticker-above" as const, icon: "flip_to_front", label: t('ministry.tickerAboveContent'), desc: t('dock.tickerRemainsVisibleOnTop') },
+                      ]).map(({ mode, icon, label, desc }) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          className="dock-sidebar__radio"
+                          onClick={() => setProjectionSettings((s) => ({ ...s, tickerLayerPriority: mode }))}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            width: "100%",
+                            padding: "6px 8px",
+                            border: "none",
+                            borderRadius: 3,
+                            background: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
+                            color: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            fontSize: 11,
+                            transition: "background 0.15s",
+                          }}
+                          title={t('common.confirm')}>
+                          <Icon name={icon} size={14} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600 }}>{label}</div>
+                            <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
+                          </div>
+                          {projectionSettings.tickerLayerPriority === mode && <Icon name="check" size={12} />}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Restore Original Scene */}
+                    <label
+                      className="dock-sidebar__check"
+                      style={{ marginTop: 8, cursor: "pointer" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={projectionSettings.restoreOriginalScene}
+                        onChange={(e) => setProjectionSettings((s) => ({ ...s, restoreOriginalScene: e.target.checked }))}
+                      />
+                      <span>{t('page.restoreSceneAfterProjection')}</span>
+                    </label>
+                    <div style={{ fontSize: 10, opacity: 0.5, padding: "2px 8px 0 22px", lineHeight: 1.4 }}>
+                      {t('page.returnsObsToPreviousState')}
+                    </div>
+                  </div>
+                )}
+
+                <div className="dock-sidebar__divider" />
+
+                {/* History */}
+                <button
+                  type="button"
+                  className="dock-sidebar__item"
+                  onClick={() => {
+                    setShowHistory(true);
+                    setShowSettingsMenu(false);
+                  }}
+                  title={t('dock.history')}>
+                  <Icon name="history" size={16} />
+                  <span>{t('dock.history')}</span>
+                </button>
+
+                <div className="dock-sidebar__divider" />
+
+                {/* OBS Connection */}
+                <button
+                  type="button"
+                  className="dock-sidebar__item"
+                  onClick={() => {
+                    setShowSettingsMenu(false);
+                    setShowReconnectModal(true);
+                  }}
+                  title={t('page.connection')}>
+                  <Icon name="link" size={16} />
+                  <span>{obsConnected ? t('dock.reconnectToObs') : t('dock.connectToObs')}</span>
+                </button>
+
+                <div className="dock-sidebar__divider" />
+
+                {/* Clear All MCE Scenes */}
+                <button
+                  type="button"
+                  className="dock-sidebar__item"
+                  onClick={() => {
+                    setShowSettingsMenu(false);
+                    setShowClearScenesConfirm(true);
+                  }}
+                  style={{ color: "var(--dock-red, #EF4444)" }}
+                  title={t('page.clearAllScenes')}>
+                  <Icon name="delete_sweep" size={16} />
+                  <span>{t('page.clearAllScenes')}</span>
+                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Move Plugin Notice */}
-      {obsConnected && movePluginInstalled === false && !moveNoticeDismissed && (
-        <div className="dock-settings-panel" style={{ background: "var(--dock-yellow-soft, rgba(255, 193, 7, 0.1))", borderBottom: "1px solid var(--dock-yellow, #ffc107)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
-            <Icon name="info" size={14} style={{ color: "var(--dock-yellow, #ffc107)" }} />
-            <span style={{ color: "var(--dock-text)" }}>
-              <strong>Move Transition</strong> plugin not detected — animated scene items require it.
-            </span>
-            <a
-              href="#"
-              onClick={(e) => { e.preventDefault(); handleOpenMovePlugin(); }}
-              className="dock-btn dock-btn--preview"
-              style={{ marginLeft: "auto", padding: "2px 6px", fontSize: 10, whiteSpace: "nowrap" }}
-            >
-              <Icon name="download" size={12} />
-              {moveUrlCopied ? t('common.done') : t('page.movePlugin')}
-            </a>
+        {/* ── Clear All MCE Scenes Confirmation ── */}
+        {showClearScenesConfirm && (
+          <div className="dock-dialog-backdrop" onClick={() => { if (!clearScenesLoading) setShowClearScenesConfirm(false); }}>
+            <div className="dock-dialog dock-dialog--compact" onClick={(e) => e.stopPropagation()}>
+              <div className="dock-dialog__header">
+                <div>
+                  <div className="dock-dialog__eyebrow" style={{ color: "var(--dock-red, #EF4444)" }}>{t('page.dangerZone')}</div>
+                  <h2 className="dock-dialog__title">{t('page.clearAllScenesConfirm')}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="dock-dialog__close"
+                  onClick={() => { if (!clearScenesLoading) setShowClearScenesConfirm(false); }}
+                  aria-label={t('common.close')}
+                  title={t('common.close')}>
+                  <Icon name="close" size={14} />
+                </button>
+              </div>
+              <div className="dock-dialog__body">
+                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5 }}>
+                  {t('dock.clearAllScenesWarning')}
+                </p>
+                <ul style={{ margin: "8px 0", paddingLeft: 20, fontSize: 12, lineHeight: 1.6, color: "var(--dock-text-secondary, #94A3B8)" }}>
+                  <li>{t('page.mceScenes')}</li>
+                  <li>{t('page.mcePreService')}</li>
+                  <li>{t('page.mvLayouts')}</li>
+                  <li>{t('page.mceSources')}</li>
+                </ul>
+                <p style={{ margin: 0, fontSize: 11, color: "var(--dock-text-dim, #64748B)", lineHeight: 1.4 }}>
+                  {t('dock.clearAllScenesOwnScenes')}
+                </p>
+              </div>
+              <div className="dock-dialog__actions">
+                <button
+                  type="button"
+                  className="dock-btn dock-btn--sm"
+                  disabled={clearScenesLoading}
+                  onClick={() => setShowClearScenesConfirm(false)}
+                  title={t('page.clearAllScenesCancel')}>
+                  {t('page.clearAllScenesCancel')}
+                </button>
+                <button
+                  type="button"
+                  className="dock-btn dock-btn--sm dock-btn--danger"
+                  disabled={clearScenesLoading}
+                  onClick={async () => {
+                    if (!obsConnected) return;
+                    setClearScenesLoading(true);
+                    try {
+                      const result = await dockObsClient.clearAllMCEScenes();
+                      console.log(`[DockOBS] Cleared ${result.deletedScenes} scenes, cleaned ${result.cleanedSources} sources`);
+                    } catch (err) {
+                      console.error("[DockOBS] Failed to clear MCE scenes:", err);
+                    } finally {
+                      setClearScenesLoading(false);
+                      setShowClearScenesConfirm(false);
+                    }
+                  }}
+                  title={t('common.loading')}>
+                  {clearScenesLoading ? t('common.loading') : t('page.clearAllScenesContinue')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showReconnectModal && (
+          <div className="dock-dialog-backdrop" onClick={() => setShowReconnectModal(false)}>
+            <div className="dock-dialog dock-dialog--compact" onClick={(e) => e.stopPropagation()}>
+              <div className="dock-dialog__header">
+                <div>
+                  <div className="dock-dialog__eyebrow">{t('page.connection')}</div>
+                  <h2 className="dock-dialog__title">{t('page.obsWebSocket')}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="dock-dialog__close"
+                  onClick={() => setShowReconnectModal(false)}
+                  aria-label={t('common.close')}
+                  title={t('common.close')}>
+                  <Icon name="close" size={14} />
+                </button>
+              </div>
+              <div className="dock-dialog__body">
+                {obsError && (
+                  <div className="dock-error-msg">
+                    <Icon name="error" size={14} />
+                    {obsError}
+                  </div>
+                )}
+                <div className="dock-settings-form">
+                  <input
+                    className="dock-input"
+                    placeholder="ws://localhost:4455"
+                    value={obsUrlInput}
+                    onChange={(event) => setObsUrlInput(event.target.value)}
+                  />
+                  <input
+                    className="dock-input"
+                    type="password"
+                    placeholder={t('dock.passwordOptional')}
+                    value={obsPwInput}
+                    onChange={(event) => setObsPwInput(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="dock-btn dock-btn--preview dock-btn--block"
+                    onClick={() => {
+                      void handleManualConnect();
+                      setShowReconnectModal(false);
+                    }}
+                    title={t('dock.reconnectToObs')}>
+                    <Icon name="link" size={16} />
+                    {obsConnected ? t('page.reconnect') : t('page.connection')}
+                  </button>
+                </div>
+                <div className="dock-settings-panel__hint">
+                  {t('page.makeSureEnabled')}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Move Plugin Notice */}
+        {obsConnected && movePluginInstalled === false && !moveNoticeDismissed && (
+          <div className="dock-settings-panel" style={{ background: "var(--dock-yellow-soft, rgba(255, 193, 7, 0.1))", borderBottom: "1px solid var(--dock-yellow, #ffc107)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
+              <Icon name="info" size={14} style={{ color: "var(--dock-yellow, #ffc107)" }} />
+              <span style={{ color: "var(--dock-text)" }}>
+                <strong>{t('dock.moveTransition')}</strong> {t('dock.movePluginNotDetected')}
+              </span>
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); handleOpenMovePlugin(); }}
+                className="dock-btn dock-btn--preview"
+                style={{ marginLeft: "auto", padding: "2px 6px", fontSize: 10, whiteSpace: "nowrap" }}
+              >
+                <Icon name="download" size={12} />
+                {moveUrlCopied ? t('common.done') : t('page.movePlugin')}
+              </a>
+              <button
+                type="button"
+                className="dock-toolbar__btn"
+                onClick={() => setMoveNoticeDismissed(true)}
+                title={t('common.close')}
+                style={{ width: 20, height: 20, padding: 0, border: "none", flexShrink: 0 }}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+            <div className="dock-settings-panel__hint" style={{ color: "var(--dock-text-dim)" }}>
+              {dockObsClient.getMovePluginDownloadInfo().instructions}
+            </div>
+          </div>
+        )}
+
+        <div className="dock-content">
+
+          <div className="dock-content-main">
+            {activeTab === "planner" && (
+              <DockPlannerTab
+                staged={staged}
+                onStage={handleStage}
+                initialSnapshot={servicePlanner}
+              />
+            )}
+            {activeTab === "bible" && (
+              <DockBibleTab
+                staged={staged}
+                onStage={handleStage}
+                productionDefaults={productionSettings.bible}
+                appConnected={appConnected}
+                showHistory={showHistory}
+                onHistoryClose={() => setShowHistory(false)}
+                compactToolbar={compactToolbar}
+              />
+            )}
+            {activeTab === "worship" && (
+              <DockWorshipTab
+                staged={staged}
+                onStage={handleStage}
+                productionDefaults={productionSettings.worship}
+                compactToolbar={compactToolbar}
+              />
+            )}
+            {activeTab === "media" && (
+              <DockMediaTab
+                staged={staged}
+                onStage={handleStage}
+              />
+            )}
+            {activeTab === "multiview" && (
+              <DockMultiviewTab />
+            )}
+            {activeTab === "ministry" && (
+              <DockMinistryTab
+                staged={staged}
+                onStage={handleStage}
+                tickerOutputMode={tickerOutputMode}
+              />
+            )}
+            {activeTab === "countdowns" && (
+              <DockCountdownsTab />
+            )}
+          </div>
+        </div>
+      </div>{/* end dock-main-column */}
+
+      {/* ═══ HORIZONTAL TAB NAVIGATION (bottom, hidden when vertical) ═══ */}
+      {!verticalTabs && (
+        <nav className="dock-bottom-nav" aria-label={t('page.dockSections')}>
+          {DOCK_TABS.filter((tab) => !disabledTabs.includes(tab.id)).map((tab) => (
             <button
+              key={tab.id}
               type="button"
-              className="dock-toolbar__btn"
-              onClick={() => setMoveNoticeDismissed(true)}
-              title={t('common.close')}
-              style={{ width: 20, height: 20, padding: 0, border: "none", flexShrink: 0 }}
+              className={`dock-bottom-nav__item${activeTab === tab.id ? " dock-bottom-nav__item--active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
+              aria-label={tab.label}
+              title={tab.label}
+              data-label={tab.label}
+              data-summary={tab.summary}
             >
-              <Icon name="close" size={12} />
+              <Icon name={tab.icon} size={14} className="dock-bottom-nav__icon" />
+              <span className="dock-bottom-nav__label-short">{getCompactDockTabLabel(tab.id, t)}</span>
             </button>
-          </div>
-          <div className="dock-settings-panel__hint" style={{ color: "var(--dock-text-dim)" }}>
-            {dockObsClient.getMovePluginDownloadInfo().instructions}
-          </div>
-        </div>
+          ))}
+        </nav>
       )}
-
-      <div className="dock-content">
-        <div className="dock-content-main">
-          {activeTab === "planner" && (
-            <DockPlannerTab
-              staged={staged}
-              onStage={handleStage}
-              initialSnapshot={servicePlanner}
-            />
-          )}
-          {activeTab === "bible" && (
-            <DockBibleTab
-              staged={staged}
-              onStage={handleStage}
-              productionDefaults={productionSettings.bible}
-              appConnected={appConnected}
-              showHistory={showHistory}
-              onHistoryClose={() => setShowHistory(false)}
-            />
-          )}
-          {activeTab === "worship" && (
-            <DockWorshipTab
-              staged={staged}
-              onStage={handleStage}
-              productionDefaults={productionSettings.worship}
-            />
-          )}
-          {activeTab === "media" && (
-            <DockMediaTab
-              staged={staged}
-              onStage={handleStage}
-            />
-          )}
-          {activeTab === "multiview" && (
-            <DockMultiviewTab />
-          )}
-          {activeTab === "ministry" && (
-            <DockMinistryTab
-              staged={staged}
-              onStage={handleStage}
-              tickerOutputMode={tickerOutputMode}
-            />
-          )}
-        </div>
-      </div>
-
-      <nav className="dock-bottom-nav" aria-label="Dock sections">
-        {DOCK_TABS.filter((tab) => !disabledTabs.includes(tab.id)).map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`dock-bottom-nav__item${activeTab === tab.id ? " dock-bottom-nav__item--active" : ""}`}
-            onClick={() => setActiveTab(tab.id)}
-            aria-label={tab.label}
-            title={tab.label}
-            data-label={tab.label}
-            data-summary={tab.summary}
-          >
-            <Icon name={tab.icon} size={14} className="dock-bottom-nav__icon" />
-            <span className="dock-bottom-nav__label-short">{getCompactDockTabLabel(tab.id, t)}</span>
-          </button>
-        ))}
-      </nav>
 
       {/* Keyboard shortcut toast feedback */}
       {toasts.length > 0 && (
@@ -1207,7 +1257,7 @@ export default function DockPage() {
           <div className="dock-shortcuts-overlay__content" onClick={(e) => e.stopPropagation()}>
             <div className="dock-shortcuts-overlay__header">
               <div>
-                <div className="dock-shortcuts-overlay__eyebrow">Dock</div>
+                <div className="dock-shortcuts-overlay__eyebrow">{t('dock.dockLabel')}</div>
                 <div className="dock-shortcuts-overlay__title">{t('page.keyboardShortcuts')}</div>
               </div>
               <button
@@ -1215,14 +1265,14 @@ export default function DockPage() {
                 className="dock-shortcuts-overlay__close"
                 onClick={() => setShowShortcutsHelp(false)}
                 aria-label={t('common.close')}
-                title="Close">
+                title={t('common.close')}>
                 <Icon name="close" size={14} />
               </button>
             </div>
 
             <div className="dock-shortcuts-overlay__body">
               <div className="dock-shortcuts-section">
-                <div className="dock-shortcuts-section__label">Navigation</div>
+                <div className="dock-shortcuts-section__label">{t('dock.navigation')}</div>
                 <div className="dock-shortcuts-list">
                   {[
                     { key: "2", label: t('page.shortcutTabBible') },
@@ -1230,6 +1280,8 @@ export default function DockPage() {
                     { key: "4", label: t('page.shortcutTabMedia') },
                     { key: "5", label: t('page.shortcutTabPlanner') },
                     { key: "6", label: t('page.shortcutTabMultiview') },
+                    { key: "7", label: t('page.shortcutTabMinistry') },
+                    { key: "8", label: t('page.shortcutTabCountdowns') },
                   ].map((s) => (
                     <div key={s.key} className="dock-shortcuts-item">
                       <span className="dock-shortcuts-item__key">{formatShortcut(s.key)}</span>
@@ -1240,12 +1292,12 @@ export default function DockPage() {
               </div>
 
               <div className="dock-shortcuts-section">
-                <div className="dock-shortcuts-section__label">Utility</div>
+                <div className="dock-shortcuts-section__label">{t('dock.utility')}</div>
                 <div className="dock-shortcuts-list">
                   {[
                     { key: "k", label: t('page.shortcutCommandPalette') },
-                    { key: "t", label: "Toggle theme" },
-                    { key: "s", label: "Toggle settings" },
+                    { key: "t", label: t('dock.toggleTheme') },
+                    { key: "s", label: t('dock.toggleSettings') },
                     { key: "/", label: t('page.shortcutsHelp') },
                   ].map((s) => (
                     <div key={s.key} className="dock-shortcuts-item">
@@ -1258,7 +1310,7 @@ export default function DockPage() {
             </div>
 
             <div className="dock-shortcuts-overlay__footer">
-              Press <kbd>{t('page.shortcutAlt')}</kbd> + <kbd>{t('page.shortcutShift')}</kbd> + <kbd>/</kbd> to toggle this overlay
+              {t('dock.shortcutsFooterPrefix')} <kbd>{t('page.shortcutAlt')}</kbd> + <kbd>{t('page.shortcutShift')}</kbd> + <kbd>/</kbd> {t('dock.shortcutsFooterSuffix')}
             </div>
           </div>
         </div>

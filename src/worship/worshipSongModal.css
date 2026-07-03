@@ -144,57 +144,33 @@
   border-color: var(--primary);
 }
 
-/* ── Auto-split bar ── */
-.ws-autosplit-bar {
+/* ── Slide layout bar ── */
+.ws-layout-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 6px 14px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  gap: 8px;
 }
 
-.ws-autosplit-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.ws-autosplit-label input[type="checkbox"] {
-  accent-color: var(--primary);
-}
-
-.ws-autosplit-controls {
-  display: flex;
-  min-width: 60px;
-  align-items: center;
-  gap: 4px;
-}
-
-.ws-autosplit-hint {
+.ws-layout-label {
   font-size: 10px;
-  color: var(--text-muted);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.ws-autosplit-num {
-  width: 80px;
-  background: var(--bg-dark);
-  border: 1px solid var(--border);
-  border-radius: var(--radius, 4px);
-  padding: 3px 6px;
+.ws-layout-select {
+  width: auto;
+  min-width: 110px;
+  padding: 4px 8px;
   font-size: 12px;
-  color: var(--text-primary);
-  text-align: center;
-  outline: none;
-  font-family: inherit;
-  box-sizing: border-box;
-}
-
-.ws-autosplit-num:focus {
-  border-color: var(--primary);
+  cursor: pointer;
 }
 
 /* ── Lyrics textarea ── */
@@ -439,6 +415,40 @@
 
 .ws-theme-thumb.active .ws-theme-thumb-name {
   color: var(--primary);
+}
+
+/* ── Theme cycle button ── */
+.ws-theme-cycle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: border-color 0.15s;
+}
+
+.ws-theme-cycle:hover {
+  border-color: var(--text-muted);
+}
+
+.ws-theme-cycle-preview {
+  width: 40px;
+  height: 28px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.ws-theme-cycle-name {
+  font-size: 11px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Footer ── */

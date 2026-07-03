@@ -2,7 +2,7 @@ import { useEffect, useCallback } from "react";
 import { X, ExternalLink, Play, Youtube } from "lucide-react";
 import { track } from "../services/analytics";
 
-const YOUTUBE_CHANNEL = "https://www.youtube.com/@MakeChurchEasy";
+const YOUTUBE_CHANNEL = "https://www.youtube.com/watch?v=08UjSYtjmLU";
 
 interface Tutorial {
   title: string;

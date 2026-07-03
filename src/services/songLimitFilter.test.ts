@@ -53,11 +53,11 @@ describe("Song limit filtering before dock delivery", () => {
     expect(result[2].id).toBe("song-2");
   });
 
-  it("basic plan: slices 200 songs down to 30", () => {
+  it("basic plan: slices 200 songs down to 70", () => {
     vi.mocked(getCachedPlan).mockReturnValue("basic");
     const result = sliceToLimit(twoHundredSongs, BASIC_USER);
-    expect(result).toHaveLength(30);
-    expect(result[29].id).toBe("song-29");
+    expect(result).toHaveLength(70);
+    expect(result[69].id).toBe("song-69");
   });
 
   it("pro plan: keeps all 200 songs (unlimited)", () => {
@@ -79,10 +79,10 @@ describe("Song limit filtering before dock delivery", () => {
     expect(result).toHaveLength(2);
   });
 
-  it("basic plan limit is exactly 30", () => {
+  it("basic plan limit is exactly 70", () => {
     vi.mocked(getCachedPlan).mockReturnValue("basic");
     const limits = getUserPlanLimits(BASIC_USER);
-    expect(limits.songs).toBe(30);
+    expect(limits.songs).toBe(70);
   });
 
   it("free plan limit is exactly 3", () => {

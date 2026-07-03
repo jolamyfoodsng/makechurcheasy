@@ -15,8 +15,9 @@ interface GrowthBadgeProps {
   locked?: boolean;
 }
 
-export function GrowthBadge({ feature = "This feature", onClick, locked = false }: GrowthBadgeProps) {
+export function GrowthBadge({ feature, onClick, locked = false }: GrowthBadgeProps) {
   const { t } = useTranslation();
+  const label = feature ?? t('growth.defaultFeature');
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -25,19 +26,19 @@ export function GrowthBadge({ feature = "This feature", onClick, locked = false 
       } else {
         // Trigger the upgrade modal with a Growth-specific message
         const event = new CustomEvent("dock-upgrade", {
-          detail: { message: `${feature} requires Growth plan or higher.` },
+          detail: { message: `${label} ${t('growth.requiresGrowthPlan')}` },
         });
         window.dispatchEvent(event);
       }
     },
-    [feature, onClick]
+    [label, onClick, t]
   );
 
   return (
     <span
       className={`dock-growth-badge ${locked ? "dock-growth-badge--locked" : ""}`}
       onClick={handleClick}
-      title={`${feature} requires Growth plan`}
+      title={`${label} ${t('growth.requiresGrowthPlan')}`}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {

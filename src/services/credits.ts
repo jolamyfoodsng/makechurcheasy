@@ -363,3 +363,75 @@ export function getCreditSummary(balance: number, extra?: { isAdmin?: boolean })
     isAdmin: extra?.isAdmin,
   };
 }
+
+// ── Reserve / Commit / Refund flow ──────────────────────────────────────────
+
+export interface ReserveResult {
+  credits: number;
+  deducted: number;
+  reservationId: string;
+}
+
+/**
+ * Reserve credits for a translation before it starts.
+ * Returns reservationId + remaining balance, or null on failure.
+ */
+export async function reserveTranslationCredits(
+  amount: number,
+  source: string,
+  description: string,
+  metadata?: Record<string, unknown>
+): Promise<ReserveResult | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/credit-transactions/reserve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ amount, source, description, metadata }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    setCreditsBalance(data.credits);
+    emitCreditChange(data.credits);
+    return { credits: data.credits, deducted: data.deducted, reservationId: data.reservationId };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Commit a previously reserved translation — marks credits as permanently used.
+ */
+export async function commitTranslationCredits(reservationId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/credit-transactions/commit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ reservationId }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Refund a previously reserved translation — restores credits on failure.
+ */
+export async function refundTranslationCredits(reservationId: string): Promise<{ refunded: boolean; credits: number } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/credit-transactions/refund`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ reservationId }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (typeof data.credits === "number") {
+      setCreditsBalance(data.credits);
+      emitCreditChange(data.credits);
+    }
+    return { refunded: data.refunded, credits: data.credits };
+  } catch {
+    return null;
+  }
+}

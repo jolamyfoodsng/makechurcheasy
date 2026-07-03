@@ -42,11 +42,16 @@ export default function CountryPicker({ value, onChange, placeholder = "Select c
     if (e.key === "Escape") setOpen(false);
   }
 
+  // Force-close dropdown when value changes from parent
+  useEffect(() => {
+    setOpen(false);
+  }, [value]);
+
   return (
     <>
       <button
         className="cp-trigger"
-        onClick={() => setOpen(true)}
+        onClick={() => setOpen((prev) => !prev)}
         type="button"
         title="Select country"
       >
@@ -61,10 +66,10 @@ export default function CountryPicker({ value, onChange, placeholder = "Select c
       </button>
 
       {open && (
-        <div className="cp-overlay" onClick={() => setOpen(false)}>
+        <div className="cp-overlay" onMouseDown={() => setOpen(false)}>
           <div
             className="cp-dropdown"
-            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             onKeyDown={handleKeyDown}
           >
             <div className="cp-search-bar">

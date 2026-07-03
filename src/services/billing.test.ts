@@ -10,14 +10,13 @@ import { describe, it, expect } from "vitest";
 
 // ── Inline logic (mirrors Paystack webhook patterns) ──
 
-type PlanTier = "free" | "basic" | "starter" | "growth" | "pro";
+type PlanTier = "free" | "basic" | "growth" | "pro";
 
-const VALID_PLANS: PlanTier[] = ["free", "basic", "starter", "growth", "pro"];
+const VALID_PLANS: PlanTier[] = ["free", "basic", "growth", "pro"];
 
 const PLAN_NAMES: Record<string, string> = {
   free: "Free",
   basic: "Basic",
-  starter: "Starter",
   growth: "Growth",
   pro: "Pro",
 };
@@ -121,8 +120,8 @@ describe("Billing — plan resolution from Paystack data", () => {
   });
 
   it("resolves plan case-insensitively", () => {
-    const data = { metadata: { plan: "STARTER" } };
-    expect(resolvePlan(data)).toBe("starter");
+    const data = { metadata: { plan: "GROWTH" } };
+    expect(resolvePlan(data)).toBe("growth");
   });
 
   it("returns free when no plan info available", () => {

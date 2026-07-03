@@ -12,8 +12,6 @@ const GB = 1024 * 1024 * 1024;
 
 const STORAGE_QUOTAS: Record<string, number> = {
   free: 0,
-  basic: 1,
-  starter: 5,
   growth: 20,
   pro: 200,
 };
@@ -53,12 +51,8 @@ describe("Storage quota by plan", () => {
     expect(getStorageQuota("free")).toBe(0);
   });
 
-  it("basic tier has 1 GB quota", () => {
-    expect(getStorageQuota("basic")).toBe(1 * GB);
-  });
-
-  it("starter tier has 5 GB quota", () => {
-    expect(getStorageQuota("starter")).toBe(5 * GB);
+  it("basic tier has no storage quota", () => {
+    expect(getStorageQuota("basic")).toBe(0);
   });
 
   it("growth tier has 20 GB quota", () => {
@@ -103,9 +97,11 @@ describe("Storage quota enforcement", () => {
     expect(result.allowed).toBe(false);
   });
 
-  it("reports correct overBy amount", () => {
+  it("reports correct overBy amount for basic plan (no quota)", () => {
     const result = checkStorageQuota("basic", 2 * GB);
-    expect(result.overBy).toBe(1 * GB);
+    expect(result.allowed).toBe(false);
+    expect(result.quotaBytes).toBe(0);
+    expect(result.overBy).toBeUndefined();
   });
 });
 

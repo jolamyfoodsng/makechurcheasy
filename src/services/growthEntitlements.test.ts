@@ -30,24 +30,11 @@ const PLAN_CONFIG = {
       credits: 50,
       entitlements: {
         songs: 30, images: 20, videos: 10, themes: 3, lowerThirds: 1, devices: 2,
-        bibleVersions: 20, multiviewTemplates: 0, tickerThemes: 0, themePresets: 3,
-        cloudStorageGB: 1,
-        multiview: false, tickers: false, massImport: false, easyWorshipImport: false,
-        proPresenterImport: false, translation: false, speechToScripture: false,
-        sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
-        customReports: false, mobileControl: false, apiAccess: false, slideshow: true,
-      },
-    },
-    starter: {
-      label: "Starter",
-      credits: 500,
-      entitlements: {
-        songs: -1, images: -1, videos: -1, themes: 10, lowerThirds: -1, devices: 5,
-        bibleVersions: -1, multiviewTemplates: 2, tickerThemes: 5, themePresets: 10,
+        bibleVersions: 20, multiviewTemplates: 2, tickerThemes: 5, themePresets: 3,
         cloudStorageGB: 5,
-        multiview: true, tickers: true, massImport: true, easyWorshipImport: true,
-        proPresenterImport: true, translation: true, speechToScripture: true,
-        sermonExport: true, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
+        multiview: true, tickers: true, massImport: false, easyWorshipImport: false,
+        proPresenterImport: false, translation: true, speechToScripture: false,
+        sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
         customReports: false, mobileControl: false, apiAccess: false, slideshow: true,
       },
     },
@@ -82,11 +69,11 @@ const PLAN_CONFIG = {
 
 // ── Entitlement check logic (mirrors server-side pattern) ──
 
-const TIERS = ["free", "basic", "starter", "growth", "pro"];
+const TIERS = ["free", "basic", "growth", "pro"];
 
 function getEffectivePlan(userPlan: string, trialEndsAt?: string | null): string {
   if (userPlan === "free" && trialEndsAt && new Date(trialEndsAt).getTime() > Date.now()) {
-    return "starter";
+    return "basic";
   }
   return userPlan;
 }
@@ -115,8 +102,8 @@ function checkEntitlement(
 
 describe("Growth Plan entitlements", () => {
   describe("AI features (aiFeatures)", () => {
-    it("blocks on free, basic, and starter", () => {
-      for (const tier of ["free", "basic", "starter"]) {
+    it("blocks on free and basic", () => {
+      for (const tier of ["free", "basic"]) {
         const result = checkEntitlement(tier, "aiFeatures");
         expect(result.allowed).toBe(false);
       }
@@ -131,8 +118,8 @@ describe("Growth Plan entitlements", () => {
   });
 
   describe("Cloud sync (cloudSync)", () => {
-    it("blocks on free, basic, and starter", () => {
-      for (const tier of ["free", "basic", "starter"]) {
+    it("blocks on free and basic", () => {
+      for (const tier of ["free", "basic"]) {
         const result = checkEntitlement(tier, "cloudSync");
         expect(result.allowed).toBe(false);
       }
@@ -147,8 +134,8 @@ describe("Growth Plan entitlements", () => {
   });
 
   describe("Advanced analytics (advancedAnalytics)", () => {
-    it("blocks on free, basic, and starter", () => {
-      for (const tier of ["free", "basic", "starter"]) {
+    it("blocks on free and basic", () => {
+      for (const tier of ["free", "basic"]) {
         const result = checkEntitlement(tier, "advancedAnalytics");
         expect(result.allowed).toBe(false);
       }
@@ -169,13 +156,8 @@ describe("Growth Plan entitlements", () => {
       expect(result.allowed).toBe(false);
     });
 
-    it("basic tier has 1 GB", () => {
+    it("basic tier has 5 GB", () => {
       const result = checkEntitlement("basic", "cloudStorageGB");
-      expect(result.limit).toBe(1);
-    });
-
-    it("starter tier has 5 GB", () => {
-      const result = checkEntitlement("starter", "cloudStorageGB");
       expect(result.limit).toBe(5);
     });
 
@@ -213,11 +195,11 @@ describe("Growth Plan entitlements", () => {
     }
   });
 
-  describe("Trial users get starter entitlements", () => {
-    it("free user with active trial is treated as starter", () => {
+  describe("Trial users get basic entitlements", () => {
+    it("free user with active trial is treated as basic", () => {
       const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       const effectivePlan = getEffectivePlan("free", futureDate);
-      expect(effectivePlan).toBe("starter");
+      expect(effectivePlan).toBe("basic");
     });
 
     it("free user with expired trial stays free", () => {
@@ -226,10 +208,10 @@ describe("Growth Plan entitlements", () => {
       expect(effectivePlan).toBe("free");
     });
 
-    it("starter user ignores trial", () => {
+    it("basic user ignores trial", () => {
       const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      const effectivePlan = getEffectivePlan("starter", futureDate);
-      expect(effectivePlan).toBe("starter");
+      const effectivePlan = getEffectivePlan("basic", futureDate);
+      expect(effectivePlan).toBe("basic");
     });
   });
 

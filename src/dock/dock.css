@@ -6135,10 +6135,10 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 9px 11px;
+  padding: 4px;
   border-bottom: 1px solid color-mix(in srgb, var(--dock-border) 70%, transparent);
   background: color-mix(in srgb, var(--dock-surface-alt) 100%, transparent);
-  font-size: 12px;
+  font-size: 10px;
   line-height: 1.2;
 }
 
@@ -6150,7 +6150,7 @@
   border-radius: 4px;
   background: color-mix(in srgb, var(--dock-surface-hover) 78%, transparent);
   color: var(--dock-text-dim);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -6160,7 +6160,7 @@
 .dock-bible-reader__ref-header-reference {
   min-width: 0;
   color: var(--dock-text);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -8060,6 +8060,99 @@
   color: #fff;
   border-color: color-mix(in srgb, var(--dock-accent) 70%, var(--dock-border));
   background: color-mix(in srgb, var(--dock-accent) 86%, black 14%);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Vertical Tab Navigation (compact dock / low height)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.dock-root--vertical-tabs {
+  flex-direction: row;
+}
+
+
+.dock-root--vertical-tabs .dock-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.dock-main-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dock-vertical-nav {
+  display: flex;
+  flex-direction: column;
+  width: 40px;
+  flex-shrink: 0;
+  background: var(--dock-surface);
+  border-right: 1px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+  gap: 0;
+  transition: width 0.2s ease, opacity 0.2s ease;
+}
+
+.dock-vertical-nav__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--dock-text-dim);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  position: relative;
+}
+
+.dock-vertical-nav__item:hover {
+  color: var(--dock-text);
+  background: color-mix(in srgb, var(--dock-surface-hover) 60%, transparent);
+}
+
+.dock-vertical-nav__item--active {
+  color: #fff;
+  border-left-color: var(--dock-accent);
+  background: color-mix(in srgb, var(--dock-accent) 86%, black 14%);
+}
+
+/* Tooltip for vertical nav items */
+.dock-vertical-nav__item::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 7px;
+  border: 1px solid color-mix(in srgb, var(--dock-accent) 18%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-surface) 94%, black 6%);
+  color: var(--dock-text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  border-radius: 4px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  z-index: 12;
+}
+
+.dock-vertical-nav__item:hover::after,
+.dock-vertical-nav__item:focus-visible::after {
+  opacity: 1;
 }
 
 /* ── Service Planner ── */
@@ -23167,6 +23260,10 @@ button.dock-btm-toolbar__clear--inline,
   display: none !important;
 }
 
+.dock-btm-toolbar--compact button {
+  display: block !important;
+}
+
 @media (max-width:345px) {
   .dock-btm-toolbar__clear.dock-btm-toolbar__clear--bible {
     display: none !important;
@@ -23257,49 +23354,720 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   DockLowerThirdEditor
+   DockLowerThirdEditor — control-panel.html layout
    ══════════════════════════════════════════════════════════════════════════════ */
 
-.dock-lt-editor {
+/* ── 3-Zone Layout ── */
+.dock-lt-editor-layout {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px 0;
+  height: 520px;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--dock-bg);
 }
 
-/* ── Section ── */
-.dock-lt-editor__section {
+.dock-lt-editor-layout__preview {
+  flex-shrink: 0;
+  height: 200px;
+  background: #111;
+  border-bottom: 1px solid var(--dock-border-soft);
+  overflow: hidden;
+}
+
+.dock-lt-editor-layout__preview iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  pointer-events: none;
+}
+
+.dock-lt-editor-layout__scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0;
+}
+
+.dock-lt-editor-layout__scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dock-lt-editor-layout__scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dock-lt-editor-layout__scroll::-webkit-scrollbar-thumb {
+  background: var(--dock-border);
+  border-radius: 2px;
+}
+
+.dock-lt-editor-layout__scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--dock-text-dim);
+}
+
+.dock-lt-editor-layout__bar {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
   border-top: 1px solid var(--dock-border-soft);
+  background: var(--dock-bg);
 }
 
-.dock-lt-editor__section-header {
+/* ── OCS Card ── */
+.dock-lt-ocs-card {
+  position: relative;
+  padding: 8px 10px 10px;
+  background: var(--dock-surface);
+  border: 1px solid var(--dock-border);
+  border-radius: 6px;
+  margin: 6px 8px;
+}
+
+.dock-lt-ocs-card--active {
+  border-color: var(--dock-green);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.25);
+}
+
+/* ── OCS Header ── */
+.dock-lt-ocs-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.dock-lt-alt-number-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  min-width: 15px;
+  border-radius: 3px;
+  border: 2px solid var(--dock-border);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--dock-text-secondary);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.dock-lt-ocs-card--active .dock-lt-alt-number-icon {
+  border-color: var(--dock-green);
+  color: var(--dock-green);
+}
+
+.dock-lt-ocs-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dock-text);
+  padding: 2px 4px;
+  border-radius: 2px;
+  border: 1px solid transparent;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+}
+
+.dock-lt-ocs-title:focus {
+  border-color: var(--dock-border);
+  background: var(--dock-input-bg);
+}
+
+/* ── Accordion Toggle ── */
+.dock-lt-accordion-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border-radius: 3px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--dock-text-dim);
+  padding: 0;
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.dock-lt-accordion-toggle:hover {
+  color: var(--dock-text);
+}
+
+.dock-lt-accordion-toggle .material-icons {
+  font-size: 16px;
+  transition: transform 0.2s ease;
+}
+
+.dock-lt-accordion-toggle--open .material-icons {
+  transform: rotate(180deg);
+}
+
+/* ── Hidable (accordion body) ── */
+.dock-lt-hidable {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease;
+}
+
+.dock-lt-hidable--open {
+  max-height: 600px;
+}
+
+/* ── Grid Container ── */
+.dock-lt-grid-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.dock-lt-grid-row {
+  display: inline-flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 23px;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.dock-lt-grid-row>.dock-lt-field-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 23px;
+}
+
+/* ── Input Icon ── */
+.dock-lt-input-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--dock-text-dim);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.dock-lt-input-icon .material-icons {
+  font-size: 13px;
+}
+
+/* ── Number Input (stepper) ── */
+.dock-lt-number-input {
+  display: inline-flex;
+  align-items: center;
+  width: 40px;
+  height: 23px;
+  background: var(--dock-input-bg);
+  border: 1px solid var(--dock-border);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.dock-lt-number-input input {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: var(--dock-text);
+  font-size: 11px;
+  font-family: inherit;
+  text-align: center;
+  padding: 0 2px;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.dock-lt-number-input input::-webkit-outer-spin-button,
+.dock-lt-number-input input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.dock-lt-number-input button {
+  width: 14px;
+  height: 23px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--dock-border);
+  color: var(--dock-text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.dock-lt-number-input button:hover {
+  color: var(--dock-text);
+  background: var(--dock-surface-alt);
+}
+
+.dock-lt-number-input button .material-icons {
+  font-size: 10px;
+}
+
+/* ── Align Toggle (3 radio buttons) ── */
+.dock-lt-align-toggle {
+  display: inline-flex;
+  align-items: center;
+  height: 23px;
+  border: 1px solid var(--dock-border);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--dock-input-bg);
+}
+
+.dock-lt-align-toggle input[type="radio"] {
+  display: none;
+}
+
+.dock-lt-align-toggle label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 23px;
+  height: 23px;
+  cursor: pointer;
+  color: var(--dock-text-dim);
+  transition: all 0.15s ease;
+}
+
+.dock-lt-align-toggle label:hover {
+  color: var(--dock-text);
+}
+
+.dock-lt-align-toggle input[type="radio"]:checked+label {
+  background: var(--dock-accent);
+  color: #fff;
+}
+
+.dock-lt-align-toggle label .material-icons {
+  font-size: 12px;
+}
+
+/* ── Config Button (toggle checkbox icon) ── */
+.dock-lt-config-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 23px;
+  height: 23px;
+  border-radius: 3px;
+  border: 1px solid var(--dock-border);
+  background: var(--dock-input-bg);
+  cursor: pointer;
+  color: var(--dock-text-dim);
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.dock-lt-config-btn input {
+  display: none;
+}
+
+.dock-lt-config-btn:hover {
+  border-color: var(--dock-text-dim);
+}
+
+.dock-lt-config-btn:has(input:checked) {
+  background: var(--dock-accent);
+  border-color: var(--dock-accent);
+  color: #fff;
+}
+
+.dock-lt-config-btn .material-icons {
+  font-size: 14px;
+  margin: 4px;
+}
+
+/* ── Select ── */
+.dock-lt-select {
+  height: 23px;
+  background: var(--dock-input-bg);
+  border: 1px solid var(--dock-border);
+  border-radius: 3px;
+  color: var(--dock-text);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 0 20px 0 6px;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23666' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+
+.dock-lt-select.font {
+  width: 155px;
+}
+
+/* ── Fill Color Appearance / Border Color Appearance ── */
+.dock-lt-color-appearance {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: 155px;
+  height: 23px;
+  background: var(--dock-input-bg);
+  border: 1px solid var(--dock-border);
+  border-radius: 3px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.dock-lt-color-appearance .dock-lt-tool-title {
+  font-size: 9px;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--dock-text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dock-lt-color-appearance input[type="color"] {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* ── Margin Config Group ── */
+.dock-lt-margin-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 23px;
+}
+
+.dock-lt-margin-group .dock-lt-number-input.input-no-icon input {
+  width: 32px;
+}
+
+/* ── Font Config Group ── */
+.dock-lt-font-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 23px;
+}
+
+/* ── First Edit Container (logo + textfields) ── */
+.dock-lt-first-edit {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 6px 0;
+}
+
+.dock-lt-logo-container {
+  width: 96px;
+  height: 51px;
+  min-width: 96px;
+  background: var(--dock-input-bg);
+  border: 1px solid var(--dock-border);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.dock-lt-logo-container img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.dock-lt-logo-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: transparent;
+}
+
+.dock-lt-textfields {
+  flex: 1;
+  min-width: 0;
+}
+
+.dock-lt-textfields input[type="text"] {
+  width: calc(100% - 92px);
+  height: 23px;
+  float: left;
+  background: var(--dock-input-bg);
+  border: 1px solid var(--dock-border);
+  border-radius: 2px 0 0 2px;
+  color: var(--dock-text);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 0 6px;
+  outline: none;
+  margin-bottom: 4px;
+}
+
+.dock-lt-textfields input[type="text"]:focus {
+  border-color: var(--dock-accent);
+}
+
+.dock-lt-textfields .dock-lt-textfield-appearance {
+  float: right;
+  width: 92px;
+  height: 23px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--dock-input-bg);
+  border: 1px solid var(--dock-border);
+  border-radius: 0 2px 2px 0;
+  padding: 0 4px;
+  margin-bottom: 4px;
+}
+
+.dock-lt-textfield-appearance .dock-lt-app-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  border: 1px solid var(--dock-border);
+  background: var(--dock-surface);
+  cursor: pointer;
+  color: var(--dock-text-dim);
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.dock-lt-textfield-appearance .dock-lt-app-btn:has(input:checked) {
+  background: var(--dock-accent);
+  border-color: var(--dock-accent);
+  color: #fff;
+}
+
+.dock-lt-textfield-appearance .dock-lt-app-btn input {
+  display: none;
+}
+
+.dock-lt-textfield-appearance .dock-lt-app-btn .material-icons {
+  font-size: 11px;
+}
+
+.dock-lt-textfield-appearance input[type="color"] {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.dock-lt-textfields::after {
+  content: '';
+  display: table;
+  clear: both;
+}
+
+/* ── Panel Bottom ── */
+.dock-lt-panel-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--dock-border);
+  margin-top: 6px;
+}
+
+/* ── Memory Slots ── */
+.dock-lt-memory-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dock-lt-memory-slots li {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  background: var(--dock-input-bg);
+  border: 1px solid var(--dock-border);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+  color: var(--dock-text-dim);
+}
+
+.dock-lt-memory-slots li:hover {
+  border-color: var(--dock-text-dim);
+}
+
+.dock-lt-memory-slots li--active {
+  border-color: var(--dock-green);
+  color: var(--dock-green);
+  box-shadow: 0 0 4px rgba(34, 197, 94, 0.3);
+}
+
+.dock-lt-memory-slots li--filled {
+  background: var(--dock-surface-alt);
+}
+
+.dock-lt-slot-number {
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1;
+}
+
+.dock-lt-memory-slots li .dock-lt-slot-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--dock-surface);
+  border: 1px solid var(--dock-border);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 9px;
+  color: var(--dock-text-secondary);
+  white-space: nowrap;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.dock-lt-memory-slots li:hover .dock-lt-slot-tooltip {
+  display: block;
+}
+
+/* ── Time Bar ── */
+.dock-lt-time-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dock-lt-time-bar>div {
+  font-size: 7px;
+  color: var(--dock-text-dim);
+  width: 22px;
+  height: 8px;
+  background: var(--dock-input-bg);
+  border: 1px solid var(--dock-border);
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* ── Custom Times Accordion ── */
+.dock-lt-custom-times {
+  border-top: 1px solid var(--dock-border);
+  padding-top: 6px;
+  margin-top: 6px;
+}
+
+.dock-lt-custom-times .dock-lt-times-title {
+  font-size: 9px;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--dock-text-dim);
+  margin-bottom: 4px;
+}
+
+.dock-lt-custom-times .dock-lt-times-inputs {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.dock-lt-custom-times input[type="number"] {
+  width: 50px;
+  height: 23px;
+  background: var(--dock-input-bg);
+  border: 1px solid var(--dock-border);
+  border-radius: 3px;
+  color: var(--dock-text);
+  font-size: 10px;
+  font-family: inherit;
+  text-align: center;
+  padding: 0 4px;
+  outline: none;
+}
+
+.dock-lt-custom-times input[type="number"]:focus {
+  border-color: var(--dock-accent);
+}
+
+/* ── Lock Input Group ── */
+.dock-lt-lock-group {
+  display: inline-flex;
+  align-items: center;
+  height: 23px;
+}
+
+/* ── Collapsible Extra Section (React-only: Theme, Speaker, Animation, Position, etc.) ── */
+.dock-lt-extra-section {
+  border-top: 1px solid var(--dock-border);
+  margin: 0 8px;
+}
+
+.dock-lt-extra-section__header {
   display: flex;
   align-items: center;
   gap: 4px;
   width: 100%;
-  padding: 4px 4px;
+  padding: 5px 4px;
   background: none;
   border: none;
   color: var(--dock-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
 }
 
-.dock-lt-editor__section-header:hover {
+.dock-lt-extra-section__header:hover {
   color: var(--dock-text);
   background: var(--dock-surface);
 }
 
-.dock-lt-editor__section-body {
-  padding: 4px 4px 6px;
+.dock-lt-extra-section__body {
+  padding: 4px 4px 8px;
 }
 
-/* ── Group label ── */
-.dock-lt-editor__group-label {
-  font-size: 12px;
+/* ── Group label (used in extra sections) ── */
+.dock-lt-group-label {
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -23307,36 +24075,29 @@ button.dock-btm-toolbar__clear--inline,
   padding: 4px 0;
 }
 
-.dock-lt-editor__group-divider {
+.dock-lt-group-divider {
   height: 1px;
-  background: var(--dock-border-soft);
+  background: var(--dock-border);
   margin-bottom: 4px;
 }
 
-/* ── Field label ── */
-.dock-lt-editor__field-label {
+/* ── Field label (used in extra sections) ── */
+.dock-lt-field-label {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--dock-text-dim);
-  margin-bottom: 4px;
-}
-
-/* ── Preview ── */
-.dock-lt-editor__preview {
-  position: relative;
-  border-radius: 4px;
-  overflow: hidden;
+  margin-bottom: 3px;
 }
 
 /* ── Position grid ── */
-.dock-lt-editor__pos-grid {
+.dock-lt-pos-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
-.dock-lt-editor__pos-btn {
+.dock-lt-pos-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -23349,81 +24110,129 @@ button.dock-btm-toolbar__clear--inline,
   color: var(--dock-text-dim);
   cursor: pointer;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 11px;
   transition: all 0.1s ease;
 }
 
-.dock-lt-editor__pos-btn:hover {
-  border-color: var(--dock-border-active);
+.dock-lt-pos-btn:hover {
+  border-color: var(--dock-border-active, var(--dock-text-dim));
   color: var(--dock-text);
 }
 
-.dock-lt-editor__pos-btn--active {
+.dock-lt-pos-btn--active {
   background: var(--dock-accent);
   border-color: var(--dock-accent);
   color: #fff;
 }
 
 /* ── Presets grid ── */
-.dock-lt-editor__presets-grid {
+.dock-lt-presets-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
   padding: 4px 0;
 }
 
-.dock-lt-editor__preset-btn {
+.dock-lt-preset-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 4px 4px;
+  padding: 4px;
   background: var(--dock-surface);
   border: 1px solid var(--dock-border);
   border-radius: 4px;
   color: var(--dock-text-secondary);
   cursor: pointer;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 11px;
   transition: all 0.1s ease;
 }
 
-.dock-lt-editor__preset-btn:hover {
+.dock-lt-preset-btn:hover {
   border-color: var(--dock-accent);
   color: var(--dock-text);
   background: var(--dock-surface-alt);
 }
 
 /* ── Theme inspector ── */
-.dock-lt-editor__inspector {
+.dock-lt-inspector {
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 4px 0;
 }
 
-.dock-lt-editor__inspector-row {
+.dock-lt-inspector-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 0;
+  padding: 3px 0;
 }
 
-.dock-lt-editor__inspector-key {
-  font-size: 12px;
+.dock-lt-inspector-key {
+  font-size: 11px;
   color: var(--dock-text-dim);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
 
-.dock-lt-editor__inspector-val {
-  font-size: 12px;
+.dock-lt-inspector-val {
+  font-size: 11px;
   color: var(--dock-text-secondary);
   text-align: right;
   max-width: 60%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── Theme Selector ── */
+.dock-lt-theme-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.dock-lt-theme-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid var(--dock-border);
+  border-radius: 3px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: var(--dock-text-secondary);
+  font-size: 11px;
+  transition: all 0.1s ease;
+}
+
+.dock-lt-theme-btn:hover {
+  border-color: var(--dock-text-dim);
+  color: var(--dock-text);
+}
+
+.dock-lt-theme-btn--active {
+  background: var(--dock-accent);
+  border-color: var(--dock-accent);
+  color: #fff;
+}
+
+/* ── Speaker hint ── */
+.dock-lt-speaker-hint {
+  background: var(--dock-accent);
+  border: 1px solid var(--dock-accent);
+  border-radius: 3px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  font-size: 10px;
+  color: #fff;
+  line-height: 1.4;
 }
 
 /* ══════════════════════════════════════════════════════
@@ -23704,4 +24513,530 @@ button.dock-btm-toolbar__clear--inline,
   .dock-console-toggle {
     padding: 0 6px;
   }
+}
+
+/* ══════════════════════════════════════════════════
+   Bible Compact Mode (container height ≤ 450px)
+   Toggled via .dock-module--bible--compact
+   ══════════════════════════════════════════════════ */
+
+/* ── Search row ── */
+.dock-module--bible--compact .dock-bible-search-row {
+  gap: 6px;
+  padding: 4px 8px;
+  min-height: 34px;
+}
+
+.dock-module--bible--compact .dock-bible-search-row__input .dock_search__input {
+  min-height: 26px;
+  font-size: 11px;
+}
+
+/* ── Reading card: reference header ── */
+.dock-module--bible--compact .dock-bible-reader__ref-header {
+  gap: 4px;
+  padding: 4px 6px;
+}
+
+.dock-module--bible--compact .dock-bible-reader__ref-header-label {
+  min-height: auto;
+  height: 18px;
+  padding: 2px 6px;
+  font-size: 10px;
+}
+
+.dock-module--bible--compact .dock-bible-reader__ref-header-reference {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dock-module--bible--compact .dock-bible-reader__ref-header-translation {
+  min-height: auto;
+  height: 18px;
+  padding: 2px 6px;
+  font-size: 10px;
+}
+
+.dock-module--bible--compact .dock-bible-reader__ref-header-fav {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── Scripture content: verse rows ── */
+.dock-module--bible--compact .dock-bible-verse-row {
+  padding: 8px 0;
+  gap: 6px;
+}
+
+.dock-module--bible--compact .dock-bible-verse-row__num {
+  min-width: 16px;
+  font-size: 11px;
+}
+
+.dock-module--bible--compact .dock-bible-verse-row__text {
+  line-height: 1.4;
+}
+
+/* ── Bottom toolbar: compressed ── */
+.dock-module--bible--compact .dock-btm-toolbar {
+  padding: 6px 8px;
+  min-height: auto;
+}
+
+.dock-module--bible--compact .dock-btm-toolbar__icon-btn {
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.dock-module--bible--compact .dock-btm-segmented__item {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 10px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ImagePicker — compact image selector for lower-third variables
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dtb-image-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dtb-image-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Preview thumbnail ── */
+.dtb-image-picker__preview {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  border: 1px solid var(--dock-border);
+  background: var(--dock-surface);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dtb-image-picker__thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dtb-image-picker__placeholder {
+  color: var(--dock-text-secondary);
+  opacity: 0.4;
+}
+
+.dtb-image-picker__uploading {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dock-accent);
+  animation: dtb-image-picker-pulse 1s ease-in-out infinite;
+}
+
+@keyframes dtb-image-picker-pulse {
+
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ── Action buttons ── */
+.dtb-image-picker__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.dtb-image-picker__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  border: 1px solid var(--dock-border);
+  background: var(--dock-surface);
+  color: var(--dock-text-secondary);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+
+.dtb-image-picker__btn:hover {
+  background: var(--dock-surface-2);
+  color: var(--dock-text);
+  border-color: var(--dock-accent);
+}
+
+.dtb-image-picker__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dtb-image-picker__btn--danger:hover {
+  color: #ff4444;
+  border-color: #ff4444;
+}
+
+.dtb-image-picker__btn--icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--dock-text-secondary);
+  cursor: pointer;
+}
+
+.dtb-image-picker__btn--icon:hover {
+  background: var(--dock-surface-2);
+  color: var(--dock-text);
+}
+
+.dtb-image-picker__file-input {
+  display: none;
+}
+
+/* ── URL input ── */
+.dtb-image-picker__url-row {
+  display: flex;
+  gap: 6px;
+}
+
+.dtb-image-picker__url-input {
+  flex: 1;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid var(--dock-border);
+  background: var(--dock-surface);
+  color: var(--dock-text);
+  font-size: 11px;
+  font-family: var(--dock-font);
+  outline: none;
+  transition: border-color 100ms ease;
+}
+
+.dtb-image-picker__url-input::placeholder {
+  color: var(--dock-text-secondary);
+  opacity: 0.5;
+}
+
+.dtb-image-picker__url-input:focus {
+  border-color: var(--dock-accent);
+}
+
+.dtb-image-picker__url-input--error {
+  border-color: #ff4444;
+}
+
+.dtb-image-picker__error {
+  font-size: 10px;
+  color: #ff4444;
+  margin-top: -2px;
+}
+
+/* ── Library overlay ── */
+.dtb-image-picker__library-overlay {
+  border: 1px solid var(--dock-border);
+  border-radius: 6px;
+  background: var(--dock-surface);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+}
+
+.dtb-image-picker__library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dtb-image-picker__library-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dock-text);
+}
+
+.dtb-image-picker__library-search {
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid var(--dock-border);
+  background: var(--dock-surface);
+  color: var(--dock-text);
+  font-size: 11px;
+  font-family: var(--dock-font);
+  outline: none;
+}
+
+.dtb-image-picker__library-search::placeholder {
+  color: var(--dock-text-secondary);
+  opacity: 0.5;
+}
+
+.dtb-image-picker__library-search:focus {
+  border-color: var(--dock-accent);
+}
+
+/* ── Library grid ── */
+.dtb-image-picker__library-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  overflow-y: auto;
+  max-height: 140px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dock-border) transparent;
+}
+
+.dtb-image-picker__library-grid::-webkit-scrollbar {
+  width: 5px;
+}
+
+.dtb-image-picker__library-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dtb-image-picker__library-grid::-webkit-scrollbar-thumb {
+  background: var(--dock-border);
+  border-radius: 3px;
+}
+
+.dtb-image-picker__library-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background: var(--dock-surface);
+  cursor: pointer;
+  overflow: hidden;
+  padding: 0;
+  transition: border-color 100ms ease;
+}
+
+.dtb-image-picker__library-item:hover {
+  border-color: var(--dock-accent);
+}
+
+.dtb-image-picker__library-item--selected {
+  border-color: var(--dock-accent);
+  box-shadow: 0 0 0 1px var(--dock-accent);
+}
+
+.dtb-image-picker__library-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dtb-image-picker__library-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  color: var(--dock-text-secondary);
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+/* ── Mode Toggle (Design | Slots) ─────────────────────────────── */
+.dtb-lt-mode-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--dock-surface);
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  padding: 2px;
+  margin-bottom: 8px;
+}
+
+.dtb-lt-mode-toggle__btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 0;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--dock-text-secondary);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dtb-lt-mode-toggle__btn:hover {
+  background: var(--dock-border);
+  color: var(--dock-text);
+}
+
+.dtb-lt-mode-toggle__btn--active {
+  background: var(--dock-accent-soft);
+  color: var(--dock-accent);
+  font-weight: 600;
+}
+
+/* ── Slots Panel ──────────────────────────────────────────────── */
+.dtb-slots-panel {
+  padding: 0 0 8px;
+}
+
+.dtb-slots-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.dtb-slots-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--dock-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dtb-slots-panel__jump-btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--dock-border);
+  border-radius: 3px;
+  color: var(--dock-text-secondary);
+  font-size: 10px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dtb-slots-panel__jump-btn:hover {
+  background: var(--dock-surface);
+  color: var(--dock-text);
+  border-color: var(--dock-accent);
+}
+
+.dtb-slots-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.dtb-slots-panel__slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 2px;
+  min-height: 48px;
+  background: var(--dock-surface);
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  touch-action: manipulation;
+  font-family: inherit;
+}
+
+.dtb-slots-panel__slot:hover {
+  border-color: var(--dock-accent);
+}
+
+.dtb-slots-panel__slot--filled {
+  background: var(--dock-accent-soft);
+  border-color: var(--dock-border);
+}
+
+.dtb-slots-panel__slot--filled:hover {
+  border-color: var(--dock-accent);
+}
+
+.dtb-slots-panel__slot--active {
+  border-color: var(--dock-accent);
+  box-shadow: 0 0 0 1px var(--dock-accent);
+}
+
+.dtb-slots-panel__slot--empty {
+  opacity: 0.5;
+}
+
+.dtb-slots-panel__slot--empty:hover {
+  opacity: 0.8;
+}
+
+.dtb-slots-panel__slot-num {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--dock-text-secondary);
+  line-height: 1;
+}
+
+.dtb-slots-panel__slot--filled .dtb-slots-panel__slot-num {
+  color: var(--dock-accent);
+}
+
+.dtb-slots-panel__slot-label {
+  font-size: 9px;
+  color: var(--dock-text);
+  text-align: center;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dtb-slots-panel__slot--empty .dtb-slots-panel__slot-num {
+  color: var(--dock-text-dim);
+}
+
+.dtb-slots-panel__slot-empty {
+  color: var(--dock-text-dim);
+}
+
+.dtb-slots-panel__hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 9px;
+  color: var(--dock-text-dim);
+  opacity: 0.6;
 }

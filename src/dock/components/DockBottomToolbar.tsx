@@ -3,8 +3,11 @@
  *
  * Default: single-row (toggle | divider | actions | spacer | collapse) + clear below
  * ≤250px: two-row compact (toggle + collapse | action icons incl. delete inline)
+ * compact (panel ≤350px): Full | LT ... Delete | ⋯ overflow
  */
 
+import { useCallback, useRef, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 import "./DockBottomToolbar.css";
 
@@ -29,6 +32,8 @@ interface Props {
   collapsed?: boolean;
   /** Called when collapse/expand is toggled */
   onCollapseChange?: (collapsed: boolean) => void;
+  /** Compact mode: hides action children behind a ⋯ overflow menu */
+  compact?: boolean;
 }
 
 export default function DockBottomToolbar({
@@ -36,12 +41,31 @@ export default function DockBottomToolbar({
   onModeChange,
   morphing = false,
   children,
-  clearLabel = "Hide Bible",
+  clearLabel,
   onClear,
   clearDisabled = false,
   collapsed = false,
   onCollapseChange,
+  compact = false,
 }: Props) {
+  const { t } = useTranslation();
+  const resolvedClearLabel = clearLabel ?? t("dock.bottomToolbar.hideBible");
+  const [showOverflow, setShowOverflow] = useState(false);
+  const overflowRef = useRef<HTMLDivElement>(null);
+
+  // Close overflow on outside click
+  useEffect(() => {
+    if (!showOverflow) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setShowOverflow(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [showOverflow]);
+
+  const toggleOverflow = useCallback(() => setShowOverflow((prev) => !prev), []);
 
   if (collapsed) {
     return (
@@ -52,21 +76,91 @@ export default function DockBottomToolbar({
             className="dock-btm-toolbar__clear dock-btm-toolbar__clear--bible"
             onClick={onClear}
             disabled={clearDisabled}
-            title={clearLabel}
+            title={resolvedClearLabel}
           >
-            <span>Hide Bible</span>
-            {/* <Icon name="delete_sweep" size={16} /> */}
+            <span>{t("dock.bottomToolbar.hideBible")}</span>
           </button>
         )}
         <button
           type="button"
           className="dock-btm-toolbar__icon-btn"
           onClick={() => onCollapseChange?.(false)}
-          aria-label="Expand toolbar"
-          title="Expand toolbar"
+          aria-label={t("dock.bottomToolbar.expandTooltip")}
+          title={t("dock.bottomToolbar.expandTooltip")}
         >
           <Icon name="expand_less" size={18} />
         </button>
+      </div>
+    );
+  }
+
+  /* ═══ COMPACT MODE (panel ≤350px) ═══
+   * Layout: [ Full | LT ] ... [ Delete ] [ ⋯ ]
+   * Hidden actions (children) go into the ⋯ overflow dropdown */
+  if (compact) {
+    return (
+      <div className="dock-btm-toolbar dock-btm-toolbar--compact">
+        <div className="dock-btm-toolbar__row">
+          {/* Segmented: Full | LT */}
+          <div
+            className={`dock-btm-segmented${morphing ? " dock-btm-segmented--morphing" : ""}`}
+            role="group"
+            aria-label={t("dock.bottomToolbar.overlayModeLabel")}
+          >
+            <button
+              type="button"
+              className={`dock-btm-segmented__item${overlayMode === "fullscreen" ? " dock-btm-segmented__item--active" : ""}`}
+              onClick={() => onModeChange("fullscreen")}
+              title={t("dock.bottomToolbar.fullscreenTooltip")}
+            >
+              {t("dock.bottomToolbar.fullLabel")}
+            </button>
+            <button
+              type="button"
+              className={`dock-btm-segmented__item${overlayMode === "lower-third" ? " dock-btm-segmented__item--active" : ""}`}
+              onClick={() => onModeChange("lower-third")}
+              title={t("dock.bottomToolbar.lowerThirdTooltip")}
+            >
+              {t("dock.bottomToolbar.ltLabel")}
+            </button>
+          </div>
+
+          {/* Spacer pushes right actions to the end */}
+          <div className="dock-btm-spacer" />
+
+          {/* Delete / Hide button — always accessible */}
+          {onClear && (
+            <button
+              type="button"
+              className="dock-btm-toolbar__clear--inline"
+              onClick={onClear}
+              disabled={clearDisabled}
+              title={resolvedClearLabel}
+            >
+              {resolvedClearLabel}
+            </button>
+          )}
+
+          {/* ⋯ Overflow menu for hidden actions */}
+          {children && (
+            <div className="dock-btm-overflow" ref={overflowRef}>
+              <button
+                type="button"
+                className={`dock-btm-toolbar__icon-btn${showOverflow ? " dock-btm-toolbar__icon-btn--active" : ""}`}
+                onClick={toggleOverflow}
+                aria-label={t("dock.bottomToolbar.moreActions")}
+                title={t("dock.bottomToolbar.moreActions")}
+              >
+                <Icon name="more_horiz" size={16} />
+              </button>
+              {showOverflow && (
+                <div className="dock-btm-overflow__menu" role="menu">
+                  {children}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -78,35 +172,33 @@ export default function DockBottomToolbar({
         <div
           className={`dock-btm-segmented${morphing ? " dock-btm-segmented--morphing" : ""}`}
           role="group"
-          aria-label="Overlay mode"
+          aria-label={t("dock.bottomToolbar.overlayModeLabel")}
         >
           <button
             type="button"
             className={`dock-btm-segmented__item${overlayMode === "fullscreen" ? " dock-btm-segmented__item--active" : ""}`}
             onClick={() => onModeChange("fullscreen")}
-            title="Fullscreen overlay"
+            title={t("dock.bottomToolbar.fullscreenTooltip")}
           >
-            Full
+            {t("dock.bottomToolbar.fullLabel")}
           </button>
           <button
             type="button"
             className={`dock-btm-segmented__item${overlayMode === "lower-third" ? " dock-btm-segmented__item--active" : ""}`}
             onClick={() => onModeChange("lower-third")}
-            title="Lower-third overlay"
+            title={t("dock.bottomToolbar.lowerThirdTooltip")}
           >
-            LT
+            {t("dock.bottomToolbar.ltLabel")}
           </button>
           <button
             type="button"
             className="dock-btm-toolbar__icon-btn dock-btm-toolbar__icon-btn--collapse"
             onClick={() => onCollapseChange?.(true)}
-            aria-label="Collapse toolbar"
-            title="Collapse toolbar"
+            aria-label={t("dock.bottomToolbar.collapseTooltip")}
+            title={t("dock.bottomToolbar.collapseTooltip")}
           >
             <Icon name="expand_more" size={18} />
           </button>
-
-
         </div>
 
         {/* Action buttons + collapse grouped together */}
@@ -118,7 +210,7 @@ export default function DockBottomToolbar({
               className="dock-btm-toolbar__clear--inline"
               onClick={onClear}
               disabled={clearDisabled}
-              title={clearLabel}
+              title={resolvedClearLabel}
             >
               <Icon name="delete_sweep" size={16} />
             </button>
@@ -127,13 +219,11 @@ export default function DockBottomToolbar({
             type="button"
             className="dock-btm-toolbar__icon-btn dock-btm-toolbar__icon-btn--collapse_two"
             onClick={() => onCollapseChange?.(true)}
-            aria-label="Collapse toolbar"
-            title="Collapse toolbar"
+            aria-label={t("dock.bottomToolbar.collapseTooltip")}
+            title={t("dock.bottomToolbar.collapseTooltip")}
           >
             <Icon name="expand_more" size={18} />
           </button>
-
-
         </div>
 
         {/* Clear button — inline with actions at ≤250px, full-width below at wider */}
@@ -143,25 +233,20 @@ export default function DockBottomToolbar({
             className="dock-btm-toolbar__clear dock-btm-toolbar__clear--bible"
             onClick={onClear}
             disabled={clearDisabled}
-            title={clearLabel}
+            title={resolvedClearLabel}
           >
-            <span>Hide Bible</span>
-            {/* <Icon name="delete_sweep" size={16} /> */}
-            {/* <span>{clearLabel}</span> */}
+            <span>{t("dock.bottomToolbar.hideBible")}</span>
           </button>
         )}
-
-
       </div>
       <button
         type="button"
         className="dock-btm-toolbar__clear dock-btm-toolbar__clear--full"
         onClick={onClear}
         disabled={clearDisabled}
-        title={clearLabel}
+        title={resolvedClearLabel}
       >
-        <span>{clearLabel}</span>
-        {/* <Icon name="delete_sweep" size={16} /> */}
+        <span>{resolvedClearLabel}</span>
       </button>
     </div>
   );

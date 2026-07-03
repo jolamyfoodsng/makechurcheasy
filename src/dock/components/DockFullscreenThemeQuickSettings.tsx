@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { BibleThemeSettings } from "../../bible/types";
 import Icon from "../DockIcon";
 
@@ -266,10 +267,13 @@ export default function DockFullscreenThemeQuickSettings({
   onChange,
   onReset,
   onSaveDefault,
-  title = "Quick Theme Settings",
-  subtitle = "Theme edits update the dock preview live.",
+  title,
+  subtitle,
   showBackgroundControls = true,
 }: Props) {
+  const { t } = useTranslation();
+  const resolvedTitle = title ?? t("dock.fullscreenThemeQuickSettings.quickThemeSettings");
+  const resolvedSubtitle = subtitle ?? t("dock.fullscreenThemeQuickSettings.subtitle");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -310,7 +314,7 @@ export default function DockFullscreenThemeQuickSettings({
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        title="Quick theme settings"
+        title={t("dock.fullscreenThemeQuickSettings.quickThemeSettings")}
       >
         <Icon name="edit" size={10} />
       </button>
@@ -324,20 +328,20 @@ export default function DockFullscreenThemeQuickSettings({
           <div
             className="dock-theme-quick__modal"
             role="dialog"
-            aria-label="Quick theme settings"
+            aria-label={t("dock.fullscreenThemeQuickSettings.quickThemeSettings")}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="dock-theme-quick__modal-head">
               <div>
-                <div className="dock-theme-quick__heading">{title}</div>
-                <div className="dock-theme-quick__sub">{subtitle}</div>
+                <div className="dock-theme-quick__heading">{resolvedTitle}</div>
+                <div className="dock-theme-quick__sub">{resolvedSubtitle}</div>
               </div>
               <button
                 type="button"
                 className="dock-theme-quick__close"
                 onClick={() => setOpen(false)}
-                aria-label="Close quick theme settings"
-                title="Close"
+                aria-label={t("dock.fullscreenThemeQuickSettings.closeQuickThemeSettings")}
+                title={t("common.close")}
               >
                 <Icon name="close" size={14} />
               </button>
@@ -347,7 +351,7 @@ export default function DockFullscreenThemeQuickSettings({
               <div className="dock-theme-quick__section">
                 <label className="dock-theme-quick__field">
                   <span className="dock-theme-quick__field-head">
-                    <span>Main text size</span>
+                    <span>{t("dock.fullscreenThemeQuickSettings.mainTextSize")}</span>
                     <span>{formatPx(settings.fontSize)}</span>
                   </span>
                   <input
@@ -365,7 +369,7 @@ export default function DockFullscreenThemeQuickSettings({
 
                 <div className="dock-theme-quick__split-row">
                   <div className="dock-theme-quick__section">
-                    <div className="dock-theme-quick__section-label">Weight</div>
+                    <div className="dock-theme-quick__section-label">{t("dock.fullscreenThemeQuickSettings.weight")}</div>
                     <div className="dock-console-segmented dock-console-segmented--compact">
                       {(["normal", "bold"] as const).map((weight) => (
                         <button
@@ -373,15 +377,15 @@ export default function DockFullscreenThemeQuickSettings({
                           type="button"
                           className={`dock-console-segmented__item${settings.fontWeight === weight ? " dock-console-segmented__item--active" : ""}`}
                           onClick={() => onChange(withPatch(settings, { fontWeight: weight }))}
-                         title="No">
-                          {weight === "normal" ? "Normal" : "Bold"}
+                          title={weight === "normal" ? t("dock.fullscreenThemeQuickSettings.normal") : t("dock.fullscreenThemeQuickSettings.bold")}>
+                          {weight === "normal" ? t("dock.fullscreenThemeQuickSettings.normal") : t("dock.fullscreenThemeQuickSettings.bold")}
                         </button>
                       ))}
                     </div>
                   </div>
 
                   <div className="dock-theme-quick__section">
-                    <div className="dock-theme-quick__section-label">Case</div>
+                    <div className="dock-theme-quick__section-label">{t("dock.fullscreenThemeQuickSettings.case")}</div>
                     <div className="dock-console-segmented dock-console-segmented--compact dock-theme-quick__segmented-wrap">
                       {([
                         ["none", "Aa"],
@@ -407,7 +411,7 @@ export default function DockFullscreenThemeQuickSettings({
               <div className="dock-theme-quick__section">
                 <label className="dock-theme-quick__field">
                   <span className="dock-theme-quick__field-head">
-                    <span>Font family</span>
+                    <span>{t("dock.fullscreenThemeQuickSettings.fontFamily")}</span>
                   </span>
                   <select
                     className="dock-theme-quick__select"
@@ -423,7 +427,7 @@ export default function DockFullscreenThemeQuickSettings({
                     <option value="'Roboto', sans-serif">Roboto</option>
                     <option value="'Impact', 'Arial Black', sans-serif">Impact</option>
                     <option value="'Courier New', monospace">Courier New</option>
-                    <option value="system-ui, sans-serif">System Default</option>
+                    <option value="system-ui, sans-serif">{t("dock.fullscreenThemeQuickSettings.systemDefault")}</option>
                   </select>
                 </label>
               </div>
@@ -431,7 +435,7 @@ export default function DockFullscreenThemeQuickSettings({
               <div className="dock-theme-quick__section">
                 <label className="dock-theme-quick__field">
                   <span className="dock-theme-quick__field-head">
-                    <span>Ref. size</span>
+                    <span>{t("dock.fullscreenThemeQuickSettings.refSize")}</span>
                     <span>{formatPx(settings.refFontSize)}</span>
                   </span>
                   <input
@@ -451,7 +455,7 @@ export default function DockFullscreenThemeQuickSettings({
               <div className="dock-theme-quick__section">
                 <div className="dock-theme-quick__color-grid">
                   <label className="dock-theme-quick__color-field">
-                    <span>Main text</span>
+                    <span>{t("dock.fullscreenThemeQuickSettings.mainText")}</span>
                     <span className="dock-theme-quick__color-input-wrap">
                       <input
                         className="dock-theme-quick__color-input"
@@ -466,7 +470,7 @@ export default function DockFullscreenThemeQuickSettings({
                   </label>
 
                   <label className="dock-theme-quick__color-field">
-                    <span>Reference</span>
+                    <span>{t("dock.fullscreenThemeQuickSettings.reference")}</span>
                     <span className="dock-theme-quick__color-input-wrap">
                       <input
                         className="dock-theme-quick__color-input"
@@ -482,7 +486,7 @@ export default function DockFullscreenThemeQuickSettings({
 
                   {showBackgroundControls && (
                     <label className="dock-theme-quick__color-field">
-                      <span>Background</span>
+                      <span>{t("dock.fullscreenThemeQuickSettings.background")}</span>
                       <span className="dock-theme-quick__color-input-wrap">
                         <input
                           className="dock-theme-quick__color-input"
@@ -507,7 +511,7 @@ export default function DockFullscreenThemeQuickSettings({
                 <div className="dock-theme-quick__section">
                   <label className="dock-theme-quick__field">
                     <span className="dock-theme-quick__field-head">
-                      <span>Background opacity</span>
+                      <span>{t("dock.fullscreenThemeQuickSettings.backgroundOpacity")}</span>
                       <span>{formatOpacity(settings.fullscreenShadeOpacity)}</span>
                     </span>
                     <input
@@ -531,7 +535,7 @@ export default function DockFullscreenThemeQuickSettings({
 
               <div className="dock-theme-quick__split-row">
                 <div className="dock-theme-quick__section">
-                  <div className="dock-theme-quick__section-label">Text alignment</div>
+                  <div className="dock-theme-quick__section-label">{t("dock.fullscreenThemeQuickSettings.textAlignment")}</div>
                   <div className="dock-console-segmented dock-console-segmented--compact">
                     {(["left", "center", "right"] as const).map((align) => (
                       <button
@@ -539,8 +543,8 @@ export default function DockFullscreenThemeQuickSettings({
                         type="button"
                         className={`dock-console-segmented__item${settings.textAlign === align ? " dock-console-segmented__item--active" : ""}`}
                         onClick={() => onChange(withPatch(settings, { textAlign: align }))}
-                       title="Center">
-                        {align === "left" ? "Left" : align === "center" ? "Center" : "Right"}
+                        title={t(`common.${align}`)}>
+                        {t(`common.${align}`)}
                       </button>
                     ))}
                   </div>
@@ -549,7 +553,7 @@ export default function DockFullscreenThemeQuickSettings({
                 <div className="dock-theme-quick__section">
                   <label className="dock-theme-quick__field">
                     <span className="dock-theme-quick__field-head">
-                      <span>Line height</span>
+                      <span>{t("dock.fullscreenThemeQuickSettings.lineHeight")}</span>
                       <span>{formatLineHeight(settings.lineHeight)}</span>
                     </span>
                     <input
@@ -568,7 +572,7 @@ export default function DockFullscreenThemeQuickSettings({
               </div>
 
               <div className="dock-theme-quick__section">
-                <div className="dock-theme-quick__section-label">Presets</div>
+                <div className="dock-theme-quick__section-label">{t("dock.fullscreenThemeQuickSettings.presets")}</div>
                 <div className="dock-theme-quick__preset-grid">
                   {PRESETS.map((preset) => (
                     <button
@@ -577,7 +581,7 @@ export default function DockFullscreenThemeQuickSettings({
                       className="dock-theme-quick__preset"
                       onClick={() => handlePreset(preset)}
                     >
-                      {preset.label}
+                      {t(`dock.fullscreenThemeQuickSettings.preset${preset.id.split("-").map(s => s.charAt(0).toUpperCase() + s.slice(1)).join("")}`)}
                     </button>
                   ))}
                 </div>
@@ -589,16 +593,16 @@ export default function DockFullscreenThemeQuickSettings({
                 type="button"
                 className="dock-btn dock-btn--ghost dock-btn--compact dock-theme-quick__action"
                 onClick={onReset}
-               title="Reset">
-                Reset to Default
+                title={t("common.reset")}>
+                {t("dock.fullscreenThemeQuickSettings.resetToDefault")}
               </button>
               <button
                 type="button"
                 className="dock-btn dock-btn--preview dock-btn--compact dock-theme-quick__action"
                 onClick={() => void handleSave()}
                 disabled={saving}
-               title="Saving...">
-                {saving ? "Saving..." : "Save"}
+                title={t("dock.fullscreenThemeQuickSettings.saving")}>
+                {saving ? t("dock.fullscreenThemeQuickSettings.saving") : t("common.save")}
               </button>
             </div>
           </div>

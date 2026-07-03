@@ -11,7 +11,11 @@
  */
 
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
+import { relaunch, exit } from "@tauri-apps/plugin-process";
+import { open } from "@tauri-apps/plugin-shell";
+import { writeFile } from "@tauri-apps/plugin-fs";
+import { tempDir, join } from "@tauri-apps/api/path";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 // ── Private-repo auth ──
 // For private GitHub repos, a fine-grained PAT with contents:read is injected
@@ -93,17 +97,23 @@ export async function fetchVersionFloor(): Promise<{
   blocked: boolean;
   currentVersion: string;
   minimumVersion: string;
+  gracePeriodHours: number;
 } | null> {
   try {
     const res = await fetch(`${API_BASE}/api/app/version`);
     if (!res.ok) return null;
-    const data = await res.json() as { minimumSupportedVersion?: string };
+    const data = await res.json() as { minimumSupportedVersion?: string; gracePeriodHours?: number };
     const floor = data.minimumSupportedVersion || "";
     if (!floor) return null; // No floor configured
 
     const currentVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
     if (isBelowVersionFloor(currentVersion, floor)) {
-      return { blocked: true, currentVersion, minimumVersion: floor };
+      return {
+        blocked: true,
+        currentVersion,
+        minimumVersion: floor,
+        gracePeriodHours: data.gracePeriodHours ?? 0,
+      };
     }
     return null;
   } catch {
@@ -298,4 +308,109 @@ export async function downloadAndInstallUpdate(
   // Brief pause so the user sees "Relaunching..."
   await new Promise((r) => setTimeout(r, 800));
   await relaunch();
+}
+
+// ── GitHub Releases fallback ──
+
+const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-releases/releases/latest";
+
+type Platform = "windows" | "macos" | "linux";
+
+function detectPlatform(): Platform {
+  const ua = navigator.userAgent;
+  if (ua.includes("Windows")) return "windows";
+  if (ua.includes("Mac") || ua.includes("Macintosh")) return "macos";
+  return "linux";
+}
+
+const PLATFORM_EXTENSIONS: Record<Platform, string[]> = {
+  windows: [".msi", ".exe"],
+  macos: [".dmg", ".app.tar.gz"],
+  linux: [".AppImage", ".deb"],
+};
+
+function findPlatformAsset(assets: { name: string; browser_download_url: string }[], platform: Platform): { name: string; browser_download_url: string } | null {
+  for (const ext of PLATFORM_EXTENSIONS[platform]) {
+    const asset = assets.find((a) => a.name?.toLowerCase().endsWith(ext));
+    if (asset) return asset;
+  }
+  return null;
+}
+
+/**
+ * Download and install an update directly from GitHub Releases.
+ * Used as a fallback when the Tauri auto-updater has no signed binary
+ * for the current platform.
+ *
+ * Downloads the platform installer to a temp file and opens it with
+ * the OS default handler (MSI installer, DMG, AppImage, etc.).
+ * The app exits after launching the installer so files can be replaced.
+ */
+export async function downloadAndInstallFromGitHub(
+  onProgress?: (progress: DownloadProgress) => void,
+  onStatusChange?: (status: "downloading" | "installing" | "relaunching") => void
+): Promise<void> {
+  // 1. Fetch latest release metadata from GitHub API
+  const metaRes = await tauriFetch(RELEASES_API);
+  if (!metaRes.ok) throw new Error(`Failed to fetch release info (${metaRes.status})`);
+  const release = await metaRes.json() as {
+    tag_name?: string;
+    assets?: { name: string; browser_download_url: string }[];
+  };
+
+  // 2. Detect platform and find matching installer asset
+  const platform = detectPlatform();
+  const asset = findPlatformAsset(release.assets ?? [], platform);
+  if (!asset) throw new Error(`No installer available for ${platform}`);
+
+  // 3. Download the binary with progress tracking
+  onStatusChange?.("downloading");
+  const binRes = await tauriFetch(asset.browser_download_url);
+  if (!binRes.ok) throw new Error(`Download failed (${binRes.status})`);
+
+  const contentLength = Number(binRes.headers.get("content-length")) || 0;
+  let downloaded = 0;
+
+  let buffer: ArrayBuffer;
+
+  if (binRes.body) {
+    // Stream with progress
+    const reader = binRes.body.getReader();
+    const chunks: Uint8Array[] = [];
+
+    for (; ;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      downloaded += value.length;
+      onProgress?.({ contentLength, downloaded });
+    }
+
+    const merged = new Uint8Array(downloaded);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
+    buffer = merged.buffer;
+  } else {
+    // Fallback: no streaming support
+    buffer = await binRes.arrayBuffer();
+    downloaded = buffer.byteLength;
+    onProgress?.({ contentLength: contentLength || downloaded, downloaded });
+  }
+
+  // 4. Write installer to temp directory
+  const tmpDir = await tempDir();
+  const filePath = await join(tmpDir, asset.name);
+  await writeFile(filePath, new Uint8Array(buffer));
+
+  // 5. Open the installer with the OS default handler
+  onStatusChange?.("installing");
+  await open(filePath);
+
+  // 6. Exit the app so the installer can replace files
+  onStatusChange?.("relaunching");
+  await new Promise((r) => setTimeout(r, 800));
+  await exit(0);
 }

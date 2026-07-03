@@ -349,8 +349,8 @@ export default function MultiViewGalleryTutorial({
   }, [stepIndex]);
 
   const handleSkip = useCallback(() => {
-    onClose();
-  }, [onClose]);
+    onFinish();
+  }, [onFinish]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────
 
@@ -359,7 +359,7 @@ export default function MultiViewGalleryTutorial({
 
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        onFinish();
       } else if (e.key === "Enter" && stepCompleted) {
         goNext();
       }
@@ -367,7 +367,7 @@ export default function MultiViewGalleryTutorial({
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isActive, stepCompleted, goNext, onClose]);
+  }, [isActive, stepCompleted, goNext, onFinish]);
 
   // ── Nothing to render ─────────────────────────────────────────────────
 

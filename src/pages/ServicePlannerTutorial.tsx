@@ -357,8 +357,8 @@ export default function ServicePlannerTutorial({
   }, [stepIndex]);
 
   const handleSkip = useCallback(() => {
-    onClose();
-  }, [onClose]);
+    onFinish();
+  }, [onFinish]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────
 
@@ -367,7 +367,7 @@ export default function ServicePlannerTutorial({
 
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        onFinish();
       } else if (e.key === "Enter" && stepCompleted) {
         goNext();
       }
@@ -375,7 +375,7 @@ export default function ServicePlannerTutorial({
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isActive, stepCompleted, goNext, onClose]);
+  }, [isActive, stepCompleted, goNext, onFinish]);
 
   // ── Nothing to render ─────────────────────────────────────────────────
 

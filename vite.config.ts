@@ -252,13 +252,15 @@ export default defineConfig(async () => ({
     },
     // Proxy /uploads/* and /api/* to the Tauri overlay server so the dock
     // can load synced JSON files (dock-worship-songs.json, etc.) in dev.
+    // Set OVERLAY_PORT env var to match the running Tauri app's overlay port
+    // (check Tauri console output or `lsof -i -P | grep LISTEN`).
     proxy: {
       "/uploads": {
-        target: "http://127.0.0.1:45678",
+        target: `http://127.0.0.1:${process.env.OVERLAY_PORT || 45678}`,
         changeOrigin: true,
       },
       "/api": {
-        target: "http://127.0.0.1:45678",
+        target: `http://127.0.0.1:${process.env.OVERLAY_PORT || 45678}`,
         changeOrigin: true,
       },
     },
