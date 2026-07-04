@@ -6,7 +6,7 @@
  * Animation, Animation Presets, Theme Inspector.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import { buildOverlayUrl } from "../../lowerthirds/lowerThirdObsService";
 import { isSpeakerTheme } from "../../lowerthirds/speakerThemeUtils";
@@ -19,7 +19,6 @@ import type {
   LTFontSize,
   LTPosition,
   LTSize,
-  LTVariable,
   LowerThirdTheme,
 } from "../../lowerthirds/types";
 import {
@@ -34,9 +33,8 @@ import {
   LT_EXIT_STYLE_LABELS,
 } from "../../lowerthirds/types";
 import Icon from "../DockIcon";
-import ImagePicker from "../components/ImagePicker";
 import {
-  loadSlots, saveSlot, deleteSlot, getNextPopulatedSlot,
+  loadSlots, saveSlot, deleteSlot,
 } from "../../lowerthirds/contentSlots";
 import type { ContentSlot } from "../../lowerthirds/contentSlots";
 
@@ -91,109 +89,119 @@ function Section({
     </div>
   );
 }
-
 // ---------------------------------------------------------------------------
-// Variable Control — renders a single LTVariable as a form field
+// Sub-components matching control-panel.html dock-lt-* CSS classes
 // ---------------------------------------------------------------------------
 
-function VariableControl({
-  variable,
+const FONT_LIST = [
+  "'Open Sans', sans-serif",
+  "'Poppins', sans-serif",
+  "'Raleway', sans-serif",
+  "'Anonymous Pro', monospace",
+  "'Patua One', cursive",
+  "'Abril Fatface', cursive",
+  "'Lora', serif",
+  "'Cookie', cursive",
+  "'Oleo Script', cursive",
+  "'Kalam', cursive",
+  "'Fredoka One', cursive",
+];
+
+/** Align toggle: 3 radio buttons (left/center/right) — uses adjacent sibling CSS */
+function AlignToggle({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const options = [
+    { val: "left", icon: "format_align_left" },
+    { val: "center", icon: "format_align_center" },
+    { val: "right", icon: "format_align_right" },
+  ];
+  return (
+    <div className="dock-lt-align-toggle">
+      {options.map((o) => (
+        <Fragment key={o.val}>
+          <input
+            type="radio"
+            name="dock-lt-align"
+            id={`dock-lt-align-${o.val}`}
+            checked={value === o.val}
+            onChange={() => onChange(o.val)}
+          />
+          <label htmlFor={`dock-lt-align-${o.val}`}>
+            <span className="material-icons">{o.icon}</span>
+          </label>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+/** Number stepper: input with +/− buttons — uses .dock-lt-number-input */
+function NumberStepper({
   value,
   onChange,
+  min,
+  max,
+  step = 1,
+  icon,
+  noIcon,
+  width,
 }: {
-  variable: LTVariable;
-  value: string;
-  onChange: (val: string) => void;
+  value: number;
+  onChange: (v: number) => void;
+  min: number;
+  max: number;
+  step?: number;
+  icon?: string;
+  noIcon?: boolean;
+  width?: number;
 }) {
-  const { t } = useTranslation();
-  const baseInputStyle: React.CSSProperties = {
-    width: "100%",
-    background: "var(--dock-surface)",
-    border: "1px solid var(--dock-border)",
-    borderRadius: 3,
-    padding: "4px 6px",
-    fontSize: 11,
-    color: "var(--dock-text)",
-    fontFamily: "inherit",
-  };
+  const clamp = (v: number) => Math.min(max, Math.max(min, v));
+  const inc = () => onChange(clamp(Math.round((value + step) * 100) / 100));
+  const dec = () => onChange(clamp(Math.round((value - step) * 100) / 100));
+  return (
+    <div
+      className={`dock-lt-number-input${noIcon ? " input-no-icon" : ""}`}
+      style={width ? { width } : undefined}
+    >
+      <button type="button" onPointerDown={(e) => { e.preventDefault(); dec(); }}>
+        <span className="material-icons">{icon || "expand_less"}</span>
+      </button>
+      <input
+        type="number"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => onChange(clamp(Number(e.target.value)))}
+      />
+      <button type="button" onPointerDown={(e) => { e.preventDefault(); inc(); }}>
+        <span className="material-icons">expand_more</span>
+      </button>
+    </div>
+  );
+}
 
-  switch (variable.type) {
-    case "color":
-      return (
-        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-          <input
-            type="color"
-            value={value || "#ffffff"}
-            onChange={(e) => onChange(e.target.value)}
-            style={{ width: 24, height: 24, border: "none", background: "none", cursor: "pointer", padding: 0 }}
-          />
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={variable.placeholder}
-            style={{ ...baseInputStyle, flex: 1 }}
-          />
-        </div>
-      );
-
-    case "select":
-      return (
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          style={{ ...baseInputStyle, cursor: "pointer" }}
-        >
-          {variable.options?.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      );
-
-    case "number":
-      return (
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={variable.placeholder}
-          min={0}
-          style={baseInputStyle}
-        />
-      );
-
-    case "toggle":
-      return (
-        <button
-          type="button"
-          onClick={() => onChange(value === "true" ? "false" : "true")}
-          style={{
-            ...baseInputStyle,
-            background: value === "true" ? "var(--dock-accent)" : "var(--dock-surface)",
-            color: value === "true" ? "#fff" : "var(--dock-text-dim)",
-            cursor: "pointer",
-            textAlign: "center",
-          }}
-          title="true">
-          {value === "true" ? t("common.on") : t("common.off")}
-        </button>
-      );
-
-    case "image":
-      return <ImagePicker value={value} onChange={onChange} />;
-
-    default:
-      return (
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={variable.placeholder}
-          maxLength={variable.maxLength}
-          style={baseInputStyle}
-        />
-      );
-  }
+/** Config toggle: icon button with hidden checkbox — uses .dock-lt-config-btn + :has(input:checked) */
+function ConfigToggle({
+  checked,
+  onChange,
+  icon,
+  title,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  icon: string;
+  title?: string;
+}) {
+  return (
+    <label className="dock-lt-config-btn" title={title}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span className="material-icons">{icon}</span>
+    </label>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -367,12 +375,13 @@ export default function DockLowerThirdEditor({
       setExitStyle("fade");
       setSlots(loadSlots(theme.id, "default"));
       setActiveSlotIndex(null);
-      setEditorMode("design");
+      setCardsOpen(true);
     }
   }, [theme]);
 
-  // ── Editor mode (Design vs Slots) ──
-  const [editorMode, setEditorMode] = useState<"design" | "slots">("design");
+  // ── Cards accordion state ──
+  const [cardsOpen, setCardsOpen] = useState(true);
+
   const [slots, setSlots] = useState<(ContentSlot | null)[]>(() => loadSlots(theme.id, "default"));
   const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -399,14 +408,6 @@ export default function DockLowerThirdEditor({
     reloadSlots();
     if (activeSlotIndex === index) setActiveSlotIndex(null);
   }, [theme.id, reloadSlots, activeSlotIndex]);
-
-  const handleJumpNext = useCallback(() => {
-    const start = activeSlotIndex !== null ? activeSlotIndex + 1 : 0;
-    const next = getNextPopulatedSlot(theme.id, "default", start);
-    if (next) {
-      handleRecallSlot(next);
-    }
-  }, [theme.id, activeSlotIndex, handleRecallSlot]);
 
   const handleSlotPointerDown = useCallback((index: number) => {
     longPressTriggeredRef.current = false;
@@ -506,61 +507,6 @@ export default function DockLowerThirdEditor({
     );
     onAnimateOut(url);
   }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onAnimateOut]);
-
-  // ── Group variables ──
-  const groupedVars = useMemo(() => {
-    const groups = new Map<string, LTVariable[]>();
-    for (const v of theme.variables) {
-      const g = v.group || "Content";
-      if (!groups.has(g)) groups.set(g, []);
-      groups.get(g)!.push(v);
-    }
-    return groups;
-  }, [theme.variables]);
-
-  // ── Color picker row helper ──
-  const colorRow = (
-    label: string,
-    cssVar: string,
-    value: string,
-    onChange: (v: string) => void,
-  ) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 72 }}>{label}</label>
-      <input
-        type="color"
-        value={value || "#ffffff"}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ width: 22, height: 22, border: "none", background: "none", cursor: "pointer", padding: 0 }}
-      />
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={cssVar}
-        style={{
-          flex: 1,
-          background: "var(--dock-surface)",
-          border: "1px solid var(--dock-border)",
-          borderRadius: 3,
-          padding: "3px 6px",
-          fontSize: 10,
-          color: "var(--dock-text)",
-          fontFamily: "inherit",
-        }}
-      />
-    </div>
-  );
-
-  // ── Animation Presets ──
-  const presets = useMemo(() => [
-    { label: "Classic Slide", icon: "arrow_forward", anim: "slide-left" as LTAnimationIn, exit: "fade" as LTExitStyle },
-    { label: "Modern Fade", icon: "blur_on", anim: "fade-in" as LTAnimationIn, exit: "fade" as LTExitStyle },
-    { label: "Dramatic", icon: "zoom_in", anim: "zoom-in" as LTAnimationIn, exit: "slideDown" as LTExitStyle },
-    { label: "Smooth Rise", icon: "north", anim: "fade-up" as LTAnimationIn, exit: "fade" as LTExitStyle },
-    { label: "Snap", icon: "flash_on", anim: "none" as LTAnimationIn, exit: "cut" as LTExitStyle },
-    { label: "Elegant Blur", icon: "blur_circular", anim: "blur-in" as LTAnimationIn, exit: "fade" as LTExitStyle },
-  ], []);
 
   // ── Theme categories for the selector ──
   const categories = useMemo(() => {
@@ -728,184 +674,367 @@ export default function DockLowerThirdEditor({
           </div>
         )}
 
-        {/* ── Content: Design / Slots mode toggle ── */}
-        <div className="dtb-lt-mode-toggle">
-          <button
-            type="button"
-            className={`dtb-lt-mode-toggle__btn${editorMode === "design" ? " dtb-lt-mode-toggle__btn--active" : ""}`}
-            onClick={() => setEditorMode("design")}
+        {/* ── Lower Third Customization Card ── */}
+        <div className="dock-lt-config-content">
+          {/* Accordion Header */}
+          <div
+            className="dock-lt-ocs-alt-header"
+            onClick={() => setCardsOpen(!cardsOpen)}
+            style={{ cursor: "pointer" }}
           >
-            <Icon name="edit" size={12} />
-            <span>{t("lowerThird.design", "Design")}</span>
-          </button>
-          <button
-            type="button"
-            className={`dtb-lt-mode-toggle__btn${editorMode === "slots" ? " dtb-lt-mode-toggle__btn--active" : ""}`}
-            onClick={() => setEditorMode("slots")}
-          >
-            <Icon name="grid_view" size={12} />
-            <span>{t("lowerThird.slots", "Slots")}</span>
-          </button>
-        </div>
+            <div className="dock-lt-number-icon">1</div>
+            <div className="dock-lt-title">Lower Third</div>
+            <span className="material-icons dock-lt-accordion-icon">
+              {cardsOpen ? "expand_less" : "expand_more"}
+            </span>
+          </div>
 
-        {editorMode === "design" ? (
-          <Section label={t("lowerThird.content")} icon="edit" open={!!openSections.content} onToggle={() => toggleSection("content")}>
-            {[...groupedVars.entries()].map(([groupName, vars]) => (
-              <div key={groupName} style={{ marginBottom: 8 }}>
-                <div className="dock-lt-editor__group-label">{groupName}</div>
-                <div className="dock-lt-editor__group-divider" />
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "4px 0" }}>
-                  {vars.map((v) => (
-                    <div key={v.key}>
-                      <label className="dock-lt-editor__field-label">{v.label}</label>
-                      <VariableControl
-                        variable={v}
-                        value={variableValues[v.key] ?? ""}
-                        onChange={(val) => setVariableValues((prev) => ({ ...prev, [v.key]: val }))}
-                      />
-                    </div>
-                  ))}
+          {/* Hidable Content */}
+          <div className={`dock-lt-hidable${cardsOpen ? " dock-lt-hidable--open" : ""}`}>
+            {/* Grid Container */}
+            <div className="dock-lt-grid-container">
+              {/* Grid Row 1: Align, Style, Size, Margins */}
+              <div className="dock-lt-grid-row">
+                <AlignToggle
+                  value={customStyles.alignment}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, alignment: v as "left" | "center" | "right" }))}
+                />
+                <NumberStepper
+                  value={customStyles.styleNumber}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, styleNumber: v }))}
+                  min={1}
+                  max={3}
+                />
+                <NumberStepper
+                  value={customStyles.fontSize}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, fontSize: v }))}
+                  min={10}
+                  max={50}
+                />
+                <div className="dock-lt-margin-group">
+                  <NumberStepper
+                    value={customStyles.marginH}
+                    onChange={(v) => setCustomStyles((p) => ({ ...p, marginH: v }))}
+                    min={0}
+                    max={100}
+                    icon="swap_horiz"
+                  />
+                  <NumberStepper
+                    value={customStyles.marginV}
+                    onChange={(v) => setCustomStyles((p) => ({ ...p, marginV: v }))}
+                    min={0}
+                    max={55}
+                    icon="swap_vert"
+                    noIcon
+                  />
                 </div>
               </div>
-            ))}
-          </Section>
-        ) : (
-          /* ── Slots Panel ── */
-          <div className="dtb-slots-panel">
-            <div className="dtb-slots-panel__header">
-              <span className="dtb-slots-panel__title">
-                <Icon name="grid_view" size={13} />
-                {t("lowerThird.slots", "Slots")}
-              </span>
+
+              {/* Grid Row 2: Padding, Ratio, Spacing, Font */}
+              <div className="dock-lt-grid-row">
+                <div className="dock-lt-margin-group">
+                  <NumberStepper
+                    value={customStyles.paddingH}
+                    onChange={(v) => setCustomStyles((p) => ({ ...p, paddingH: v }))}
+                    min={0}
+                    max={4}
+                    step={0.1}
+                    icon="select_all"
+                  />
+                  <NumberStepper
+                    value={customStyles.paddingV}
+                    onChange={(v) => setCustomStyles((p) => ({ ...p, paddingV: v }))}
+                    min={0}
+                    max={4}
+                    step={0.1}
+                    icon="select_all"
+                    noIcon
+                  />
+                </div>
+                <NumberStepper
+                  value={customStyles.inverseRatio}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, inverseRatio: v }))}
+                  min={0}
+                  max={10}
+                  icon="aspect_ratio"
+                />
+                <NumberStepper
+                  value={customStyles.lineSpacing}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, lineSpacing: v }))}
+                  min={-5}
+                  max={5}
+                  icon="height"
+                />
+                <div className="dock-lt-font-group">
+                  <select
+                    className="dock-lt-select font"
+                    value={customStyles.fontFamily}
+                    onChange={(e) => setCustomStyles((p) => ({ ...p, fontFamily: e.target.value }))}
+                  >
+                    <option value="">System Default</option>
+                    {FONT_LIST.map((f) => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Grid Row 3: Logo, Shadow, Background colors */}
+              <div className="dock-lt-grid-row">
+                <ConfigToggle
+                  checked={customStyles.showLogo}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, showLogo: v }))}
+                  icon="image"
+                  title="Logo"
+                />
+                <NumberStepper
+                  value={customStyles.logoSize}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, logoSize: v }))}
+                  min={-10}
+                  max={10}
+                  icon="photo_size_select_large"
+                />
+                <ConfigToggle
+                  checked={customStyles.showShadow}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, showShadow: v }))}
+                  icon="icon-shadow"
+                  title="Shadow"
+                />
+                <NumberStepper
+                  value={customStyles.shadowAmount}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, shadowAmount: v }))}
+                  min={1}
+                  max={10}
+                  icon="tonality"
+                />
+                <ConfigToggle
+                  checked={customStyles.showBackground}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, showBackground: v }))}
+                  icon="icon-fill-drip"
+                  title="Background"
+                />
+                <div className="dock-lt-color-appearance">
+                  <span className="dock-lt-tool-title">Clr1</span>
+                  <input
+                    type="color"
+                    value={customStyles.bgColor1}
+                    onChange={(e) => setCustomStyles((p) => ({ ...p, bgColor1: e.target.value }))}
+                  />
+                  <span className="dock-lt-tool-title">Clr2</span>
+                  <input
+                    type="color"
+                    value={customStyles.bgColor2}
+                    onChange={(e) => setCustomStyles((p) => ({ ...p, bgColor2: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Grid Row 4: Corners, Border */}
+              <div className="dock-lt-grid-row">
+                <NumberStepper
+                  value={customStyles.borderRadius}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, borderRadius: v }))}
+                  min={0}
+                  max={10}
+                  icon="rounded_corner"
+                />
+                <ConfigToggle
+                  checked={customStyles.showBorder}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, showBorder: v }))}
+                  icon="icon-thickness"
+                  title="Border"
+                />
+                <NumberStepper
+                  value={customStyles.borderWidth}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, borderWidth: v }))}
+                  min={1}
+                  max={10}
+                  icon="line_weight"
+                />
+                <ConfigToggle
+                  checked={customStyles.showBorder}
+                  onChange={(v) => setCustomStyles((p) => ({ ...p, showBorder: v }))}
+                  icon="icon-pen"
+                  title="Border Color"
+                />
+                <div className="dock-lt-color-appearance">
+                  <span className="dock-lt-tool-title">Clr3</span>
+                  <input
+                    type="color"
+                    value={customStyles.borderColor1}
+                    onChange={(e) => setCustomStyles((p) => ({ ...p, borderColor1: e.target.value }))}
+                  />
+                  <span className="dock-lt-tool-title">Clr4</span>
+                  <input
+                    type="color"
+                    value={customStyles.borderColor2}
+                    onChange={(e) => setCustomStyles((p) => ({ ...p, borderColor2: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* First Edit Container: Logo + Textfields */}
+            <div className="dock-lt-first-edit">
+              <div className="dock-lt-logo-container">
+                <span className="material-icons" style={{ fontSize: 24, color: "var(--dock-text-dim)" }}>
+                  image
+                </span>
+              </div>
+              <div className="dock-lt-textfields">
+                {/* Name Field */}
+                <input
+                  type="text"
+                  value={variableValues["name"] ?? ""}
+                  onChange={(e) => setVariableValues((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="Name"
+                />
+                <div className="dock-lt-textfield-appearance">
+                  <label className="dock-lt-app-btn">
+                    <input
+                      type="checkbox"
+                      checked={customStyles.nameUpper}
+                      onChange={(e) => setCustomStyles((p) => ({ ...p, nameUpper: e.target.checked }))}
+                    />
+                    <span className="material-icons">text_fields</span>
+                  </label>
+                  <label className="dock-lt-app-btn">
+                    <input
+                      type="checkbox"
+                      checked={customStyles.nameBold}
+                      onChange={(e) => setCustomStyles((p) => ({ ...p, nameBold: e.target.checked }))}
+                    />
+                    <span className="material-icons">format_bold</span>
+                  </label>
+                  <input
+                    type="color"
+                    value={customStyles.nameColor}
+                    onChange={(e) => setCustomStyles((p) => ({ ...p, nameColor: e.target.value }))}
+                  />
+                </div>
+
+                {/* Info Field */}
+                <input
+                  type="text"
+                  value={variableValues["info"] ?? ""}
+                  onChange={(e) => setVariableValues((prev) => ({ ...prev, info: e.target.value }))}
+                  placeholder="Info"
+                />
+                <div className="dock-lt-textfield-appearance">
+                  <label className="dock-lt-app-btn">
+                    <input
+                      type="checkbox"
+                      checked={customStyles.infoUpper}
+                      onChange={(e) => setCustomStyles((p) => ({ ...p, infoUpper: e.target.checked }))}
+                    />
+                    <span className="material-icons">text_fields</span>
+                  </label>
+                  <label className="dock-lt-app-btn">
+                    <input
+                      type="checkbox"
+                      checked={customStyles.infoBold}
+                      onChange={(e) => setCustomStyles((p) => ({ ...p, infoBold: e.target.checked }))}
+                    />
+                    <span className="material-icons">format_bold</span>
+                  </label>
+                  <input
+                    type="color"
+                    value={customStyles.infoColor}
+                    onChange={(e) => setCustomStyles((p) => ({ ...p, infoColor: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Panel Bottom: Memory + Time Controls */}
+            <div className="dock-lt-panel-bottom">
               <button
                 type="button"
-                className="dtb-slots-panel__jump-btn"
-                onClick={handleJumpNext}
-                title={t("lowerThird.jumpNext", "Jump Next")}
-              >
-                <Icon name="skip_next" size={13} />
-                <span>{t("lowerThird.jumpNext", "Jump Next")}</span>
-              </button>
-            </div>
-            <div className="dtb-slots-panel__grid">
-              {slots.map((slot, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  className={`dtb-slots-panel__slot${slot ? " dtb-slots-panel__slot--filled" : " dtb-slots-panel__slot--empty"}${activeSlotIndex === idx ? " dtb-slots-panel__slot--active" : ""}`}
-                  onPointerDown={() => handleSlotPointerDown(idx)}
-                  onPointerUp={() => handleSlotPointerUp(idx, slot)}
-                  onPointerLeave={() => {
-                    if (longPressTimerRef.current) {
-                      clearTimeout(longPressTimerRef.current);
-                      longPressTimerRef.current = null;
-                    }
-                  }}
-                  title={slot ? `${slot.label}\n${t("common.clickRecall", "Click to recall")}\n${t("common.longPressDelete", "Long press to delete")}` : t("common.clickSave", "Click to save current")}
-                >
-                  <span className="dtb-slots-panel__slot-num">{idx + 1}</span>
-                  {slot ? (
-                    <span className="dtb-slots-panel__slot-label">{slot.label}</span>
-                  ) : (
-                    <span className="dtb-slots-panel__slot-empty">
-                      <Icon name="add" size={10} />
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-            <div className="dtb-slots-panel__hint">
-              <Icon name="info" size={10} />
-              <span>{t("lowerThird.slotsHint", "Click to save/recall • Long press to delete")}</span>
-            </div>
-          </div>
-        )}
-
-        {/* ── Appearance ── */}
-        <Section label={t("lowerThird.appearance")} icon="format_paint" open={!!openSections.appearance} onToggle={() => toggleSection("appearance")}>
-          {colorRow(t("lowerThird.background"), "bgColor", customStyles.bgColor, (v) => setCustomStyles((p) => ({ ...p, bgColor: v })))}
-          {colorRow(t("lowerThird.textColor"), "textColor", customStyles.textColor, (v) => setCustomStyles((p) => ({ ...p, textColor: v })))}
-          {colorRow(t("lowerThird.accent"), "accentColor", customStyles.accentColor, (v) => setCustomStyles((p) => ({ ...p, accentColor: v })))}
-
-          <div style={{ marginTop: 6 }}>
-            <label style={{ fontSize: 10, color: "var(--dock-text-dim)", display: "block", marginBottom: 2 }}>
-              {t("lowerThird.bgImage")}
-            </label>
-            <input
-              type="text"
-              value={customStyles.bgImage}
-              onChange={(e) => setCustomStyles((p) => ({ ...p, bgImage: e.target.value }))}
-              placeholder="https://..."
-              style={{
-                width: "100%", background: "var(--dock-surface)", border: "1px solid var(--dock-border)",
-                borderRadius: 3, padding: "3px 6px", fontSize: 10, color: "var(--dock-text)", fontFamily: "inherit",
-              }}
-            />
-          </div>
-
-          <div style={{ marginTop: 6 }}>
-            <label style={{ fontSize: 10, color: "var(--dock-text-dim)", display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-              <span>{t("lowerThird.bgImageOpacity")}</span>
-              <span style={{ color: "var(--dock-text-secondary)" }}>{customStyles.bgImageOpacity.toFixed(2)}</span>
-            </label>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={customStyles.bgImageOpacity}
-              onChange={(e) => setCustomStyles((p) => ({ ...p, bgImageOpacity: Number(e.target.value) }))}
-              style={{ width: "100%", height: 16, cursor: "pointer" }}
-            />
-          </div>
-
-          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 10, color: "var(--dock-text-dim)", display: "block", marginBottom: 2 }}>
-                {t("lowerThird.heightPx")} <span style={{ opacity: 0.6 }}>({t("lowerThird.heightPxHint")})</span>
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={customStyles.heightPx}
-                onChange={(e) => setCustomStyles((p) => ({ ...p, heightPx: Number(e.target.value) }))}
+                onClick={() => setCustomStyles({ ...LT_DEFAULT_CUSTOM_STYLE })}
                 style={{
-                  width: "100%", background: "var(--dock-surface)", border: "1px solid var(--dock-border)",
-                  borderRadius: 3, padding: "3px 6px", fontSize: 10, color: "var(--dock-text)", fontFamily: "inherit",
+                  background: "var(--dock-input-bg)",
+                  border: "1px solid var(--dock-border)",
+                  borderRadius: 3,
+                  color: "var(--dock-text-dim)",
+                  cursor: "pointer",
+                  padding: "2px 6px",
+                  fontSize: 10,
+                  fontFamily: "inherit",
                 }}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 10, color: "var(--dock-text-dim)", display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                <span>{t("lowerThird.logoScale")}</span>
-                <span style={{ color: "var(--dock-text-secondary)" }}>{customStyles.logoScale.toFixed(1)}×</span>
-              </label>
-              <input
-                type="range"
-                min={0.3}
-                max={3}
-                step={0.1}
-                value={customStyles.logoScale}
-                onChange={(e) => setCustomStyles((p) => ({ ...p, logoScale: Number(e.target.value) }))}
-                style={{ width: "100%", height: 16, cursor: "pointer" }}
-              />
+              >
+                <span className="material-icons" style={{ fontSize: 12, verticalAlign: "middle", marginRight: 2 }}>
+                  restart_alt
+                </span>
+                Clear
+              </button>
+
+              <ul className="dock-lt-memory-slots">
+                {slots.map((slot, idx) => (
+                  <li
+                    key={idx}
+                    className={`${activeSlotIndex === idx ? " li--active" : ""}${slot ? " li--filled" : ""}`}
+                    onPointerDown={() => handleSlotPointerDown(idx)}
+                    onPointerUp={() => handleSlotPointerUp(idx, slot)}
+                    onPointerLeave={() => {
+                      if (longPressTimerRef.current) {
+                        clearTimeout(longPressTimerRef.current);
+                        longPressTimerRef.current = null;
+                      }
+                    }}
+                  >
+                    <span className="dock-lt-slot-number">{idx + 1}</span>
+                    {slot && (
+                      <span className="dock-lt-slot-tooltip">{slot.label}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <select
+                  value={animationIn}
+                  onChange={(e) => setAnimationIn(e.target.value as LTAnimationIn)}
+                  style={{
+                    height: 23,
+                    background: "var(--dock-input-bg)",
+                    border: "1px solid var(--dock-border)",
+                    borderRadius: 3,
+                    color: "var(--dock-text)",
+                    fontSize: 10,
+                    fontFamily: "inherit",
+                    padding: "0 16px 0 4px",
+                    cursor: "pointer",
+                    outline: "none",
+                  }}
+                >
+                  {LT_ANIMATIONS_IN.map((anim) => (
+                    <option key={anim} value={anim}>{LT_ANIMATION_LABELS[anim]}</option>
+                  ))}
+                </select>
+                <select
+                  value={exitStyle}
+                  onChange={(e) => setExitStyle(e.target.value as LTExitStyle)}
+                  style={{
+                    height: 23,
+                    background: "var(--dock-input-bg)",
+                    border: "1px solid var(--dock-border)",
+                    borderRadius: 3,
+                    color: "var(--dock-text)",
+                    fontSize: 10,
+                    fontFamily: "inherit",
+                    padding: "0 16px 0 4px",
+                    cursor: "pointer",
+                    outline: "none",
+                  }}
+                >
+                  {LT_EXIT_STYLES.map((es) => (
+                    <option key={es} value={es}>{LT_EXIT_STYLE_LABELS[es]}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setCustomStyles({ ...LT_DEFAULT_CUSTOM_STYLE })}
-            style={{
-              marginTop: 6, width: "100%", padding: "4px 0", fontSize: 10,
-              background: "var(--dock-surface)", border: "1px solid var(--dock-border)",
-              borderRadius: 3, color: "var(--dock-text-dim)", cursor: "pointer", fontFamily: "inherit",
-            }}
-          >
-            <Icon name="restart_alt" size={12} style={{ verticalAlign: "middle", marginRight: 4 }} />
-            {t("lowerThird.resetToDefault")}
-          </button>
-        </Section>
-
+        </div>
         {/* ── Position ── */}
         <Section label={t("lowerThird.position")} icon="open_with" open={!!openSections.position} onToggle={() => toggleSection("position")}>
           <div className="dock-lt-editor__pos-grid">
@@ -961,26 +1090,6 @@ export default function DockLowerThirdEditor({
           </div>
         </Section>
 
-        {/* ── Animation Presets ── */}
-        <Section label={t("lowerThird.presets")} icon="auto_awesome" open={!!openSections.presets} onToggle={() => toggleSection("presets")}>
-          <div className="dock-lt-editor__presets-grid">
-            {presets.map((p) => (
-              <button
-                key={p.label}
-                type="button"
-                className="dock-lt-editor__preset-btn"
-                onClick={() => {
-                  setAnimationIn(p.anim);
-                  setExitStyle(p.exit);
-                }}
-                title={`${p.label} — ${LT_ANIMATION_LABELS[p.anim]} + ${LT_EXIT_STYLE_LABELS[p.exit]}`}
-              >
-                <Icon name={p.icon} size={16} />
-                <span style={{ fontSize: 10 }}>{p.label}</span>
-              </button>
-            ))}
-          </div>
-        </Section>
 
         {/* ── Theme Inspector ── */}
         <Section label={t("lowerThird.inspector")} icon="info" open={!!openSections.inspector} onToggle={() => toggleSection("inspector")}>

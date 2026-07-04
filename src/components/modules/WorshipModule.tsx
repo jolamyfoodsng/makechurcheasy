@@ -59,6 +59,7 @@ import { getUserScopedKey } from "../../services/userScopedStorage";
 import { DEFAULT_THEME_SETTINGS, type BibleTemplateType, type BibleTheme, type BibleThemeSettings } from "../../bible/types";
 import { LT_WORSHIP_THEMES } from "../../lowerthirds/themes";
 import type { LowerThirdTheme, LTCustomStyle } from "../../lowerthirds/types";
+import { LT_DEFAULT_CUSTOM_STYLE } from "../../lowerthirds/types";
 import type { Song, SongMetadata, SplitConfig, Slide } from "../../worship/types";
 import "../../worship/worship.css";
 import Icon from "../Icon";
@@ -579,6 +580,7 @@ export function WorshipModule({
   }, [songSearch]);
 
   const worshipCustomStyles = useMemo<LTCustomStyle>(() => ({
+    ...LT_DEFAULT_CUSTOM_STYLE,
     bgColor: "",
     textColor: "",
     accentColor: primaryColor,

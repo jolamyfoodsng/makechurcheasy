@@ -496,6 +496,14 @@ export interface MVSettings {
 
   // ── Audio ──
   inputGain: number;  // 0–300 (percent), default 100
+
+  // ── Mobile Remote ──
+  mobileRemoteEnabled: boolean;
+  mobileRequireApproval: boolean;
+  mobileAllowMultipleDevices: boolean;
+  mobileMaxDevices: number;
+  mobileAutoRemoveInactive: boolean;
+  mobileDesktopName: string;
 }
 
 export const DEFAULT_SETTINGS: MVSettings = {
@@ -530,6 +538,14 @@ export const DEFAULT_SETTINGS: MVSettings = {
   sermonPoints: [],
 
   inputGain: 100,
+
+  // ── Mobile Remote ──
+  mobileRemoteEnabled: false,
+  mobileRequireApproval: true,
+  mobileAllowMultipleDevices: true,
+  mobileMaxDevices: 3,
+  mobileAutoRemoveInactive: true,
+  mobileDesktopName: "My Church",
 };
 
 export function getSettings(): MVSettings {

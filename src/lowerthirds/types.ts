@@ -226,24 +226,86 @@ export const LT_ANIMATION_ICONS: Record<LTAnimationIn, string> = {
 // ---------------------------------------------------------------------------
 
 export interface LTCustomStyle {
-  /** Override background color (CSS color value) */
+  // ── Grid Row 1: Alignment, Style, Size, Margins ──
+  alignment: "left" | "center" | "right";
+  styleNumber: number; // 1–3, readonly stepper
+  fontSize: number; // 10–50
+  marginH: number; // 0–100
+  marginV: number; // 0–100
+
+  // ── Grid Row 2: Padding, Inverse Ratio, Line Spacing, Font ──
+  paddingH: number; // 0–4 step 0.1
+  paddingV: number; // 0–4 step 0.1
+  inverseRatio: number; // 0–10
+  lineSpacing: number; // -5–5
+  fontFamily: string;
+
+  // ── Grid Row 3: Logo, Shadow, Background ──
+  showLogo: boolean;
+  logoSize: number; // -10–10
+  showShadow: boolean;
+  shadowAmount: number; // 1–10
+  showBackground: boolean;
+  bgColor1: string;
+  bgColor2: string;
+
+  // ── Grid Row 4: Corners, Border ──
+  borderRadius: number; // 0–10
+  showBorder: boolean;
+  borderWidth: number; // 1–10
+  borderColor1: string;
+  borderColor2: string;
+
+  // ── Textfield appearance: Name ──
+  nameUpper: boolean;
+  nameBold: boolean;
+  nameColor: string;
+
+  // ── Textfield appearance: Info ──
+  infoUpper: boolean;
+  infoBold: boolean;
+  infoColor: string;
+
+  // ── Legacy fields (kept for compat) ──
   bgColor: string;
-  /** Override primary text color */
   textColor: string;
-  /** Override accent / highlight color (borders, tags, icons, gradients) */
   accentColor: string;
-  /** Background image URL — replaces background color when set */
   bgImage: string;
-  /** Background image opacity (0–1, blended over bgColor) */
   bgImageOpacity: number;
-  /** Height override in px (0 = auto/theme default) */
   heightPx: number;
-  /** Logo scale multiplier for branded lower-thirds */
   logoScale: number;
 }
 
 /** Default custom style — empty = use theme defaults */
 export const LT_DEFAULT_CUSTOM_STYLE: LTCustomStyle = {
+  alignment: "left",
+  styleNumber: 1,
+  fontSize: 24,
+  marginH: 4,
+  marginV: 4,
+  paddingH: 0,
+  paddingV: 0,
+  inverseRatio: 9,
+  lineSpacing: 0,
+  fontFamily: "",
+  showLogo: true,
+  logoSize: 0,
+  showShadow: false,
+  shadowAmount: 5,
+  showBackground: true,
+  bgColor1: "",
+  bgColor2: "",
+  borderRadius: 0,
+  showBorder: false,
+  borderWidth: 4,
+  borderColor1: "",
+  borderColor2: "",
+  nameUpper: true,
+  nameBold: true,
+  nameColor: "",
+  infoUpper: false,
+  infoBold: false,
+  infoColor: "",
   bgColor: "",
   textColor: "",
   accentColor: "",

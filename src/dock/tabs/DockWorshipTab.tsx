@@ -1341,7 +1341,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
       if (!section) return;
       setSlideEditor({
         index: idx,
-        label: cleanWorshipSectionLabel(section.label) || `Slide ${idx + 1}`,
+        label: cleanWorshipSectionLabel(section.label) || t('worship.slideNumber', { number: idx + 1 }),
         text: section.text,
       });
     },

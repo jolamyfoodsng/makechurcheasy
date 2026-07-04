@@ -166,10 +166,20 @@ function PreviewModal({
   installing: boolean;
   isAdded: boolean;
 }) {
+  const { t } = useTranslation();
+  const contentTypeLabels = useMemo(() => ({
+    camera: t("gallery.type.camera"),
+    scripture: t("gallery.type.scripture"),
+    translation: t("gallery.type.translation"),
+    "lower-third": t("gallery.type.lowerThird"),
+    browser: t("gallery.type.browser"),
+    image: t("gallery.type.image"),
+  }), [t]);
+
   return (
     <div className="mvg-modal-overlay" onClick={onClose}>
       <div className="mvg-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="mvg-modal-close" onClick={onClose} aria-label="Close" title="Close">
+        <button className="mvg-modal-close" onClick={onClose} aria-label={t("gallery.close")} title={t("gallery.close")}>
           <Icon name="close" size={20} />
         </button>
 
@@ -185,7 +195,7 @@ function PreviewModal({
             <span className="mvg-modal-category">
               {isAdded ? (
                 <span className="mvg-modal-added-badge">
-                  <Icon name="check_circle" size={12} /> Added
+                  <Icon name="check_circle" size={12} /> {t("gallery.added")}
                 </span>
               ) : (
                 GALLERY_CATEGORIES.find((c) => c.key === layout.category)?.label
@@ -198,7 +208,7 @@ function PreviewModal({
           {/* Slots */}
           <div className="mvg-modal-section">
             <h3 className="mvg-modal-section-title">
-              Layout Slots ({layout.slots.length})
+              {t("gallery.layoutSlots", { count: layout.slots.length })}
             </h3>
             <div className="mvg-modal-slots">
               {layout.slots.map((slot) => {
@@ -208,7 +218,7 @@ function PreviewModal({
                     <div className="mvg-modal-slot-dot" style={{ background: info.color }} />
                     <Icon name={info.icon} size={14} className="mvg-modal-slot-icon" />
                     <span className="mvg-modal-slot-label">{slot.label}</span>
-                    <span className="mvg-modal-slot-type">{info.label}</span>
+                    <span className="mvg-modal-slot-type">{contentTypeLabels[slot.contentType] || info.label}</span>
                   </div>
                 );
               })}
@@ -217,7 +227,7 @@ function PreviewModal({
 
           {/* Use Cases */}
           <div className="mvg-modal-section">
-            <h3 className="mvg-modal-section-title">Use Cases</h3>
+            <h3 className="mvg-modal-section-title">{t("gallery.useCases")}</h3>
             <div className="mvg-modal-usecases">
               {layout.useCases.map((uc) => (
                 <span key={uc} className="mvg-modal-usecase">{uc}</span>
@@ -234,7 +244,7 @@ function PreviewModal({
               </span>
               <span className="mvg-modal-meta-item">
                 <Icon name="view_module" size={14} />
-                {layout.slots.length} slot{layout.slots.length !== 1 ? "s" : ""}
+                {t("gallery.slotCount", { count: layout.slots.length })}
               </span>
             </div>
           </div>
@@ -245,18 +255,18 @@ function PreviewModal({
               className={`mvg-btn ${isAdded ? "mvg-btn--added" : "mvg-btn--primary"}`}
               onClick={onAddToOBS}
               disabled={installing}
-              title="Add">
+              title={t("gallery.addToObs")}>
               {installing ? (
                 <>
-                  <span className="loading-spinner-sm" /> Installing...
+                  <span className="loading-spinner-sm" /> {t("gallery.installing")}
                 </>
               ) : isAdded ? (
                 <>
-                  <Icon name="check_circle" size={16} /> Added to OBS
+                  <Icon name="check_circle" size={16} /> {t("gallery.addedToObs")}
                 </>
               ) : (
                 <>
-                  <Icon name="add" size={16} /> Add To OBS
+                  <Icon name="add" size={16} /> {t("gallery.addToObs")}
                 </>
               )}
             </button>
@@ -264,7 +274,7 @@ function PreviewModal({
 
           {!obsConnected && (
             <p className="mvg-modal-obs-hint">
-              <Icon name="info" size={12} /> Connect to OBS to add layouts
+              <Icon name="info" size={12} /> {t("gallery.connectToObsHint")}
             </p>
           )}
         </div>
@@ -276,19 +286,20 @@ function PreviewModal({
 // ── OBS Not Connected Modal ────────────────────────────────────────────────
 
 function OBSDisconnectedModal({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="mvg-modal-overlay" onClick={onClose}>
       <div className="mvg-modal mvg-modal--small" onClick={(e) => e.stopPropagation()}>
-        <button className="mvg-modal-close" onClick={onClose} aria-label="Close" title="Close">
+        <button className="mvg-modal-close" onClick={onClose} aria-label={t("gallery.close")} title={t("gallery.close")}>
           <Icon name="close" size={20} />
         </button>
         <div className="mvg-disconnected-content">
           <Icon name="cast_connected" size={40} className="mvg-disconnected-icon" />
-          <h3>OBS is not connected</h3>
-          <p>Connect to OBS Studio to install multi-view layouts.</p>
+          <h3>{t("gallery.obsNotConnected")}</h3>
+          <p>{t("gallery.obsConnectDescription")}</p>
           <div className="mvg-disconnected-actions">
-            <button className="mvg-btn mvg-btn--outline" onClick={onClose} title="Cancel">
-              Cancel
+            <button className="mvg-btn mvg-btn--outline" onClick={onClose} title={t("gallery.cancel")}>
+              {t("gallery.cancel")}
             </button>
           </div>
         </div>
@@ -457,16 +468,16 @@ export default function MultiViewGalleryPage() {
         // Mark as added
         markAdded(layout.id);
 
-        showToast(`"${sceneName}" added to OBS`, "success");
+        showToast(t("gallery.toastAdded", { name: sceneName }), "success");
         setPreviewLayout(null);
       } catch (err) {
         console.error("[MultiViewGallery] Failed to install layout:", err);
-        showToast("Failed to install layout to OBS", "error");
+        showToast(t("gallery.toastFailed"), "error");
       } finally {
         setInstalling(false);
       }
     },
-    [tryAutoConnect, showToast, markAdded]
+    [tryAutoConnect, showToast, markAdded, t]
   );
 
   // ── Handle preview → install ──
@@ -482,11 +493,10 @@ export default function MultiViewGalleryPage() {
         {/* Header */}
         <header className="app-page__header mvg-header" data-mgt-tutorial="welcome">
           <div className="app-page__header-copy">
-            <p className="app-page__eyebrow">Multi-View</p>
-            <h1 className="app-page__title">Multi-View Layouts</h1>
+            <p className="app-page__eyebrow">{t("gallery.eyebrow")}</p>
+            <h1 className="app-page__title">{t("gallery.title")}</h1>
             <p className="app-page__subtitle">
-              Choose a layout for displaying multiple cameras, speakers, scriptures,
-              translations, and other content in OBS.
+              {t("gallery.subtitle")}
             </p>
           </div>
           <div className="app-page__actions">
@@ -526,12 +536,12 @@ export default function MultiViewGalleryPage() {
           <input
             type="text"
             className="mvg-search-input"
-            placeholder="Search layouts..."
+            placeholder={t("gallery.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           {search && (
-            <button className="mvg-search-clear" onClick={() => setSearch("")} aria-label="Clear" title="Close">
+            <button className="mvg-search-clear" onClick={() => setSearch("")} aria-label={t("gallery.clearSearch")} title={t("gallery.clearSearch")}>
               <Icon name="close" size={14} />
             </button>
           )}
@@ -564,10 +574,10 @@ export default function MultiViewGalleryPage() {
                   {/* Preview */}
                   <div className="mvg-card-preview">
                     <LayoutPreviewSVG layout={layout} />
-                    <span className="mvg-card-slots">{layout.slots.length} slot{layout.slots.length !== 1 ? "s" : ""}</span>
+                    <span className="mvg-card-slots">{t("gallery.slotCount", { count: layout.slots.length })}</span>
                     {isAdded && (
                       <span className="mvg-card-added-badge">
-                        <Icon name="check_circle" size={12} /> Added
+                        <Icon name="check_circle" size={12} /> {t("gallery.added")}
                       </span>
                     )}
                   </div>
@@ -588,20 +598,20 @@ export default function MultiViewGalleryPage() {
                     <button
                       className="mvg-btn mvg-btn--outline mvg-btn--sm"
                       onClick={() => setPreviewLayout(layout)}
-                      title="Show">
-                      <Icon name="visibility" size={14} /> Preview
+                      title={t("gallery.preview")}>
+                      <Icon name="visibility" size={14} /> {t("gallery.preview")}
                     </button>
                     <button
                       className={`mvg-btn mvg-btn--sm ${isAdded ? "mvg-btn--added" : "mvg-btn--primary"}`}
                       onClick={() => handleAddToOBS(layout)}
-                      title="Add">
+                      title={t("gallery.addToObs")}>
                       {isAdded ? (
                         <>
-                          <Icon name="check_circle" size={14} /> Added
+                          <Icon name="check_circle" size={14} /> {t("gallery.added")}
                         </>
                       ) : (
                         <>
-                          <Icon name="add" size={14} /> Add to OBS
+                          <Icon name="add" size={14} /> {t("gallery.addToObs")}
                         </>
                       )}
                     </button>
@@ -615,13 +625,13 @@ export default function MultiViewGalleryPage() {
             <Icon name="view_module" size={48} className="mvg-empty-icon" />
             <h3>
               {filter === "added"
-                ? "No layouts added yet"
-                : "More multi-view layouts are coming soon."}
+                ? t("gallery.emptyAdded")
+                : t("gallery.emptyDefault")}
             </h3>
             <p>
               {filter === "added"
-                ? "Add a layout to OBS and it will appear here."
-                : "You can create custom layouts in the Multi-View editor."}
+                ? t("gallery.emptyAddedDesc")
+                : t("gallery.emptyDefaultDesc")}
             </p>
           </div>
         )}

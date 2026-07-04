@@ -5,8 +5,9 @@
  * Sidebar navigation + OBS status + routed content area.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { NavLink, Routes, Route, Navigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { MVDashboard } from "./pages/MVDashboard";
 import { MVEditor } from "./pages/MVEditor";
 import { MVTemplates } from "./pages/MVTemplates";
@@ -18,16 +19,17 @@ import { useThemeSync } from "./components/MVThemeProvider";
 import "./mv.css";
 import Icon from "../components/Icon";
 
-const NAV_ITEMS = [
-  { to: "/multiview/dashboard", icon: "dashboard", label: "Dashboard" },
-  { to: "/multiview/scenes", icon: "cast_connected", label: "Scenes & Output" },
-  { to: "/multiview/templates", icon: "auto_awesome_mosaic", label: "Templates" },
-  { to: "/multiview/settings", icon: "settings", label: "Settings" },
-] as const;
-
 export function MVShell() {
+  const { t } = useTranslation();
   const [obsConnected, setObsConnected] = useState(obsService.status === "connected");
   useThemeSync();
+
+  const NAV_ITEMS = useMemo(() => [
+    { to: "/multiview/dashboard", icon: "dashboard", label: t("mvShell.navDashboard") },
+    { to: "/multiview/scenes", icon: "cast_connected", label: t("mvShell.navScenes") },
+    { to: "/multiview/templates", icon: "auto_awesome_mosaic", label: t("mvShell.navTemplates") },
+    { to: "/multiview/settings", icon: "settings", label: t("mvShell.navSettings") },
+  ] as const, [t]);
 
   useEffect(() => {
     const unsub = obsService.onStatusChange((status) => {
@@ -38,25 +40,25 @@ export function MVShell() {
 
   return (
     <ToastProvider>
-      <div className="mv-shell" role="application" aria-label="Multi-View Editor">
+      <div className="mv-shell" role="application" aria-label={t("mvShell.multiView")}>
         {/* Skip navigation link for keyboard users */}
-        <a className="mv-skip-link" href="#mv-main-content">Skip to content</a>
+        <a className="mv-skip-link" href="#mv-main-content">{t("mvShell.skipToContent")}</a>
 
         {/* ── Sidebar ── */}
-        <nav className="mv-sidebar" aria-label="Multi-View navigation">
+        <nav className="mv-sidebar" aria-label={t("mvShell.navigation")}>
           <div className="mv-sidebar-brand" aria-hidden="true">
             <Icon name="grid_view" size={24} />
-            <span className="mv-sidebar-title">Multi-View</span>
+            <span className="mv-sidebar-title">{t("mvShell.multiView")}</span>
           </div>
 
           {/* OBS Status */}
-          <div className="mv-sidebar-obs-status" role="status" aria-live="polite" aria-label={obsConnected ? "Broadcast Connected" : "Broadcast Disconnected"}>
+          <div className="mv-sidebar-obs-status" role="status" aria-live="polite" aria-label={obsConnected ? t("mvShell.broadcastConnected") : t("mvShell.broadcastDisconnected")}>
             <span
               className={`mv-obs-dot ${obsConnected ? "mv-obs-dot--connected" : ""}`}
               aria-hidden="true"
             />
             <span className="mv-obs-label">
-              {obsConnected ? "Broadcast Connected" : "Broadcast Disconnected"}
+              {obsConnected ? t("mvShell.broadcastConnected") : t("mvShell.broadcastDisconnected")}
             </span>
           </div>
 
@@ -80,7 +82,7 @@ export function MVShell() {
           <div className="mv-sidebar-footer">
             <NavLink to="/" className="mv-nav-item mv-nav-item--back">
               <Icon name="arrow_back" size={20} className="mv-nav-icon" />
-              <span className="mv-nav-label">Back to Switcher</span>
+              <span className="mv-nav-label">{t("mvShell.backToSwitcher")}</span>
             </NavLink>
           </div>
         </nav>

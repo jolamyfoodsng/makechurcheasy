@@ -52,11 +52,11 @@ import { useAppTheme } from "../hooks/useAppTheme";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function getGreeting(): string {
+function getGreetingKey(): string {
   const hour = new Date().getHours();
-  if (hour < 12) return "Good Morning";
-  if (hour < 17) return "Good Afternoon";
-  return "Good Evening";
+  if (hour < 12) return "dashboard.greeting.morning";
+  if (hour < 17) return "dashboard.greeting.afternoon";
+  return "dashboard.greeting.evening";
 }
 
 function formatRelativeTime(date: Date): string {
@@ -98,7 +98,8 @@ function DashboardHeader({
   onConnectObs,
   onOpenTutorials,
 }: DashboardHeaderProps) {
-  const greeting = useMemo(() => getGreeting(), []);
+  const { t } = useTranslation();
+  const greetingKey = useMemo(() => getGreetingKey(), []);
   const { effective, setTheme } = useAppTheme();
   const isLight = effective === "light";
   const now = useMemo(() => {
@@ -119,14 +120,14 @@ function DashboardHeader({
 
           <div>
             <h2 className="header-title">
-              {greeting},{" "}
+              {t(greetingKey)},{" "}
               {pastorName || "User"}{" "}
               <span className="header-emoji">&#x1F44B;</span>
             </h2>
             <p className="header-subtitle">
               {obsConnected
-                ? "Everything looks ready for your next service."
-                : "Connect to OBS to get started."}
+                ? t("dashboard.header.readyMessage")
+                : t("dashboard.header.connectMessage")}
             </p>
           </div>
         </div>
@@ -134,7 +135,7 @@ function DashboardHeader({
           <button
             className="header-theme-toggle"
             onClick={() => setTheme(isLight ? "dark" : "light")}
-            title={isLight ? "Switch to dark mode" : "Switch to light mode"}
+            title={isLight ? t("dashboard.header.themeToggle.dark") : t("dashboard.header.themeToggle.light")}
           >
             {isLight ? <Moon className="header-theme-icon" /> : <Sun className="header-theme-icon" />}
           </button>
@@ -147,7 +148,7 @@ function DashboardHeader({
           <Monitor className="status-icon" />
           <div>
             <p className="status-title">
-              OBS {obsConnected ? "Connected" : "Disconnected"}{" "}
+              {t("dashboard.status.obs")} {obsConnected ? t("dashboard.obs.connected") : t("dashboard.obs.disconnected")}{" "}
               <span
                 className="status-dot"
                 style={{
@@ -159,8 +160,8 @@ function DashboardHeader({
             </p>
             <p className="status-desc">
               {obsConnected
-                ? "Studio is online and ready"
-                : "Not connected to OBS"}
+                ? t("dashboard.obs.studioOnline")
+                : t("dashboard.obs.notConnected")}
             </p>
           </div>
         </div>
@@ -168,7 +169,7 @@ function DashboardHeader({
           <MonitorSmartphone className="status-icon" />
           <div>
             <p className="status-title">
-              Dock {dockAvailable ? "Connected" : "Unavailable"}{" "}
+              {t("dashboard.status.dock")} {dockAvailable ? t("dashboard.dock.detected") : t("dashboard.dock.notDetected")}{" "}
               <span
                 className="status-dot"
                 style={{
@@ -180,8 +181,8 @@ function DashboardHeader({
             </p>
             <p className="status-desc">
               {dockAvailable
-                ? "MakeChurchEasy Dock detected"
-                : "Dock not detected"}
+                ? t("dashboard.dock.detected")
+                : t("dashboard.dock.notDetected")}
             </p>
           </div>
         </div>
@@ -191,19 +192,19 @@ function DashboardHeader({
             track("connect_obs_clicked");
             onConnectObs();
           }}
-          title="Connect">
+          title={t("dashboard.btn.connect")}>
           {obsConnected ? (
             <>
-              <Check className="btn-icon" /> OBS Connected
+              <Check className="btn-icon" /> {t("dashboard.btn.obsConnected")}
             </>
           ) : (
             <>
-              <Monitor className="btn-icon" /> Connect to OBS
+              <Monitor className="btn-icon" /> {t("dashboard.btn.connectToObs")}
             </>
           )}
         </button>
-        <button className="btn-secondary" onClick={onOpenTutorials} title="Open in new tab">
-          <Play className="btn-icon" /> Watch Tutorials <ExternalLink className="btn-icon" />
+        <button className="btn-secondary" onClick={onOpenTutorials} title={t("dashboard.btn.openInNewTab")}>
+          <Play className="btn-icon" /> {t("dashboard.btn.watchTutorials")} <ExternalLink className="btn-icon" />
         </button>
       </div>
     </>
@@ -237,20 +238,21 @@ function FeatureGrid({
   onStartVoiceBible,
   onNavigate,
 }: FeatureGridProps) {
+  const { t } = useTranslation();
   const vbStatusLabel = useMemo(() => {
     switch (voiceBibleStatus) {
       case "listening":
-        return "Listening";
+        return t("dashboard.vb.listening");
       case "connecting":
-        return "Connecting...";
+        return t("dashboard.vb.connecting");
       case "requesting-mic":
-        return "Requesting Mic...";
+        return t("dashboard.vb.requestingMic");
       case "error":
-        return "Error";
+        return t("dashboard.vb.error");
       default:
-        return voiceBibleConnected ? "Ready" : "Disconnected";
+        return voiceBibleConnected ? t("dashboard.vb.ready") : t("dashboard.vb.disconnected");
     }
-  }, [voiceBibleStatus, voiceBibleConnected]);
+  }, [voiceBibleStatus, voiceBibleConnected, t]);
 
   return (
     <div className="grid-container" data-dt-tutorial="feature-grid">
@@ -260,21 +262,21 @@ function FeatureGrid({
         <div className="icon-wrapper icon-wrapper-purple">
           <Mic className="feature-icon icon-purple" />
         </div>
-        <h3 className="card-title">Voice Bible</h3>
+        <h3 className="card-title">{t("dashboard.vb.title")}</h3>
         <p className="card-subtitle card-subtitle-purple">
           {vbStatusLabel}
         </p>
         <p className="card-info">
-          {voiceBibleConnected ? "Voice Ready" : "Not connected"}
+          {voiceBibleConnected ? t("dashboard.vb.voiceReady") : t("dashboard.vb.notConnected")}
         </p>
         <button
           className="card-btn card-btn-purple"
           onClick={onStartVoiceBible}
-          title="Start">
+          title={t("dashboard.vb.start")}>
           <Mic className="card-btn-icon" />{" "}
           {voiceBibleStatus === "listening"
-            ? "Stop Listening"
-            : "Start Listening"}
+            ? t("dashboard.vb.stopListening")
+            : t("dashboard.vb.startListening")}
         </button>
       </div>
 
@@ -284,19 +286,18 @@ function FeatureGrid({
         <div className="icon-wrapper icon-wrapper-blue">
           <BookOpen className="feature-icon icon-blue" />
         </div>
-        <h3 className="card-title">Bible</h3>
+        <h3 className="card-title">{t("dashboard.bible.title")}</h3>
         <p className="card-subtitle card-subtitle-blue">
-          {activeTranslation} Active
+          {t("dashboard.bible.active", { translation: activeTranslation })}
         </p>
         <p className="card-info">
-          {translationCount} Translation{translationCount !== 1 ? "s" : ""}{" "}
-          Installed
+          {t("dashboard.bible.translationsInstalled", { count: translationCount })}
         </p>
         <button
           className="card-btn card-btn-blue"
           onClick={() => { track("dashboard_card_clicked", { card: "bible" }); onNavigate("/resources?tab=bible"); }}
-          title="Open">
-          <BookOpen className="card-btn-icon" /> Open Bible
+          title={t("dashboard.bible.open")}>
+          <BookOpen className="card-btn-icon" /> {t("dashboard.bible.open")}
         </button>
       </div>
 
@@ -306,18 +307,18 @@ function FeatureGrid({
         <div className="icon-wrapper icon-wrapper-green">
           <Music className="feature-icon icon-green" />
         </div>
-        <h3 className="card-title">Worship</h3>
+        <h3 className="card-title">{t("dashboard.worship.title")}</h3>
         <p className="card-subtitle card-subtitle-green">
-          {songCount} Song{songCount !== 1 ? "s" : ""}
+          {t("dashboard.worship.songs", { count: songCount })}
         </p>
         <p className="card-info">
-          {recentSongCount} Recently Used
+          {t("dashboard.worship.recentlyUsed", { count: recentSongCount })}
         </p>
         <button
           className="card-btn card-btn-green"
           onClick={() => { track("dashboard_card_clicked", { card: "worship" }); onNavigate("/resources?tab=worship"); }}
-          title="Open">
-          <ListMusic className="card-btn-icon" /> Open Worship
+          title={t("dashboard.worship.open")}>
+          <ListMusic className="card-btn-icon" /> {t("dashboard.worship.open")}
         </button>
       </div>
 
@@ -327,18 +328,18 @@ function FeatureGrid({
         <div className="icon-wrapper icon-wrapper-orange">
           <Images className="feature-icon icon-orange" />
         </div>
-        <h3 className="card-title">Media</h3>
+        <h3 className="card-title">{t("dashboard.media.title")}</h3>
         <p className="card-subtitle card-subtitle-orange">
-          {mediaCount} Asset{mediaCount !== 1 ? "s" : ""}
+          {t("dashboard.media.assets", { count: mediaCount })}
         </p>
         <p className="card-info">
-          {recentMediaCount} Recent Upload{recentMediaCount !== 1 ? "s" : ""}
+          {t("dashboard.media.recentUploads", { count: recentMediaCount })}
         </p>
         <button
           className="card-btn card-btn-orange"
           onClick={() => { track("dashboard_card_clicked", { card: "media" }); onNavigate("/resources?tab=media"); }}
-          title="Open">
-          <Video className="card-btn-icon" /> Open Media
+          title={t("dashboard.media.open")}>
+          <Video className="card-btn-icon" /> {t("dashboard.media.open")}
         </button>
       </div>
     </div>
@@ -352,6 +353,7 @@ interface ConnectionUrlsProps {
 }
 
 function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
+  const { t } = useTranslation();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showInstructions, setShowInstructions] = useState(false);
 
@@ -378,9 +380,9 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
       <div className="urls-header">
         <Link className="urls-header-icon" />
         <div>
-          <h3 className="urls-title">Connection URLs</h3>
+          <h3 className="urls-title">{t("dashboard.urls.title")}</h3>
           <p className="urls-subtitle">
-            Add these URLs as OBS Custom Browser Docks
+            {t("dashboard.urls.subtitle")}
           </p>
         </div>
       </div>
@@ -388,9 +390,9 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
       <div className="urls-row">
         <div className="urls-group">
           <div className="url-label-block">
-            <span className="url-label-text text-indigo">Bible Overlay Dock</span>
+            <span className="url-label-text text-indigo">{t("dashboard.urls.bibleOverlay")}</span>
             <p className="url-label-desc">
-              Scripture presentation and Bible controls inside OBS
+              {t("dashboard.urls.bibleOverlayDesc")}
             </p>
           </div>
           <div className="url-input-group">
@@ -402,21 +404,21 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
             <button
               className="url-btn btn-indigo"
               onClick={() => handleCopy("overlay", overlayUrl)}
-              title="Copy">
+              title={t("dashboard.urls.copy")}>
               {copiedId === "overlay" ? (
                 <Check className="url-btn-icon" />
               ) : (
                 <Copy className="url-btn-icon" />
               )}
-              {copiedId === "overlay" ? "Copied" : "Copy URL"}
+              {copiedId === "overlay" ? t("dashboard.urls.copied") : t("dashboard.urls.copy")}
             </button>
           </div>
         </div>
 
         <div className="urls-group">
-          <span className="url-label-text text-green">Scripture Assistant</span>
+          <span className="url-label-text text-green">{t("dashboard.urls.scriptureAssistant")}</span>
           <p className="url-label-desc">
-            Automatically detects and displays Bible references as the preacher speaks
+            {t("dashboard.urls.scriptureAssistantDesc")}
           </p>
           <div className="url-input-group">
             <input
@@ -427,13 +429,13 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
             <button
               className="url-btn btn-green"
               onClick={() => handleCopy("dock", lmDockUrl)}
-              title="Copy">
+              title={t("dashboard.urls.copy")}>
               {copiedId === "dock" ? (
                 <Check className="url-btn-icon" />
               ) : (
                 <Copy className="url-btn-icon" />
               )}
-              {copiedId === "dock" ? "Copied" : "Copy URL"}
+              {copiedId === "dock" ? t("dashboard.urls.copied") : t("dashboard.urls.copy")}
             </button>
           </div>
         </div>
@@ -444,30 +446,30 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
           <Info className="urls-info-icon" />
           <span className="urls-info-title">
             {obsConnected
-              ? "OBS is connected — these URLs are ready to use"
-              : "Connect to OBS first, then add these as Custom Browser Docks"}
+              ? t("dashboard.urls.obsConnectedInfo")
+              : t("dashboard.urls.obsNotConnectedInfo")}
           </span>
         </div>
         <button
           className="urls-info-toggle"
           onClick={() => setShowInstructions(!showInstructions)}
-          title="Add">
+          title={t("dashboard.urls.howToAdd")}>
           {showInstructions ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          <span className="urls-info-subtitle">How to Add a Dock in OBS</span>
+          <span className="urls-info-subtitle">{t("dashboard.urls.howToAdd")}</span>
         </button>
         {showInstructions && (
           <>
             <ol className="urls-info-list">
-              <li>Open OBS Studio.</li>
-              <li>Go to <strong>Docks → Custom Browser Docks</strong>.</li>
-              <li>Enter a name for the dock (e.g. "MakeChurchEasy Bible" or "MakeChurchEasy Control").</li>
-              <li>Paste the URL.</li>
-              <li>Click <strong>Apply</strong>.</li>
-              <li>The dock will appear inside OBS and can be moved, resized, or docked anywhere in the interface.</li>
+              <li>{t("dashboard.urls.step1")}</li>
+              <li>{t("dashboard.urls.step2")}</li>
+              <li>{t("dashboard.urls.step3")}</li>
+              <li>{t("dashboard.urls.step4")}</li>
+              <li>{t("dashboard.urls.step5")}</li>
+              <li>{t("dashboard.urls.step6")}</li>
             </ol>
             <div className="urls-info-footer">
               <AlertCircle className="urls-info-footer-icon" />
-              <span>These are OBS Dock URLs, not Browser Sources. Do not add them under Sources.</span>
+              <span>{t("dashboard.urls.warning")}</span>
             </div>
           </>
         )}
@@ -499,23 +501,24 @@ function ActivityAndStatus({
   songCount,
   onNavigate,
 }: ActivityAndStatusProps) {
+  const { t } = useTranslation();
   const obsConnected = obsStatus === "connected";
   const vbStatusLabel = useMemo(() => {
     switch (voiceBibleStatus) {
       case "listening":
-        return "Listening";
+        return t("dashboard.vb.listening");
       case "connecting":
-        return "Connecting";
+        return t("dashboard.vb.connecting");
       case "requesting-mic":
-        return "Requesting Mic";
+        return t("dashboard.vb.requestingMic");
       case "error":
-        return "Error";
+        return t("dashboard.vb.error");
       case "idle":
-        return "Ready";
+        return t("dashboard.vb.ready");
       default:
-        return "Disconnected";
+        return t("dashboard.vb.disconnected");
     }
-  }, [voiceBibleStatus]);
+  }, [voiceBibleStatus, t]);
 
   const vbStatusColor = useMemo(() => {
     if (voiceBibleStatus === "listening") return "var(--success)";
@@ -529,13 +532,13 @@ function ActivityAndStatus({
       <div className="panel">
         <div className="panel-header">
           <h3 className="panel-title">
-            <History className="panel-icon" /> Recent Activity
+            <History className="panel-icon" /> {t("dashboard.activity.recentActivity")}
           </h3>
           <button
             className="btn-view-all"
             onClick={() => onNavigate("/settings")}
-            title="View All">
-            View All
+            title={t("dashboard.activity.viewAll")}>
+            {t("dashboard.activity.viewAll")}
           </button>
         </div>
 
@@ -545,7 +548,7 @@ function ActivityAndStatus({
               <div className="activity-content">
                 <Activity className="activity-icon icon-variant" />
                 <p className="activity-text" style={{ color: "var(--text-muted)" }}>
-                  No recent activity yet
+                  {t("dashboard.activity.noActivity")}
                 </p>
               </div>
             </div>
@@ -576,7 +579,7 @@ function ActivityAndStatus({
       {/* System Status */}
       <div className="panel">
         <h3 className="panel-title panel-title-mb">
-          <Activity className="panel-icon" /> System Status
+          <Activity className="panel-icon" /> {t("dashboard.status.systemStatus")}
         </h3>
 
         <div className="status-grid">
@@ -586,7 +589,7 @@ function ActivityAndStatus({
               {obsConnected && <span className="status-dot" />}
             </div>
             <div>
-              <p className="status-card-title">OBS</p>
+              <p className="status-card-title">{t("dashboard.status.obs")}</p>
               <p
                 className={`status-card-subtitle ${obsConnected ? "text-secondary-color" : ""
                   }`}
@@ -594,7 +597,7 @@ function ActivityAndStatus({
                   !obsConnected ? { color: "var(--text-muted)" } : undefined
                 }
               >
-                {obsConnected ? "Connected" : "Disconnected"}
+                {obsConnected ? t("dashboard.status.connected") : t("dashboard.status.disconnected")}
               </p>
             </div>
           </div>
@@ -605,7 +608,7 @@ function ActivityAndStatus({
               {dockAvailable && <span className="status-dot" />}
             </div>
             <div>
-              <p className="status-card-title">Dock</p>
+              <p className="status-card-title">{t("dashboard.status.dock")}</p>
               <p
                 className={`status-card-subtitle ${dockAvailable ? "text-secondary-color" : ""
                   }`}
@@ -613,7 +616,7 @@ function ActivityAndStatus({
                   !dockAvailable ? { color: "var(--text-muted)" } : undefined
                 }
               >
-                {dockAvailable ? "Connected" : "Unavailable"}
+                {dockAvailable ? t("dashboard.status.connected") : t("dashboard.status.unavailable")}
               </p>
             </div>
           </div>
@@ -630,7 +633,7 @@ function ActivityAndStatus({
                 )}
             </div>
             <div>
-              <p className="status-card-title">Voice Bible</p>
+              <p className="status-card-title">{t("dashboard.status.voiceBible")}</p>
               <p
                 className="status-card-subtitle"
                 style={{ color: vbStatusColor }}
@@ -645,9 +648,9 @@ function ActivityAndStatus({
               <BookOpen className="status-card-icon text-blue-color" />
             </div>
             <div>
-              <p className="status-card-title">Bible</p>
+              <p className="status-card-title">{t("dashboard.status.bible")}</p>
               <p className="status-card-subtitle text-blue-color">
-                {translationCount} Installed
+                {t("dashboard.status.installed", { count: translationCount })}
               </p>
             </div>
           </div>
@@ -657,9 +660,9 @@ function ActivityAndStatus({
               <ImageIcon className="status-card-icon text-orange-color" />
             </div>
             <div>
-              <p className="status-card-title">Media</p>
+              <p className="status-card-title">{t("dashboard.status.media")}</p>
               <p className="status-card-subtitle text-orange-color">
-                {mediaCount} Asset{mediaCount !== 1 ? "s" : ""}
+                {t("dashboard.media.assets", { count: mediaCount })}
               </p>
             </div>
           </div>
@@ -669,9 +672,9 @@ function ActivityAndStatus({
               <Music className="status-card-icon text-green-color" />
             </div>
             <div>
-              <p className="status-card-title">Worship</p>
+              <p className="status-card-title">{t("dashboard.status.worship")}</p>
               <p className="status-card-subtitle text-green-color">
-                {songCount} Song{songCount !== 1 ? "s" : ""}
+                {t("dashboard.worship.songs", { count: songCount })}
               </p>
             </div>
           </div>
@@ -821,7 +824,7 @@ export default function ProductionHomePage() {
         addActivity(
           BookOpen,
           "icon-blue",
-          `${list.length} translation${list.length !== 1 ? "s" : ""} installed`,
+          t("dashboard.activity.translationsInstalled", { count: list.length }),
         );
       }
     });
@@ -830,7 +833,7 @@ export default function ProductionHomePage() {
         addActivity(
           Music,
           "icon-green",
-          `${songs.length} song${songs.length !== 1 ? "s" : ""} in library`,
+          t("dashboard.activity.songsInLibrary", { count: songs.length }),
         );
       }
     });
@@ -839,14 +842,14 @@ export default function ProductionHomePage() {
         addActivity(
           ImageIcon,
           "icon-orange",
-          `${items.length} media asset${items.length !== 1 ? "s" : ""} loaded`,
+          t("dashboard.activity.mediaLoaded", { count: items.length }),
         );
       }
     });
 
     return () => clearInterval(dockInterval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, t]);
 
   // ── Auto-start tutorial on first visit ──
   useEffect(() => {
@@ -876,19 +879,19 @@ export default function ProductionHomePage() {
   // ── Track OBS connection events ──
   useEffect(() => {
     if (obsStatus === "connected") {
-      addActivity(Monitor, "icon-primary", "OBS connected");
+      addActivity(Monitor, "icon-primary", t("dashboard.activity.obsConnected"));
     } else if (obsStatus === "error") {
-      addActivity(Monitor, "icon-variant", "OBS connection error");
+      addActivity(Monitor, "icon-variant", t("dashboard.activity.obsError"));
     }
-  }, [obsStatus, addActivity]);
+  }, [obsStatus, addActivity, t]);
 
   // ── Track Voice Bible events ──
   const prevVbStatus = useMemo(() => voiceBible.status, [voiceBible.status]);
   useEffect(() => {
     if (voiceBible.status === "listening" && prevVbStatus !== "listening") {
-      addActivity(Mic, "icon", "Voice Bible started listening");
+      addActivity(Mic, "icon", t("dashboard.activity.vbStarted"));
     } else if (voiceBible.status === "idle" && prevVbStatus === "listening") {
-      addActivity(Mic, "icon", "Voice Bible stopped listening");
+      addActivity(Mic, "icon", t("dashboard.activity.vbStopped"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceBible.status]);

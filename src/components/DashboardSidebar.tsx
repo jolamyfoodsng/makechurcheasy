@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AppLogo } from "./AppLogo";
 import {
   LayoutDashboard,
@@ -50,6 +51,7 @@ export default function DashboardSidebar({
   onNavigate,
 }: DashboardSidebarProps) {
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // ── App ID ──
@@ -102,42 +104,42 @@ export default function DashboardSidebar({
         <button
           className="sidebar-toggle"
           onClick={onToggleCollapse}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? t("sidebar.expandSidebar") : t("sidebar.collapseSidebar")}
+          aria-label={collapsed ? t("sidebar.expandSidebar") : t("sidebar.collapseSidebar")}
         >
           {collapsed ? <PanelLeftOpen className="sidebar-toggle-icon" /> : <PanelLeftClose className="sidebar-toggle-icon" />}
         </button>
       </div>
 
       <div className="sidebar-section">
-        <p className="sidebar-label">Navigation</p>
+        <p className="sidebar-label">{t("sidebar.navigation")}</p>
         <div className="sidebar-nav-list">
-          {navItem("/", LayoutDashboard, "Dashboard")}
-          {navItem("/speech-to-scripture", Mic, "Verse AI")}
-          {navItem("/transcripts", FileText, "Transcripts")}
-          {navItem("/production/themes", Palette, "Themes")}
+          {navItem("/", LayoutDashboard, t("sidebar.dashboard"))}
+          {navItem("/speech-to-scripture", Mic, t("sidebar.verseAi"))}
+          {navItem("/transcripts", FileText, t("sidebar.transcripts"))}
+          {navItem("/production/themes", Palette, t("sidebar.themes"))}
 
-          {navItem("/resources?tab=bible", BookOpen, "Bible")}
-          {navItem("/resources?tab=worship", Music, "Worship")}
-          {navItem("/resources?tab=media", Images, "Media")}
-          {navItem("/gallery", LayoutGrid, "Multi-View")}
+          {navItem("/resources?tab=bible", BookOpen, t("sidebar.bible"))}
+          {navItem("/resources?tab=worship", Music, t("sidebar.worship"))}
+          {navItem("/resources?tab=media", Images, t("sidebar.media"))}
+          {navItem("/gallery", LayoutGrid, t("sidebar.multiView"))}
         </div>
       </div>
 
       <div className="sidebar-section-bottom">
         <div className="sidebar-nav-list sidebar-nav-list--bottom">
-          {navItem("/settings", Settings, "Settings")}
+          {navItem("/settings", Settings, t("sidebar.settings"))}
         </div>
 
         <div className="sidebar-appid-section">
           <div className="sidebar-appid-header">
             <Fingerprint className="sidebar-appid-icon" />
-            <span className="sidebar-appid-label">App ID</span>
+            <span className="sidebar-appid-label">{t("sidebar.appId")}</span>
           </div>
           <button
             className="sidebar-appid-copy"
             onClick={handleCopyAppId}
-            title="Share this App ID when submitting bug reports."
+            title={t("sidebar.appIdHint")}
           >
             <span className="sidebar-appid-value">{appId}</span>
             {appIdCopied ? (
@@ -147,7 +149,7 @@ export default function DashboardSidebar({
             )}
           </button>
           <p className="sidebar-appid-hint">
-            Share when reporting bugs
+            {t("sidebar.shareWhenReportingBugs")}
           </p>
         </div>
 
@@ -170,7 +172,7 @@ export default function DashboardSidebar({
             <button
               className="sidebar-user-signout"
               onClick={() => setShowLogoutConfirm(true)}
-              title="Sign out"
+              title={t("sidebar.signOut")}
             >
               <LogOut className="sidebar-user-signout-icon" />
             </button>
@@ -181,20 +183,20 @@ export default function DashboardSidebar({
       {showLogoutConfirm && (
         <div className="end-confirm-backdrop" onClick={() => setShowLogoutConfirm(false)}>
           <div className="end-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Sign out?</h2>
-            <p>You'll need to pair your device again to access your account.</p>
+            <h2>{t("sidebar.signOutConfirm")}</h2>
+            <p>{t("sidebar.signOutDesc")}</p>
             <div className="end-confirm-actions">
               <button
                 className="end-confirm-btn-cancel"
                 onClick={() => setShowLogoutConfirm(false)}
-                title="Cancel">
-                Cancel
+                title={t("sidebar.cancel")}>
+                {t("sidebar.cancel")}
               </button>
               <button
                 className="end-confirm-btn-end"
                 onClick={() => { setShowLogoutConfirm(false); logout(); }}
-                title="Sign out">
-                Sign Out
+                title={t("sidebar.signOut")}>
+                {t("sidebar.signOut")}
               </button>
             </div>
           </div>

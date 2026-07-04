@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { obsService } from "./services/obsService";
 import { serviceStore } from "./services/serviceStore";
 import {
@@ -31,6 +32,7 @@ import type { ConnectionStatus } from "./services/obsService";
 
 
 export function AppShell() {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const svc = useServiceStore();
@@ -63,10 +65,10 @@ export function AppShell() {
 
   type ShortcutsTab = "dashboard" | "bible" | "graphics" | "ticker";
   const SHORTCUTS_TABS: { key: ShortcutsTab; label: string; icon: string; categories: ShortcutCategory[] }[] = [
-    { key: "dashboard", label: "Dashboard", icon: "dashboard", categories: ["navigation", "file", "edit", "selection", "view", "canvas", "slots", "alignment"] },
-    { key: "bible", label: "Bible", icon: "menu_book", categories: ["bible"] },
-    { key: "graphics", label: "Graphics", icon: "palette", categories: ["lowerthirds", "quickmerge", "worship"] },
-    { key: "ticker", label: "Ticker", icon: "text_rotation_none", categories: ["ticker"] },
+    { key: "dashboard", label: t("appShell.shortcutsTab.dashboard"), icon: "dashboard", categories: ["navigation", "file", "edit", "selection", "view", "canvas", "slots", "alignment"] },
+    { key: "bible", label: t("appShell.shortcutsTab.bible"), icon: "menu_book", categories: ["bible"] },
+    { key: "graphics", label: t("appShell.shortcutsTab.graphics"), icon: "palette", categories: ["lowerthirds", "quickmerge", "worship"] },
+    { key: "ticker", label: t("appShell.shortcutsTab.ticker"), icon: "text_rotation_none", categories: ["ticker"] },
   ];
   const [shortcutsTab, setShortcutsTab] = useState<ShortcutsTab>("dashboard");
 
@@ -171,17 +173,17 @@ export function AppShell() {
       {showEndConfirm && (
         <div className="end-confirm-backdrop" onClick={() => setShowEndConfirm(false)}>
           <div className="end-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>End Service?</h2>
-            <p>Are you sure you want to end the current service? This cannot be undone.</p>
+            <h2>{t("appShell.endService.title")}</h2>
+            <p>{t("appShell.endService.description")}</p>
             <div className="end-confirm-actions">
               <button
                 className="end-confirm-btn-cancel"
                 onClick={() => setShowEndConfirm(false)}
-               title="Keep Going">
-                Keep Going
+                title={t("appShell.endService.keepGoing")}>
+                {t("appShell.endService.keepGoing")}
               </button>
-              <button className="end-confirm-btn-end" onClick={handleEndServiceConfirm} title="End service">
-                End Service
+              <button className="end-confirm-btn-end" onClick={handleEndServiceConfirm} title={t("appShell.endService.confirm")}>
+                {t("appShell.endService.confirm")}
               </button>
             </div>
           </div>
@@ -192,17 +194,17 @@ export function AppShell() {
       {showCancelConfirm && (
         <div className="end-confirm-backdrop" onClick={() => setShowCancelConfirm(false)}>
           <div className="end-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Cancel Service?</h2>
-            <p>Are you sure you want to cancel? All pre-service progress will be lost and you'll return to the dashboard.</p>
+            <h2>{t("appShell.cancelService.title")}</h2>
+            <p>{t("appShell.cancelService.description")}</p>
             <div className="end-confirm-actions">
               <button
                 className="end-confirm-btn-cancel"
                 onClick={() => setShowCancelConfirm(false)}
-               title="Keep Going">
-                Keep Going
+                title={t("appShell.cancelService.keepGoing")}>
+                {t("appShell.cancelService.keepGoing")}
               </button>
-              <button className="end-confirm-btn-end" onClick={handleConfirmCancel} title="Cancel">
-                Yes, Cancel
+              <button className="end-confirm-btn-end" onClick={handleConfirmCancel} title={t("appShell.cancelService.confirm")}>
+                {t("appShell.cancelService.confirm")}
               </button>
             </div>
           </div>
@@ -225,8 +227,8 @@ export function AppShell() {
         <div className="end-confirm-backdrop" onClick={() => setShowShortcuts(false)}>
           <div className="shortcuts-modal" onClick={(e) => e.stopPropagation()}>
             <div className="shortcuts-modal-head">
-              <h2>Keyboard Shortcuts</h2>
-              <button className="shortcuts-modal-close" onClick={() => setShowShortcuts(false)} title="Close">
+              <h2>{t("appShell.keyboardShortcuts.title")}</h2>
+              <button className="shortcuts-modal-close" onClick={() => setShowShortcuts(false)} title={t("appShell.keyboardShortcuts.close")}>
                 <Icon name="close" size={20} />
               </button>
             </div>
@@ -253,19 +255,19 @@ export function AppShell() {
                   return (
                     <div className="shortcuts-modal-section" key={cat}>
                       <h4>{
-                        cat === "navigation" ? "Navigation" :
-                          cat === "file" ? "File" :
-                            cat === "edit" ? "Edit" :
-                              cat === "selection" ? "Selection" :
-                                cat === "view" ? "View & Zoom" :
-                                  cat === "canvas" ? "Canvas & Grid" :
-                                    cat === "slots" ? "Slots" :
-                                      cat === "alignment" ? "Alignment" :
-                                        cat === "bible" ? "Bible" :
-                                          cat === "lowerthirds" ? "Lower Thirds" :
-                                            cat === "quickmerge" ? "Quick Merge" :
-                                              cat === "worship" ? "Speaker" :
-                                                cat === "ticker" ? "Ticker" : cat
+                        cat === "navigation" ? t("appShell.shortcutsCategory.navigation") :
+                          cat === "file" ? t("appShell.shortcutsCategory.file") :
+                            cat === "edit" ? t("appShell.shortcutsCategory.edit") :
+                              cat === "selection" ? t("appShell.shortcutsCategory.selection") :
+                                cat === "view" ? t("appShell.shortcutsCategory.viewZoom") :
+                                  cat === "canvas" ? t("appShell.shortcutsCategory.canvasGrid") :
+                                    cat === "slots" ? t("appShell.shortcutsCategory.slots") :
+                                      cat === "alignment" ? t("appShell.shortcutsCategory.alignment") :
+                                        cat === "bible" ? t("appShell.shortcutsCategory.bible") :
+                                          cat === "lowerthirds" ? t("appShell.shortcutsCategory.lowerThirds") :
+                                            cat === "quickmerge" ? t("appShell.shortcutsCategory.quickMerge") :
+                                              cat === "worship" ? t("appShell.shortcutsCategory.speaker") :
+                                                cat === "ticker" ? t("appShell.shortcutsCategory.ticker") : cat
                       }</h4>
                       {items.map((s) => (
                         <div className="shortcuts-modal-row" key={s.id}>

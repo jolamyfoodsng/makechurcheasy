@@ -5,7 +5,7 @@
  * main app remains the setup surface while the MakeChurchEasy Dock stays focused on live control.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -35,20 +35,14 @@ function parseTab(value: string | null): ResourceTab | null {
   return null;
 }
 
-const TAB_COPY: Record<ResourceTab, { title: string; subtitle: string; icon: string }> = {
+const TAB_COPY: Record<ResourceTab, { icon: string }> = {
   bible: {
-    title: "Bible Resources",
-    subtitle: "Download translations like KJV and ASV or import custom XML Bibles for the MakeChurchEasy Dock.",
     icon: "menu_book",
   },
   worship: {
-    title: "Worship Resources",
-    subtitle: "Manage the worship songs and lyrics that appear in the MakeChurchEasy Dock.",
     icon: "music_note",
   },
   media: {
-    title: "Media Resources",
-    subtitle: "Manage videos, images, and backgrounds that the dock can send into OBS.",
     icon: "perm_media",
   },
 };
@@ -91,27 +85,33 @@ export default function ResourcesPage() {
     setSearchParams({ tab: next }, { replace: true });
   }, [setSearchParams]);
 
-  const copy = TAB_COPY[tab];
+  const translatedTabCopy = useMemo(() => ({
+    bible: { title: t("resources.tabBibleTitle"), subtitle: t("resources.tabBibleSubtitle"), icon: TAB_COPY.bible.icon },
+    worship: { title: t("resources.tabWorshipTitle"), subtitle: t("resources.tabWorshipSubtitle"), icon: TAB_COPY.worship.icon },
+    media: { title: t("resources.tabMediaTitle"), subtitle: t("resources.tabMediaSubtitle"), icon: TAB_COPY.media.icon },
+  }), [t]);
+
+  const copy = translatedTabCopy[tab];
 
   return (
     <div className="app-page resources-page">
       <div className="app-page__inner resources-page__inner">
         <header className="app-page__header resources-page__header" data-res-tutorial="welcome">
           <div className="app-page__header-copy resources-page__header-copy">
-            <p className="app-page__eyebrow">Resources</p>
+            <p className="app-page__eyebrow">{t("resources.pageEyebrow")}</p>
             <h1 className="app-page__title">{copy.title}</h1>
             <p className="app-page__subtitle">{copy.subtitle}</p>
 
-            <div className="resources-tab-switcher" role="tablist" aria-label="Resource sections" data-res-tutorial="tabs">
+            <div className="resources-tab-switcher" role="tablist" aria-label={t("resources.ariaSections")} data-res-tutorial="tabs">
               <button
                 type="button"
                 role="tab"
                 aria-selected={tab === "bible"}
                 className={`resources-tab-btn${tab === "bible" ? " is-active" : ""}`}
                 onClick={() => handleTab("bible")}
-                title="Book">
+                title={t("resources.tabTitleBible")}>
                 <Icon name="menu_book" size={20} />
-                Bible
+                {t("resources.tabLabelBible")}
               </button>
               <button
                 type="button"
@@ -119,9 +119,9 @@ export default function ResourcesPage() {
                 aria-selected={tab === "worship"}
                 className={`resources-tab-btn${tab === "worship" ? " is-active" : ""}`}
                 onClick={() => handleTab("worship")}
-                title="Music">
+                title={t("resources.tabTitleWorship")}>
                 <Icon name="music_note" size={20} />
-                Worship
+                {t("resources.tabLabelWorship")}
               </button>
               <button
                 type="button"
@@ -129,9 +129,9 @@ export default function ResourcesPage() {
                 aria-selected={tab === "media"}
                 className={`resources-tab-btn${tab === "media" ? " is-active" : ""}`}
                 onClick={() => handleTab("media")}
-                title="Media">
+                title={t("resources.tabTitleMedia")}>
                 <Icon name="perm_media" size={20} />
-                Media
+                {t("resources.tabLabelMedia")}
               </button>
             </div>
           </div>

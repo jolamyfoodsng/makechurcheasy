@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { getDeviceId } from "../services/authService";
@@ -36,6 +37,7 @@ export function trackRecentOpen(path: string, label: string, icon: string) {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [dockCopied, setDockCopied] = useState(false);
   const [obsConnected, setObsConnected] = useState(() => obsService.isConnected);
 
@@ -101,15 +103,15 @@ export default function DashboardPage() {
             <div className="dash-hero-copy">
               <h1 className="dash-hero-title">MakeChurchEasy</h1>
               <p className="dash-hero-subtitle">
-                Your church production command center — scripture display, worship lyrics, announcements, and AI-powered scripture recognition.
+                {t("dashboard.heroSubtitle")}
               </p>
             </div>
             <button
               className="dash-hero-cta"
               onClick={() => handleModuleNav("/speech-to-scripture", "AI Scripture", "auto_awesome")}
-             title="Auto arrange">
+              title="Auto arrange">
               <Icon name="auto_awesome" size={16} />
-              Try AI Scripture Recognition
+              {t("dashboard.tryAiScripture")}
             </button>
           </section>
 
@@ -117,49 +119,49 @@ export default function DashboardPage() {
             <button
               className="dash-mod-card"
               onClick={() => handleModuleNav("/hub?mode=live&tab=bible", "Bible", "menu_book")}
-             title="Book">
+              title="Book">
               <div className="dash-mod-icon dash-mod-icon--bible">
                 <Icon name="menu_book" size={24} />
               </div>
               <div className="dash-mod-info">
-                <h2>Display Scripture</h2>
-                <p>Broadcast selected biblical texts to all active output displays with one click.</p>
+                <h2>{t("dashboard.displayScripture")}</h2>
+                <p>{t("dashboard.displayScriptureDesc")}</p>
               </div>
             </button>
             <button
               className="dash-mod-card"
               onClick={() => handleModuleNav("/hub?mode=live&tab=worship", "Worship", "music_note")}
-             title="Start">
+              title="Start">
               <div className="dash-mod-icon dash-mod-icon--worship">
                 <Icon name="music_note" size={10} style={{ width: '12px', height: '12px' }} />
               </div>
               <div className="dash-mod-info">
-                <h2>Start Song</h2>
-                <p>Initiate the current setlist item and synchronize lyrics across the production network.</p>
+                <h2>{t("dashboard.startSong")}</h2>
+                <p>{t("dashboard.startSongDesc")}</p>
               </div>
             </button>
             <button
               className="dash-mod-card"
               onClick={() => handleModuleNav("/hub?mode=live&tab=graphics", "Announcements", "campaign")}
-             title="Show">
+              title="Show">
               <div className="dash-mod-icon dash-mod-icon--announce">
                 <Icon name="campaign" size={24} />
               </div>
               <div className="dash-mod-info">
-                <h2>Show Announcement</h2>
-                <p>Push automated event slides or custom message overlays to the live stream.</p>
+                <h2>{t("dashboard.showAnnouncement")}</h2>
+                <p>{t("dashboard.showAnnouncementDesc")}</p>
               </div>
             </button>
             <button
               className="dash-mod-card dash-mod-card--ai"
               onClick={() => handleModuleNav("/speech-to-scripture", "AI Scripture", "auto_awesome")}
-             title="Auto arrange">
+              title="Auto arrange">
               <div className="dash-mod-icon dash-mod-icon--ai">
                 <Icon name="auto_awesome" size={24} />
               </div>
               <div className="dash-mod-info">
-                <h2>AI Scripture</h2>
-                <p>Speak naturally and watch as AI identifies and displays matching Bible verses in real time.</p>
+                <h2>{t("dashboard.aiScripture")}</h2>
+                <p>{t("dashboard.aiScriptureDesc")}</p>
               </div>
             </button>
           </section>
@@ -175,14 +177,14 @@ export default function DashboardPage() {
                   <button
                     className="dash-action-card"
                     onClick={() => handleModuleNav("/templates/studio", "Create New Layout", "grid_view")}
-                   title="Create">
+                    title="Create">
                     <div className="dash-action-copy">
                       <div className="dash-action-icon">
                         <Icon name="grid_view" size={18} />
                       </div>
                       <div>
-                        <h4>Create New Layout</h4>
-                        <p>Design a bespoke canvas for multi-screen projection.</p>
+                        <h4>{t("dashboard.createNewLayout")}</h4>
+                        <p>{t("dashboard.createNewLayoutDesc")}</p>
                       </div>
                     </div>
                     <Icon name="chevron_right" size={18} className="dash-action-chevron" />
@@ -190,14 +192,14 @@ export default function DashboardPage() {
                   <button
                     className="dash-action-card"
                     onClick={() => handleModuleNav("/hub/quick-merge", "Quick Merge", "merge_type")}
-                   title="Open">
+                    title="Open">
                     <div className="dash-action-copy">
                       <div className="dash-action-icon">
                         <Icon name="merge_type" size={18} />
                       </div>
                       <div>
-                        <h4>Open Quick Merge</h4>
-                        <p>Sync database updates with your local repository.</p>
+                        <h4>{t("dashboard.openQuickMerge")}</h4>
+                        <p>{t("dashboard.openQuickMergeDesc")}</p>
                       </div>
                     </div>
                     <Icon name="chevron_right" size={18} className="dash-action-chevron" />
@@ -214,16 +216,14 @@ export default function DashboardPage() {
                 <div className="dash-dock-body">
                   <div className={`dash-dock-badge${obsConnected ? " is-live" : ""}`}>
                     <span className="dash-dock-badge-dot" />
-                    <span>{obsConnected ? "Live Connection" : "Broadcast Offline"}</span>
+                    <span>{obsConnected ? t("dashboard.liveConnection") : t("dashboard.broadcastOffline")}</span>
                   </div>
                   <div className="dash-dock-copy">
-                    <h3>MakeChurchEasy Dock</h3>
-                    <p>
-                      Integrate your service controls directly into OBS. Copy the local URL below and paste it into a new Browser Dock in OBS.
-                    </p>
+                    <h3>{t("dashboard.dockTitle")}</h3>
+                    <p>{t("dashboard.dockDescription")}</p>
                   </div>
                   <div className="dash-dock-endpoint">
-                    <label>Localhost Endpoint</label>
+                    <label>{t("dashboard.localhostEndpoint")}</label>
                     <div className="dash-dock-url-row">
                       <input
                         className="dash-dock-url-input"
@@ -242,7 +242,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="dash-dock-endpoint" style={{ marginTop: 8 }}>
-                    <label>LM Dock (Speech-to-Bible)</label>
+                    <label>{t("dashboard.lmDock")}</label>
                     <div className="dash-dock-url-row">
                       <input
                         className="dash-dock-url-input"

@@ -30,10 +30,10 @@ function getMomentClass(moment: LiveToolMoment): string {
   return moment === "emergency" ? " dock-live-tool-row--emergency" : "";
 }
 
-function getConfigurationMessage(tool: LiveToolTemplate): string {
-  if (tool.kind === "scene" && !tool.sceneName) return "Choose scene in app";
-  if (tool.action === "safe-scene" && !tool.sceneName) return "Choose safe scene in app";
-  if (tool.action === "mute-mic" && !tool.sourceName) return "Choose mic source in app";
+function getConfigurationMessage(tool: LiveToolTemplate, t: (key: string) => string): string {
+  if (tool.kind === "scene" && !tool.sceneName) return t("liveTools.chooseScene");
+  if (tool.action === "safe-scene" && !tool.sceneName) return t("liveTools.chooseSafeScene");
+  if (tool.action === "mute-mic" && !tool.sourceName) return t("liveTools.chooseMic");
   return "";
 }
 
@@ -82,7 +82,7 @@ export default function DockLiveToolsTab({ staged: _staged, onStage, initialSnap
       onStage({
         type: "live",
         label: tool.label,
-        subtitle: "Live",
+        subtitle: t("liveTools.liveLabel"),
         data: {
           tool,
           _dockLive: true,
@@ -153,7 +153,7 @@ export default function DockLiveToolsTab({ staged: _staged, onStage, initialSnap
 
         <div className="dock-live-tools-list">
           {templates.map((tool) => {
-            const configurationMessage = getConfigurationMessage(tool);
+            const configurationMessage = getConfigurationMessage(tool, t);
             const disabled = sending !== null || Boolean(configurationMessage);
             return (
               <div key={tool.id} className={`dock-live-tool-row${getMomentClass(tool.moment)}`}>

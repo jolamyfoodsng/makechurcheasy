@@ -88,7 +88,8 @@ export type DockStateType =
   | "state:song-limit"
   | "state:plan-update"
   | "state:countdowns"
-  | "state:pong";
+  | "state:pong"
+  | "state:language-changed";
 
 export interface DockStateMessage {
   type: DockStateType;
@@ -237,6 +238,15 @@ class DockBridge {
     this.sendState({
       type: "state:branding-updated",
       payload,
+      timestamp: Date.now(),
+    });
+  }
+
+  /** Notify all dock instances that the interface language changed */
+  sendLanguageChanged(language: string, code: string) {
+    this.sendState({
+      type: "state:language-changed",
+      payload: { language, code },
       timestamp: Date.now(),
     });
   }

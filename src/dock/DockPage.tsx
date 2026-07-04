@@ -6,7 +6,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { dockClient, type DockStateMessage } from "../services/dockBridge";
+import i18n from "../i18n";
+import { dockClient, dockBridge, type DockStateMessage } from "../services/dockBridge";
 import { dockObsClient, type DockObsStatus } from "./dockObsClient";
 import { DOCK_TABS, type DockTab, type DockStagedItem } from "./dockTypes";
 import DockBibleTab from "./tabs/DockBibleTab";
@@ -596,6 +597,12 @@ export default function DockPage() {
   const [showClearScenesConfirm, setShowClearScenesConfirm] = useState(false);
   const [clearScenesLoading, setClearScenesLoading] = useState(false);
 
+  // ── Language Selector ──
+  const ALL_LANGUAGES: string[] = ["English", "French", "Spanish", "Portuguese", "Yoruba", "Igbo", "Hausa", "Ghanaian"];
+  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => localStorage.getItem("mce_interface_language") || "English");
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
+
   return (
     <div className={`dock-root${verticalTabs ? " dock-root--vertical-tabs" : ""}`} ref={dockRootRef}>
       {/* ═══ VERTICAL NAV (left side when dock is short) ═══ */}
@@ -715,6 +722,34 @@ export default function DockPage() {
                   <Icon name={themeToggleIcon} size={16} />
                   <span>{themeToggleLabel}</span>
                 </button>
+
+                {/* Language */}
+                <div className="dock-sidebar__item" style={{ cursor: "default" }}>
+                  <Icon name="translate" size={16} />
+                  <select
+                    className="dock-sidebar__select"
+                    value={interfaceLanguage}
+                    onChange={(e) => {
+                      setPendingLanguage(e.target.value);
+                      setShowLanguageModal(true);
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "inherit",
+                      fontSize: "inherit",
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      outline: "none",
+                      flex: 1,
+                      padding: 0,
+                    }}
+                  >
+                    {ALL_LANGUAGES.map((lang) => (
+                      <option key={lang} value={lang}>{lang}</option>
+                    ))}
+                  </select>
+                </div>
 
                 {/* Bible Options */}
                 <button
@@ -1344,6 +1379,49 @@ export default function DockPage() {
         onClose={() => setUpgradeModalMsg("")}
         message={upgradeModalMsg}
       />
+
+      {/* ── Language change confirmation modal ── */}
+      {showLanguageModal && pendingLanguage && (
+        <div className="dock-modal-overlay" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
+          <div className="dock-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="dock-modal__header">
+              <h3>{t('dock.changeLanguage') || 'Change Language'}</h3>
+            </div>
+            <div className="dock-modal__body">
+              <p>{t('dock.changeLanguageConfirm', { language: pendingLanguage }) || `Change interface language to ${pendingLanguage}?`}</p>
+            </div>
+            <div className="dock-modal__footer">
+              <button
+                type="button"
+                className="dock-btn dock-btn--ghost"
+                onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}
+              >
+                {t('common.cancel') || 'Cancel'}
+              </button>
+              <button
+                type="button"
+                className="dock-btn dock-btn--primary"
+                onClick={() => {
+                  const lang = pendingLanguage!;
+                  const langToCode: Record<string, string> = {
+                    English: "en", French: "fr", Spanish: "es", Portuguese: "pt",
+                    Yoruba: "yo", Igbo: "ig", Hausa: "ha", Ghanaian: "gh",
+                  };
+                  const code = langToCode[lang] || "en";
+                  localStorage.setItem("mce_interface_language", lang);
+                  i18n.changeLanguage(code);
+                  dockBridge.sendLanguageChanged(lang, code);
+                  setInterfaceLanguage(lang);
+                  setShowLanguageModal(false);
+                  setPendingLanguage(null);
+                }}
+              >
+                {t('dock.changeLanguage') || 'Change Language'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

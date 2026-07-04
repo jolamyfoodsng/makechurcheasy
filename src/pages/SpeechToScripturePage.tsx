@@ -114,6 +114,20 @@ function formatTimestamp(entry: { startTime?: number }, elapsed: number): string
 
 export default function SpeechToScripturePage() {
   const { t } = useTranslation();
+
+  // ── Translated config maps (constants are defined outside component) ──
+  const speedLabelMap = useMemo(() => ({
+    fast: t("verseAi.speedFast"),
+    balanced: t("verseAi.speedBalanced"),
+    accurate: t("verseAi.speedAccurate"),
+  }), [t]);
+
+  const speedDescMap = useMemo(() => ({
+    fast: t("verseAi.speedFastDesc"),
+    balanced: t("verseAi.speedBalancedDesc"),
+    accurate: t("verseAi.speedAccurateDesc"),
+  }), [t]);
+
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const effectivePlan = getEffectivePlan(user);
@@ -348,9 +362,9 @@ export default function SpeechToScripturePage() {
         });
         void saveTranscript(transcript).then((result) => {
           if (result.ok) {
-            setSaveToast("Transcript saved");
+            setSaveToast({ message: t("verseAi.transcriptSaved"), isError: false });
           } else {
-            setSaveToast("Saved locally — cloud sync failed");
+            setSaveToast({ message: t("verseAi.savedLocallyCloudFailed"), isError: true });
           }
           setTimeout(() => setSaveToast(null), 3000);
         });
@@ -364,13 +378,13 @@ export default function SpeechToScripturePage() {
             if (creditsNeeded > 0 && user?.id && !serviceFailed) {
               const ok = await deductCreditsWithSync(user.id, creditsNeeded, "transcription", `Transcription: ${Math.round(durationSec)}s audio`);
               if (!ok) {
-                setSaveToast("Credit deduction failed — insufficient credits");
+                setSaveToast({ message: t("verseAi.creditDeductionFailed"), isError: true });
                 setTimeout(() => setSaveToast(null), 4000);
               }
             }
           } catch (err) {
             console.warn("[Credits] Transcription credit deduction error:", err);
-            setSaveToast("Credit sync failed — check connection");
+            setSaveToast({ message: t("verseAi.creditSyncFailed"), isError: true });
             setTimeout(() => setSaveToast(null), 4000);
           } finally {
             // Backend deduction is done — clear the pending session offset so
@@ -472,13 +486,13 @@ export default function SpeechToScripturePage() {
             if (creditsNeeded > 0 && user?.id && !serviceFailed) {
               const ok = await deductCreditsWithSync(user.id, creditsNeeded, "transcription", `Transcription: ${Math.round(durationSec)}s audio`);
               if (!ok) {
-                setSaveToast("Credit deduction failed — insufficient credits");
+                setSaveToast({ message: t("verseAi.creditDeductionFailed"), isError: true });
                 setTimeout(() => setSaveToast(null), 4000);
               }
             }
           } catch (err) {
             console.warn("[Credits] Transcription credit deduction error:", err);
-            setSaveToast("Credit sync failed — check connection");
+            setSaveToast({ message: t("verseAi.creditSyncFailed"), isError: true });
             setTimeout(() => setSaveToast(null), 4000);
           }
         })();
@@ -531,7 +545,7 @@ export default function SpeechToScripturePage() {
 
   const handlePushVerse = useCallback(async (candidate: VoiceBibleCandidate) => {
     if (!obsConnected) {
-      setPushError("Not connected to broadcast");
+      setPushError(t("verseAi.notConnectedToBroadcast"));
       return;
     }
     setPushing(true);
@@ -548,7 +562,7 @@ export default function SpeechToScripturePage() {
       };
       await bibleObsService.pushSlide(slide, null, true, false, "fullscreen");
       track("sts_push_to_live", { reference: candidate.label, confidence: candidate.confidence });
-      setPushSuccess(`Pushed ${candidate.label} to broadcast`);
+      setPushSuccess(t("verseAi.pushedToBroadcast", { reference: candidate.label }));
       setTimeout(() => setPushSuccess(null), 3000);
     } catch (err) {
       setPushError(err instanceof Error ? err.message : String(err));
@@ -661,7 +675,7 @@ export default function SpeechToScripturePage() {
   const [downloadFormat, setDownloadFormat] = useState<"txt" | "srt">("txt");
   const [downloading, setDownloading] = useState(false);
   const [downloadToast, setDownloadToast] = useState<string | null>(null);
-  const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [saveToast, setSaveToast] = useState<{ message: string; isError: boolean } | null>(null);
 
   const formatSrtTime = useCallback((seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -719,10 +733,10 @@ export default function SpeechToScripturePage() {
       URL.revokeObjectURL(url);
 
       setDownloadModalOpen(false);
-      setDownloadToast(`Transcript downloaded (${ext.toUpperCase()})`);
+      setDownloadToast(t("verseAi.transcriptDownloaded", { ext: ext.toUpperCase() }));
       setTimeout(() => setDownloadToast(null), 3000);
     } catch {
-      setDownloadToast("Failed to download transcript");
+      setDownloadToast(t("verseAi.downloadFailed"));
       setTimeout(() => setDownloadToast(null), 3000);
     } finally {
       setDownloading(false);
@@ -816,26 +830,26 @@ export default function SpeechToScripturePage() {
           <button
             className="sts3-btn sts3-btn--dock"
             onClick={handleCopyDockUrl}
-            title="Copy">
+            title={t("verseAi.copied")}>
             <Link size={14} />
-            {dockCopied ? "Copied!" : "Copy to Dock"}
+            {dockCopied ? t("verseAi.copied") : t("verseAi.copyToDock")}
           </button>
           <div className="sts3-header-mic-group" data-stt-tutorial="start-btn">
             <button
               className={`sts3-btn ${isListening ? "sts3-btn--red" : ""}`}
               onClick={isListening ? handleStop : handleStart}
               disabled={isConnecting || checkingAccess || (!isListening && !hasCredits)}
-              title={!isListening && !hasCredits ? "No credits remaining" : "Start"}>
+              title={!isListening && !hasCredits ? t("verseAi.noCredits") : t("verseAi.startListening")}>
               {isListening ? (
-                <><StopCircle size={16} /> Stop Listening</>
+                <><StopCircle size={16} /> {t("verseAi.stopListening")}</>
               ) : checkingAccess ? (
-                <><span className="sts3-spinner" /> Checking access…</>
+                <><span className="sts3-spinner" /> {t("verseAi.checkingAccess")}</>
               ) : isConnecting ? (
-                <><span className="sts3-spinner" /> Connecting…</>
+                <><span className="sts3-spinner" /> {t("verseAi.connecting")}</>
               ) : !hasCredits ? (
-                <><Lock size={16} /> No Credits</>
+                <><Lock size={16} /> {t("verseAi.noCredits")}</>
               ) : (
-                <><Mic size={16} /> Start Listening</>
+                <><Mic size={16} /> {t("verseAi.startListening")}</>
               )}
             </button>
 
@@ -870,8 +884,8 @@ export default function SpeechToScripturePage() {
           onClick={() => navigate(`/transcripts/${generatedTranscriptId}`)}
         >
           <CheckCircle size={15} />
-          <span>Transcript generated</span>
-          <span className="sts3-transcript-banner-link">Click to view →</span>
+          <span>{t("verseAi.transcriptGenerated")}</span>
+          <span className="sts3-transcript-banner-link">{t("verseAi.clickToView")}</span>
         </div>
       )}
 
@@ -882,12 +896,12 @@ export default function SpeechToScripturePage() {
         <div className="sts3-connection-lost-banner">
           <span>📡</span>
           <div className="sts3-connection-lost-text">
-            <strong>Connection Lost</strong>
-            <span>Voice Bible has lost internet connectivity. Detection accuracy may be affected.</span>
+            <strong>{t("verseAi.connectionLost")}</strong>
+            <span>{t("verseAi.connectionLostDesc")}</span>
           </div>
           {snapshot.status === "connecting" && (
             <span className="sts3-reconnecting">
-              <span className="sts3-spinner sts3-spinner--small" /> Reconnecting…
+              <span className="sts3-spinner sts3-spinner--small" /> {t("verseAi.reconnecting")}
             </span>
           )}
         </div>
@@ -897,9 +911,9 @@ export default function SpeechToScripturePage() {
       {isOffline && !connectionLostBanner && (
         <div className="sts3-offline-banner">
           <span>📡</span>
-          <span>No internet connection. Please connect to the internet to use this feature.</span>
-          {whisperStatus === "loading" && <span className="sts3-banner-status">Loading model...</span>}
-          {whisperStatus === "ready" && <span className="sts3-banner-status sts3-banner-status--ready">Ready</span>}
+          <span>{t("verseAi.offlineDesc")}</span>
+          {whisperStatus === "loading" && <span className="sts3-banner-status">{t("verseAi.loadingModel")}</span>}
+          {whisperStatus === "ready" && <span className="sts3-banner-status sts3-banner-status--ready">{t("verseAi.ready")}</span>}
         </div>
       )}
 
@@ -921,7 +935,7 @@ export default function SpeechToScripturePage() {
                 >
                   <span className="sts3-select-mic-label">
                     <Mic size={14} />
-                    {mics.find((m) => m.id === selectedMic)?.label || (micLoading ? "Loading mics…" : "No microphone")}
+                    {mics.find((m) => m.id === selectedMic)?.label || (micLoading ? t("verseAi.loadingMics") : t("verseAi.noMicrophone"))}
                   </span>
                   <ChevronDown size={14} />
                 </div>
@@ -929,7 +943,7 @@ export default function SpeechToScripturePage() {
                   <div className="sts3-mic-dropdown">
                     {mics.length === 0 && (
                       <div className="sts3-mic-dropdown-item sts3-mic-dropdown-item--disabled">
-                        {micLoading ? "Loading mics…" : "No microphones found"}
+                        {micLoading ? t("verseAi.loadingMics") : t("verseAi.noMicrophonesFound")}
                       </div>
                     )}
                     {mics.map((mic) => (
@@ -956,7 +970,7 @@ export default function SpeechToScripturePage() {
                   className={`sts3-header-icon-btn${copyToast ? " sts3-header-icon-btn--active" : ""}`}
                   onClick={handleCopyTranscript}
                   disabled={!fullTranscript}
-                  title="Copy transcript"
+                  title={t("verseAi.copyTranscriptTitle")}
                 >
                   {copyToast ? <Check size={14} /> : <Copy size={14} />}
                 </button>
@@ -964,7 +978,7 @@ export default function SpeechToScripturePage() {
                   className="sts3-header-icon-btn"
                   onClick={() => setDownloadModalOpen(true)}
                   disabled={!fullTranscript}
-                  title="Download transcript"
+                  title={t("verseAi.downloadTranscriptTitle")}
                 >
                   <Download size={14} />
                 </button>
@@ -974,35 +988,34 @@ export default function SpeechToScripturePage() {
               <div className="sts3-footer-item">
                 <Mic size={14} />
                 <span className={`sts3-footer-dot ${isListening ? "sts3-footer-dot--green" : ""}`} />
-                {isListening ? "Listening" : "Stopped"}
+                {isListening ? t("verseAi.listening") : t("verseAi.stopped")}
               </div>
               <div className="sts3-footer-item">
                 <Radio size={14} className={isBroadcastConnected ? "sts3-footer-icon--green" : ""} />
-                {isBroadcastConnected ? "Broadcast Connected" : "Broadcast Disconnected"}
+                {isBroadcastConnected ? t("verseAi.broadcastConnected") : t("verseAi.broadcastDisconnected")}
               </div>
             </div>
 
             {/* Detection Speed Toggle */}
             <div className="sts3-detection-speed">
-              <div className="sts3-detection-speed-label">Detection Speed</div>
+              <div className="sts3-detection-speed-label">{t("verseAi.detectionSpeed")}</div>
               <div className="sts3-detection-speed-options">
                 {(["fast", "balanced", "accurate"] as DetectionSpeed[]).map((speed) => {
-                  const config = DETECTION_SPEED_CONFIG[speed];
                   return (
                     <button
                       key={speed}
                       className={`sts3-detection-speed-btn ${detectionSpeed === speed ? "sts3-detection-speed-btn--active" : ""}`}
                       onClick={() => handleDetectionSpeedChange(speed)}
-                      title={config.description}
+                      title={speedDescMap[speed]}
                     >
-                      <span className="sts3-detection-speed-icon">{config.icon}</span>
-                      <span className="sts3-detection-speed-name">{speed.charAt(0).toUpperCase() + speed.slice(1)}</span>
+                      <span className="sts3-detection-speed-icon">{DETECTION_SPEED_CONFIG[speed].icon}</span>
+                      <span className="sts3-detection-speed-name">{speedLabelMap[speed]}</span>
                     </button>
                   );
                 })}
               </div>
               <div className="sts3-detection-speed-hint">
-                {DETECTION_SPEED_CONFIG[detectionSpeed].description}
+                {speedDescMap[detectionSpeed]}
               </div>
             </div>
 
@@ -1012,22 +1025,22 @@ export default function SpeechToScripturePage() {
               <input
                 className="sts3-search-input"
                 type="text"
-                placeholder="Search transcript…"
+                placeholder={t("verseAi.searchTranscript")}
                 value={transcriptSearch}
                 onChange={(e) => setTranscriptSearch(e.target.value)}
               />
             </div>
 
             <div className="sts3-sidebar-title">
-              {isListening && <span className="sts3-live-badge">LIVE</span>}
-              LIVE TRANSCRIPT
+              {isListening && <span className="sts3-live-badge">{t("verseAi.live")}</span>}
+              {t("verseAi.liveTranscript")}
             </div>
 
             <div
               className={`sts3-transcript-toggle${transcriptCollapsed ? " sts3-transcript-toggle--collapsed" : ""}`}
               onClick={() => setTranscriptCollapsed((c) => !c)}
             >
-              <span>Live Transcript</span>
+              <span>{t("verseAi.liveTranscriptLabel")}</span>
               <ChevronDown size={14} />
             </div>
 
@@ -1037,7 +1050,7 @@ export default function SpeechToScripturePage() {
                 <div className="sts3-transcript-empty">
 
                   <p className="sts3-transcript-empty-text">
-                    Start listening to see the live transcript here.
+                    {t("verseAi.transcriptEmpty")}
                   </p>
 
                 </div>
@@ -1058,7 +1071,7 @@ export default function SpeechToScripturePage() {
                       <div className={`sts3-t-dot ${entry.finalized ? "" : "sts3-t-dot--live"}`} />
                       <div className="sts3-transcript-text">
                         {entry.text}
-                        {isCopied && <span className="sts3-copied-badge"><Check size={10} /> Copied</span>}
+                        {isCopied && <span className="sts3-copied-badge"><Check size={10} /> {t("verseAi.copiedLabel")}</span>}
                       </div>
                     </div>
                   </div>
@@ -1072,7 +1085,7 @@ export default function SpeechToScripturePage() {
                   <div className="sts3-transcript-text-wrap">
                     <div className="sts3-t-dot sts3-t-dot--live" />
                     <div className="sts3-transcript-text sts3-transcript-text--muted">
-                      listening for next segment…
+                      {t("verseAi.listeningForSegment")}
                     </div>
                   </div>
                 </div>
@@ -1083,21 +1096,21 @@ export default function SpeechToScripturePage() {
           {/* ── Center: Current Verse (Top Match) ── */}
           <div className="sts3-main-card" data-stt-tutorial="top-match">
             <div className="sts3-card-title">
-              <span>TOP MATCH</span>
+              <span>{t("verseAi.topMatch")}</span>
               {topMatch && (
                 <div className="sts3-card-title-actions">
                   <button
                     className={`sts3-header-icon-btn${pushing ? " sts3-header-icon-btn--active" : ""}`}
                     onClick={() => void handlePushVerse(topMatch)}
                     disabled={pushing || !obsConnected}
-                    title="Push to Live"
+                    title={t("verseAi.pushToLive")}
                   >
                     <Radio size={14} />
                   </button>
                   <button
                     className={`sts3-header-icon-btn${verseCopied ? " sts3-header-icon-btn--active" : ""}`}
                     onClick={handleCopyVerse}
-                    title="Copy verse"
+                    title={t("verseAi.copyVerse")}
                   >
                     {verseCopied ? <Check size={14} /> : <Copy size={14} />}
                   </button>
@@ -1111,7 +1124,7 @@ export default function SpeechToScripturePage() {
                   <div className="sts3-verse-content">
                     <h1 className="sts3-verse-ref">{topMatch.label}</h1>
                     <p className="sts3-verse-text">&ldquo;{topMatch.snippet}&rdquo;</p>
-                    <div className="sts3-verse-version">{topMatch.translation || "KJV"} VERSION</div>
+                    <div className="sts3-verse-version">{topMatch.translation || "KJV"} {t("verseAi.version")}</div>
                   </div>
                 </div>
               </>
@@ -1120,8 +1133,8 @@ export default function SpeechToScripturePage() {
 
                 <p className="sts3-verse-empty-text">
                   {isListening
-                    ? "Listening for scripture… Speak a reference or quote a verse."
-                    : "Start listening to detect Bible verses in real time."}
+                    ? t("verseAi.listeningForScripture")
+                    : t("verseAi.startToDetect")}
                 </p>
               </div>
             )}
@@ -1130,13 +1143,13 @@ export default function SpeechToScripturePage() {
           {/* ── Right: Detected References ── */}
           <aside className="sts3-right-panel">
             <div className="sts3-right-title">
-              <BookOpen size={14} /> DETECTED REFERENCES
+              <BookOpen size={14} /> {t("verseAi.detectedReferences")}
             </div>
             <div className="sts3-ref-list">
               {detectedRefs.length === 0 ? (
                 <div className="sts3-ref-empty">
                   <p className="sts3-ref-empty-text">
-                    Bible references will appear here when detected.
+                    {t("verseAi.refsEmpty")}
                   </p>
                 </div>
               ) : (
@@ -1146,7 +1159,7 @@ export default function SpeechToScripturePage() {
                     className={`sts3-ref-item ${i === 0 ? "sts3-ref-item--active" : ""}`}
                   >
                     <span className="sts3-ref-label">{ref.label}</span>
-                    {i === 0 && <span className="sts3-live-badge">LIVE</span>}
+                    {i === 0 && <span className="sts3-live-badge">{t("verseAi.live")}</span>}
                   </div>
                 ))
               )}
@@ -1159,7 +1172,7 @@ export default function SpeechToScripturePage() {
           {/* Candidate Matches */}
           <div className="sts3-candidate-card" data-stt-tutorial="candidates">
             <div className="sts3-candidate-header">
-              <span className="sts3-candidate-title">CANDIDATE MATCHES</span>
+              <span className="sts3-candidate-title">{t("verseAi.candidateMatches")}</span>
               {candidateMatches.length > 0 && (
                 <span className="sts3-candidate-count">{candidateMatches.length}</span>
               )}
@@ -1167,8 +1180,8 @@ export default function SpeechToScripturePage() {
             <div className="sts3-candidate-list">
               {candidateMatches.length === 0 ? (
                 <div className="sts3-candidate-empty">
-                  <p>No verse matches yet.</p>
-                  <p className="sts3-candidate-empty-hint">Mention a Bible reference or quote part of a verse.</p>
+                  <p>{t("verseAi.candidateEmpty")}</p>
+                  <p className="sts3-candidate-empty-hint">{t("verseAi.candidateEmptyHint")}</p>
                 </div>
               ) : (
                 candidateMatches.map((c, i) => {
@@ -1188,7 +1201,7 @@ export default function SpeechToScripturePage() {
                         className="sts3-cand-push"
                         onClick={() => { setSelectedCandidate(c); void handlePushVerse(c); }}
                         disabled={pushing || !obsConnected}
-                        title="Push to broadcast"
+                        title={t("verseAi.pushToBroadcast")}
                       >
                         <Radio size={12} />
                       </button>
@@ -1221,19 +1234,19 @@ export default function SpeechToScripturePage() {
       {isListening && import.meta.env.DEV && snapshot.telemetry && snapshot.telemetry.searchCount > 0 && (
         <div className="sts3-telemetry">
           <div className="sts3-telemetry-row">
-            <span className="sts3-telemetry-label">Searches:</span>
+            <span className="sts3-telemetry-label">{t("verseAi.searches")}:</span>
             <span className="sts3-telemetry-value">{snapshot.telemetry.searchCount}</span>
           </div>
           <div className="sts3-telemetry-row">
-            <span className="sts3-telemetry-label">Search→Results:</span>
+            <span className="sts3-telemetry-label">{t("verseAi.searchToResults")}:</span>
             <span className="sts3-telemetry-value">{snapshot.telemetry.searchToResultsMs}ms</span>
           </div>
           <div className="sts3-telemetry-row">
-            <span className="sts3-telemetry-label">Avg Latency:</span>
+            <span className="sts3-telemetry-label">{t("verseAi.avgLatency")}:</span>
             <span className="sts3-telemetry-value">{snapshot.telemetry.avgLatencyMs}ms</span>
           </div>
           <div className="sts3-telemetry-row">
-            <span className="sts3-telemetry-label">Mode:</span>
+            <span className="sts3-telemetry-label">{t("verseAi.mode")}:</span>
             <span className="sts3-telemetry-value">{DETECTION_SPEED_CONFIG[detectionSpeed].icon} {detectionSpeed}</span>
           </div>
         </div>
@@ -1256,8 +1269,8 @@ export default function SpeechToScripturePage() {
         </div>
       )}
       {saveToast && (
-        <div className={`sts3-toast ${saveToast.includes("failed") ? "sts3-toast--error" : "sts3-toast--success"}`}>
-          {saveToast.includes("failed") ? <span>⚠</span> : <Check size={14} />} {saveToast}
+        <div className={`sts3-toast ${saveToast.isError ? "sts3-toast--error" : "sts3-toast--success"}`}>
+          {saveToast.isError ? <span>⚠</span> : <Check size={14} />} {saveToast.message}
         </div>
       )}
 
@@ -1266,11 +1279,11 @@ export default function SpeechToScripturePage() {
         <div className="sts3-modal-overlay" onClick={() => !downloading && setDownloadModalOpen(false)}>
           <div className="sts3-modal" onClick={(e) => e.stopPropagation()}>
             <div className="sts3-modal-header">
-              <h3 className="sts3-modal-title">Download Transcript</h3>
-              <button className="sts3-modal-close" onClick={() => setDownloadModalOpen(false)} disabled={downloading} title="Close">✕</button>
+              <h3 className="sts3-modal-title">{t("verseAi.downloadTranscript")}</h3>
+              <button className="sts3-modal-close" onClick={() => setDownloadModalOpen(false)} disabled={downloading} title={t("verseAi.close")}>✕</button>
             </div>
             <div className="sts3-modal-body">
-              <label className="sts3-modal-label">Select format</label>
+              <label className="sts3-modal-label">{t("verseAi.selectFormat")}</label>
               <div
                 className={`sts3-modal-option ${downloadFormat === "txt" ? "sts3-modal-option--active" : ""}`}
                 onClick={() => !downloading && setDownloadFormat("txt")}
@@ -1280,7 +1293,7 @@ export default function SpeechToScripturePage() {
                 </div>
                 <div className="sts3-modal-option-info">
                   <span className="sts3-modal-option-name">TXT</span>
-                  <span className="sts3-modal-option-desc">Plain text transcript</span>
+                  <span className="sts3-modal-option-desc">{t("verseAi.plainTextTranscript")}</span>
                 </div>
               </div>
               <div
@@ -1292,28 +1305,28 @@ export default function SpeechToScripturePage() {
                 </div>
                 <div className="sts3-modal-option-info">
                   <span className="sts3-modal-option-name">SRT</span>
-                  <span className="sts3-modal-option-desc">Subtitles with timestamps (OBS / video)</span>
+                  <span className="sts3-modal-option-desc">{t("verseAi.subtitlesWithTimestamps")}</span>
                 </div>
               </div>
               {finalizedEntries.length > 0 && (
                 <div className="sts3-modal-preview">
                   <div className="sts3-modal-preview-row">
-                    <span>{finalizedEntries.length} subtitle block{finalizedEntries.length !== 1 ? "s" : ""}</span>
+                    <span>{t("verseAi.subtitleBlockCount", { count: finalizedEntries.length })}</span>
                   </div>
                   <div className="sts3-modal-preview-row">
-                    <span>Duration: {formatTime(elapsed)}</span>
+                    <span>{t("verseAi.duration")}: {formatTime(elapsed)}</span>
                   </div>
                 </div>
               )}
             </div>
             <div className="sts3-modal-footer">
-              <button className="sts3-modal-btn sts3-modal-btn--ghost" onClick={() => setDownloadModalOpen(false)} disabled={downloading} title="Cancel">Cancel</button>
+              <button className="sts3-modal-btn sts3-modal-btn--ghost" onClick={() => setDownloadModalOpen(false)} disabled={downloading} title={t("verseAi.cancel")}>{t("verseAi.cancel")}</button>
               <button
                 className="sts3-modal-btn sts3-modal-btn--primary"
                 onClick={() => void handleDownloadConfirm()}
                 disabled={downloading || finalizedEntries.length === 0}
-                title="Generating…">
-                {downloading ? "Generating…" : "Download"}
+                title={t("verseAi.generating")}>
+                {downloading ? t("verseAi.generating") : t("verseAi.download")}
               </button>
             </div>
           </div>
@@ -1325,15 +1338,15 @@ export default function SpeechToScripturePage() {
         <div className="sts3-modal-overlay" onClick={() => setShowStopConfirm(false)}>
           <div className="sts3-modal sts3-modal--small" onClick={(e) => e.stopPropagation()}>
             <div className="sts3-modal-header">
-              <h3 className="sts3-modal-title">Stop Listening?</h3>
+              <h3 className="sts3-modal-title">{t("verseAi.stopListeningTitle")}</h3>
             </div>
             <div className="sts3-modal-body">
-              <p className="sts3-modal-text">Are you sure you want to stop the live transcription?</p>
+              <p className="sts3-modal-text">{t("verseAi.stopListeningConfirm")}</p>
             </div>
             <div className="sts3-modal-footer">
-              <button className="sts3-modal-btn sts3-modal-btn--ghost" onClick={() => setShowStopConfirm(false)} title="Cancel">Cancel</button>
-              <button className="sts3-modal-btn sts3-modal-btn--danger" onClick={confirmStop} title="Stop">
-                <StopCircle size={14} /> Stop Listening
+              <button className="sts3-modal-btn sts3-modal-btn--ghost" onClick={() => setShowStopConfirm(false)} title={t("verseAi.cancel")}>{t("verseAi.cancel")}</button>
+              <button className="sts3-modal-btn sts3-modal-btn--danger" onClick={confirmStop} title={t("verseAi.stopListening")}>
+                <StopCircle size={14} /> {t("verseAi.stopListening")}
               </button>
             </div>
           </div>
@@ -1345,17 +1358,17 @@ export default function SpeechToScripturePage() {
         <div className="sts3-modal-overlay" onClick={cancelLeave}>
           <div className="sts3-modal sts3-modal--small" onClick={(e) => e.stopPropagation()}>
             <div className="sts3-modal-header">
-              <h3 className="sts3-modal-title">Transcription Still Active</h3>
+              <h3 className="sts3-modal-title">{t("verseAi.transcriptionStillActive")}</h3>
             </div>
             <div className="sts3-modal-body">
               <p className="sts3-modal-text">
-                Voice Bible is currently transcribing. Leaving this page will stop the live transcription.
+                {t("verseAi.leaveConfirmDesc")}
               </p>
             </div>
             <div className="sts3-modal-footer">
-              <button className="sts3-modal-btn sts3-modal-btn--ghost" onClick={cancelLeave} title="On">Stay on Page</button>
-              <button className="sts3-modal-btn sts3-modal-btn--danger" onClick={confirmLeave} title="Stop">
-                <StopCircle size={14} /> Stop &amp; Leave
+              <button className="sts3-modal-btn sts3-modal-btn--ghost" onClick={cancelLeave} title={t("verseAi.stayOnPage")}>{t("verseAi.stayOnPage")}</button>
+              <button className="sts3-modal-btn sts3-modal-btn--danger" onClick={confirmLeave} title={t("verseAi.stopAndLeave")}>
+                <StopCircle size={14} /> {t("verseAi.stopAndLeave")}
               </button>
             </div>
           </div>
@@ -1369,39 +1382,39 @@ export default function SpeechToScripturePage() {
             {accessDenied.reason === "subscription_expired" && (
               <>
                 <CreditCard size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">Subscription Required</h2>
+                <h2 className="sts3-lock-title">{t("verseAi.subscriptionRequired")}</h2>
                 <p className="sts3-lock-desc">
-                  Your subscription is no longer active. Renew your subscription to use Verse AI.
+                  {t("verseAi.subscriptionExpiredDesc")}
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
                   onClick={() => navigate("/pricing")}
-                  title="Manage Subscription">
-                  Manage Subscription
+                  title={t("verseAi.manageSubscription")}>
+                  {t("verseAi.manageSubscription")}
                 </button>
               </>
             )}
             {accessDenied.reason === "trial_expired" && (
               <>
                 <Zap size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">Free Trial Ended</h2>
+                <h2 className="sts3-lock-title">{t("verseAi.freeTrialEnded")}</h2>
                 <p className="sts3-lock-desc">
-                  Your trial has expired. Subscribe to continue using Verse AI.
+                  {t("verseAi.trialExpiredDesc")}
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
                   onClick={() => navigate("/pricing")}
-                  title="Choose a Plan">
-                  Choose a Plan
+                  title={t("verseAi.choosePlan")}>
+                  {t("verseAi.choosePlan")}
                 </button>
               </>
             )}
             {accessDenied.reason === "device_revoked" && (
               <>
                 <ShieldAlert size={40} style={{ color: "var(--error)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">Device Removed</h2>
+                <h2 className="sts3-lock-title">{t("verseAi.deviceRemoved")}</h2>
                 <p className="sts3-lock-desc">
-                  This device has been removed from your account. Please sign in again.
+                  {t("verseAi.deviceRemovedDesc")}
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
@@ -1409,45 +1422,45 @@ export default function SpeechToScripturePage() {
                     setAccessDenied(null);
                     logout();
                   }}
-                  title="Sign out">
-                  Sign Out
+                  title={t("verseAi.signOut")}>
+                  {t("verseAi.signOut")}
                 </button>
               </>
             )}
             {accessDenied.reason === "account_suspended" && (
               <>
                 <Lock size={40} style={{ color: "var(--error)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">Account Restricted</h2>
+                <h2 className="sts3-lock-title">{t("verseAi.accountRestricted")}</h2>
                 <p className="sts3-lock-desc">
-                  Your account has been temporarily restricted. Please contact support for assistance.
+                  {t("verseAi.accountRestrictedDesc")}
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
                   onClick={() => setAccessDenied(null)}
-                  title="Contact Support">
-                  Contact Support
+                  title={t("verseAi.contactSupport")}>
+                  {t("verseAi.contactSupport")}
                 </button>
               </>
             )}
             {accessDenied.reason === "insufficient_credits" && (
               <>
                 <Zap size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">Insufficient Credits</h2>
+                <h2 className="sts3-lock-title">{t("verseAi.insufficientCredits")}</h2>
                 <p className="sts3-lock-desc">
-                  You do not have enough credits to use Verse AI. Purchase more credits or upgrade your plan to continue.
+                  {t("verseAi.insufficientCreditsDesc")}
                 </p>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
                     className="sts3-btn sts3-btn--primary"
                     onClick={() => navigate("/pricing")}
-                    title="Upgrade Plan">
-                    Upgrade Plan
+                    title={t("verseAi.upgradePlan")}>
+                    {t("verseAi.upgradePlan")}
                   </button>
                   <button
                     className="sts3-btn sts3-btn--ghost"
                     onClick={() => setAccessDenied(null)}
-                    title="Dismiss">
-                    Dismiss
+                    title={t("verseAi.dismiss")}>
+                    {t("verseAi.dismiss")}
                   </button>
                 </div>
               </>
@@ -1455,65 +1468,65 @@ export default function SpeechToScripturePage() {
             {accessDenied.reason === "feature_not_available" && (
               <>
                 <Lock size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">Verse AI Not Available</h2>
+                <h2 className="sts3-lock-title">{t("verseAi.verseAINotAvailable")}</h2>
                 <p className="sts3-lock-desc">
-                  Verse AI is not included in your current plan.
+                  {t("verseAi.featureNotAvailableDesc")}
                   {accessDenied.requiredPlan && (
                     <>
-                      {" "}Upgrade to <strong>{accessDenied.requiredPlan.charAt(0).toUpperCase() + accessDenied.requiredPlan.slice(1)}</strong> or higher to unlock Verse AI.
+                      {" "}{t("verseAi.upgradeToUnlock", { plan: accessDenied.requiredPlan.charAt(0).toUpperCase() + accessDenied.requiredPlan.slice(1) })}
                     </>
                   )}
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
                   onClick={() => navigate("/pricing")}
-                  title="View Plans">
-                  View Plans
+                  title={t("verseAi.viewPlans")}>
+                  {t("verseAi.viewPlans")}
                 </button>
               </>
             )}
             {accessDenied.reason === "internet_verification_required" && (
               <>
                 <Wifi size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">Connection Required</h2>
+                <h2 className="sts3-lock-title">{t("verseAi.connectionRequired")}</h2>
                 <p className="sts3-lock-desc">
-                  Unable to reach the server. Please check your internet connection and try again.
+                  {t("verseAi.connectionRequiredDesc")}
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
                   onClick={() => setAccessDenied(null)}
-                  title="Retry">
-                  Retry
+                  title={t("verseAi.retry")}>
+                  {t("verseAi.retry")}
                 </button>
               </>
             )}
             {accessDenied.reason === "server_error" && (
               <>
                 <AlertTriangle size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">Server Error</h2>
+                <h2 className="sts3-lock-title">{t("verseAi.serverError")}</h2>
                 <p className="sts3-lock-desc">
-                  Something went wrong on our end. Please try again shortly.
+                  {t("verseAi.serverErrorDesc")}
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
                   onClick={() => setAccessDenied(null)}
-                  title="Retry">
-                  Retry
+                  title={t("verseAi.retry")}>
+                  {t("verseAi.retry")}
                 </button>
               </>
             )}
             {accessDenied.reason === "device_not_found" && (
               <>
                 <ShieldAlert size={40} style={{ color: "var(--danger)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">Device Not Found</h2>
+                <h2 className="sts3-lock-title">{t("verseAi.deviceNotFound")}</h2>
                 <p className="sts3-lock-desc">
-                  This device is no longer registered. Please re-pair your device.
+                  {t("verseAi.deviceNotFoundDesc")}
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
                   onClick={() => setAccessDenied(null)}
-                  title="Retry">
-                  Retry
+                  title={t("verseAi.retry")}>
+                  {t("verseAi.retry")}
                 </button>
               </>
             )}
@@ -1525,9 +1538,9 @@ export default function SpeechToScripturePage() {
       {assemblyAIError && (
         <div className="sts3-lock-overlay">
           <div className="sts3-lock-card">
-            <h2 className="sts3-lock-title">Voice Bible Service Unavailable</h2>
+            <h2 className="sts3-lock-title">{t("verseAi.voiceBibleUnavailable")}</h2>
             <p className="sts3-lock-desc">
-              Unable to connect to the transcription service. Please try again shortly.
+              {t("verseAi.voiceBibleUnavailableDesc")}
             </p>
             <button
               className="sts3-btn sts3-btn--primary"
@@ -1535,8 +1548,8 @@ export default function SpeechToScripturePage() {
                 setAssemblyAIError(false);
                 void lmDockService.startListening(selectedMic || undefined);
               }}
-              title="Retry">
-              Retry Connection
+              title={t("verseAi.retryConnection")}>
+              {t("verseAi.retryConnection")}
             </button>
           </div>
         </div>

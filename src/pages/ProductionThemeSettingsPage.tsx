@@ -231,12 +231,7 @@ interface DockTickerPreview {
   permanentTheme?: TickerTheme;
 }
 
-function buildDockTickerPreviewHtml(dockTheme: TickerThemeConfig): string {
-  const sampleMessages = [
-    "Prayer Meeting Tuesday 6:30 PM",
-    "Youth Night Friday 7:00 PM",
-    "New Members Class next Sunday",
-  ];
+function buildDockTickerPreviewHtml(dockTheme: TickerThemeConfig, sampleMessages: string[]): string {
   return generateTickerHTML(
     dockTheme,
     dockTheme.defaultColors,
@@ -305,6 +300,11 @@ export default function ProductionThemeSettingsPage() {
     return [...dockTickers, ...permanentTickers];
   }, []);
 
+  const translatedCategoryFilters = useMemo(() => OBS_CATEGORY_FILTERS.map((f) => ({
+    ...f,
+    label: t(`themes.filter${f.key.charAt(0).toUpperCase() + f.key.slice(1)}`),
+  })), [t]);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -319,7 +319,7 @@ export default function ProductionThemeSettingsPage() {
       console.error("[ProductionThemeSettingsPage] Failed to load production settings:", err);
       setStatus({
         tone: "error",
-        text: "Could not load production theme settings.",
+        text: t("themes.loadError"),
       });
     } finally {
       setLoading(false);
@@ -419,7 +419,7 @@ export default function ProductionThemeSettingsPage() {
         const nextSettings = alignSettingsToThemes(settings, nextThemes);
         await persistSettings(
           nextSettings,
-          isEditing ? `"${theme.name}" updated.` : `"${theme.name}" created.`,
+          isEditing ? t("themes.themeUpdated", { name: theme.name }) : t("themes.themeCreated", { name: theme.name }),
           nextThemes,
         );
       } catch (err) {
@@ -427,7 +427,7 @@ export default function ProductionThemeSettingsPage() {
         setSettings((current) => alignSettingsToThemes(current, nextThemes));
         setStatus({
           tone: "error",
-          text: "Theme saved, but dock defaults could not be refreshed automatically.",
+          text: t("themes.themeSavedSyncFailed"),
         });
       }
     },
@@ -452,14 +452,14 @@ export default function ProductionThemeSettingsPage() {
       const nextSettings = alignSettingsToThemes(settings, nextThemes);
       await persistSettings(
         nextSettings,
-        `"${theme.name}" deleted and defaults refreshed.`,
+        t("themes.themeDeleted", { name: theme.name }),
         nextThemes,
       );
     } catch (err) {
       console.error("[ProductionThemeSettingsPage] Failed to delete custom theme:", err);
       setStatus({
         tone: "error",
-        text: err instanceof Error ? err.message : "Failed to delete theme.",
+        text: err instanceof Error ? err.message : t("themes.deleteFailed"),
       });
     } finally {
       setPendingDeleteTheme(null);
@@ -490,9 +490,9 @@ export default function ProductionThemeSettingsPage() {
     setObsFavorites(next);
     if (!wasFav) {
       const theme = allObsThemes.find((t) => t.id === themeId);
-      showToast(`"${theme?.name ?? "Theme"}" added to dock`, "success");
+      showToast(t("themes.addedToFavDock", { name: theme?.name ?? t("themes.defaultThemeName") }), "success");
     }
-  }, [obsFavorites, allObsThemes, showToast]);
+  }, [obsFavorites, allObsThemes, showToast, t]);
 
   const handleToggleTickerFavorite = useCallback((tickerId: string) => {
     const wasFav = tickerFavorites.has(tickerId);
@@ -500,7 +500,7 @@ export default function ProductionThemeSettingsPage() {
     setTickerFavorites(next);
     if (!wasFav) {
       const ticker = allTickers.find((t) => t.id === tickerId);
-      showToast(`"${ticker?.name ?? "Ticker"}" added to dock`, "success");
+      showToast(t("themes.addedToFavDock", { name: ticker?.name ?? t("themes.defaultTickerName") }), "success");
     }
   }, [tickerFavorites, allTickers, showToast]);
 
@@ -515,7 +515,7 @@ export default function ProductionThemeSettingsPage() {
           <section className="production-panel">
             <div className="production-loading">
               <Icon name="hourglass_empty" size={18} />
-              Loading production theme settings...
+              {t("themes.loading")}
             </div>
           </section>
         </div>
@@ -528,8 +528,8 @@ export default function ProductionThemeSettingsPage() {
       <div className="app-page__inner">
         <header className="app-page__header" data-theme-tutorial="header">
           <div className="app-page__header-copy">
-            <p className="app-page__eyebrow">Production Themes</p>
-            <h1 className="app-page__title">Set the defaults the MakeChurchEasy Dock should use for Bible and Worship.</h1>
+            <p className="app-page__eyebrow">{t("themes.pageEyebrow")}</p>
+            <h1 className="app-page__title">{t("themes.pageDescription")}</h1>
 
           </div>
 
@@ -552,9 +552,9 @@ export default function ProductionThemeSettingsPage() {
                   setShowCreator(true);
                 }}
                 data-theme-tutorial="create-theme"
-                title="Create">
+                title={t("themes.createTheme")}>
                 <Icon name="add" size={16} />
-                Create Theme
+                {t("themes.createTheme")}
               </button>
             )}
           </div>
@@ -592,22 +592,22 @@ export default function ProductionThemeSettingsPage() {
             className={`production-tab ${activeTab === "custom" ? "production-tab--active" : ""}`}
             onClick={() => setActiveTab("custom")}
             data-theme-tutorial="custom-tab"
-            title="Custom Themes">
-            Custom Themes
+            title={t("themes.tabCustom")}>
+            {t("themes.tabCustom")}
           </button>
           <button
             className={`production-tab ${activeTab === "obs" ? "production-tab--active" : ""}`}
             onClick={() => setActiveTab("obs")}
             data-theme-tutorial="obs-tab"
-            title="OBS Themes">
-            OBS Themes
+            title={t("themes.tabObs")}>
+            {t("themes.tabObs")}
           </button>
           <button
             className={`production-tab ${activeTab === "tickers" ? "production-tab--active" : ""}`}
             onClick={() => setActiveTab("tickers")}
             data-theme-tutorial="tickers-tab"
-            title="Tickers">
-            Tickers
+            title={t("themes.tabTickers")}>
+            {t("themes.tabTickers")}
           </button>
         </div>
 
@@ -618,18 +618,18 @@ export default function ProductionThemeSettingsPage() {
           <section className="production-panel">
             <div className="production-card-head">
               <div>
-                <h2>Custom Themes</h2>
-                <p>Create and maintain the custom fullscreen and lower-third looks used in production mode.</p>
+                <h2>{t("themes.tabCustom")}</h2>
+                <p>{t("themes.customDescription")}</p>
               </div>
-              <span className="production-count-pill">{customThemes.length} custom</span>
+              <span className="production-count-pill">{t("themes.customCount", { count: customThemes.length })}</span>
             </div>
 
             {customThemes.length === 0 ? (
               <div className="production-empty">
                 <Icon name="palette" size={18} />
                 <div>
-                  <strong>No custom themes yet.</strong>
-                  <p>Create one here and then assign it above as a Bible or Worship default.</p>
+                  <strong>{t("themes.noCustomThemesYet")}</strong>
+                  <p>{t("themes.noCustomThemesHint")}</p>
                 </div>
               </div>
             ) : (
@@ -656,7 +656,7 @@ export default function ProductionThemeSettingsPage() {
                             textShadow: theme.settings.textShadow,
                           }}
                         >
-                          For with God nothing shall be impossible
+                          {t("themes.sampleScripture")}
                         </span>
                         <span
                           className="production-theme-card__preview-ref"
@@ -665,7 +665,7 @@ export default function ProductionThemeSettingsPage() {
                             fontWeight: theme.settings.refFontWeight,
                           }}
                         >
-                          Luke 1:37
+                          {t("themes.sampleRef")}
                         </span>
                       </div>
                     </ThemePreviewSurface>
@@ -674,17 +674,17 @@ export default function ProductionThemeSettingsPage() {
                       <div className="production-theme-card__head">
                         <div className="production-theme-card__copy">
                           <strong>{theme.name}</strong>
-                          <span>{theme.description?.trim() || "Custom production theme"}</span>
+                          <span>{theme.description?.trim() || t("themes.customProductionTheme")}</span>
                         </div>
                         <span className="production-theme-card__type">
-                          {theme.templateType === "lower-third" ? "Lower Third" : "Fullscreen"}
+                          {theme.templateType === "lower-third" ? t("themes.lowerThird") : t("themes.fullscreen")}
                         </span>
                       </div>
 
                       <div className="production-theme-card__meta">
-                        <span className="production-theme-card__meta-pill">{themeCategories(theme)}</span>
+                        <span className="production-theme-card__meta-pill">{themeCategories(theme) === "uncategorized" ? t("themes.uncategorized") : themeCategories(theme)}</span>
                         <span className="production-theme-card__meta-pill production-theme-card__meta-pill--muted">
-                          {theme.source === "custom" ? "Custom" : "Built-in"}
+                          {theme.source === "custom" ? t("themes.sourceCustom") : t("themes.sourceBuiltin")}
                         </span>
                       </div>
 
@@ -695,16 +695,16 @@ export default function ProductionThemeSettingsPage() {
                             setEditingTheme(theme);
                             setShowCreator(true);
                           }}
-                          title="Edit">
+                          title={t("themes.edit")}>
                           <Icon name="edit" size={16} />
-                          Edit
+                          {t("themes.edit")}
                         </button>
                         <button
                           className="production-btn production-btn--danger"
                           onClick={() => handleDeleteTheme(theme)}
-                          title="Delete">
+                          title={t("themes.delete")}>
                           <Icon name="delete" size={16} />
-                          Delete
+                          {t("themes.delete")}
                         </button>
                       </div>
                     </div>
@@ -722,11 +722,11 @@ export default function ProductionThemeSettingsPage() {
           <section className="production-panel">
             <div className="production-card-head">
               <div>
-                <h2>OBS Themes</h2>
-                <p>Browse lower-third themes from the built-in library. Mark favorites to make them available in OBS.</p>
+                <h2>{t("themes.tabObs")}</h2>
+                <p>{t("themes.obsDescription")}</p>
               </div>
               <span className="production-count-pill">
-                {obsFavoritesCount} favorite{obsFavoritesCount !== 1 ? "s" : ""}
+                {t("themes.favoritesCount", { count: obsFavoritesCount })}
               </span>
             </div>
 
@@ -736,19 +736,19 @@ export default function ProductionThemeSettingsPage() {
                 <Icon name="search" size={14} />
                 <input
                   type="text"
-                  placeholder="Search themes..."
+                  placeholder={t("themes.searchThemes")}
                   value={obsSearch}
                   onChange={(e) => setObsSearch(e.target.value)}
                 />
                 {obsSearch && (
-                  <button className="obs-themes-search-clear" onClick={() => setObsSearch("")} title="Close">
+                  <button className="obs-themes-search-clear" onClick={() => setObsSearch("")} title={t("themes.close")}>
                     <Icon name="close" size={12} />
                   </button>
                 )}
               </div>
 
               <div className="obs-themes-filters">
-                {OBS_CATEGORY_FILTERS.map((f) => (
+                {translatedCategoryFilters.map((f) => (
                   <button
                     key={f.key}
                     className={`obs-themes-filter ${obsCategoryFilter === f.key ? "obs-themes-filter--active" : ""}`}
@@ -768,8 +768,8 @@ export default function ProductionThemeSettingsPage() {
               <div className="production-empty">
                 <Icon name="palette" size={18} />
                 <div>
-                  <strong>No themes found.</strong>
-                  <p>{obsSearch ? "Try a different search term." : "No themes match this filter."}</p>
+                  <strong>{t("themes.noThemesFound")}</strong>
+                  <p>{obsSearch ? t("themes.tryDifferentSearch") : t("themes.noThemesMatchFilter")}</p>
                 </div>
               </div>
             ) : (
@@ -783,7 +783,7 @@ export default function ProductionThemeSettingsPage() {
                         <div className="obs-theme-preview-card__title">
                           <strong>{theme.name}</strong>
                           <span className="obs-theme-preview-card__category">
-                            {theme.category || "general"}
+                            {theme.category || t("themes.uncategorized")}
                           </span>
                         </div>
                         {theme.accentColor && (
@@ -806,27 +806,27 @@ export default function ProductionThemeSettingsPage() {
                         ) : (
                           <div className="obs-theme-preview-card__empty">
                             <Icon name="visibility_off" size={20} />
-                            <span>No preview</span>
+                            <span>{t("themes.noPreview")}</span>
                           </div>
                         )}
                       </div>
 
                       <div className="obs-theme-preview-card__footer">
                         <span className="obs-theme-preview-card__desc">
-                          {theme.description?.trim() || "Lower-third overlay theme"}
+                          {theme.description?.trim() || t("themes.lowerThirdOverlayTheme")}
                         </span>
                         <div className="obs-theme-preview-card__actions">
                           <button
                             className="production-btn production-btn--ghost production-btn--sm"
                             onClick={() => setPreviewTheme(theme)}
-                            title="Open">
+                            title={t("themes.open")}>
                             <Icon name="open_in_full" size={14} />
                           </button>
                           <button
                             className={`production-btn production-btn--sm ${isFav ? "production-btn--primary" : "production-btn--ghost"}`}
                             onClick={() => handleToggleObsFavorite(theme.id)}
                             data-theme-tutorial="obs-favorite"
-                            title="star_border">
+                            title={t("themes.toggleFavorite")}>
                             <Icon name={isFav ? "star" : "star_border"} size={14} />
                           </button>
                         </div>
@@ -846,11 +846,11 @@ export default function ProductionThemeSettingsPage() {
           <section className="production-panel">
             <div className="production-card-head">
               <div>
-                <h2>Tickers</h2>
-                <p>Dock and permanent scrolling tickers for church updates, announcements, and contact info.</p>
+                <h2>{t("themes.tabTickers")}</h2>
+                <p>{t("themes.tickersDescription")}</p>
               </div>
               <span className="production-count-pill">
-                {allTickers.length} ticker{allTickers.length !== 1 ? "s" : ""}
+                {t("themes.tickerCount", { count: allTickers.length })}
               </span>
             </div>
 
@@ -858,7 +858,7 @@ export default function ProductionThemeSettingsPage() {
               {allTickers.map((ticker) => {
                 const previewSrc =
                   ticker.source === "dock" && ticker.dockTheme
-                    ? buildDockTickerPreviewHtml(ticker.dockTheme)
+                    ? buildDockTickerPreviewHtml(ticker.dockTheme, [t("themes.sampleTicker1"), t("themes.sampleTicker2"), t("themes.sampleTicker3")])
                     : ticker.permanentTheme
                       ? buildTickerPreviewHtml(ticker.permanentTheme)
                       : "";
@@ -869,7 +869,7 @@ export default function ProductionThemeSettingsPage() {
                       <div className="ticker-preview-card__title">
                         <strong>{ticker.name}</strong>
                         <span className="ticker-preview-card__source">
-                          {ticker.source === "dock" ? "Dock" : "Permanent"}
+                          {ticker.source === "dock" ? t("themes.sourceDock") : t("themes.sourcePermanent")}
                         </span>
                       </div>
                       <span
@@ -890,7 +890,7 @@ export default function ProductionThemeSettingsPage() {
                       ) : (
                         <div className="ticker-preview-card__empty">
                           <Icon name="visibility_off" size={20} />
-                          <span>No preview</span>
+                          <span>{t("themes.noPreview")}</span>
                         </div>
                       )}
                     </div>
@@ -901,14 +901,14 @@ export default function ProductionThemeSettingsPage() {
                         <button
                           className="production-btn production-btn--ghost production-btn--sm"
                           onClick={() => setPreviewTicker(ticker)}
-                          title="Open">
+                          title={t("themes.open")}>
                           <Icon name="open_in_full" size={14} />
                         </button>
                         <button
                           className={`production-btn production-btn--sm ${tickerFavorites.has(ticker.id) ? "production-btn--primary" : "production-btn--ghost"}`}
                           onClick={() => handleToggleTickerFavorite(ticker.id)}
                           data-theme-tutorial="ticker-favorite"
-                          title="star_border">
+                          title={t("themes.toggleFavorite")}>
                           <Icon name={tickerFavorites.has(ticker.id) ? "star" : "star_border"} size={14} />
                         </button>
                       </div>
@@ -937,25 +937,25 @@ export default function ProductionThemeSettingsPage() {
             <div className="production-confirm-modal" onClick={(e) => e.stopPropagation()}>
               <div className="production-confirm-header">
                 <Icon name="warning" size={20} style={{ color: "#ff5050" }} />
-                <h3>Delete Theme</h3>
+                <h3>{t("themes.deleteThemeTitle")}</h3>
               </div>
               <p className="production-confirm-text">
-                Are you sure you want to delete <strong>{pendingDeleteTheme.name}</strong>?
-                This cannot be undone.
+                {t("themes.deleteThemeConfirm")} <strong>{pendingDeleteTheme.name}</strong>?
+                {t("themes.deleteThemeCannotUndo")}
               </p>
               <div className="production-confirm-actions">
                 <button
                   className="production-btn production-btn--ghost"
                   onClick={() => setPendingDeleteTheme(null)}
-                  title="Cancel">
-                  Cancel
+                  title={t("themes.cancel")}>
+                  {t("themes.cancel")}
                 </button>
                 <button
                   className="production-btn production-btn--danger"
                   onClick={() => void confirmDeleteTheme()}
-                  title="Delete">
+                  title={t("themes.delete")}>
                   <Icon name="delete" size={16} />
-                  Delete
+                  {t("themes.delete")}
                 </button>
               </div>
             </div>
@@ -973,14 +973,14 @@ export default function ProductionThemeSettingsPage() {
                 <div>
                   <h3>{previewTheme.name}</h3>
                   <span className="obs-preview-modal__subtitle">
-                    {previewTheme.category || "general"}
+                    {previewTheme.category || t("themes.uncategorized")}
                     {previewTheme.tags?.length ? ` · ${previewTheme.tags.join(", ")}` : ""}
                   </span>
                 </div>
                 <button
                   className="production-btn production-btn--ghost"
                   onClick={() => setPreviewTheme(null)}
-                  title="Close">
+                  title={t("themes.close")}>
                   <Icon name="close" size={16} />
                 </button>
               </div>
@@ -996,7 +996,7 @@ export default function ProductionThemeSettingsPage() {
                 ) : (
                   <div className="obs-preview-modal__empty">
                     <Icon name="visibility_off" size={24} />
-                    <span>No preview available for this theme.</span>
+                    <span>{t("themes.noPreviewAvailable")}</span>
                   </div>
                 )}
               </div>
@@ -1005,9 +1005,9 @@ export default function ProductionThemeSettingsPage() {
                 <button
                   className={`production-btn ${obsFavorites.has(previewTheme.id) ? "production-btn--primary" : "production-btn--ghost"}`}
                   onClick={() => handleToggleObsFavorite(previewTheme.id)}
-                  title="Add">
+                  title={t("themes.addToOBS")}>
                   <Icon name={obsFavorites.has(previewTheme.id) ? "star" : "star_border"} size={16} />
-                  {obsFavorites.has(previewTheme.id) ? "Added to OBS" : "Add to OBS"}
+                  {obsFavorites.has(previewTheme.id) ? t("themes.addedToOBS") : t("themes.addToOBS")}
                 </button>
               </div>
             </div>
@@ -1025,14 +1025,14 @@ export default function ProductionThemeSettingsPage() {
                 <div>
                   <h3>{previewTicker.name}</h3>
                   <span className="obs-preview-modal__subtitle">
-                    {previewTicker.source === "dock" ? "Dock Ticker" : "Permanent Ticker"}
-                    {previewTicker.permanentTheme ? ` · ${previewTicker.permanentTheme.speed} speed` : ""}
+                    {previewTicker.source === "dock" ? t("themes.dockTicker") : t("themes.permanentTicker")}
+                    {previewTicker.permanentTheme ? ` · ${previewTicker.permanentTheme.speed} ${t("themes.speed")}` : ""}
                   </span>
                 </div>
                 <button
                   className="production-btn production-btn--ghost"
                   onClick={() => setPreviewTicker(null)}
-                  title="Close">
+                  title={t("themes.close")}>
                   <Icon name="close" size={16} />
                 </button>
               </div>
@@ -1042,7 +1042,7 @@ export default function ProductionThemeSettingsPage() {
                   className="obs-preview-modal__iframe"
                   srcDoc={
                     previewTicker.source === "dock" && previewTicker.dockTheme
-                      ? buildDockTickerPreviewHtml(previewTicker.dockTheme)
+                      ? buildDockTickerPreviewHtml(previewTicker.dockTheme, [t("themes.sampleTicker1"), t("themes.sampleTicker2"), t("themes.sampleTicker3")])
                       : previewTicker.permanentTheme
                         ? buildTickerPreviewHtml(previewTicker.permanentTheme)
                         : ""
@@ -1056,15 +1056,15 @@ export default function ProductionThemeSettingsPage() {
                 <button
                   className={`production-btn ${tickerFavorites.has(previewTicker.id) ? "production-btn--primary" : "production-btn--ghost"}`}
                   onClick={() => handleToggleTickerFavorite(previewTicker.id)}
-                  title="Add">
+                  title={t("themes.addToOBS")}>
                   <Icon name={tickerFavorites.has(previewTicker.id) ? "star" : "star_border"} size={16} />
-                  {tickerFavorites.has(previewTicker.id) ? "Added to OBS" : "Add to OBS"}
+                  {tickerFavorites.has(previewTicker.id) ? t("themes.addedToOBS") : t("themes.addToOBS")}
                 </button>
                 <button
                   className="production-btn production-btn--ghost"
                   onClick={() => setPreviewTicker(null)}
-                  title="Close">
-                  Close
+                  title={t("themes.close")}>
+                  {t("themes.close")}
                 </button>
               </div>
             </div>

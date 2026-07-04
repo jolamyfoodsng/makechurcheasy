@@ -8,6 +8,7 @@ import PreServicePanel from "../components/preservice/PreServicePanel";
 import { BibleProvider } from "../bible/bibleStore";
 import GlobalSearchModal, { type GlobalSearchTarget } from "../components/GlobalSearchModal";
 import Icon from "../components/Icon";
+import { useTranslation } from "react-i18next";
 
 type ServiceHubMode = "live" | "automation";
 type ServiceHubLiveTab = "worship" | "bible" | "graphics" | "media" | "ticker";
@@ -88,6 +89,7 @@ function getInitialHubMode(queryMode: string | null, queryTab: string | null): S
 
 export default function ServiceHubPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryTab = searchParams.get("tab");
   const queryMode = searchParams.get("mode");
@@ -211,6 +213,14 @@ export default function ServiceHubPage() {
 
   const tabLabels = useMemo(() => new Map(LIVE_TABS.map((tab) => [tab.id, tab.label])), []);
 
+  const tabLabelMap: Record<ServiceHubLiveTab, string> = useMemo(() => ({
+    worship: t("serviceHub.tabs.worship"),
+    bible: t("serviceHub.tabs.bible"),
+    graphics: t("serviceHub.tabs.graphics"),
+    media: t("serviceHub.tabs.media"),
+    ticker: t("serviceHub.tabs.ticker"),
+  }), [t]);
+
   const handleModeChange = (mode: ServiceHubMode) => {
     if (mode === activeMode) return;
     const next = new URLSearchParams(searchParams);
@@ -246,7 +256,7 @@ export default function ServiceHubPage() {
                   onClick={() => handleLiveTabChange(tab.id)}
                 >
                   <Icon name={tab.icon} size={16} />
-                  {tab.label}
+                  {tabLabelMap[tab.id]}
                 </button>
               );
             })}
@@ -254,26 +264,26 @@ export default function ServiceHubPage() {
         )}
 
         <div className="service-hub-header-right">
-          <div className="service-hub-mode-toggle" aria-label="Hub mode">
+          <div className="service-hub-mode-toggle" aria-label={t("serviceHub.aria.hubMode")}>
             <button
               className={`service-hub-mode-toggle-btn${activeMode === "live" ? " is-active" : ""}`}
               onClick={() => handleModeChange("live")}
-             title="LIVE">
-              LIVE
+              title={t("serviceHub.mode.live").toUpperCase()}>
+              {t("serviceHub.mode.live").toUpperCase()}
             </button>
             <button
               className={`service-hub-mode-toggle-btn${activeMode === "automation" ? " is-active" : ""}`}
               onClick={() => handleModeChange("automation")}
-             title="AUTOMATION">
-              AUTOMATION
+              title={t("serviceHub.mode.automation").toUpperCase()}>
+              {t("serviceHub.mode.automation").toUpperCase()}
             </button>
           </div>
           <button
             type="button"
             className="service-hub-quickmerge-btn"
             onClick={() => navigate("/hub/quick-merge")}
-           title="QUICK MERGE">
-            QUICK MERGE
+            title={t("serviceHub.tooltip.quickMerge")}>
+            {t("serviceHub.actions.quickMerge").toUpperCase()}
           </button>
         </div>
       </header>
@@ -351,20 +361,20 @@ export default function ServiceHubPage() {
           <section
             className="service-hub-panel service-hub-panel--preservice"
             hidden={activeMode !== "automation"}
-            aria-label="Automation"
+            aria-label={t("serviceHub.aria.automation")}
           >
-            <div className="service-hub-automation-tabs" role="tablist" aria-label="Automation pages">
+            <div className="service-hub-automation-tabs" role="tablist" aria-label={t("serviceHub.aria.automationPages")}>
               <button
                 type="button"
                 role="tab"
                 aria-selected={automationSection === "pre-service"}
                 className={`service-hub-automation-tab${automationSection === "pre-service" ? " is-active" : ""}`}
                 onClick={() => setAutomationSection("pre-service")}
-               title="Pre-Service Sequence">
-                Pre-Service Sequence
+                title={t("serviceHub.tooltip.preServiceTab")}>
+                {t("serviceHub.automation.preServiceSequence")}
               </button>
-              <button type="button" className="service-hub-automation-tab is-placeholder" disabled title="Post-Service (Soon)">
-                Post-Service (Soon)
+              <button type="button" className="service-hub-automation-tab is-placeholder" disabled title={t("serviceHub.automation.postServiceSoon")}>
+                {t("serviceHub.automation.postServiceSoon")}
               </button>
             </div>
 

@@ -60,6 +60,7 @@ import {
 } from "../dockTypes";
 import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { invoke } from "@tauri-apps/api/core";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -1146,6 +1147,22 @@ export default function DockBibleTab({
         });
         setChapterPassages(nextPassages);
         setChapterErrors(nextErrors);
+
+        // Update the shared Bible reading state so mobile can show the same chapter
+        const primaryPassage = nextPassages[0];
+        if (primaryPassage && !cancelled) {
+          const verses = (primaryPassage.verses ?? []).map((v) => ({
+            verse: v.verse,
+            text: v.text,
+          }));
+          invoke("set_bible_reading_state", {
+            translation: primaryPassage.translation ?? quickTranslations[0] ?? "KJV",
+            book: selectedBook,
+            chapter: selectedChapter,
+            verses,
+            selectedVerse: selectedVerse ?? null,
+          }).catch(() => { });
+        }
       } catch (error) {
         if (cancelled) return;
         const nextErrors = createEmptyErrors();

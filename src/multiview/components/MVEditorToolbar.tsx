@@ -7,6 +7,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useEditor } from "../editorStore";
 import { pushLayoutToOBS, isOBSReady } from "../mvObsService";
 import type { OBSSceneRegion } from "../types";
@@ -15,6 +16,7 @@ import { tooltipWithShortcut } from "../shortcuts";
 import { downloadLayoutJSON, promptImportLayout } from "../mvStore";
 
 export function MVEditorToolbar() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { state, dispatch, save, undo, redo, deleteSelected, duplicateSelected, unassignSceneFromRegion, resetCanvas, alignRegions, distributeRegions, lockAll, unlockAll } = useEditor();
   const layout = state.layout;
@@ -211,7 +213,7 @@ export function MVEditorToolbar() {
     gridOn: state.showGrid,
     snapOn: state.snapEnabled,
     safeFrameOn: state.showSafeFrame,
-  });
+  }, t);
 
   return (
     <div className="mv-editor-toolbar" role="toolbar" aria-label="Editor toolbar">
@@ -236,22 +238,22 @@ export function MVEditorToolbar() {
           <button
             className="mv-toolbar-name"
             onClick={() => { setNameValue(layout?.name ?? ""); setEditingName(true); }}
-            title="Click to rename"
+            title={t("toolbar.clickToRename")}
           >
-            {layout?.name ?? "Untitled Layout"}
+            {layout?.name ?? t("toolbar.untitledLayout")}
             <Icon name="edit" size={14} style={{ marginLeft: 4, opacity: 0.5 }} />
           </button>
         )}
 
         <span className="mv-toolbar-sep" />
         <span className="mv-toolbar-meta">
-          {layout?.canvas.label} · {layout?.regions.length ?? 0} regions
+          {layout?.canvas.label} · {layout?.regions.length ?? 0} {t("toolbar.regions")}
         </span>
       </div>
 
       {/* Center: Tools */}
       <div className="mv-toolbar-center">
-        <button className="mv-toolbar-btn" title={tooltipWithShortcut("Undo", "undo")} disabled={!canUndo} onClick={() => {
+        <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.edit.undo"), "undo")} disabled={!canUndo} onClick={() => {
           // Show confirmation if there are assigned scenes (undo might remove a scene drag)
           const hasAssigned = (layout?.regions ?? []).some(
             (r) => r.type === "obs-scene" && !!(r as OBSSceneRegion).sceneName
@@ -264,42 +266,42 @@ export function MVEditorToolbar() {
         }}>
           <Icon name="undo" size={20} />
         </button>
-        <button className="mv-toolbar-btn" title={tooltipWithShortcut("Redo", "redo")} disabled={!canRedo} onClick={redo}>
+        <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.edit.redo"), "redo")} disabled={!canRedo} onClick={redo}>
           <Icon name="redo" size={20} />
         </button>
 
         <span className="mv-toolbar-sep" />
 
-        <button className="mv-toolbar-btn" title={tooltipWithShortcut("Duplicate", "duplicate")} disabled={!hasSelection} onClick={duplicateSelected}>
+        <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.edit.duplicate"), "duplicate")} disabled={!hasSelection} onClick={duplicateSelected}>
           <Icon name="content_copy" size={20} />
         </button>
-        <button className="mv-toolbar-btn" title={tooltipWithShortcut("Delete", "delete")} disabled={!hasSelection} onClick={handleDelete}>
+        <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.edit.delete"), "delete")} disabled={!hasSelection} onClick={handleDelete}>
           <Icon name="delete" size={20} />
         </button>
 
         <span className="mv-toolbar-sep" />
 
         <button className={`mv-toolbar-btn ${state.showGrid ? "mv-toolbar-btn--active" : ""}`}
-          title={tooltipWithShortcut("Toggle Grid", "toggle-grid")} onClick={() => dispatch({ type: "TOGGLE_GRID" })}>
+          title={tooltipWithShortcut(t("menu.view.grid"), "toggle-grid")} onClick={() => dispatch({ type: "TOGGLE_GRID" })}>
           <Icon name="grid_on" size={20} />
         </button>
         <button className={`mv-toolbar-btn ${state.snapEnabled ? "mv-toolbar-btn--active" : ""}`}
-          title={tooltipWithShortcut("Toggle Snap", "toggle-snap")} onClick={() => dispatch({ type: "TOGGLE_SNAP" })}>
+          title={tooltipWithShortcut(t("menu.view.snapToGrid"), "toggle-snap")} onClick={() => dispatch({ type: "TOGGLE_SNAP" })}>
           <Icon name="grid_4x4" size={20} />
         </button>
         <button className={`mv-toolbar-btn ${state.showSafeFrame ? "mv-toolbar-btn--active" : ""}`}
-          title={tooltipWithShortcut("Toggle Safe Frame", "toggle-safe-frame")} onClick={() => dispatch({ type: "TOGGLE_SAFE_FRAME" })}>
+          title={tooltipWithShortcut(t("menu.view.safeFrame"), "toggle-safe-frame")} onClick={() => dispatch({ type: "TOGGLE_SAFE_FRAME" })}>
           <Icon name="crop_free" size={20} />
         </button>
         <button className={`mv-toolbar-btn ${state.showBackgroundPicker ? "mv-toolbar-btn--active" : ""}`}
-          title={tooltipWithShortcut("Background Settings", "toggle-background")} onClick={() => dispatch({ type: "TOGGLE_BACKGROUND_PICKER" })}>
+          title={tooltipWithShortcut(t("toolbar.backgroundSettings"), "toggle-background")} onClick={() => dispatch({ type: "TOGGLE_BACKGROUND_PICKER" })}>
           <Icon name="wallpaper" size={20} />
         </button>
 
         <span className="mv-toolbar-sep" />
 
         {/* Reset Canvas */}
-        <button className="mv-toolbar-btn" title={tooltipWithShortcut("Reset Canvas", "reset-canvas")} onClick={() => setShowResetModal(true)}>
+        <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("toolbar.resetCanvas"), "reset-canvas")} onClick={() => setShowResetModal(true)}>
           <Icon name="restart_alt" size={20} />
         </button>
 
@@ -308,31 +310,31 @@ export function MVEditorToolbar() {
         {/* Alignment tools (visible when 2+ selected) */}
         {state.selectedRegionIds.length >= 2 && (
           <>
-            <button className="mv-toolbar-btn" title={tooltipWithShortcut("Align Left", "align-left")} onClick={() => alignRegions("left")}>
+            <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.arrange.alignLeft"), "align-left")} onClick={() => alignRegions("left")}>
               <Icon name="align_horizontal_left" size={20} />
             </button>
-            <button className="mv-toolbar-btn" title={tooltipWithShortcut("Align Center H", "align-center-h")} onClick={() => alignRegions("center-h")}>
+            <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.arrange.alignCenterH"), "align-center-h")} onClick={() => alignRegions("center-h")}>
               <Icon name="align_horizontal_center" size={20} />
             </button>
-            <button className="mv-toolbar-btn" title={tooltipWithShortcut("Align Right", "align-right")} onClick={() => alignRegions("right")}>
+            <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.arrange.alignRight"), "align-right")} onClick={() => alignRegions("right")}>
               <Icon name="align_horizontal_right" size={20} />
             </button>
-            <button className="mv-toolbar-btn" title={tooltipWithShortcut("Align Top", "align-top")} onClick={() => alignRegions("top")}>
+            <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.arrange.alignTop"), "align-top")} onClick={() => alignRegions("top")}>
               <Icon name="align_vertical_top" size={20} />
             </button>
-            <button className="mv-toolbar-btn" title={tooltipWithShortcut("Align Center V", "align-center-v")} onClick={() => alignRegions("center-v")}>
+            <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.arrange.alignCenterV"), "align-center-v")} onClick={() => alignRegions("center-v")}>
               <Icon name="align_vertical_center" size={20} />
             </button>
-            <button className="mv-toolbar-btn" title={tooltipWithShortcut("Align Bottom", "align-bottom")} onClick={() => alignRegions("bottom")}>
+            <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.arrange.alignBottom"), "align-bottom")} onClick={() => alignRegions("bottom")}>
               <Icon name="align_vertical_bottom" size={20} />
             </button>
             {state.selectedRegionIds.length >= 3 && (
               <>
                 <span className="mv-toolbar-sep" />
-                <button className="mv-toolbar-btn" title={tooltipWithShortcut("Distribute Horizontally", "distribute-h")} onClick={() => distributeRegions("horizontal")}>
+                <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.arrange.distributeH"), "distribute-h")} onClick={() => distributeRegions("horizontal")}>
                   <Icon name="horizontal_distribute" size={20} />
                 </button>
-                <button className="mv-toolbar-btn" title={tooltipWithShortcut("Distribute Vertically", "distribute-v")} onClick={() => distributeRegions("vertical")}>
+                <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.arrange.distributeV"), "distribute-v")} onClick={() => distributeRegions("vertical")}>
                   <Icon name="vertical_distribute" size={20} />
                 </button>
               </>
@@ -345,19 +347,19 @@ export function MVEditorToolbar() {
       {/* Right: Zoom + Live */}
       <div className="mv-toolbar-right">
         {/* OBS Connection Badge */}
-        <div className={`mv-obs-badge ${obsReady ? "mv-obs-badge--connected" : "mv-obs-badge--disconnected"}`} title={obsReady ? "Broadcast Connected" : "Broadcast Disconnected"}>
+        <div className={`mv-obs-badge ${obsReady ? "mv-obs-badge--connected" : "mv-obs-badge--disconnected"}`} title={obsReady ? t("toolbar.broadcastConnected") : t("toolbar.broadcastDisconnected")}>
           <span className={`mv-obs-badge-dot ${obsReady ? "mv-obs-badge-dot--on" : ""}`} />
           <span className="mv-obs-badge-label">{obsReady ? "OBS" : "OBS Off"}</span>
         </div>
 
         <span className="mv-toolbar-sep" />
-        <button className="mv-toolbar-btn" title={tooltipWithShortcut("Zoom Out", "zoom-out")} onClick={zoomOut}>
+        <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.view.zoomOut"), "zoom-out")} onClick={zoomOut}>
           <Icon name="remove" size={20} />
         </button>
-        <button className="mv-toolbar-zoom" title={tooltipWithShortcut("Zoom to Fit", "zoom-fit")} onClick={zoomFit}>
+        <button className="mv-toolbar-zoom" title={tooltipWithShortcut(t("menu.view.zoomToFit"), "zoom-fit")} onClick={zoomFit}>
           {Math.round(state.zoom * 100)}%
         </button>
-        <button className="mv-toolbar-btn" title={tooltipWithShortcut("Zoom In", "zoom-in")} onClick={zoomIn}>
+        <button className="mv-toolbar-btn" title={tooltipWithShortcut(t("menu.view.zoomIn"), "zoom-in")} onClick={zoomIn}>
           <Icon name="add" size={20} />
         </button>
 
@@ -372,14 +374,14 @@ export function MVEditorToolbar() {
             save().then(() => pushLayoutToOBS(layout)).catch(() => { }).finally(() => setSyncing(false));
           }}
           disabled={!obsReady || syncing || !hasAssignedScenes}
-          title={!obsReady ? "Not connected to OBS" : !hasAssignedScenes ? "Assign scenes to regions first" : "Apply layout to OBS"}
+          title={!obsReady ? t("toolbar.notConnected") : !hasAssignedScenes ? t("toolbar.assignScenesFirst") : t("toolbar.applyLayoutToOBS")}
         >
           {syncing ? (
             <span className="loading-spinner-sm" />
           ) : (
             <>
               <Icon name="cast_connected" size={16} />
-              Apply to OBS
+              {t("toolbar.applyToOBS")}
             </>
           )}
         </button>
@@ -387,7 +389,7 @@ export function MVEditorToolbar() {
         {syncing && (
           <span className="mv-toolbar-sync-msg mv-toolbar-sync-msg--ok">
             <Icon name="sync" size={14} />
-            Applying...
+            {t("toolbar.applying")}
           </span>
         )}
       </div>
@@ -397,16 +399,15 @@ export function MVEditorToolbar() {
         <div className="mv-modal-backdrop" onClick={() => setDeleteModal(null)}>
           <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
             <div className="mv-modal-icon"><Icon name="warning" size={20} /></div>
-            <h3 className="mv-modal-title">Remove Scene?</h3>
+            <h3 className="mv-modal-title">{t("toolbar.removeScene")}</h3>
             <p className="mv-modal-text">
-              Are you sure you want to remove <strong>"{deleteModal.sceneName}"</strong> from this slot?
-              The slot will remain but the scene will be unassigned.
+              {t("toolbar.removeSceneDesc", { name: deleteModal.sceneName })}
             </p>
             <div className="mv-modal-actions">
-              <button className="mv-btn mv-btn--ghost" onClick={() => setDeleteModal(null)} title="Cancel">Cancel</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setDeleteModal(null)} title={t("common.cancel")}>{t("common.cancel")}</button>
               <button className="mv-btn mv-btn--danger"
-                onClick={() => { unassignSceneFromRegion(deleteModal.regionId as any); setDeleteModal(null); }} title="Remove">
-                Remove Scene
+                onClick={() => { unassignSceneFromRegion(deleteModal.regionId as any); setDeleteModal(null); }} title={t("toolbar.removeScene")}>
+                {t("toolbar.removeScene")}
               </button>
             </div>
           </div>
@@ -418,16 +419,16 @@ export function MVEditorToolbar() {
         <div className="mv-modal-backdrop" onClick={() => setShowResetModal(false)}>
           <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
             <div className="mv-modal-icon"><Icon name="restart_alt" size={20} /></div>
-            <h3 className="mv-modal-title">Reset Canvas?</h3>
+            <h3 className="mv-modal-title">{t("toolbar.resetCanvas")}</h3>
             <p className="mv-modal-text">
-              This will unassign all scenes from every slot and reset the canvas to its default state. This action can be undone.
+              {t("toolbar.resetCanvasDesc")}
             </p>
             <div className="mv-modal-actions">
-              <button className="mv-btn mv-btn--ghost" onClick={() => setShowResetModal(false)} title="Cancel">Cancel</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setShowResetModal(false)} title={t("common.cancel")}>{t("common.cancel")}</button>
               <button className="mv-btn mv-btn--danger"
-                onClick={() => { resetCanvas(); setShowResetModal(false); }} title="Reset">
+                onClick={() => { resetCanvas(); setShowResetModal(false); }} title={t("toolbar.resetCanvas")}>
                 <Icon name="restart_alt" size={16} />
-                Reset Canvas
+                {t("toolbar.resetCanvas")}
               </button>
             </div>
           </div>
@@ -439,16 +440,16 @@ export function MVEditorToolbar() {
         <div className="mv-modal-backdrop" onClick={() => setShowUndoConfirm(false)}>
           <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
             <div className="mv-modal-icon"><Icon name="undo" size={20} /></div>
-            <h3 className="mv-modal-title">Undo Changes?</h3>
+            <h3 className="mv-modal-title">{t("toolbar.undoChanges")}</h3>
             <p className="mv-modal-text">
-              Are you sure you want to undo? This may remove scene assignments from the canvas.
+              {t("toolbar.undoChangesDesc")}
             </p>
             <div className="mv-modal-actions">
-              <button className="mv-btn mv-btn--ghost" onClick={() => setShowUndoConfirm(false)} title="Cancel">Cancel</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setShowUndoConfirm(false)} title={t("common.cancel")}>{t("common.cancel")}</button>
               <button className="mv-btn mv-btn--primary"
-                onClick={() => { undo(); setShowUndoConfirm(false); }} title="Undo">
+                onClick={() => { undo(); setShowUndoConfirm(false); }} title={t("toolbar.undo")}>
                 <Icon name="undo" size={16} />
-                Undo
+                {t("toolbar.undo")}
               </button>
             </div>
           </div>
@@ -462,17 +463,16 @@ export function MVEditorToolbar() {
             <div className="mv-modal-icon">
               <Icon name="cell_tower" size={20} style={{ color: "#ef4444" }} />
             </div>
-            <h3 className="mv-modal-title">Scene Is Currently Live</h3>
+            <h3 className="mv-modal-title">{t("toolbar.sceneIsLive")}</h3>
             <p className="mv-modal-text">
-              The scene <strong>"MV: {layout?.name || "Untitled"}"</strong> is currently the <em>live Program output</em>.
-              Applying changes may cause a brief disruption to the broadcast. A staging scene will be used to minimise impact, but viewers may notice a momentary flicker.
+              {t("toolbar.sceneIsLiveDesc", { name: layout?.name || "Untitled" })}
             </p>
             <div className="mv-modal-actions">
-              <button className="mv-btn mv-btn--ghost" onClick={() => setShowLiveConfirm(false)} title="Cancel">Cancel</button>
+              <button className="mv-btn mv-btn--ghost" onClick={() => setShowLiveConfirm(false)} title={t("common.cancel")}>{t("common.cancel")}</button>
               <button className="mv-btn mv-btn--danger"
-                onClick={() => { setShowLiveConfirm(false); doApplyToOBS(); }} title="Apply">
+                onClick={() => { setShowLiveConfirm(false); doApplyToOBS(); }} title={t("toolbar.applyAnyway")}>
                 <Icon name="cast_connected" size={16} />
-                Apply Anyway
+                {t("toolbar.applyAnyway")}
               </button>
             </div>
           </div>
@@ -493,6 +493,7 @@ import { getShortcutsByCategory, CATEGORY_LABELS, shortcutLabel as fmtShortcut }
 import Icon from "../../components/Icon";
 
 function ShortcutsReferenceModal({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
   const grouped = getShortcutsByCategory();
   const [search, setSearch] = useState("");
 
@@ -500,15 +501,15 @@ function ShortcutsReferenceModal({ onClose }: { onClose: () => void }) {
     <div className="mv-modal-backdrop" onClick={onClose}>
       <div className="mv-modal mv-shortcuts-modal" onClick={(e) => e.stopPropagation()}>
         <div className="mv-shortcuts-header">
-          <h3 className="mv-modal-title">Keyboard Shortcuts</h3>
+          <h3 className="mv-modal-title">{t("toolbar.shortcuts")}</h3>
           <div className="mv-shortcuts-search-wrap">
             <input
               className="mv-shortcuts-search"
               type="text"
-              placeholder="Search shortcuts…"
+              placeholder={t("toolbar.searchShortcuts")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search keyboard shortcuts"
+              aria-label={t("toolbar.searchShortcuts")}
               autoFocus
             />
             {search && (
@@ -516,14 +517,14 @@ function ShortcutsReferenceModal({ onClose }: { onClose: () => void }) {
                 type="button"
                 className="mv-inline-search-clear"
                 onClick={() => setSearch("")}
-                aria-label="Clear shortcut search"
-                title="Clear shortcut search"
+                aria-label={t("toolbar.clearShortcutSearch")}
+                title={t("toolbar.clearShortcutSearch")}
               >
                 <Icon name="close" size={14} />
               </button>
             )}
           </div>
-          <button className="mv-toolbar-btn" onClick={onClose} title="Close">
+          <button className="mv-toolbar-btn" onClick={onClose} title={t("common.close")}>
             <Icon name="close" size={20} />
           </button>
         </div>

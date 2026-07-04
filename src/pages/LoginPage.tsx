@@ -9,6 +9,7 @@ import { DEFAULT_DESKTOP_CONFIG, readDesktopConfigCache } from "@/services/deskt
 import { trackDevicePaired, trackLogin } from "@/services/tracking";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const AUTH_API = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 console.log('AUTH_API :', AUTH_API);
@@ -27,6 +28,7 @@ function detectOS(): string {
 type View = "initial" | "pairing" | "manual" | "qr";
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   const { setUser } = useAuth();
   const [view, setView] = useState<View>("initial");
   const [code, setCode] = useState("");
@@ -221,10 +223,10 @@ export default function LoginPage() {
           }}>
             <div style={{ fontSize: "48px", marginBottom: "16px" }}>🔧</div>
             <h1 style={{ fontSize: "24px", fontWeight: 600, color: "#f0f0f5", marginBottom: "12px" }}>
-              Maintenance Mode
+              {t("login.maintenance.title")}
             </h1>
             <p style={{ fontSize: "16px", color: "#a0a0b0", lineHeight: 1.6 }}>
-              We'll be back shortly!
+              {t("login.maintenance.message")}
             </p>
           </div>
         </div>
@@ -249,7 +251,7 @@ export default function LoginPage() {
             MakeChurchEasy
           </h1>
           <p style={{ fontSize: "13px", color: "#9898a8" }}>
-            Church Presentation Software for OBS
+            {t("login.hero.subtitle")}
           </p>
         </div>
 
@@ -314,7 +316,7 @@ export default function LoginPage() {
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
               </svg>
-              Login with Google
+              {t("login.btn.google")}
             </button>
 
             <button
@@ -334,7 +336,7 @@ export default function LoginPage() {
                 justifyContent: "center",
                 gap: "8px",
               }}
-              title="Scan QR Code">
+              title={t("login.tooltip.scanQr")}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="7" height="7" rx="1" />
                 <rect x="14" y="3" width="7" height="7" rx="1" />
@@ -345,7 +347,7 @@ export default function LoginPage() {
                 <line x1="21" y1="17" x2="21" y2="21" />
                 <line x1="17" y1="21" x2="21" y2="21" />
               </svg>
-              Scan QR Code
+              {t("login.btn.scanQr")}
             </button>
 
             <div

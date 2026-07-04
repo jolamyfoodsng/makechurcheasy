@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../../i18n";
+import { dockBridge } from "../../services/dockBridge";
 import { getBibleSettings, getInstalledTranslations, saveBibleSettings } from "../../bible/bibleDb";
 import { useBible } from "../../bible/bibleStore";
 import type { BibleTranslation } from "../../bible/types";
@@ -24,7 +25,8 @@ import { fetchCreditDetails, fetchCreditTransactions, onCreditChange, type Credi
 import { obsService } from "../../services/obsService";
 import { formatCredits, getPlanConfig, getPlanCredits, getPlanLabel, type PlanConfig } from "../../services/planConfig";
 import { isProUnlocked } from "../../services/proLicense";
-import { getUserPlan, isInTrial, getTrialDaysRemaining } from "../../services/licenseService";
+import { getUserPlan, isInTrial, getTrialDaysRemaining, getEffectivePlan, canUseMobileControl } from "../../services/licenseService";
+import { UpgradeModal } from "../../components/UpgradeModal";
 import { clearAllSongs } from "../../worship/worshipDb";
 import { refreshTheme } from "../components/MVThemeProvider";
 import * as db from "../mvStore";
@@ -46,15 +48,23 @@ import {
   Mic,
   Monitor,
   Moon,
+  Music,
   Paintbrush,
   Palette,
   Radio,
   RefreshCw,
   RotateCcw,
   Settings,
+  Smartphone,
   Sun,
   Trash2,
+  Users,
+  Bell,
+  Copy,
+  Printer,
+  Zap,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 
 import "./MVSettings.css";
 
@@ -74,7 +84,7 @@ const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
   { value: "KJV", label: "King James Version (KJV)" },
 ];
 
-type SettingsTab = "general" | "obs" | "appearance" | "branding" | "bible" | "usage" | "audio";
+type SettingsTab = "general" | "obs" | "mobile" | "appearance" | "branding" | "bible" | "usage" | "audio";
 
 const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "" };
 
@@ -114,7 +124,7 @@ function resolveSpeakerProfiles(settings: MVSettingsType): SpeakerProfileSetting
 export function MVSettings() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const validTabs: SettingsTab[] = ["general", "obs", "appearance", "branding", "bible", "usage", "audio"];
+  const validTabs: SettingsTab[] = ["general", "obs", "mobile", "appearance", "branding", "bible", "usage", "audio"];
   const initialTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<SettingsTab>(
     initialTab && validTabs.includes(initialTab as SettingsTab) ? (initialTab as SettingsTab) : "general"
@@ -174,6 +184,9 @@ export function MVSettings() {
 
   // ── Credits state (fetched from backend) ──
   const { user: authUser } = useAuth();
+  const effectivePlan = getEffectivePlan(authUser);
+  const hasMobileAccess = canUseMobileControl(authUser);
+  const [showMobileUpgrade, setShowMobileUpgrade] = useState(false);
   const [creditBalance, setCreditBalance] = useState<number>(0);
   const [creditsUsedThisMonth, setCreditsUsedThisMonth] = useState<number>(0);
   const [planConfig, setPlanConfig] = useState<PlanConfig | null>(null);
@@ -525,6 +538,7 @@ export function MVSettings() {
     setInterfaceLanguage("English");
     localStorage.setItem("mce_interface_language", "English");
     i18n.changeLanguage("en");
+    dockBridge.sendLanguageChanged("English", "en");
     update({ theme: "dark", highContrast: false });
     triggerToast(t("mvSettings.toast.appearanceResetToDefaults"), "success");
   }, [update, triggerToast]);
@@ -544,6 +558,7 @@ export function MVSettings() {
     switch (activeTab) {
       case "general": return t("mvSettings.tabDesc.general");
       case "obs": return t("mvSettings.tabDesc.obs");
+      case "mobile": return t("mvSettings.tabDesc.mobile");
       case "appearance": return t("mvSettings.tabDesc.appearance");
       case "branding": return t("mvSettings.tabDesc.branding");
       case "bible": return t("mvSettings.tabDesc.bible");
@@ -551,6 +566,127 @@ export function MVSettings() {
       case "audio": return t("mvSettings.tabDesc.audio");
     }
   }, [activeTab]);
+
+  /* ── Mobile Remote state & handlers ── */
+  const [mobileServerStatus, setMobileServerStatus] = useState<{ running: boolean; port: number } | null>(null);
+  const [mobilePairingInfo, setMobilePairingInfo] = useState<{ ip: string; port: number; pairingToken: string } | null>(null);
+  const [mobileConnectedDevices, _setMobileConnectedDevices] = useState(0);
+  const [mobileApprovedDevices, setMobileApprovedDevices] = useState<{ id: string; name: string; lastConnected: string }[]>([]);
+  const [mobileDeviceRequests, setMobileDeviceRequests] = useState<{ id: string; name: string; model: string }[]>([]);
+  const [mobilePermissions, setMobilePermissions] = useState([
+    { key: "slides", icon: Monitor, nameKey: "mvSettings.mobile.permSlides", descKey: "mvSettings.mobile.permSlidesDesc", enabled: true, locked: false, requiredPlan: "" },
+    { key: "bible", icon: Globe, nameKey: "mvSettings.mobile.permBible", descKey: "mvSettings.mobile.permBibleDesc", enabled: true, locked: false, requiredPlan: "" },
+    { key: "lowerThird", icon: Users, nameKey: "mvSettings.mobile.permLowerThird", descKey: "mvSettings.mobile.permLowerThirdDesc", enabled: true, locked: false, requiredPlan: "" },
+    { key: "songLyrics", icon: Music, nameKey: "mvSettings.mobile.permSongLyrics", descKey: "mvSettings.mobile.permSongLyricsDesc", enabled: true, locked: false, requiredPlan: "" },
+    { key: "automation", icon: Zap, nameKey: "mvSettings.mobile.permAutomation", descKey: "mvSettings.mobile.permAutomationDesc", enabled: false, locked: true, requiredPlan: "Growth" },
+  ]);
+
+  const mobilePairingPayload = useMemo(() => {
+    if (!mobilePairingInfo) return "";
+    return JSON.stringify({
+      desktopName: settings.mobileDesktopName || "My Church",
+      ip: mobilePairingInfo.ip,
+      wsPort: mobilePairingInfo.port,
+      apiPort: 45678,
+      pairingCode: mobilePairingInfo.pairingToken,
+    });
+  }, [mobilePairingInfo, settings.mobileDesktopName]);
+
+  const handleMobileRestart = useCallback(async () => {
+    try {
+      await invoke("restart_mobile_companion");
+      triggerToast(t("mvSettings.toast.mobileServerStarted"), "success");
+    } catch {
+      triggerToast(t("mvSettings.toast.mobileServerFailed"), "accent");
+    }
+  }, [triggerToast, t]);
+
+  const handleMobileLogs = useCallback(() => {
+    // Placeholder: open logs panel
+    triggerToast(t("mvSettings.mobile.logsPanelSoon"), "accent");
+  }, [triggerToast, t]);
+
+  const handleMobileRefreshPairing = useCallback(async () => {
+    try {
+      const info = await invoke<{ ip: string; port: number; pairingToken: string }>("get_mobile_pairing_info");
+      setMobilePairingInfo(info);
+    } catch { /* ignore */ }
+  }, []);
+
+  const handleMobileCopyPayload = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(mobilePairingPayload);
+      triggerToast(t("mvSettings.toast.mobileCopied"), "success");
+    } catch { /* ignore */ }
+  }, [mobilePairingPayload, triggerToast, t]);
+
+  const handleMobilePrintQR = useCallback(() => {
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(mobilePairingPayload)}`;
+    const w = window.open("", "_blank", "width=400,height=500");
+    if (w) {
+      w.document.write(`<html><head><title>${t("mvSettings.mobile.qrPrintTitle")}</title><style>body{display:flex;flex-direction:column;align-items:center;font-family:sans-serif;padding:20px}img{margin:16px 0}p{font-size:12px;color:#666}</style></head><body><img src="${qrUrl}" width="300" height="300"/><p>${mobilePairingInfo?.pairingToken ?? ""}</p></body></html>`);
+      w.document.close();
+      w.print();
+    }
+  }, [mobilePairingPayload, mobilePairingInfo, t]);
+
+  const handleMobileRenameDevice = useCallback(async (device: { id: string; name: string }) => {
+    const newName = prompt(t("mvSettings.mobile.renamePrompt"), device.name);
+    if (newName && newName.trim()) {
+      setMobileApprovedDevices((prev) => prev.map((d) => d.id === device.id ? { ...d, name: newName.trim() } : d));
+      triggerToast(t("mvSettings.toast.mobileDeviceRenamed"), "success");
+    }
+  }, [triggerToast, t]);
+
+  const handleMobileDisconnectDevice = useCallback((device: { id: string }) => {
+    setMobileApprovedDevices((prev) => prev.filter((d) => d.id !== device.id));
+    triggerToast(t("mvSettings.toast.mobileDeviceRejected"), "success");
+  }, [triggerToast, t]);
+
+  const handleMobileRemoveDevice = useCallback((device: { id: string }) => {
+    setMobileApprovedDevices((prev) => prev.filter((d) => d.id !== device.id));
+    triggerToast(t("mvSettings.toast.mobileDeviceRemoved"), "success");
+  }, [triggerToast, t]);
+
+  const handleMobileApproveRequest = useCallback((request: { id: string; name: string }) => {
+    setMobileApprovedDevices((prev) => [...prev, { id: request.id, name: request.name, lastConnected: t("mvSettings.mobile.justNow") }]);
+    setMobileDeviceRequests((prev) => prev.filter((r) => r.id !== request.id));
+    triggerToast(t("mvSettings.toast.mobileDeviceApproved"), "success");
+  }, [triggerToast, t]);
+
+  const handleMobileRejectRequest = useCallback((request: { id: string }) => {
+    setMobileDeviceRequests((prev) => prev.filter((r) => r.id !== request.id));
+    triggerToast(t("mvSettings.toast.mobileDeviceRejected"), "success");
+  }, [triggerToast, t]);
+
+  const handleMobilePermToggle = useCallback((key: string, enabled: boolean) => {
+    setMobilePermissions((prev) => prev.map((p) => p.key === key ? { ...p, enabled } : p));
+  }, []);
+
+  /* Fetch pairing info once when remote is enabled */
+  useEffect(() => {
+    if (!settings.mobileRemoteEnabled) return;
+    let mounted = true;
+    invoke<{ ip: string; port: number; pairingToken: string }>("get_mobile_pairing_info")
+      .then((info) => { if (mounted) setMobilePairingInfo(info); })
+      .catch(() => { });
+    return () => { mounted = false; };
+  }, [settings.mobileRemoteEnabled]);
+
+  /* Poll server status every 3s when remote is enabled */
+  useEffect(() => {
+    if (!settings.mobileRemoteEnabled) return;
+    let mounted = true;
+    const poll = async () => {
+      try {
+        const status = await invoke<{ running: boolean; port: number }>("get_mobile_server_status");
+        if (mounted) setMobileServerStatus(status);
+      } catch { /* backend not available */ }
+    };
+    poll();
+    const id = setInterval(poll, 3000);
+    return () => { mounted = false; clearInterval(id); };
+  }, [settings.mobileRemoteEnabled]);
 
   return (
     <div className="app-container">
@@ -585,6 +721,18 @@ export function MVSettings() {
               lmDockService.setInputGain(100);
               triggerToast(t("mvSettings.toast.inputGainReset"), "accent");
             }
+            else if (activeTab === "mobile") {
+              db.updateSettings({
+                mobileRemoteEnabled: false,
+                mobileRequireApproval: true,
+                mobileAllowMultipleDevices: true,
+                mobileMaxDevices: 3,
+                mobileAutoRemoveInactive: true,
+                mobileDesktopName: "My Church",
+              });
+              setSettings(db.getSettings());
+              triggerToast(t("mvSettings.toast.mobileReset"), "accent");
+            }
             else triggerToast(t("mvSettings.toast.resetOptionsAvailable"), "accent");
           }} title="Reset">
             <RotateCcw size={16} />
@@ -597,6 +745,7 @@ export function MVSettings() {
           {([
             ["general", Settings, t("mvSettings.tabs.general")],
             ["obs", Radio, t("mvSettings.tabs.obs")],
+            ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
             ["appearance", Palette, t("mvSettings.tabs.appearance")],
             ["branding", Paintbrush, t("mvSettings.tabs.branding")],
             ["audio", Mic, t("mvSettings.tabs.audio")],
@@ -874,6 +1023,316 @@ export function MVSettings() {
 
 
                 </div>
+              )}
+
+              {/* ══════════════ MOBILE REMOTE TAB ══════════════ */}
+              {activeTab === "mobile" && (
+                hasMobileAccess ? (
+                  <div className="settings-section">
+                    {/* ── Section 1: Enable Mobile Remote ── */}
+                    <div className="section-header">
+                      <h3 className="section-title">{t("mvSettings.mobile.enable")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <div className="switch-row">
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.mobile.enableDesc")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.mobile.enableHint")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={settings.mobileRemoteEnabled}
+                            onChange={(e) => {
+                              const next = e.target.checked;
+                              db.updateSettings({ mobileRemoteEnabled: next });
+                              setSettings(db.getSettings());
+                            }}
+                          />
+                          <span className="switch-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* ── Section 2: Connection Status ── */}
+                    <div className="section-header" style={{ marginTop: 24 }}>
+                      <h3 className="section-title">{t("mvSettings.mobile.status")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <div className="mr-status-grid">
+                        <div className="mr-status-item">
+                          <span className="mr-status-label">{t("mvSettings.mobile.statusServer")}</span>
+                          <span className={`mr-status-badge ${mobileServerStatus?.running ? "mr-status-on" : "mr-status-off"}`}>
+                            {mobileServerStatus?.running ? t("mvSettings.mobile.statusRunning") : t("mvSettings.mobile.statusStopped")}
+                          </span>
+                        </div>
+                        <div className="mr-status-item">
+                          <span className="mr-status-label">{t("mvSettings.mobile.statusWsPort")}</span>
+                          <span className="mr-status-value">8765</span>
+                        </div>
+                        <div className="mr-status-item">
+                          <span className="mr-status-label">{t("mvSettings.mobile.statusApiPort")}</span>
+                          <span className="mr-status-value">45678</span>
+                        </div>
+                        <div className="mr-status-item">
+                          <span className="mr-status-label">{t("mvSettings.mobile.statusDevices")}</span>
+                          <span className="mr-status-value">{mobileConnectedDevices}</span>
+                        </div>
+                      </div>
+                      <div className="mr-status-actions">
+                        <button className="action-btn secondary" onClick={handleMobileRestart}>
+                          <RefreshCw size={14} /> {t("mvSettings.mobile.statusRestart")}
+                        </button>
+                        <button className="action-btn secondary" onClick={handleMobileLogs}>
+                          <Monitor size={14} /> {t("mvSettings.mobile.statusLogs")}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* ── Section 3: QR Pairing ── */}
+                    <div className="section-header" style={{ marginTop: 24 }}>
+                      <h3 className="section-title">{t("mvSettings.mobile.qrTitle")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <p className="section-desc">{t("mvSettings.mobile.qrDesc")}</p>
+                      <div className="mr-qr-container">
+                        <div className="mr-qr-box">
+                          {mobilePairingInfo ? (
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mobilePairingPayload)}`}
+                              alt="QR Code"
+                              className="mr-qr-image"
+                              onError={(e) => {
+                                // Fallback: generate SVG locally
+                                const target = e.currentTarget;
+                                target.style.display = "none";
+                                const fallback = target.nextElementSibling as HTMLElement;
+                                if (fallback) fallback.style.display = "flex";
+                              }}
+                            />
+                          ) : null}
+                          <div className="mr-qr-fallback" style={{ display: mobilePairingInfo ? "none" : "flex" }}>
+                            <Smartphone size={48} />
+                          </div>
+                        </div>
+                        <div className="mr-qr-info">
+                          <div className="mr-qr-code-display">
+                            <span className="mr-qr-code-label">{t("mvSettings.mobile.qrCode")}</span>
+                            <span className="mr-qr-code-value">{mobilePairingInfo?.pairingToken ?? "------"}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mr-qr-actions">
+                        <button className="action-btn secondary" onClick={handleMobileRefreshPairing}>
+                          <RefreshCw size={14} /> {t("mvSettings.mobile.qrRefresh")}
+                        </button>
+                        <button className="action-btn secondary" onClick={handleMobileCopyPayload}>
+                          <Copy size={14} /> {t("mvSettings.mobile.qrCopy")}
+                        </button>
+                        <button className="action-btn secondary" onClick={handleMobilePrintQR}>
+                          <Printer size={14} /> {t("mvSettings.mobile.qrPrint")}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* ── Section 4: Approved Devices ── */}
+                    <div className="section-header" style={{ marginTop: 24 }}>
+                      <h3 className="section-title">{t("mvSettings.mobile.approvedDevices")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <p className="section-desc">{t("mvSettings.mobile.approvedDevicesDesc")}</p>
+                      {mobileApprovedDevices.length === 0 ? (
+                        <p className="mr-empty-state">{t("mvSettings.mobile.noDevices")}</p>
+                      ) : (
+                        <div className="mr-device-list">
+                          {mobileApprovedDevices.map((device) => (
+                            <div key={device.id} className="mr-device-item">
+                              <div className="mr-device-info">
+                                <Smartphone size={16} className="mr-device-icon" />
+                                <span className="mr-device-name">{device.name}</span>
+                                <span className="mr-device-last">{device.lastConnected}</span>
+                              </div>
+                              <div className="mr-device-actions">
+                                <button className="action-btn small secondary" onClick={() => handleMobileRenameDevice(device)}>
+                                  {t("mvSettings.mobile.rename")}
+                                </button>
+                                <button className="action-btn small secondary" onClick={() => handleMobileDisconnectDevice(device)}>
+                                  {t("mvSettings.mobile.disconnect")}
+                                </button>
+                                <button className="action-btn small danger" onClick={() => handleMobileRemoveDevice(device)}>
+                                  {t("mvSettings.mobile.remove")}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Section 5: Device Requests ── */}
+                    <div className="section-header" style={{ marginTop: 24 }}>
+                      <h3 className="section-title">{t("mvSettings.mobile.deviceRequests")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <p className="section-desc">{t("mvSettings.mobile.deviceRequestsDesc")}</p>
+                      {mobileDeviceRequests.length === 0 ? (
+                        <p className="mr-empty-state">{t("mvSettings.mobile.noRequests")}</p>
+                      ) : (
+                        <div className="mr-device-list">
+                          {mobileDeviceRequests.map((request) => (
+                            <div key={request.id} className="mr-device-item mr-device-pending">
+                              <div className="mr-device-info">
+                                <Bell size={16} className="mr-device-icon" />
+                                <span className="mr-device-name">{request.name}</span>
+                                <span className="mr-device-model">{request.model}</span>
+                              </div>
+                              <div className="mr-device-actions">
+                                <button className="action-btn small primary" onClick={() => handleMobileApproveRequest(request)}>
+                                  {t("mvSettings.mobile.approve")}
+                                </button>
+                                <button className="action-btn small danger" onClick={() => handleMobileRejectRequest(request)}>
+                                  {t("mvSettings.mobile.reject")}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Section 6: Mobile Permissions ── */}
+                    <div className="section-header" style={{ marginTop: 24 }}>
+                      <h3 className="section-title">{t("mvSettings.mobile.permissions")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <p className="section-desc">{t("mvSettings.mobile.permissionsDesc")}</p>
+                      <div className="mr-permissions-list">
+                        {mobilePermissions.map((perm) => (
+                          <div key={perm.key} className={`mr-perm-item ${perm.locked ? "mr-perm-locked" : ""}`}>
+                            <div className="mr-perm-icon">
+                              <perm.icon size={18} />
+                            </div>
+                            <div className="mr-perm-info">
+                              <span className="mr-perm-name">{t(perm.nameKey)}</span>
+                              <span className="mr-perm-desc">{t(perm.descKey)}</span>
+                            </div>
+                            {perm.locked ? (
+                              <span className="mr-perm-badge">{t("mvSettings.mobile.permLocked", { plan: perm.requiredPlan })}</span>
+                            ) : (
+                              <label className="switch-toggle-label">
+                                <input
+                                  type="checkbox"
+                                  checked={perm.enabled}
+                                  onChange={(e) => handleMobilePermToggle(perm.key, e.target.checked)}
+                                />
+                                <span className="switch-slider"></span>
+                              </label>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ── Section 7: Security ── */}
+                    <div className="section-header" style={{ marginTop: 24 }}>
+                      <h3 className="section-title">{t("mvSettings.mobile.security")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <p className="section-desc">{t("mvSettings.mobile.securityDesc")}</p>
+
+                      <div className="switch-row">
+                        <div>
+                          <p className="switch-label">{t("mvSettings.mobile.secRequireApproval")}</p>
+                          <p className="switch-hint">{t("mvSettings.mobile.secRequireApprovalDesc")}</p>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={settings.mobileRequireApproval}
+                            onChange={(e) => {
+                              db.updateSettings({ mobileRequireApproval: e.target.checked });
+                              setSettings(db.getSettings());
+                            }}
+                          />
+                          <span className="switch-slider"></span>
+                        </label>
+                      </div>
+
+                      <div className="switch-row">
+                        <div>
+                          <p className="switch-label">{t("mvSettings.mobile.secAllowMultiple")}</p>
+                          <p className="switch-hint">{t("mvSettings.mobile.secAllowMultipleDesc")}</p>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={settings.mobileAllowMultipleDevices}
+                            onChange={(e) => {
+                              db.updateSettings({ mobileAllowMultipleDevices: e.target.checked });
+                              setSettings(db.getSettings());
+                            }}
+                          />
+                          <span className="switch-slider"></span>
+                        </label>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">{t("mvSettings.mobile.secMaxDevices")}</label>
+                        <p className="switch-hint">{t("mvSettings.mobile.secMaxDevicesDesc")}</p>
+                        <input
+                          type="number"
+                          className="form-input"
+                          min={1}
+                          max={20}
+                          value={settings.mobileMaxDevices}
+                          onChange={(e) => {
+                            const val = Math.max(1, Math.min(20, parseInt(e.target.value) || 3));
+                            db.updateSettings({ mobileMaxDevices: val });
+                            setSettings(db.getSettings());
+                          }}
+                        />
+                      </div>
+
+                      <div className="switch-row">
+                        <div>
+                          <p className="switch-label">{t("mvSettings.mobile.secAutoRemove")}</p>
+                          <p className="switch-hint">{t("mvSettings.mobile.secAutoRemoveDesc")}</p>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={settings.mobileAutoRemoveInactive}
+                            onChange={(e) => {
+                              db.updateSettings({ mobileAutoRemoveInactive: e.target.checked });
+                              setSettings(db.getSettings());
+                            }}
+                          />
+                          <span className="switch-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="settings-section">
+                    <div className="settings-card" style={{ textAlign: "center", padding: "48px 32px" }}>
+                      <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+                      <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8, color: "var(--text-primary)" }}>
+                        {t("mvSettings.mobile.upgradeTitle")}
+                      </h3>
+                      <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 24, maxWidth: 400, margin: "0 auto 24px" }}>
+                        {t("mvSettings.mobile.upgradeDesc")}
+                      </p>
+                      <button
+                        className="mv-btn mv-btn--primary"
+                        onClick={() => setShowMobileUpgrade(true)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 24px" }}
+                      >
+                        <Zap size={18} />
+                        {t("mvSettings.mobile.upgradeBtn")}
+                      </button>
+                    </div>
+                  </div>
+                )
               )}
 
               {/* ══════════════ APPEARANCE TAB ══════════════ */}
@@ -1640,46 +2099,59 @@ export function MVSettings() {
             </div>
           </div>
         </div>
-      </main>
+      </main >
 
       {/* Language Change Confirmation Modal */}
-      {showLanguageModal && pendingLanguage && (
-        <div className="mv-modal-backdrop" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
-          <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mv-modal-title">Change Language</h3>
-            <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.85rem", lineHeight: 1.5, margin: "0 0 4px" }}>
-              Switch interface language to <strong>{pendingLanguage}</strong>?
-            </p>
-            <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.8rem", lineHeight: 1.5 }}>
-              The interface will update immediately.
-            </p>
-            <div className="mv-modal-actions" style={{ marginTop: 12 }}>
-              <button className="mv-btn mv-btn--ghost" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>Cancel</button>
-              <button
-                className="mv-btn mv-btn--primary"
-                onClick={() => {
-                  const lang = pendingLanguage!;
-                  const langToCode: Record<string, string> = {
-                    English: "en", French: "fr", Spanish: "es", Portuguese: "pt",
-                    Yoruba: "yo", Igbo: "ig", Hausa: "ha", Ghanaian: "gh",
-                  };
-                  const code = langToCode[lang] || "en";
-                  console.log(`[MCE-i18n] User clicked Change Language → "${lang}" → code="${code}", current lng=${i18n.language}`);
-                  localStorage.setItem("mce_interface_language", lang);
-                  i18n.changeLanguage(code).then(() => {
-                    console.log(`[MCE-i18n] changeLanguage resolved. New lng=${i18n.language}`);
-                  });
-                  setInterfaceLanguage(lang);
-                  setShowLanguageModal(false);
-                  setPendingLanguage(null);
-                }}
-              >
-                Change Language
-              </button>
+      {
+        showLanguageModal && pendingLanguage && (
+          <div className="mv-modal-backdrop" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
+            <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
+              <h3 className="mv-modal-title">Change Language</h3>
+              <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.85rem", lineHeight: 1.5, margin: "0 0 4px" }}>
+                Switch interface language to <strong>{pendingLanguage}</strong>?
+              </p>
+              <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.8rem", lineHeight: 1.5 }}>
+                The interface will update immediately.
+              </p>
+              <div className="mv-modal-actions" style={{ marginTop: 12 }}>
+                <button className="mv-btn mv-btn--ghost" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>Cancel</button>
+                <button
+                  className="mv-btn mv-btn--primary"
+                  onClick={() => {
+                    const lang = pendingLanguage!;
+                    const langToCode: Record<string, string> = {
+                      English: "en", French: "fr", Spanish: "es", Portuguese: "pt",
+                      Yoruba: "yo", Igbo: "ig", Hausa: "ha", Ghanaian: "gh",
+                    };
+                    const code = langToCode[lang] || "en";
+                    console.log(`[MCE-i18n] User clicked Change Language → "${lang}" → code="${code}", current lng=${i18n.language}`);
+                    localStorage.setItem("mce_interface_language", lang);
+                    i18n.changeLanguage(code).then(() => {
+                      console.log(`[MCE-i18n] changeLanguage resolved. New lng=${i18n.language}`);
+                    });
+                    dockBridge.sendLanguageChanged(lang, code);
+                    setInterfaceLanguage(lang);
+                    setShowLanguageModal(false);
+                    setPendingLanguage(null);
+                  }}
+                >
+                  Change Language
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+
+      {/* Mobile Remote upgrade modal */}
+      <UpgradeModal
+        open={showMobileUpgrade}
+        onClose={() => setShowMobileUpgrade(false)}
+        feature="Mobile Remote"
+        requiredPlan="growth"
+        currentPlan={effectivePlan}
+        message="Mobile Remote access is available on Growth and Pro plans."
+      />
+    </div >
   );
 }

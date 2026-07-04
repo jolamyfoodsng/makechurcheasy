@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Icon from "../components/Icon";
 import { getAllMedia } from "../library/libraryDb";
 import type { MediaItem } from "../library/libraryTypes";
@@ -74,6 +75,7 @@ function getConfigurationMessage(tool: LiveToolTemplate): string {
 }
 
 export default function LiveToolsPage() {
+  const { t } = useTranslation();
   const [templates, setTemplates] = useState<LiveToolTemplate[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [scenes, setScenes] = useState<string[]>([]);
@@ -125,12 +127,12 @@ export default function LiveToolsPage() {
   const handleSend = useCallback(async (tool: LiveToolTemplate, target: SendTarget) => {
     const key = `${tool.id}:${target}`;
     setSending(key);
-    setStatus({ id: tool.id, message: target === "preview" ? "Sending to Preview..." : "Sending to Program...", tone: "info" });
+    setStatus({ id: tool.id, message: target === "preview" ? t("liveTools.status.sendingPreview") : t("liveTools.status.sendingProgram"), tone: "info" });
     try {
       await sendLiveToolToObs(tool, target === "program");
       setStatus({
         id: tool.id,
-        message: target === "preview" ? "Sent to Preview" : "Sent to Program",
+        message: target === "preview" ? t("liveTools.status.sentPreview") : t("liveTools.status.sentProgram"),
         tone: "ok",
       });
     } catch (err) {
@@ -139,7 +141,7 @@ export default function LiveToolsPage() {
     } finally {
       setSending(null);
     }
-  }, []);
+  }, [t]);
 
   const handleClear = useCallback(async (target: "preview" | "program" | "all") => {
     setSending(`clear:${target}`);
@@ -149,14 +151,14 @@ export default function LiveToolsPage() {
       } else {
         await clearLiveToolTarget(target === "program");
       }
-      setStatus({ id: "clear", message: `Cleared ${target}`, tone: "ok" });
+      setStatus({ id: "clear", message: t("liveTools.status.cleared"), tone: "ok" });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setStatus({ id: "clear", message, tone: "error" });
     } finally {
       setSending(null);
     }
-  }, []);
+  }, [t]);
 
   const openEditor = useCallback((tool: LiveToolTemplate) => {
     setEditing(tool);
@@ -172,49 +174,49 @@ export default function LiveToolsPage() {
     if (!draft) return;
     const saved = await saveLiveToolTemplate(draft);
     setTemplates((current) => current.map((template) => template.id === saved.id ? { ...template, ...saved } : template));
-    setStatus({ id: saved.id, message: "Template saved", tone: "ok" });
+    setStatus({ id: saved.id, message: t("liveTools.status.templateSaved"), tone: "ok" });
     closeEditor();
-  }, [closeEditor, draft]);
+  }, [closeEditor, draft, t]);
 
   const handleReset = useCallback(async () => {
     if (!editing) return;
     await resetLiveToolTemplate(editing.id);
     await reload();
-    setStatus({ id: editing.id, message: "Template reset to default", tone: "ok" });
+    setStatus({ id: editing.id, message: t("liveTools.status.templateReset"), tone: "ok" });
     closeEditor();
-  }, [closeEditor, editing, reload]);
+  }, [closeEditor, editing, reload, t]);
 
   return (
     <div className="app-page live-tools-page">
       <div className="app-page__inner live-tools-page__inner">
         <header className="app-page__header live-tools-hero">
           <div className="app-page__header-copy">
-            <p className="app-page__eyebrow">Live Tools</p>
-            <h1 className="app-page__title">Run service moments without opening OBS.</h1>
+            <p className="app-page__eyebrow">{t("liveTools.hero.eyebrow")}</p>
+            <h1 className="app-page__title">{t("liveTools.hero.title")}</h1>
             <p className="app-page__subtitle">
-              Countdown, welcome loops, emergency screens, lower thirds, and post-service cards grouped by real church flow.
+              {t("liveTools.hero.subtitle")}
             </p>
           </div>
           <div className="app-page__actions live-tools-actions">
             <span className={`app-chip${obsConnected ? " is-ok" : ""}`}>
               <Icon name={obsConnected ? "check_circle" : "error_outline"} size={14} />
-              {obsConnected ? "Broadcast connected" : "Broadcast disconnected"}
+              {obsConnected ? t("liveTools.hero.connected") : t("liveTools.hero.disconnected")}
             </span>
             <button
               type="button"
               className="live-tools-clear-btn"
               disabled={sending !== null}
               onClick={() => void handleClear("preview")}
-             title="Clear">
-              Clear Preview
+              title={t("liveTools.tooltip.clearPreview")}>
+              {t("liveTools.hero.clearPreview")}
             </button>
             <button
               type="button"
               className="live-tools-clear-btn live-tools-clear-btn--danger"
               disabled={sending !== null}
               onClick={() => void handleClear("all")}
-             title="Clear">
-              Clear All
+              title={t("liveTools.tooltip.clearAll")}>
+              {t("liveTools.hero.clearAll")}
             </button>
           </div>
         </header>
@@ -265,23 +267,23 @@ export default function LiveToolsPage() {
                           className="live-tool-btn live-tool-btn--preview"
                           disabled={disabled}
                           onClick={() => void handleSend(tool, "preview")}
-                         title="Send">
-                          {sending === previewKey ? "Sending..." : "Preview"}
+                          title={t("liveTools.tooltip.previewTool")}>
+                          {sending === previewKey ? t("liveTools.card.sending") : t("liveTools.card.preview")}
                         </button>
                         <button
                           type="button"
                           className="live-tool-btn live-tool-btn--program"
                           disabled={disabled}
                           onClick={() => void handleSend(tool, "program")}
-                         title="Send">
-                          {sending === programKey ? "Sending..." : "Program"}
+                          title={t("liveTools.tooltip.sendProgram")}>
+                          {sending === programKey ? t("liveTools.card.sending") : t("liveTools.card.program")}
                         </button>
                         <button
                           type="button"
                           className="live-tool-btn live-tool-btn--ghost"
                           onClick={() => openEditor(tool)}
-                         title="Edit">
-                          Edit
+                          title={t("liveTools.tooltip.editTool")}>
+                          {t("liveTools.card.edit")}
                         </button>
                       </div>
                     </article>
@@ -295,34 +297,34 @@ export default function LiveToolsPage() {
 
       {editing && draft && (
         <div className="live-tools-modal-backdrop" onClick={closeEditor}>
-          <div className="live-tools-modal" role="dialog" aria-modal="true" aria-label={`Edit ${editing.label}`} onClick={(event) => event.stopPropagation()}>
+          <div className="live-tools-modal" role="dialog" aria-modal="true" aria-label={t("liveTools.modal.editLabel")} onClick={(event) => event.stopPropagation()}>
             <div className="live-tools-modal__head">
               <div>
-                <p>Edit template</p>
+                <p>{t("liveTools.modal.heading")}</p>
                 <h2>{editing.label}</h2>
               </div>
-              <button type="button" className="live-tools-modal__close" onClick={closeEditor} aria-label="Close editor" title="Close">
+              <button type="button" className="live-tools-modal__close" onClick={closeEditor} aria-label={t("liveTools.tooltip.closeModal")} title={t("liveTools.tooltip.closeModal")}>
                 <Icon name="close" size={18} />
               </button>
             </div>
 
             <div className="live-tools-form">
               <label>
-                <span>Main text</span>
+                <span>{t("liveTools.modal.mainText")}</span>
                 <input
                   value={draft.title}
                   onChange={(event) => setDraft({ ...draft, title: event.target.value })}
                 />
               </label>
               <label>
-                <span>Secondary text</span>
+                <span>{t("liveTools.modal.secondaryText")}</span>
                 <input
                   value={draft.subtitle ?? ""}
                   onChange={(event) => setDraft({ ...draft, subtitle: event.target.value })}
                 />
               </label>
               <label className="live-tools-form__wide">
-                <span>Body / details</span>
+                <span>{t("liveTools.modal.bodyDetails")}</span>
                 <textarea
                   rows={4}
                   value={draft.body ?? ""}
@@ -332,7 +334,7 @@ export default function LiveToolsPage() {
 
               {draft.kind === "countdown" && (
                 <label>
-                  <span>Countdown duration</span>
+                  <span>{t("liveTools.modal.countdownDuration")}</span>
                   <input
                     type="number"
                     min={5}
@@ -345,7 +347,7 @@ export default function LiveToolsPage() {
               )}
 
               <label>
-                <span>Background color</span>
+                <span>{t("liveTools.modal.backgroundColor")}</span>
                 <input
                   type="color"
                   value={draft.backgroundColor ?? "#111827"}
@@ -355,12 +357,12 @@ export default function LiveToolsPage() {
 
               {canSelectMedia(draft) && (
                 <label className="live-tools-form__wide">
-                  <span>Background / loop media</span>
+                  <span>{t("liveTools.modal.backgroundMedia")}</span>
                   <select
                     value={draft.backgroundMediaId ?? ""}
                     onChange={(event) => setDraft(applyMediaToTemplate(draft, event.target.value, media))}
                   >
-                    <option value="">No media selected</option>
+                    <option value="">{t("liveTools.modal.noMediaSelected")}</option>
                     {media.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.name}
@@ -372,12 +374,12 @@ export default function LiveToolsPage() {
 
               {(draft.kind === "scene" || draft.action === "safe-scene") && (
                 <label className="live-tools-form__wide">
-                  <span>OBS scene</span>
+                  <span>{t("liveTools.modal.obsScene")}</span>
                   <select
                     value={draft.sceneName ?? ""}
                     onChange={(event) => setDraft({ ...draft, sceneName: event.target.value })}
                   >
-                    <option value="">Choose scene</option>
+                    <option value="">{t("liveTools.modal.chooseScene")}</option>
                     {scenes.map((scene) => (
                       <option key={scene} value={scene}>{scene}</option>
                     ))}
@@ -387,26 +389,26 @@ export default function LiveToolsPage() {
 
               {draft.action === "mute-mic" && (
                 <label className="live-tools-form__wide">
-                  <span>Mic source name</span>
+                  <span>{t("liveTools.modal.micSourceName")}</span>
                   <input
                     value={draft.sourceName ?? ""}
                     onChange={(event) => setDraft({ ...draft, sourceName: event.target.value })}
-                    placeholder="OBS audio source name"
+                    placeholder={t("liveTools.modal.micSourcePlaceholder")}
                   />
                 </label>
               )}
             </div>
 
             <div className="live-tools-modal__actions">
-              <button type="button" className="live-tools-clear-btn" onClick={() => void handleReset()} title="Reset">
-                Reset to Default
+              <button type="button" className="live-tools-clear-btn" onClick={() => void handleReset()} title={t("liveTools.tooltip.resetDefault")}>
+                {t("liveTools.modal.resetDefault")}
               </button>
               <div className="live-tools-modal__action-group">
-                <button type="button" className="live-tool-btn live-tool-btn--ghost" onClick={closeEditor} title="Cancel">
-                  Cancel
+                <button type="button" className="live-tool-btn live-tool-btn--ghost" onClick={closeEditor} title={t("liveTools.tooltip.cancelEdit")}>
+                  {t("liveTools.modal.cancel")}
                 </button>
-                <button type="button" className="live-tool-btn live-tool-btn--program" onClick={() => void handleSave()} title="Save">
-                  Save
+                <button type="button" className="live-tool-btn live-tool-btn--program" onClick={() => void handleSave()} title={t("liveTools.tooltip.saveTool")}>
+                  {t("liveTools.modal.save")}
                 </button>
               </div>
             </div>

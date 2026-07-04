@@ -103,6 +103,39 @@ export function buildOverlayUrl(
   // Include custom style overrides if any are set
   let hasAccentOverride = false;
   if (customStyles) {
+    // Grid Row 1: alignment, styleNumber, fontSize, margins
+    if (customStyles.alignment) payload.alignment = customStyles.alignment;
+    if (customStyles.styleNumber) payload.styleNumber = customStyles.styleNumber;
+    if (customStyles.fontSize) payload.fontSize = customStyles.fontSize;
+    if (customStyles.marginH != null) payload.marginH = customStyles.marginH;
+    if (customStyles.marginV != null) payload.marginV = customStyles.marginV;
+    // Grid Row 2: inverseRatio, lineSpacing, fontFamily
+    if (customStyles.inverseRatio != null) payload.inverseRatio = customStyles.inverseRatio;
+    if (customStyles.lineSpacing != null) payload.lineSpacing = customStyles.lineSpacing;
+    if (customStyles.fontFamily) payload.fontFamily = customStyles.fontFamily;
+    // Grid Row 3: logo, shadow, background
+    if (customStyles.showLogo != null) payload.showLogo = customStyles.showLogo;
+    if (customStyles.logoSize != null) payload.logoSize = customStyles.logoSize;
+    if (customStyles.showShadow != null) payload.showShadow = customStyles.showShadow;
+    if (customStyles.shadowAmount != null) payload.shadowAmount = customStyles.shadowAmount;
+    if (customStyles.showBackground != null) payload.showBackground = customStyles.showBackground;
+    if (customStyles.bgColor1) payload.bgColor1 = customStyles.bgColor1;
+    if (customStyles.bgColor2) payload.bgColor2 = customStyles.bgColor2;
+    // Grid Row 4: corners, border
+    if (customStyles.borderRadius != null) payload.borderRadius = customStyles.borderRadius;
+    if (customStyles.showBorder != null) payload.showBorder = customStyles.showBorder;
+    if (customStyles.borderWidth != null) payload.borderWidth = customStyles.borderWidth;
+    if (customStyles.borderColor1) payload.borderColor1 = customStyles.borderColor1;
+    if (customStyles.borderColor2) payload.borderColor2 = customStyles.borderColor2;
+    // Textfield appearance: name
+    if (customStyles.nameUpper != null) payload.nameUpper = customStyles.nameUpper;
+    if (customStyles.nameBold != null) payload.nameBold = customStyles.nameBold;
+    if (customStyles.nameColor) payload.nameColor = customStyles.nameColor;
+    // Textfield appearance: info
+    if (customStyles.infoUpper != null) payload.infoUpper = customStyles.infoUpper;
+    if (customStyles.infoBold != null) payload.infoBold = customStyles.infoBold;
+    if (customStyles.infoColor) payload.infoColor = customStyles.infoColor;
+    // Legacy fields
     if (customStyles.bgColor) payload.bgColor = customStyles.bgColor;
     if (customStyles.textColor) payload.textColor = customStyles.textColor;
     if (customStyles.accentColor) {

@@ -16,6 +16,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { ALL_THEMES } from "../lowerthirds/themes";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
 import type { BibleTheme, BibleThemeCategory, BibleThemeSettings } from "../bible/types";
@@ -337,6 +338,8 @@ function themeTimestamp(theme: UnifiedTheme): number {
 // ---------------------------------------------------------------------------
 
 export default function TemplatesLibraryPage() {
+  const { t } = useTranslation();
+
   // ── State ──
   const [typeFilter, setTypeFilter] = useState<ThemeType>("all");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
@@ -589,7 +592,7 @@ export default function TemplatesLibraryPage() {
         <div className="tlib-header-left">
           <h1 className="tlib-title">
             <Icon name="palette" size={20} />
-            Templates Library
+            {t("templatesLibrary.header.title")}
           </h1>
           <p className="tlib-subtitle">
             {totalCount} themes available · {favCount} favorited
@@ -602,26 +605,26 @@ export default function TemplatesLibraryPage() {
               setEditThemeData(null);
               setShowCreator(true);
             }}
-           title="Create">
+            title="Create">
             <Icon name="add" size={18} />
-            Create Theme
+            {t("templatesLibrary.header.createTheme")}
           </button>
           <div className="tlib-search">
             <Icon name="search" size={20} />
             <input
               type="text"
-              placeholder="Search themes..."
+              placeholder={t("templatesLibrary.header.searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search themes"
+              aria-label={t("templatesLibrary.header.searchAriaLabel")}
             />
             {searchQuery && (
               <button
                 type="button"
                 className="tlib-search-clear"
                 onClick={() => setSearchQuery("")}
-                aria-label="Clear theme search"
-                title="Clear theme search"
+                aria-label={t("templatesLibrary.header.clearSearchAriaLabel")}
+                title={t("templatesLibrary.header.clearSearchTitle")}
               >
                 <Icon name="close" size={20} />
               </button>
@@ -639,7 +642,7 @@ export default function TemplatesLibraryPage() {
             <button
               className={`tlib-sidebar-item${typeFilter === "all" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setTypeFilter("all")}
-             title="All Types">
+              title="All Types">
               <Icon name="apps" size={20} />
               <span>All Types</span>
               <span className="tlib-sidebar-count">{totalCount}</span>
@@ -647,7 +650,7 @@ export default function TemplatesLibraryPage() {
             <button
               className={`tlib-sidebar-item${typeFilter === "lower-third" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setTypeFilter("lower-third")}
-             title="Lower Thirds">
+              title="Lower Thirds">
               <Icon name="call_to_action" size={20} />
               <span>Lower Thirds</span>
               <span className="tlib-sidebar-count">{ltCount}</span>
@@ -655,7 +658,7 @@ export default function TemplatesLibraryPage() {
             <button
               className={`tlib-sidebar-item${typeFilter === "fullscreen" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setTypeFilter("fullscreen")}
-             title="Fullscreen">
+              title="Fullscreen">
               <Icon name="fullscreen" size={20} />
               <span>Fullscreen</span>
               <span className="tlib-sidebar-count">{fsCount}</span>
@@ -669,28 +672,28 @@ export default function TemplatesLibraryPage() {
             <button
               className={`tlib-sidebar-item${categoryFilter === "all" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setCategoryFilter("all")}
-             title="Grid view">
+              title="Grid view">
               <Icon name="grid_view" size={20} />
               <span>All Categories</span>
             </button>
             <button
               className={`tlib-sidebar-item${categoryFilter === "bible" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setCategoryFilter("bible")}
-             title="Bible">
+              title="Bible">
               <Icon name="auto_stories" size={20} />
               <span>Bible</span>
             </button>
             <button
               className={`tlib-sidebar-item${categoryFilter === "worship" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setCategoryFilter("worship")}
-             title="Music">
+              title="Music">
               <Icon name="music_note" size={20} />
               <span>Worship</span>
             </button>
             <button
               className={`tlib-sidebar-item${categoryFilter === "general" ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setCategoryFilter("general")}
-             title="General">
+              title="General">
               <Icon name="dashboard" size={20} />
               <span>General</span>
             </button>
@@ -703,7 +706,7 @@ export default function TemplatesLibraryPage() {
             <button
               className={`tlib-sidebar-item${showMyThemesOnly ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setShowMyThemesOnly(!showMyThemesOnly)}
-             title="Create">
+              title="Create">
               <Icon name="person" size={20} />
               <span>Created by Me</span>
               <span className="tlib-sidebar-count">{myCount}</span>
@@ -722,7 +725,7 @@ export default function TemplatesLibraryPage() {
             <button
               className={`tlib-sidebar-item${showFavoritesOnly ? " tlib-sidebar-item--active" : ""}`}
               onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
-             title="Favorites Only">
+              title="Favorites Only">
               <Icon name="star" size={20} />
               <span>Favorites Only</span>
               <span className="tlib-sidebar-count">{favCount}</span>
@@ -730,7 +733,7 @@ export default function TemplatesLibraryPage() {
             <button
               className="tlib-sidebar-item"
               onClick={() => { setTypeFilter("all"); setCategoryFilter("all"); setSearchQuery(""); setShowFavoritesOnly(false); setShowMyThemesOnly(false); }}
-             title="Reset">
+              title="Reset">
               <Icon name="restart_alt" size={20} />
               <span>Reset All Filters</span>
             </button>
@@ -982,7 +985,7 @@ export default function TemplatesLibraryPage() {
                 <button
                   className={`tlib-preview-fav-btn${previewTheme.isFavorite ? " tlib-preview-fav-btn--active" : ""}`}
                   onClick={() => handleToggleFavorite(previewTheme)}
-                 title="Add">
+                  title="Add">
                   <Icon name={previewTheme.isFavorite ? "star" : "star_border"} size={20} />
                   {previewTheme.isFavorite ? "Favorited" : "Add to Favorites"}
                 </button>
@@ -1051,7 +1054,7 @@ export default function TemplatesLibraryPage() {
             type="button"
             onClick={() => setToastMessage(null)}
             aria-label="Dismiss notification"
-           title="Close">
+            title="Close">
             <Icon name="close" size={20} />
           </button>
         </div>
