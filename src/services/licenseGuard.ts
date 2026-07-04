@@ -212,10 +212,7 @@ function evaluateLicense(payload: LicensePayload): LockReason {
   // Falls back to Date.now() if serverTime is missing (backward compat).
   const now = payload.serverTime ? new Date(payload.serverTime).getTime() : Date.now();
 
-  // 1. Backend-forced lock (maintenance, forced upgrade, etc.)
-  if (payload.lockReason) return payload.lockReason;
-
-  // 2. Future extensibility flags
+  // 1. Extensibility flags (highest severity — always lock regardless of plan)
   if (payload.maintenanceMode) return "maintenance";
   if (payload.forceUpgradeRequired) return "forced_upgrade";
   if (payload.organizationDisabled) return "organization_disabled";
@@ -223,42 +220,58 @@ function evaluateLicense(payload: LicensePayload): LockReason {
   if (payload.chargeback) return "chargeback";
   if (payload.tooManyDevices) return "too_many_devices";
 
-  // 3. Account status
+  // 2. Account status (always lock — security/compliance)
   if (payload.accountStatus === "suspended" || payload.accountStatus === "banned") {
     return "account_suspended";
   }
 
-  // 4. Payment status (check before subscription — payment failure means subscription is invalid)
+  // 3. Resolve effective plan — this gates all payment/subscription/trial enforcement
+  //    Free plan users have no payment obligation and are never locked for
+  //    payment, subscription, or trial reasons.
+  const effectivePlan = payload.plan || "free";
+
+  // 4. Backend-forced lock — override payment/trial locks for free plan users
+  if (payload.lockReason) {
+    if (effectivePlan === "free" &&
+      (payload.lockReason === "payment_expired" ||
+        payload.lockReason === "trial_expired" ||
+        payload.lockReason === "subscription_expired")) {
+      // Free plan: fall through — these lock reasons don't apply
+    } else {
+      return payload.lockReason;
+    }
+  }
+
+  // 5. Free plan users are always usable
+  if (effectivePlan === "free") {
+    return null;
+  }
+
+  // ── Below this point: paid plan users only ──
+
+  // 6. Payment status
   if (payload.paymentStatus === "expired" || payload.paymentStatus === "failed" || payload.paymentStatus === "refunded") {
     return "payment_expired";
   }
 
-  // 5. Subscription status
+  // 7. Subscription status
   if (payload.subscriptionStatus === "cancelled") {
     return "subscription_expired";
   }
-
   if (payload.subscriptionStatus === "active" && payload.subscriptionEndsAt) {
     if (new Date(payload.subscriptionEndsAt).getTime() < now) {
       return "subscription_expired";
     }
   }
 
-  // 6. Trial status
+  // 8. Trial status
   if (payload.trialActive && payload.trialEndsAt) {
     if (new Date(payload.trialEndsAt).getTime() < now) {
       return "trial_expired";
     }
   }
 
-  // 7. Trial-only users: if trial ended and no active subscription, lock
-  if (!payload.trialActive && payload.subscriptionStatus !== "active") {
-    // No trial, no subscription — only free plan users reach here.
-    // Free users with an active account are allowed (no lock).
-    // This is intentional: the free tier should work without subscription.
-  }
-
-  return null; // All checks passed
+  return null;
 }
 
 /**

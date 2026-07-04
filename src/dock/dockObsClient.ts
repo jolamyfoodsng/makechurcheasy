@@ -28,6 +28,7 @@
 
 import OBSWebSocket from "obs-websocket-js";
 import { getDefaultOBSUrl, getDefaultCanvasSize, getDefaultLowerThirdTheme } from "../services/desktopConfig";
+import { getUserScopedKey } from "../services/userScopedStorage";
 import { ALL_THEMES, type ThemeLike } from "../lowerthirds/themes";
 import { getWorshipLTFavorites } from "../services/favoriteThemes";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
@@ -964,6 +965,14 @@ class DockObsClient {
     const remembered = this.getRememberedSceneBeforePush(tabId);
     if (!remembered) return false;
 
+    // In "Don't Clone" mode, clean up the embedded MCE Presentation from Program
+    if (this.readSceneMode() === "no-clone") {
+      const currentScene = await this.getCurrentProgramSceneName().catch(() => "");
+      if (currentScene) {
+        await this.removeMCEPresentationFromScene(currentScene);
+      }
+    }
+
     const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
     if (currentProgramScene === remembered) {
       this.clearRememberedSceneBeforePush(tabId);
@@ -994,6 +1003,11 @@ class DockObsClient {
    */
   private async ensureProgramSceneAsSourceInPresentation(): Promise<void> {
     try {
+      // In "Don't Clone" mode, MCE Presentation is already inside the Program scene
+      // (reversed direction). Adding Program inside MCE Presentation would create a
+      // circular reference (Program → Presentation → Program), so skip.
+      if (this.readSceneMode() === "no-clone") return;
+
       const programScene = await this.getCurrentProgramSceneName().catch(() => "");
       if (!programScene || programScene === DOCK_PRESENTATION_SCENE) return;
 
@@ -1043,6 +1057,81 @@ class DockObsClient {
 
     } catch (err) {
       console.warn("[DockOBS] Failed to add program scene as source in presentation:", err);
+    }
+  }
+
+  /**
+   * Ensure MCE Presentation exists as a Scene Source inside the given scene,
+   * positioned at the top of the z-order (above all other content).
+   * Used in "Don't Clone" mode: MCE Presentation is embedded inside the user's
+   * Program scene so overlays appear directly within it without needing a clone.
+   */
+  private async ensureMCEPresentationInScene(sceneName: string): Promise<void> {
+    try {
+      if (!sceneName || sceneName === DOCK_PRESENTATION_SCENE) return;
+
+      await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
+
+      // Check if already present
+      const resp = await this.call("GetSceneItemList", { sceneName }) as {
+        sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number }>;
+      };
+      const existing = resp.sceneItems.find((i) => i.sourceName === DOCK_PRESENTATION_SCENE);
+
+      if (existing) {
+        // Already present — ensure it's on top and enabled
+        const maxIndex = resp.sceneItems.length - 1;
+        if (existing.sceneItemIndex !== maxIndex) {
+          await this.call("SetSceneItemIndex", {
+            sceneName,
+            sceneItemId: existing.sceneItemId,
+            sceneItemIndex: maxIndex,
+          }).catch(() => { });
+        }
+        await this.call("SetSceneItemEnabled", {
+          sceneName,
+          sceneItemId: existing.sceneItemId,
+          sceneItemEnabled: true,
+        }).catch(() => { });
+        return;
+      }
+
+      // Add MCE Presentation as a source to the scene
+      const created = await this.call("CreateSceneItem", {
+        sceneName,
+        sourceName: DOCK_PRESENTATION_SCENE,
+        sceneItemEnabled: true,
+      }) as { sceneItemId: number };
+
+      // Fit to canvas
+      await this.fitSceneItemToCanvas(sceneName, created.sceneItemId);
+
+    } catch (err) {
+      console.warn("[DockOBS] Failed to add MCE Presentation as scene source:", err);
+    }
+  }
+
+  /**
+   * Remove MCE Presentation as a Scene Source from the given scene.
+   * Used in "Don't Clone" mode cleanup — removes the embedded presentation
+   * when overlays are cleared or projection ends.
+   */
+  private async removeMCEPresentationFromScene(sceneName: string): Promise<void> {
+    try {
+      if (!sceneName || sceneName === DOCK_PRESENTATION_SCENE) return;
+
+      const resp = await this.call("GetSceneItemList", { sceneName }) as {
+        sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
+      };
+      const presentationItem = resp.sceneItems.find((i) => i.sourceName === DOCK_PRESENTATION_SCENE);
+      if (presentationItem) {
+        await this.call("RemoveSceneItem", {
+          sceneName,
+          sceneItemId: presentationItem.sceneItemId,
+        }).catch(() => { });
+      }
+    } catch (err) {
+      console.warn("[DockOBS] Failed to remove MCE Presentation from scene:", err);
     }
   }
 
@@ -1544,10 +1633,36 @@ class DockObsClient {
     }
 
     if (studioMode) {
+      const sceneMode = this.readSceneMode();
+
+      // "no-clone" mode: embed MCE Presentation as a Scene Source inside the
+      // user's Program scene, then return MCE Presentation as the target so
+      // overlays go into it — no separate clone scene is created.
+      if (sceneMode === "no-clone") {
+        const sceneName = await this.getCurrentProgramSceneName().catch(() => "");
+        if (!sceneName) return { sceneName: "", studioMode: true };
+        this.rememberUserScene(sceneName, tabId);
+
+        // Add MCE Presentation on top of the user's scene
+        await this.ensureMCEPresentationInScene(sceneName);
+
+        // Set Program as Preview so the user sees the result before going live
+        await this.setCurrentPreviewScene(sceneName);
+
+        // Return MCE Presentation as target — overlays will be placed there
+        return { sceneName: DOCK_PRESENTATION_SCENE, studioMode: true };
+      }
+
       const currentScene = await this.getCurrentProgramSceneName().catch(() => "");
       if (!currentScene) return { sceneName: "", studioMode: true };
       this.rememberUserScene(currentScene, tabId);
-      const cloneName = await this.ensureClone(currentScene, tabId);
+
+      // "reference" mode (default): embed the program scene as a live Scene Source.
+      // "auto-duplicate" mode: snapshot — copy each source individually with its transform.
+      const cloneName = sceneMode === "auto-duplicate"
+        ? await this.ensureDuplicate(currentScene, tabId)
+        : await this.ensureClone(currentScene, tabId);
+
       await this.setCurrentPreviewScene(cloneName);
       return { sceneName: cloneName, studioMode: true };
     }
@@ -1613,7 +1728,125 @@ class DockObsClient {
     return cloneName;
   }
 
+  /**
+   * Read the user's chosen scene creation mode from projection settings.
+   *
+   * - "auto-duplicate" (default): snapshot — each source is individually copied with its
+   *   transform so the clone is an independent copy of the program scene.
+   * - "reference": live — the program scene is embedded as a single Scene Source that
+   *   automatically mirrors any changes to the original.
+   * - "no-clone": the dock works directly on the user's program scene without cloning.
+   */
+  private readSceneMode(): "auto-duplicate" | "reference" | "no-clone" {
+    try {
+      const raw = localStorage.getItem(getUserScopedKey("ocs-dock-projection-settings"));
+      if (!raw) return "auto-duplicate";
+      const parsed = JSON.parse(raw) as { sceneMode?: string };
+      if (parsed.sceneMode === "reference" || parsed.sceneMode === "no-clone" || parsed.sceneMode === "auto-duplicate") {
+        return parsed.sceneMode;
+      }
+    } catch { /* ignore */ }
+    return "auto-duplicate";
+  }
+
+  /**
+   * Snapshot mode: create a new scene and individually copy every source from the
+   * source scene, preserving each source's transform.  The resulting scene is an
+   * independent snapshot — changes to the source scene do NOT propagate here.
+   *
+   * Returns the name of the newly created scene.
+   */
+  private async ensureDuplicate(sourceScene: string, tabId?: DockPreviewTab): Promise<string> {
+    const trimmedSourceScene = sourceScene.trim();
+    if (!trimmedSourceScene) {
+      throw new Error("Source scene was empty");
+    }
+
+    if (trimmedSourceScene.startsWith(DockObsClient.CLONE_PREFIX)) {
+      console.warn(`[DockOBS] Reusing promoted preview scene "${trimmedSourceScene}" without nesting another duplicate`);
+      return trimmedSourceScene;
+    }
+
+    const cloneName = this.buildPreviewSceneName(trimmedSourceScene, tabId);
+    const stalePreviewSceneName = tabId
+      ? (this.getStoredPreviewSceneStateForTab(tabId)?.previewSceneName ?? "")
+      : (this.getStoredPreviewSceneState()?.previewSceneName ?? "");
+
+    const scenes = await this.getObsSceneNames().catch(() => [] as string[]);
+    const cloneExists = scenes.includes(cloneName);
+    if (!cloneExists) {
+      await this.call("CreateScene", { sceneName: cloneName });
+      await this.sleep(120);
+      await this.clearSceneItems(cloneName);
+
+      // Get every source item from the original scene along with its transform,
+      // then recreate each one individually in the clone — preserving layout.
+      const sourceItems = await this.call("GetSceneItemList", { sceneName: trimmedSourceScene }) as {
+        sceneItems: Array<{ sceneItemId: number; sourceName: string }>;
+      };
+
+      for (const item of (sourceItems.sceneItems ?? [])) {
+        try {
+          // Read the source item's current transform
+          const transformResp = await this.call("GetSceneItemTransform", {
+            sceneName: trimmedSourceScene,
+            sceneItemId: item.sceneItemId,
+          }) as { sceneItemTransform: Record<string, unknown> };
+
+          // Create the same source in the clone scene
+          const created = await this.call("CreateSceneItem", {
+            sceneName: cloneName,
+            sourceName: item.sourceName,
+            sceneItemEnabled: true,
+          }) as { sceneItemId: number };
+
+          // Apply the saved transform to the new item
+          if (transformResp?.sceneItemTransform && created?.sceneItemId) {
+            await this.call("SetSceneItemTransform", {
+              sceneName: cloneName,
+              sceneItemId: created.sceneItemId,
+              sceneItemTransform: transformResp.sceneItemTransform,
+            }).catch(() => { /* transform is best-effort */ });
+          }
+        } catch (err) {
+          console.warn(`[DockOBS] Failed to duplicate source "${item.sourceName}" into "${cloneName}":`, err);
+        }
+      }
+    }
+
+    this._cloneMap.set(trimmedSourceScene, cloneName);
+    if (tabId) {
+      this.setPreviewSceneStateForTab(tabId, trimmedSourceScene, cloneName, "preview-clone");
+    } else {
+      this.setPreviewSceneState(trimmedSourceScene, cloneName, "preview-clone");
+    }
+
+    if (await this.isStudioModeEnabled()) {
+      await this.setCurrentPreviewScene(cloneName);
+    }
+
+    // Clean up stale preview scenes — only for the same tab (or non-tabbed)
+    if (stalePreviewSceneName && stalePreviewSceneName !== cloneName && stalePreviewSceneName !== trimmedSourceScene) {
+      const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
+      const currentPreviewScene = await this.getCurrentPreviewSceneName().catch(() => "");
+      if (stalePreviewSceneName !== currentProgramScene && stalePreviewSceneName !== currentPreviewScene) {
+        await this.removeSceneIfExists(stalePreviewSceneName);
+      }
+    }
+    return cloneName;
+  }
+
   async deleteClone(sceneNameOrTab?: string, tabId?: DockPreviewTab): Promise<void> {
+    // In "Don't Clone" mode, there is no clone scene to delete.
+    // Instead, remove the embedded MCE Presentation from the user's Program scene.
+    if (this.readSceneMode() === "no-clone") {
+      const programScene = await this.getCurrentProgramSceneName().catch(() => "");
+      if (programScene) {
+        await this.removeMCEPresentationFromScene(programScene);
+      }
+      return;
+    }
+
     const toDelete: string[] = [];
 
     if (tabId) {

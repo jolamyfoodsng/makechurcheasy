@@ -251,7 +251,7 @@ export default function LoginPage() {
             MakeChurchEasy
           </h1>
           <p style={{ fontSize: "13px", color: "#9898a8" }}>
-            {t("login.hero.subtitle")}
+            {t("login.subtitle")}
           </p>
         </div>
 

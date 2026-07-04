@@ -6,7 +6,7 @@
    Uses MakeChurchEasy dark theme design tokens.
    ──────────────────────────────────────────────────────────────────────────── */
 
-/* ── Overlay (full-screen backdrop) ── */
+/* ── Overlay (full-screen backdrop – final step only) ── */
 .stt-overlay {
   position: fixed;
   inset: 0;
@@ -14,6 +14,20 @@
   z-index: 9998;
   animation: stt-fade-in 200ms ease-out;
   pointer-events: none;
+  overflow: hidden;
+}
+
+/* ── Spotlight (box-shadow technique – regular steps) ──
+   The element itself is transparent; its massive box-shadow creates the
+   dark backdrop while the border-box reveals the target underneath. */
+.stt-spotlight {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9998;
+  border: 2px solid var(--primary);
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65);
+  animation: stt-fade-in 200ms ease-out;
 }
 
 @keyframes stt-fade-in {
@@ -49,6 +63,7 @@
   z-index: 10000;
   pointer-events: auto;
   width: 340px;
+  max-height: calc(100vh - 40px);
   background: var(--surface-dark);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -129,6 +144,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow-y: auto;
 }
 
 .stt-step-icon-wrap {

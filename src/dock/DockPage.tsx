@@ -51,8 +51,13 @@ interface DockShellPreferences {
 }
 
 interface ProjectionSettings {
-  /** "auto-duplicate" = clone current Program scene into MCE Presentation; "no-clone" = skip */
-  sceneMode: "auto-duplicate" | "no-clone";
+  /**
+   * Scene creation mode for projection:
+   * - "auto-duplicate": Clone current Program scene items at this moment (snapshot)
+   * - "reference": Add Program scene as a live Scene Source (always mirrors current)
+   * - "no-clone": Skip — projects directly without any Program scene copy
+   */
+  sceneMode: "auto-duplicate" | "reference" | "no-clone";
   /** "ticker-above" = ticker stays on top; "content-above" = MCE content on top (default) */
   tickerLayerPriority: "ticker-above" | "content-above";
   /** When true, restore the original Program scene after projection ends */
@@ -590,7 +595,6 @@ export default function DockPage() {
   // ── Settings Menu State ──
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showReconnectModal, setShowReconnectModal] = useState(false);
-  const [showBibleOptions, setShowBibleOptions] = useState(false);
   const [showTabVisibility, setShowTabVisibility] = useState(false);
   const [showProjectionSettings, setShowProjectionSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -751,38 +755,8 @@ export default function DockPage() {
                   </select>
                 </div>
 
-                {/* Bible Options */}
-                <button
-                  type="button"
-                  className="dock-sidebar__item"
-                  onClick={() => setShowBibleOptions(!showBibleOptions)}
-                  title={t('dock.bibleOptions')}>
-                  <Icon name="menu_book" size={16} />
-                  <span>{t('dock.bibleOptions')}</span>
-                  <Icon name={showBibleOptions ? "expand_less" : "expand_more"} size={14} />
-                </button>
-                {showBibleOptions && (
-                  <div className="dock-sidebar__subpanel">
-                    <label className="dock-sidebar__check">
-                      <input type="checkbox" defaultChecked /> {t('dock.showBibleVersion')}
-                    </label>
-                    <label className="dock-sidebar__check">
-                      <input type="checkbox" defaultChecked /> {t('dock.shortenVersion')}
-                    </label>
-                    <label className="dock-sidebar__check">
-                      <input type="checkbox" /> {t('dock.shortenBookNames')}
-                    </label>
-                    <label className="dock-sidebar__check">
-                      <input type="checkbox" /> {t('dock.showVerseNumbers')}
-                    </label>
-                    <label className="dock-sidebar__check">
-                      <input type="checkbox" defaultChecked /> {t('dock.capitalizedReferences')}
-                    </label>
-                    <label className="dock-sidebar__check">
-                      <input type="checkbox" defaultChecked /> {t('dock.versionSwitchUpdatesOutput')}
-                    </label>
-                  </div>
-                )}
+
+
 
                 <div className="dock-sidebar__divider" />
 
@@ -901,6 +875,7 @@ export default function DockPage() {
                     <div className="dock-sidebar__radio-group">
                       {([
                         { mode: "auto-duplicate" as const, icon: "content_copy", label: t('page.autoDuplicateProgramScene'), desc: t('page.dedicatedSceneWithProgramBehind') },
+                        { mode: "reference" as const, icon: "link", label: t('page.referenceProgramScene'), desc: t('page.liveSceneSourceMirrorsProgram') },
                         { mode: "no-clone" as const, icon: "block", label: t('page.dontCloneProgramScene'), desc: t('page.projectsDirectlyWithoutDuplicating') },
                       ]).map(({ mode, icon, label, desc }) => (
                         <button

@@ -92,12 +92,14 @@ function detectNumbered(text: string): DetectionResult {
     const start = boundaries[b].lineIdx;
     const end = b + 1 < boundaries.length ? boundaries[b + 1].lineIdx : lines.length;
 
-    // Title: trailing text after number, or next non-empty line
-    let title = boundaries[b].trailing;
-    if (!title) {
+    // Title: number + trailing text, or number + next non-empty line
+    let title = boundaries[b].trailing
+      ? `${boundaries[b].num}. ${boundaries[b].trailing}`
+      : "";
+    if (!title.replace(`${boundaries[b].num}. `, "")) {
       for (let j = start + 1; j < end; j++) {
         const trimmed = lines[j].trim();
-        if (trimmed) { title = trimmed; break; }
+        if (trimmed) { title = `${boundaries[b].num}. ${trimmed}`; break; }
       }
     }
     if (!title) title = `Song ${boundaries[b].num}`;

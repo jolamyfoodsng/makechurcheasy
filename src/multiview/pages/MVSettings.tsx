@@ -500,6 +500,9 @@ export function MVSettings() {
       localStorage.removeItem("mce-onboarding-complete");
       localStorage.removeItem("mce-onboarding-step");
     } catch { /* ignore */ }
+    // Hard-reload so App.tsx re-reads the cleared localStorage flag.
+    // On reload the index route will <Navigate> to /onboarding automatically.
+    window.location.href = "/";
   }, [update]);
 
   /* ── Bible settings save ── */

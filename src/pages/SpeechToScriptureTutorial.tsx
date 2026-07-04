@@ -18,6 +18,12 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  calculatePanelPlacement,
+  clampSpotlight,
+  type Rect,
+  type Viewport,
+} from "./tutorialPlacement";
 import "./SpeechToScriptureTutorial.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -46,32 +52,14 @@ const STORAGE_KEY = "mce.speech-to-scripture.tutorial.completed";
 // ── Target Elevation ───────────────────────────────────────────────────────
 
 /**
- * Elevates a target element above the tutorial overlay by boosting z-index
- * of all positioned ancestors and applying visual glow/padding effects
- * directly to the target. Returns a cleanup function that restores originals.
+ * Applies visual glow/pulse effects to a target element during the tutorial.
+ * The spotlight box-shadow technique handles the dark backdrop, so no
+ * z-index elevation is needed. Returns a cleanup function that restores originals.
  */
 function elevateTarget(el: HTMLElement, interactive: boolean): () => void {
   const primaryRgb = getComputedStyle(document.documentElement)
     .getPropertyValue("--primary-rgb")
     .trim() || "99,102,241";
-
-  // ── z-index elevation ────────────────────────────────────────────────
-  const ancestors: Array<[HTMLElement, string]> = [];
-  let parent = el.parentElement;
-  while (parent && parent !== document.documentElement) {
-    if (getComputedStyle(parent).position !== "static") {
-      ancestors.push([parent, parent.style.zIndex]);
-      parent.style.zIndex = "10005";
-    }
-    parent = parent.parentElement;
-  }
-
-  const origPos = el.style.position;
-  if (getComputedStyle(el).position === "static") {
-    el.style.position = "relative";
-  }
-  const origZ = el.style.zIndex;
-  el.style.zIndex = "10006";
 
   // ── visual effects ───────────────────────────────────────────────────
   const glow = interactive
@@ -108,11 +96,6 @@ function elevateTarget(el: HTMLElement, interactive: boolean): () => void {
     el.style.outline = origOutline;
     el.style.outlineOffset = origOutlineOff;
     el.style.transition = origTransition;
-    el.style.zIndex = origZ;
-    el.style.position = origPos;
-    for (const [node, z] of ancestors) {
-      node.style.zIndex = z;
-    }
   };
 }
 
@@ -215,7 +198,7 @@ export default function SpeechToScriptureTutorial({
       return;
     }
 
-    el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
 
     const cleanup = elevateTarget(el, needsInteraction);
 
@@ -224,42 +207,47 @@ export default function SpeechToScriptureTutorial({
     };
 
     updateRect();
+
+    const resizeObserver = new ResizeObserver(updateRect);
+    resizeObserver.observe(el);
     window.addEventListener("resize", updateRect);
 
     return () => {
       cleanup();
+      resizeObserver.disconnect();
       window.removeEventListener("resize", updateRect);
     };
   }, [isActive, currentStep?.target, isFinalStep, needsInteraction]);
 
   // ── Panel Positioning ─────────────────────────────────────────────────
 
+  const recalcPanelPosition = useCallback(
+    (rect: Rect | null) => {
+      const viewport: Viewport = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      };
+
+      if (isFinalStep || !rect) {
+        setPanelRect({
+          top: viewport.height / 2 - 180,
+          left: viewport.width / 2 - 200,
+        });
+        return;
+      }
+
+      const panelW = 340;
+      const panelH = 300;
+
+      const placement = calculatePanelPlacement(rect, panelW, panelH, viewport);
+      setPanelRect({ top: placement.top, left: placement.left });
+    },
+    [isFinalStep],
+  );
+
   useEffect(() => {
-    if (isFinalStep || !targetRect) {
-      setPanelRect({ top: window.innerHeight / 2 - 180, left: window.innerWidth / 2 - 180 });
-      return;
-    }
-
-    const panelW = 340;
-    const panelH = 300;
-    const gap = 20;
-
-    let top = targetRect.top + targetRect.height / 2 - panelH / 2;
-    let left = targetRect.right + gap;
-
-    if (left + panelW > window.innerWidth - 20) {
-      left = targetRect.left - gap - panelW;
-    }
-
-    if (left < 20) {
-      left = Math.max(20, (window.innerWidth - panelW) / 2);
-      top = targetRect.bottom + gap;
-    }
-
-    top = Math.max(20, Math.min(top, window.innerHeight - panelH - 20));
-
-    setPanelRect({ top, left });
-  }, [targetRect, isFinalStep]);
+    recalcPanelPosition(targetRect);
+  }, [targetRect, recalcPanelPosition]);
 
   // ── Trigger Event Listeners ───────────────────────────────────────────
 
@@ -426,8 +414,34 @@ export default function SpeechToScriptureTutorial({
 
   // ── Regular Step ──────────────────────────────────────────────────────
 
+  const SPOTLIGHT_PAD = 8;
+  const spotlight = targetRect
+    ? clampSpotlight(
+      {
+        top: targetRect.top - SPOTLIGHT_PAD,
+        left: targetRect.left - SPOTLIGHT_PAD,
+        width: targetRect.width + SPOTLIGHT_PAD * 2,
+        height: targetRect.height + SPOTLIGHT_PAD * 2,
+      },
+      { width: window.innerWidth, height: window.innerHeight },
+    )
+    : null;
+
   return (
-    <div className="stt-overlay">
+    <>
+      {/* Spotlight – transparent element with massive box-shadow for dark backdrop */}
+      {spotlight && (
+        <div
+          className="stt-spotlight"
+          style={{
+            top: spotlight.top,
+            left: spotlight.left,
+            width: spotlight.width,
+            height: spotlight.height,
+          }}
+        />
+      )}
+
       {/* Assistant Panel */}
       <div
         ref={panelRef}
@@ -496,7 +510,7 @@ export default function SpeechToScriptureTutorial({
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
