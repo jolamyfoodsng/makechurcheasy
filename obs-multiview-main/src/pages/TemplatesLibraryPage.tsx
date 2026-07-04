@@ -1,0 +1,828 @@
+/**
+ * TemplatesLibraryPage.tsx — Theme & Template Library
+ *
+ * Browseable library of ALL lower-third and fullscreen themes.
+ * Users can:
+ *   - Filter by type: "lower-third" or "fullscreen"
+ *   - Filter by category: bible, worship, general (giving/events/speakers)
+ *   - Mark themes as favorites (★)
+ *   - Favorites appear first in the OBS dock theme pickers
+ *   - If no favorites are set, the dock shows the first 2 themes
+ *
+ * Data sources:
+ *   - Lower-third themes: ALL_THEMES from lowerthirds/themes.ts (deduped canonical set)
+ *   - Fullscreen themes: BUILTIN_THEMES from bible/themes/builtinThemes.ts (4 themes)
+ *   - Custom fullscreen themes: loaded from IndexedDB (bibleDb.getCustomThemes)
+ */
+
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { ALL_THEMES } from "../lowerthirds/themes";
+import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
+import type { BibleTheme } from "../bible/types";
+import {
+  getBibleFavorites,
+  toggleBibleFavorite,
+  getWorshipLTFavorites,
+  toggleWorshipLTFavorite,
+} from "../services/favoriteThemes";
+import { deleteCustomTheme } from "../bible/bibleDb";
+import Icon from "../components/Icon";
+import ThemeCreatorModal from "./ThemeCreatorModal";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type ThemeType = "all" | "lower-third" | "fullscreen";
+type CategoryFilter = "all" | "bible" | "worship" | "general";
+const SHARED_WORSHIP_BIBLE_THEME_TAG = "shared-worship-bible";
+
+/** Unified shape so we can render both LT and fullscreen themes in one grid */
+interface UnifiedTheme {
+  id: string;
+  name: string;
+  description: string;
+  type: "lower-third" | "fullscreen";
+  category: string;
+  accentColor: string;
+  tags: string[];
+  /** For LT themes — raw HTML preview */
+  html?: string;
+  css?: string;
+  fontImports?: string[];
+  sampleValues?: Record<string, string>;
+  /** For fullscreen themes — settings preview */
+  bgColor?: string;
+  fontColor?: string;
+  isFavorite: boolean;
+  source: "builtin" | "custom";
+}
+
+const FALLBACK_LOGO_DATA_URI =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220">
+      <rect width="220" height="220" rx="36" fill="#003F7A"/>
+      <path d="M110 42l46 26v52c0 33-20 56-46 64-26-8-46-31-46-64V68l46-26z" fill="#fff"/>
+      <path d="M110 70c17 0 30 13 30 30s-13 30-30 30-30-13-30-30 13-30 30-30z" fill="#003F7A"/>
+    </svg>`
+  );
+
+const DEFAULT_LT_PREVIEW_VALUES: Record<string, string> = {
+  state: "in",
+  animMode: "stagger",
+  logoUrl: FALLBACK_LOGO_DATA_URI,
+  qrCodeUrl: FALLBACK_LOGO_DATA_URI,
+  name: "Pastor Daniel Carter",
+  title: "Senior Pastor · Grace Church",
+  label: "Sermon Point",
+  heading: "This Week",
+  headline: "Faithful in Every Season",
+  details: "Join us this Wednesday 6:30 PM",
+  line1: "Prayer Night",
+  line2: "Main Auditorium · 6:30 PM",
+  titleText: "Faithful in Every Season",
+  subtitle: "Stand firm in hope and grace.",
+  meta: "Romans 8:28",
+  verseText: "For God so loved the world...",
+  reference: "John 3:16",
+  quote: "Grace grows where truth is planted.",
+  keyword: "FAITH",
+  supportingText: "Walking in obedience daily",
+  month: "NOV",
+  day: "24",
+  badge: "Announcement",
+  tickerText: "Welcome to service • Prayer meeting tonight • Youth conference this Friday",
+  platform: "Instagram",
+  handle: "@gracechurch",
+  facebook: "/GraceChurch",
+  twitter: "@GraceChurch",
+  instagram: "@GraceChurch",
+  time: "00:15",
+  eventName: "Service Begins",
+  cycleSeconds: "8",
+};
+
+function safeValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+function extractSampleValues(theme: unknown): Record<string, string> {
+  const values: Record<string, string> = { ...DEFAULT_LT_PREVIEW_VALUES };
+  const maybeTheme = theme as { variables?: Array<Record<string, unknown>> };
+  if (!Array.isArray(maybeTheme.variables)) return values;
+
+  for (const variable of maybeTheme.variables) {
+    const key = typeof variable?.key === "string" ? variable.key : "";
+    if (!key) continue;
+    const candidate = variable.defaultValue ?? variable.placeholder ?? values[key] ?? "";
+    values[key] = safeValue(candidate);
+  }
+
+  return values;
+}
+
+function substituteTemplateVariables(template: string, values: Record<string, string>): string {
+  if (!template) return "";
+  return template.replace(/\{\{(\w+)\}\}/g, (_match, key) => {
+    if (Object.prototype.hasOwnProperty.call(values, key)) return values[key];
+    return key in DEFAULT_LT_PREVIEW_VALUES ? DEFAULT_LT_PREVIEW_VALUES[key] : "";
+  });
+}
+
+function buildLowerThirdPreviewDoc(theme: UnifiedTheme, options: { includeFonts: boolean }): string {
+  const values = { ...DEFAULT_LT_PREVIEW_VALUES, ...(theme.sampleValues || {}) };
+  const css = theme.css || "";
+  const html = substituteTemplateVariables(theme.html || "", values);
+  const imports = options.includeFonts
+    ? (theme.fontImports || [])
+        .filter((href) => typeof href === "string" && href.trim())
+        .map((href) => `<link rel="stylesheet" href="${href.replace(/"/g, "&quot;")}">`)
+        .join("\n")
+    : "";
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    ${imports}
+    <style>
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+      body {
+        position: relative;
+        font-family: "CMG Sans", "Montserrat", sans-serif;
+      }
+      ${css}
+    </style>
+  </head>
+  <body>
+    ${html}
+  </body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function TemplatesLibraryPage() {
+  // ── State ──
+  const [typeFilter, setTypeFilter] = useState<ThemeType>("all");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [ltFavs, setLtFavs] = useState<Set<string>>(() => getWorshipLTFavorites());
+  const [bibleFavs, setBibleFavs] = useState<Set<string>>(() => getBibleFavorites());
+  const [customFSThemes, setCustomFSThemes] = useState<BibleTheme[]>([]);
+  const [previewTheme, setPreviewTheme] = useState<UnifiedTheme | null>(null);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showCreator, setShowCreator] = useState(false);
+  const [editThemeData, setEditThemeData] = useState<BibleTheme | null>(null);
+  const [showMyThemesOnly, setShowMyThemesOnly] = useState(false);
+
+  // ── Auto-dismiss toast ──
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = window.setTimeout(() => setToastMessage(null), 2800);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
+
+  // ── Load custom fullscreen themes ──
+  useEffect(() => {
+    (async () => {
+      try {
+        const { getCustomThemes } = await import("../bible/bibleDb");
+        const custom = await getCustomThemes();
+        const builtinIds = new Set(BUILTIN_THEMES.map((t) => t.id));
+        setCustomFSThemes(custom.filter((t) => !builtinIds.has(t.id)));
+      } catch { /* IndexedDB not available */ }
+    })();
+  }, []);
+
+  // ── Build unified theme list ──
+  const allThemes = useMemo<UnifiedTheme[]>(() => {
+    const themes: UnifiedTheme[] = [];
+
+    // Lower-third themes (from merged registry)
+    for (const t of ALL_THEMES) {
+      if (!t.html || !t.css) continue;
+      themes.push({
+        id: t.id,
+        name: t.name || t.id,
+        description: t.description || "",
+        type: "lower-third",
+        category: t.category || "general",
+        accentColor: t.accentColor || "#6c63ff",
+        tags: t.tags || [],
+        html: t.html,
+        css: t.css,
+        fontImports: Array.isArray(t.fontImports) ? t.fontImports.filter((href): href is string => typeof href === "string") : [],
+        sampleValues: extractSampleValues(t),
+        isFavorite: ltFavs.has(t.id),
+        source: "builtin",
+      });
+    }
+
+    // Fullscreen themes (builtin)
+    for (const t of BUILTIN_THEMES) {
+      themes.push({
+        id: t.id,
+        name: t.name,
+        description: t.description || "",
+        type: "fullscreen",
+        category: "bible",
+        accentColor: t.settings.fontColor || "#fff",
+        tags: [],
+        bgColor: t.settings.backgroundColor,
+        fontColor: t.settings.fontColor,
+        isFavorite: bibleFavs.has(t.id),
+        source: "builtin",
+      });
+    }
+
+    // Custom fullscreen themes
+    for (const t of customFSThemes) {
+      themes.push({
+        id: t.id,
+        name: t.name,
+        description: t.description || "",
+        type: "fullscreen",
+        category: t.category || "bible",
+        accentColor: t.settings.fontColor || "#fff",
+        tags: [],
+        bgColor: t.settings.backgroundColor,
+        fontColor: t.settings.fontColor,
+        isFavorite: bibleFavs.has(t.id),
+        source: "custom",
+      });
+    }
+
+    return themes;
+  }, [ltFavs, bibleFavs, customFSThemes]);
+
+  // ── Filtered & sorted list ──
+  const filteredThemes = useMemo(() => {
+    let list = allThemes;
+
+    // My themes only
+    if (showMyThemesOnly) {
+      list = list.filter((t) => t.source === "custom");
+    }
+
+    // Favorites only
+    if (showFavoritesOnly) {
+      list = list.filter((t) => t.isFavorite);
+    }
+
+    // Type filter
+    if (typeFilter !== "all") {
+      list = list.filter((t) => t.type === typeFilter);
+    }
+
+    // Category filter
+    if (categoryFilter !== "all") {
+      list = list.filter((t) => {
+        if (t.category === categoryFilter) return true;
+        if (t.type !== "lower-third") return false;
+        const hasSharedTag = t.tags.some(
+          (tag) => String(tag).trim().toLowerCase() === SHARED_WORSHIP_BIBLE_THEME_TAG
+        );
+        if (!hasSharedTag) return false;
+        return categoryFilter === "bible" || categoryFilter === "worship";
+      });
+    }
+
+    // Search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          t.description.toLowerCase().includes(q) ||
+          t.tags.some((tag) => tag.toLowerCase().includes(q))
+      );
+    }
+
+    // Sort: favorites first, then alphabetical
+    return list.sort((a, b) => {
+      if (a.isFavorite && !b.isFavorite) return -1;
+      if (!a.isFavorite && b.isFavorite) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [allThemes, typeFilter, categoryFilter, searchQuery, showFavoritesOnly, showMyThemesOnly]);
+
+  // ── Toggle favorite ──
+  const handleToggleFavorite = useCallback((theme: UnifiedTheme) => {
+    const wasFav = theme.isFavorite;
+    if (theme.type === "fullscreen") {
+      const updated = toggleBibleFavorite(theme.id);
+      setBibleFavs(new Set(updated));
+    } else {
+      const updated = toggleWorshipLTFavorite(theme.id);
+      setLtFavs(new Set(updated));
+    }
+    setToastMessage(
+      wasFav
+        ? `"${theme.name}" removed from favorites`
+        : `"${theme.name}" added to favorites ★`
+    );
+  }, []);
+
+  // ── Delete custom theme ──
+  const handleDeleteTheme = useCallback(async (theme: UnifiedTheme) => {
+    if (theme.source !== "custom") return;
+    if (!window.confirm(`Delete "${theme.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteCustomTheme(theme.id);
+      setCustomFSThemes((prev) => prev.filter((t) => t.id !== theme.id));
+      setToastMessage(`"${theme.name}" deleted`);
+      if (previewTheme?.id === theme.id) setPreviewTheme(null);
+    } catch {
+      setToastMessage("Failed to delete theme");
+    }
+  }, [previewTheme]);
+
+  // ── Edit custom theme ──
+  const handleEditTheme = useCallback((theme: UnifiedTheme) => {
+    if (theme.source !== "custom" || theme.type !== "fullscreen") return;
+    const original = customFSThemes.find((t) => t.id === theme.id);
+    if (!original) return;
+    setEditThemeData(original);
+    setShowCreator(true);
+  }, [customFSThemes]);
+
+  // ── Clone any fullscreen theme ──
+  const handleCloneTheme = useCallback((theme: UnifiedTheme) => {
+    if (theme.type !== "fullscreen") return;
+    // Find in builtins or custom
+    const original =
+      BUILTIN_THEMES.find((t) => t.id === theme.id) ||
+      customFSThemes.find((t) => t.id === theme.id);
+    if (!original) return;
+    // Create a clone with a new id and "(Copy)" in the name
+    const clone: BibleTheme = {
+      ...original,
+      id: "", // Will be assigned by the creator on save
+      name: `${original.name} (Copy)`,
+      source: "custom",
+    };
+    setEditThemeData(clone);
+    setShowCreator(true);
+  }, [customFSThemes]);
+
+  // ── Counts ──
+  const totalCount = allThemes.length;
+  const favCount = allThemes.filter((t) => t.isFavorite).length;
+  const ltCount = allThemes.filter((t) => t.type === "lower-third").length;
+  const fsCount = allThemes.filter((t) => t.type === "fullscreen").length;
+  const myCount = allThemes.filter((t) => t.source === "custom").length;
+
+  return (
+    <div className="tlib-page">
+      {/* ── Header ── */}
+      <div className="tlib-header">
+        <div className="tlib-header-left">
+          <h1 className="tlib-title">
+            <Icon name="palette" size={20} />
+            Templates Library
+          </h1>
+          <p className="tlib-subtitle">
+            {totalCount} themes available · {favCount} favorited
+          </p>
+        </div>
+        <div className="tlib-header-right">
+          <button className="tlib-create-btn" onClick={() => setShowCreator(true)}>
+            <Icon name="add" size={18} />
+            Create Theme
+          </button>
+          <div className="tlib-search">
+            <Icon name="search" size={20} />
+            <input
+              type="text"
+              placeholder="Search themes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button className="tlib-search-clear" onClick={() => setSearchQuery("")}>
+                <Icon name="close" size={20} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Body: sidebar + grid ── */}
+      <div className="tlib-body">
+        {/* ── Left Sidebar Filters ── */}
+        <aside className="tlib-sidebar">
+          <div className="tlib-sidebar-group">
+            <h4 className="tlib-sidebar-heading">Type</h4>
+            <button
+              className={`tlib-sidebar-item${typeFilter === "all" ? " tlib-sidebar-item--active" : ""}`}
+              onClick={() => setTypeFilter("all")}
+            >
+              <Icon name="apps" size={20} />
+              <span>All Types</span>
+              <span className="tlib-sidebar-count">{totalCount}</span>
+            </button>
+            <button
+              className={`tlib-sidebar-item${typeFilter === "lower-third" ? " tlib-sidebar-item--active" : ""}`}
+              onClick={() => setTypeFilter("lower-third")}
+            >
+              <Icon name="call_to_action" size={20} />
+              <span>Lower Thirds</span>
+              <span className="tlib-sidebar-count">{ltCount}</span>
+            </button>
+            <button
+              className={`tlib-sidebar-item${typeFilter === "fullscreen" ? " tlib-sidebar-item--active" : ""}`}
+              onClick={() => setTypeFilter("fullscreen")}
+            >
+              <Icon name="fullscreen" size={20} />
+              <span>Fullscreen</span>
+              <span className="tlib-sidebar-count">{fsCount}</span>
+            </button>
+          </div>
+
+          <div className="tlib-sidebar-divider" />
+
+          <div className="tlib-sidebar-group">
+            <h4 className="tlib-sidebar-heading">Category</h4>
+            <button
+              className={`tlib-sidebar-item${categoryFilter === "all" ? " tlib-sidebar-item--active" : ""}`}
+              onClick={() => setCategoryFilter("all")}
+            >
+              <Icon name="grid_view" size={20} />
+              <span>All Categories</span>
+            </button>
+            <button
+              className={`tlib-sidebar-item${categoryFilter === "bible" ? " tlib-sidebar-item--active" : ""}`}
+              onClick={() => setCategoryFilter("bible")}
+            >
+              <Icon name="auto_stories" size={20} />
+              <span>Bible</span>
+            </button>
+            <button
+              className={`tlib-sidebar-item${categoryFilter === "worship" ? " tlib-sidebar-item--active" : ""}`}
+              onClick={() => setCategoryFilter("worship")}
+            >
+              <Icon name="music_note" size={20} />
+              <span>Worship</span>
+            </button>
+            <button
+              className={`tlib-sidebar-item${categoryFilter === "general" ? " tlib-sidebar-item--active" : ""}`}
+              onClick={() => setCategoryFilter("general")}
+            >
+              <Icon name="dashboard" size={20} />
+              <span>General</span>
+            </button>
+          </div>
+
+          <div className="tlib-sidebar-divider" />
+
+          <div className="tlib-sidebar-group">
+            <h4 className="tlib-sidebar-heading">My Themes</h4>
+            <button
+              className={`tlib-sidebar-item${showMyThemesOnly ? " tlib-sidebar-item--active" : ""}`}
+              onClick={() => setShowMyThemesOnly(!showMyThemesOnly)}
+            >
+              <Icon name="person" size={20} />
+              <span>Created by Me</span>
+              <span className="tlib-sidebar-count">{myCount}</span>
+            </button>
+            {myCount === 0 && (
+              <p className="tlib-sidebar-hint">
+                No custom themes yet. Click <strong>Create Theme</strong> to get started!
+              </p>
+            )}
+          </div>
+
+          <div className="tlib-sidebar-divider" />
+
+          <div className="tlib-sidebar-group">
+            <h4 className="tlib-sidebar-heading">Quick Filters</h4>
+            <button
+              className={`tlib-sidebar-item${showFavoritesOnly ? " tlib-sidebar-item--active" : ""}`}
+              onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+            >
+              <Icon name="star" size={20} />
+              <span>Favorites Only</span>
+              <span className="tlib-sidebar-count">{favCount}</span>
+            </button>
+            <button
+              className="tlib-sidebar-item"
+              onClick={() => { setTypeFilter("all"); setCategoryFilter("all"); setSearchQuery(""); setShowFavoritesOnly(false); setShowMyThemesOnly(false); }}
+            >
+              <Icon name="restart_alt" size={20} />
+              <span>Reset All Filters</span>
+            </button>
+          </div>
+        </aside>
+
+        {/* ── Main content area ── */}
+        <div className="tlib-main">
+          {/* Result count bar */}
+          <div className="tlib-result-bar">
+            <span className="tlib-result-count">
+              Showing {filteredThemes.length} of {totalCount} themes
+            </span>
+            {/* Active filter pills */}
+            {(typeFilter !== "all" || categoryFilter !== "all" || searchQuery || showFavoritesOnly || showMyThemesOnly) && (
+              <div className="tlib-active-filters">
+                {showMyThemesOnly && (
+                  <span className="tlib-active-pill tlib-active-pill--my">
+                    <Icon name="person" size={12} />
+                    My Themes
+                    <button onClick={() => setShowMyThemesOnly(false)}>
+                      <Icon name="close" size={20} />
+                    </button>
+                  </span>
+                )}
+                {showFavoritesOnly && (
+                  <span className="tlib-active-pill tlib-active-pill--fav">
+                    <Icon name="star" size={12} />
+                    Favorites
+                    <button onClick={() => setShowFavoritesOnly(false)}>
+                      <Icon name="close" size={20} />
+                    </button>
+                  </span>
+                )}
+                {typeFilter !== "all" && (
+                  <span className="tlib-active-pill">
+                    {typeFilter === "lower-third" ? "Lower Thirds" : "Fullscreen"}
+                    <button onClick={() => setTypeFilter("all")}>
+                      <Icon name="close" size={20} />
+                    </button>
+                  </span>
+                )}
+                {categoryFilter !== "all" && (
+                  <span className="tlib-active-pill">
+                    {categoryFilter}
+                    <button onClick={() => setCategoryFilter("all")}>
+                      <Icon name="close" size={20} />
+                    </button>
+                  </span>
+                )}
+                {searchQuery && (
+                  <span className="tlib-active-pill">
+                    "{searchQuery}"
+                    <button onClick={() => setSearchQuery("")}>
+                      <Icon name="close" size={20} />
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Theme Grid ── */}
+          <div className="tlib-grid">
+            {filteredThemes.map((theme) => (
+              <div
+                key={theme.id}
+                className={`tlib-card${theme.isFavorite ? " tlib-card--fav" : ""}${previewTheme?.id === theme.id ? " tlib-card--preview" : ""}`}
+                onClick={() => setPreviewTheme(previewTheme?.id === theme.id ? null : theme)}
+              >
+                {/* Preview area */}
+                <div className="tlib-card-preview">
+                  {theme.type === "fullscreen" ? (
+                    <div
+                      className="tlib-card-fs-preview"
+                      style={{
+                        background: theme.bgColor || "#0a0a14",
+                        color: theme.fontColor || "#fff",
+                      }}
+                    >
+                      <span className="tlib-card-fs-verse">"For God so loved..."</span>
+                      <span className="tlib-card-fs-ref">John 3:16</span>
+                    </div>
+                  ) : (
+                    <div className="tlib-card-lt-preview tlib-card-lt-preview--iframe">
+                      <iframe
+                        className="tlib-card-lt-iframe"
+                        title={`${theme.name} preview`}
+                        loading="lazy"
+                        srcDoc={buildLowerThirdPreviewDoc(theme, { includeFonts: false })}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Card info */}
+                <div className="tlib-card-body">
+                  <div className="tlib-card-head">
+                    <div className="tlib-card-title-wrap">
+                      <h4 className="tlib-card-name">{theme.name}</h4>
+                      <div className="tlib-card-badges">
+                        <span className={`tlib-badge tlib-badge--${theme.type}`}>
+                          {theme.type === "fullscreen" ? "Fullscreen" : "Lower Third"}
+                        </span>
+                        <span className="tlib-badge tlib-badge--cat">
+                          {theme.category}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      className={`tlib-fav-btn${theme.isFavorite ? " tlib-fav-btn--active" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleFavorite(theme);
+                      }}
+                      title={theme.isFavorite ? "Remove from favorites" : "Add to favorites"}
+                    >
+                      <Icon name={theme.isFavorite ? "star" : "star_border"} size={20} />
+                    </button>
+                  </div>
+                  {theme.description && (
+                    <p className="tlib-card-desc">{theme.description}</p>
+                  )}
+                  {theme.tags.length > 0 && (
+                    <div className="tlib-card-tags">
+                      {theme.tags.slice(0, 4).map((tag) => (
+                        <span key={tag} className="tlib-tag">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Action buttons for fullscreen themes */}
+                  {theme.type === "fullscreen" && (
+                    <div className="tlib-card-actions">
+                      {theme.source === "custom" && (
+                        <button
+                          className="tlib-action-btn"
+                          onClick={(e) => { e.stopPropagation(); handleEditTheme(theme); }}
+                          title="Edit theme"
+                        >
+                          <Icon name="edit" size={14} />
+                        </button>
+                      )}
+                      <button
+                        className="tlib-action-btn"
+                        onClick={(e) => { e.stopPropagation(); handleCloneTheme(theme); }}
+                        title="Duplicate theme"
+                      >
+                        <Icon name="content_copy" size={14} />
+                      </button>
+                      {theme.source === "custom" && (
+                        <button
+                          className="tlib-action-btn tlib-action-btn--danger"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteTheme(theme); }}
+                          title="Delete theme"
+                        >
+                          <Icon name="delete" size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Empty state ── */}
+          {filteredThemes.length === 0 && (
+            <div className="tlib-empty">
+              <Icon name="search_off" size={20} />
+              <h3>No themes found</h3>
+              <p>Try adjusting your filters or search query.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Preview modal ── */}
+      {previewTheme && (
+        <div className="tlib-preview-backdrop" onClick={() => setPreviewTheme(null)}>
+          <div className="tlib-preview-modal" onClick={(e) => e.stopPropagation()}>
+            {/* Close button */}
+            <button className="tlib-preview-close" onClick={() => setPreviewTheme(null)}>
+              <Icon name="close" size={20} />
+            </button>
+
+            {/* Large preview area */}
+            <div className="tlib-preview-stage">
+              {previewTheme.type === "fullscreen" ? (
+                <div
+                  className="tlib-preview-fs"
+                  style={{
+                    background: previewTheme.bgColor || "#0a0a14",
+                    color: previewTheme.fontColor || "#fff",
+                  }}
+                >
+                  <p className="tlib-preview-fs-verse">
+                    "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life."
+                  </p>
+                  <p className="tlib-preview-fs-ref">John 3:16 (KJV)</p>
+                </div>
+              ) : (
+                <div className="tlib-preview-lt tlib-preview-lt--iframe">
+                  <iframe
+                    className="tlib-preview-lt-iframe"
+                    title={`${previewTheme.name} full preview`}
+                    srcDoc={buildLowerThirdPreviewDoc(previewTheme, { includeFonts: true })}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Info section */}
+            <div className="tlib-preview-info">
+              <div className="tlib-preview-info-top">
+                <div className="tlib-preview-info-left">
+                  <h3 className="tlib-preview-title">{previewTheme.name}</h3>
+                  <div className="tlib-preview-badges">
+                    <span className={`tlib-badge tlib-badge--${previewTheme.type}`}>
+                      {previewTheme.type === "fullscreen" ? "Fullscreen" : "Lower Third"}
+                    </span>
+                    <span className={`tlib-badge tlib-badge--${previewTheme.category}`}>
+                      {previewTheme.category}
+                    </span>
+                    <span className="tlib-badge">{previewTheme.source}</span>
+                  </div>
+                </div>
+                <button
+                  className={`tlib-preview-fav-btn${previewTheme.isFavorite ? " tlib-preview-fav-btn--active" : ""}`}
+                  onClick={() => handleToggleFavorite(previewTheme)}
+                >
+                  <Icon name={previewTheme.isFavorite ? "star" : "star_border"} size={20} />
+                  {previewTheme.isFavorite ? "Favorited" : "Add to Favorites"}
+                </button>
+              </div>
+
+              {previewTheme.description && (
+                <p className="tlib-preview-desc">{previewTheme.description}</p>
+              )}
+
+              {previewTheme.tags.length > 0 && (
+                <div className="tlib-preview-tags">
+                  {previewTheme.tags.map((tag) => (
+                    <span key={tag} className="tlib-preview-tag">{tag}</span>
+                  ))}
+                </div>
+              )}
+
+              {/* Accent color swatch */}
+              <div className="tlib-preview-swatch-row">
+                <span className="tlib-preview-swatch-label">Accent</span>
+                <span
+                  className="tlib-preview-swatch"
+                  style={{ background: previewTheme.accentColor }}
+                />
+                <span className="tlib-preview-swatch-hex">{previewTheme.accentColor}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Theme Creator Modal ── */}
+      {showCreator && (
+        <ThemeCreatorModal
+          editTheme={editThemeData}
+          onClose={() => { setShowCreator(false); setEditThemeData(null); }}
+          onSaved={(theme) => {
+            setCustomFSThemes((prev) => {
+              // If editing, replace existing; if creating, append
+              const idx = prev.findIndex((t) => t.id === theme.id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = theme;
+                return next;
+              }
+              return [...prev, theme];
+            });
+            setShowCreator(false);
+            setEditThemeData(null);
+            setToastMessage(
+              editThemeData ? `"${theme.name}" updated!` : `"${theme.name}" created successfully!`
+            );
+          }}
+        />
+      )}
+
+      {/* ── Toast notification ── */}
+      {toastMessage && (
+        <div className="tlib-toast" role="status" aria-live="polite">
+          <Icon name="check_circle" size={20} />
+          <span>{toastMessage}</span>
+          <button
+            className="tlib-toast-close"
+            type="button"
+            onClick={() => setToastMessage(null)}
+            aria-label="Dismiss notification"
+          >
+            <Icon name="close" size={20} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
