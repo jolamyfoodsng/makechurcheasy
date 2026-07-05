@@ -35,8 +35,8 @@ export async function extractPdfText(file: File): Promise<string> {
 
 // ── Bilingual hymn parser ──────────────────────────────────────────────────
 
-const ORIN_HEADER_RE = /^Orin\s+(\d+)\s*$/i;
-const HYMN_HEADER_RE = /^Hymn\s+(\d+)\s*$/i;
+const ORIN_HEADER_RE = /Orin\s+(\d+)/i;
+const HYMN_HEADER_RE = /Hymn\s+(\d+)/i;
 const SECTION_HEADER_RE = /^(ORIN\s+[A-ZÀ-Ỹ][A-ZÀ-Ỹ\s]*?)$/;
 const MUSICAL_NOTATION_RE = /^[m:s:d:f:l:r:t:\-\s]+$/i;
 
@@ -69,15 +69,28 @@ export function parseBilingualHymns(text: string): ParsedHymn[] {
     const orin = orinHeaders[h];
     const nextOrinLine = h + 1 < orinHeaders.length ? orinHeaders[h + 1].lineIdx : lines.length;
 
-    // Find the "Hymn N" header that follows this "Orin N"
+    // Check if "Hymn N" is on the same line as "Orin N" (two-column PDF layout)
+    const headerLine = lines[orin.lineIdx];
+    const hymnSameLine = headerLine.match(HYMN_HEADER_RE);
+
     let hymnLineIdx = -1;
     let hymnNumber = orin.number;
-    for (let i = orin.lineIdx + 1; i < Math.min(orin.lineIdx + 5, lines.length); i++) {
-      const m = lines[i].match(HYMN_HEADER_RE);
-      if (m) {
-        hymnLineIdx = i;
-        hymnNumber = parseInt(m[1], 10);
-        break;
+    let columnSplitCol = -1;
+
+    if (hymnSameLine && hymnSameLine.index! > 0) {
+      // Both headers on same line — two-column format
+      hymnLineIdx = orin.lineIdx;
+      hymnNumber = parseInt(hymnSameLine[1], 10);
+      columnSplitCol = hymnSameLine.index!;
+    } else {
+      // Search next 5 lines for "Hymn N"
+      for (let i = orin.lineIdx + 1; i < Math.min(orin.lineIdx + 5, lines.length); i++) {
+        const m = lines[i].match(HYMN_HEADER_RE);
+        if (m) {
+          hymnLineIdx = i;
+          hymnNumber = parseInt(m[1], 10);
+          break;
+        }
       }
     }
 
@@ -98,13 +111,38 @@ export function parseBilingualHymns(text: string): ParsedHymn[] {
       continue;
     }
 
-    // Extract Yoruba block: between Orin header and Hymn header
-    const yorubaLines = lines.slice(orin.lineIdx + 1, hymnLineIdx);
-    const yoruba = cleanLyricBlock(yorubaLines);
+    let yoruba: string;
+    let english: string;
 
-    // Extract English block: between Hymn header and next Orin header (or end)
-    const englishLines = lines.slice(hymnLineIdx + 1, nextOrinLine);
-    const english = cleanLyricBlock(englishLines);
+    if (columnSplitCol > 0) {
+      // Two-column format: split each lyrics line at the column position
+      const yorubaParts: string[] = [];
+      const englishParts: string[] = [];
+
+      for (let i = orin.lineIdx + 1; i < nextOrinLine; i++) {
+        const line = lines[i];
+        if (!line.trim()) continue;
+
+        const breakIdx = findColumnBreak(line, columnSplitCol);
+
+        if (breakIdx > 0 && breakIdx < line.length) {
+          const left = line.substring(0, breakIdx).trim();
+          const right = line.substring(breakIdx).trim();
+          if (left) yorubaParts.push(left);
+          if (right) englishParts.push(right);
+        } else {
+          // Can't split — treat as Yoruba only
+          yorubaParts.push(line.trim());
+        }
+      }
+
+      yoruba = cleanLyricBlock(yorubaParts);
+      english = cleanLyricBlock(englishParts);
+    } else {
+      // Single-column format: extract Yoruba between Orin and Hymn, English after Hymn
+      yoruba = cleanLyricBlock(lines.slice(orin.lineIdx + 1, hymnLineIdx));
+      english = cleanLyricBlock(lines.slice(hymnLineIdx + 1, nextOrinLine));
+    }
 
     if (!yoruba && !english) continue;
 
@@ -155,6 +193,28 @@ function cleanLyricBlock(lines: string[]): string {
     cleaned.pop();
   }
   return cleaned.join("\n").trim();
+}
+
+/**
+ * Find the nearest whitespace gap (2+ consecutive spaces) around a target
+ * column position. Used to split two-column PDF text into left/right halves.
+ */
+function findColumnBreak(line: string, targetCol: number): number {
+  for (let offset = 0; offset <= 20; offset++) {
+    const rightIdx = targetCol + offset;
+    if (rightIdx > 0 && rightIdx < line.length - 1) {
+      if (line[rightIdx] === " " && line[rightIdx + 1] === " ") {
+        return rightIdx;
+      }
+    }
+    const leftIdx = targetCol - offset;
+    if (leftIdx > 0 && leftIdx < line.length - 1) {
+      if (line[leftIdx] === " " && line[leftIdx + 1] === " ") {
+        return leftIdx;
+      }
+    }
+  }
+  return -1;
 }
 
 // ── Song creation ──────────────────────────────────────────────────────────

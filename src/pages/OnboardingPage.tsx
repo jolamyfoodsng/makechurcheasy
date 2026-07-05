@@ -913,7 +913,7 @@ function StepReady({ onFinish }: { onFinish: () => void }) {
         </button>
         <button className="ob-quick-btn" onClick={() => openUrl(YOUTUBE_URL)} title="Watch Tutorials">
           <Video size={16} />
-          Watch Tutorials
+          Watch
         </button>
         <button
           className="ob-quick-btn"

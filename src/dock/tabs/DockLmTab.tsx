@@ -255,7 +255,9 @@ export default function DockLmTab() {
           if (state.queue) setQueue(state.queue);
           if (state.suggestions) setSuggestions(state.suggestions);
         }
-      } catch { /* relay unavailable */ }
+      } catch (err) {
+        console.warn("[DockLmTab] pollRelay FAILED:", err);
+      }
     };
     pollRelayRef.current = pollRelay;
     void pollRelay();
@@ -366,13 +368,18 @@ export default function DockLmTab() {
   /** Send command via both BroadcastChannel and HTTP relay */
   const sendLmCommand = useCallback((type: DockCommandType, payload?: unknown) => {
     const cmd = { type, payload: payload ?? {}, timestamp: Date.now() };
+    console.log("[DockLmTab] 📡 sendLmCommand:", type, "cmd:", JSON.stringify(cmd));
     dockClient.sendCommand(cmd);
     fetch("/api/lm-command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cmd),
       keepalive: true,
-    }).catch(() => { });
+    }).then((res) => {
+      console.log("[DockLmTab] 📡 sendLmCommand POST response:", res.status, res.ok);
+    }).catch((err) => {
+      console.error("[DockLmTab] ❌ sendLmCommand POST FAILED:", err);
+    });
   }, []);
 
   // ── Navigate Bible Dock ──
@@ -425,7 +432,14 @@ export default function DockLmTab() {
   }, [candidates, settings.autoPushQueue, settings.autoPushSuggestions, settings.autoNavigate, settings.duplicateWindowSec, obsStatus, pushing, handlePushVerse, navigateBibleDock, queue]);
 
   const handleStartListening = useCallback(async () => {
-    if (!(await requireEntitlement("speechToScripture", 0))) return;
+    console.log("[DockLmTab] 🎤 handleStartListening called");
+    const entitled = await requireEntitlement("speechToScripture", 0);
+    console.log("[DockLmTab] 📋 Entitlement check result:", entitled);
+    if (!entitled) {
+      console.warn("[DockLmTab] ❌ Entitlement DENIED — command NOT sent");
+      return;
+    }
+    console.log("[DockLmTab] ✅ Sending lm:start command via HTTP relay");
     sendLmCommand("lm:start");
   }, [sendLmCommand]);
 

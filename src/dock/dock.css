@@ -24235,6 +24235,184 @@ button.dock-btm-toolbar__clear--inline,
   line-height: 1.4;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   DockLowerThirdEditor — dock-lt-editor__* BEM rules
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Section (accordion container) ── */
+.dock-lt-editor__section {
+  border-top: 1px solid var(--dock-border);
+  margin: 0;
+}
+
+.dock-lt-editor__section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  color: var(--dock-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s ease;
+}
+
+.dock-lt-editor__section-header:hover {
+  color: var(--dock-text);
+  background: var(--dock-surface);
+}
+
+.dock-lt-editor__section-header .material-icons {
+  font-size: 14px;
+  color: var(--dock-text-dim);
+}
+
+.dock-lt-editor__section-body {
+  padding: 4px 8px 8px;
+}
+
+/* ── Group label (theme selector categories) ── */
+.dock-lt-editor__group-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--dock-accent);
+  padding: 4px 0;
+}
+
+.dock-lt-editor__group-divider {
+  height: 1px;
+  background: var(--dock-border);
+  margin-bottom: 4px;
+}
+
+/* ── Position grid ── */
+.dock-lt-editor__pos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.dock-lt-editor__pos-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 4px;
+  background: var(--dock-surface);
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  color: var(--dock-text-dim);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  transition: all 0.1s ease;
+}
+
+.dock-lt-editor__pos-btn:hover {
+  border-color: var(--dock-border-active, var(--dock-text-dim));
+  color: var(--dock-text);
+}
+
+.dock-lt-editor__pos-btn--active {
+  background: var(--dock-accent);
+  border-color: var(--dock-accent);
+  color: #fff;
+}
+
+/* ── Theme Inspector ── */
+.dock-lt-editor__inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.dock-lt-editor__inspector-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+
+.dock-lt-editor__inspector-key {
+  font-size: 11px;
+  color: var(--dock-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.dock-lt-editor__inspector-val {
+  font-size: 11px;
+  color: var(--dock-text-secondary);
+  text-align: right;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Config Content (accordion card wrapper) ── */
+.dock-lt-config-content {
+  margin: 6px 8px;
+}
+
+/* ── Number Icon (used in config-content header) ── */
+.dock-lt-number-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  min-width: 15px;
+  border-radius: 3px;
+  border: 2px solid var(--dock-border);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--dock-text-secondary);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* ── Title (used in config-content header) ── */
+.dock-lt-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dock-text);
+}
+
+/* ── OCS Alt Header (config-content accordion header) ── */
+.dock-lt-ocs-alt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dock-lt-ocs-alt-header .dock-lt-number-icon {
+  border-color: var(--dock-accent);
+  color: var(--dock-accent);
+}
+
+.dock-lt-ocs-alt-header .dock-lt-accordion-icon {
+  margin-left: auto;
+  font-size: 16px;
+  color: var(--dock-text-dim);
+  transition: transform 0.2s ease;
+}
+
 /* ══════════════════════════════════════════════════════
    DOCK UPGRADE MODAL — compact upgrade prompt
    ══════════════════════════════════════════════════════ */

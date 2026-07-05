@@ -2282,7 +2282,7 @@ fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
         for candidate in pdftotext_candidates {
             eprintln!("[pdf-extract] trying: {} on file {}", candidate, path_str);
             match std::process::Command::new(candidate)
-                .arg("-enc").arg("UTF-8")
+                .arg("-layout").arg("-enc").arg("UTF-8")
                 .arg(path_str)
                 .arg("-")
                 .output()

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import {
   getStoredUser,
   isAuthenticated,
@@ -38,6 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(() => isAuthenticated());
   const [isAdmin, setIsAdmin] = useState(() => getStoredUser()?.role === "admin");
+  const consecutiveFailuresRef = useRef(0);
+  const visibilityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshUser = useCallback(() => {
     const stored = getStoredUser();
@@ -84,6 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const STARTUP_GRACE_MS = 15_000;          // 15 s — no logout during this window
     const CHECK_RETRY_ATTEMPTS = 3;           // retries on exists:false before logout
     const CHECK_RETRY_DELAY_MS = 3_000;      // 3 s between retries
+    const REQUIRED_FAILURES_TO_LOGOUT = 2;    // require 2+ consecutive failed cycles
+    const VISIBILITY_DEBOUNCE_MS = 5_000;     // 5 s debounce on visibility change
     const mountTimestamp = Date.now();
 
     async function checkDevice(): Promise<boolean> {
@@ -121,7 +125,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (res.ok) {
             const { exists } = await res.json();
-            if (exists) return true;
+            if (exists) {
+              consecutiveFailuresRef.current = 0; // reset on success
+              return true;
+            }
 
             // exists === false — retry unless this is the last attempt
             console.warn(
@@ -132,13 +139,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               continue;
             }
 
-            // Final attempt failed — only logout after grace period
+            // Final attempt failed — only logout after grace period AND consecutive failures
             if (duringGracePeriod) {
               console.warn(
                 "[AuthContext] checkDevice: exists=false during startup grace — skipping logout this cycle",
               );
               return true; // don't kill the session during grace
             }
+
+            consecutiveFailuresRef.current += 1;
+            if (consecutiveFailuresRef.current < REQUIRED_FAILURES_TO_LOGOUT) {
+              console.warn(
+                `[AuthContext] checkDevice: exists=false — failure ${consecutiveFailuresRef.current}/${REQUIRED_FAILURES_TO_LOGOUT} (will retry next cycle)`,
+              );
+              return true; // don't logout yet
+            }
+
             console.warn("[AuthContext] checkDevice: exists=false after retries — forcing logout");
             logout();
             return false;
@@ -163,14 +179,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     }, HEARTBEAT_MS);
 
-    // Also check immediately when app regains focus, but respect grace period
+    // Also check when app regains focus, debounced to avoid rapid-fire checks
     function onVisibilityChange() {
       if (document.visibilityState === "visible") {
-        void checkDevice().then((ok) => {
-          if (ok) {
-            void refreshPlanFromServer().then(() => refreshUser());
-          }
-        });
+        if (visibilityDebounceRef.current) clearTimeout(visibilityDebounceRef.current);
+        visibilityDebounceRef.current = setTimeout(() => {
+          void checkDevice().then((ok) => {
+            if (ok) {
+              void refreshPlanFromServer().then(() => refreshUser());
+            }
+          });
+        }, VISIBILITY_DEBOUNCE_MS);
       }
     }
 
@@ -178,6 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       clearInterval(heartbeatId);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (visibilityDebounceRef.current) clearTimeout(visibilityDebounceRef.current);
     };
   }, [authenticated]);
 

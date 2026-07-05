@@ -140,6 +140,15 @@ export interface CountdownTemplate {
   icon: string;
 }
 
+// ── Message ────────────────────────────────────────────────────────────────
+
+export interface MessageSettings {
+  /** Message text shown below the timer in the overlay */
+  text: string;
+  /** Message text color (hex) */
+  color: string;
+}
+
 // ── Main Countdown Record ──────────────────────────────────────────────────
 
 export interface CountdownConfig {
@@ -153,8 +162,19 @@ export interface CountdownConfig {
   text: TextSettings;
   animation: AnimationSettings;
   obs: OBSSettings;
+  /** Message displayed below timer in the overlay */
+  message?: MessageSettings;
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Overlay Sync State (sent to OBS browser source) ────────────────────────
+
+export interface OverlaySyncState {
+  /** Whether the countdown is paused */
+  paused: boolean;
+  /** Remaining seconds at the moment this payload was generated */
+  remaining: number;
 }
 
 // ── Overlay Payload (sent to OBS browser source) ───────────────────────────
@@ -163,6 +183,8 @@ export interface CountdownOverlayPayload {
   config: CountdownConfig;
   baseUrl: string;
   timestamp: number;
+  /** App-side sync state: pause/resume + exact remaining time */
+  sync?: OverlaySyncState;
 }
 
 // ── Snapshot for sync ──────────────────────────────────────────────────────

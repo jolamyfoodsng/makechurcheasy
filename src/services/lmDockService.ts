@@ -159,13 +159,15 @@ class LmDockService {
     if (this.initialized) return () => { };
     this.initialized = true;
 
-    // Push initial idle state to dock immediately (covers late-connecting docks)
-    this.pushStatus();
-    this.pushCandidates();
+    // Do NOT push idle state at init — the dock should only show content
+    // after the user explicitly starts listening via SpeechToScripturePage.
+    // The "ping" handler below covers late-connecting docks.
 
     this.unsubscribeDock = dockBridge.onCommand((cmd) => {
+      console.log("[lmDockService] 📡 dockBridge command:", cmd.type);
       if (cmd.type === "lm:start") {
         const payload = cmd.payload as { micId?: string } | undefined;
+        console.log("[lmDockService] 🎤 dockBridge lm:start → startListening()");
         void this.startListening(payload?.micId);
       } else if (cmd.type === "lm:stop") {
         this.stopListening();
@@ -183,10 +185,19 @@ class LmDockService {
       try {
         const url = await relayUrl("/api/lm-command");
         const res = await fetch(url);
-        const commands = await res.json() as Array<{ type: string; payload?: unknown }>;
+        const raw = (await res.json()) as unknown;
+        // Rust returns Vec<String> (raw JSON strings), not Vec<Value>
+        const commands: Array<{ type: string; payload?: unknown }> = Array.isArray(raw)
+          ? raw.map((item) =>
+            typeof item === "string"
+              ? (JSON.parse(item) as { type: string; payload?: unknown })
+              : (item as { type: string; payload?: unknown }),
+          )
+          : [];
         for (const cmd of commands) {
           if (cmd.type === "lm:start") {
             const payload = cmd.payload as { micId?: string } | undefined;
+            console.log("[lmDockService] 🎤 HTTP lm:start → startListening()");
             void this.startListening(payload?.micId);
           } else if (cmd.type === "lm:stop") {
             this.stopListening();
@@ -195,7 +206,12 @@ class LmDockService {
             dockBridge.sendState({ type: "state:lm-status", payload: { ...this.snapshot }, timestamp: Date.now() });
           }
         }
-      } catch { /* relay unavailable */ }
+      } catch (err) {
+        // Only log occasionally to avoid spam
+        if (Math.random() < 0.05) {
+          console.warn("[lmDockService] ⚠️ commandPoll failed:", err);
+        }
+      }
     }, 500);
 
     return () => {
@@ -269,14 +285,19 @@ class LmDockService {
         error: this.snapshot.error,
       };
       relayUrl("/api/lm-state").then((url) => {
+        console.log("[lmDockService] 📡 postToRelay → POST", url, "status:", payload.status);
         fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        }).catch(() => { });
-      }).catch(() => { });
-    } catch {
-      // Relay unavailable — BroadcastChannel is primary for same-process
+        }).catch((err) => {
+          console.warn("[lmDockService] postToRelay fetch FAILED:", err);
+        });
+      }).catch((err) => {
+        console.warn("[lmDockService] postToRelay relayUrl FAILED:", err);
+      });
+    } catch (err) {
+      console.warn("[lmDockService] postToRelay error:", err);
     }
   }
 
@@ -630,6 +651,7 @@ class LmDockService {
   // ── Start / Stop ────────────────────────────────────────────────────────
 
   async startListening(micId?: string): Promise<void> {
+    console.log("[lmDockService] 🎤 startListening() called, micId:", micId, "currentStatus:", this.snapshot.status);
     if (this.snapshot.status === "listening" || this.snapshot.status === "connecting") return;
 
     // Load detection speed from settings
@@ -846,8 +868,14 @@ class LmDockService {
       ...this.snapshot,
       status: "idle",
       inputLevel: 0,
+      entries: [],
+      candidates: [],
+      queue: [],
+      suggestions: [],
+      matching: false,
     };
     this.pushStatus();
+    this.pushCandidates();
   }
 
   /**

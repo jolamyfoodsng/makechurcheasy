@@ -944,6 +944,7 @@ class BibleObsService {
         const sourceSignature = JSON.stringify({
           baseUrl,
           css: customCss || "",
+          slideData: slide ? `${slide.id}:${slide.verseRange}` : null,
         });
         if (this.bgSceneItemId !== null) {
           await this.enforceBgPlacement(BIBLE_SCENE_NAME, this.bgSceneItemId);

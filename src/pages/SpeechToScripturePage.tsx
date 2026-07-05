@@ -19,7 +19,6 @@ import {
   CreditCard,
   Download,
   HelpCircle,
-  Link,
   Lock,
   Mic,
   Radio,
@@ -48,7 +47,6 @@ import { checkEntitlement, checkEntitlementSync } from "../services/entitlementC
 import { getEffectivePlan } from "../services/licenseService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService } from "../services/obsService";
-import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { loadData } from "../services/store";
 import { trackVoiceSessionCompleted, trackVoiceSessionStarted } from "../services/tracking";
 import type { VoiceBibleCandidate, DetectionSpeed } from "../services/voiceBibleTypes";
@@ -136,6 +134,13 @@ export default function SpeechToScripturePage() {
   const [tourActive, setTourActive] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
+  // ── Backend access check (declared early for use in useEffects below) ──
+  const [checkingAccess, setCheckingAccess] = useState(false);
+  const [accessDenied, setAccessDenied] = useState<{
+    reason: string;
+    requiredPlan?: string;
+  } | null>(null);
+
   // ── Auto-start tutorial on first visit ──
   useEffect(() => {
     if (!isSpeechToScriptureTutorialCompleted() && !tourActive) {
@@ -156,6 +161,14 @@ export default function SpeechToScripturePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectivePlan]);
+
+  // ── Auto-logout on device_not_found (device was removed from admin) ──
+  useEffect(() => {
+    if (accessDenied?.reason === "device_not_found") {
+      const timer = setTimeout(() => logout(), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [accessDenied, logout]);
 
   // ── Track credit balance for Start button gating ──
   const [creditBalance, setCreditBalance] = useState(() => getCreditsBalance());
@@ -188,22 +201,6 @@ export default function SpeechToScripturePage() {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 1500);
     } catch { /* ignore */ }
-  }, []);
-
-  // ── Copy Dock URL ──
-  const [dockCopied, setDockCopied] = useState(false);
-
-  const handleCopyDockUrl = useCallback(() => {
-    const isDev =
-      window.location.protocol === "http:" && window.location.port === "1420";
-    const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
-    const deviceId = getDeviceId();
-    const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : "";
-    const url = (isDev ? `${base}/lm-dock` : `${base}/lm-dock.html`) + deviceIdParam;
-    void navigator.clipboard.writeText(url).then(() => {
-      setDockCopied(true);
-      setTimeout(() => setDockCopied(false), 2000);
-    });
   }, []);
 
   // ── OBS ──
@@ -259,13 +256,6 @@ export default function SpeechToScripturePage() {
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [generatedTranscriptId, setGeneratedTranscriptId] = useState<string | null>(null);
 
-  // ── Backend access check ──
-  const [checkingAccess, setCheckingAccess] = useState(false);
-  const [accessDenied, setAccessDenied] = useState<{
-    reason: string;
-    requiredPlan?: string;
-  } | null>(null);
-
   const handleStart = useCallback(async () => {
     // Disable button and show checking state
     setCheckingAccess(true);
@@ -273,6 +263,7 @@ export default function SpeechToScripturePage() {
 
     try {
       const deviceId = getDeviceId();
+      console.log("[SpeechToScripture] 🎤 handleStart called, deviceId:", deviceId);
       const res = await fetch(
         `${API_BASE}/api/device/speech-to-scripture/check-access?deviceId=${encodeURIComponent(deviceId || "")}`,
         {
@@ -285,18 +276,21 @@ export default function SpeechToScripturePage() {
       );
 
       const data = await res.json();
+      console.log("[SpeechToScripture] 📋 Access check response:", JSON.stringify(data));
 
       if (!data.allowed) {
+        console.warn("[SpeechToScripture] ❌ Access DENIED:", data.reason, "requiredPlan:", data.requiredPlan);
         setAccessDenied({ reason: data.reason, requiredPlan: data.requiredPlan });
         return;
       }
 
       // Backend approved — start listening
+      console.log("[SpeechToScripture] ✅ Access ALLOWED — calling lmDockService.startListening()");
       track("sts_listening_started", { mic: selectedMic || "default" });
       trackVoiceSessionStarted();
       void lmDockService.startListening(selectedMic || undefined);
     } catch (err) {
-      console.warn("[SpeechToScripture] Access check failed:", err);
+      console.warn("[SpeechToScripture] ❌ Access check FAILED (network/error):", err);
       const isNetworkError = err instanceof TypeError && /fetch|network/i.test(err.message);
       setAccessDenied({ reason: isNetworkError ? "internet_verification_required" : "server_error" });
     } finally {
@@ -827,13 +821,6 @@ export default function SpeechToScripturePage() {
           >
             <HelpCircle size={16} /> {t("stt.button")}
           </button>
-          <button
-            className="sts3-btn sts3-btn--dock"
-            onClick={handleCopyDockUrl}
-            title={t("verseAi.copied")}>
-            <Link size={14} />
-            {dockCopied ? t("verseAi.copied") : t("verseAi.copyToDock")}
-          </button>
           <div className="sts3-header-mic-group" data-stt-tutorial="start-btn">
             <button
               className={`sts3-btn ${isListening ? "sts3-btn--red" : ""}`}
@@ -849,10 +836,9 @@ export default function SpeechToScripturePage() {
               ) : !hasCredits ? (
                 <><Lock size={16} /> {t("verseAi.noCredits")}</>
               ) : (
-                <><Mic size={16} /> {t("verseAi.startListening")}</>
+                <><Mic size={16} /> {t("verseAi.showInObs")}</>
               )}
             </button>
-
           </div>
 
         </div>

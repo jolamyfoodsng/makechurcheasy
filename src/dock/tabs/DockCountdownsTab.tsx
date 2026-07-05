@@ -17,7 +17,7 @@ import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import Icon from "../DockIcon";
 import { nanoid } from "nanoid";
-import type { CountdownConfig } from "../../countdowns/types";
+import type { CountdownConfig, MessageSettings, OverlaySyncState, CountdownOverlayPayload } from "../../countdowns/types";
 import { createDefaultCountdown, getTemplateName } from "../../countdowns/countdownDefaults";
 import { getCountdowns, saveCountdown, deleteCountdown, saveCountdownAsset } from "../../countdowns/countdownStore";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
@@ -67,6 +67,30 @@ function useCountdownTimer(cd: CountdownConfig | null) {
     cancelAnimationFrame(frameRef.current);
   }, [cd]);
 
+  /** Add or subtract seconds while running or paused */
+  const adjustTime = useCallback((deltaSeconds: number) => {
+    const newRemaining = Math.max(0, (isRunning ? totalRef.current - ((Date.now() - (startedAtRef.current ?? Date.now())) / 1000) : remaining) + deltaSeconds);
+    if (isRunning) {
+      totalRef.current = newRemaining;
+      startedAtRef.current = Date.now();
+    } else {
+      setRemaining(newRemaining);
+      totalRef.current = newRemaining;
+    }
+  }, [isRunning, remaining]);
+
+  /** Set remaining time directly (e.g. from inline edit) */
+  const setRemainingDirect = useCallback((seconds: number) => {
+    const clamped = Math.max(0, seconds);
+    if (isRunning) {
+      totalRef.current = clamped;
+      startedAtRef.current = Date.now();
+    } else {
+      setRemaining(clamped);
+      totalRef.current = clamped;
+    }
+  }, [isRunning]);
+
   useEffect(() => {
     if (!isRunning) return;
     const tick = () => {
@@ -93,7 +117,33 @@ function useCountdownTimer(cd: CountdownConfig | null) {
     formatted = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   }
 
-  return { remaining, isRunning, progress, formatted, start, pause, reset, isComplete: remaining <= 0 };
+  return { remaining, isRunning, progress, formatted, start, pause, reset, adjustTime, setRemainingDirect, isComplete: remaining <= 0 };
+}
+
+// ── Live state persistence ────────────────────────────────────────────────
+
+interface LivePersistState {
+  id: string;
+  remaining: number;
+  running: boolean;
+  savedAt: number;
+}
+
+const LIVE_STATE_KEY = "mce_live_state";
+
+function readLivePersistState(): LivePersistState | null {
+  try {
+    const raw = localStorage.getItem(LIVE_STATE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function writeLivePersistState(state: LivePersistState | null) {
+  try {
+    if (state) localStorage.setItem(LIVE_STATE_KEY, JSON.stringify(state));
+    else localStorage.removeItem(LIVE_STATE_KEY);
+  } catch { /* ignore */ }
 }
 
 // ── Quick Countdown Modal ──────────────────────────────────────────────────
@@ -439,6 +489,8 @@ function CountdownCard({
   onSelect,
   onStart,
   onPause,
+  onAdjustTime,
+  onSetTime,
   onShowObs,
   onHideObs,
   onEdit,
@@ -446,6 +498,7 @@ function CountdownCard({
   onReset,
   onDelete,
   onThemeChange,
+  onMessageChange,
 }: {
   cd: CountdownConfig;
   isLive: boolean;
@@ -454,6 +507,8 @@ function CountdownCard({
   onSelect: () => void;
   onStart: () => void;
   onPause: () => void;
+  onAdjustTime: (deltaSeconds: number) => void;
+  onSetTime: (seconds: number) => void;
   onShowObs: () => void;
   onHideObs: () => void;
   onEdit: () => void;
@@ -461,10 +516,16 @@ function CountdownCard({
   onReset: () => void;
   onDelete: () => void;
   onThemeChange: (theme: CountdownTextTheme) => void;
+  onMessageChange: (msg: MessageSettings) => void;
 }) {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
+  const [messageOpen, setMessageOpen] = useState(false);
+  const [editingTime, setEditingTime] = useState(false);
+  const [editValue, setEditValue] = useState("");
+  const messageText = cd.message?.text ?? "";
+  const messageColor = cd.message?.color ?? "#ffffff";
 
   // Theme-aware timer display
   const theme = cd.textThemeId ? getTextTheme(cd.textThemeId) : null;
@@ -506,77 +567,89 @@ function CountdownCard({
         )}
       </div>
 
-      {/* Row 2: Timer */}
-      <div style={{ fontSize: 28, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, textShadow: timerShadow, letterSpacing: 1, lineHeight: 1, padding: "8px 0" }}>
-        {formattedTime}
+      {/* Row 2: Timer (click to edit inline) */}
+      <div
+        style={{ fontSize: 28, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, textShadow: timerShadow, letterSpacing: 1, lineHeight: 1, padding: "8px 0", cursor: "pointer" }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!editingTime) {
+            setEditValue(formattedTime);
+            setEditingTime(true);
+          }
+        }}
+      >
+        {editingTime ? (
+          <input
+            autoFocus
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={(ev) => {
+              if (ev.key === "Enter") {
+                const parts = editValue.split(":").map(Number);
+                let secs = 0;
+                if (parts.length === 3) secs = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                else if (parts.length === 2) secs = parts[0] * 60 + parts[1];
+                else secs = parts[0] || 0;
+                onSetTime(Math.max(0, secs));
+                setEditingTime(false);
+              } else if (ev.key === "Escape") {
+                setEditingTime(false);
+              }
+            }}
+            onBlur={() => setEditingTime(false)}
+            onClick={(ev) => ev.stopPropagation()}
+            style={{ fontSize: 28, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-accent, #3b82f6)", borderRadius: 4, padding: "2px 6px", width: "100%", letterSpacing: 1, lineHeight: 1, outline: "none" }}
+          />
+        ) : (
+          formattedTime
+        )}
       </div>
 
-      {/* Row 3: Primary action */}
-      <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 4 }}>
-        {!isRunning && !isLive ? (
-          <button
-            type="button"
-            className="dock-btn dock-btn--small dock-btn--success"
-            onClick={(e) => { e.stopPropagation(); onShowObs(); }}
-            style={{ flex: 1, fontSize: 10, padding: "5px 0" }}
-          >
-            <Icon name="visibility" size={11} /> {t("countdowns.showInOBS")}
-          </button>
-        ) : isRunning && isLive ? (
+      {/* Row 3: Timer adjust controls */}
+      <div style={{ display: "flex", gap: 3, alignItems: "center", marginTop: 4 }}>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-60); }} title="-1 minute" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}>-1m</button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-10); }} title="-10 seconds" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}><Icon name="fast_rewind" size={10} /></button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(10); }} title="+10 seconds" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}><Icon name="fast_forward" size={10} /></button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(60); }} title="+1 minute" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}>+1m</button>
+      </div>
+
+      {/* Row 4: Show/Hide, Pause/Resume, Message, Theme, More */}
+      <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 2 }}>
+        {isLive ? (
           <>
-            <button
-              type="button"
-              className="dock-btn dock-btn--small dock-btn--warning"
-              onClick={(e) => { e.stopPropagation(); onPause(); }}
-              style={{ flex: 1, fontSize: 10, padding: "5px 0" }}
-            >
-              <Icon name="pause" size={11} /> {t("common.pause")}
+            <button type="button" className="dock-btn dock-btn--small dock-btn--warning" onClick={(e) => { e.stopPropagation(); isRunning ? onPause() : onStart(); }} style={{ fontSize: 10, padding: "4px 6px" }}>
+              <Icon name={isRunning ? "pause" : "play_arrow"} size={10} />
             </button>
-            <button
-              type="button"
-              className="dock-btn dock-btn--small dock-btn--danger"
-              onClick={(e) => { e.stopPropagation(); onHideObs(); }}
-              style={{ fontSize: 10, padding: "5px 8px" }}
-            >
-              <Icon name="visibility_off" size={11} /> {t("countdowns.hide")}
-            </button>
-          </>
-        ) : isLive && !isRunning ? (
-          <>
-            <button
-              type="button"
-              className="dock-btn dock-btn--small dock-btn--primary"
-              onClick={(e) => { e.stopPropagation(); onStart(); }}
-              style={{ flex: 1, fontSize: 10, padding: "5px 0" }}
-            >
-              <Icon name="play_arrow" size={11} /> {t("common.start")}
-            </button>
-            <button
-              type="button"
-              className="dock-btn dock-btn--small dock-btn--danger"
-              onClick={(e) => { e.stopPropagation(); onHideObs(); }}
-              style={{ fontSize: 10, padding: "5px 8px" }}
-            >
-              <Icon name="visibility_off" size={11} /> {t("countdowns.hide")}
+            <button type="button" className="dock-btn dock-btn--small dock-btn--danger" onClick={(e) => { e.stopPropagation(); onHideObs(); }} style={{ fontSize: 10, padding: "4px 6px" }}>
+              <Icon name="visibility_off" size={10} /> {t("countdowns.hide")}
             </button>
           </>
         ) : (
-          <button
-            type="button"
-            className="dock-btn dock-btn--small dock-btn--primary"
-            onClick={(e) => { e.stopPropagation(); onStart(); }}
-            style={{ flex: 1, fontSize: 10, padding: "5px 0" }}
-          >
-            <Icon name="play_arrow" size={11} /> {t("common.start")}
+          <button type="button" className="dock-btn dock-btn--small dock-btn--success" onClick={(e) => { e.stopPropagation(); onShowObs(); }} style={{ fontSize: 10, padding: "4px 6px" }}>
+            <Icon name="visibility" size={10} /> {t("countdowns.showInOBS")}
           </button>
         )}
+
+        {/* Message toggle */}
+        <div style={{ position: "relative" }}>
+          <button
+            type="button"
+            className="dock-btn dock-btn--small"
+            onClick={(e) => { e.stopPropagation(); setMessageOpen(!messageOpen); setMenuOpen(false); setThemeOpen(false); }}
+            title={t("countdowns.message", "Message")}
+            style={{ fontSize: 10, padding: "4px 6px", color: messageText ? "var(--dock-accent, #3b82f6)" : undefined }}
+          >
+            <Icon name="chat_bubble" size={10} />
+          </button>
+        </div>
 
         {/* Text Style button */}
         <div style={{ position: "relative" }}>
           <button
             type="button"
             className="dock-btn dock-btn--small"
-            onClick={(e) => { e.stopPropagation(); setThemeOpen(!themeOpen); setMenuOpen(false); }}
+            onClick={(e) => { e.stopPropagation(); setThemeOpen(!themeOpen); setMenuOpen(false); setMessageOpen(false); }}
             title={t("countdowns.textStyle", "Text Style")}
             style={{ fontSize: 11, fontWeight: 700, padding: "4px 7px", fontFamily: theme ? theme.fontFamily : "inherit" }}
           >
@@ -600,7 +673,7 @@ function CountdownCard({
           <button
             type="button"
             className="dock-btn dock-btn--small"
-            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
+            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); setThemeOpen(false); setMessageOpen(false); }}
             style={{ fontSize: 12, padding: "4px 6px", lineHeight: 1 }}
           >
             ⋯
@@ -619,6 +692,42 @@ function CountdownCard({
           )}
         </div>
       </div>
+
+      {/* Message panel — toggled by message button in Row 4 */}
+      {messageOpen && (
+        <div style={{ marginTop: 6, borderTop: "1px solid var(--dock-border, rgba(255,255,255,0.06))", paddingTop: 6 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingBottom: 4 }}>
+            <input
+              type="text"
+              value={messageText}
+              onChange={(e) => onMessageChange({ text: e.target.value, color: messageColor })}
+              placeholder={t("countdowns.messagePlaceholder", "Type a message to show on screen…")}
+              className="dock-input"
+              style={{ width: "100%", fontSize: 10, padding: "4px 6px" }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="color"
+                value={messageColor}
+                onChange={(e) => onMessageChange({ text: messageText, color: e.target.value })}
+                style={{ width: 22, height: 20, border: "none", borderRadius: 3, cursor: "pointer", padding: 0 }}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <span style={{ fontSize: 9, color: "var(--dock-text-dim)" }}>{t("countdowns.messageColor", "Color")}</span>
+              {messageText && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onMessageChange({ text: "", color: messageColor }); }}
+                  style={{ marginLeft: "auto", fontSize: 9, color: "#ef4444", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}
+                >
+                  {t("countdowns.clearMessage", "Clear")}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -642,13 +751,86 @@ export default function DockCountdownsTab() {
   const [countdowns, setCountdowns] = useState<CountdownConfig[]>([]);
   const [showQuickModal, setShowQuickModal] = useState(false);
   const [editingCd, setEditingCd] = useState<CountdownConfig | null>(null);
-  const [liveCountdownId, setLiveCountdownId] = useState<string | null>(null);
+  const [liveCountdownId, setLiveCountdownId] = useState<string | null>(() => {
+    return readLivePersistState()?.id ?? null;
+  });
+  const livePersistRef = useRef<LivePersistState | null>(readLivePersistState());
+  const restoredRef = useRef(false);
   const [loaded, setLoaded] = useState(false);
 
   // Per-card timer state: only the "active" card runs a live timer
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeCd = countdowns.find((c) => c.id === activeId) ?? null;
   const timer = useCountdownTimer(activeCd);
+
+  // Restore activeId when liveCountdownId is set but activeId is not
+  useEffect(() => {
+    if (liveCountdownId && !activeId) {
+      setActiveId(liveCountdownId);
+    }
+  }, [liveCountdownId, activeId]);
+
+  // Restore timer remaining when activeCd becomes available after mount
+  useEffect(() => {
+    if (restoredRef.current) return;
+    const persist = livePersistRef.current;
+    if (!persist || !activeCd || activeCd.id !== persist.id) return;
+
+    restoredRef.current = true;
+    livePersistRef.current = null;
+
+    let remaining = persist.remaining;
+    if (persist.running && persist.savedAt) {
+      const elapsed = (Date.now() - persist.savedAt) / 1000;
+      remaining = Math.max(0, remaining - elapsed);
+    }
+
+    timer.setRemainingDirect(remaining);
+
+    if (persist.running && remaining > 0) {
+      timer.start();
+      const sync: OverlaySyncState = { paused: false, remaining: Math.floor(remaining) };
+      pushToObs(activeCd, sync);
+    } else {
+      const sync: OverlaySyncState = { paused: true, remaining: Math.floor(remaining) };
+      pushToObs(activeCd, sync);
+    }
+  }, [activeCd]);
+
+  // Persist live state on beforeunload, visibilitychange, and periodically
+  useEffect(() => {
+    function save() {
+      if (liveCountdownId) {
+        writeLivePersistState({
+          id: liveCountdownId,
+          remaining: timer.remaining,
+          running: timer.isRunning,
+          savedAt: Date.now(),
+        });
+      }
+    }
+    const handleBeforeUnload = () => save();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") save();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    // Periodic save every 2s as safety net
+    const interval = setInterval(save, 2000);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearInterval(interval);
+    };
+  }, [liveCountdownId, timer.remaining, timer.isRunning]);
+
+  // Clear live countdown when timer completes
+  useEffect(() => {
+    if (timer.isComplete && liveCountdownId) {
+      writeLivePersistState(null);
+      setLiveCountdownId(null);
+    }
+  }, [timer.isComplete, liveCountdownId]);
 
   // Load from IndexedDB
   useEffect(() => {
@@ -675,56 +857,56 @@ export default function DockCountdownsTab() {
   // ── OBS ─────────────────────────────────────────────────────────────────
 
   const COUNTDOWN_SOURCE = "MCE Countdown";
+  const BG_SOURCE = "MCE Countdown BG";
+  const PRESENTATION_SCENE = "MCE Presentation";
 
-  const showInObs = useCallback(async (cd: CountdownConfig) => {
-    await ensureObsConnected();
-    if (!dockObsClient.isConnected) return;
+  // ── Helper: ensure a browser source exists in the scene and is enabled ───
 
-    try {
-      const baseUrl = getOverlayBaseUrlSync();
-      const payload = { config: cd, baseUrl, timestamp: Date.now() };
-      const url = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
+  async function ensureObsSource(
+    sourceName: string,
+    url: string,
+    sceneName: string,
+    opts?: { setTransform?: boolean },
+  ): Promise<void> {
+    const inputs = await dockObsClient.call("GetInputList", { inputKind: "browser_source" }) as { inputs: Array<{ inputName: string }> };
+    const existing = inputs.inputs.find((i) => i.inputName === sourceName);
 
-      const presentationScene = "MCE Presentation";
+    if (existing) {
+      await dockObsClient.call("SetInputSettings", {
+        inputName: sourceName,
+        inputSettings: { url, width: 1920, height: 1080, shutdown: false },
+      });
+    } else {
+      await dockObsClient.call("CreateInput", {
+        sceneName,
+        inputName: sourceName,
+        inputKind: "browser_source",
+        inputSettings: { url, width: 1920, height: 1080, shutdown: false },
+      });
+    }
 
-      const inputs = await dockObsClient.call("GetInputList", { inputKind: "browser_source" }) as { inputs: Array<{ inputName: string }> };
-      const existing = inputs.inputs.find((i) => i.inputName === COUNTDOWN_SOURCE);
+    const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
+    const item = sceneItems.sceneItems.find((i) => i.sourceName === sourceName);
 
-      if (existing) {
-        await dockObsClient.call("SetInputSettings", {
-          inputName: COUNTDOWN_SOURCE,
-          inputSettings: { url, width: 1920, height: 1080, shutdown: false },
-        });
-      } else {
-        await dockObsClient.call("CreateInput", {
-          sceneName: presentationScene,
-          inputName: COUNTDOWN_SOURCE,
-          inputKind: "browser_source",
-          inputSettings: { url, width: 1920, height: 1080, shutdown: false },
-        });
-      }
+    if (item) {
+      await dockObsClient.call("SetSceneItemEnabled", {
+        sceneName,
+        sceneItemId: item.sceneItemId,
+        sceneItemEnabled: true,
+      });
 
-      const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName: presentationScene }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
-      const item = sceneItems.sceneItems.find((i) => i.sourceName === COUNTDOWN_SOURCE);
-
-      if (item) {
-        await dockObsClient.call("SetSceneItemEnabled", {
-          sceneName: presentationScene,
-          sceneItemId: item.sceneItemId,
-          sceneItemEnabled: true,
-        });
-
-        const allItems = await dockObsClient.call("GetSceneItemList", { sceneName: presentationScene }) as { sceneItems: Array<{ sceneItemId: number }> };
+      if (opts?.setTransform) {
+        const allItems = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sceneItemId: number }> };
         const topIndex = Math.max(0, allItems.sceneItems.length - 1);
         await dockObsClient.call("SetSceneItemIndex", {
-          sceneName: presentationScene,
+          sceneName,
           sceneItemId: item.sceneItemId,
           sceneItemIndex: topIndex,
         });
 
         const vs = await dockObsClient.call("GetVideoSettings", {}) as any;
         await dockObsClient.call("SetSceneItemTransform", {
-          sceneName: presentationScene,
+          sceneName,
           sceneItemId: item.sceneItemId,
           sceneItemTransform: {
             positionX: 0, positionY: 0,
@@ -734,6 +916,59 @@ export default function DockCountdownsTab() {
           },
         });
       }
+    }
+  }
+
+  async function hideObsSource(sourceName: string): Promise<void> {
+    const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName: PRESENTATION_SCENE }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
+    const item = sceneItems.sceneItems.find((i) => i.sourceName === sourceName);
+    if (item) {
+      await dockObsClient.call("SetSceneItemEnabled", {
+        sceneName: PRESENTATION_SCENE,
+        sceneItemId: item.sceneItemId,
+        sceneItemEnabled: false,
+      });
+    }
+  }
+
+  // ── Push countdown state to OBS (used by pause/resume/message) ──────────
+  // Only updates the CONTENT source — background source stays untouched.
+
+  const pushToObs = useCallback(async (cd: CountdownConfig, sync?: OverlaySyncState) => {
+    await ensureObsConnected();
+    if (!dockObsClient.isConnected) return;
+
+    try {
+      const baseUrl = getOverlayBaseUrlSync();
+      const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
+      const url = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
+
+      await dockObsClient.call("SetInputSettings", {
+        inputName: COUNTDOWN_SOURCE,
+        inputSettings: { url, width: 1920, height: 1080, shutdown: false },
+      });
+    } catch (err) {
+      console.warn("[DockCountdowns] Failed to push to OBS:", err);
+    }
+  }, []);
+
+  const showInObs = useCallback(async (cd: CountdownConfig) => {
+    await ensureObsConnected();
+    if (!dockObsClient.isConnected) return;
+
+    try {
+      const baseUrl = getOverlayBaseUrlSync();
+
+      // 1) Background source — set once, never updated
+      const bgPayload = { config: cd, baseUrl, timestamp: Date.now() };
+      const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
+      await ensureObsSource(BG_SOURCE, bgUrl, PRESENTATION_SCENE, { setTransform: true });
+
+      // 2) Content source — timer + message, updated freely
+      const sync: OverlaySyncState = { paused: true, remaining: cd.timer.durationSeconds };
+      const contentPayload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
+      const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(contentPayload))}`;
+      await ensureObsSource(COUNTDOWN_SOURCE, contentUrl, PRESENTATION_SCENE, { setTransform: true });
 
       setLiveCountdownId(cd.id);
     } catch (err) {
@@ -742,18 +977,12 @@ export default function DockCountdownsTab() {
   }, []);
 
   const hideFromObs = useCallback(async () => {
-    if (!dockObsClient.isConnected) return;
     try {
-      const presentationScene = "MCE Presentation";
-      const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName: presentationScene }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
-      const item = sceneItems.sceneItems.find((i) => i.sourceName === COUNTDOWN_SOURCE);
-      if (item) {
-        await dockObsClient.call("SetSceneItemEnabled", {
-          sceneName: presentationScene,
-          sceneItemId: item.sceneItemId,
-          sceneItemEnabled: false,
-        });
-      }
+      await ensureObsConnected();
+      if (!dockObsClient.isConnected) return;
+      await hideObsSource(BG_SOURCE);
+      await hideObsSource(COUNTDOWN_SOURCE);
+      writeLivePersistState(null);
       setLiveCountdownId(null);
     } catch (err) {
       console.warn("[DockCountdowns] Failed to hide from OBS:", err);
@@ -766,8 +995,64 @@ export default function DockCountdownsTab() {
     await showInObs(cd);
     // Auto-start timer after showing in OBS
     setActiveId(cd.id);
-    setTimeout(() => timer.start(), 50);
-  }, [showInObs, timer]);
+    setTimeout(async () => {
+      timer.start();
+      writeLivePersistState({ id: cd.id, remaining: timer.remaining, running: true, savedAt: Date.now() });
+      setLiveCountdownId(cd.id);
+      const sync: OverlaySyncState = { paused: false, remaining: Math.floor(timer.remaining) };
+      await pushToObs(cd, sync);
+    }, 50);
+  }, [showInObs, timer, pushToObs]);
+
+  const handlePause = useCallback(async (cd: CountdownConfig) => {
+    timer.pause();
+    const remaining = Math.floor(timer.remaining);
+    writeLivePersistState({ id: cd.id, remaining: timer.remaining, running: false, savedAt: Date.now() });
+    const sync: OverlaySyncState = { paused: true, remaining };
+    await pushToObs(cd, sync);
+  }, [timer, pushToObs]);
+
+  const handleResume = useCallback(async (cd: CountdownConfig) => {
+    setActiveId(cd.id);
+    setTimeout(async () => {
+      timer.start();
+      writeLivePersistState({ id: cd.id, remaining: timer.remaining, running: true, savedAt: Date.now() });
+      const sync: OverlaySyncState = { paused: false, remaining: Math.floor(timer.remaining) };
+      await pushToObs(cd, sync);
+    }, 0);
+  }, [timer, pushToObs]);
+
+  const handleAdjustTime = useCallback(async (cd: CountdownConfig, deltaSeconds: number) => {
+    timer.adjustTime(deltaSeconds);
+    // Push updated time to OBS immediately
+    const newRemaining = Math.max(0, timer.remaining + deltaSeconds);
+    if (liveCountdownId === cd.id) {
+      writeLivePersistState({ id: cd.id, remaining: newRemaining, running: timer.isRunning, savedAt: Date.now() });
+    }
+    const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(newRemaining) };
+    await pushToObs(cd, sync);
+  }, [timer, pushToObs, liveCountdownId]);
+
+  const handleSetTime = useCallback(async (cd: CountdownConfig, seconds: number) => {
+    timer.setRemainingDirect(seconds);
+    if (liveCountdownId === cd.id) {
+      writeLivePersistState({ id: cd.id, remaining: seconds, running: timer.isRunning, savedAt: Date.now() });
+    }
+    const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(seconds) };
+    await pushToObs(cd, sync);
+  }, [timer, pushToObs]);
+
+  const handleMessageChange = useCallback(async (cd: CountdownConfig, msg: MessageSettings) => {
+    // Save to config
+    const updated = { ...cd, message: msg, updatedAt: new Date().toISOString() };
+    await saveCountdown(updated);
+    setCountdowns((prev) => prev.map((c) => c.id === updated.id ? updated : c));
+    // Push to OBS with current sync state
+    const sync: OverlaySyncState | undefined = liveCountdownId === cd.id
+      ? { paused: !timer.isRunning, remaining: Math.floor(timer.remaining) }
+      : undefined;
+    await pushToObs(updated, sync);
+  }, [liveCountdownId, timer, pushToObs]);
 
   const handleCreateQuick = useCallback(async (title: string, minutes: number) => {
     const id = nanoid();
@@ -889,8 +1174,10 @@ export default function DockCountdownsTab() {
                   formattedTime={timeDisplay}
                   isRunning={isThisRunning}
                   onSelect={() => setActiveId(cd.id)}
-                  onStart={() => { setActiveId(cd.id); setTimeout(() => timer.start(), 0); }}
-                  onPause={() => timer.pause()}
+                  onStart={() => handleResume(cd)}
+                  onPause={() => handlePause(cd)}
+                  onAdjustTime={isThisActive ? (delta) => handleAdjustTime(cd, delta) : () => { }}
+                  onSetTime={isThisActive ? (secs) => handleSetTime(cd, secs) : () => { }}
                   onShowObs={() => handleShowInObs(cd)}
                   onHideObs={hideFromObs}
                   onEdit={() => setEditingCd(cd)}
@@ -898,6 +1185,7 @@ export default function DockCountdownsTab() {
                   onReset={() => { if (isThisActive) timer.reset(); }}
                   onDelete={() => handleDelete(cd.id)}
                   onThemeChange={(theme) => handleSelectTheme(cd, theme)}
+                  onMessageChange={(msg) => handleMessageChange(cd, msg)}
                 />
               );
             })}

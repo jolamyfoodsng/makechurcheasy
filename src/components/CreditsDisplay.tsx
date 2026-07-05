@@ -9,7 +9,6 @@ import { Zap, CloudOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   getCreditsBalance,
-  isProUnlocked,
   onCreditChange,
   syncCreditsWithBackend,
   getPendingCount,
@@ -27,9 +26,9 @@ interface CreditsDisplayProps {
 
 export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed = 0 }: CreditsDisplayProps) {
   const [balance, setBalance] = useState<number>(0);
+  const [isUnlimited, setIsUnlimited] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [synced, setSynced] = useState(false);
-  const pro = isProUnlocked();
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Generation counter: incremented on every local deduction so stale poll
   // responses (initiated before the deduction) are discarded.
@@ -37,7 +36,7 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
 
   // Sync from backend on mount and every 5 seconds
   useEffect(() => {
-    if (!userId || pro) return;
+    if (!userId) return;
 
     let cancelled = false;
 
@@ -46,9 +45,15 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
       const result = await syncCreditsWithBackend();
       // If a deduction happened while the fetch was in flight, discard
       // the stale response — the deduction already set the correct balance.
-      if (!cancelled && result >= 0 && genBefore === genRef.current) {
-        setBalance(result);
-        setSynced(true);
+      if (!cancelled && genBefore === genRef.current) {
+        if (result === -1) {
+          setIsUnlimited(true);
+          setSynced(true);
+        } else if (result >= 0) {
+          setIsUnlimited(false);
+          setBalance(result);
+          setSynced(true);
+        }
       }
     }
 
@@ -62,7 +67,7 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
       cancelled = true;
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, [userId, pro]);
+  }, [userId]);
 
   // Also update when refreshKey changes (local deduction)
   useEffect(() => {
@@ -74,19 +79,24 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
   useEffect(() => {
     const unsub = onCreditChange((newBalance) => {
       genRef.current += 1;
-      setBalance(newBalance);
+      if (newBalance === -1) {
+        setIsUnlimited(true);
+      } else {
+        setIsUnlimited(false);
+        setBalance(newBalance);
+      }
       setPendingCount(getPendingCount());
     });
     return unsub;
   }, []);
 
-  if (pro) {
+  if (isUnlimited) {
     return (
       <div className="sts3-usage-pill" style={{ gap: 6 }}>
         <Zap size={12} style={{ color: "var(--gold)" }} />
         <span className="sts3-usage-label">CREDITS</span>
         <span className="sts3-usage-value" style={{ color: "var(--gold)" }}>
-          Pro — Unlimited
+          Unlimited
         </span>
       </div>
     );

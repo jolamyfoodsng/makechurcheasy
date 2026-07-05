@@ -13,6 +13,8 @@
 import { invoke } from "@tauri-apps/api/core";
 
 let _cachedBaseUrl: string | null = null;
+let _lastInvokeAttempt = 0;
+const RETRY_COOLDOWN_MS = 2000;
 
 function isLocalOverlayHost(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
@@ -82,6 +84,13 @@ export function resolveOverlayAssetUrl(value: string | undefined): string {
 export async function getOverlayBaseUrl(): Promise<string> {
   if (_cachedBaseUrl) return _cachedBaseUrl;
 
+  // Cooldown: don't hammer invoke on repeated failures
+  const now = Date.now();
+  if (now - _lastInvokeAttempt < RETRY_COOLDOWN_MS) {
+    return _cachedBaseUrl || window.location.origin;
+  }
+  _lastInvokeAttempt = now;
+
   try {
     const port = await invoke<number>("get_overlay_port");
     if (port > 0) {
@@ -89,12 +98,14 @@ export async function getOverlayBaseUrl(): Promise<string> {
       return _cachedBaseUrl;
     }
   } catch (err) {
-    console.warn("[OverlayURL] Failed to get overlay port from Tauri, falling back to window.location.origin:", err);
+    console.warn("[OverlayURL] Failed to get overlay port from Tauri:", err);
   }
 
-  // Fallback: use current origin (works in dev with Vite)
-  _cachedBaseUrl = window.location.origin;
-  return _cachedBaseUrl;
+  // Return fallback but do NOT cache it — retry on next call.
+  // In production Tauri, window.location.origin is "tauri://localhost" which
+  // is NOT the same as http://127.0.0.1:{port}, so caching it permanently
+  // would break all relay POSTs.
+  return window.location.origin;
 }
 
 /**
