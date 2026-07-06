@@ -61,7 +61,7 @@ export function registerUpgradeModal(trigger: (message: string) => void): void {
 /**
  * Read the plan tier bridged from the main app.
  */
-function getDockPlan(): string {
+export function getDockPlan(): string {
   try {
     return localStorage.getItem(getUserScopedKey(PLAN_KEY)) || "free";
   } catch {

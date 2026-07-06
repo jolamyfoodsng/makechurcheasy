@@ -89,6 +89,7 @@ import {
   type WorshipDockSongSavePayload,
 } from "./services/worshipDockInterop";
 import { getLiveToolsSnapshot, syncLiveToolsToDock } from "./live-tools/liveToolStore";
+import { getCountdownSnapshot } from "./countdowns/countdownStore";
 import { STORES, putRecord } from "./services/db";
 import { MEDIA_FILE_ACCEPT, saveLibraryMediaFile } from "./library/MediaTab";
 import {
@@ -107,6 +108,8 @@ import "./bible/bible.css";
 import "./lowerthirds/lowerthirds.css";
 import "./App.css";
 import "./NewDashboard.css";
+import "./compat-mode.css";
+import { getRecommendedPollingInterval } from "./services/performanceManager";
 
 const UPDATE_POLL_INTERVAL_MS = 30_000;
 const WORSHIP_DOCK_SAVE_POLL_INTERVAL_MS = 500;
@@ -125,6 +128,9 @@ async function saveWorshipSongFromDockPayload(payload: WorshipDockSongSavePayloa
 
   const existing = await getSong(id);
   const now = new Date().toISOString();
+  const autoSplit = payload.autoSplit ?? existing?.autoSplit ?? true;
+  const linesPerSlide = payload.linesPerSlide ?? existing?.linesPerSlide ?? 2;
+  const themeId = payload.themeId ?? existing?.themeId;
   const song: Song = {
     id,
     metadata: {
@@ -132,7 +138,7 @@ async function saveWorshipSongFromDockPayload(payload: WorshipDockSongSavePayloa
       artist: payload.artist?.trim() ?? "",
     },
     lyrics,
-    slides: generateSlides(lyrics, 2, true),
+    slides: generateSlides(lyrics, linesPerSlide, autoSplit),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
     importSourceName: payload.importSourceName ?? existing?.importSourceName,
@@ -140,6 +146,9 @@ async function saveWorshipSongFromDockPayload(payload: WorshipDockSongSavePayloa
     importSourceUrl: payload.importSourceUrl ?? existing?.importSourceUrl,
     archived: existing?.archived,
     archivedAt: existing?.archivedAt,
+    autoSplit,
+    linesPerSlide,
+    themeId,
   };
 
   await saveSong(song);
@@ -260,12 +269,14 @@ function App() {
         const productionSettings = await buildDockProductionSettingsPayload().catch(() => undefined);
         const servicePlanner = await getServicePlannerSnapshot().catch(() => undefined);
         const liveTools = await getLiveToolsSnapshot().catch(() => undefined);
+        const countdowns = await getCountdownSnapshot().catch(() => undefined);
         dockBridge.sendFullState({
           obsConnected: obsService.status === "connected",
           serviceStatus: svcStore.status,
           productionSettings,
           servicePlanner,
           liveTools,
+          countdowns,
         });
       }
 
@@ -283,6 +294,18 @@ function App() {
           });
         } catch (err) {
           console.warn("[App] Failed to send songs on ping:", err);
+        }
+
+        // Also send countdowns on ping so dock has current state after reload
+        try {
+          const countdownSnapshot = await getCountdownSnapshot();
+          dockBridge.sendState({
+            type: "state:countdowns",
+            payload: countdownSnapshot,
+            timestamp: Date.now(),
+          });
+        } catch (err) {
+          console.warn("[App] Failed to send countdowns on ping:", err);
         }
       }
 
@@ -501,7 +524,7 @@ function App() {
     void pollWorshipSaveFallback();
     const worshipSaveFallbackTimer = window.setInterval(
       () => void pollWorshipSaveFallback(),
-      WORSHIP_DOCK_SAVE_POLL_INTERVAL_MS,
+      getRecommendedPollingInterval(WORSHIP_DOCK_SAVE_POLL_INTERVAL_MS),
     );
 
     return () => {
@@ -691,6 +714,13 @@ function App() {
     const overlayInit = initOverlayUrl().catch(() => {
       // Fallback to window.location.origin if Tauri command fails
     });
+
+    // Initialize device performance detection (non-blocking)
+    import("./services/performanceManager").then((m) =>
+      m.init().catch((err) => {
+        console.warn("[App] Performance manager init failed (non-critical):", err);
+      }),
+    );
 
     // Run one-time migration from legacy databases (non-blocking)
     migrateFromLegacyDatabases().catch((err) => {

@@ -20,6 +20,7 @@ import { DEFAULT_THEME_SETTINGS, type BibleTheme } from "../../bible/types";
 import { getCustomThemes } from "../../bible/bibleDb";
 import { LT_BIBLE_THEMES, LT_WORSHIP_THEMES, LT_GENERAL_THEMES } from "../../lowerthirds/themes";
 import Icon from "../../components/Icon";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 type SidebarTab = "main" | "templates" | "logos" | "media";
 
@@ -232,7 +233,7 @@ export function MVRegionLibrary() {
       } catch { /* OBS not ready */ }
     };
     poll();
-    const iv = setInterval(poll, 2000);
+    const iv = setInterval(poll, getRecommendedPollingInterval(2000));
     return () => { cancelled = true; clearInterval(iv); };
   }, [obsConnected]);
 

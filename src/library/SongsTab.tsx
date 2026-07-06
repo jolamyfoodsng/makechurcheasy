@@ -56,8 +56,8 @@ const MIN_ONLINE_LYRICS_QUERY_LENGTH = 3;
 const ONLINE_LYRICS_SEARCH_DELAY_MS = 80;
 
 function fuzzyMatch(query: string, target: string): boolean {
-  const q = unicodeStripDiacritics(query);
-  const t = unicodeStripDiacritics(target);
+  const q = unicodeStripDiacritics(query).replace(/\s+/g, "");
+  const t = unicodeStripDiacritics(target).replace(/\s+/g, "");
   if (t.includes(q)) return true;
   let qi = 0;
   for (let ti = 0; ti < t.length && qi < q.length; ti++) {
@@ -182,12 +182,9 @@ export function SongsTab() {
     const filtered = songs.filter((s) => {
       if (languageFilter !== "all" && s.metadata.language !== languageFilter) return false;
       if (!search) return true;
-      const q = search;
-      return (
-        fuzzyMatch(q, s.metadata.title) ||
-        fuzzyMatch(q, s.metadata.artist) ||
-        fuzzyMatch(q, s.lyrics)
-      );
+      const words = search.trim().split(/\s+/);
+      const fields = [s.metadata.title, s.metadata.artist, s.lyrics];
+      return words.every((w) => fields.some((f) => fuzzyMatch(w, f)));
     });
     return filtered;
   }, [search, songs, languageFilter]);

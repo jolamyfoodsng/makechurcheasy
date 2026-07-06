@@ -29,6 +29,7 @@ import { getAllMedia, saveMediaItem, findMediaByPath, type MediaItem } from "../
 import "./preService.css";
 import Icon from "../Icon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 interface AddStepDraft {
   type: PreServiceStepType;
@@ -441,7 +442,7 @@ export default function PreServicePanel() {
     });
 
     // Fallback poll every 5s in case events are missed
-    const pollId = window.setInterval(checkStreamStatus, 5000);
+    const pollId = window.setInterval(checkStreamStatus, getRecommendedPollingInterval(5000));
 
     return () => {
       unsubStart();
@@ -1243,7 +1244,7 @@ export default function PreServicePanel() {
                       type="button"
                       className={`ps-step-expand-btn${!isExpanded ? " is-collapsed" : ""}`}
                       onClick={(e) => { e.stopPropagation(); toggleStepExpanded(step.id); }}
-                     title="Collapse">
+                      title="Collapse">
                       <Icon name="expand_less" size={20} />
                     </button>
                   </div>
@@ -1303,7 +1304,7 @@ export default function PreServicePanel() {
                             className="ps-media-delete"
                             disabled={isRunning || isPaused}
                             onClick={(e) => { e.stopPropagation(); removeStep(step.id); }}
-                           title="Delete">
+                            title="Delete">
                             <Icon name="delete" size={20} />
                           </button>
                         </div>
@@ -1561,7 +1562,7 @@ export default function PreServicePanel() {
             className={`ps-add-step-btn${isRunning || isPaused ? " is-disabled-state" : ""}`}
             disabled={isRunning || isPaused}
             onClick={openAddStep}
-           title="Add">
+            title="Add">
             <Icon name="add_circle" size={20} />
             <span>Add New Step</span>
           </button>
@@ -1654,7 +1655,7 @@ export default function PreServicePanel() {
                   className="ps-btn-start"
                   onClick={isPaused ? startSequence : () => setShowStartConfirm(true)}
                   disabled={!obsConnected || plan.steps.length === 0}
-                 title="Continue">
+                  title="Continue">
                   <Icon name="play_arrow" size={20} />
                   <span>{pausedAtManualHold ? "Continue Sequence" : isPaused ? "Resume Sequence" : "Start Sequence"}</span>
                 </button>
@@ -1670,7 +1671,7 @@ export default function PreServicePanel() {
                 className="ps-btn-stop"
                 onClick={stopAndReset}
                 disabled={runtime.status === "idle"}
-               title="Reset">
+                title="Reset">
                 <Icon name="stop_circle" size={20} />
                 Stop / Reset
               </button>
@@ -1680,7 +1681,7 @@ export default function PreServicePanel() {
                 className="ps-btn-secondary"
                 onClick={skipStep}
                 disabled={!isRunning && !isPaused}
-               title="Skip">
+                title="Skip">
                 <Icon name="skip_next" size={20} />
                 Skip Step
               </button>
@@ -1743,7 +1744,7 @@ export default function PreServicePanel() {
                             durationMode: option.id === "video" ? "auto" : "manual",
                           }));
                         }}
-                       title="Confirm">
+                        title="Confirm">
                         {isSelected && !isDisabled && (
                           <span className="type-card-check">
                             <Icon name="check" size={20} />
@@ -1808,7 +1809,7 @@ export default function PreServicePanel() {
                       type="button"
                       className="cfg-upload-btn"
                       onClick={() => videoUploadRef.current?.click()}
-                     title="Browse">
+                      title="Browse">
                       Browse Files
                     </button>
                     <input
@@ -1842,7 +1843,7 @@ export default function PreServicePanel() {
                             type="button"
                             className={`cfg-media-card${isSelected ? " is-selected" : ""}`}
                             onClick={() => applyMediaPreset(item, "video")}
-                           title="Confirm">
+                            title="Confirm">
                             <div className="cfg-media-card__thumb">
                               {item.previewSrc ? (
                                 <img src={item.previewSrc} alt={item.name} />
@@ -1933,7 +1934,7 @@ export default function PreServicePanel() {
                       type="button"
                       className="cfg-upload-btn"
                       onClick={() => imageUploadRef.current?.click()}
-                     title="Browse">
+                      title="Browse">
                       Browse Files
                     </button>
                     <input
@@ -1967,7 +1968,7 @@ export default function PreServicePanel() {
                             type="button"
                             className={`cfg-media-card cfg-media-card--image${isSelected ? " is-selected" : ""}`}
                             onClick={() => applyMediaPreset(item, "image")}
-                           title="Confirm">
+                            title="Confirm">
                             <div className="cfg-media-card__thumb">
                               {item.previewSrc ? (
                                 <img src={item.previewSrc} alt={item.name} />
@@ -2184,7 +2185,7 @@ export default function PreServicePanel() {
                       type="button"
                       className="cfg-upload-btn"
                       onClick={() => audioUploadRef.current?.click()}
-                     title="Browse">
+                      title="Browse">
                       Browse Audio
                     </button>
                     <input
@@ -2425,7 +2426,7 @@ export default function PreServicePanel() {
                     type="button"
                     onClick={() => setAddModalStage("configure")}
                     disabled={!!STEP_TYPE_OPTIONS[selectedCardIndex]?.disabled}
-                   title="Next">
+                    title="Next">
                     Next
                     <Icon name="arrow_forward" size={20} />
                   </button>
@@ -2464,7 +2465,7 @@ export default function PreServicePanel() {
                 type="button"
                 className="ps-confirm-cancel"
                 onClick={() => setShowStartConfirm(false)}
-               title="Cancel">
+                title="Cancel">
                 Cancel
               </button>
               <button
@@ -2472,7 +2473,7 @@ export default function PreServicePanel() {
                 className="ps-confirm-go"
                 style={{ background: "#00E676", color: "#121212" }}
                 onClick={() => { setShowStartConfirm(false); startSequence(); }}
-               title="Start">
+                title="Start">
                 <Icon name="play_arrow" size={20} />
                 Start
               </button>
@@ -2498,7 +2499,7 @@ export default function PreServicePanel() {
                 type="button"
                 className="ps-confirm-cancel"
                 onClick={() => setShowCancelConfirm(false)}
-               title="Keep Going">
+                title="Keep Going">
                 Keep Going
               </button>
               <button
@@ -2511,7 +2512,7 @@ export default function PreServicePanel() {
                   serviceStore.reset();
                   navigate("/");
                 }}
-               title="Cancel">
+                title="Cancel">
                 <Icon name="cancel" size={20} />
                 Yes, Cancel
               </button>

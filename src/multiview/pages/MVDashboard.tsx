@@ -5,6 +5,7 @@ import * as db from "../mvStore";
 import { TEMPLATE_LIBRARY } from "../templates";
 import { obsService, type OBSInput, type OBSScene } from "../../services/obsService";
 import Icon from "../../components/Icon";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 function timeAgo(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
@@ -128,7 +129,7 @@ export function MVDashboard() {
     }
 
     refreshObsState();
-    const timer = setInterval(refreshObsState, 5000);
+    const timer = setInterval(refreshObsState, getRecommendedPollingInterval(5000));
     return () => clearInterval(timer);
   }, [obsConnected, refreshObsState]);
 
@@ -281,7 +282,7 @@ export function MVDashboard() {
                       // no-op
                     });
                   }}
-                 title="Disconnect">
+                  title="Disconnect">
                   <Icon name="power_settings_new" size={20} />
                   Disconnect
                 </button>

@@ -27,7 +27,8 @@ import { LT_SIZE_LABELS, LT_SIZE_SCALE } from "../../lowerthirds/types";
 import type { BibleTheme } from "../../bible/types";
 import allThemesData from "../../../lower_thirds/all_themes.json";
 import DockLowerThirdEditor from "./DockLowerThirdEditor";
-import { requireEntitlement } from "../dockEntitlement";
+import DockCountdownsTab from "./DockCountdownsTab";
+import { requireEntitlement, getDockPlan } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
 
@@ -76,7 +77,7 @@ const SETTINGS_KEY = "dock-ticker-settings";
 const MAX_CHARS = 140;
 const TICKER_HEIGHT = 80;
 
-type MinistrySubTab = "ticker" | "lower-thirds";
+type MinistrySubTab = "ticker" | "lower-thirds" | "countdowns";
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -124,13 +125,23 @@ function saveSettings(s: TickerSettings) {
   try { localStorage.setItem(getUserScopedKey(SETTINGS_KEY), JSON.stringify(s)); } catch { /* ignore */ }
 }
 
+const MINISTRY_TAB_KEY = "dock-ministry-active-tab";
+
+function loadMinistryTab(): MinistrySubTab {
+  try {
+    const raw = localStorage.getItem(MINISTRY_TAB_KEY);
+    if (raw === "ticker" || raw === "lower-thirds" || raw === "countdowns") return raw;
+  } catch { /* ignore */ }
+  return "ticker";
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export default function DockMinistryTab({ staged: _staged, onStage: _onStage, tickerOutputMode }: Props) {
   const { t } = useTranslation();
-  const [subTab, setSubTab] = useState<MinistrySubTab>("ticker");
+  const [subTab, setSubTab] = useState<MinistrySubTab>(loadMinistryTab);
   const [messages, setMessages] = useState<TickerMessage[]>(loadMessages);
   const [newText, setNewText] = useState("");
   const [settings, setSettings] = useState<TickerSettings>(loadSettings);
@@ -163,6 +174,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   // Persist
   useEffect(() => { saveMessages(messages); }, [messages]);
   useEffect(() => { saveSettings(settings); }, [settings]);
+  useEffect(() => { try { localStorage.setItem(MINISTRY_TAB_KEY, subTab); } catch { /* ignore */ } }, [subTab]);
 
   // OBS connection
   useEffect(() => {
@@ -534,15 +546,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   return (
     <div className="dock-mv-tab">
       {/* ── Header ── */}
-      <div className="dock-mv-tab__header">
-        <div className="dock-mv-tab__title-row">
-          <Icon name="campaign" size={16} />
-          <span className="dock-mv-tab__title">{t("ministry.title")}</span>
-          {subTab === "ticker" && running && (
-            <span className="dock-mv-tab__count" style={{ background: "var(--dock-red)", color: "#fff" }}>{t("ministry.live")}</span>
-          )}
-        </div>
-      </div>
+
 
       {/* ── Sub-Tab Switcher ── */}
       <div className="dock-ministry-tabs">
@@ -562,6 +566,16 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           <Icon name="subtitles" size={12} />
           <span>{t("ministry.lowerThirds")}</span>
         </button>
+        {getDockPlan() !== "free" && (
+          <button
+            type="button"
+            className={`dock-ministry-tab${subTab === "countdowns" ? " dock-ministry-tab--active" : ""}`}
+            onClick={() => setSubTab("countdowns")}
+            title={t("ministry.countdowns")}>
+            <Icon name="timer" size={12} />
+            <span>{t("ministry.countdowns")}</span>
+          </button>
+        )}
       </div>
 
       {/* ── Ticker Tab ── */}
@@ -1295,6 +1309,11 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             )}
           </div>
         </>
+      )}
+
+      {/* ── Countdowns Tab ── */}
+      {subTab === "countdowns" && getDockPlan() !== "free" && (
+        <DockCountdownsTab />
       )}
     </div>
   );

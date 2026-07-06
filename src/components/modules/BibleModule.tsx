@@ -44,6 +44,7 @@ import { OCS_LT_PATTERN, VC_LT_PATTERN, MV_LT_PATTERN, OCS_BIBLE_LT_PATTERN, VC_
 import { dockObsClient } from "../../dock/dockObsClient";
 import Icon from "../Icon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 const LEFT_PANEL_DEFAULT_WIDTH = 300;
 const LEFT_PANEL_MIN_WIDTH = 220;
@@ -636,7 +637,7 @@ export function BibleModule({
     };
 
     poll();
-    const iv = window.setInterval(poll, 500);
+    const iv = window.setInterval(poll, getRecommendedPollingInterval(500));
     return () => window.clearInterval(iv);
   }, [isActive, obsConnected, loadLtScenes]);
 

@@ -19,6 +19,7 @@ import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { GALLERY_LAYOUTS, type GalleryLayout, type GallerySlot } from "../../multiview/galleryLayouts";
 import { saveToDisk, getSafeFileName } from "../dockUploadService";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -746,7 +747,7 @@ export default function DockMultiviewTab() {
     fetchScenes();
     const interval = setInterval(() => {
       if (mountedRef.current) { scanObs(); fetchScenes(); }
-    }, 5000);
+    }, getRecommendedPollingInterval(5000));
     return () => { mountedRef.current = false; clearInterval(interval); };
   }, [obsReady, scanObs, fetchScenes]);
 

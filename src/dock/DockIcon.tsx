@@ -277,6 +277,8 @@ const ICONS: Record<string, IconDef> = {
   expand_more: { component: ChevronDown },
   explore: { component: Compass },
   fact_check: { component: ListChecks },
+  fast_rewind: { component: SkipBack },
+  fast_forward: { component: SkipForward },
   fiber_manual_record: { component: Circle, fill: true, strokeWidth: 0 },
   filter_list: { component: Filter },
   format_align_center: { component: AlignCenter },

@@ -26,6 +26,7 @@ import { getEffectivePlan } from "../../services/licenseService";
 import "./ticker.css";
 import Icon from "../Icon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 const TICKER_SOURCE_NAME = "⚡ MCE Ticker Overlay";
 const TICKER_HEIGHT = 74;
@@ -412,7 +413,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
       }
     };
     poll();
-    const iv = window.setInterval(poll, 500);
+    const iv = window.setInterval(poll, getRecommendedPollingInterval(500));
     return () => window.clearInterval(iv);
   }, [isActive, obsConnected, refreshScenes, clearAutoStopTimers]);
 

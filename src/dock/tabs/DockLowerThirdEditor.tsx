@@ -26,17 +26,12 @@ import {
   LT_POSITIONS,
   LT_POSITION_LABELS,
   LT_POSITION_ICONS,
-  LT_ANIMATIONS_IN,
-  LT_ANIMATION_LABELS,
-  LT_ANIMATION_ICONS,
-  LT_EXIT_STYLES,
-  LT_EXIT_STYLE_LABELS,
 } from "../../lowerthirds/types";
 import Icon from "../DockIcon";
 import {
-  loadSlots, saveSlot, deleteSlot,
+  loadSlots, saveSlot, deleteSlot, renameSlot, resolveSlotState,
 } from "../../lowerthirds/contentSlots";
-import type { ContentSlot } from "../../lowerthirds/contentSlots";
+import type { ContentSlot, SlotState } from "../../lowerthirds/contentSlots";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -95,15 +90,15 @@ function Section({
 
 export default function DockLowerThirdEditor({
   theme,
-  themes,
-  onSelectTheme,
+  themes: _themes,
+  onSelectTheme: _onSelectTheme,
   onSend,
   onBlank: _onBlank,
   onAnimateOut,
-  onUpdate,
+  onUpdate: _onUpdate,
   sending,
   size = "xl",
-  live = false,
+  live: _live = false,
 }: DockLTEditorProps) {
   const { t } = useTranslation();
   // ── Variable values ──
@@ -137,12 +132,76 @@ export default function DockLowerThirdEditor({
     inspector: false,
   });
 
+  // ── Preview zoom (persisted) ──
+  const ZOOM_KEY = "ocs-dock-lt-zoom";
+  const [previewZoom, setPreviewZoom] = useState<number>(() => {
+    try { return parseFloat(localStorage.getItem(ZOOM_KEY) ?? "0.3") || 0.3; } catch { return 0.3; }
+  });
+  const adjustZoom = useCallback((delta: number) => {
+    setPreviewZoom((prev) => {
+      const next = Math.round(Math.min(1, Math.max(0.1, prev + delta)) * 100) / 100;
+      try { localStorage.setItem(ZOOM_KEY, String(next)); } catch { /* noop */ }
+      return next;
+    });
+  }, []);
+
   const toggleSection = useCallback((key: string) => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
   // ── Speaker theme detection & ministry data ──
   const isCurrentThemeSpeaker = useMemo(() => isSpeakerTheme(theme), [theme]);
+
+  // ── Logo variable detection ──
+  const hasLogoVariable = useMemo(
+    () => theme.variables.some(
+      (v) => v.type === "image"
+        || v.key.toLowerCase().includes("logo")
+        || (v.label ?? "").toLowerCase().includes("logo"),
+    ),
+    [theme],
+  );
+
+  // ── Image variable (for interactive picker) ──
+  // Matches type:"image" variables, OR type:"text" variables whose key/label contains "logo"
+  const imageVariable = useMemo(
+    () => theme.variables.find((v) => v.type === "image"
+      || ((v.key.toLowerCase().includes("logo") || (v.label ?? "").toLowerCase().includes("logo")) && v.type === "text")) ?? null,
+    [theme],
+  );
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
+  const [imageHovered, setImageHovered] = useState(false);
+  const [imageDragOver, setImageDragOver] = useState(false);
+
+  const handleImageFileSelect = useCallback((file: File) => {
+    if (!imageVariable) return;
+    if (!file.type.startsWith("image/")) return;
+    const url = URL.createObjectURL(file);
+    setVariableValues((prev) => ({ ...prev, [imageVariable.key]: url }));
+  }, [imageVariable, setVariableValues]);
+
+  const handleImageFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleImageFileSelect(file);
+    e.target.value = "";
+  }, [handleImageFileSelect]);
+
+  const handleImageDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setImageDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleImageFileSelect(file);
+  }, [handleImageFileSelect]);
+
+  const handleImageRemove = useCallback(() => {
+    if (!imageVariable) return;
+    // For text-type logo variables, reset to the theme's default URL; otherwise clear
+    setVariableValues((prev) => ({
+      ...prev,
+      [imageVariable.key]: imageVariable.type === "text" ? (imageVariable.defaultValue ?? "") : "",
+    }));
+  }, [imageVariable, setVariableValues]);
+
   const [speakers, setSpeakers] = useState<Array<{ name: string; role: string; isMain?: boolean }>>([]);
   const [selectedSpeakerIdx, setSelectedSpeakerIdx] = useState<number | null>(null);
   const [showSpeakerHint, setShowSpeakerHint] = useState(() => {
@@ -249,6 +308,7 @@ export default function DockLowerThirdEditor({
   useEffect(() => {
     if (prevThemeId.current !== theme.id) {
       prevThemeId.current = theme.id;
+      if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null; }
       const init: Record<string, string> = {};
       for (const v of theme.variables) {
         init[v.key] = v.defaultValue ?? "";
@@ -269,8 +329,16 @@ export default function DockLowerThirdEditor({
 
   const [slots, setSlots] = useState<(ContentSlot | null)[]>(() => loadSlots(theme.id, "default"));
   const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressTriggeredRef = useRef(false);
+  const suppressLiveUpdateRef = useRef(false);
+  const isSavingRef = useRef(false);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Context menu state ──
+  const [contextMenu, setContextMenu] = useState<{ slotIndex: number; x: number; y: number } | null>(null);
+  const [renamingSlotIndex, setRenamingSlotIndex] = useState<number | null>(null);
+  const [renamingSlotName, setRenamingSlotName] = useState("");
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
 
   const reloadSlots = useCallback(() => {
     setSlots(loadSlots(theme.id, "default"));
@@ -278,14 +346,30 @@ export default function DockLowerThirdEditor({
 
   // ── Slot handlers ──
   const handleSaveSlot = useCallback((index: number) => {
-    saveSlot(theme.id, "default", index, variableValues, theme);
+    isSavingRef.current = true;
+    const fullState: SlotState = {
+      variableValues: { ...variableValues },
+      customStyles: { ...customStyles },
+      position,
+      animationIn,
+      exitStyle,
+    };
+    saveSlot(theme.id, "default", index, variableValues, theme, fullState);
     reloadSlots();
     setActiveSlotIndex(index);
-  }, [theme.id, theme, variableValues, reloadSlots]);
+    requestAnimationFrame(() => { isSavingRef.current = false; });
+  }, [theme.id, theme, variableValues, customStyles, position, animationIn, exitStyle, reloadSlots]);
 
   const handleRecallSlot = useCallback((slot: ContentSlot) => {
-    setVariableValues({ ...slot.values });
+    suppressLiveUpdateRef.current = true;
+    const resolved = resolveSlotState(slot);
+    setVariableValues({ ...resolved.variableValues });
+    setCustomStyles({ ...resolved.customStyles });
+    setPosition(resolved.position);
+    setAnimationIn(resolved.animationIn);
+    setExitStyle(resolved.exitStyle);
     setActiveSlotIndex(slot.index);
+    requestAnimationFrame(() => { suppressLiveUpdateRef.current = false; });
   }, []);
 
   const handleDeleteSlot = useCallback((index: number) => {
@@ -294,66 +378,97 @@ export default function DockLowerThirdEditor({
     if (activeSlotIndex === index) setActiveSlotIndex(null);
   }, [theme.id, reloadSlots, activeSlotIndex]);
 
-  const handleSlotPointerDown = useCallback((index: number) => {
-    longPressTriggeredRef.current = false;
-    longPressTimerRef.current = setTimeout(() => {
-      longPressTriggeredRef.current = true;
-      handleDeleteSlot(index);
-    }, 600);
-  }, [handleDeleteSlot]);
+  const handleRenameSlot = useCallback((index: number) => {
+    renameSlot(theme.id, "default", index, renamingSlotName);
+    reloadSlots();
+    setRenamingSlotIndex(null);
+    setRenamingSlotName("");
+  }, [theme.id, renamingSlotName, reloadSlots]);
 
-  const handleSlotPointerUp = useCallback((index: number, slot: ContentSlot | null) => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    if (longPressTriggeredRef.current) return;
+  // ── Auto-save active slot on editor changes (debounced 300ms) ──
+  useEffect(() => {
+    if (activeSlotIndex === null) return;
+    if (isSavingRef.current) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (isSavingRef.current) return;
+      const fullState: SlotState = {
+        variableValues: { ...variableValues },
+        customStyles: { ...customStyles },
+        position,
+        animationIn,
+        exitStyle,
+      };
+      saveSlot(theme.id, "default", activeSlotIndex, variableValues, theme, fullState);
+      reloadSlots();
+    }, 300);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [activeSlotIndex, variableValues, customStyles, position, animationIn, exitStyle, theme, reloadSlots]);
+
+  // ── Context menu open (right-click or left-click empty slot) ──
+  const openContextMenu = useCallback((slotIndex: number, x: number, y: number) => {
+    setContextMenu({ slotIndex, x, y });
+    setRenamingSlotIndex(null);
+    setRenamingSlotName("");
+  }, []);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+    setRenamingSlotIndex(null);
+    setRenamingSlotName("");
+  }, []);
+
+  // ── Slot click: left-click on filled→load, left-click on empty→open menu ──
+  const handleSlotClick = useCallback((index: number, slot: ContentSlot | null, e: React.MouseEvent) => {
+    if (e.button !== 0) return; // only left-click
+    e.preventDefault();
     if (slot) {
       handleRecallSlot(slot);
     } else {
-      handleSaveSlot(index);
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      openContextMenu(index, rect.right + 4, rect.top);
     }
-  }, [handleRecallSlot, handleSaveSlot]);
+  }, [handleRecallSlot, openContextMenu]);
 
-  // ── Push update to OBS (position/content changes while live) ──
-  const pushUpdate = useCallback(() => {
-    if (!live || !onUpdate) return;
-    const url = buildOverlayUrl(
-      theme,
-      variableValues,
-      true,
-      false,
-      size,
-      customStyles,
-      undefined as LTFontSize | undefined,
-      position,
-      undefined,
-      undefined,
-      animationIn,
-      exitStyle,
-    );
-    onUpdate(url);
-  }, [live, onUpdate, theme, variableValues, customStyles, position, animationIn, exitStyle, size]);
+  // ── Slot right-click: always open menu ──
+  const handleSlotContextMenu = useCallback((e: React.MouseEvent, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    openContextMenu(index, rect.right + 4, rect.top);
+  }, [openContextMenu]);
 
-  // Auto-push when live and relevant settings change
-  const prevLiveRef = useRef(live);
-  const hasPushedLiveRef = useRef(false);
+  // Focus rename input when entering rename mode
   useEffect(() => {
-    const wasLive = prevLiveRef.current;
-    prevLiveRef.current = live;
-    if (live && !hasPushedLiveRef.current) {
-      // Just went live — don't auto-push on the transition (onSend already did it)
-      hasPushedLiveRef.current = true;
-      return;
+    if (renamingSlotIndex !== null && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
     }
-    if (!live) {
-      hasPushedLiveRef.current = false;
-      return;
-    }
-    if (live && wasLive) {
-      pushUpdate();
-    }
-  }, [position, animationIn, exitStyle, customStyles, variableValues]);
+  }, [renamingSlotIndex]);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        closeContextMenu();
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [contextMenu, closeContextMenu]);
+
+  // Close context menu on Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeContextMenu();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [contextMenu, closeContextMenu]);
 
   // ── Send / Blank handlers ──
   const handleSend = useCallback(() => {
@@ -393,17 +508,6 @@ export default function DockLowerThirdEditor({
     onAnimateOut(url);
   }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onAnimateOut]);
 
-  // ── Theme categories for the selector ──
-  const categories = useMemo(() => {
-    const map = new Map<string, LowerThirdTheme[]>();
-    for (const th of themes) {
-      const cat = th.category || "general";
-      if (!map.has(cat)) map.set(cat, []);
-      map.get(cat)!.push(th);
-    }
-    return map;
-  }, [themes]);
-
   // ── Preview URL ──
   const previewUrl = useMemo(() => buildOverlayUrl(
     theme, variableValues, false, false, size, customStyles,
@@ -411,72 +515,68 @@ export default function DockLowerThirdEditor({
     undefined, undefined, animationIn, exitStyle,
   ), [theme, variableValues, size, customStyles, position, animationIn, exitStyle]);
 
-  const baseSelect: React.CSSProperties = {
-    width: "100%",
-    background: "var(--dock-surface)",
-    border: "1px solid var(--dock-border)",
-    borderRadius: 3,
-    padding: "4px 6px",
-    fontSize: 11,
-    color: "var(--dock-text)",
-    fontFamily: "inherit",
-    cursor: "pointer",
-  };
-
   return (
     <div className="dock-lt-editor-layout">
       {/* ── Preview (fixed top) ── */}
-      <div className="dock-lt-editor-layout__preview">
+      <div className="dock-lt-editor-layout__preview" style={{ zoom: previewZoom }}>
         <iframe
+          key={previewUrl}
           src={previewUrl}
           title="lt-preview"
           sandbox="allow-scripts allow-same-origin"
         />
+        {/* Zoom controls */}
+        <div style={{
+          position: "absolute",
+          bottom: 4,
+          right: 4,
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          background: "rgba(0,0,0,0.65)",
+          borderRadius: 4,
+          padding: "2px 4px",
+          zIndex: 10,
+        }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => adjustZoom(-0.05)}
+            style={{
+              width: 18, height: 18, border: "none", borderRadius: 3,
+              background: "var(--dock-surface, #222)", color: "var(--dock-text, #ccc)",
+              cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex",
+              alignItems: "center", justifyContent: "center", padding: 0,
+            }}
+            title="Zoom out"
+          >
+            −
+          </button>
+          <span style={{
+            fontSize: 9, color: "var(--dock-text-dim, #888)",
+            minWidth: 28, textAlign: "center", userSelect: "none",
+          }}>
+            {Math.round(previewZoom * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={() => adjustZoom(0.05)}
+            style={{
+              width: 18, height: 18, border: "none", borderRadius: 3,
+              background: "var(--dock-surface, #222)", color: "var(--dock-text, #ccc)",
+              cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex",
+              alignItems: "center", justifyContent: "center", padding: 0,
+            }}
+            title="Zoom in"
+          >
+            +
+          </button>
+        </div>
       </div>
 
       {/* ── Scrollable settings ── */}
       <div className="dock-lt-editor-layout__scroll">
-        {/* ── Theme Selector ── */}
-        <Section label={t("lowerThird.selectTheme")} icon="palette" open={!!openSections.theme} onToggle={() => toggleSection("theme")}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 220, overflowY: "auto" }}>
-            {[...categories.entries()].map(([cat, catThemes]) => (
-              <div key={cat}>
-                <div className="dock-lt-editor__group-label">{cat}</div>
-                <div className="dock-lt-editor__group-divider" />
-                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  {catThemes.map((th) => (
-                    <button
-                      key={th.id}
-                      type="button"
-                      onClick={() => onSelectTheme(th.id)}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        padding: "4px 6px",
-                        background: th.id === theme.id ? "var(--dock-accent-soft)" : "transparent",
-                        border: `1px solid ${th.id === theme.id ? "var(--dock-accent)" : "var(--dock-border)"}`,
-                        borderRadius: 3,
-                        cursor: "pointer",
-                        textAlign: "left",
-                        fontFamily: "inherit",
-                        color: th.id === theme.id ? "var(--dock-accent)" : "var(--dock-text-secondary)",
-                        fontSize: 11,
-                        transition: "all 0.1s ease",
-                      }}
-                    >
-                      <Icon name={th.icon} size={14} />
-                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{th.name}</span>
-                      {th.id === theme.id && <Icon name="check" size={12} style={{ color: "var(--dock-accent)", flexShrink: 0 }} />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Section>
-
-        {/* ── Speaker First-Time Hint ── */}
         {isCurrentThemeSpeaker && showSpeakerHint && speakers.length > 0 && (
           <div style={{
             background: "var(--dock-accent-soft)",
@@ -570,74 +670,149 @@ export default function DockLowerThirdEditor({
 
 
             {/* First Edit Container: Logo + Textfields */}
-            <div className="dock-lt-first-edit">
-              <div className="dock-lt-logo-container">
-                <span className="material-icons" style={{ fontSize: 24, color: "var(--dock-text-dim)" }}>
-                  image
-                </span>
-              </div>
+            <div className={`dock-lt-first-edit${hasLogoVariable ? "" : " dock-lt-first-edit--no-logo"}`}>
+              {hasLogoVariable && imageVariable && (
+                <>
+                  <input
+                    ref={imageFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: "none" }}
+                    onChange={handleImageFileInput}
+                  />
+                  <div
+                    className={`dock-lt-logo-container dock-lt-image-picker${imageDragOver ? " dock-lt-image-picker--dragover" : ""}`}
+                    onClick={() => imageFileInputRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); setImageDragOver(true); }}
+                    onDragLeave={() => setImageDragOver(false)}
+                    onDrop={handleImageDrop}
+                    onMouseEnter={() => setImageHovered(true)}
+                    onMouseLeave={() => setImageHovered(false)}
+                  >
+                    {variableValues[imageVariable.key] ? (
+                      <>
+                        <img src={variableValues[imageVariable.key]} alt="" />
+                        {imageHovered && (
+                          <div className="dock-lt-image-picker-overlay">
+                            <button
+                              type="button"
+                              className="dock-lt-image-picker-action"
+                              onClick={(e) => { e.stopPropagation(); imageFileInputRef.current?.click(); }}
+                            >
+                              <span className="material-icons" style={{ fontSize: 14 }}>photo_camera</span>
+                              <span>Change</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="dock-lt-image-picker-action dock-lt-image-picker-action--remove"
+                              onClick={(e) => { e.stopPropagation(); handleImageRemove(); }}
+                            >
+                              <span className="material-icons" style={{ fontSize: 14 }}>close</span>
+                              <span>Remove</span>
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="dock-lt-image-picker-empty">
+                        <span className="material-icons" style={{ fontSize: 20, color: "var(--dock-text-dim)" }}>
+                          add_photo_alternate
+                        </span>
+                        <span className="dock-lt-image-picker-empty-text">Drop image or click</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
               <div className="dock-lt-textfields">
-                {/* Name Field */}
-                <input
-                  type="text"
-                  value={variableValues["name"] ?? ""}
-                  onChange={(e) => setVariableValues((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="Name"
-                />
-                <div className="dock-lt-textfield-appearance">
-                  <label className="dock-lt-app-btn">
-                    <input
-                      type="checkbox"
-                      checked={customStyles.nameUpper}
-                      onChange={(e) => setCustomStyles((p) => ({ ...p, nameUpper: e.target.checked }))}
-                    />
-                    <span className="material-icons">text_fields</span>
-                  </label>
-                  <label className="dock-lt-app-btn">
-                    <input
-                      type="checkbox"
-                      checked={customStyles.nameBold}
-                      onChange={(e) => setCustomStyles((p) => ({ ...p, nameBold: e.target.checked }))}
-                    />
-                    <span className="material-icons">format_bold</span>
-                  </label>
-                  <input
-                    type="color"
-                    value={customStyles.nameColor}
-                    onChange={(e) => setCustomStyles((p) => ({ ...p, nameColor: e.target.value }))}
-                  />
-                </div>
-
-                {/* Info Field */}
-                <input
-                  type="text"
-                  value={variableValues["info"] ?? ""}
-                  onChange={(e) => setVariableValues((prev) => ({ ...prev, info: e.target.value }))}
-                  placeholder="Info"
-                />
-                <div className="dock-lt-textfield-appearance">
-                  <label className="dock-lt-app-btn">
-                    <input
-                      type="checkbox"
-                      checked={customStyles.infoUpper}
-                      onChange={(e) => setCustomStyles((p) => ({ ...p, infoUpper: e.target.checked }))}
-                    />
-                    <span className="material-icons">text_fields</span>
-                  </label>
-                  <label className="dock-lt-app-btn">
-                    <input
-                      type="checkbox"
-                      checked={customStyles.infoBold}
-                      onChange={(e) => setCustomStyles((p) => ({ ...p, infoBold: e.target.checked }))}
-                    />
-                    <span className="material-icons">format_bold</span>
-                  </label>
-                  <input
-                    type="color"
-                    value={customStyles.infoColor}
-                    onChange={(e) => setCustomStyles((p) => ({ ...p, infoColor: e.target.value }))}
-                  />
-                </div>
+                {/* Dynamic fields from theme variables (text/list types, excluding image/logo variables) */}
+                {theme.variables
+                  .filter((v) => {
+                    if (v.type !== "text" && v.type !== "list") return false;
+                    // Skip variables managed by the image picker
+                    const key = v.key.toLowerCase();
+                    const label = (v.label ?? "").toLowerCase();
+                    if (key.includes("logo") || key.includes("image") || label.includes("logo") || label.includes("image")) return false;
+                    return true;
+                  })
+                  .map((v, idx) => {
+                    const isPrimary = idx === 0;
+                    const isSecondary = idx === 1;
+                    return (
+                      <div className="dock-lt-field-row" key={v.key}>
+                        <input
+                          className="dock-lt-field-input"
+                          type="text"
+                          value={variableValues[v.key] ?? ""}
+                          onChange={(e) => setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
+                          placeholder={v.label || v.key}
+                        />
+                        <div className="dock-lt-field-toolbar">
+                          <label className="dock-lt-app-btn">
+                            <input
+                              type="checkbox"
+                              checked={isPrimary ? customStyles.nameUpper : isSecondary ? customStyles.infoUpper : false}
+                              onChange={(e) => {
+                                if (isPrimary) setCustomStyles((p) => ({ ...p, nameUpper: e.target.checked }));
+                                else if (isSecondary) setCustomStyles((p) => ({ ...p, infoUpper: e.target.checked }));
+                              }}
+                            />
+                            <span className="material-icons">text_fields</span>
+                          </label>
+                          <label className="dock-lt-app-btn">
+                            <input
+                              type="checkbox"
+                              checked={isPrimary ? customStyles.nameBold : isSecondary ? customStyles.infoBold : false}
+                              onChange={(e) => {
+                                if (isPrimary) setCustomStyles((p) => ({ ...p, nameBold: e.target.checked }));
+                                else if (isSecondary) setCustomStyles((p) => ({ ...p, infoBold: e.target.checked }));
+                              }}
+                            />
+                            <span className="material-icons">format_bold</span>
+                          </label>
+                          <input
+                            type="color"
+                            value={isPrimary ? customStyles.nameColor : isSecondary ? customStyles.infoColor : ""}
+                            onChange={(e) => {
+                              if (isPrimary) setCustomStyles((p) => ({ ...p, nameColor: e.target.value }));
+                              else if (isSecondary) setCustomStyles((p) => ({ ...p, infoColor: e.target.value }));
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                {/* Select-type variables as dropdowns (skip internal animation controls) */}
+                {theme.variables
+                  .filter((v) => v.type === "select" && v.key !== "state" && v.key !== "animMode")
+                  .map((v) => (
+                    <div className="dock-lt-field-row" key={v.key}>
+                      <select
+                        className="dock-lt-field-input"
+                        value={variableValues[v.key] ?? ""}
+                        onChange={(e) => setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
+                      >
+                        <option value="">{v.label || v.key}</option>
+                        {(v.options ?? []).map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                {/* Number-type variables */}
+                {theme.variables
+                  .filter((v) => v.type === "number")
+                  .map((v) => (
+                    <div className="dock-lt-field-row" key={v.key}>
+                      <input
+                        className="dock-lt-field-input"
+                        type="number"
+                        value={variableValues[v.key] ?? ""}
+                        onChange={(e) => setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
+                        placeholder={v.label || v.key}
+                      />
+                    </div>
+                  ))}
               </div>
             </div>
 
@@ -667,66 +842,17 @@ export default function DockLowerThirdEditor({
                 {slots.map((slot, idx) => (
                   <li
                     key={idx}
-                    className={`${activeSlotIndex === idx ? " li--active" : ""}${slot ? " li--filled" : ""}`}
-                    onPointerDown={() => handleSlotPointerDown(idx)}
-                    onPointerUp={() => handleSlotPointerUp(idx, slot)}
-                    onPointerLeave={() => {
-                      if (longPressTimerRef.current) {
-                        clearTimeout(longPressTimerRef.current);
-                        longPressTimerRef.current = null;
-                      }
-                    }}
+                    className={`dock-lt-slot${activeSlotIndex === idx ? " dock-lt-slot--active" : ""}${slot ? " dock-lt-slot--filled" : " dock-lt-slot--empty"}`}
+                    title={slot?.label}
+                    onClick={(e) => handleSlotClick(idx, slot, e)}
+                    onContextMenu={(e) => handleSlotContextMenu(e, idx)}
                   >
-                    <span className="dock-lt-slot-number">{idx + 1}</span>
-                    {slot && (
-                      <span className="dock-lt-slot-tooltip">{slot.label}</span>
-                    )}
+                    {idx + 1}
                   </li>
                 ))}
               </ul>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <select
-                  value={animationIn}
-                  onChange={(e) => setAnimationIn(e.target.value as LTAnimationIn)}
-                  style={{
-                    height: 23,
-                    background: "var(--dock-input-bg)",
-                    border: "1px solid var(--dock-border)",
-                    borderRadius: 3,
-                    color: "var(--dock-text)",
-                    fontSize: 10,
-                    fontFamily: "inherit",
-                    padding: "0 16px 0 4px",
-                    cursor: "pointer",
-                    outline: "none",
-                  }}
-                >
-                  {LT_ANIMATIONS_IN.map((anim) => (
-                    <option key={anim} value={anim}>{LT_ANIMATION_LABELS[anim]}</option>
-                  ))}
-                </select>
-                <select
-                  value={exitStyle}
-                  onChange={(e) => setExitStyle(e.target.value as LTExitStyle)}
-                  style={{
-                    height: 23,
-                    background: "var(--dock-input-bg)",
-                    border: "1px solid var(--dock-border)",
-                    borderRadius: 3,
-                    color: "var(--dock-text)",
-                    fontSize: 10,
-                    fontFamily: "inherit",
-                    padding: "0 16px 0 4px",
-                    cursor: "pointer",
-                    outline: "none",
-                  }}
-                >
-                  {LT_EXIT_STYLES.map((es) => (
-                    <option key={es} value={es}>{LT_EXIT_STYLE_LABELS[es]}</option>
-                  ))}
-                </select>
-              </div>
+
             </div>
           </div>
         </div>
@@ -748,83 +874,10 @@ export default function DockLowerThirdEditor({
           </div>
         </Section>
 
-        {/* ── Animation ── */}
-        <Section label={t("lowerThird.animation")} icon="animation" open={!!openSections.animation} onToggle={() => toggleSection("animation")}>
-          <div style={{ marginBottom: 8 }}>
-            <label style={{ fontSize: 10, color: "var(--dock-text-dim)", display: "block", marginBottom: 4 }}>
-              {t("lowerThird.animationIn")}
-            </label>
-            <select
-              value={animationIn}
-              onChange={(e) => setAnimationIn(e.target.value as LTAnimationIn)}
-              style={baseSelect}
-            >
-              {LT_ANIMATIONS_IN.map((anim) => (
-                <option key={anim} value={anim}>{LT_ANIMATION_LABELS[anim]}</option>
-              ))}
-            </select>
-            <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
-              <Icon name={LT_ANIMATION_ICONS[animationIn]} size={14} style={{ color: "var(--dock-accent)" }} />
-              <span style={{ fontSize: 10, color: "var(--dock-text-secondary)" }}>{LT_ANIMATION_LABELS[animationIn]}</span>
-            </div>
-          </div>
-
-          <div>
-            <label style={{ fontSize: 10, color: "var(--dock-text-dim)", display: "block", marginBottom: 4 }}>
-              {t("lowerThird.exitStyle")}
-            </label>
-            <select
-              value={exitStyle}
-              onChange={(e) => setExitStyle(e.target.value as LTExitStyle)}
-              style={baseSelect}
-            >
-              {LT_EXIT_STYLES.map((es) => (
-                <option key={es} value={es}>{LT_EXIT_STYLE_LABELS[es]}</option>
-              ))}
-            </select>
-          </div>
-        </Section>
 
 
-        {/* ── Theme Inspector ── */}
-        <Section label={t("lowerThird.inspector")} icon="info" open={!!openSections.inspector} onToggle={() => toggleSection("inspector")}>
-          <div className="dock-lt-editor__inspector">
-            <div className="dock-lt-editor__inspector-row">
-              <span className="dock-lt-editor__inspector-key">{t("lowerThird.themeId")}</span>
-              <span className="dock-lt-editor__inspector-val">{theme.id}</span>
-            </div>
-            <div className="dock-lt-editor__inspector-row">
-              <span className="dock-lt-editor__inspector-key">{t("lowerThird.category")}</span>
-              <span className="dock-lt-editor__inspector-val">{theme.category}</span>
-            </div>
-            <div className="dock-lt-editor__inspector-row">
-              <span className="dock-lt-editor__inspector-key">{t("lowerThird.variableCount")}</span>
-              <span className="dock-lt-editor__inspector-val">{theme.variables.length}</span>
-            </div>
-            {theme.animation && (
-              <div className="dock-lt-editor__inspector-row">
-                <span className="dock-lt-editor__inspector-key">{t("lowerThird.animation")}</span>
-                <span className="dock-lt-editor__inspector-val">{theme.animation.name} ({theme.animation.duration}ms)</span>
-              </div>
-            )}
-            {theme.exitAnimation && (
-              <div className="dock-lt-editor__inspector-row">
-                <span className="dock-lt-editor__inspector-key">{t("lowerThird.animateOut")}</span>
-                <span className="dock-lt-editor__inspector-val">{theme.exitAnimation.name} ({theme.exitAnimation.duration}ms)</span>
-              </div>
-            )}
-            <div className="dock-lt-editor__inspector-row">
-              <span className="dock-lt-editor__inspector-key">{t("lowerThird.usesTailwind")}</span>
-              <span className="dock-lt-editor__inspector-val">{theme.usesTailwind ? t("lowerThird.yes") : t("lowerThird.no")}</span>
-            </div>
-            {theme.fontImports && theme.fontImports.length > 0 && (
-              <div className="dock-lt-editor__inspector-row">
-                <span className="dock-lt-editor__inspector-key">{t("lowerThird.fontImports")}</span>
-                <span className="dock-lt-editor__inspector-val">{theme.fontImports.length}</span>
-              </div>
-            )}
-          </div>
-        </Section>
+
+
 
       </div>{/* /scroll */}
 
@@ -852,6 +905,100 @@ export default function DockLowerThirdEditor({
           </button>
         )}
       </div>
+
+      {/* ── Slot Context Menu ── */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="dock-lt-slot-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          {renamingSlotIndex === contextMenu.slotIndex ? (
+            /* ── Inline rename mode ── */
+            <div className="dock-lt-slot-context-rename">
+              <input
+                ref={renameInputRef}
+                className="dock-lt-slot-rename-input"
+                type="text"
+                value={renamingSlotName}
+                onChange={(e) => setRenamingSlotName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleRenameSlot(contextMenu.slotIndex);
+                  if (e.key === "Escape") closeContextMenu();
+                }}
+                placeholder={t("lowerThird.slotRenamePlaceholder")}
+                maxLength={30}
+              />
+              <div className="dock-lt-slot-rename-actions">
+                <button
+                  className="dock-lt-slot-context-item"
+                  onClick={() => handleRenameSlot(contextMenu.slotIndex)}
+                >
+                  <Icon name="check" size={14} />
+                  {t("common.confirm")}
+                </button>
+                <button
+                  className="dock-lt-slot-context-item"
+                  onClick={closeContextMenu}
+                >
+                  <Icon name="close" size={14} />
+                  {t("common.cancel")}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* ── Normal menu ── */
+            <>
+              {slots[contextMenu.slotIndex] && (
+                <button
+                  className="dock-lt-slot-context-item"
+                  onClick={() => {
+                    handleRecallSlot(slots[contextMenu.slotIndex]!);
+                    closeContextMenu();
+                  }}
+                >
+                  <Icon name="open_in_new" size={14} />
+                  {t("lowerThird.slotLoad")}
+                </button>
+              )}
+              <button
+                className="dock-lt-slot-context-item"
+                onClick={() => {
+                  handleSaveSlot(contextMenu.slotIndex);
+                  closeContextMenu();
+                }}
+              >
+                <Icon name="save" size={14} />
+                {t("lowerThird.slotSave")}
+              </button>
+              {slots[contextMenu.slotIndex] && (
+                <button
+                  className="dock-lt-slot-context-item"
+                  onClick={() => {
+                    setRenamingSlotIndex(contextMenu.slotIndex);
+                    setRenamingSlotName(slots[contextMenu.slotIndex]?.label ?? "");
+                  }}
+                >
+                  <Icon name="edit" size={14} />
+                  {t("lowerThird.slotRename")}
+                </button>
+              )}
+              {slots[contextMenu.slotIndex] && (
+                <button
+                  className="dock-lt-slot-context-item dock-lt-slot-context-item--danger"
+                  onClick={() => {
+                    handleDeleteSlot(contextMenu.slotIndex);
+                    closeContextMenu();
+                  }}
+                >
+                  <Icon name="delete" size={14} />
+                  {t("lowerThird.slotClear")}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

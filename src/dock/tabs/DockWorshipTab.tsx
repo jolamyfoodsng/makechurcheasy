@@ -59,6 +59,9 @@ interface DockSong {
   importSourceName?: string;
   importSourceType?: "manual" | "online";
   importSourceUrl?: string;
+  autoSplit?: boolean;
+  linesPerSlide?: number;
+  themeId?: string;
 }
 
 interface DockWorshipPreferences {
@@ -208,6 +211,9 @@ function mapAppSongToDockSong(song: {
   importSourceName?: string;
   importSourceType?: "manual" | "online";
   importSourceUrl?: string;
+  autoSplit?: boolean;
+  linesPerSlide?: number;
+  themeId?: string;
 }): DockSong {
   return {
     id: song.id,
@@ -217,6 +223,9 @@ function mapAppSongToDockSong(song: {
     importSourceName: song.importSourceName,
     importSourceType: song.importSourceType,
     importSourceUrl: song.importSourceUrl,
+    autoSplit: song.autoSplit,
+    linesPerSlide: song.linesPerSlide,
+    themeId: song.themeId,
   };
 }
 
@@ -258,9 +267,9 @@ async function loadDockWorshipPreferencesFromApp(): Promise<DockWorshipPreferenc
   }
 }
 
-function parseLyricSections(lyrics: string, linesPerSlide: number): DockWorshipSection[] {
+function parseLyricSections(lyrics: string, linesPerSlide: number, autoSplit = false): DockWorshipSection[] {
   if (!lyrics.trim()) return [];
-  return generateSlides(lyrics, linesPerSlide, false).map((slide) => ({
+  return generateSlides(lyrics, linesPerSlide, autoSplit).map((slide) => ({
     id: slide.id,
     label: slide.isContinuation ? "" : slide.label,
     text: slide.content,
@@ -585,7 +594,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
   const suppressAutoProjectionTimerRef = useRef<number | null>(null);
 
   const selectedSongSections = useMemo(
-    () => (selectedSong ? parseLyricSections(selectedSong.lyrics, linesPerSlide) : []),
+    () => (selectedSong ? parseLyricSections(selectedSong.lyrics, selectedSong.linesPerSlide ?? linesPerSlide, selectedSong.autoSplit ?? false) : []),
     [linesPerSlide, selectedSong],
   );
   const searchableSongs = useMemo(
@@ -1124,7 +1133,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     async (
       songId: string,
       draft: DockSongDraft,
-      source?: Pick<DockSong, "importSourceName" | "importSourceType" | "importSourceUrl">,
+      source?: Pick<DockSong, "importSourceName" | "importSourceType" | "importSourceUrl" | "autoSplit" | "linesPerSlide" | "themeId">,
     ) => {
       const title = draft.title.trim();
       const lyrics = draft.lyrics.trim();
@@ -1138,6 +1147,9 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
         importSourceName: source?.importSourceName,
         importSourceType: source?.importSourceType ?? "manual",
         importSourceUrl: source?.importSourceUrl,
+        autoSplit: source?.autoSplit,
+        linesPerSlide: source?.linesPerSlide,
+        themeId: source?.themeId,
       });
 
       setSongs((current) => {

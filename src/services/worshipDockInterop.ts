@@ -8,6 +8,9 @@ export interface WorshipDockSongSavePayload {
   importSourceName?: string;
   importSourceType?: "manual" | "online";
   importSourceUrl?: string;
+  autoSplit?: boolean;
+  linesPerSlide?: number;
+  themeId?: string;
 }
 
 export interface WorshipDockSongSaveCommand {

@@ -48,6 +48,7 @@ import type { LTVersionSnapshot, LTVersionGroup } from "../../lowerthirds/ltVers
 import "../../lowerthirds/lowerthirds.css";
 import Icon from "../Icon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 // ---------------------------------------------------------------------------
 // LT Preset types + persistence
@@ -628,7 +629,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
       }
     };
     void poll();
-    const iv = setInterval(() => { void poll(); }, 500);
+    const iv = setInterval(() => { void poll(); }, getRecommendedPollingInterval(500));
     return () => clearInterval(iv);
   }, [refreshScenes, isActive]);
 

@@ -23,6 +23,7 @@ import Icon from "../DockIcon";
 import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
+import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 
 type LmStatus = "idle" | "requesting-mic" | "connecting" | "listening" | "error";
 
@@ -243,7 +244,7 @@ export default function DockLmTab() {
 
     const pollRelay = async () => {
       try {
-        const res = await fetch("/api/lm-state");
+        const res = await fetch(`${getOverlayBaseUrlSync()}/api/lm-state`);
         const state = await res.json();
         if (state && state.status) {
           setAppConnected(true);
@@ -370,7 +371,7 @@ export default function DockLmTab() {
     const cmd = { type, payload: payload ?? {}, timestamp: Date.now() };
     console.log("[DockLmTab] 📡 sendLmCommand:", type, "cmd:", JSON.stringify(cmd));
     dockClient.sendCommand(cmd);
-    fetch("/api/lm-command", {
+    fetch(`${getOverlayBaseUrlSync()}/api/lm-command`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cmd),
@@ -395,7 +396,7 @@ export default function DockLmTab() {
       timestamp: Date.now(),
     };
     dockClient.sendCommand(cmd);
-    fetch("/api/lm-command", {
+    fetch(`${getOverlayBaseUrlSync()}/api/lm-command`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cmd),

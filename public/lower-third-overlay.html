@@ -46,6 +46,11 @@
       box-sizing: border-box;
     }
 
+    #overlay-root,
+    #overlay-bg-buffer {
+      /* zoom: 0.3; */
+    }
+
     html,
     body {
       width: 100%;
@@ -78,6 +83,7 @@
       z-index: 1;
       opacity: 1;
       transition: opacity 260ms ease;
+      /* zoom: 0.35 !important; */
     }
 
     .lt-fit-frame {
@@ -1330,6 +1336,70 @@
       if (css) {
         cssEl.textContent = compactEntryMotionCss(css);
       }
+
+      // Inject animation override — editor-selected animationIn/exitStyle
+      // must beat the theme's hardcoded animations.
+      // Covers three theme families:
+      //   .lt  (standard) — animates the root .lt element itself
+      //   .b-lt (b-series) — animates children .b-shell, .b-e1, .b-e2
+      //   .ylt (y-series) — animates children .y-shell, .y-enter-1, .y-enter-2, .y-enter-3
+      var overrideEl = document.getElementById("animation-override");
+      if (!overrideEl) {
+        overrideEl = document.createElement("style");
+        overrideEl.id = "animation-override";
+        document.head.appendChild(overrideEl);
+      }
+      var overrideCss = "";
+      if (data.animationIn && data.animationIn !== "none") {
+        var entryKeyframe = "lt-" + data.animationIn;
+        // Use animation shorthand with !important to reliably beat the theme's
+        // animation shorthand (avoids Chromium longhand/short-hand override edge case)
+        var entryProps = "animation:" + entryKeyframe + " 0.45s cubic-bezier(0.16,1,0.3,1) forwards !important;";
+        // Standard .lt themes — the root element itself is animated
+        overrideCss += "#overlay-root .lt[data-state=\"in\"]{" + entryProps + "}";
+        // .b-lt and .ylt themes — override animated children with !important
+        overrideCss += "#overlay-root .b-lt[data-state=\"in\"] .b-shell," +
+          "#overlay-root .b-lt[data-state=\"in\"] .b-e1," +
+          "#overlay-root .b-lt[data-state=\"in\"] .b-e2," +
+          "#overlay-root .ylt[data-state=\"in\"] .y-shell," +
+          "#overlay-root .ylt[data-state=\"in\"] .y-enter-1," +
+          "#overlay-root .ylt[data-state=\"in\"] .y-enter-2," +
+          "#overlay-root .ylt[data-state=\"in\"] .y-enter-3{" + entryProps + "}";
+      } else if (data.animationIn === "none") {
+        overrideCss += "#overlay-root .lt[data-state=\"in\"]{animation:none !important;opacity:1 !important;}";
+        overrideCss += "#overlay-root .b-lt[data-state=\"in\"] .b-shell," +
+          "#overlay-root .b-lt[data-state=\"in\"] .b-e1," +
+          "#overlay-root .b-lt[data-state=\"in\"] .b-e2," +
+          "#overlay-root .ylt[data-state=\"in\"] .y-shell," +
+          "#overlay-root .ylt[data-state=\"in\"] .y-enter-1," +
+          "#overlay-root .ylt[data-state=\"in\"] .y-enter-2," +
+          "#overlay-root .ylt[data-state=\"in\"] .y-enter-3{animation:none !important;opacity:1 !important;}";
+      }
+      if (data.exitStyle) {
+        var exitKeyframe = "lt-fade-out";
+        var exitDuration = "0.4s";
+        var exitTiming = "ease-in";
+        if (data.exitStyle === "exit-slide-down") {
+          exitKeyframe = "lt-slide-out-down";
+          exitDuration = "0.5s";
+          exitTiming = "cubic-bezier(0.7,0,0.84,0)";
+        } else if (data.exitStyle === "exit-none") {
+          exitDuration = "0.15s";
+        }
+        var exitProps = "animation:" + exitKeyframe + " " + exitDuration + " " + exitTiming + " forwards !important;";
+        overrideCss += "#overlay-root .lt[data-state=\"out\"]{" + exitProps + "}";
+        overrideCss += "#overlay-root .b-lt[data-state=\"out\"] .b-shell," +
+          "#overlay-root .b-lt[data-state=\"out\"] .b-e1," +
+          "#overlay-root .b-lt[data-state=\"out\"] .b-e2," +
+          "#overlay-root .ylt[data-state=\"out\"] .y-shell," +
+          "#overlay-root .ylt[data-state=\"out\"] .y-enter-1," +
+          "#overlay-root .ylt[data-state=\"out\"] .y-enter-2," +
+          "#overlay-root .ylt[data-state=\"out\"] .y-enter-3{" + exitProps + "}";
+      }
+      overrideEl.textContent = overrideCss;
+
+      // Debug: verify animation override is applied
+      console.log("[LT Override] animationIn:", data.animationIn, "| exitStyle:", data.exitStyle, "| overrideCss length:", overrideCss.length);
 
       // Body stays transparent (custom bg is handled inside the LT element)
       document.body.style.background = "transparent";

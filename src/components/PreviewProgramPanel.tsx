@@ -8,6 +8,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useBroadcastStore } from "../hooks/useBroadcastStore";
 import { obsService } from "../services/obsService";
 import Icon from "./Icon";
+import { getRecommendedPollingInterval } from "../services/performanceManager";
 
 export function PreviewProgramPanel() {
     const {
@@ -34,7 +35,7 @@ export function PreviewProgramPanel() {
 
     useEffect(() => {
         pollScreenshot();
-        pollRef.current = setInterval(pollScreenshot, 800);
+        pollRef.current = setInterval(pollScreenshot, getRecommendedPollingInterval(800));
         return () => {
             if (pollRef.current) clearInterval(pollRef.current);
         };

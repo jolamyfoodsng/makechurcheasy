@@ -10,6 +10,7 @@
  * Declining closes the application (mandatory update).
  */
 
+
 import { useState, useCallback } from "react";
 import {
   downloadAndInstallUpdate,

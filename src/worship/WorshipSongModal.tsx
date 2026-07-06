@@ -114,17 +114,9 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  /* ── Format lyrics on mount when editing an existing song ── */
-  useEffect(() => {
-    if (autoSplit && lyrics.trim()) {
-      const formatted = reformatLyrics(lyrics, linesPerSlide);
-      if (formatted !== lyrics) {
-        setLyrics(formatted);
-      }
-    }
-    // Only run on mount — layout changes are handled by handleLayoutChange
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  /* NOTE: reformatLyrics removed — it inserted \n\n between slide groups within
+     sections, which the Dock parser (splitting on \n\n) misinterpreted as
+     section boundaries, destroying the song structure. */
 
   /* ── Live slide generation ── */
   const slides: Slide[] = useMemo(

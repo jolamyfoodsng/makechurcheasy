@@ -9,7 +9,7 @@
 // Dock Tabs
 // ---------------------------------------------------------------------------
 
-export type DockTab = "planner" | "bible" | "worship" | "media" | "multiview" | "ministry" | "countdowns";
+export type DockTab = "planner" | "bible" | "worship" | "media" | "multiview" | "ministry";
 export type DockStageType = DockTab | "live" | "speaker" | "sermon" | "event" | "media" | "animated-lt";
 
 export interface DockTabDef {
@@ -26,7 +26,6 @@ export const DOCK_TABS: DockTabDef[] = [
   { id: "media", label: "Media", icon: "photo_library", summary: "Upload and present images, videos, and graphics" },
   { id: "ministry", label: "Ministry", icon: "campaign", summary: "Live ticker announcements and ministry updates" },
   { id: "multiview", label: "Multi-View", icon: "grid_view", summary: "Compose and push multi-source layouts to OBS" },
-  { id: "countdowns", label: "Countdowns", icon: "timer", summary: "Live countdown timers for pre-service and events" },
 ];
 
 // ---------------------------------------------------------------------------

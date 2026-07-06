@@ -21,6 +21,7 @@ import { DEFAULT_THEME_SETTINGS, type BibleTheme } from "../../bible/types";
 import { getCustomThemes } from "../../bible/bibleDb";
 import { LT_BIBLE_THEMES, LT_WORSHIP_THEMES, LT_GENERAL_THEMES } from "../../lowerthirds/themes";
 import Icon from "../../components/Icon";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 const GRID_SIZE = 40;
 const HANDLE_SIZE = 6;
@@ -52,7 +53,7 @@ export function MVCanvas() {
   const [customBibleThemes, setCustomBibleThemes] = useState<BibleTheme[]>([]);
   useEffect(() => {
     let cancelled = false;
-    getCustomThemes().then((themes) => { if (!cancelled) setCustomBibleThemes(themes); }).catch(() => {});
+    getCustomThemes().then((themes) => { if (!cancelled) setCustomBibleThemes(themes); }).catch(() => { });
     return () => { cancelled = true; };
   }, [scenePicker]); // reload when picker opens
 
@@ -117,7 +118,7 @@ export function MVCanvas() {
       } catch { if (!cancelled) setProgramScene(null); }
     };
     poll();
-    const iv = setInterval(poll, 2000);
+    const iv = setInterval(poll, getRecommendedPollingInterval(2000));
     return () => { cancelled = true; clearInterval(iv); };
   }, [obsConnected]);
 
@@ -155,7 +156,7 @@ export function MVCanvas() {
       if (!cancelled) setThumbnails((prev) => ({ ...prev, ...batch }));
     };
     poll();
-    const iv = setInterval(poll, THUMB_POLL_MS);
+    const iv = setInterval(poll, getRecommendedPollingInterval(THUMB_POLL_MS));
     return () => { cancelled = true; clearInterval(iv); };
   }, [regions, obsConnected]);
 
@@ -387,7 +388,7 @@ export function MVCanvas() {
     const content = getContentArea(canvas, safeFrame);
     safeFrameElements.push(
       <Line key="safe-frame-border" name="safe-frame-overlay"
-        points={[ content.x, content.y, content.x + content.width, content.y, content.x + content.width, content.y + content.height, content.x, content.y + content.height, content.x, content.y ]}
+        points={[content.x, content.y, content.x + content.width, content.y, content.x + content.width, content.y + content.height, content.x, content.y + content.height, content.x, content.y]}
         stroke="rgba(255,200,0,0.5)" strokeWidth={2 / effectiveScale} dash={[10, 5]} listening={false} />
     );
     const dc = "rgba(0,0,0,0.25)";
@@ -439,7 +440,7 @@ export function MVCanvas() {
 
     video.addEventListener("loadeddata", () => {
       setBgVideoEl(video);
-      video.play().catch(() => {});
+      video.play().catch(() => { });
     });
     video.load();
 
@@ -522,19 +523,19 @@ export function MVCanvas() {
             const fo = region.fontOverrides;   // persisted font overrides
 
             // Effective theme values (fallback: black bg + white text)
-            const themeBg    = ts?.backgroundColor ?? "#000000";
-            const themeFont  = fo?.fontFamily ?? ts?.fontFamily ?? '"CMG Sans", sans-serif';
+            const themeBg = ts?.backgroundColor ?? "#000000";
+            const themeFont = fo?.fontFamily ?? ts?.fontFamily ?? '"CMG Sans", sans-serif';
             const themeFontW = ts?.fontWeight ?? "normal";
             const themeAlign = fo?.textAlign ?? ts?.textAlign ?? "center";
-            const themeTT    = (fo?.textTransform ?? ts?.textTransform ?? "none") as string;
-            const vAlign     = fo?.verticalAlign ?? "center";
+            const themeTT = (fo?.textTransform ?? ts?.textTransform ?? "none") as string;
+            const vAlign = fo?.verticalAlign ?? "center";
             // Font size: scale proportionally to slot, cap at MAX_PREVIEW_FONT
             const MAX_PREVIEW_FONT = 150;
             const MIN_PREVIEW_FONT = 12;
             const baseFontPx = fo?.fontSize ?? ts?.fontSize ?? 48;
-            const slotScale  = Math.min(region.width / 1920, region.height / 1080);
+            const slotScale = Math.min(region.width / 1920, region.height / 1080);
             const scaledFont = Math.max(MIN_PREVIEW_FONT, Math.min(MAX_PREVIEW_FONT, Math.round(baseFontPx * slotScale)));
-            const lineH      = ts?.lineHeight ?? 1.5;
+            const lineH = ts?.lineHeight ?? 1.5;
             // Padding in canvas coords (proportional to slot)
             const padX = Math.max(8, region.width * 0.03);
             const padTop = Math.max(24, region.height * 0.06);
@@ -618,40 +619,40 @@ export function MVCanvas() {
                   const konvaVAlign = vAlign === "center" ? "middle" : vAlign === "bottom" ? "bottom" : "top";
                   const refY = region.y + region.height - scaledFont * 0.55 - padX;
                   return (
-                  <>
-                    {/* Verse / lyrics text */}
-                    <Text
-                      x={region.x + padX}
-                      y={verseY}
-                      text={transformText(previewText)}
-                      fontSize={scaledFont}
-                      fontFamily={themeFont}
-                      fontStyle={`${themeFontW === "bold" ? "bold" : "normal"}${ts?.fontStyle === "italic" ? " italic" : ""}`.trim()}
-                      fill={ts?.fontColor ?? "#FFFFFF"}
-                      align={themeAlign}
-                      verticalAlign={konvaVAlign}
-                      width={region.width - padX * 2}
-                      height={contentH}
-                      lineHeight={lineH}
-                      listening={false}
-                      wrap="word"
-                      ellipsis={true}
-                    />
-                    {/* Reference line (Bible only) */}
-                    {refText && (
+                    <>
+                      {/* Verse / lyrics text */}
                       <Text
                         x={region.x + padX}
-                        y={refY}
-                        text={refText}
-                        fontSize={Math.max(8, scaledFont * 0.45)}
+                        y={verseY}
+                        text={transformText(previewText)}
+                        fontSize={scaledFont}
                         fontFamily={themeFont}
-                        fill={ts?.refFontColor ?? "rgba(255,255,255,0.6)"}
+                        fontStyle={`${themeFontW === "bold" ? "bold" : "normal"}${ts?.fontStyle === "italic" ? " italic" : ""}`.trim()}
+                        fill={ts?.fontColor ?? "#FFFFFF"}
                         align={themeAlign}
+                        verticalAlign={konvaVAlign}
                         width={region.width - padX * 2}
+                        height={contentH}
+                        lineHeight={lineH}
                         listening={false}
+                        wrap="word"
+                        ellipsis={true}
                       />
-                    )}
-                  </>
+                      {/* Reference line (Bible only) */}
+                      {refText && (
+                        <Text
+                          x={region.x + padX}
+                          y={refY}
+                          text={refText}
+                          fontSize={Math.max(8, scaledFont * 0.45)}
+                          fontFamily={themeFont}
+                          fill={ts?.refFontColor ?? "rgba(255,255,255,0.6)"}
+                          align={themeAlign}
+                          width={region.width - padX * 2}
+                          listening={false}
+                        />
+                      )}
+                    </>
                   );
                 })()}
 

@@ -1,27 +1,46 @@
 /**
  * contentSlots.ts — CG-style content slot persistence for lower-thirds
  *
- * 10 memory slots per lower-third, stored in localStorage.
- * Slots store ONLY variable values (not theme, not design settings).
+ * 5 memory slots per lower-third, stored in localStorage.
+ * Slots store the ENTIRE editor state: content, style, position, animation.
  * Key format: `mce-lt-slots-{themeId}-{editorId}`
  */
 
-import type { LowerThirdTheme } from "./types";
+import type { LowerThirdTheme, LTCustomStyle, LTPosition, LTAnimationIn, LTExitStyle } from "./types";
+import { LT_DEFAULT_CUSTOM_STYLE } from "./types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/** A single content slot — stores variable key→value snapshot */
+/** Full editor state snapshot stored in a single slot */
+export interface SlotState {
+  /** All variable key→value pairs (name, info, custom vars, etc.) */
+  variableValues: Record<string, string>;
+  /** Style overrides (bold, uppercase, color, etc.) */
+  customStyles: LTCustomStyle;
+  /** Overlay position */
+  position: LTPosition;
+  /** Entry animation */
+  animationIn: LTAnimationIn;
+  /** Exit animation */
+  exitStyle: LTExitStyle;
+}
+
+/** A single content slot — stores a full editor state snapshot */
 export interface ContentSlot {
   /** Slot index (0-9) */
   index: number;
-  /** Variable values snapshot */
-  values: Record<string, string>;
-  /** Display label (auto-generated from first text value or "Slot N") */
+  /** Full editor state snapshot */
+  state: SlotState;
+  /** Legacy: variable values (kept for backward compat reads) */
+  values?: Record<string, string>;
+  /** Display label (auto-generated from first text value or "Slot N", or user-renamed) */
   label: string;
-  /** Timestamp when saved */
-  savedAt: number;
+  /** Timestamp when last saved/updated */
+  updatedAt: number;
+  /** @deprecated Use updatedAt. Kept for backward compat. */
+  savedAt?: number;
 }
 
 /** Result of a save operation */
@@ -34,7 +53,7 @@ export interface SaveSlotResult {
 // Constants
 // ---------------------------------------------------------------------------
 
-export const MAX_SLOTS = 10;
+export const MAX_SLOTS = 7;
 const STORAGE_PREFIX = "mce-lt-slots";
 
 // ---------------------------------------------------------------------------
@@ -65,7 +84,7 @@ export function loadSlots(themeId: string, editorId: string): (ContentSlot | nul
 }
 
 /**
- * Save a slot at a specific index.
+ * Save a slot at a specific index with full editor state.
  * Returns the saved ContentSlot.
  */
 export function saveSlot(
@@ -73,16 +92,20 @@ export function saveSlot(
   editorId: string,
   index: number,
   values: Record<string, string>,
-  theme: LowerThirdTheme
+  theme: LowerThirdTheme,
+  fullState: SlotState
 ): ContentSlot {
   if (index < 0 || index >= MAX_SLOTS) throw new Error(`Invalid slot index: ${index}`);
 
   const label = generateSlotLabel(values, theme, index);
+  const now = Date.now();
   const slot: ContentSlot = {
     index,
+    state: { ...fullState },
     values: { ...values },
     label,
-    savedAt: Date.now(),
+    updatedAt: now,
+    savedAt: now,
   };
 
   const slots = loadSlots(themeId, editorId);
@@ -93,12 +116,44 @@ export function saveSlot(
 }
 
 /**
+ * Resolve the full SlotState from a ContentSlot.
+ * Handles backward compatibility: old slots have no `state`, only `values`.
+ * In that case, returns the legacy values with default style/position/animation.
+ */
+export function resolveSlotState(slot: ContentSlot): SlotState {
+  if (slot.state) return slot.state;
+
+  // Legacy slot — only has variable values, use defaults for everything else
+  return {
+    variableValues: slot.values ?? {},
+    customStyles: { ...LT_DEFAULT_CUSTOM_STYLE },
+    position: "bottom-left",
+    animationIn: "slide-left",
+    exitStyle: "fade",
+  };
+}
+
+/**
  * Delete a slot at a specific index.
  */
 export function deleteSlot(themeId: string, editorId: string, index: number): void {
   if (index < 0 || index >= MAX_SLOTS) return;
   const slots = loadSlots(themeId, editorId);
   slots[index] = null;
+  localStorage.setItem(storageKey(themeId, editorId), JSON.stringify(slots));
+}
+
+/**
+ * Rename a slot's display label.
+ * Preserves all slot state — only changes the label.
+ */
+export function renameSlot(themeId: string, editorId: string, index: number, newLabel: string): void {
+  if (index < 0 || index >= MAX_SLOTS) return;
+  const slots = loadSlots(themeId, editorId);
+  const slot = slots[index];
+  if (!slot) return;
+  slot.label = newLabel.trim() || `Slot ${index + 1}`;
+  slot.updatedAt = Date.now();
   localStorage.setItem(storageKey(themeId, editorId), JSON.stringify(slots));
 }
 

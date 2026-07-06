@@ -13830,6 +13830,7 @@
   font-size: 12px;
   color: var(--dock-text-dim);
   line-height: 1.4;
+  white-space: pre-line;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   line-clamp: 3;
@@ -23374,6 +23375,7 @@ button.dock-btm-toolbar__clear--inline,
   background: #111;
   border-bottom: 1px solid var(--dock-border-soft);
   overflow: hidden;
+  position: relative;
 }
 
 .dock-lt-editor-layout__preview iframe {
@@ -23772,14 +23774,14 @@ button.dock-btm-toolbar__clear--inline,
 .dock-lt-first-edit {
   display: flex;
   gap: 8px;
-  align-items: flex-start;
+  align-items: center;
   margin: 6px 0;
 }
 
 .dock-lt-logo-container {
-  width: 96px;
+  width: 50px;
   height: 51px;
-  min-width: 96px;
+  min-width: 46px;
   background: var(--dock-input-bg);
   border: 1px solid var(--dock-border);
   border-radius: 3px;
@@ -23805,45 +23807,119 @@ button.dock-btm-toolbar__clear--inline,
   background: transparent;
 }
 
+/* ── Image Picker (replaces static logo placeholder) ── */
+.dock-lt-image-picker {
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dock-lt-image-picker:hover {
+  border-color: var(--dock-accent, var(--dock-text-dim));
+}
+
+.dock-lt-image-picker--dragover {
+  border-color: var(--dock-accent, #4a9eff) !important;
+  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.25);
+  background: rgba(74, 158, 255, 0.06);
+}
+
+.dock-lt-image-picker-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.dock-lt-image-picker-empty-text {
+  font-size: 8px;
+  color: var(--dock-text-dim);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.dock-lt-image-picker-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 2px;
+  pointer-events: auto;
+}
+
+.dock-lt-image-picker-action {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 9px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 3px 5px;
+  border-radius: 2px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dock-lt-image-picker-action:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.dock-lt-image-picker-action--remove:hover {
+  background: rgba(220, 50, 50, 0.5);
+}
+
 .dock-lt-textfields {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.dock-lt-textfields input[type="text"] {
-  width: calc(100% - 92px);
+/* ── Field Row: [input] [toolbar] side-by-side ── */
+.dock-lt-field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dock-lt-field-input {
+  flex: 1;
+  min-width: 0;
   height: 23px;
-  float: left;
   background: var(--dock-input-bg);
   border: 1px solid var(--dock-border);
-  border-radius: 2px 0 0 2px;
+  border-radius: 2px;
   color: var(--dock-text);
   font-size: 11px;
   font-family: inherit;
   padding: 0 6px;
   outline: none;
-  margin-bottom: 4px;
 }
 
-.dock-lt-textfields input[type="text"]:focus {
+.dock-lt-field-input:focus {
   border-color: var(--dock-accent);
 }
 
-.dock-lt-textfields .dock-lt-textfield-appearance {
-  float: right;
-  width: 92px;
-  height: 23px;
-  display: inline-flex;
+.dock-lt-field-toolbar {
+  display: flex;
   align-items: center;
   gap: 2px;
+  flex-shrink: 0;
+  height: 23px;
   background: var(--dock-input-bg);
   border: 1px solid var(--dock-border);
-  border-radius: 0 2px 2px 0;
+  border-radius: 2px;
   padding: 0 4px;
-  margin-bottom: 4px;
 }
 
-.dock-lt-textfield-appearance .dock-lt-app-btn {
+.dock-lt-field-toolbar .dock-lt-app-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -23858,21 +23934,21 @@ button.dock-btm-toolbar__clear--inline,
   transition: all 0.15s ease;
 }
 
-.dock-lt-textfield-appearance .dock-lt-app-btn:has(input:checked) {
+.dock-lt-field-toolbar .dock-lt-app-btn:has(input:checked) {
   background: var(--dock-accent);
   border-color: var(--dock-accent);
   color: #fff;
 }
 
-.dock-lt-textfield-appearance .dock-lt-app-btn input {
+.dock-lt-field-toolbar .dock-lt-app-btn input {
   display: none;
 }
 
-.dock-lt-textfield-appearance .dock-lt-app-btn .material-icons {
+.dock-lt-field-toolbar .dock-lt-app-btn .material-icons {
   font-size: 11px;
 }
 
-.dock-lt-textfield-appearance input[type="color"] {
+.dock-lt-field-toolbar input[type="color"] {
   width: 18px;
   height: 18px;
   border: none;
@@ -23880,12 +23956,6 @@ button.dock-btm-toolbar__clear--inline,
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-}
-
-.dock-lt-textfields::after {
-  content: '';
-  display: table;
-  clear: both;
 }
 
 /* ── Panel Bottom ── */
@@ -23900,71 +23970,120 @@ button.dock-btm-toolbar__clear--inline,
   margin-top: 6px;
 }
 
-/* ── Memory Slots ── */
+/* ── Content Slots ── */
 .dock-lt-memory-slots {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 3px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.dock-lt-memory-slots li {
+.dock-lt-slot {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
   background: var(--dock-input-bg);
   border: 1px solid var(--dock-border);
   border-radius: 3px;
   cursor: pointer;
-  position: relative;
   transition: all 0.15s ease;
   color: var(--dock-text-dim);
+  font-size: 9px;
+  font-weight: 600;
+  font-family: var(--font-mono);
 }
 
-.dock-lt-memory-slots li:hover {
+.dock-lt-slot:hover {
   border-color: var(--dock-text-dim);
+  background: var(--dock-surface-alt);
 }
 
-.dock-lt-memory-slots li--active {
+.dock-lt-slot:active {
+  transform: scale(0.95);
+}
+
+.dock-lt-slot--active {
   border-color: var(--dock-green);
   color: var(--dock-green);
   box-shadow: 0 0 4px rgba(34, 197, 94, 0.3);
 }
 
-.dock-lt-memory-slots li--filled {
-  background: var(--dock-surface-alt);
+.dock-lt-slot--filled {
+  color: var(--dock-text-primary);
 }
 
-.dock-lt-slot-number {
-  font-size: 10px;
-  font-weight: 700;
-  text-align: center;
-  line-height: 1;
+.dock-lt-slot--filled:hover {
+  color: var(--dock-green);
 }
 
-.dock-lt-memory-slots li .dock-lt-slot-tooltip {
-  display: none;
-  position: absolute;
-  bottom: calc(100% + 4px);
-  left: 50%;
-  transform: translateX(-50%);
+.dock-lt-slot--empty {
+  color: var(--dock-text-dim);
+  opacity: 0.6;
+}
+
+/* ── Slot Context Menu ── */
+.dock-lt-slot-context-menu {
+  position: fixed;
   background: var(--dock-surface);
   border: 1px solid var(--dock-border);
-  border-radius: 3px;
-  padding: 2px 6px;
-  font-size: 9px;
-  color: var(--dock-text-secondary);
-  white-space: nowrap;
-  z-index: 10;
-  pointer-events: none;
+  border-radius: 4px;
+  padding: 2px 0;
+  min-width: 140px;
+  z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.dock-lt-memory-slots li:hover .dock-lt-slot-tooltip {
-  display: block;
+.dock-lt-slot-context-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 10px;
+  background: none;
+  border: none;
+  color: var(--dock-text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.dock-lt-slot-context-item:hover {
+  background: var(--dock-input-bg);
+  color: var(--dock-text-primary);
+}
+
+.dock-lt-slot-context-item--danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.dock-lt-slot-context-rename {
+  padding: 6px 8px;
+}
+
+.dock-lt-slot-rename-input {
+  width: 100%;
+  padding: 3px 6px;
+  background: var(--dock-input-bg);
+  border: 1px solid var(--dock-border);
+  border-radius: 2px;
+  color: var(--dock-text-primary);
+  font-size: 10px;
+  outline: none;
+}
+
+.dock-lt-slot-rename-input:focus {
+  border-color: var(--dock-green);
+}
+
+.dock-lt-slot-rename-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
 }
 
 /* ── Time Bar ── */
@@ -25217,4 +25336,427 @@ button.dock-btm-toolbar__clear--inline,
   font-size: 9px;
   color: var(--dock-text-dim);
   opacity: 0.6;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dock Modal System — aligned with STYLE_DESIGN.md
+   Standard: 640px | Confirmation: 480px | Radius: 16px
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dock-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: dock-modal-fade-in 0.2s ease-out;
+}
+
+@keyframes dock-modal-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.dock-modal {
+  width: 480px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--dock-surface, #111827);
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  overflow: hidden;
+  animation: dock-modal-slide-up 0.2s ease-out;
+}
+
+.dock-modal--standard {
+  width: 640px;
+}
+
+.dock-modal--large {
+  width: 960px;
+}
+
+.dock-modal--confirmation {
+  width: 480px;
+}
+
+@keyframes dock-modal-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Header ── */
+
+.dock-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--dock-border, #334155);
+  flex-shrink: 0;
+}
+
+.dock-modal__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--dock-text, #F8FAFC);
+  line-height: 1.3;
+}
+
+.dock-modal__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.dock-modal__close:hover {
+  background: var(--dock-surface-alt, #1F2937);
+  color: var(--dock-text, #F8FAFC);
+}
+
+/* ── Body ── */
+
+.dock-modal__body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.dock-modal__body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dock-modal__body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dock-modal__body::-webkit-scrollbar-thumb {
+  background: var(--dock-border, #334155);
+  border-radius: 4px;
+}
+
+/* ── Footer / Actions ── */
+
+.dock-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--dock-border, #334155);
+  flex-shrink: 0;
+}
+
+.dock-modal__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── Form sections inside modals ── */
+
+.dock-modal__section {
+  margin-bottom: 20px;
+}
+
+.dock-modal__section:last-child {
+  margin-bottom: 0;
+}
+
+.dock-modal__section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dock-text-dim, #94A3B8);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--dock-border, #334155);
+}
+
+/* ── Form field wrapper ── */
+
+.dock-modal__field {
+  margin-bottom: 16px;
+}
+
+.dock-modal__field:last-child {
+  margin-bottom: 0;
+}
+
+.dock-modal__field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dock-text-secondary, #CBD5E1);
+  margin-bottom: 6px;
+}
+
+.dock-modal__field-hint {
+  font-size: 11px;
+  color: var(--dock-text-dim, #94A3B8);
+  margin-top: 4px;
+}
+
+/* ── Modal input overrides (design system: 44px height, 8px radius) ── */
+
+.dock-modal .dock-input,
+.dock-modal input[type="text"],
+.dock-modal input[type="number"],
+.dock-modal textarea {
+  min-height: 40px;
+  border-radius: 8px;
+  font-size: 14px;
+  padding: 0 12px;
+}
+
+/* ── Color picker row ── */
+
+.dock-modal__color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dock-modal__color-picker {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 2px;
+  background: var(--dock-surface, #111827);
+}
+
+/* ── Icon button row (e.g. background type selector) ── */
+
+.dock-modal__icon-btn-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.dock-modal__icon-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0;
+  border-radius: 8px;
+  border: 1px solid var(--dock-border, #334155);
+  background: transparent;
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.dock-modal__icon-btn:hover {
+  background: var(--dock-surface-alt, #1F2937);
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-modal__icon-btn--active {
+  border-color: var(--dock-accent, #1D4ED8);
+  background: var(--dock-accent-soft, rgba(29, 78, 216, 0.08));
+  color: var(--dock-accent, #1D4ED8);
+}
+
+/* ── Upload zone ── */
+
+.dock-modal__upload-zone {
+  width: 100%;
+  padding: 20px 0;
+  border: 2px dashed var(--dock-border, #334155);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.dock-modal__upload-zone:hover {
+  border-color: var(--dock-accent, #1D4ED8);
+  background: var(--dock-accent-soft, rgba(29, 78, 216, 0.05));
+}
+
+/* ── Preview card ── */
+
+.dock-modal__preview {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.dock-modal__preview img,
+.dock-modal__preview video {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  display: block;
+}
+
+.dock-modal__preview-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+}
+
+/* ── Inline checkbox row ── */
+
+.dock-modal__checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dock-text-secondary, #CBD5E1);
+  cursor: pointer;
+}
+
+.dock-modal__checkbox-row input[type="checkbox"] {
+  accent-color: var(--dock-accent, #1D4ED8);
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Grid for built-in thumbnails ── */
+
+.dock-modal__thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.dock-modal__thumb-btn {
+  height: 48px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.dock-modal__thumb-btn:hover {
+  border-color: var(--dock-text-dim, #94A3B8);
+}
+
+.dock-modal__thumb-btn--active {
+  border-color: var(--dock-accent, #1D4ED8);
+}
+
+/* ── Fit button row ── */
+
+.dock-modal__fit-row {
+  display: flex;
+  gap: 6px;
+}
+
+.dock-modal__fit-btn {
+  flex: 1;
+  padding: 6px 0;
+  border-radius: 6px;
+  border: 1px solid var(--dock-border, #334155);
+  background: transparent;
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: inherit;
+  text-transform: capitalize;
+  transition: all 0.15s;
+}
+
+.dock-modal__fit-btn--active {
+  border-color: var(--dock-accent, #1D4ED8);
+  background: var(--dock-accent-soft, rgba(29, 78, 216, 0.08));
+  color: var(--dock-accent, #1D4ED8);
+}
+
+/* ── Category pill row ── */
+
+.dock-modal__pill-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.dock-modal__pill {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  border: 1px solid var(--dock-border, #334155);
+  background: transparent;
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.dock-modal__pill--active {
+  border-color: var(--dock-accent, #1D4ED8);
+  background: var(--dock-accent-soft, rgba(29, 78, 216, 0.08));
+  color: var(--dock-accent, #1D4ED8);
+}
+
+/* ── Error message ── */
+
+.dock-modal__error {
+  font-size: 11px;
+  color: var(--dock-error, #EF4444);
+  margin-top: 4px;
+}
+
+/* ── Gradient preview bar ── */
+
+.dock-modal__gradient-bar {
+  height: 28px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+#overlay-root {
+  zoom: 0.35 !important;
 }

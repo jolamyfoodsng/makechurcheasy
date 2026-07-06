@@ -120,6 +120,12 @@ export interface OBSSettings {
   autoAction: AutoAction;
   /** Scene to switch to (when autoAction === "switch-scene") */
   autoActionScene: string;
+  /** Enable automatic OBS scene switch at a specific remaining time */
+  autoSwitchEnabled?: boolean;
+  /** Target scene name for auto scene switch */
+  autoSwitchScene?: string;
+  /** Remaining seconds that triggers the switch (0 = at 00:00) */
+  autoSwitchAtSeconds?: number;
 }
 
 // ── Template / Style ───────────────────────────────────────────────────────

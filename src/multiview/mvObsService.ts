@@ -15,6 +15,7 @@
 import { obsService } from "../services/obsService";
 import { obsSyncService } from "../services/obsSyncService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { stripCompatModeCSS } from "../services/performanceManager";
 import type { MVLayout, Region, RegionId } from "./types";
 import { getLTThemeById } from "../lowerthirds/themes";
 import { playIntroAnimation } from "./animationEngine";
@@ -523,7 +524,7 @@ export async function pushLayoutToOBS(
               const payload = {
                 themeId: ltTheme.id,
                 html: ltTheme.html,
-                css: ltTheme.css,
+                css: stripCompatModeCSS(ltTheme.css),
                 values: ltValues,
                 live: ltEnabled,
                 blanked: !ltEnabled,

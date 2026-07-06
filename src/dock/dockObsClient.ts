@@ -28,6 +28,10 @@
 
 import OBSWebSocket from "obs-websocket-js";
 import { getDefaultOBSUrl, getDefaultCanvasSize, getDefaultLowerThirdTheme } from "../services/desktopConfig";
+import { stripCompatModeCSS } from "../services/performanceManager";
+import * as connTracker from "../services/obsConnectionTracker";
+import * as obsQueue from "../services/obsRequestQueue";
+import * as browserQueue from "../services/browserUpdateQueue";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import { ALL_THEMES, type ThemeLike } from "../lowerthirds/themes";
 import { getWorshipLTFavorites } from "../services/favoriteThemes";
@@ -518,6 +522,7 @@ class DockObsClient {
 
       this._reconnectAttempts = 0;
       this.setStatus("connected");
+      connTracker.register("dock-cef", this._url);
 
       // Persist connection params so auto-reconnect works across dock reloads
       this.persistParams();
@@ -540,6 +545,7 @@ class DockObsClient {
     this._obsGeneration += 1;
     await this.deleteClone().catch(() => { });
     try { await this.obs.disconnect(); } catch { /* ignore */ }
+    connTracker.unregister("dock-cef");
     this.setStatus("disconnected");
   }
 
@@ -577,7 +583,11 @@ class DockObsClient {
     if (!this.isConnected) throw new Error("Not connected to OBS");
     const t0 = Date.now();
     try {
-      return await this.obs.call(requestType as never, requestData as never);
+      return await obsQueue.enqueue(
+        requestType,
+        () => this.obs.call(requestType as never, requestData as never),
+        { dedupeKey: requestData?.sceneName ? `${requestType}:${requestData.sceneName}` : undefined }
+      );
     } finally {
       this._trackCallLatency(Date.now() - t0, requestType);
     }
@@ -2816,21 +2826,23 @@ class DockObsClient {
    *             (logos, box backgrounds) that would exceed URL-hash limits.
    */
   private async setBrowserSourceUrl(inputName: string, url: string, forceReload = false, css?: string): Promise<void> {
-    if (forceReload) {
-      // Blank → wait → set new URL → forces OBS CEF to fully reload
+    browserQueue.enqueue(inputName, async () => {
+      if (forceReload) {
+        // Blank → wait → set new URL → forces OBS CEF to fully reload
+        try {
+          await this.call("SetInputSettings", { inputName, inputSettings: { url: "about:blank" } });
+        } catch { /* ignore */ }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const inputSettings: Record<string, unknown> = { url };
+      if (css !== undefined) inputSettings.css = css;
       try {
-        await this.call("SetInputSettings", { inputName, inputSettings: { url: "about:blank" } });
+        await this.call("SetInputSettings", {
+          inputName,
+          inputSettings,
+        });
       } catch { /* ignore */ }
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    const inputSettings: Record<string, unknown> = { url };
-    if (css !== undefined) inputSettings.css = css;
-    try {
-      await this.call("SetInputSettings", {
-        inputName,
-        inputSettings,
-      });
-    } catch { /* ignore */ }
+    }, { label: inputName, force: forceReload });
   }
 
   private buildCssOverlayDataCss(
@@ -3210,7 +3222,7 @@ class DockObsClient {
     const payload = {
       themeId: t.id,
       html: t.html,
-      css: t.css,
+      css: stripCompatModeCSS(t.css),
       values,
       live: true,
       blanked,
@@ -3528,7 +3540,7 @@ class DockObsClient {
   ${!bgEnabled || bgMode === "text-only" ? `<div class="frame ${animClass}"><div class="copy">${headline ? `<div class="headline">${headline}</div>` : ""}${subline ? `<div class="subline">${subline}</div>` : ""}</div></div>` : ""}
 </body>
 </html>`;
-    return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+    return `data:text/html;charset=utf-8,${encodeURIComponent(stripCompatModeCSS(html))}`;
   }
 
   private async buildBlankedOverlayUrlFromCurrentSource(
@@ -3585,7 +3597,7 @@ class DockObsClient {
     const payload = {
       themeId: t.id,
       html: t.html,
-      css: t.css,
+      css: stripCompatModeCSS(t.css),
       values: {
         name: verseText,
         role: reference,
@@ -4544,7 +4556,7 @@ class DockObsClient {
     const payload = {
       themeId: t.id,
       html: t.html,
-      css: t.css,
+      css: stripCompatModeCSS(t.css),
       values,
       live: true,
       blanked,
@@ -4679,7 +4691,7 @@ class DockObsClient {
 
       // Strip data URIs to stay within URL-hash limits
       const { cleanSettings, css } = this.stripThemeDataUris(effectiveThemeSettings);
-      themeCss = css;
+      themeCss = stripCompatModeCSS(css);
       const slide = sectionText ? {
         id: `dock-worship-${Date.now()}`,
         reference: "",
@@ -4732,7 +4744,7 @@ class DockObsClient {
         }
 
         const { cleanSettings: wltClean, css } = this.stripThemeDataUris(overlayTheme);
-        themeCss = css;
+        themeCss = stripCompatModeCSS(css);
         const slide = this.buildBibleSlide(
           sectionText,
           sectionLabel,
@@ -4876,7 +4888,7 @@ class DockObsClient {
     const payload = {
       themeId: t.id,
       html: t.html,
-      css: t.css,
+      css: stripCompatModeCSS(t.css),
       values: {
         badge: badge || "Church News",
         tickerText: tickerText || "",

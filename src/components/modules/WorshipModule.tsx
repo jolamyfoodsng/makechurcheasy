@@ -63,6 +63,7 @@ import { LT_DEFAULT_CUSTOM_STYLE } from "../../lowerthirds/types";
 import type { Song, SongMetadata, SplitConfig, Slide } from "../../worship/types";
 import "../../worship/worship.css";
 import Icon from "../Icon";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 const WORSHIP_THEME_KEYWORDS = ["worship", "prayer", "lyric", "lyrics", "song", "hymn", "choir"];
 
@@ -453,7 +454,7 @@ export function WorshipModule({
       }
     };
     poll();
-    const iv = window.setInterval(poll, 500);
+    const iv = window.setInterval(poll, getRecommendedPollingInterval(500));
     return () => window.clearInterval(iv);
   }, [isActive, obsConnected, loadLtScenes]);
 

@@ -23,6 +23,7 @@ import "../../lowerthirds/lowerthirds.css";
 import "./speaker-module.css";
 import Icon from "../Icon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 interface SpeakerPreset {
   id: string;
@@ -787,7 +788,7 @@ export function SpeakerModule({
       }
     };
     void poll();
-    const iv = setInterval(() => { void poll(); }, 500);
+    const iv = setInterval(() => { void poll(); }, getRecommendedPollingInterval(500));
     return () => clearInterval(iv);
   }, [lt, isActive]);
 

@@ -11,6 +11,8 @@
 
 import OBSWebSocket from "obs-websocket-js";
 import { getDefaultOBSUrl } from "./desktopConfig";
+import * as connTracker from "./obsConnectionTracker";
+import * as obsQueue from "./obsRequestQueue";
 import {
   registerScene,
   registerInput,
@@ -283,6 +285,7 @@ class OBSService {
       await Promise.race([connectPromise, timeoutPromise]);
       this.reconnectAttempts = 0;
       this.setStatus("connected");
+      connTracker.register("main-app", url);
 
       // Safety: ensure OBS has at least one scene to prevent crashes
       await this.ensureSafeState();
@@ -313,6 +316,7 @@ class OBSService {
     } catch {
       // Ignore errors during disconnect — socket may already be closed
     }
+    connTracker.unregister("main-app");
     this.setStatus("disconnected");
   }
 
@@ -586,7 +590,11 @@ class OBSService {
         }
       }
     }
-    return this.obs.call(requestType as never, requestData as never);
+    return obsQueue.enqueue(
+      requestType,
+      () => this.obs.call(requestType as never, requestData as never),
+      { dedupeKey: requestData?.sceneName ? `${requestType}:${requestData.sceneName}` : undefined }
+    );
   }
 
   /**

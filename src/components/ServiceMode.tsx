@@ -31,6 +31,7 @@ import {
 } from "../services/layoutEngine";
 import { obsService } from "../services/obsService";
 import { loadData, updateData } from "../services/store";
+import { getRecommendedPollingInterval } from "../services/performanceManager";
 import type { PresetId, PresetOptions } from "../services/presetService";
 import { DEFAULT_PRESET_OPTIONS } from "../services/presetService";
 import Icon from "./Icon";
@@ -151,7 +152,7 @@ export function ServiceMode({
         fetchScreenshots();
 
         // Then poll every 2 seconds
-        const interval = setInterval(fetchScreenshots, 2000);
+        const interval = setInterval(fetchScreenshots, getRecommendedPollingInterval(2000));
 
         return () => {
             cancelled = true;
@@ -182,7 +183,7 @@ export function ServiceMode({
         };
 
         fetchSceneScreenshots();
-        const interval = setInterval(fetchSceneScreenshots, 3000);
+        const interval = setInterval(fetchSceneScreenshots, getRecommendedPollingInterval(3000));
 
         return () => {
             cancelled = true;
@@ -458,7 +459,7 @@ export function ServiceMode({
                                         className="sm-dropdown-item"
                                         onClick={handleRepair}
                                         disabled={isRepairing || !config}
-                                     title="Repair">
+                                        title="Repair">
                                         <Icon name="build" size={20} />
                                         {isRepairing ? "Repairing..." : "Repair Layouts"}
                                     </button>
@@ -474,7 +475,7 @@ export function ServiceMode({
                                             "success"
                                         );
                                     }}
-                                 title="admin_panel_settings">
+                                    title="admin_panel_settings">
                                     <Icon name={volunteerMode ? "admin_panel_settings" : "person"} size={20} />
                                     {volunteerMode ? "Advanced Mode" : "Volunteer Mode"}
                                 </button>
@@ -667,7 +668,7 @@ export function ServiceMode({
                                             onClick={() => {
                                                 updateLayout({ splitRatio: preset.value });
                                             }}
-                                         title="ratio-label">
+                                            title="ratio-label">
                                             <span className="ratio-label">{preset.label}</span>
                                             <span className="ratio-desc">{preset.desc}</span>
                                         </button>
@@ -747,7 +748,7 @@ export function ServiceMode({
                                                 setLogoPreview(null);
                                                 updateLayout({ logoUrl: null });
                                             }}
-                                         title="Remove">
+                                            title="Remove">
                                             <Icon name="delete" size={20} />
                                             Remove Logo
                                         </button>
@@ -821,7 +822,7 @@ export function ServiceMode({
                                 className="btn-primary"
                                 onClick={handleApplyLayout}
                                 disabled={isApplying || layoutState.autoSync}
-                             title="Apply">
+                                title="Apply">
                                 <Icon name={isApplying ? "hourglass_empty" : "check"} size={20} className="btn-icon" />
                                 {isApplying
                                     ? "Applying..."

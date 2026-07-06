@@ -136,6 +136,7 @@ function buildAllLimits(config: PlanConfig): Record<PlanTier, PlanLimits> {
         sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
         customReports: false, mobileControl: false, apiAccess: false,
         teamManagement: false, campusManagement: false, slideshow: false,
+        countdowns: false,
       });
     }
   }

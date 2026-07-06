@@ -11,6 +11,7 @@ import { ALL_THEMES, canonicalizeLowerThirdThemeId, type ThemeLike } from "../..
 import { loadDockLTFavorites } from "../dockThemeData";
 import { requireEntitlement } from "../dockEntitlement";
 import DockIcon from "../DockIcon";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 /** Compact label for the theme card */
 function shortName(theme: ThemeLike): string {
@@ -64,7 +65,7 @@ export default function DockLTThemePicker({ selectedThemeId, onSelect, category,
       });
     };
     refreshFavorites();
-    const timer = window.setInterval(refreshFavorites, 2000);
+    const timer = window.setInterval(refreshFavorites, getRecommendedPollingInterval(2000));
     return () => {
       cancelled = true;
       window.clearInterval(timer);

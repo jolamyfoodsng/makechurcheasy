@@ -24,6 +24,7 @@ import { LT_DEFAULT_CUSTOM_STYLE, LT_SOURCE_PREFIX, LT_SCENE_NAME, OCS_LT_PATTER
 import { getLTThemeById } from "./themes";
 import { getSettings } from "../multiview/mvStore";
 import { applyRuntimeBranding } from "./runtimeBranding";
+import { stripCompatModeCSS } from "../services/performanceManager";
 
 // Registry slot names
 const SLOT_SCENE = "lt-overlay";
@@ -80,7 +81,7 @@ export function buildOverlayUrl(
   const payload: Record<string, unknown> = {
     themeId: runtimeTheme.id,
     html: runtimeTheme.html,
-    css: runtimeTheme.css,
+    css: stripCompatModeCSS(runtimeTheme.css),
     values: runtimeValues,
     live,
     blanked,

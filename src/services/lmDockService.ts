@@ -119,6 +119,8 @@ class LmDockService {
   private static readonly AUTO_PUSH_COOLDOWN_MS = 3000;
   /** One-shot flag: auto-push to OBS only once per listening session */
   private hasAutoPushed = false;
+  /** Resolved overlay base URL (http://127.0.0.1:<port>) — set once at init */
+  private overlayBaseUrl: string | null = null;
 
   // ── Sentence detection state ──────────────────────────────────────────────
   /** Accumulated text for the current sentence (across ASR finals) */
@@ -158,6 +160,16 @@ class LmDockService {
   init(): () => void {
     if (this.initialized) return () => { };
     this.initialized = true;
+
+    // Eagerly resolve the overlay base URL so relay POSTs always use
+    // http://127.0.0.1:<port> instead of falling back to tauri://localhost
+    // or http://localhost (Vite dev server) which would hit the wrong proxy.
+    getOverlayBaseUrl().then((url) => {
+      this.overlayBaseUrl = url;
+      console.log("[lmDockService] overlay base URL resolved:", url);
+    }).catch((err) => {
+      console.warn("[lmDockService] overlay base URL resolve FAILED:", err);
+    });
 
     // Do NOT push idle state at init — the dock should only show content
     // after the user explicitly starts listening via SpeechToScripturePage.
@@ -284,21 +296,40 @@ class LmDockService {
         matching: this.snapshot.matching,
         error: this.snapshot.error,
       };
-      relayUrl("/api/lm-state").then((url) => {
-        console.log("[lmDockService] 📡 postToRelay → POST", url, "status:", payload.status);
-        fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+
+      // Use the eagerly-resolved overlay URL (http://127.0.0.1:<port>).
+      // Falls back to async getOverlayBaseUrl() if cache hasn't resolved yet.
+      // Must NOT use window.location.origin (Vite dev server or tauri://) —
+      // that would hit the Vite proxy which forwards to the wrong port.
+      const base = this.overlayBaseUrl;
+      if (!base) {
+        // URL not yet resolved — wait for it (first few posts after init)
+        void getOverlayBaseUrl().then((resolved) => {
+          this.overlayBaseUrl = resolved;
+          this._postToRelayDirect(resolved, payload);
         }).catch((err) => {
-          console.warn("[lmDockService] postToRelay fetch FAILED:", err);
+          console.warn("[lmDockService] postToRelay: overlay URL resolve failed:", err);
         });
-      }).catch((err) => {
-        console.warn("[lmDockService] postToRelay relayUrl FAILED:", err);
-      });
+        return;
+      }
+
+      this._postToRelayDirect(base, payload);
     } catch (err) {
       console.warn("[lmDockService] postToRelay error:", err);
     }
+  }
+
+  private _postToRelayDirect(baseUrl: string, payload: Record<string, unknown>): void {
+    const url = `${baseUrl}/api/lm-state`;
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).then((r) => {
+      if (!r.ok) console.warn("[lmDockService] postToRelay HTTP", r.status, r.statusText);
+    }).catch((err) => {
+      console.warn("[lmDockService] postToRelay fetch FAILED:", url, err);
+    });
   }
 
   /** Get all finalized text joined for Bible matching */

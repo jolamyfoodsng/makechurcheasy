@@ -25,6 +25,7 @@ import MVAudioPanel from "../components/MVAudioPanel";
 import { obsService } from "../../services/obsService";
 import { pushLayoutToOBS } from "../mvObsService";
 import Icon from "../../components/Icon";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 export function MVEditor() {
   const { layoutId } = useParams<{ layoutId: string }>();
@@ -74,7 +75,7 @@ export function MVEditor() {
         <button
           className="mv-btn mv-btn--primary"
           onClick={() => navigate("/")}
-         title="Go back">
+          title="Go back">
           Back to Dashboard
         </button>
       </div>
@@ -802,7 +803,7 @@ function MVPreviewPanel() {
       } catch { /* OBS not ready or scene doesn't exist yet */ }
     };
     poll();
-    const iv = setInterval(poll, 800);
+    const iv = setInterval(poll, getRecommendedPollingInterval(800));
     return () => { cancelled = true; clearInterval(iv); };
   }, [sceneName, obsConnected]);
 

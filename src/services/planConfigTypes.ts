@@ -53,6 +53,7 @@ export interface PlanEntitlements {
   teamManagement: boolean;
   campusManagement: boolean;
   slideshow: boolean;
+  countdowns: boolean;
 }
 
 /** Per-currency pricing. NGN amounts in whole naira. USD amounts in dollars. */
@@ -119,7 +120,8 @@ export type FeatureKey =
   | "sermonExport" | "aiFeatures" | "cloudSync" | "advancedAnalytics"
   | "customReports" | "mobileControl" | "apiAccess"
   | "teamManagement" | "campusManagement"
-  | "slideshow";
+  | "slideshow"
+  | "countdowns";
 
 // ── Display Labels ───────────────────────────────────────────────────────────
 
@@ -152,6 +154,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   teamManagement: "Team Management",
   campusManagement: "Multi-Campus",
   slideshow: "Slideshow",
+  countdowns: "Countdowns",
 };
 
 // ── Derived Constants ────────────────────────────────────────────────────────
@@ -214,6 +217,7 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
         customReports: false, mobileControl: false, apiAccess: false,
         teamManagement: false, campusManagement: false, slideshow: false,
+        countdowns: false,
       },
     },
     trial: {
@@ -233,6 +237,7 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,
         customReports: true, mobileControl: true, apiAccess: true,
         teamManagement: true, campusManagement: true, slideshow: true,
+        countdowns: true,
       },
     },
     basic: {
@@ -255,6 +260,7 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
         customReports: false, mobileControl: false, apiAccess: false,
         teamManagement: false, campusManagement: false, slideshow: true,
+        countdowns: true,
       },
     },
     growth: {
@@ -277,6 +283,7 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,
         customReports: false, mobileControl: true, apiAccess: false,
         teamManagement: true, campusManagement: false, slideshow: true,
+        countdowns: true,
       },
     },
     pro: {
@@ -299,6 +306,7 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,
         customReports: true, mobileControl: true, apiAccess: true,
         teamManagement: true, campusManagement: true, slideshow: true,
+        countdowns: true,
       },
     },
     ambassador: {
@@ -318,6 +326,7 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,
         customReports: true, mobileControl: true, apiAccess: true,
         teamManagement: true, campusManagement: true, slideshow: true,
+        countdowns: true,
       },
     },
   },

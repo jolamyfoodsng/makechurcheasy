@@ -16,7 +16,6 @@ import DockWorshipTab from "./tabs/DockWorshipTab";
 import DockPlannerTab from "./tabs/DockPlannerTab";
 import DockMultiviewTab from "./tabs/DockMultiviewTab";
 import DockMinistryTab from "./tabs/DockMinistryTab";
-import DockCountdownsTab from "./tabs/DockCountdownsTab";
 import { useAppTheme } from "../hooks/useAppTheme";
 import {
   type DockProductionSettingsPayload,
@@ -32,6 +31,7 @@ import { useDockDragDrop } from "./useDockDragDrop";
 import { useDockUpload } from "./useDockUpload";
 import { ensureObsConnected } from "./obsConnectionGuard";
 import { getUserScopedKey } from "../services/userScopedStorage";
+import { getRecommendedPollingInterval } from "../services/performanceManager";
 import { getDefaultOBSUrl, readDesktopConfigCache, DEFAULT_DESKTOP_CONFIG } from "../services/desktopConfig";
 import DockDropOverlay from "./DockDropOverlay";
 import DockUploadToasts from "./DockUploadToasts";
@@ -91,7 +91,7 @@ function saveProjectionSettings(next: ProjectionSettings): void {
 }
 
 function resolveDockTab(tab?: DockTab | "live" | null): DockTab {
-  if (tab === "planner" || tab === "bible" || tab === "worship" || tab === "media" || tab === "multiview" || tab === "ministry" || tab === "countdowns") {
+  if (tab === "planner" || tab === "bible" || tab === "worship" || tab === "media" || tab === "multiview" || tab === "ministry") {
     return tab;
   }
   return "bible";
@@ -168,8 +168,6 @@ function getCompactDockTabLabel(tab: DockTab, t: (key: string) => string): strin
       return t('page.shortcutTabPlanner');
     case "multiview":
       return t('page.shortcutTabMultiview');
-    case "countdowns":
-      return t('page.shortcutTabCountdowns');
     default:
       return t('dock.defaultTab');
   }
@@ -212,6 +210,13 @@ export default function DockPage() {
   useEffect(() => {
     registerUpgradeModal((msg) => setUpgradeModalMsg(msg));
     startPlanRefresh();
+
+    // Initialize device performance detection for dock (non-blocking)
+    import("../services/performanceManager").then((m) =>
+      m.init().catch((err) => {
+        console.warn("[Dock] Performance manager init failed (non-critical):", err);
+      }),
+    );
 
     // Also listen for custom dock-upgrade events (from GrowthBadge, etc.)
     const handleUpgradeEvent = (e: Event) => {
@@ -398,7 +403,7 @@ export default function DockPage() {
     tryConnect();
 
     // Retry every 2 seconds until connected
-    autoReconnectTimer = setInterval(tryConnect, 2000);
+    autoReconnectTimer = setInterval(tryConnect, getRecommendedPollingInterval(2000));
 
     const unsubObs = dockObsClient.onStatusChange((status: DockObsStatus, err?: string) => {
       setObsConnected(status === "connected");
@@ -584,7 +589,6 @@ export default function DockPage() {
     { key: "5", handler: () => setActiveTab("planner"), label: t('page.shortcutTabPlanner'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
     { key: "6", handler: () => setActiveTab("multiview"), label: t('page.shortcutTabMultiview'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
     { key: "7", handler: () => setActiveTab("ministry"), label: t('page.shortcutTabMinistry'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
-    { key: "8", handler: () => setActiveTab("countdowns"), label: t('page.shortcutTabCountdowns'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
     { key: "k", handler: () => openCommandPalette(""), label: t('page.shortcutCommandPalette'), category: t('page.shortcutCategoryUtility') as ShortcutCategory },
     { key: "t", handler: () => setTheme(nextTheme), label: themeToggleLabel, category: t('page.shortcutCategoryUtility') as ShortcutCategory },
     { key: "/", handler: () => setShowShortcutsHelp((v) => !v), label: t('page.shortcutsHelp'), category: t('page.shortcutCategoryUtility') as ShortcutCategory },
@@ -1217,9 +1221,6 @@ export default function DockPage() {
                 tickerOutputMode={tickerOutputMode}
               />
             )}
-            {activeTab === "countdowns" && (
-              <DockCountdownsTab />
-            )}
           </div>
         </div>
       </div>{/* end dock-main-column */}
@@ -1291,7 +1292,6 @@ export default function DockPage() {
                     { key: "5", label: t('page.shortcutTabPlanner') },
                     { key: "6", label: t('page.shortcutTabMultiview') },
                     { key: "7", label: t('page.shortcutTabMinistry') },
-                    { key: "8", label: t('page.shortcutTabCountdowns') },
                   ].map((s) => (
                     <div key={s.key} className="dock-shortcuts-item">
                       <span className="dock-shortcuts-item__key">{formatShortcut(s.key)}</span>

@@ -767,7 +767,7 @@ fn get_overlay_port() -> u16 {
     OVERLAY_PORT.load(Ordering::Relaxed)
 }
 
-/// Return the device hostname and OS so the frontend can use a real device name.
+/// Return device hostname and OS (legacy — kept for backward compat).
 #[tauri::command]
 fn get_device_info() -> Result<serde_json::Value, String> {
     let hostname = hostname::get()
@@ -779,6 +779,115 @@ fn get_device_info() -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
         "hostname": hostname,
         "os": os,
+    }))
+}
+
+/// Return full hardware profile for the performance detection system.
+#[tauri::command]
+fn get_system_hardware_info() -> Result<serde_json::Value, String> {
+    use sysinfo::System;
+
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    // CPU
+    let cpu_model = sys.cpus().first()
+        .map(|c| c.brand().to_string())
+        .unwrap_or_else(|| "Unknown CPU".to_string());
+    let cpu_cores = sys.cpus().len() as u32;
+
+    // RAM
+    let total_ram_mb = sys.total_memory() / (1024 * 1024);
+    let available_ram_mb = sys.available_memory() / (1024 * 1024);
+
+    // GPU — sysinfo 0.35+ removed video_cards(); use platform detection
+    let gpu_name = detect_gpu_name();
+
+    // OS version
+    let os_version = System::long_os_version().unwrap_or_else(|| "Unknown".to_string());
+    let os_name = System::name().unwrap_or_else(|| std::env::consts::OS.to_string());
+    let arch = std::env::consts::ARCH;
+
+    // Hostname
+    let hostname = hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "Unknown Device".to_string());
+
+    Ok(serde_json::json!({
+        "hostname": hostname,
+        "os": os_name,
+        "osVersion": os_version,
+        "arch": arch,
+        "cpuModel": cpu_model,
+        "cpuCores": cpu_cores,
+        "totalRAMMB": total_ram_mb,
+        "availableRAMMB": available_ram_mb,
+        "gpuName": gpu_name,
+    }))
+}
+
+/// Detect GPU name via platform-specific commands.
+fn detect_gpu_name() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(output) = std::process::Command::new("system_profiler")
+            .args(["SPDisplaysDataType"])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if let Some(rest) = line.strip_prefix("          Chipset Model: ") {
+                    return rest.trim().to_string();
+                }
+                if let Some(rest) = line.strip_prefix("          Chip: ") {
+                    return rest.trim().to_string();
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Try wmic for GPU name on Windows
+        if let Ok(output) = std::process::Command::new("wmic")
+            .args(["path", "win32_videocontroller", "get", "name"])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines().skip(1) {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() && trimmed != "Name" {
+                    return trimmed.to_string();
+                }
+            }
+        }
+    }
+
+    "Unknown GPU".to_string()
+}
+
+/// Periodic memory check — returns available/total RAM for runtime tier adjustment.
+#[tauri::command]
+fn get_memory_usage() -> Result<serde_json::Value, String> {
+    use sysinfo::System;
+
+    let mut sys = System::new();
+    sys.refresh_memory();
+
+    let total_mb = sys.total_memory() / (1024 * 1024);
+    let available_mb = sys.available_memory() / (1024 * 1024);
+    let used_mb = total_mb - available_mb;
+    let fraction = if total_mb > 0 {
+        (available_mb as f64 / total_mb as f64 * 100.0).round() / 100.0
+    } else {
+        1.0
+    };
+
+    Ok(serde_json::json!({
+        "totalMB": total_mb,
+        "availableMB": available_mb,
+        "usedMB": used_mb,
+        "availableFraction": fraction,
     }))
 }
 
@@ -3453,6 +3562,8 @@ pub fn run() {
             save_app_data,
             get_overlay_port,
             get_device_info,
+            get_system_hardware_info,
+            get_memory_usage,
             save_dock_data,
             load_dock_data,
             search_online_song_lyrics,

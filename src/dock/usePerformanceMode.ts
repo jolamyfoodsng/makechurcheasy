@@ -1,19 +1,22 @@
 /**
- * usePerformanceMode.ts — React hook for performance mode settings
+ * usePerformanceMode.ts — React hook for manual performance mode settings
  *
- * Thin wrapper around useSyncExternalStore + the performanceMode store.
+ * Thin wrapper around useSyncExternalStore + the performanceManager manual settings store.
  * Returns the effective settings (master toggle applied) and setters.
  */
 
 import { useSyncExternalStore, useCallback } from "react";
 import {
-  subscribePerformanceMode,
-  getPerformanceModeSnapshot,
-  getPerformanceModeServerSnapshot,
-  setPerformanceMode,
-  togglePerformanceMode,
-  type PerformanceModeSettings,
-} from "./performanceMode";
+  subscribeManualSettings,
+  getManualSettingsSnapshot,
+  getManualSettingsServerSnapshot,
+  setManualSettings,
+  toggleManualMode,
+  type ManualPerformanceSettings,
+} from "../services/performanceManager";
+
+/** Alias for backward compatibility with DockPerformanceTab */
+export type PerformanceModeSettings = ManualPerformanceSettings;
 
 export interface UsePerformanceMode {
   /** Effective settings (false defaults when master toggle is off) */
@@ -28,23 +31,30 @@ export interface UsePerformanceMode {
   toggle: () => void;
 }
 
+const DEFAULT_SETTINGS: PerformanceModeSettings = {
+  enabled: false,
+  animations: true,
+  livePreviews: true,
+  pollingMultiplier: 1,
+};
+
 export function usePerformanceMode(): UsePerformanceMode {
   const raw = useSyncExternalStore(
-    subscribePerformanceMode,
-    getPerformanceModeSnapshot,
-    getPerformanceModeServerSnapshot,
+    subscribeManualSettings,
+    getManualSettingsSnapshot,
+    getManualSettingsServerSnapshot,
   );
 
   const update = useCallback((partial: Partial<PerformanceModeSettings>) => {
-    setPerformanceMode(partial);
+    setManualSettings(partial);
   }, []);
 
   const active = raw.enabled;
 
-  // Compute effective settings inline (same logic as getEffectivePerformanceMode)
+  // Compute effective settings inline (same logic as getEffectiveManualSettings)
   const settings: PerformanceModeSettings = raw.enabled
     ? raw
-    : { enabled: false, animations: true, livePreviews: true, pollingMultiplier: 1 };
+    : { ...DEFAULT_SETTINGS };
 
-  return { settings, raw, active, update, toggle: togglePerformanceMode };
+  return { settings, raw, active, update, toggle: toggleManualMode };
 }
