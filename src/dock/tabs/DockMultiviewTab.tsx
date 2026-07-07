@@ -26,6 +26,7 @@ import { getRecommendedPollingInterval } from "../../services/performanceManager
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = "dock-mv-saved";
+const MV_SCENE_NAME = "MV: Multiview";
 const CANVAS_W = 1920;
 const CANVAS_H = 1080;
 
@@ -696,7 +697,7 @@ function MVCard({
 export default function DockMultiviewTab() {
   const { t } = useTranslation();
   const [savedList, setSavedList] = useState<SavedMultiView[]>([]);
-  const [activeNames, setActiveNames] = useState<Set<string>>(new Set());
+  const [hasMvScene, setHasMvScene] = useState(false);
   const [obsScenes, setObsScenes] = useState<string[]>([]);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [pushingId, setPushingId] = useState<string | null>(null);
@@ -705,12 +706,36 @@ export default function DockMultiviewTab() {
   const mountedRef = useRef(true);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
-  // Derived: layouts that exist as OBS scenes (MV: Name) — these are "Added to OBS"
-  const addedLayouts = GALLERY_LAYOUTS.filter(l => activeNames.has(l.name));
+  // Derived: when the shared MV scene exists all gallery layouts are available
+  const addedLayouts = hasMvScene ? GALLERY_LAYOUTS : [];
 
-  // ── Load saved list ──
+  // ── Load saved list (auto-seed two cards if empty) ──
   useEffect(() => {
-    setSavedList(loadSaved());
+    let list = loadSaved();
+    if (list.length === 0) {
+      const now = new Date().toISOString();
+      const defaultMv1: SavedMultiView = {
+        id: genId(),
+        name: `${t('multiview.title')} 1`,
+        layoutId: GALLERY_LAYOUTS[0]?.id ?? "",
+        assignments: {},
+        background: { ...DEFAULT_MV_BG },
+        createdAt: now,
+        updatedAt: now,
+      };
+      const defaultMv2: SavedMultiView = {
+        id: genId(),
+        name: `${t('multiview.title')} 2`,
+        layoutId: GALLERY_LAYOUTS[0]?.id ?? "",
+        assignments: {},
+        background: { ...DEFAULT_MV_BG },
+        createdAt: now,
+        updatedAt: now,
+      };
+      list = [defaultMv1, defaultMv2];
+      saveSaved(list);
+    }
+    setSavedList(list);
   }, []);
 
   const obsReady = useDockObsReady();
@@ -720,12 +745,10 @@ export default function DockMultiviewTab() {
     if (!mountedRef.current) return;
     try {
       const resp = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
-      const mvNames = (resp.scenes ?? [])
-        .filter(s => s.sceneName.startsWith("MV: "))
-        .map(s => s.sceneName.replace("MV: ", ""));
-      if (mountedRef.current) setActiveNames(new Set(mvNames));
+      const hasMvScene = (resp.scenes ?? []).some(s => s.sceneName === MV_SCENE_NAME);
+      if (mountedRef.current) setHasMvScene(hasMvScene);
     } catch {
-      if (mountedRef.current) setActiveNames(new Set());
+      if (mountedRef.current) setHasMvScene(false);
     }
   }, []);
 
@@ -761,23 +784,6 @@ export default function DockMultiviewTab() {
   // ════════════════════════════════════════════════════════════════════════
   // CRUD Operations
   // ════════════════════════════════════════════════════════════════════════
-
-  const handleAdd = useCallback(() => {
-    const now = new Date().toISOString();
-    const mv: SavedMultiView = {
-      id: genId(),
-      name: `${t('multiview.title')} ${savedList.length + 1}`,
-      layoutId: GALLERY_LAYOUTS[0]?.id ?? "",
-      assignments: {},
-      background: { ...DEFAULT_MV_BG },
-      createdAt: now,
-      updatedAt: now,
-    };
-    const next = [mv, ...savedList];
-    setSavedList(next);
-    saveSaved(next);
-    showFeedback("success", t('multiview.newCreated'));
-  }, [savedList, showFeedback, t]);
 
   const handleUpdateName = useCallback((id: string, name: string) => {
     const next = savedList.map(m => m.id === id ? { ...m, name, updatedAt: new Date().toISOString() } : m);
@@ -844,7 +850,7 @@ export default function DockMultiviewTab() {
     setDeleteTargetId(null);
 
     if (deleteObsScene && mv && dockObsClient.isConnected) {
-      const sceneName = `MV: ${mv.name}`;
+      const sceneName = MV_SCENE_NAME;
       dockObsClient.call("RemoveScene", { sceneName }).catch(() => { });
     }
 
@@ -877,11 +883,19 @@ export default function DockMultiviewTab() {
 
     setPushingId(mv.id);
     try {
-      const sceneName = `MV: ${mv.name}`;
+      const sceneName = MV_SCENE_NAME;
       await ensureScene(sceneName);
 
+      // Clear existing items so pushing a different card replaces the content
+      try {
+        const existing = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sceneItemId: number }> };
+        for (const item of existing.sceneItems ?? []) {
+          await dockObsClient.call("RemoveSceneItem", { sceneName, sceneItemId: item.sceneItemId }).catch(() => { });
+        }
+      } catch { /* scene may be empty */ }
+
       // Background
-      const bgName = `MV_${mv.name.replace(/[^a-zA-Z0-9 _-]/g, "").trim()}_BG`;
+      const bgName = "MV_BG";
       const bg = getMvBg(mv);
       try {
         const inputs = await dockObsClient.call("GetInputList") as { inputs: Array<{ inputName: string }> };
@@ -990,7 +1004,7 @@ export default function DockMultiviewTab() {
     if (!dockObsClient.isConnected) return;
     setClearingId(mv.id);
     try {
-      const sceneName = `MV: ${mv.name}`;
+      const sceneName = MV_SCENE_NAME;
       await dockObsClient.fadeOutAllSceneItems(sceneName).catch(() => { });
 
       try {
@@ -1006,7 +1020,6 @@ export default function DockMultiviewTab() {
           await dockObsClient.call("RemoveSceneItem", { sceneName, sceneItemId: item.sceneItemId }).catch(() => { });
         }
       } catch { }
-
       await dockObsClient.call("RemoveScene", { sceneName }).catch(() => { });
 
       showFeedback("success", `"${sceneName}" cleared`);
@@ -1031,17 +1044,6 @@ export default function DockMultiviewTab() {
           {savedList.length > 0 && (
             <span className="dock-mv-tab__count">{savedList.length}</span>
           )}
-        </div>
-        <div className="dock-mv-tab__actions">
-          <button
-            type="button"
-            className="dock-btn dock-btn--sm dock-btn--primary"
-            onClick={handleAdd}
-            title={t('multiview.addView')}
-          >
-            <Icon name="add" size={14} />
-            <span>{t('common.add')}</span>
-          </button>
         </div>
       </div>
 
@@ -1072,7 +1074,7 @@ export default function DockMultiviewTab() {
               key={mv.id}
               mv={mv}
               index={idx}
-              isActive={activeNames.has(mv.name)}
+              isActive={hasMvScene}
               obsScenes={obsScenes}
               addedLayouts={addedLayouts}
               pushingId={pushingId}

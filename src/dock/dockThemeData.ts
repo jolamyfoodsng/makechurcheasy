@@ -1,5 +1,5 @@
 import type { BibleTheme } from "../bible/types";
-import { getBibleFavorites, getWorshipLTFavorites, getObsFavorites, hydrateFavoriteThemes } from "../services/favoriteThemes";
+import { getBibleFavorites, getWorshipLTFavorites, getObsFavorites, getTickerFavorites, hydrateFavoriteThemes } from "../services/favoriteThemes";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
 
 function mergeIdSets(...sets: Array<Iterable<string>>): Set<string> {
@@ -54,6 +54,13 @@ export async function loadDockLTFavorites(): Promise<Set<string>> {
   const remoteObs = await loadJsonObjectArray("/uploads/dock-obs-favorites.json", "favoriteThemes");
   const merged = mergeIdSets(localWorship, localObs, remoteLt, remoteObs);
   return merged;
+}
+
+export async function loadDockTickerFavorites(): Promise<Set<string>> {
+  await hydrateFavoriteThemes().catch(() => { });
+  const local = getTickerFavorites();
+  const remote = await loadJsonObjectArray("/uploads/dock-ticker-favorites.json", "favoriteTickers");
+  return mergeIdSets(local, remote);
 }
 
 export async function loadDockCustomBibleThemes(): Promise<BibleTheme[]> {

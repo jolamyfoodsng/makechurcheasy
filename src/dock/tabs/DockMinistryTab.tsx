@@ -20,7 +20,7 @@ import {
   generateTickerHTML,
 } from "../../components/modules/tickerThemes";
 import { LT_ALL_THEMES } from "../../lowerthirds/themes";
-import { loadDockLTFavorites, loadDockFavoriteBibleThemes } from "../dockThemeData";
+import { loadDockLTFavorites, loadDockFavoriteBibleThemes, loadDockTickerFavorites } from "../dockThemeData";
 import type { LowerThirdTheme } from "../../lowerthirds/types";
 import type { LTSize } from "../../lowerthirds/types";
 import { LT_SIZE_LABELS, LT_SIZE_SCALE } from "../../lowerthirds/types";
@@ -31,6 +31,7 @@ import DockCountdownsTab from "./DockCountdownsTab";
 import { requireEntitlement, getDockPlan } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
+import { normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
 
 const ALL_LT_THEMES: LowerThirdTheme[] = [
   ...LT_ALL_THEMES,
@@ -167,6 +168,8 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const [ltLive, setLtLive] = useState(false);
   // BibleTheme lower-third text input (used when a BibleTheme is selected)
   const [bibleLtText, setBibleLtText] = useState("");
+  // Ticker favorites — filtered list of themes to show in dropdown
+  const [tickerFavorites, setTickerFavorites] = useState<typeof TICKER_THEMES>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mountedRef = useRef(true);
@@ -240,8 +243,34 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     if (entryIdx >= 0 && entryIdx < ltFavorites.length) setLtSelectedIdx(entryIdx);
   }, [ltFavorites]);
 
+  // Load ticker favorites on mount
+  useEffect(() => {
+    let cancelled = false;
+    loadDockTickerFavorites().then((favIds) => {
+      if (cancelled) return;
+      const favSet = favIds.size > 0 ? favIds : null;
+      const filtered = favSet
+        ? TICKER_THEMES.filter((t) => favSet.has(t.id))
+        : TICKER_THEMES;
+      setTickerFavorites(filtered.length > 0 ? filtered : TICKER_THEMES);
+    }).catch(() => {
+      if (!cancelled) setTickerFavorites(TICKER_THEMES);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const theme = TICKER_THEMES.find((t) => t.id === settings.themeId) ?? TICKER_THEMES[0];
   const activeMessages = messages.filter((m) => m.active);
+
+  // Derive branded ticker colors from the app's brand color
+  const brandedColors = (() => {
+    const brandColor = normalizeBrandColor(getSettings().brandColor);
+    return {
+      ...theme.defaultColors,
+      accent: brandColor,
+      separator: brandColor,
+    };
+  })();
 
   // ── Add message ──
   const handleAdd = useCallback(async () => {
@@ -300,7 +329,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       await ensureObsConnected();
       const html = generateTickerHTML(
         theme,
-        theme.defaultColors,
+        brandedColors,
         settings.heading,
         activeMessages.map((m) => m.text),
         settings.speed,
@@ -472,7 +501,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     try {
       const html = generateTickerHTML(
         theme,
-        theme.defaultColors,
+        brandedColors,
         settings.heading,
         activeMessages.map((m) => m.text),
         settings.speed,
@@ -618,7 +647,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     cursor: "pointer",
                   }}
                 >
-                  {TICKER_THEMES.map((tpl) => (
+                  {tickerFavorites.map((tpl) => (
                     <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
                   ))}
                 </select>

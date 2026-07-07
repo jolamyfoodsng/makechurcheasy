@@ -345,21 +345,6 @@ export default function DockLowerThirdEditor({
   }, [theme.id]);
 
   // ── Slot handlers ──
-  const handleSaveSlot = useCallback((index: number) => {
-    isSavingRef.current = true;
-    const fullState: SlotState = {
-      variableValues: { ...variableValues },
-      customStyles: { ...customStyles },
-      position,
-      animationIn,
-      exitStyle,
-    };
-    saveSlot(theme.id, "default", index, variableValues, theme, fullState);
-    reloadSlots();
-    setActiveSlotIndex(index);
-    requestAnimationFrame(() => { isSavingRef.current = false; });
-  }, [theme.id, theme, variableValues, customStyles, position, animationIn, exitStyle, reloadSlots]);
-
   const handleRecallSlot = useCallback((slot: ContentSlot) => {
     suppressLiveUpdateRef.current = true;
     const resolved = resolveSlotState(slot);
@@ -420,17 +405,46 @@ export default function DockLowerThirdEditor({
     setRenamingSlotName("");
   }, []);
 
-  // ── Slot click: left-click on filled→load, left-click on empty→open menu ──
+  // ── Slot click: flush current slot, then load clicked slot's data (or defaults for empty) ──
   const handleSlotClick = useCallback((index: number, slot: ContentSlot | null, e: React.MouseEvent) => {
-    if (e.button !== 0) return; // only left-click
+    if (e.button !== 0) return;
     e.preventDefault();
+
+    // No-op: clicking the already-active slot does nothing
+    if (activeSlotIndex === index) return;
+
+    // Flush: synchronously save current slot before switching
+    if (activeSlotIndex !== null) {
+      isSavingRef.current = true;
+      const fullState: SlotState = {
+        variableValues: { ...variableValues },
+        customStyles: { ...customStyles },
+        position,
+        animationIn,
+        exitStyle,
+      };
+      saveSlot(theme.id, "default", activeSlotIndex, variableValues, theme, fullState);
+      reloadSlots();
+      isSavingRef.current = false;
+    }
+
     if (slot) {
+      // Filled slot: load its saved data into the editor
       handleRecallSlot(slot);
     } else {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      openContextMenu(index, rect.right + 4, rect.top);
+      // Empty slot: select it with default values
+      setActiveSlotIndex(index);
+      const init: Record<string, string> = {};
+      for (const v of theme.variables) {
+        init[v.key] = v.defaultValue ?? "";
+      }
+      setVariableValues(init);
+      setCustomStyles({ ...LT_DEFAULT_CUSTOM_STYLE });
+      setPosition("bottom-left");
+      setAnimationIn("slide-left");
+      setExitStyle("fade");
     }
-  }, [handleRecallSlot, openContextMenu]);
+  }, [activeSlotIndex, variableValues, customStyles, position, animationIn, exitStyle, theme, reloadSlots, handleRecallSlot]);
 
   // ── Slot right-click: always open menu ──
   const handleSlotContextMenu = useCallback((e: React.MouseEvent, index: number) => {
@@ -961,16 +975,6 @@ export default function DockLowerThirdEditor({
                   {t("lowerThird.slotLoad")}
                 </button>
               )}
-              <button
-                className="dock-lt-slot-context-item"
-                onClick={() => {
-                  handleSaveSlot(contextMenu.slotIndex);
-                  closeContextMenu();
-                }}
-              >
-                <Icon name="save" size={14} />
-                {t("lowerThird.slotSave")}
-              </button>
               {slots[contextMenu.slotIndex] && (
                 <button
                   className="dock-lt-slot-context-item"
