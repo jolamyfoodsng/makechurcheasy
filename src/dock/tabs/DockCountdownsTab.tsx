@@ -153,6 +153,8 @@ function useCountdownTimer(cd: CountdownConfig | null) {
   return { remaining, isRunning, isComplete, formatted, start, pause, reset, adjustTime, setRemainingDirect };
 }
 
+const PRESENTATION_SCENE = "MCE Presentation";
+
 // ── Simplified Countdown Card ──────────────────────────────────────────────
 
 function CountdownCard({
@@ -343,6 +345,19 @@ function CountdownCard({
         <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(60); }} title="+1 minute" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}>+1m</button>
       </div>
 
+      {/* Push to separate scene toggle */}
+      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: isLive ? "not-allowed" : "pointer", opacity: isLive ? 0.5 : 1 }} onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          checked={!!cd.obs.sceneName}
+          disabled={isLive}
+          onChange={(e) => onUpdateObs({ sceneName: e.target.checked ? "MCE Countdown" : "" })}
+          style={{ accentColor: "var(--dock-accent, #3b82f6)", width: 12, height: 12 }}
+        />
+        <span style={{ fontSize: 9, color: "var(--dock-text)" }}>{t("countdowns.pushToScene", "Use a separate scene")}</span>
+      </label>
+      <span style={{ fontSize: 7, color: "var(--dock-text-dim)", lineHeight: 1.2, marginTop: -2 }}>{t("countdowns.pushToSceneDesc", "When on, the overlay goes to a new scene instead of MCE Presentation.")}</span>
+
       {/* Push & Start / Pause / Stop */}
       <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 2 }}>
         {isLive ? (
@@ -379,6 +394,8 @@ function CountdownCard({
 
         {showAutoSwitch && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6, paddingLeft: 2 }}>
+            <span style={{ fontSize: 8, color: "var(--dock-text-dim)", lineHeight: 1.3 }}>{t("countdowns.autoSceneSwitchDesc", "Automatically switch OBS to a different scene when the countdown reaches a specific time.")}</span>
+
             <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={(e) => e.stopPropagation()}>
               <input
                 type="checkbox"
@@ -388,6 +405,7 @@ function CountdownCard({
               />
               <span style={{ fontSize: 10, color: "var(--dock-text)" }}>{t("countdowns.enableAutoSceneSwitch", "Enable")}</span>
             </label>
+            <span style={{ fontSize: 7, color: "var(--dock-text-dim)", lineHeight: 1.2, marginTop: -4 }}>{t("countdowns.enableAutoSceneSwitchDesc", "Turn on to auto-switch scenes at the trigger time.")}</span>
 
             {(cd.obs.autoSwitchEnabled ?? false) && (
               <>
@@ -402,9 +420,10 @@ function CountdownCard({
                     style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 4, padding: "3px 6px", color: "var(--dock-text)", fontSize: 10, outline: "none", width: "100%" }}
                   />
                 </label>
+                <span style={{ fontSize: 7, color: "var(--dock-text-dim)", lineHeight: 1.2, marginTop: -4 }}>{t("countdowns.switchAtDesc", "Seconds remaining when the scene switch fires. 0 = at the very end.")}</span>
 
                 <label style={{ display: "flex", flexDirection: "column", gap: 2 }} onClick={(e) => e.stopPropagation()}>
-                  <span style={{ fontSize: 9, color: "var(--dock-text-dim)" }}>{t("countdowns.targetScene", "Scene")}</span>
+                  <span style={{ fontSize: 9, color: "var(--dock-text-dim)" }}>{t("countdowns.targetScene", "Switch to scene")}</span>
                   <select
                     value={cd.obs.autoSwitchScene ?? ""}
                     onChange={(e) => onUpdateObs({ autoSwitchScene: e.target.value })}
@@ -414,6 +433,7 @@ function CountdownCard({
                     {obsScenes.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </label>
+                <span style={{ fontSize: 7, color: "var(--dock-text-dim)", lineHeight: 1.2, marginTop: -4 }}>{t("countdowns.targetSceneDesc", "OBS scene to switch to when the countdown hits the trigger.")}</span>
               </>
             )}
           </div>
@@ -545,7 +565,6 @@ export default function DockCountdownsTab() {
 
   const COUNTDOWN_SOURCE = "MCE Countdown";
   const BG_SOURCE = "MCE Countdown BG";
-  const PRESENTATION_SCENE = "MCE Presentation";
 
   async function loadObsScenes(): Promise<string[]> {
     try {
@@ -592,7 +611,12 @@ export default function DockCountdownsTab() {
     }
 
     const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
-    const item = sceneItems.sceneItems.find((i) => i.sourceName === sourceName);
+    let item = sceneItems.sceneItems.find((i) => i.sourceName === sourceName);
+
+    if (!item && existing) {
+      const addResult = await dockObsClient.call("AddSceneItem", { sceneName, sourceName }) as { sceneItemId: number };
+      item = { sceneItemId: addResult.sceneItemId, sourceName };
+    }
 
     if (item) {
       await dockObsClient.call("SetSceneItemEnabled", {
@@ -625,12 +649,13 @@ export default function DockCountdownsTab() {
     }
   }
 
-  async function hideObsSource(sourceName: string): Promise<void> {
-    const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName: PRESENTATION_SCENE }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
+  async function hideObsSource(sourceName: string, sceneName?: string): Promise<void> {
+    const target = sceneName || PRESENTATION_SCENE;
+    const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName: target }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
     const item = sceneItems.sceneItems.find((i) => i.sourceName === sourceName);
     if (item) {
       await dockObsClient.call("SetSceneItemEnabled", {
-        sceneName: PRESENTATION_SCENE,
+        sceneName: target,
         sceneItemId: item.sceneItemId,
         sceneItemEnabled: false,
       });
@@ -645,8 +670,9 @@ export default function DockCountdownsTab() {
       const baseUrl = getOverlayBaseUrlSync();
       const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
       const url = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
+      const targetScene = cd.obs.sceneName || PRESENTATION_SCENE;
 
-      await ensureObsSource(COUNTDOWN_SOURCE, url, PRESENTATION_SCENE);
+      await ensureObsSource(COUNTDOWN_SOURCE, url, targetScene);
     } catch (err) {
       console.warn("[DockCountdowns] Failed to push to OBS:", err);
     }
@@ -658,15 +684,16 @@ export default function DockCountdownsTab() {
 
     try {
       const baseUrl = getOverlayBaseUrlSync();
+      const targetScene = cd.obs.sceneName || PRESENTATION_SCENE;
 
       const bgPayload = { config: cd, baseUrl, timestamp: Date.now() };
       const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
-      await ensureObsSource(BG_SOURCE, bgUrl, PRESENTATION_SCENE, { setTransform: true });
+      await ensureObsSource(BG_SOURCE, bgUrl, targetScene, { setTransform: true });
 
       const sync: OverlaySyncState = { paused: true, remaining: cd.timer.durationSeconds };
       const contentPayload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
       const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(contentPayload))}`;
-      await ensureObsSource(COUNTDOWN_SOURCE, contentUrl, PRESENTATION_SCENE, { setTransform: true });
+      await ensureObsSource(COUNTDOWN_SOURCE, contentUrl, targetScene, { setTransform: true });
 
       setLiveCountdownId(cd.id);
     } catch (err) {
@@ -714,16 +741,17 @@ export default function DockCountdownsTab() {
     await pushToObs(cd, sync);
   }, [timer, pushToObs]);
 
-  const handleStopAndRemove = useCallback(async (_cd: CountdownConfig) => {
+  const handleStopAndRemove = useCallback(async (cd: CountdownConfig) => {
     timer.reset();
     autoSwitchTriggeredRef.current = false;
     setActiveId(null);
     setPlaybackState("running");
+    const targetScene = cd.obs.sceneName || PRESENTATION_SCENE;
     try {
       await ensureObsConnected();
       if (dockObsClient.isConnected) {
-        await hideObsSource(BG_SOURCE);
-        await hideObsSource(COUNTDOWN_SOURCE);
+        await hideObsSource(BG_SOURCE, targetScene);
+        await hideObsSource(COUNTDOWN_SOURCE, targetScene);
       }
     } catch (err) {
       console.warn("[DockCountdowns] Failed to hide OBS sources:", err);
