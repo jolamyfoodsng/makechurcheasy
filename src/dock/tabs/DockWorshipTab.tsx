@@ -569,7 +569,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     useState<DockFullscreenQuickThemeSettings | null>(null);
   const [lowerThirdQuickThemeSettingsLinkedToFullscreen, setLowerThirdQuickThemeSettingsLinkedToFullscreen] =
     useState(false);
-  const [, setSending] = useState(false);
   const [actionError, setActionError] = useState("");
   const [songEditor, setSongEditor] = useState<DockSong | null>(null);
   const [songDraft, setSongDraft] = useState<DockSongDraft>({ title: "", artist: "", lyrics: "" });
@@ -1028,7 +1027,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
         return;
       }
 
-      setSending(true);
       try {
         await dockObsClient.pushWorshipLyrics(payload.obsData);
         track("song_presented");
@@ -1042,8 +1040,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
         } else {
           console.warn("[DockWorshipTab] Push worship failed (transient):", message);
         }
-      } finally {
-        setSending(false);
       }
     },
     [buildSectionPayload, onStage],

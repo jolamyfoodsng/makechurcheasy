@@ -2203,8 +2203,6 @@ class DockObsClient {
 
     const sceneExists = await this.hasObsScene(trimmedSceneName).catch(() => false);
     if (sceneExists) {
-      // Small delay even for existing scenes to ensure OBS is ready
-      await new Promise((r) => setTimeout(r, 150));
       return trimmedSceneName;
     }
 
@@ -2348,10 +2346,8 @@ class DockObsClient {
     // Never hide MCE Presentation — only hide legacy dedicated scenes
     if (dedicatedScene === PRESENTATION_SCENE_NAME) return;
     try {
-      const resp = await this.call("GetSceneItemList", { sceneName: targetScene }) as {
-        sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
-      };
-      const item = resp.sceneItems.find((i) => i.sourceName === dedicatedScene);
+      const items = await this.getSceneItemListCached(targetScene);
+      const item = items.find((i) => i.sourceName === dedicatedScene);
       if (item) {
         await this.call("SetSceneItemEnabled", {
           sceneName: targetScene,
@@ -2366,11 +2362,9 @@ class DockObsClient {
     // Never remove MCE Presentation scene source — only remove legacy dedicated scenes
     if (sourceName === PRESENTATION_SCENE_NAME) return;
     try {
-      const resp = await this.call("GetSceneItemList", { sceneName }) as {
-        sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
-      };
-      const items = resp.sceneItems.filter((item) => item.sourceName === sourceName);
-      for (const item of items) {
+      const items = await this.getSceneItemListCached(sceneName);
+      const matched = items.filter((item) => item.sourceName === sourceName);
+      for (const item of matched) {
         await this.call("RemoveSceneItem", {
           sceneName,
           sceneItemId: item.sceneItemId,
@@ -3681,12 +3675,11 @@ class DockObsClient {
     } catch { /* ignore */ }
 
     for (const scene of scenes) {
-      for (const src of toHide) {
-        await this.hideOverlaySource(scene, src);
-      }
+      const hidePromises = toHide.map((src) => this.hideOverlaySource(scene, src));
       if (!keepSet.has(resources.fsBgSource)) {
-        await this.hideOverlaySource(scene, this.getTargetFullscreenBgSourceName(scene, resources));
+        hidePromises.push(this.hideOverlaySource(scene, this.getTargetFullscreenBgSourceName(scene, resources)));
       }
+      await Promise.all(hidePromises);
     }
 
   }
@@ -4122,23 +4115,27 @@ class DockObsClient {
       const scene = PRESENTATION_SCENE_NAME;
 
       // Hide all Bible sources in MCE Presentation (fullscreen mode)
-      await this.hideOverlaySource(scene, SOURCE_NAMES.BIBLE).catch(() => { });
-      await this.hideOverlaySource(scene, BG_SOURCE_NAMES.BIBLE).catch(() => { });
-      await this.hideOverlaySource(scene, FULLSCREEN_SOURCE_NAMES.BIBLE).catch(() => { });
-      await this.hideOverlaySource(scene, FULLSCREEN_BG_SOURCE_NAMES.BIBLE).catch(() => { });
-      await this.hideOverlaySource(scene, resources.bibleSource).catch(() => { });
-      await this.hideSceneSource(scene, resources.bibleScene).catch(() => { });
-      await this.hideFullscreenBg(scene, resources).catch(() => { });
-      await this._hideLowerThirdBgSource(scene).catch(() => { });
+      await Promise.all([
+        this.hideOverlaySource(scene, SOURCE_NAMES.BIBLE).catch(() => { }),
+        this.hideOverlaySource(scene, BG_SOURCE_NAMES.BIBLE).catch(() => { }),
+        this.hideOverlaySource(scene, FULLSCREEN_SOURCE_NAMES.BIBLE).catch(() => { }),
+        this.hideOverlaySource(scene, FULLSCREEN_BG_SOURCE_NAMES.BIBLE).catch(() => { }),
+        this.hideOverlaySource(scene, resources.bibleSource).catch(() => { }),
+        this.hideSceneSource(scene, resources.bibleScene).catch(() => { }),
+        this.hideFullscreenBg(scene, resources).catch(() => { }),
+        this._hideLowerThirdBgSource(scene).catch(() => { }),
+      ]);
 
       // Also hide the dock bible overlay from the user's current scene
       // (lower-third mode creates sources there, not in MCE Presentation)
       const currentScene = await this.getCurrentProgramSceneName().catch(() => "");
       if (currentScene && currentScene !== scene) {
-        await this.hideOverlaySource(currentScene, resources.bibleSource).catch(() => { });
-        await this.hideSceneSource(currentScene, resources.bibleScene).catch(() => { });
-        await this.hideFullscreenBg(currentScene, resources).catch(() => { });
-        await this._hideLowerThirdBgSource(currentScene).catch(() => { });
+        await Promise.all([
+          this.hideOverlaySource(currentScene, resources.bibleSource).catch(() => { }),
+          this.hideSceneSource(currentScene, resources.bibleScene).catch(() => { }),
+          this.hideFullscreenBg(currentScene, resources).catch(() => { }),
+          this._hideLowerThirdBgSource(currentScene).catch(() => { }),
+        ]);
 
         // Remove fullscreen scene source from user's scene if present
         const fsDef = this._fullscreenSceneDefs["bible"];
@@ -4825,23 +4822,27 @@ class DockObsClient {
     const scene = PRESENTATION_SCENE_NAME;
 
     // Hide all worship sources in MCE Presentation (fullscreen mode)
-    await this.hideOverlaySource(scene, SOURCE_NAMES.WORSHIP).catch(() => { });
-    await this.hideOverlaySource(scene, BG_SOURCE_NAMES.WORSHIP).catch(() => { });
-    await this.hideOverlaySource(scene, FULLSCREEN_SOURCE_NAMES.WORSHIP).catch(() => { });
-    await this.hideOverlaySource(scene, FULLSCREEN_BG_SOURCE_NAMES.WORSHIP).catch(() => { });
-    await this.hideOverlaySource(scene, resources.worshipSource).catch(() => { });
-    await this.hideSceneSource(scene, resources.worshipScene).catch(() => { });
-    await this.hideFullscreenBg(scene, resources).catch(() => { });
-    await this._hideLowerThirdBgSource(scene).catch(() => { });
+    await Promise.all([
+      this.hideOverlaySource(scene, SOURCE_NAMES.WORSHIP).catch(() => { }),
+      this.hideOverlaySource(scene, BG_SOURCE_NAMES.WORSHIP).catch(() => { }),
+      this.hideOverlaySource(scene, FULLSCREEN_SOURCE_NAMES.WORSHIP).catch(() => { }),
+      this.hideOverlaySource(scene, FULLSCREEN_BG_SOURCE_NAMES.WORSHIP).catch(() => { }),
+      this.hideOverlaySource(scene, resources.worshipSource).catch(() => { }),
+      this.hideSceneSource(scene, resources.worshipScene).catch(() => { }),
+      this.hideFullscreenBg(scene, resources).catch(() => { }),
+      this._hideLowerThirdBgSource(scene).catch(() => { }),
+    ]);
 
     // Also hide the dock worship overlay from the user's current scene
     // (lower-third mode creates sources there, not in MCE Presentation)
     const currentScene = await this.getCurrentProgramSceneName().catch(() => "");
     if (currentScene && currentScene !== scene) {
-      await this.hideOverlaySource(currentScene, resources.worshipSource).catch(() => { });
-      await this.hideSceneSource(currentScene, resources.worshipScene).catch(() => { });
-      await this.hideFullscreenBg(currentScene, resources).catch(() => { });
-      await this._hideLowerThirdBgSource(currentScene).catch(() => { });
+      await Promise.all([
+        this.hideOverlaySource(currentScene, resources.worshipSource).catch(() => { }),
+        this.hideSceneSource(currentScene, resources.worshipScene).catch(() => { }),
+        this.hideFullscreenBg(currentScene, resources).catch(() => { }),
+        this._hideLowerThirdBgSource(currentScene).catch(() => { }),
+      ]);
 
       // Remove fullscreen scene source from user's scene if present
       const fsDef = this._fullscreenSceneDefs["worship"];

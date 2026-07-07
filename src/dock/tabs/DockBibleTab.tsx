@@ -617,7 +617,6 @@ export default function DockBibleTab({
     () => initialVoiceBible ?? emptyVoiceBibleSnapshot(),
   );
   const [, setLiveTranscriptWords] = useState<LiveTranscriptWordChip[]>([]);
-  const [sending, setSending] = useState(false);
   const [modeMorphing, setModeMorphing] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -1331,7 +1330,6 @@ export default function DockBibleTab({
     ) => {
       if (liveVerseActionInFlightRef.current) return;
       liveVerseActionInFlightRef.current = true;
-      setSending(true);
       try {
         const effectiveTranslation = options?.translation ?? activeTranslation;
         const effectiveLineCount = clampVerseLineCount(options?.lineCount ?? verseLineCount);
@@ -1409,7 +1407,6 @@ export default function DockBibleTab({
         }
       } finally {
         liveVerseActionInFlightRef.current = false;
-        setSending(false);
       }
     },
     [
@@ -2386,7 +2383,7 @@ export default function DockBibleTab({
   const handleVerseClick = useCallback(
     (v: number, columnIndex: number, version: string) => {
       if (!selectedBook || !selectedChapter) return;
-      if (sending || liveVerseActionInFlightRef.current) return;
+      if (liveVerseActionInFlightRef.current) return;
       setSelectedVerse(v);
       selectedVerseRef.current = v;
       pendingScrollVerseRef.current = null;
@@ -2397,7 +2394,7 @@ export default function DockBibleTab({
         reveal: false,
       });
     },
-    [selectedBook, selectedChapter, goLiveVerse, sending],
+    [selectedBook, selectedChapter, goLiveVerse],
   );
 
   const stopVerseActionEvent = useCallback((event: React.SyntheticEvent) => {
@@ -2959,7 +2956,7 @@ export default function DockBibleTab({
           morphing={modeMorphing}
           clearLabel={t("common.clear")}
           onClear={handleClearBible}
-          clearDisabled={sending}
+          clearDisabled={false}
           collapsed={toolbarCollapsed}
           onCollapseChange={setToolbarCollapsed}
           compact={compactToolbar}
