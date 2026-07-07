@@ -62,6 +62,8 @@ interface ProjectionSettings {
   tickerLayerPriority: "ticker-above" | "content-above";
   /** When true, restore the original Program scene after projection ends */
   restoreOriginalScene: boolean;
+  /** When true, lower-third overlays go to MCE Presentation only — not the Program scene */
+  presentationOnly: boolean;
 }
 
 const PROJECTION_SETTINGS_KEY = "ocs-dock-projection-settings";
@@ -69,6 +71,7 @@ const DEFAULT_PROJECTION_SETTINGS: ProjectionSettings = {
   sceneMode: "auto-duplicate",
   tickerLayerPriority: "content-above",
   restoreOriginalScene: false,
+  presentationOnly: false,
 };
 
 function loadProjectionSettings(): ProjectionSettings {
@@ -965,6 +968,22 @@ export default function DockPage() {
                     </label>
                     <div style={{ fontSize: 10, opacity: 0.5, padding: "2px 8px 0 22px", lineHeight: 1.4 }}>
                       {t('page.returnsObsToPreviousState')}
+                    </div>
+
+                    {/* Lower Thirds → Presentation Only */}
+                    <label
+                      className="dock-sidebar__check"
+                      style={{ marginTop: 8, cursor: "pointer" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={projectionSettings.presentationOnly}
+                        onChange={(e) => setProjectionSettings((s) => ({ ...s, presentationOnly: e.target.checked }))}
+                      />
+                      <span>{t('page.presentationOnly', 'Lower Thirds in Presentation')}</span>
+                    </label>
+                    <div style={{ fontSize: 10, opacity: 0.5, padding: "2px 8px 0 22px", lineHeight: 1.4 }}>
+                      {t('page.presentationOnlyDesc', 'Lower thirds go to MCE Presentation only, not the Program scene')}
                     </div>
                   </div>
                 )}

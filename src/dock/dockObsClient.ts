@@ -1679,6 +1679,15 @@ class DockObsClient {
 
     const sceneName = await this.getCurrentProgramSceneName().catch(() => "");
     this.rememberUserScene(sceneName, tabId);
+
+    // Presentation-only mode: route overlays to MCE Presentation directly.
+    // This avoids duplication because the Program scene is embedded inside
+    // Presentation (via ensureProgramSceneAsSourceInPresentation) at z=0,
+    // while overlays sit on top — only visible in Presentation.
+    if (this.readPresentationOnly()) {
+      return { sceneName: DOCK_PRESENTATION_SCENE, studioMode: false };
+    }
+
     return { sceneName, studioMode: false };
   }
   private async ensureClone(sourceScene: string, tabId?: DockPreviewTab): Promise<string> {
@@ -1757,6 +1766,21 @@ class DockObsClient {
       }
     } catch { /* ignore */ }
     return "auto-duplicate";
+  }
+
+  /**
+   * When true, lower-third overlays are routed to MCE Presentation directly
+   * instead of the user's Program scene — avoids duplication when Presentation
+   * embeds the Program scene as a Scene Source.
+   */
+  private readPresentationOnly(): boolean {
+    try {
+      const raw = localStorage.getItem(getUserScopedKey("ocs-dock-projection-settings"));
+      if (!raw) return false;
+      const parsed = JSON.parse(raw) as { presentationOnly?: boolean };
+      return parsed.presentationOnly === true;
+    } catch { /* ignore */ }
+    return false;
   }
 
   /**
