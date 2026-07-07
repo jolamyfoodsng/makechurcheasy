@@ -5,12 +5,18 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { Upload } from "lucide-react";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import Icon from "../DockIcon";
-import type { CountdownConfig, OBSSettings, OverlaySyncState, CountdownOverlayPayload } from "../../countdowns/types";
+import type { CountdownConfig, BackgroundSettings, BackgroundType, ImageFit, MessageSettings, OBSSettings, OverlaySyncState, CountdownOverlayPayload } from "../../countdowns/types";
+// countdownDefaults removed — editBg initialized inline
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 import { getTextTheme, loadTextThemeFont } from "../../countdowns/textThemes";
+import { validateMediaFile, backgroundFileAccept } from "../../countdowns/mediaValidation";
+import { saveCountdownAsset, deleteCountdownAsset } from "../../countdowns/countdownStore";
+import { BUILTIN_CATEGORIES, getBuiltinsByCategory } from "../../countdowns/builtinBackgrounds";
+import type { MediaItem } from "../../library/libraryTypes";
 
 // ── Hardcoded countdowns ───────────────────────────────────────────────────
 
@@ -21,6 +27,7 @@ function makeCountdown(title: string, minutes: number, templateId: "minimal" | "
     title,
     templateId,
     timer: { mode: "fixed-duration" as const, durationSeconds: minutes * 60, showHours: false, showMinutes: true, showSeconds: true },
+    message: { text: title, color: "#ffffff", position: "below" as const },
     background: {
       type: "solid" as const,
       color: templateId === "minimal" ? "#1a1a2e" : templateId === "circular" ? "#0f172a" : "#1e293b",
@@ -173,6 +180,7 @@ function CountdownCard({
   onEdit,
   onReset,
   onUpdateObs,
+  onUpdateMessage,
 }: {
   cd: CountdownConfig;
   isLive: boolean;
@@ -189,12 +197,15 @@ function CountdownCard({
   onEdit: () => void;
   onReset: () => void;
   onUpdateObs: (patch: Partial<OBSSettings>) => void;
+  onUpdateMessage: (msg: MessageSettings | undefined) => void;
 }) {
   const { t } = useTranslation();
   const [editingTime, setEditingTime] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAutoSwitch, setShowAutoSwitch] = useState(false);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [msgDraft, setMsgDraft] = useState<MessageSettings>({ text: "", color: "#ffffff", position: "below" });
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
@@ -300,10 +311,10 @@ function CountdownCard({
 
       {/* Timer (click to edit inline) */}
       <div
-        style={{ fontSize: 28, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, textShadow: timerShadow, letterSpacing: 1, lineHeight: 1, padding: "8px 0", cursor: "pointer" }}
+        style={{ fontSize: 28, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, textShadow: timerShadow, letterSpacing: 1, lineHeight: 1, padding: "8px 0", cursor: isLive ? "default" : "pointer" }}
         onClick={(e) => {
           e.stopPropagation();
-          if (!editingTime) {
+          if (!isLive && !editingTime) {
             setEditValue(formattedTime);
             setEditingTime(true);
           }
@@ -358,8 +369,8 @@ function CountdownCard({
       </label>
       <span style={{ fontSize: 7, color: "var(--dock-text-dim)", lineHeight: 1.2, marginTop: -2 }}>{t("countdowns.pushToSceneDesc", "When on, the overlay goes to a new scene instead of MCE Presentation.")}</span>
 
-      {/* Push & Start / Pause / Stop */}
-      <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 2 }}>
+      {/* Push & Start / Pause / Stop + Message */}
+      <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
         {isLive ? (
           <>
             <button type="button" className="dock-btn dock-btn--small dock-btn--danger" onClick={(e) => { e.stopPropagation(); onStop(); }} style={{ fontSize: 10, padding: "4px 6px", display: "flex", alignItems: "center", gap: 3 }}>
@@ -374,6 +385,59 @@ function CountdownCard({
             {t("countdowns.pushAndStart", "Push & Start")}
           </button>
         )}
+        {/* Message icon + inline editor */}
+        <div style={{ position: "relative", marginLeft: "auto" }}>
+          <button
+            type="button"
+            title={cd.message?.text?.trim() ? `Message: ${cd.message.text}` : "Add message to overlay"}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (msgOpen) { setMsgOpen(false); return; }
+              setMsgDraft(cd.message ? { ...cd.message } : { text: "", color: "#ffffff", position: "below" });
+              setMsgOpen(true);
+            }}
+            style={{ background: cd.message?.text?.trim() ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)", border: "none", borderRadius: 4, padding: "4px 6px", cursor: "pointer", color: cd.message?.text?.trim() ? "#a5b4fc" : "var(--dock-text-dim)", fontSize: 12, display: "flex", alignItems: "center", gap: 2, lineHeight: 1 }}
+          >
+            <Icon name="chat_bubble" size={12} />
+          </button>
+          {msgOpen && (
+            <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: "100%", right: 0, marginBottom: 6, background: "var(--dock-surface, #1a1a2e)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 8, padding: 10, width: 220, zIndex: 50, display: "flex", flexDirection: "column", gap: 8, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "var(--dock-text)" }}>Message (OBS Overlay)</span>
+              <input
+                type="text"
+                value={msgDraft.text}
+                onChange={(e) => setMsgDraft((p) => ({ ...p, text: e.target.value }))}
+                placeholder="e.g. Welcome to our service"
+                autoFocus
+                style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "5px 8px", color: "var(--dock-text)", fontSize: 11, outline: "none", width: "100%" }}
+              />
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input type="color" value={msgDraft.color} onChange={(e) => setMsgDraft((p) => ({ ...p, color: e.target.value }))}
+                  style={{ width: 24, height: 24, borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 1, background: "transparent" }} />
+                <div style={{ display: "flex", gap: 3, flex: 1 }}>
+                  {(["above", "below"] as const).map((pos) => (
+                    <button key={pos} type="button" onClick={() => setMsgDraft((p) => ({ ...p, position: pos }))}
+                      style={{ flex: 1, padding: "3px 0", borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: msgDraft.position === pos ? "rgba(99,102,241,0.3)" : "rgba(0,0,0,0.2)", color: "var(--dock-text)", fontSize: 10, cursor: "pointer", textTransform: "capitalize" }}>
+                      {pos}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                {cd.message?.text?.trim() && (
+                  <button type="button" onClick={() => { onUpdateMessage(undefined); setMsgOpen(false); }}
+                    style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.1)", color: "#fca5a5", fontSize: 10, cursor: "pointer" }}>
+                    Clear
+                  </button>
+                )}
+                <button type="button" onClick={() => { onUpdateMessage(msgDraft.text.trim() ? { ...msgDraft } : undefined); setMsgOpen(false); }}
+                  style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(99,102,241,0.3)", background: "rgba(99,102,241,0.2)", color: "#a5b4fc", fontSize: 10, cursor: "pointer", fontWeight: 600 }}>
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Auto Scene Switch */}
@@ -443,6 +507,56 @@ function CountdownCard({
   );
 }
 
+// ── Built-in Background Picker (for Edit Modal) ──────────────────────────────
+
+function EditBuiltinPicker({ editBg, setEditBg }: { editBg: BackgroundSettings; setEditBg: React.Dispatch<React.SetStateAction<BackgroundSettings>> }) {
+  const [showBuiltins, setShowBuiltins] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>("nature");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <button type="button" onClick={() => setShowBuiltins(!showBuiltins)}
+        style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 11, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span>🖼️ Built-in Backgrounds</span>
+        <span style={{ fontSize: 9 }}>{showBuiltins ? "▲" : "▼"}</span>
+      </button>
+      {showBuiltins && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+            {BUILTIN_CATEGORIES.map((cat) => (
+              <button key={cat.id} type="button"
+                onClick={() => setSelectedCategory(selectedCategory === cat.id ? "" : cat.id)}
+                style={{ padding: "3px 8px", borderRadius: 12, fontSize: 10, fontWeight: 500, border: `1px solid ${selectedCategory === cat.id ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: selectedCategory === cat.id ? "rgba(99,102,241,0.2)" : "transparent", color: selectedCategory === cat.id ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer" }}>
+                {cat.icon} {cat.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, maxHeight: 120, overflowY: "auto" }}>
+            {getBuiltinsByCategory(selectedCategory).map((b) => (
+              <button key={b.id} type="button"
+                onClick={() => setEditBg((p) => ({
+                  ...p,
+                  type: b.type,
+                  source: "builtin",
+                  builtinId: b.id,
+                  imageUrl: b.type === "image" ? b.source : p.imageUrl,
+                  videoUrl: b.type === "video" ? b.source : p.videoUrl,
+                  assetId: "",
+                  gradientStart: b.type === "gradient" ? b.source.split(",")[0]?.replace(/.*\(/, "").trim() || p.gradientStart : p.gradientStart,
+                  gradientEnd: b.type === "gradient" ? b.source.split(",")[1]?.replace(/.*\(/, "").replace(/\).*/, "").trim() || p.gradientEnd : p.gradientEnd,
+                }))}
+                title={b.label}
+                style={{ borderRadius: 4, overflow: "hidden", border: editBg.builtinId === b.id ? "2px solid #6366f1" : "2px solid transparent", cursor: "pointer", background: "none", padding: 0 }}>
+                <div style={{ width: "100%", height: 36, background: b.thumbnail }} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Tab ───────────────────────────────────────────────────────────────
 
 export default function DockCountdownsTab() {
@@ -458,6 +572,19 @@ export default function DockCountdownsTab() {
   const [editTitle, setEditTitle] = useState("");
   const [editMinutes, setEditMinutes] = useState("");
   const [obsScenes, setObsScenes] = useState<string[]>([]);
+  const [editBg, setEditBg] = useState<BackgroundSettings>({
+    type: "solid", color: "#1a1a2e", gradientStart: "#1a1a2e", gradientEnd: "#16213e", gradientAngle: 135,
+    imageUrl: "", videoUrl: "", blur: 0, brightness: 100, overlayOpacity: 0, zoom: 1, positionX: 50, positionY: 50,
+    source: "upload", imageFit: "cover", loop: true, muted: true, flyerMode: false,
+  });
+  const [editMessage, setEditMessage] = useState<MessageSettings>({ text: "", color: "#ffffff", position: "below" });
+  const [showBgSection, setShowBgSection] = useState(false);
+  const [showMsgSection, setShowMsgSection] = useState(false);
+  const [editBgMediaModal, setEditBgMediaModal] = useState(false);
+  const [editMediaSearch, setEditMediaSearch] = useState("");
+  const [editMediaItems, setEditMediaItems] = useState<MediaItem[]>([]);
+  const [editMediaLoading, setEditMediaLoading] = useState(false);
+  const editBgFileRef = useRef<HTMLInputElement | null>(null);
 
   // Per-card timer state
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -819,6 +946,10 @@ export default function DockCountdownsTab() {
                   setEditingCd(cd);
                   setEditTitle(cd.title);
                   setEditMinutes(String(cd.timer.durationSeconds / 60));
+                  setEditBg({ ...cd.background });
+                  setEditMessage(cd.message ? { ...cd.message } : { text: "", color: "#ffffff", position: "below" });
+                  setShowBgSection(false);
+                  setShowMsgSection(false);
                   const scenes = await loadObsScenes();
                   setObsScenes(scenes);
                 }}
@@ -838,6 +969,11 @@ export default function DockCountdownsTab() {
                     c.id === cd.id ? { ...c, obs: { ...c.obs, ...patch } } : c,
                   ));
                 }}
+                onUpdateMessage={(msg) => {
+                  setCountdowns((prev) => prev.map((c) =>
+                    c.id === cd.id ? { ...c, message: msg } : c,
+                  ));
+                }}
               />
             );
           })}
@@ -848,7 +984,7 @@ export default function DockCountdownsTab() {
       {editingCd && (
         <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)" }}
           onClick={() => setEditingCd(null)}>
-          <div style={{ background: "var(--dock-surface, #1e1e2e)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 12, padding: 20, width: 320, maxHeight: "80vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}
+          <div style={{ background: "var(--dock-surface, #1e1e2e)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 12, padding: 20, width: 380, maxHeight: "85vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}
             onClick={(e) => e.stopPropagation()}>
             <span style={{ fontSize: 14, fontWeight: 700, color: "var(--dock-text)" }}>{t("countdowns.editCountdown", "Edit Countdown")}</span>
 
@@ -874,11 +1010,297 @@ export default function DockCountdownsTab() {
               />
             </label>
 
+            {/* ── Background Section ─────────────────────────────── */}
+            <div style={{ borderTop: "1px solid var(--dock-border, rgba(255,255,255,0.08))", paddingTop: 10 }}>
+              <button type="button" onClick={() => setShowBgSection(!showBgSection)}
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: showBgSection ? "rgba(99,102,241,0.1)" : "rgba(0,0,0,0.2)", color: "var(--dock-text)", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>🎨 {t("countdowns.background", "Background")}</span>
+                <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{showBgSection ? "▲" : "▼"}</span>
+              </button>
+
+              {showBgSection && (
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+                  {/* Type selector */}
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {(["solid", "gradient", "image", "video"] as BackgroundType[]).map((bgType) => (
+                      <button key={bgType} type="button" onClick={() => setEditBg((prev) => ({ ...prev, type: bgType }))}
+                        style={{ flex: 1, padding: "5px 0", borderRadius: 6, fontSize: 11, fontWeight: 500, border: `1px solid ${editBg.type === bgType ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: editBg.type === bgType ? "rgba(99,102,241,0.2)" : "transparent", color: editBg.type === bgType ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer", textTransform: "capitalize" }}>
+                        {bgType}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Solid */}
+                  {editBg.type === "solid" && (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input type="color" value={editBg.color} onChange={(e) => setEditBg((p) => ({ ...p, color: e.target.value }))}
+                        style={{ width: 34, height: 34, borderRadius: 6, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 2, background: "transparent" }} />
+                      <input type="text" value={editBg.color} onChange={(e) => setEditBg((p) => ({ ...p, color: e.target.value }))}
+                        style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "6px 10px", color: "var(--dock-text)", fontSize: 12, outline: "none", fontFamily: "monospace", flex: 1 }} />
+                    </div>
+                  )}
+
+                  {/* Gradient */}
+                  {editBg.type === "gradient" && (
+                    <>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>Start</span>
+                          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                            <input type="color" value={editBg.gradientStart} onChange={(e) => setEditBg((p) => ({ ...p, gradientStart: e.target.value }))}
+                              style={{ width: 28, height: 28, borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 1, background: "transparent" }} />
+                            <input type="text" value={editBg.gradientStart} onChange={(e) => setEditBg((p) => ({ ...p, gradientStart: e.target.value }))}
+                              style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 4, padding: "4px 6px", color: "var(--dock-text)", fontSize: 10, outline: "none", fontFamily: "monospace", flex: 1 }} />
+                          </div>
+                        </div>
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>End</span>
+                          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                            <input type="color" value={editBg.gradientEnd} onChange={(e) => setEditBg((p) => ({ ...p, gradientEnd: e.target.value }))}
+                              style={{ width: 28, height: 28, borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 1, background: "transparent" }} />
+                            <input type="text" value={editBg.gradientEnd} onChange={(e) => setEditBg((p) => ({ ...p, gradientEnd: e.target.value }))}
+                              style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 4, padding: "4px 6px", color: "var(--dock-text)", fontSize: 10, outline: "none", fontFamily: "monospace", flex: 1 }} />
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                        <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>Angle: {editBg.gradientAngle}°</span>
+                        <input type="range" min={0} max={360} value={editBg.gradientAngle}
+                          onChange={(e) => setEditBg((p) => ({ ...p, gradientAngle: Number(e.target.value) }))}
+                          style={{ width: "100%", accentColor: "#6366f1" }} />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Image */}
+                  {editBg.type === "image" && (
+                    <>
+                      {(editBg.type === "image" && editBg.imageUrl) ? (
+                        <div style={{ position: "relative", borderRadius: 8, overflow: "hidden" }}>
+                          <img src={editBg.imageUrl} alt="" style={{ width: "100%", height: 80, objectFit: "cover", display: "block" }} />
+                          <div style={{ position: "absolute", bottom: 4, right: 4, display: "flex", gap: 4 }}>
+                            <button type="button" onClick={() => editBgFileRef.current?.click()}
+                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>Replace</button>
+                            <button type="button" onClick={async () => {
+                              if (editBg.assetId) await deleteCountdownAsset(editBg.assetId).catch(() => { });
+                              setEditBg((p) => ({ ...p, type: "solid", imageUrl: "", assetId: "", builtinId: "", source: "upload" }));
+                            }}
+                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(220,38,38,0.8)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>Remove</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button type="button" onClick={() => editBgFileRef.current?.click()}
+                            style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                            <Upload size={14} /> Upload
+                          </button>
+                          <button type="button" onClick={async () => {
+                            setEditBgMediaModal(true);
+                            setEditMediaLoading(true);
+                            try {
+                              const { getAllMedia } = await import("../../library/libraryDb");
+                              const all = await getAllMedia();
+                              setEditMediaItems(all.filter((m) => m.type === "image"));
+                            } catch { setEditMediaItems([]); }
+                            setEditMediaLoading(false);
+                          }}
+                            style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                            📁 Library
+                          </button>
+                        </div>
+                      )}
+                      {/* Image fit */}
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {(["cover", "contain", "stretch"] as ImageFit[]).map((fit) => (
+                          <button key={fit} type="button" onClick={() => setEditBg((p) => ({ ...p, imageFit: fit }))}
+                            style={{ flex: 1, padding: "4px 0", borderRadius: 6, fontSize: 10, fontWeight: 500, border: `1px solid ${editBg.imageFit === fit ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: editBg.imageFit === fit ? "rgba(99,102,241,0.2)" : "transparent", color: editBg.imageFit === fit ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer", textTransform: "capitalize" }}>
+                            {fit}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                        <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>Brightness: {editBg.brightness}%</span>
+                        <input type="range" min={10} max={200} value={editBg.brightness}
+                          onChange={(e) => setEditBg((p) => ({ ...p, brightness: Number(e.target.value) }))}
+                          style={{ width: "100%", accentColor: "#6366f1" }} />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Video */}
+                  {editBg.type === "video" && (
+                    <>
+                      {(editBg.type === "video" && editBg.videoUrl) ? (
+                        <div style={{ position: "relative", borderRadius: 8, overflow: "hidden", background: "#000" }}>
+                          <video src={editBg.videoUrl} muted loop style={{ width: "100%", height: 80, objectFit: "cover", display: "block" }} />
+                          <div style={{ position: "absolute", bottom: 4, right: 4, display: "flex", gap: 4 }}>
+                            <button type="button" onClick={() => editBgFileRef.current?.click()}
+                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>Replace</button>
+                            <button type="button" onClick={async () => {
+                              if (editBg.assetId) await deleteCountdownAsset(editBg.assetId).catch(() => { });
+                              setEditBg((p) => ({ ...p, type: "solid", videoUrl: "", assetId: "", builtinId: "", source: "upload" }));
+                            }}
+                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(220,38,38,0.8)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>Remove</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button type="button" onClick={() => editBgFileRef.current?.click()}
+                            style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                            <Upload size={14} /> Upload
+                          </button>
+                          <button type="button" onClick={async () => {
+                            setEditBgMediaModal(true);
+                            setEditMediaLoading(true);
+                            try {
+                              const { getAllMedia } = await import("../../library/libraryDb");
+                              const all = await getAllMedia();
+                              setEditMediaItems(all.filter((m) => m.type === "video"));
+                            } catch { setEditMediaItems([]); }
+                            setEditMediaLoading(false);
+                          }}
+                            style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                            📁 Library
+                          </button>
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: 10, marginBottom: 4 }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--dock-text-dim)", cursor: "pointer" }}>
+                          <input type="checkbox" checked={editBg.loop} onChange={(e) => setEditBg((p) => ({ ...p, loop: e.target.checked }))} style={{ accentColor: "#6366f1" }} /> Loop
+                        </label>
+                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--dock-text-dim)", cursor: "pointer" }}>
+                          <input type="checkbox" checked={editBg.muted} onChange={(e) => setEditBg((p) => ({ ...p, muted: e.target.checked }))} style={{ accentColor: "#6366f1" }} /> Muted
+                        </label>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Built-in backgrounds */}
+                  <EditBuiltinPicker editBg={editBg} setEditBg={setEditBg} />
+
+                  {/* Hidden file input */}
+                  <input ref={editBgFileRef} type="file" accept={backgroundFileAccept()} style={{ display: "none" }}
+                    onChange={async (e) => {
+                      const files = e.target.files;
+                      if (!files?.length) return;
+                      const file = files[0];
+                      const result = validateMediaFile(file);
+                      if (!result.valid) return;
+                      try {
+                        if (editBg.assetId) await deleteCountdownAsset(editBg.assetId).catch(() => { });
+                        const { assetId, overlayUrl } = await saveCountdownAsset(file);
+                        const isImage = result.mediaType === "image";
+                        setEditBg((p) => ({
+                          ...p,
+                          type: isImage ? "image" : "video",
+                          source: "upload",
+                          assetId,
+                          builtinId: "",
+                          imageUrl: isImage ? overlayUrl : p.imageUrl,
+                          videoUrl: !isImage ? overlayUrl : p.videoUrl,
+                        }));
+                      } catch { /* upload failed silently */ }
+                      if (editBgFileRef.current) editBgFileRef.current.value = "";
+                    }} />
+
+                  {/* Media library modal */}
+                  {editBgMediaModal && (
+                    <div style={{ border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 8, padding: 10, background: "rgba(0,0,0,0.3)" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dock-text)" }}>Choose from Library</span>
+                        <button type="button" onClick={() => { setEditBgMediaModal(false); setEditMediaSearch(""); }}
+                          style={{ background: "none", border: "none", color: "var(--dock-text-dim)", cursor: "pointer", fontSize: 16 }}>×</button>
+                      </div>
+                      <input type="text" placeholder="Search..." value={editMediaSearch} onChange={(e) => setEditMediaSearch(e.target.value)}
+                        style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "6px 10px", color: "var(--dock-text)", fontSize: 12, outline: "none", width: "100%", marginBottom: 8 }} />
+                      <div style={{ maxHeight: 180, overflowY: "auto" }}>
+                        {editMediaLoading ? (
+                          <div style={{ padding: 16, textAlign: "center", color: "var(--dock-text-dim)", fontSize: 12 }}>Loading...</div>
+                        ) : editMediaItems.length === 0 ? (
+                          <div style={{ padding: 16, textAlign: "center", color: "var(--dock-text-dim)", fontSize: 12 }}>No media files found</div>
+                        ) : (
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                            {editMediaItems
+                              .filter((m) => !editMediaSearch || m.name.toLowerCase().includes(editMediaSearch.toLowerCase()))
+                              .map((item) => (
+                                <button key={item.id} type="button"
+                                  onClick={() => {
+                                    const isImage = item.type === "image";
+                                    setEditBg((p) => ({
+                                      ...p,
+                                      type: isImage ? "image" : "video",
+                                      source: "media-library",
+                                      assetId: "",
+                                      builtinId: "",
+                                      imageUrl: isImage ? (item.url || "") : p.imageUrl,
+                                      videoUrl: !isImage ? (item.url || "") : p.videoUrl,
+                                    }));
+                                    setEditBgMediaModal(false);
+                                    setEditMediaSearch("");
+                                  }}
+                                  style={{ borderRadius: 6, overflow: "hidden", border: "2px solid transparent", cursor: "pointer", background: "none", padding: 0, textAlign: "left" }}
+                                  title={item.name}>
+                                  <div style={{ width: "100%", height: 50, backgroundImage: `url(${item.thumbnailUrl || item.url})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+                                  <div style={{ fontSize: 9, padding: "3px 4px", color: "var(--dock-text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                                </button>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Message Section ────────────────────────────────── */}
+            <div style={{ borderTop: "1px solid var(--dock-border, rgba(255,255,255,0.08))", paddingTop: 10 }}>
+              <button type="button" onClick={() => setShowMsgSection(!showMsgSection)}
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: showMsgSection ? "rgba(99,102,241,0.1)" : "rgba(0,0,0,0.2)", color: "var(--dock-text)", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>💬 {t("countdowns.message", "Message")}</span>
+                <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{showMsgSection ? "▲" : "▼"}</span>
+              </button>
+
+              {showMsgSection && (
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>Message Text</span>
+                    <input
+                      type="text"
+                      value={editMessage.text}
+                      onChange={(e) => setEditMessage((p) => ({ ...p, text: e.target.value }))}
+                      placeholder="e.g. Welcome to our service"
+                      style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "6px 10px", color: "var(--dock-text)", fontSize: 12, outline: "none" }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>Color</span>
+                    <input type="color" value={editMessage.color} onChange={(e) => setEditMessage((p) => ({ ...p, color: e.target.value }))}
+                      style={{ width: 28, height: 28, borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 1, background: "transparent" }} />
+                    <input type="text" value={editMessage.color} onChange={(e) => setEditMessage((p) => ({ ...p, color: e.target.value }))}
+                      style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "6px 10px", color: "var(--dock-text)", fontSize: 12, outline: "none", fontFamily: "monospace", flex: 1 }} />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>Position</span>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {(["above", "below"] as const).map((pos) => (
+                        <button key={pos} type="button" onClick={() => setEditMessage((p) => ({ ...p, position: pos }))}
+                          style={{ padding: "4px 10px", borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: editMessage.position === pos ? "rgba(99,102,241,0.3)" : "rgba(0,0,0,0.2)", color: "var(--dock-text)", fontSize: 11, cursor: "pointer", textTransform: "capitalize" }}>
+                          {pos}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── Actions ────────────────────────────────────────── */}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
               <button type="button" className="dock-btn dock-btn--small" onClick={() => setEditingCd(null)} style={{ fontSize: 11 }}>
                 {t("common.cancel", "Cancel")}
               </button>
-              <button type="button" className="dock-btn dock-btn--small dock-btn--success" onClick={() => {
+              <button type="button" className="dock-btn dock-btn--small dock-btn--success" onClick={async () => {
                 const mins = parseFloat(editMinutes) || 0;
                 const secs = Math.round(mins * 60);
                 setCountdowns((prev) => prev.map((c) =>
@@ -887,6 +1309,8 @@ export default function DockCountdownsTab() {
                       ...c,
                       title: editTitle.trim() || c.title,
                       timer: { ...c.timer, durationSeconds: secs },
+                      background: { ...editBg },
+                      message: editMessage.text.trim() ? { ...editMessage } : undefined,
                     }
                     : c,
                 ));

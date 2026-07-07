@@ -142,11 +142,19 @@
 
     function renderMessage() {
       const msg = currentCfg.message;
+      const container = document.getElementById("countdown-container");
       if (msg && msg.text && msg.text.trim()) {
         messageEl.textContent = msg.text;
         messageEl.style.color = msg.color || "#ffffff";
         messageEl.classList.remove("hidden");
         messageEl.classList.add("visible");
+        // Position: above or below timer
+        if (msg.position === "above") {
+          container.insertBefore(messageEl, timerEl);
+        } else {
+          container.insertBefore(timerEl, messageEl);
+          container.appendChild(messageEl);
+        }
       } else {
         messageEl.classList.remove("visible");
         messageEl.classList.add("hidden");
@@ -190,12 +198,12 @@
 
       lastSyncState = sync || null;
       tick();
+      renderMessage();
       countdownTimer = setInterval(tick, 250);
     }
 
     window.addEventListener("hashchange", render);
     render();
-    renderMessage();
   </script>
 </body>
 

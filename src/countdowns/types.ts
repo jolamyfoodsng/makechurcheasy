@@ -149,10 +149,12 @@ export interface CountdownTemplate {
 // ── Message ────────────────────────────────────────────────────────────────
 
 export interface MessageSettings {
-  /** Message text shown below the timer in the overlay */
+  /** Message text shown in the overlay */
   text: string;
   /** Message text color (hex) */
   color: string;
+  /** Position relative to the timer */
+  position?: "above" | "below";
 }
 
 // ── Main Countdown Record ──────────────────────────────────────────────────
