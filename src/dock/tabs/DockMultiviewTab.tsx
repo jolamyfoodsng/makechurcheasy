@@ -705,6 +705,7 @@ export default function DockMultiviewTab() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const obsScanBusyRef = useRef(false);
 
   // Derived: when the shared MV scene exists all gallery layouts are available
   const addedLayouts = hasMvScene ? GALLERY_LAYOUTS : [];
@@ -740,39 +741,33 @@ export default function DockMultiviewTab() {
 
   const obsReady = useDockObsReady();
 
-  // ── Scan OBS for active MV scenes ──
-  const scanObs = useCallback(async () => {
-    if (!mountedRef.current) return;
+  // ── Single GetSceneList call → derive MV scene check + scene list ──
+  const refreshObsScenes = useCallback(async () => {
+    if (!mountedRef.current || obsScanBusyRef.current) return;
+    obsScanBusyRef.current = true;
     try {
       const resp = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
-      const hasMvScene = (resp.scenes ?? []).some(s => s.sceneName === MV_SCENE_NAME);
-      if (mountedRef.current) setHasMvScene(hasMvScene);
+      const scenes = resp.scenes ?? [];
+      if (!mountedRef.current) return;
+      setHasMvScene(scenes.some(s => s.sceneName === MV_SCENE_NAME));
+      setObsScenes(scenes.map(s => s.sceneName));
     } catch {
-      if (mountedRef.current) setHasMvScene(false);
-    }
-  }, []);
-
-  // ── Fetch OBS scene list for dropdowns ──
-  const fetchScenes = useCallback(async () => {
-    if (!mountedRef.current) return;
-    try {
-      const resp = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
-      if (mountedRef.current) setObsScenes(resp.scenes?.map(s => s.sceneName) ?? []);
-    } catch {
-      if (mountedRef.current) setObsScenes([]);
+      if (mountedRef.current) {
+        setHasMvScene(false);
+        setObsScenes([]);
+      }
+    } finally {
+      obsScanBusyRef.current = false;
     }
   }, []);
 
   useEffect(() => {
     if (!obsReady) return;
     mountedRef.current = true;
-    scanObs();
-    fetchScenes();
-    const interval = setInterval(() => {
-      if (mountedRef.current) { scanObs(); fetchScenes(); }
-    }, getRecommendedPollingInterval(5000));
+    refreshObsScenes();
+    const interval = setInterval(() => { refreshObsScenes(); }, getRecommendedPollingInterval(5000));
     return () => { mountedRef.current = false; clearInterval(interval); };
-  }, [obsReady, scanObs, fetchScenes]);
+  }, [obsReady, refreshObsScenes]);
 
   // ── Show feedback briefly ──
   const showFeedback = useCallback((type: "success" | "error", text: string) => {
@@ -991,13 +986,13 @@ export default function DockMultiviewTab() {
       try { await dockObsClient.call("SetCurrentPreviewScene", { sceneName }); } catch { }
 
       showFeedback("success", `"${sceneName}" pushed to OBS`);
-      scanObs();
+      refreshObsScenes();
     } catch (err) {
       showFeedback("error", err instanceof Error ? err.message : t('multiview.pushFailed'));
     } finally {
       if (mountedRef.current) setPushingId(null);
     }
-  }, [ensureScene, scanObs, showFeedback, t]);
+  }, [ensureScene, refreshObsScenes, showFeedback, t]);
 
   const handleClear = useCallback(async (mv: SavedMultiView) => {
     await ensureObsConnected();
@@ -1023,10 +1018,10 @@ export default function DockMultiviewTab() {
       await dockObsClient.call("RemoveScene", { sceneName }).catch(() => { });
 
       showFeedback("success", `"${sceneName}" cleared`);
-      scanObs();
+      refreshObsScenes();
     } catch { /* ignore */ }
     finally { if (mountedRef.current) setClearingId(null); }
-  }, [scanObs, showFeedback]);
+  }, [refreshObsScenes, showFeedback]);
 
   // ════════════════════════════════════════════════════════════════════════
   // Render

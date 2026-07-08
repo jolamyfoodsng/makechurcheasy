@@ -343,87 +343,26 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       const canvasH = video.baseHeight;
       const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
       const sourceName = "MCE Ticker";
-      const tickerSceneName = "MCE Ticker Scene";
+      const presentationSceneName = "MCE Presentation";
 
       const currentScene = await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string };
       const programSceneName = currentScene.currentProgramSceneName;
 
-      // Determine target scene based on output mode
-      let targetScene: string;
+      // Always route MCE Ticker to MCE Presentation scene
+      const targetScene = presentationSceneName;
+
+      // Ensure MCE Presentation scene exists
+      const scenes = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
+      const sceneExists = scenes.scenes.some((s) => s.sceneName === presentationSceneName);
+      if (!sceneExists) {
+        await dockObsClient.call("CreateScene", { sceneName: presentationSceneName });
+        await new Promise((r) => setTimeout(r, 100));
+      }
+
+      // In scene mode, switch preview to MCE Presentation for user to transition
       if (tickerOutputMode === "scene") {
-        targetScene = tickerSceneName;
-
-        // Ensure MCE Ticker Scene exists
-        const scenes = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
-        const sceneExists = scenes.scenes.some((s) => s.sceneName === tickerSceneName);
-        if (!sceneExists) {
-          await dockObsClient.call("CreateScene", { sceneName: tickerSceneName });
-          await new Promise((r) => setTimeout(r, 100));
-        }
-
-        // Add program scene as nested source at bottom (index 0) if not already there
-        // Guard: skip if program scene IS the ticker scene (self-reference not allowed)
-        const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName: tickerSceneName }) as {
-          sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number }>;
-        };
-        if (programSceneName === tickerSceneName) {
-          setError(t("ministry.cannotNestTicker"));
-          setSending(false);
-          return;
-        }
-        const existingProgramSource = sceneItems.sceneItems.find((i) => i.sourceName === programSceneName);
-        if (!existingProgramSource) {
-          const created = await dockObsClient.call("CreateSceneItem", {
-            sceneName: tickerSceneName,
-            sourceName: programSceneName,
-            sceneItemEnabled: true,
-          }) as { sceneItemId: number };
-          // Fit to canvas and move to bottom
-          await dockObsClient.call("SetSceneItemTransform", {
-            sceneName: tickerSceneName,
-            sceneItemId: created.sceneItemId,
-            sceneItemTransform: {
-              positionX: 0,
-              positionY: 0,
-              scaleX: 1,
-              scaleY: 1,
-              rotation: 0,
-              boundsType: "OBS_BOUNDS_STRETCH",
-              boundsWidth: canvasW,
-              boundsHeight: canvasH,
-              boundsAlignment: 0,
-              cropLeft: 0,
-              cropTop: 0,
-              cropRight: 0,
-              cropBottom: 0,
-            },
-          });
-          await dockObsClient.call("SetSceneItemIndex", {
-            sceneName: tickerSceneName,
-            sceneItemId: created.sceneItemId,
-            sceneItemIndex: 0,
-          });
-        } else if (existingProgramSource.sceneItemIndex !== 0) {
-          // Ensure it stays at bottom
-          await dockObsClient.call("SetSceneItemIndex", {
-            sceneName: tickerSceneName,
-            sceneItemId: existingProgramSource.sceneItemId,
-            sceneItemIndex: 0,
-          });
-          await dockObsClient.call("SetSceneItemEnabled", {
-            sceneName: tickerSceneName,
-            sceneItemId: existingProgramSource.sceneItemId,
-            sceneItemEnabled: true,
-          });
-        }
-
-        // Remember original scene for restoration
         try { localStorage.setItem("dock-ticker-original-scene", programSceneName); } catch { /* ignore */ }
-
-        // Push to Preview — user transitions to Program manually
-        await dockObsClient.call("SetCurrentPreviewScene", { sceneName: tickerSceneName });
-      } else {
-        targetScene = programSceneName;
+        await dockObsClient.call("SetCurrentPreviewScene", { sceneName: presentationSceneName });
       }
 
       // Create or update MCE Ticker browser source in target scene
@@ -530,25 +469,15 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     setError(null);
     setSuccess(null);
     try {
-      if (tickerOutputMode === "scene") {
-        // Delete the MCE Ticker Scene entirely
-        const scenes = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
-        const sceneExists = scenes.scenes.some((s) => s.sceneName === "MCE Ticker Scene");
-        if (sceneExists) {
-          await dockObsClient.call("RemoveScene", { sceneName: "MCE Ticker Scene" });
-        }
+      // Turn off MCE Ticker wherever it lives — MCE Presentation + current program scene
+      const scenesToCheck = new Set<string>();
+      scenesToCheck.add("MCE Presentation");
+      try {
+        const cur = await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string };
+        scenesToCheck.add(cur.currentProgramSceneName);
+      } catch { /* ignore */ }
 
-        // Restore original scene in preview
-        let originalScene = "";
-        try { originalScene = localStorage.getItem("dock-ticker-original-scene") || ""; } catch { /* ignore */ }
-        if (originalScene) {
-          await dockObsClient.call("SetCurrentPreviewScene", { sceneName: originalScene }).catch(() => { });
-        }
-        try { localStorage.removeItem("dock-ticker-original-scene"); } catch { /* ignore */ }
-      } else {
-        // Source mode: hide MCE Ticker in current scene
-        const currentScene = await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string };
-        const sceneName = currentScene.currentProgramSceneName;
+      for (const sceneName of scenesToCheck) {
         const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as {
           sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
         };
@@ -560,6 +489,16 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             sceneItemEnabled: false,
           });
         }
+      }
+
+      // Restore original scene in preview if we had switched away
+      if (tickerOutputMode === "scene") {
+        let originalScene = "";
+        try { originalScene = localStorage.getItem("dock-ticker-original-scene") || ""; } catch { /* ignore */ }
+        if (originalScene) {
+          await dockObsClient.call("SetCurrentPreviewScene", { sceneName: originalScene }).catch(() => { });
+        }
+        try { localStorage.removeItem("dock-ticker-original-scene"); } catch { /* ignore */ }
       }
 
       setRunning(false);

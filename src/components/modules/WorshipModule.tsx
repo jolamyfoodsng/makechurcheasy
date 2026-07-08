@@ -454,7 +454,7 @@ export function WorshipModule({
       }
     };
     poll();
-    const iv = window.setInterval(poll, getRecommendedPollingInterval(500));
+    const iv = window.setInterval(poll, getRecommendedPollingInterval(3000));
     return () => window.clearInterval(iv);
   }, [isActive, obsConnected, loadLtScenes]);
 

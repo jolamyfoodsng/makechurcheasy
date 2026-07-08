@@ -264,16 +264,42 @@ class BibleObsService {
 
   private async moveSceneItemToTop(sceneName: string, sceneItemId: number): Promise<void> {
     try {
+      const TICKER_SOURCE = "MCE Ticker";
       const resp = await obsService.call("GetSceneItemList", { sceneName });
-      const items = (resp as { sceneItems: Array<{ sceneItemId: number; sceneItemIndex: number }> }).sceneItems ?? [];
+      const items = (resp as { sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number }> }).sceneItems ?? [];
       const topIndex = Math.max(0, items.length - 1);
       const item = items.find((entry) => entry.sceneItemId === sceneItemId);
-      if (item && item.sceneItemIndex !== topIndex) {
-        await obsService.call("SetSceneItemIndex", {
-          sceneName,
-          sceneItemId,
-          sceneItemIndex: topIndex,
-        });
+      if (!item) return;
+
+      // If a ticker source exists in the scene, keep it above the bible
+      const tickerItem = items.find((entry) => entry.sourceName === TICKER_SOURCE);
+      if (tickerItem) {
+        // Move ticker to top if not already there
+        if (tickerItem.sceneItemIndex !== topIndex) {
+          await obsService.call("SetSceneItemIndex", {
+            sceneName,
+            sceneItemId: tickerItem.sceneItemId,
+            sceneItemIndex: topIndex,
+          });
+        }
+        // Place bible just below the ticker
+        const bibleTargetIndex = Math.max(0, topIndex - 1);
+        if (item.sceneItemIndex !== bibleTargetIndex) {
+          await obsService.call("SetSceneItemIndex", {
+            sceneName,
+            sceneItemId,
+            sceneItemIndex: bibleTargetIndex,
+          });
+        }
+      } else {
+        // No ticker — move bible to top as usual
+        if (item.sceneItemIndex !== topIndex) {
+          await obsService.call("SetSceneItemIndex", {
+            sceneName,
+            sceneItemId,
+            sceneItemIndex: topIndex,
+          });
+        }
       }
     } catch { /* ok */ }
   }

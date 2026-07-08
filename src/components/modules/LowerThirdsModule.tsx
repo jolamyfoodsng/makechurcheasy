@@ -629,7 +629,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
       }
     };
     void poll();
-    const iv = setInterval(() => { void poll(); }, getRecommendedPollingInterval(500));
+    const iv = setInterval(() => { void poll(); }, getRecommendedPollingInterval(3000));
     return () => clearInterval(iv);
   }, [refreshScenes, isActive]);
 

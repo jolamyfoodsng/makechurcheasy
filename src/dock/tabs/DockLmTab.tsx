@@ -179,6 +179,7 @@ export default function DockLmTab() {
   const lastAutoPushRef = useRef<string | null>(null);
   const lastAutoPushTimeRef = useRef(0);
   const pollRelayRef = useRef<(() => Promise<void>) | null>(null);
+  const relayBusyRef = useRef(false);
 
   // ── UI state ──
   const [activeTab, setActiveTab] = useState<"up-next" | "transcript" | "history">("up-next");
@@ -243,6 +244,8 @@ export default function DockLmTab() {
     });
 
     const pollRelay = async () => {
+      if (relayBusyRef.current) return;
+      relayBusyRef.current = true;
       try {
         const res = await fetch(`${getOverlayBaseUrlSync()}/api/lm-state`);
         const state = await res.json();
@@ -258,11 +261,13 @@ export default function DockLmTab() {
         }
       } catch (err) {
         console.warn("[DockLmTab] pollRelay FAILED:", err);
+      } finally {
+        relayBusyRef.current = false;
       }
     };
     pollRelayRef.current = pollRelay;
     void pollRelay();
-    const relayInterval = setInterval(pollRelay, 800);
+    const relayInterval = setInterval(pollRelay, 2000);
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible" && pollRelayRef.current) {

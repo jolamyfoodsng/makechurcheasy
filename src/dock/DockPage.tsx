@@ -190,7 +190,7 @@ export default function DockPage() {
   const verticalTabs = dockHeight > 0 && dockHeight < 550;
   const compactToolbar = dockHeight > 0 && dockHeight <= 550;
   const [tickerOutputMode, setTickerOutputMode] = useState<"source" | "scene">(() => {
-    try { return (localStorage.getItem("dock-ticker-output-mode") as "source" | "scene") || "source"; } catch { return "source"; }
+    try { return (localStorage.getItem("dock-ticker-output-mode") as "source" | "scene") || "scene"; } catch { return "scene"; }
   });
   const [obsConnected, setObsConnected] = useState(false);
   const [obsError, setObsError] = useState("");

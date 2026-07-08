@@ -23,9 +23,6 @@ import type {
 } from "../../lowerthirds/types";
 import {
   LT_DEFAULT_CUSTOM_STYLE,
-  LT_POSITIONS,
-  LT_POSITION_LABELS,
-  LT_POSITION_ICONS,
 } from "../../lowerthirds/types";
 import Icon from "../DockIcon";
 import {
@@ -52,38 +49,6 @@ interface DockLTEditorProps {
   live?: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Collapsible Section
-// ---------------------------------------------------------------------------
-
-function Section({
-  label,
-  icon,
-  open,
-  onToggle,
-  children,
-}: {
-  label: string;
-  icon: string;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="dock-lt-editor__section">
-      <button
-        type="button"
-        className="dock-lt-editor__section-header"
-        onClick={onToggle}
-        title="expand_less">
-        <Icon name={icon} size={12} />
-        <span>{label}</span>
-        <Icon name={open ? "expand_less" : "expand_more"} size={14} style={{ marginLeft: "auto" }} />
-      </button>
-      {open && <div className="dock-lt-editor__section-body">{children}</div>}
-    </div>
-  );
-}
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
@@ -120,18 +85,6 @@ export default function DockLowerThirdEditor({
   const [animationIn, setAnimationIn] = useState<LTAnimationIn>("slide-left");
   const [exitStyle, setExitStyle] = useState<LTExitStyle>("fade");
 
-  // ── Collapsible sections ──
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    theme: false,
-    preview: true,
-    content: true,
-    appearance: false,
-    position: false,
-    animation: false,
-    presets: false,
-    inspector: false,
-  });
-
   // ── Preview zoom (persisted) ──
   const ZOOM_KEY = "ocs-dock-lt-zoom";
   const [previewZoom, setPreviewZoom] = useState<number>(() => {
@@ -143,10 +96,6 @@ export default function DockLowerThirdEditor({
       try { localStorage.setItem(ZOOM_KEY, String(next)); } catch { /* noop */ }
       return next;
     });
-  }, []);
-
-  const toggleSection = useCallback((key: string) => {
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
   // ── Speaker theme detection & ministry data ──
@@ -870,23 +819,7 @@ export default function DockLowerThirdEditor({
             </div>
           </div>
         </div>
-        {/* ── Position ── */}
-        <Section label={t("lowerThird.position")} icon="open_with" open={!!openSections.position} onToggle={() => toggleSection("position")}>
-          <div className="dock-lt-editor__pos-grid">
-            {LT_POSITIONS.map((pos) => (
-              <button
-                key={pos}
-                type="button"
-                className={`dock-lt-editor__pos-btn${position === pos ? " dock-lt-editor__pos-btn--active" : ""}`}
-                onClick={() => setPosition(pos)}
-                title={LT_POSITION_LABELS[pos]}
-              >
-                <Icon name={LT_POSITION_ICONS[pos]} size={16} />
-                <span style={{ fontSize: 9 }}>{LT_POSITION_LABELS[pos]}</span>
-              </button>
-            ))}
-          </div>
-        </Section>
+
 
 
 

@@ -216,6 +216,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
   // OBS ticker source tracking
   const sceneItemIdRef = useRef<number | null>(null);
   const tickerSceneRef = useRef<string>("");    // scene it was added to
+  const lastFullProbeTimeRef = useRef(0);
   const sceneSyncBusyRef = useRef(false);
   const toastSeqRef = useRef(0);
   const toastTimersRef = useRef<number[]>([]);
@@ -307,25 +308,47 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
       : names;
 
     let detectedTicker: { sceneName: string; sceneItemId: number } | null = null;
-    try {
-      const inputs = await obsService.getInputList();
-      const tickerInputExists = inputs.some((input) => input.inputName === TICKER_SOURCE_NAME);
-      if (tickerInputExists) {
-        for (const sceneName of probeScenes) {
-          try {
-            const items = await obsService.getSceneItemList(sceneName);
-            const tickerItem = items.find((item) => item.sourceName === TICKER_SOURCE_NAME);
-            if (tickerItem) {
-              detectedTicker = { sceneName, sceneItemId: tickerItem.sceneItemId };
-              break;
+    const FULL_PROBE_INTERVAL_MS = 30_000;
+    const now = Date.now();
+    const shouldFullProbe = !tickerSceneRef.current
+      || sceneItemIdRef.current === null
+      || !names.includes(tickerSceneRef.current)
+      || (now - lastFullProbeTimeRef.current) >= FULL_PROBE_INTERVAL_MS;
+
+    if (shouldFullProbe) {
+      // Full O(N) scan: check input list + probe every scene
+      try {
+        const inputs = await obsService.getInputList();
+        const tickerInputExists = inputs.some((input) => input.inputName === TICKER_SOURCE_NAME);
+        if (tickerInputExists) {
+          for (const sceneName of probeScenes) {
+            try {
+              const items = await obsService.getSceneItemList(sceneName);
+              const tickerItem = items.find((item) => item.sourceName === TICKER_SOURCE_NAME);
+              if (tickerItem) {
+                detectedTicker = { sceneName, sceneItemId: tickerItem.sceneItemId };
+                break;
+              }
+            } catch {
+              // Scene may be unavailable while OBS updates.
             }
-          } catch {
-            // Scene may be unavailable while OBS updates.
           }
         }
+      } catch (err) {
+        console.warn("[TickerModule] Failed to inspect ticker source state:", err);
       }
-    } catch (err) {
-      console.warn("[TickerModule] Failed to inspect ticker source state:", err);
+      lastFullProbeTimeRef.current = now;
+    } else if (tickerSceneRef.current) {
+      // Quick verify: just check the known scene (1 call instead of N)
+      try {
+        const items = await obsService.getSceneItemList(tickerSceneRef.current);
+        const tickerItem = items.find((item) => item.sourceName === TICKER_SOURCE_NAME);
+        if (tickerItem) {
+          detectedTicker = { sceneName: tickerSceneRef.current, sceneItemId: tickerItem.sceneItemId };
+        }
+      } catch {
+        // Known scene unavailable — next tick will do a full probe
+      }
     }
 
     if (detectedTicker) {
@@ -413,7 +436,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
       }
     };
     poll();
-    const iv = window.setInterval(poll, getRecommendedPollingInterval(500));
+    const iv = window.setInterval(poll, getRecommendedPollingInterval(3000));
     return () => window.clearInterval(iv);
   }, [isActive, obsConnected, refreshScenes, clearAutoStopTimers]);
 

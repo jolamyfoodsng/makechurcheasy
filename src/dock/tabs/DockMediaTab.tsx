@@ -513,6 +513,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
   const [templateVideoProgress, setTemplateVideoProgress] = useState<Record<string, number | null>>({});
   const mountedRef = useRef(true);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaPollBusyRef = useRef(false);
   const [previewPlaying, setPreviewPlaying] = useState(false);
 
   // ── Video Loop / Playlist state ──
@@ -707,7 +708,9 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
   // Fallback polling: refresh media every 30s in case event-based sync fails
   useEffect(() => {
     const interval = setInterval(() => {
-      void loadLibraryMedia();
+      if (mediaPollBusyRef.current) return;
+      mediaPollBusyRef.current = true;
+      void loadLibraryMedia().finally(() => { mediaPollBusyRef.current = false; });
     }, 30_000);
     return () => clearInterval(interval);
   }, [loadLibraryMedia]);

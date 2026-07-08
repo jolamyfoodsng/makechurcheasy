@@ -842,6 +842,50 @@ class DockObsClient {
     }
   }
 
+  /**
+   * Ensure the ticker source stays above the given source in the scene.
+   * If a ticker exists, move it to the top and place the other source just below it.
+   * If no ticker exists, move the source to the top as normal.
+   */
+  private async ensureTickerAboveSource(sceneName: string, sourceName: string): Promise<void> {
+    try {
+      const resp = await this.call("GetSceneItemList", { sceneName }) as {
+        sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number }>;
+      };
+      const item = resp.sceneItems.find((i) => i.sourceName === sourceName);
+      if (!item) return;
+
+      const topIndex = resp.sceneItems.length - 1;
+      const tickerItem = resp.sceneItems.find((i) => i.sourceName === DOCK_TICKER_SOURCE);
+
+      if (tickerItem) {
+        if (tickerItem.sceneItemIndex !== topIndex) {
+          await this.call("SetSceneItemIndex", {
+            sceneName,
+            sceneItemId: tickerItem.sceneItemId,
+            sceneItemIndex: topIndex,
+          }).catch(() => { });
+        }
+        const targetIndex = Math.max(0, topIndex - 1);
+        if (item.sceneItemIndex !== targetIndex) {
+          await this.call("SetSceneItemIndex", {
+            sceneName,
+            sceneItemId: item.sceneItemId,
+            sceneItemIndex: targetIndex,
+          }).catch(() => { });
+        }
+      } else {
+        if (item.sceneItemIndex !== topIndex) {
+          await this.call("SetSceneItemIndex", {
+            sceneName,
+            sceneItemId: item.sceneItemId,
+            sceneItemIndex: topIndex,
+          }).catch(() => { });
+        }
+      }
+    } catch { /* ignore ordering failures */ }
+  }
+
   private async setMediaSceneItemScale(
     sceneName: string,
     sceneItemId: number,
@@ -3947,6 +3991,8 @@ class DockObsClient {
 
             // Add overlay source directly to target scene
             await this.ensureOverlaySource(sceneName, resources.bibleSource, undefined, undefined, true);
+            // Keep ticker above bible if present in the scene
+            await this.ensureTickerAboveSource(sceneName, resources.bibleSource);
 
             // Add BG source directly to target scene (if needed)
             if (backgroundTheme) {
@@ -3982,6 +4028,8 @@ class DockObsClient {
           // ── Lower-third: direct browser source in user's scene ──
           await this.clearAllOverlays(resources.bibleSource, sceneName, resources);
           await this.ensureOverlaySource(sceneName, resources.bibleSource, undefined, undefined, true);
+          // Keep ticker above bible if present in the scene
+          await this.ensureTickerAboveSource(sceneName, resources.bibleSource);
 
           const resolvedLTTheme = this.resolveLTTheme(data.ltTheme, "bible");
           url = this.buildBibleLowerThirdUrl(
@@ -4099,17 +4147,13 @@ class DockObsClient {
               sceneItemId: browserItem.sceneItemId,
               sceneItemEnabled: true,
             });
-            // Move to top of z-order
-            const topIndex = existingCheck.sceneItems.length - 1;
-            if (browserItem.sceneItemId && topIndex >= 0) {
-              await this.call("SetSceneItemIndex", {
-                sceneName,
-                sceneItemId: browserItem.sceneItemId,
-                sceneItemIndex: topIndex,
-              }).catch(() => { });
-            }
           }
         } catch { /* ignore */ }
+
+        // Ensure correct z-ordering: bible below ticker if ticker exists
+        if (sceneItemId !== null) {
+          await this.ensureTickerAboveSource(sceneName, def.browserSourceName).catch(() => { });
+        }
 
         // If browser source not found, create it directly in MCE Presentation
         if (sceneItemId === null) {
@@ -4135,6 +4179,11 @@ class DockObsClient {
               } catch { /* ignore */ }
             }
           }
+        }
+
+        // Newly created sources default to the top of the z-order — ensure ticker stays above bible
+        if (sceneItemId !== null) {
+          await this.ensureTickerAboveSource(sceneName, def.browserSourceName).catch(() => { });
         }
 
         // Rename the source item to include the original scene name for clarity
@@ -5035,9 +5084,7 @@ class DockObsClient {
     ltTheme?: DockLTThemeRef;
   }): Promise<void> {
     const resources = getDockResources();
-    const target = await this.getTargetScene("ministry");
-    const sceneName = target.sceneName;
-    if (!sceneName) throw new Error("Could not determine the current OBS scene.");
+    const sceneName = DOCK_PRESENTATION_SCENE;
 
     // Ensure the live program scene is visible behind overlays in MCE Presentation
     await this.ensureProgramSceneAsSourceInPresentation();

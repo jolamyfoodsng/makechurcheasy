@@ -1958,11 +1958,27 @@ export default function DockBibleTab({
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: number | null = null;
+    let consecutiveMisses = 0;
 
     const pollVoiceState = async () => {
+      if (cancelled) return;
       const fallback = await loadVoiceBibleDockState();
-      if (!fallback || cancelled) return;
-      if (fallback.updatedAt <= lastVoiceEventTimestampRef.current) return;
+      if (!fallback || cancelled) {
+        consecutiveMisses++;
+        // Back off: after 3 misses, slow to 30s. Reset on next success.
+        const nextDelay = consecutiveMisses >= 3
+          ? 30_000
+          : appConnected ? 5000 : 3000;
+        timeoutId = window.setTimeout(() => { void pollVoiceState(); }, nextDelay);
+        return;
+      }
+
+      consecutiveMisses = 0;
+      if (fallback.updatedAt <= lastVoiceEventTimestampRef.current) {
+        timeoutId = window.setTimeout(() => { void pollVoiceState(); }, appConnected ? 5000 : 3000);
+        return;
+      }
 
       lastVoiceEventTimestampRef.current = fallback.updatedAt;
       if (voiceBridgeTimeoutRef.current) {
@@ -1981,28 +1997,21 @@ export default function DockBibleTab({
 
       if (shouldSkipInitialReplay) {
         lastVoiceResultKeyRef.current = resultKey;
-        return;
-      }
-
-      if (resultKey && resultKey !== lastVoiceResultKeyRef.current) {
+      } else if (resultKey && resultKey !== lastVoiceResultKeyRef.current) {
         lastVoiceResultKeyRef.current = resultKey;
         await applyVoiceResult(fallback.snapshot.lastResult ?? null);
-        return;
-      }
-
-      if (!resultKey) {
+      } else if (!resultKey) {
         lastVoiceResultKeyRef.current = "";
       }
+
+      timeoutId = window.setTimeout(() => { void pollVoiceState(); }, appConnected ? 5000 : 3000);
     };
 
     void pollVoiceState();
-    const intervalId = window.setInterval(() => {
-      void pollVoiceState();
-    }, appConnected ? 5000 : 3000);
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+      if (timeoutId) window.clearTimeout(timeoutId);
     };
   }, [appConnected, applyVoiceResult, voiceBible.status]);
 

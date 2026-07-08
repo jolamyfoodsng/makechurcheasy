@@ -637,7 +637,7 @@ export function BibleModule({
     };
 
     poll();
-    const iv = window.setInterval(poll, getRecommendedPollingInterval(500));
+    const iv = window.setInterval(poll, getRecommendedPollingInterval(3000));
     return () => window.clearInterval(iv);
   }, [isActive, obsConnected, loadLtScenes]);
 

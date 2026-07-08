@@ -591,6 +591,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
   const prefsReadyRef = useRef(false);
   const suppressAutoProjectionRef = useRef(true);
   const suppressAutoProjectionTimerRef = useRef<number | null>(null);
+  const songsPollBusyRef = useRef(false);
 
   const selectedSongSections = useMemo(
     () => (selectedSong ? parseLyricSections(selectedSong.lyrics, selectedSong.linesPerSlide ?? linesPerSlide, selectedSong.autoSplit ?? false) : []),
@@ -871,7 +872,9 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
   // Fallback polling: refresh songs every 30s in case event-based sync fails
   useEffect(() => {
     const interval = setInterval(() => {
-      void loadSongs(false);
+      if (songsPollBusyRef.current) return;
+      songsPollBusyRef.current = true;
+      void loadSongs(false).finally(() => { songsPollBusyRef.current = false; });
     }, 30_000);
     return () => clearInterval(interval);
   }, [loadSongs]);
