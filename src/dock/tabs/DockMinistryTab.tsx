@@ -978,9 +978,14 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                         const scale = LT_SIZE_SCALE[ltSize] ?? 1;
                         const srcW = Math.round(1920 / scale);
                         const srcH = Math.round(1080 / scale);
-                        const currentScene = await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string };
-                        const sceneName = currentScene.currentProgramSceneName;
+                        const sceneName = "MCE Presentation";
                         const sourceName = "MCE Lower Third";
+                        // Ensure scene exists
+                        const scenes = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
+                        if (!scenes.scenes.some((s) => s.sceneName === sceneName)) {
+                          await dockObsClient.call("CreateScene", { sceneName });
+                          await new Promise((r) => setTimeout(r, 100));
+                        }
                         const inputs = await dockObsClient.call("GetInputList") as { inputs: Array<{ inputName: string }> };
                         const inputExists = inputs.inputs.some((i) => i.inputName === sourceName);
                         let sceneItemId: number;
@@ -993,7 +998,6 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                           const existing = items.sceneItems.find((i) => i.sourceName === sourceName);
                           if (existing) {
                             sceneItemId = existing.sceneItemId;
-                            // Re-enable source (may have been disabled by blank)
                             await dockObsClient.call("SetSceneItemEnabled", { sceneName, sceneItemId, sceneItemEnabled: true });
                           } else {
                             sceneItemId = (await dockObsClient.call("CreateSceneItem", { sceneName, sourceName, sceneItemEnabled: true }) as { sceneItemId: number }).sceneItemId;
@@ -1041,8 +1045,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                           // Wait for exit animation to finish, then disable the source
                           const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
                           await new Promise((r) => setTimeout(r, exitDuration));
-                          const currentScene = await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string };
-                          const sceneName = currentScene.currentProgramSceneName;
+                          const sceneName = "MCE Presentation";
                           const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
                           const ltItem = items.sceneItems.find((i) => i.sourceName === "MCE Lower Third");
                           if (ltItem) {
@@ -1076,8 +1079,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                           // Wait for overlay's exit animation to finish (overlay self-times via resolveThemeExitDuration), then disable the source
                           const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
                           await new Promise((r) => setTimeout(r, exitDuration));
-                          const currentScene = await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string };
-                          const sceneName = currentScene.currentProgramSceneName;
+                          const sceneName = "MCE Presentation";
                           const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
                           const ltItem = items.sceneItems.find((i) => i.sourceName === "MCE Lower Third");
                           if (ltItem) {
@@ -1186,8 +1188,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                               // Wait for exit animation (use theme's animation duration), then disable the source
                               const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
                               await new Promise((r) => setTimeout(r, animDuration + 100));
-                              const currentScene = await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string };
-                              const sceneName = currentScene.currentProgramSceneName;
+                              const sceneName = "MCE Presentation";
                               const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
                               const ltItem = items.sceneItems.find((i) => i.sourceName === "MCE Lower Third");
                               if (ltItem) {
@@ -1239,8 +1240,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                             // Wait for exit animation (use theme's animation duration), then disable the source
                             const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
                             await new Promise((r) => setTimeout(r, animDuration + 100));
-                            const currentScene = await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string };
-                            const sceneName = currentScene.currentProgramSceneName;
+                            const sceneName = "MCE Presentation";
                             const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
                             const ltItem = items.sceneItems.find((i) => i.sourceName === "MCE Lower Third");
                             if (ltItem) {

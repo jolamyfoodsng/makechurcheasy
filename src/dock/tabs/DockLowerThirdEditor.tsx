@@ -783,7 +783,15 @@ export default function DockLowerThirdEditor({
             <div className="dock-lt-panel-bottom">
               <button
                 type="button"
-                onClick={() => setCustomStyles({ ...LT_DEFAULT_CUSTOM_STYLE })}
+                onClick={() => {
+                  const defaults: Record<string, string> = {};
+                  for (const v of theme.variables) { defaults[v.key] = v.defaultValue ?? ""; }
+                  setVariableValues(defaults);
+                  setCustomStyles({ ...LT_DEFAULT_CUSTOM_STYLE });
+                  setPosition("bottom-left");
+                  setAnimationIn("slide-left");
+                  setExitStyle("fade");
+                }}
                 style={{
                   background: "var(--dock-input-bg)",
                   border: "1px solid var(--dock-border)",
