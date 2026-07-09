@@ -41,6 +41,7 @@ import DockBottomToolbar from "../components/DockBottomToolbar";
 import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
 import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -749,8 +750,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
 
       if (cancelled) return;
 
-      const storedFullscreen = allFavorites.find((theme) => theme.id === prefs.fullscreenThemeId);
-      const storedLowerThird = allFavorites.find((theme) => theme.id === prefs.lowerThirdThemeId);
+      const storedFullscreen = allFavorites.find(
+        (theme) => theme.id === prefs.fullscreenThemeId
+          && themeSupportsBibleOverlayMode(theme, "fullscreen"),
+      );
+      const storedLowerThird = allFavorites.find(
+        (theme) => theme.id === prefs.lowerThirdThemeId
+          && themeSupportsBibleOverlayMode(theme, "lower-third"),
+      );
 
       if (storedFullscreen) setSelectedFSTheme(storedFullscreen);
       if (storedLowerThird) setSelectedLTTheme(storedLowerThird);

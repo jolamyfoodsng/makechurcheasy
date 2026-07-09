@@ -329,6 +329,8 @@ class DockObsClient {
   private _lastCssOverlayPacketBySource: Record<string, Record<string, unknown>> = {};
   private _lastCssOverlayBaseUrlBySource: Record<string, string> = {};
   private _lastCssOverlayThemeCssBySource: Record<string, string> = {};
+  /** Track the last browser source URL per input so identical verse pushes can skip reloads. */
+  private _lastBrowserSourceUrlBySource: Record<string, string> = {};
   /** Serialize Bible overlay mutations so rapid verse clicks do not overlap OBS scene rebuilds. */
   private _bibleMutationTail: Promise<void> = Promise.resolve();
   private _lastBiblePushSignature = "";
@@ -2735,6 +2737,15 @@ class DockObsClient {
       clean.boxBackgroundImage = "__FROM_CSS__";
     }
 
+    // --- backgroundPattern (SVG data URIs) ---
+    // Wrap in quotes because SVG data URIs may contain unencoded parentheses
+    // (from transform="rotate(...)" etc.) that break CSS url() parsing.
+    const bgPattern = clean.backgroundPattern as string | undefined;
+    if (bgPattern && bgPattern.startsWith("data:")) {
+      cssRules.push(`--bg-pattern-data: url("${bgPattern}");`);
+      clean.backgroundPattern = "__FROM_CSS__";
+    }
+
     const css = cssRules.length ? `:root { ${cssRules.join(" ")} }` : "";
     return { cleanSettings: clean, css };
   }
@@ -3010,19 +3021,34 @@ class DockObsClient {
    */
   private async setBrowserSourceUrl(inputName: string, url: string, forceReload = false, css?: string): Promise<void> {
     browserQueue.enqueue(inputName, async () => {
-      if (forceReload) {
+      const prevUrl = this._lastBrowserSourceUrlBySource[inputName];
+      const urlChanged = prevUrl !== url;
+
+      if (forceReload || urlChanged) {
         // Blank → wait → set new URL → forces OBS CEF to fully reload
+        if (forceReload) {
+          try {
+            await this.call("SetInputSettings", { inputName, inputSettings: { url: "about:blank" } });
+          } catch { /* ignore */ }
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        const inputSettings: Record<string, unknown> = { url, bgcolor: "#00000000" };
+        if (css !== undefined) inputSettings.css = css;
         try {
-          await this.call("SetInputSettings", { inputName, inputSettings: { url: "about:blank" } });
+          await this.call("SetInputSettings", {
+            inputName,
+            inputSettings,
+          });
+          this._lastBrowserSourceUrlBySource[inputName] = url;
         } catch { /* ignore */ }
-        await new Promise((r) => setTimeout(r, 100));
+        return;
       }
-      const inputSettings: Record<string, unknown> = { url, bgcolor: "#00000000" };
-      if (css !== undefined) inputSettings.css = css;
+
+      if (css === undefined) return;
       try {
         await this.call("SetInputSettings", {
           inputName,
-          inputSettings,
+          inputSettings: { css },
         });
       } catch { /* ignore */ }
     }, { label: inputName, force: forceReload });
@@ -4197,18 +4223,17 @@ class DockObsClient {
         // publishFullscreenOverlayPacket is a no-op for OBS CEF (cross-process
         // localStorage is unreachable), so the browser source update below is
         // the only reliable delivery path.
-        // Use raw SetInputSettings with BOTH url and css in a single atomic
-        // call — setBrowserSourceUrl goes through the fire-and-forget
-        // coalescing queue which defers by 100ms and races with
-        // _ensureFullscreenScene resetting the URL just before.
+        // Send ONLY the css field — _ensureFullscreenScene already set the
+        // URL/width/height and OBS WebSocket v5 merge mode (overlay: false)
+        // preserves those fields when they are omitted. Including the URL
+        // would cause a second page reload (flicker) because the URL
+        // differs from what _ensureFullscreenScene just set.
         {
           const overlayThemeCss = this.buildCssOverlayDataCss(packet, themeCss);
           try {
             await this.call("SetInputSettings", {
               inputName: def.browserSourceName,
               inputSettings: {
-                url: cssOverlayBaseUrl,
-                bgcolor: "#00000000",
                 css: overlayThemeCss,
               },
             });
@@ -6421,6 +6446,7 @@ class DockObsClient {
 
     const canvas = await this.getCanvasSize();
     const overlayUrl = `${this.getOverlayBaseUrl()}/${def.overlayFile}`;
+    const sourceSignature = `${overlayUrl}|${canvas.width}x${canvas.height}`;
 
     // Ensure MCE Presentation exists
     await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
@@ -6432,10 +6458,13 @@ class DockObsClient {
       const existing = items.find((i) => i.sourceName === def.browserSourceName);
       if (existing) {
         browserItemId = existing.sceneItemId;
-        await this.call("SetInputSettings", {
-          inputName: def.browserSourceName,
-          inputSettings: { url: overlayUrl, width: canvas.width, height: canvas.height, bgcolor: "#00000000", shutdown: false, restart_when_active: false },
-        });
+        if (this._lastFullscreenSourceSignature[def.browserSourceName] !== sourceSignature) {
+          await this.call("SetInputSettings", {
+            inputName: def.browserSourceName,
+            inputSettings: { url: overlayUrl, width: canvas.width, height: canvas.height, bgcolor: "#00000000", shutdown: false, restart_when_active: false },
+          });
+          this._lastFullscreenSourceSignature[def.browserSourceName] = sourceSignature;
+        }
       }
     } catch { /* empty scene */ }
 
@@ -6447,8 +6476,9 @@ class DockObsClient {
           inputKind: "browser_source",
           inputSettings: { url: overlayUrl, width: canvas.width, height: canvas.height, css: "", bgcolor: "#00000000", shutdown: false, restart_when_active: false },
           sceneItemEnabled: true,
-        }) as { sceneItemId: number };
+          }) as { sceneItemId: number };
         browserItemId = created.sceneItemId;
+        this._lastFullscreenSourceSignature[def.browserSourceName] = sourceSignature;
         this.invalidateSceneItemListCache(DOCK_PRESENTATION_SCENE);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -6456,11 +6486,15 @@ class DockObsClient {
           try {
             const added = await this.call("CreateSceneItem", { sceneName: DOCK_PRESENTATION_SCENE, sourceName: def.browserSourceName, sceneItemEnabled: true }) as { sceneItemId: number };
             browserItemId = added.sceneItemId;
+            this._lastFullscreenSourceSignature[def.browserSourceName] = sourceSignature;
             this.invalidateSceneItemListCache(DOCK_PRESENTATION_SCENE);
           } catch {
             const items = await this.getSceneItemListCached(DOCK_PRESENTATION_SCENE);
             const found = items.find((i) => i.sourceName === def.browserSourceName);
             browserItemId = found?.sceneItemId ?? null;
+            if (browserItemId !== null) {
+              this._lastFullscreenSourceSignature[def.browserSourceName] = sourceSignature;
+            }
           }
         } else {
           throw err;

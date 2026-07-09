@@ -61,6 +61,8 @@ import {
 import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { invoke } from "@tauri-apps/api/core";
+import { dockObsClient } from "../dockObsClient";
+import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -913,8 +915,14 @@ export default function DockBibleTab({
 
       if (cancelled) return;
 
-      const storedFullscreen = allFavorites.find((theme) => theme.id === prefs.fullscreenThemeId);
-      const storedLowerThird = allFavorites.find((theme) => theme.id === prefs.lowerThirdThemeId);
+      const storedFullscreen = allFavorites.find(
+        (theme) => theme.id === prefs.fullscreenThemeId
+          && themeSupportsBibleOverlayMode(theme, "fullscreen"),
+      );
+      const storedLowerThird = allFavorites.find(
+        (theme) => theme.id === prefs.lowerThirdThemeId
+          && themeSupportsBibleOverlayMode(theme, "lower-third"),
+      );
 
       if (storedFullscreen) {
         setSelectedBibleTheme(storedFullscreen);
@@ -2704,20 +2712,17 @@ export default function DockBibleTab({
   }, [activeColumnIndex, activeTranslation, selectedBook, selectedChapter, stageVerse]);
 
   const handleSelectFullscreenTheme = useCallback((theme: BibleTheme) => {
-    // Set both modes to the same unified theme — variant is resolved at render time
     setSelectedBibleTheme(theme);
-    setSelectedLowerThirdTheme(theme);
     setOverlayMode("fullscreen");
   }, []);
 
   const handleSelectLowerThirdTheme = useCallback((theme: BibleTheme) => {
-    // Set both modes to the same unified theme — variant is resolved at render time
-    setSelectedBibleTheme(theme);
     setSelectedLowerThirdTheme(theme);
     setOverlayMode("lower-third");
   }, []);
 
-  // Use the same theme ID regardless of mode — the selected theme is unified
+  // Each mode keeps its own selected theme so switching to lower-third does
+  // not accidentally keep reusing a fullscreen-only theme.
   const activeThemePickerProps =
     overlayMode === "fullscreen"
       ? {
@@ -2727,7 +2732,7 @@ export default function DockBibleTab({
         templateType: "fullscreen" as const,
       }
       : {
-        selectedThemeId: selectedBibleTheme.id,
+        selectedThemeId: selectedLowerThirdTheme.id,
         onSelect: handleSelectLowerThirdTheme,
         label: t("bible.lowerThirdTheme"),
         templateType: "lower-third" as const,

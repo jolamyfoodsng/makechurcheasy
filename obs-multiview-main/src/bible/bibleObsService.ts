@@ -628,7 +628,8 @@ class BibleObsService {
     // Push to overlay broadcaster (for same-origin windows / BroadcastChannel)
     overlayBroadcaster.pushSlide(slide, theme, live, blanked);
 
-    // If OBS is connected, update the browser source URL with data in the hash
+    // If OBS is connected, update the browser source content without forcing
+    // a page reload on every verse change.
     if (obsService.isConnected) {
       // Auto-create the browser source if it hasn't been set up yet
       if (this.sceneItemId === null) {
@@ -709,15 +710,16 @@ class BibleObsService {
           blanked,
           timestamp: Date.now(),
         };
-        const encoded = encodeURIComponent(JSON.stringify(packet));
         const base = getOverlayBaseUrlSync();
         const overlayFile = this.currentTemplateType === "fullscreen"
           ? "bible-overlay-fullscreen.html"
           : "bible-overlay-lower-third.html";
-        const url = `${base}/${overlayFile}#data=${encoded}`;
+        const url = `${base}/${overlayFile}`;
 
-        const inputSettings: Record<string, unknown> = { url };
-        inputSettings.css = customCss || "";
+        const overlayCss = this.buildOverlayDataCss(packet as unknown as Record<string, unknown>, customCss || "");
+        const inputSettings: Record<string, unknown> = { url, css: overlayCss };
+
+        const sourceSignature = url;
 
         // Resolve current input name from registry (survives renames)
         let resolvedInputName = BIBLE_SOURCE_NAME;
@@ -730,8 +732,11 @@ class BibleObsService {
 
         await obsService.call("SetInputSettings", {
           inputName: resolvedInputName,
-          inputSettings,
+          inputSettings: this._lastOverlayTransportSignature !== sourceSignature
+            ? inputSettings
+            : { css: overlayCss },
         });
+        this._lastOverlayTransportSignature = sourceSignature;
 
         // ── Push BG source — fingerprint-based dedup ──
         // • Image background → save to disk, use OBS image_source
@@ -857,23 +862,17 @@ class BibleObsService {
 
       for (const input of mvBibleInputs) {
         try {
-          // Get current settings to find the base URL and preserve custom CSS
+          // Keep the browser source URL stable and update only CSS data.
           const resp = await obsService.call("GetInputSettings", { inputName: input.inputName }) as {
             inputSettings: { url?: string; css?: string; width?: number; height?: number };
           };
           const currentSettings = resp.inputSettings;
-          const currentUrl = currentSettings.url || "";
-
-          // Extract the base URL (everything before #)
-          const baseUrl = currentUrl.split("#")[0] || currentUrl;
-
-          // Update only the hash fragment with new slide data
-          const newUrl = `${baseUrl}#data=${encoded}`;
+          const baseCss = this.stripOverlayDataCss(currentSettings.css || "");
+          const overlayCss = this.buildOverlayDataCss(packet as unknown as Record<string, unknown>, baseCss);
 
           await obsService.call("SetInputSettings", {
             inputName: input.inputName,
-            inputSettings: { url: newUrl },
-            // css is NOT set here — OBS preserves existing css when we only update url
+            inputSettings: { css: overlayCss },
           });
           console.log(`[BibleOBS] Pushed verse to MV source "${input.inputName}"`);
         } catch (err) {

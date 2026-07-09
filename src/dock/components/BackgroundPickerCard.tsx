@@ -3,6 +3,7 @@ import { HexColorPicker } from "react-colorful";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { BibleTheme } from "../../bible/types";
+import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
 import type { MediaItem } from "../../library/libraryTypes";
 import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
 import Icon from "../DockIcon";
@@ -1204,11 +1205,7 @@ function ColorSection({
 /* ── Gradient Presets ── */
 const GRADIENT_PRESETS = [
   { label: "Sunset", start: "#AD0000", end: "#000000", angle: 135 },
-  { label: "Ocean", start: "#006994", end: "#001E3C", angle: 180 },
-  { label: "Forest", start: "#1B4332", end: "#0B1A12", angle: 160 },
-  { label: "Royal", start: "#4A1A6B", end: "#0D0221", angle: 135 },
-  { label: "Ember", start: "#B7410E", end: "#1A0A00", angle: 150 },
-  { label: "Midnight", start: "#0F172A", end: "#000000", angle: 180 },
+  { label: "Sunset", start: "#AE0000", end: "#FF0000", angle: 135 },
   { label: "Dusk", start: "#2D1B69", end: "#11001C", angle: 135 },
   { label: "Slate", start: "#334155", end: "#0F172A", angle: 180 },
 ];
@@ -1537,14 +1534,15 @@ function ThemeSection({
             const cats = t.categories?.length ? t.categories : t.category ? [t.category] : [];
             return cats.some((c) => allowed.has(c.toLowerCase()));
           });
+        const modeFiltered = filtered.filter((theme) => themeSupportsBibleOverlayMode(theme, overlayMode));
         console.log("[ThemeSection]", {
           overlayMode,
           allowedCategories: allowedCategories ?? "ALL",
           loadedCount: all.length,
-          filteredCount: filtered.length,
-          themeNames: filtered.map((t) => t.name),
+          filteredCount: modeFiltered.length,
+          themeNames: modeFiltered.map((t) => t.name),
         });
-        if (!cancelled) setThemes(filtered);
+        if (!cancelled) setThemes(modeFiltered);
       } catch (err) {
         console.error("[ThemeSection] failed to load themes:", err);
         if (!cancelled) setThemes([]);

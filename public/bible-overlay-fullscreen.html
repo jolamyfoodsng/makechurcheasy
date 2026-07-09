@@ -806,7 +806,7 @@
       // Determine new background type
       let newBgType = 'none';
       if (bgVideoUrl) newBgType = 'video';
-      else if (s.backgroundPattern && PATTERN_CSS[s.backgroundPattern]) newBgType = 'pattern';
+      else if (s.backgroundPattern && (s.backgroundPattern === '__FROM_CSS__' || s.backgroundPattern.startsWith('data:') || PATTERN_CSS[s.backgroundPattern])) newBgType = 'pattern';
       else if (s.backgroundImage && s.backgroundImage !== '__BG_SOURCE__') newBgType = 'image';
       else if (hasGradient) newBgType = 'gradient';
       else if (s.backgroundColor && s.backgroundColor !== 'transparent') newBgType = 'color';
@@ -934,6 +934,9 @@
         if (!bgVideoUrl && s.backgroundPattern) {
           if (s.backgroundPattern.startsWith('data:')) {
             patternCss = 'url(' + s.backgroundPattern + ')';
+          } else if (s.backgroundPattern === '__FROM_CSS__') {
+            const cssVal = getComputedStyle(document.documentElement).getPropertyValue('--bg-pattern-data').trim();
+            if (cssVal) patternCss = cssVal;
           } else if (PATTERN_CSS[s.backgroundPattern]) {
             patternCss = PATTERN_CSS[s.backgroundPattern];
           }
