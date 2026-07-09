@@ -11,7 +11,7 @@ const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheas
 const APP_VERSION: string =
   typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
 
-export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador";
+export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador" | "unlimited";
 
 export interface AuthUser {
   id: string;

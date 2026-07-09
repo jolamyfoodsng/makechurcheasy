@@ -28,7 +28,7 @@ import type { BibleTheme } from "../../bible/types";
 import allThemesData from "../../../lower_thirds/all_themes.json";
 import DockLowerThirdEditor from "./DockLowerThirdEditor";
 import DockCountdownsTab from "./DockCountdownsTab";
-import { requireEntitlement, getDockPlan } from "../dockEntitlement";
+import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
 import { normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
@@ -154,6 +154,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const [success, setSuccess] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [dockPlan, setDockPlan] = useState<string>(() => getDockPlan());
 
   // Lower-thirds state — mixed LowerThirdTheme + BibleTheme entries
   const [ltFavorites, setLtFavorites] = useState<MixedLTThemeEntry[]>([]);
@@ -188,6 +189,28 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     if (mountedRef.current) setObsConnected(dockObsClient.isConnected);
     return () => { mountedRef.current = false; unsub(); };
   }, []);
+
+  // Refresh dock plan every 30s (matches DockAuthGate polling)
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (mountedRef.current) setDockPlan(getDockPlan());
+    }, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Enforce free plan: delete MCE Ticker source from OBS when user is free/downgraded
+  useEffect(() => {
+    if (dockPlan !== "free") return;
+    if (!obsConnected) return;
+
+    (async () => {
+      try {
+        // Remove "MCE Ticker" input — OBS auto-removes all scene items referencing it
+        await dockObsClient.call("RemoveInput", { inputName: "MCE Ticker" }).catch(() => { });
+        console.log("[DockMinistry] Free plan enforced: removed MCE Ticker source");
+      } catch { /* OBS may not be connected, source may not exist */ }
+    })();
+  }, [dockPlan, obsConnected]);
 
   // Clear feedback after 3s
   useEffect(() => {
@@ -534,7 +557,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           <Icon name="subtitles" size={12} />
           <span>{t("ministry.lowerThirds")}</span>
         </button>
-        {getDockPlan() !== "free" && (
+        {dockPlan !== "free" && (
           <button
             type="button"
             className={`dock-ministry-tab${subTab === "countdowns" ? " dock-ministry-tab--active" : ""}`}
@@ -547,7 +570,26 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       </div>
 
       {/* ── Ticker Tab ── */}
-      {subTab === "ticker" && (
+      {subTab === "ticker" && dockPlan === "free" && (
+        <div style={{ padding: "24px 16px", textAlign: "center" }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+            {t("upgrade.tickerRequired", "Ticker requires Basic plan or higher")}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--dock-text-dim)", marginBottom: 16, lineHeight: 1.5 }}>
+            {t("upgrade.tickerDescription", "Live-updating scripture, prayer points, and announcements for your congregation.")}
+          </div>
+          <button
+            type="button"
+            className="dock-btn dock-btn--primary dock-btn--sm"
+            onClick={() => showUpgradeModal("Upgrade to Basic or higher to enable the Ticker feature.")}
+          >
+            <Icon name="upgrade" size={14} />
+            <span>{t("upgrade.upgradePlan", "Upgrade Plan")}</span>
+          </button>
+        </div>
+      )}
+      {subTab === "ticker" && dockPlan !== "free" && (
         <>
           {/* Feedback */}
           {error && (
@@ -1280,7 +1322,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       )}
 
       {/* ── Countdowns Tab ── */}
-      {subTab === "countdowns" && getDockPlan() !== "free" && (
+      {subTab === "countdowns" && dockPlan !== "free" && (
         <DockCountdownsTab />
       )}
     </div>

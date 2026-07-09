@@ -358,3 +358,87 @@
   right: 0;
   left: auto;
 }
+
+/* ══════════════════════════════════════════════════
+   Display Mode Dropdown (on Full button)
+   ══════════════════════════════════════════════════ */
+
+/* Anchor wrapper — position: relative so the menu can be absolutely positioned */
+.dock-btm-display-mode-anchor {
+  position: relative;
+}
+
+/* The ▼ arrow inside the Full button */
+.dock-btm-display-mode-arrow {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 9px;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+  line-height: 1;
+}
+
+/* Dropdown menu — appears below the Full button */
+.dock-btm-display-mode-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  background: var(--dock-surface, #111827);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 100;
+  animation: dock-btm-display-mode-open 0.15s ease;
+}
+
+@keyframes dock-btm-display-mode-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Individual menu item */
+.dock-btm-display-mode-menu__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary, #F8FAFC);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+  white-space: nowrap;
+}
+
+.dock-btm-display-mode-menu__item:hover {
+  background: var(--surface-hover, #2A2A2E);
+}
+
+/* Active/selected item */
+.dock-btm-display-mode-menu__item--active {
+  color: var(--primary, #1D4ED8);
+  font-weight: 600;
+}
+
+.dock-btm-display-mode-menu__item--active::before {
+  content: "✓";
+  margin-right: 6px;
+  font-size: 11px;
+}

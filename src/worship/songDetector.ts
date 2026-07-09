@@ -69,18 +69,44 @@ export function detectLanguage(text: string): string | undefined {
   return undefined;
 }
 
-// ── Pattern A: Numbered songs ──────────────────────────────────────────────
+// ── Attribution detection ─────────────────────────────────────────────────
 
-const NUMBERED_RE = /^\s*(\d+)[.\)]\s*(.*)$/;
+const ATTRIBUTION_RE: RegExp[] = [
+  /^\s*[A-Z][a-z]{2,}\s+[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})*\s*$/,
+  /^\s*(?:MHB|PH|CH|TH|THC|CB|GBP|CWS|PPP|CP|TPH|TCH|SGT|SOS|HCB|BB|KB)\s*\.?\s*\d+\s*$/i,
+];
+
+function isAttributionLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  return ATTRIBUTION_RE.some((re) => re.test(trimmed));
+}
+
+type LineType = "hymn-header" | "verse-number" | "attribution" | "lyric" | "blank";
+
+function classifyLine(line: string): LineType {
+  const trimmed = line.trim();
+  if (!trimmed) return "blank";
+  if (isAttributionLine(trimmed)) return "attribution";
+  if (/^\d+$/.test(trimmed)) return "hymn-header";
+  if (/^\d+\./.test(trimmed)) return "verse-number";
+  if (/^\d+\)/.test(trimmed)) return "verse-number";
+  return "lyric";
+}
+
+// ── Pattern A: Numbered songs ──────────────────────────────────────────────
 
 function detectNumbered(text: string): DetectionResult {
   const lines = text.split("\n");
-  const boundaries: { lineIdx: number; num: number; trailing: string }[] = [];
+  const types = lines.map(classifyLine);
 
+  const boundaries: { lineIdx: number; num: number }[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(NUMBERED_RE);
-    if (m) {
-      boundaries.push({ lineIdx: i, num: parseInt(m[1], 10), trailing: m[2].trim() });
+    if (types[i] === "hymn-header") {
+      const m = lines[i].match(/^\s*(\d+)\s*$/);
+      if (m) {
+        boundaries.push({ lineIdx: i, num: parseInt(m[1], 10) });
+      }
     }
   }
 
@@ -92,23 +118,21 @@ function detectNumbered(text: string): DetectionResult {
     const start = boundaries[b].lineIdx;
     const end = b + 1 < boundaries.length ? boundaries[b + 1].lineIdx : lines.length;
 
-    // Title: number + trailing text, or number + next non-empty line
-    let title = boundaries[b].trailing
-      ? `${boundaries[b].num}. ${boundaries[b].trailing}`
-      : "";
-    if (!title.replace(`${boundaries[b].num}. `, "")) {
-      for (let j = start + 1; j < end; j++) {
-        const trimmed = lines[j].trim();
-        if (trimmed) { title = `${boundaries[b].num}. ${trimmed}`; break; }
+    const title = `Hymn ${boundaries[b].num}`;
+    let titleEndLine = start + 1;
+    for (let j = start + 1; j < end; j++) {
+      if (types[j] === "lyric") {
+        titleEndLine = j;
+        break;
       }
+      if (types[j] === "verse-number") break;
+      titleEndLine = j + 1;
     }
-    if (!title) title = `Song ${boundaries[b].num}`;
 
-    // Lyrics: everything after the title line(s), skipping blank leading lines
-    const titleEnd = boundaries[b].trailing ? start + 1 : start + 2;
     const lyricsLines: string[] = [];
     let leadingSkipped = false;
-    for (let j = titleEnd; j < end; j++) {
+    for (let j = titleEndLine; j < end; j++) {
+      if (types[j] === "attribution") continue;
       const line = lines[j];
       if (!leadingSkipped) {
         if (!line.trim()) continue;
@@ -128,8 +152,42 @@ function detectNumbered(text: string): DetectionResult {
     });
   }
 
+  validateVerseNumbering(songs);
+
   const confidence = scoreDetection(songs, lines.length);
   return { pattern: "numbered", confidence, songs };
+}
+
+// ── Validation: verse numbering continuity ────────────────────────────────
+
+function validateVerseNumbering(songs: DetectedSong[]): void {
+  for (let i = 1; i < songs.length; i++) {
+    const prevVerses = extractVerseNumbers(songs[i - 1].lyrics);
+    const currVerses = extractVerseNumbers(songs[i].lyrics);
+
+    if (prevVerses.length === 0 || currVerses.length === 0) continue;
+
+    const prevMax = Math.max(...prevVerses);
+    const currMin = Math.min(...currVerses);
+
+    if (currMin === 1) continue;
+
+    if (currMin === prevMax + 1) {
+      songs[i - 1].lyrics += "\n" + songs[i].lyrics;
+      songs[i - 1].lineCount += songs[i].lineCount;
+      songs.splice(i, 1);
+      i--;
+    }
+  }
+}
+
+function extractVerseNumbers(lyrics: string): number[] {
+  const numbers: number[] = [];
+  for (const line of lyrics.split("\n")) {
+    const m = line.match(/^\s*(\d+)\.\s/);
+    if (m) numbers.push(parseInt(m[1], 10));
+  }
+  return numbers;
 }
 
 // ── Pattern B: Titled songs ───────────────────────────────────────────────

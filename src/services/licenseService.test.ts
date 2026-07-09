@@ -290,26 +290,26 @@ describe("getTrialDaysRemaining", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("Feature gates — all plans", () => {
-  const ALL_PLANS: PlanTier[] = ["free", "trial", "basic", "growth", "pro", "ambassador"];
+  const ALL_PLANS: PlanTier[] = ["free", "trial", "basic", "growth", "pro", "ambassador", "unlimited"];
 
   // Feature → expected results per plan
   // Trial users behave like Pro (getEffectivePlan returns "pro" during trial).
   const FEATURE_MATRIX: Record<string, Record<PlanTier, boolean>> = {
-    translation: { free: false, trial: true, basic: true, growth: true, pro: true, ambassador: true },
-    massImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    multiview: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    easyWorshipImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    proPresenterImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    tickers: { free: false, trial: true, basic: true, growth: true, pro: true, ambassador: true },
-    speechToScripture: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    sermonExport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    aiFeatures: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    cloudSync: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    advancedAnalytics: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    customReports: { free: false, trial: true, basic: false, growth: false, pro: true, ambassador: true },
-    unlimitedDevices: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    unlimitedMultiview: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    mobileControl: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    translation: { free: false, trial: true, basic: true, growth: true, pro: true, ambassador: true, unlimited: true },
+    massImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    multiview: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    easyWorshipImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    proPresenterImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    tickers: { free: false, trial: true, basic: true, growth: true, pro: true, ambassador: true, unlimited: true },
+    speechToScripture: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    sermonExport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    aiFeatures: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    cloudSync: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    advancedAnalytics: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    customReports: { free: false, trial: true, basic: false, growth: false, pro: true, ambassador: true, unlimited: true },
+    unlimitedDevices: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    unlimitedMultiview: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    mobileControl: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
   };
 
   const FEATURE_FN_MAP: Record<string, (user: AuthUser | null) => boolean> = {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { BibleTheme } from "../../bible/types";
 import type { MediaItem } from "../../library/libraryTypes";
+import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
 import Icon from "../DockIcon";
 import type { DockBackgroundPreset } from "../dockConsoleTheme";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
@@ -11,7 +12,7 @@ import { loadDockFavoriteBibleThemes } from "../dockThemeData";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 
 /* ── Types ── */
-type BackgroundType = "off" | "theme" | "color" | "image" | "video";
+type BackgroundType = "off" | "theme" | "color" | "image" | "pattern" | "video";
 
 interface Props {
   quickSettings: DockFullscreenQuickThemeSettings;
@@ -28,6 +29,8 @@ interface Props {
   showReferences?: boolean;
   /** Active overlay mode — used to resolve variant preview in theme cards */
   overlayMode?: "fullscreen" | "lower-third";
+  /** Active display mode — controls whether Compare Layout section is visible */
+  displayMode?: "single" | "compare";
 }
 
 const BG_TYPE_KEY = "dtb-bg-picker-type";
@@ -37,6 +40,7 @@ const BG_OPTIONS: Array<{ id: BackgroundType; label: string; icon: string }> = [
   { id: "theme", label: "bgPicker.theme", icon: "palette" },
   { id: "color", label: "common.color", icon: "color_lens" },
   { id: "image", label: "common.image", icon: "image" },
+  { id: "pattern", label: "common.pattern", icon: "texture" },
   { id: "video", label: "common.video", icon: "videocam" },
 ];
 
@@ -67,6 +71,7 @@ function inferBgTypeFromSettings(qs: DockFullscreenQuickThemeSettings): Backgrou
   // Prefer explicit persisted type
   if (qs.backgroundType) return qs.backgroundType;
   if (qs.backgroundImage) return "image";
+  if (qs.backgroundPattern) return "pattern";
   if (qs.backgroundVideo) return "video";
   if (qs.backgroundColor && qs.backgroundColorEnd) return "color";
   if (qs.backgroundColor && qs.backgroundColor !== "transparent") return "color";
@@ -88,13 +93,14 @@ export default function BackgroundPickerCard({
   onBackgroundPresetChange,
   showReferences = true,
   overlayMode = "fullscreen",
+  displayMode = "single",
 }: Props) {
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
   const [bgType, setBgType] = useState<BackgroundType>(() => {
     try {
       const stored = localStorage.getItem(getUserScopedKey(BG_TYPE_KEY));
-      if (stored === "off" || stored === "theme" || stored === "color" || stored === "image" || stored === "video") return stored;
+      if (stored === "off" || stored === "theme" || stored === "color" || stored === "image" || stored === "pattern" || stored === "video") return stored;
     } catch { /* ignore */ }
     return inferBgTypeFromSettings(quickSettings);
   });
@@ -162,6 +168,21 @@ export default function BackgroundPickerCard({
         backgroundOpacity: prev.backgroundOpacity === 0 ? 1 : prev.backgroundOpacity,
         fullscreenShadeOpacity: prev.fullscreenShadeOpacity === 0 ? 0.42 : prev.fullscreenShadeOpacity,
       });
+    } else if (type === "pattern") {
+      updater = (prev) => ({
+        ...prev,
+        backgroundType: "pattern",
+        backgroundColor: "",
+        backgroundColorEnd: "",
+        bgGradientAngle: 180,
+        backgroundImage: "",
+        backgroundImageFilePath: "",
+        backgroundVideo: "",
+        backgroundVideoFilePath: "",
+        backgroundPattern: prev.backgroundPattern || PATTERN_OPTIONS[0]?.src || "",
+        backgroundOpacity: prev.backgroundOpacity === 0 ? 1 : prev.backgroundOpacity,
+        fullscreenShadeOpacity: prev.fullscreenShadeOpacity === 0 ? 0.42 : prev.fullscreenShadeOpacity,
+      });
     } else if (type === "color") {
       updater = (prev) => ({
         ...prev,
@@ -206,6 +227,7 @@ export default function BackgroundPickerCard({
       }
       case "image": return quickSettings.backgroundImage ? t('bgPicker.imageBgActive') : t('bgPicker.noImageSelected');
       case "video": return quickSettings.backgroundVideo ? t('bgPicker.videoBgActive') : t('bgPicker.noVideoSelected');
+      case "pattern": return quickSettings.backgroundPattern ? t('bgPicker.patternBgActive') : t('bgPicker.noPatternSelected');
       default: return "";
     }
   }, [bgType, quickSettings.backgroundColor, quickSettings.backgroundColorEnd, quickSettings.backgroundImage, quickSettings.backgroundVideo]);
@@ -286,6 +308,12 @@ export default function BackgroundPickerCard({
             )}
             {bgType === "video" && (
               <VideoTab
+                quickSettings={quickSettings}
+                onQuickSettingsChange={onQuickSettingsChange}
+              />
+            )}
+            {bgType === "pattern" && (
+              <PatternTab
                 quickSettings={quickSettings}
                 onQuickSettingsChange={onQuickSettingsChange}
               />
@@ -463,6 +491,14 @@ export default function BackgroundPickerCard({
           {/* ── Reference Section ── */}
           {showReferences && (
             <ReferenceSection
+              quickSettings={quickSettings}
+              onQuickSettingsChange={onQuickSettingsChange}
+            />
+          )}
+
+          {/* Compare Layout (only in compare mode) */}
+          {displayMode === "compare" && (
+            <CompareLayoutSection
               quickSettings={quickSettings}
               onQuickSettingsChange={onQuickSettingsChange}
             />
@@ -843,6 +879,75 @@ function VideoTab({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Pattern Tab — SVG patterns from shared backgroundAssets ── */
+
+interface PatternOption {
+  id: string;
+  label: string;
+  /** SVG data URI — used for both preview and overlay rendering */
+  src: string;
+}
+
+const slugify = (s: string) =>
+  s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+/** Shared SVG patterns from backgroundAssets.ts — single source of truth */
+export const PATTERN_OPTIONS: PatternOption[] = BACKGROUND_PATTERNS.map((p) => ({
+  id: slugify(p.label),
+  label: p.label,
+  src: p.src,
+}));
+
+function PatternTab({
+  quickSettings,
+  onQuickSettingsChange,
+}: {
+  quickSettings: DockFullscreenQuickThemeSettings;
+  onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
+}) {
+  const { t } = useTranslation();
+  const currentPattern = quickSettings.backgroundPattern || "";
+
+  const selectPattern = useCallback((src: string) => {
+    onQuickSettingsChange((prev) => ({
+      ...prev,
+      backgroundPattern: src,
+      backgroundImage: "",
+      backgroundImageFilePath: "",
+    }));
+  }, [onQuickSettingsChange]);
+
+  return (
+    <div className="dtb-pattern-tab">
+      <p className="dtb-bg-picker__sub-heading">{t('bgPicker.selectPattern')}</p>
+      <div className="dtb-pattern-grid">
+        {PATTERN_OPTIONS.map((opt) => {
+          const isSelected = currentPattern === opt.src;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              className={`dtb-pattern-swatch${isSelected ? " dtb-pattern-swatch--selected" : ""}`}
+              onClick={() => selectPattern(opt.src)}
+              title={opt.label}
+            >
+              <div className="dtb-pattern-swatch__preview">
+                <img src={opt.src} alt={opt.label} className="dtb-pattern-swatch__img" />
+              </div>
+              <span className="dtb-pattern-swatch__label">{opt.label}</span>
+              {isSelected && (
+                <div className="dtb-bg-picker__card-check">
+                  <Icon name="check" size={14} />
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1631,6 +1736,114 @@ function PresetSection({
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Compare Layout Section ── */
+const COMPARE_PRESETS = [
+  { label: "Compact", width: 45, gap: 20 },
+  { label: "Balanced", width: 40, gap: 40 },
+  { label: "Wide", width: 35, gap: 80 },
+] as const;
+
+function CompareLayoutSection({
+  quickSettings,
+  onQuickSettingsChange,
+}: {
+  quickSettings: DockFullscreenQuickThemeSettings;
+  onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
+}) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="dtb-colors__section dtb-colors__section--collapsible">
+      <button
+        type="button"
+        className="dtb-colors__collapsible-header"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}>
+        <span className="dtb-colors__label">Compare Layout</span>
+        <Icon name={open ? "expand_less" : "expand_more"} size={14} />
+      </button>
+      {open && (
+        <>
+          {/* ── Translation Panel Width slider ── */}
+          <div className="dtb-slider-field">
+            <div className="dtb-slider-field__head">
+              <span>Translation Panel Width</span>
+              <span className="dtb-slider-field__value">
+                {quickSettings.compareTranslationWidth}%
+              </span>
+            </div>
+            <input
+              type="range"
+              className="dtb-slider"
+              min={30}
+              max={50}
+              step={1}
+              value={quickSettings.compareTranslationWidth}
+              onChange={(e) =>
+                onQuickSettingsChange((prev) => ({
+                  ...prev,
+                  compareTranslationWidth: Number(e.target.value),
+                }))
+              }
+              aria-label="Translation Panel Width"
+            />
+          </div>
+
+          {/* ── Space Between Translations slider ── */}
+          <div className="dtb-slider-field">
+            <div className="dtb-slider-field__head">
+              <span>Space Between Translations</span>
+              <span className="dtb-slider-field__value">
+                {quickSettings.compareTranslationGap}px
+              </span>
+            </div>
+            <input
+              type="range"
+              className="dtb-slider"
+              min={0}
+              max={200}
+              step={1}
+              value={quickSettings.compareTranslationGap}
+              onChange={(e) =>
+                onQuickSettingsChange((prev) => ({
+                  ...prev,
+                  compareTranslationGap: Number(e.target.value),
+                }))
+              }
+              aria-label="Space Between Translations"
+            />
+          </div>
+
+          {/* ── Compare Layout Presets ── */}
+          <div className="dtb-colors__presets" style={{ padding: "0 12px 4px" }}>
+            {COMPARE_PRESETS.map((preset) => {
+              const isActive =
+                quickSettings.compareTranslationWidth === preset.width &&
+                quickSettings.compareTranslationGap === preset.gap;
+              return (
+                <button
+                  key={preset.label}
+                  type="button"
+                  className={`dtb-colors__preset${isActive ? " dtb-colors__preset--active" : ""}`}
+                  onClick={() =>
+                    onQuickSettingsChange((prev) => ({
+                      ...prev,
+                      compareTranslationWidth: preset.width,
+                      compareTranslationGap: preset.gap,
+                    }))
+                  }>
+                  <span className="dtb-colors__preset-label">{preset.label}</span>
+                  <span className="dtb-colors__preset-hint">{preset.width}% / {preset.gap}px</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );

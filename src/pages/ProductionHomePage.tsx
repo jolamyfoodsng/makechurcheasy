@@ -28,6 +28,12 @@ import {
   HelpCircle,
   RotateCcw,
   AlertTriangle,
+  Crown,
+  Coins,
+  Calendar,
+  Wifi,
+  Newspaper,
+  Zap,
 } from "lucide-react";
 
 import DashboardTutorial, {
@@ -49,6 +55,10 @@ import { track } from "../services/analytics";
 import { TutorialModal } from "../components/TutorialModal";
 import { OnboardingResumeBanner } from "./OnboardingPage";
 import { useAppTheme } from "../hooks/useAppTheme";
+import { getEffectivePlan, getUserPlanLimits, isInTrial, getTrialDaysRemaining } from "../services/licenseService";
+import { fetchCreditDetails } from "../services/credits";
+import { getCachedSubscription } from "../services/subscriptionCache";
+import { getPlanConfig, getPlanLabel } from "../services/planConfig";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -89,6 +99,7 @@ interface DashboardHeaderProps {
   dockAvailable: boolean;
   onConnectObs: () => void;
   onOpenTutorials: () => void;
+  onOpenTutorialsWithReset: () => void;
 }
 
 function DashboardHeader({
@@ -97,6 +108,7 @@ function DashboardHeader({
   dockAvailable,
   onConnectObs,
   onOpenTutorials,
+  onOpenTutorialsWithReset,
 }: DashboardHeaderProps) {
   const { t } = useTranslation();
   const greetingKey = useMemo(() => getGreetingKey(), []);
@@ -133,6 +145,14 @@ function DashboardHeader({
         </div>
         <div className="header-right">
           <button
+            className="btn-secondary"
+            onClick={() => onOpenTutorialsWithReset()}
+            title={t("dt.button.tooltip")}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+          >
+            <HelpCircle size={16} /> {t("dt.button")}
+          </button>
+          <button
             className="header-theme-toggle"
             onClick={() => setTheme(isLight ? "dark" : "light")}
             title={isLight ? t("dashboard.header.themeToggle.dark") : t("dashboard.header.themeToggle.light")}
@@ -150,7 +170,7 @@ function DashboardHeader({
             <p className="status-title">
               {t("dashboard.status.obs")} {obsConnected ? t("dashboard.obs.connected") : t("dashboard.obs.disconnected")}{" "}
               <span
-                className="status-dot"
+                className={`status-dot ${obsConnected ? "status-dot--live" : ""}`}
                 style={{
                   backgroundColor: obsConnected
                     ? "var(--success)"
@@ -208,6 +228,311 @@ function DashboardHeader({
         </button>
       </div>
     </>
+  );
+}
+
+// ── Dashboard Summary Cards ────────────────────────────────────────────────
+
+interface SummaryCardData {
+  plan: string;
+  planLabel: string;
+  credits: number | null;
+  creditsTotal: number;
+  deviceLimit: number;
+  deviceUnlimited: boolean;
+  renewalDate: string | null;
+  trialActive: boolean;
+  trialDaysLeft: number;
+}
+
+function DashboardSummaryCards() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const [data, setData] = useState<SummaryCardData | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const load = async () => {
+      try {
+        const plan = getEffectivePlan(user);
+        const limits = getUserPlanLimits(user);
+        const trial = isInTrial(user);
+        const trialDays = getTrialDaysRemaining(user);
+        const creditDetails = await fetchCreditDetails();
+        const sub = getCachedSubscription();
+        const config = await getPlanConfig();
+        const planLabel = getPlanLabel(config, plan);
+
+        if (!mounted) return;
+        setData({
+          plan,
+          planLabel,
+          credits: creditDetails?.credits ?? null,
+          creditsTotal: creditDetails?.planAllocation ?? 0,
+          deviceLimit: limits.devices,
+          deviceUnlimited: limits.unlimitedDevices,
+          renewalDate: sub?.payload?.expiresAt ?? null,
+          trialActive: trial,
+          trialDaysLeft: trialDays,
+        });
+      } catch {
+        if (!mounted) return;
+        setData(null);
+      }
+    };
+
+    load();
+    return () => { mounted = false; };
+  }, [user]);
+
+  if (!data) return null;
+
+  const renewalLabel = data.trialActive
+    ? t("dashboard.summary.renewalTrial", { date: data.renewalDate ? new Date(data.renewalDate).toLocaleDateString() : `${data.trialDaysLeft}d` })
+    : data.renewalDate
+      ? t("dashboard.summary.renewalActive", { date: new Date(data.renewalDate).toLocaleDateString() })
+      : t("dashboard.summary.renewalNone");
+
+  const creditsLabel = data.credits === null
+    ? "—"
+    : data.creditsTotal <= 0
+      ? t("dashboard.summary.creditsUnlimited")
+      : `${data.credits}`;
+
+  const deviceLabel = data.deviceUnlimited
+    ? t("dashboard.summary.devicesUnlimited")
+    : `${data.deviceLimit}`;
+
+  return (
+    <div className="summary-cards" data-dt-tutorial="summary-cards">
+      <div className="summary-card summary-card--plan">
+        <div className="summary-card-icon-wrap summary-card-icon--plan">
+          <Crown size={18} />
+        </div>
+        <div className="summary-card-body">
+          <span className="summary-card-label">{t("dashboard.summary.plan")}</span>
+          <span className="summary-card-value">{data.planLabel || t("dashboard.summary.planFree")}</span>
+          <span className="summary-card-sub">
+            {data.trialActive
+              ? t("dashboard.summary.planTrial") + ` — ${data.trialDaysLeft}d`
+              : t("dashboard.summary.planSubtitle")}
+          </span>
+        </div>
+      </div>
+
+      <div className="summary-card summary-card--credits">
+        <div className="summary-card-icon-wrap summary-card-icon--credits">
+          <Coins size={18} />
+        </div>
+        <div className="summary-card-body">
+          <span className="summary-card-label">{t("dashboard.summary.credits")}</span>
+          <span className="summary-card-value">{creditsLabel}</span>
+          <span className="summary-card-sub">
+            {data.creditsTotal > 0
+              ? t("dashboard.summary.creditsOf", { used: data.creditsTotal })
+              : t("dashboard.summary.creditsSubtitle")}
+          </span>
+        </div>
+      </div>
+
+      <div className="summary-card summary-card--devices">
+        <div className="summary-card-icon-wrap summary-card-icon--devices">
+          <MonitorSmartphone size={18} />
+        </div>
+        <div className="summary-card-body">
+          <span className="summary-card-label">{t("dashboard.summary.devices")}</span>
+          <span className="summary-card-value">{deviceLabel}</span>
+          <span className="summary-card-sub">
+            {data.deviceUnlimited
+              ? t("dashboard.summary.devicesUnlimited")
+              : t("dashboard.summary.devicesSubtitle", { limit: data.deviceLimit })}
+          </span>
+        </div>
+      </div>
+
+      <div className="summary-card summary-card--renewal">
+        <div className="summary-card-icon-wrap summary-card-icon--renewal">
+          <Calendar size={18} />
+        </div>
+        <div className="summary-card-body">
+          <span className="summary-card-label">{t("dashboard.summary.renewal")}</span>
+          <span className="summary-card-value summary-card-value--renewal">{renewalLabel}</span>
+          <span className="summary-card-sub">{t("dashboard.summary.renewalSubtitle")}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Monthly Usage Widget ────────────────────────────────────────────────────
+
+interface UsageItem {
+  icon: typeof Mic;
+  label: string;
+  used: number;
+  limit: number;
+  color: string;
+}
+
+function MonthlyUsageWidget() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const [items, setItems] = useState<UsageItem[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const load = async () => {
+      try {
+        const limits = getUserPlanLimits(user);
+        const creditDetails = await fetchCreditDetails();
+        const creditsUsed = creditDetails?.totalConsumed ?? 0;
+        const creditsTotal = creditDetails?.planAllocation ?? 0;
+
+        if (!mounted) return;
+        setItems([
+          {
+            icon: BookOpen,
+            label: t("dashboard.monthlyUsage.translation"),
+            used: 0,
+            limit: limits.translation ? -1 : 0,
+            color: "var(--accent-blue)",
+          },
+          {
+            icon: Zap,
+            label: t("dashboard.monthlyUsage.aiSummary"),
+            used: 0,
+            limit: limits.aiFeatures ? -1 : 0,
+            color: "var(--primary)",
+          },
+          {
+            icon: Mic,
+            label: t("dashboard.monthlyUsage.speechToScripture"),
+            used: 0,
+            limit: limits.speechToScripture ? -1 : 0,
+            color: "var(--success)",
+          },
+          {
+            icon: Coins,
+            label: t("dashboard.monthlyUsage.creditsUsed"),
+            used: creditsUsed,
+            limit: creditsTotal,
+            color: "var(--accent-orange)",
+          },
+        ]);
+      } catch {
+        if (!mounted) return;
+      }
+    };
+
+    load();
+    return () => { mounted = false; };
+  }, [user, t]);
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="panel usage-widget" data-dt-tutorial="monthly-usage">
+      <h3 className="panel-title">
+        <Activity className="panel-icon" /> {t("dashboard.monthlyUsage.title")}
+      </h3>
+      <div className="usage-grid">
+        {items.map((item) => {
+          const IconComp = item.icon;
+          const isUnlimited = item.limit === -1;
+          const pct = isUnlimited ? 0 : item.limit > 0 ? Math.min((item.used / item.limit) * 100, 100) : 0;
+
+          return (
+            <div key={item.label} className="usage-item">
+              <div className="usage-item-header">
+                <IconComp size={14} style={{ color: item.color }} />
+                <span className="usage-item-label">{item.label}</span>
+              </div>
+              <div className="usage-bar-track">
+                <div
+                  className="usage-bar-fill"
+                  style={{ width: `${pct}%`, backgroundColor: item.color }}
+                />
+              </div>
+              <span className="usage-item-value">
+                {isUnlimited
+                  ? t("dashboard.monthlyUsage.unlimited")
+                  : item.limit > 0
+                    ? `${item.used} / ${item.limit}`
+                    : "—"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Remote Presentation Status ─────────────────────────────────────────────
+
+function RemotePresentationStatus() {
+  const { t } = useTranslation();
+  const mockConnected = true;
+  const mockDeviceCount = 2;
+
+  return (
+    <div className="panel remote-panel" data-dt-tutorial="remote-status">
+      <div className="remote-header">
+        <div className="remote-header-left">
+          <Wifi size={18} className="remote-icon" />
+          <h3 className="panel-title" style={{ marginBottom: 0 }}>{t("dashboard.remote.title")}</h3>
+        </div>
+        <span className={`remote-badge ${mockConnected ? "remote-badge--connected" : "remote-badge--disconnected"}`}>
+          {mockConnected ? t("dashboard.remote.connected") : t("dashboard.remote.disconnected")}
+        </span>
+      </div>
+      <div className="remote-body">
+        <p className="remote-detail">
+          {mockConnected
+            ? t("dashboard.remote.devicesActive", { count: mockDeviceCount })
+            : t("dashboard.remote.noDevices")}
+        </p>
+        <p className="remote-hint">{t("dashboard.remote.controlHint")}</p>
+      </div>
+    </div>
+  );
+}
+
+// ── What's New Section ─────────────────────────────────────────────────────
+
+function WhatsNewSection() {
+  const { t } = useTranslation();
+  const [dismissed, setDismissed] = useState(false);
+
+  if (dismissed) return null;
+
+  return (
+    <div className="panel whatsnew-panel" data-dt-tutorial="whats-new">
+      <div className="whatsnew-header">
+        <div className="whatsnew-header-left">
+          <Newspaper size={18} className="whatsnew-icon" />
+          <h3 className="panel-title" style={{ marginBottom: 0 }}>{t("dashboard.whatsNew.title")}</h3>
+          <span className="whatsnew-badge">{t("dashboard.whatsNew.version", { version: "2.4" })}</span>
+        </div>
+        <button className="whatsnew-dismiss" onClick={() => setDismissed(true)} title={t("dashboard.whatsNew.dismiss")}>
+          ✕
+        </button>
+      </div>
+      <div className="whatsnew-body">
+        <ul className="whatsnew-list">
+          <li>{t("dashboard.monthlyUsage.title")} — track your AI and credit usage at a glance</li>
+          <li>Remote Presentation — control slides from any device</li>
+          <li>Dashboard summary cards — plan, credits, devices, renewal at a glance</li>
+        </ul>
+        <div className="whatsnew-footer">
+          <a className="whatsnew-link" href="https://github.com/MakeChurchEasy/makechurcheasy/releases" target="_blank" rel="noreferrer" title={t("dashboard.whatsNew.readMore")}>
+            {t("dashboard.whatsNew.readMore")}
+          </a>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -940,18 +1265,6 @@ export default function ProductionHomePage() {
     <div className="app-page__inner">
       <OnboardingResumeBanner />
 
-      {/* ── Tutorial button ── */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-        <button
-          className="btn-secondary"
-          onClick={() => { resetDashboardTutorial(); setTourActive(true); setBannerDismissed(false); }}
-          title={t("dt.button.tooltip")}
-          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-        >
-          <HelpCircle size={16} /> {t("dt.button")}
-        </button>
-      </div>
-
       {/* ── Incomplete tutorial banner ── */}
       {!tourActive && !isDashboardTutorialCompleted() && !bannerDismissed && (
         <div className="tst-tutorial-banner" style={{ marginBottom: 12 }}>
@@ -978,7 +1291,13 @@ export default function ProductionHomePage() {
         dockAvailable={dockAvailable}
         onConnectObs={handleConnectObs}
         onOpenTutorials={handleOpenTutorials}
+        onOpenTutorialsWithReset={() => {
+          resetDashboardTutorial();
+          setTourActive(true);
+          setBannerDismissed(false);
+        }}
       />
+      <DashboardSummaryCards />
       <FeatureGrid
         voiceBibleStatus={voiceBible.status}
         voiceBibleConnected={voiceBible.status !== "error"}
@@ -991,9 +1310,11 @@ export default function ProductionHomePage() {
         onStartVoiceBible={handleToggleVoiceBible}
         onNavigate={handleNavigate}
       />
+      <MonthlyUsageWidget />
       <div data-dt-tutorial="connection-urls">
         <ConnectionUrls obsStatus={obsStatus} />
       </div>
+      <RemotePresentationStatus />
       <div data-dt-tutorial="activity-log">
         <ActivityAndStatus
           activities={activities}
@@ -1006,6 +1327,7 @@ export default function ProductionHomePage() {
           onNavigate={handleNavigate}
         />
       </div>
+      <WhatsNewSection />
       <TutorialModal
         open={tutorialOpen}
         onClose={() => setTutorialOpen(false)}

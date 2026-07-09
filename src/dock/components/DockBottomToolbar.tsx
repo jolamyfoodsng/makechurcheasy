@@ -12,12 +12,21 @@ import Icon from "../DockIcon";
 import "./DockBottomToolbar.css";
 
 type OverlayMode = "fullscreen" | "lower-third";
+type DisplayMode = "single" | "compare";
+const DISPLAY_MODES = [
+  { id: "single" as const, labelKey: "dock.bottomToolbar.singleTranslation" },
+  { id: "compare" as const, labelKey: "dock.bottomToolbar.compareTranslations" },
+];
 
 interface Props {
   /** Current overlay mode */
   overlayMode: OverlayMode;
   /** Called when the operator toggles Full ↔ LT */
   onModeChange: (mode: OverlayMode) => void;
+  /** Current display mode (single translation or compare) */
+  displayMode?: DisplayMode;
+  /** Called when the operator switches display mode */
+  onDisplayModeChange?: (mode: DisplayMode) => void;
   /** Whether the segmented control shows the morphing pulse */
   morphing?: boolean;
   /** Action buttons rendered between the divider and spacer */
@@ -39,6 +48,8 @@ interface Props {
 export default function DockBottomToolbar({
   overlayMode,
   onModeChange,
+  displayMode = "single",
+  onDisplayModeChange,
   morphing = false,
   children,
   clearLabel,
@@ -52,6 +63,8 @@ export default function DockBottomToolbar({
   const resolvedClearLabel = clearLabel ?? t("dock.bottomToolbar.hideBible");
   const [showOverflow, setShowOverflow] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
+  const [showDisplayModeMenu, setShowDisplayModeMenu] = useState(false);
+  const displayModeMenuRef = useRef<HTMLDivElement>(null);
 
   // Close overflow on outside click
   useEffect(() => {
@@ -65,7 +78,27 @@ export default function DockBottomToolbar({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [showOverflow]);
 
+  // Close display mode menu on outside click
+  useEffect(() => {
+    if (!showDisplayModeMenu) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (displayModeMenuRef.current && !displayModeMenuRef.current.contains(e.target as Node)) {
+        setShowDisplayModeMenu(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [showDisplayModeMenu]);
+
   const toggleOverflow = useCallback(() => setShowOverflow((prev) => !prev), []);
+
+  const handleDisplayModeSelect = useCallback(
+    (mode: DisplayMode) => {
+      onDisplayModeChange?.(mode);
+      setShowDisplayModeMenu(false);
+    },
+    [onDisplayModeChange],
+  );
 
   if (collapsed) {
     return (
@@ -95,26 +128,44 @@ export default function DockBottomToolbar({
   }
 
   /* ═══ COMPACT MODE (panel ≤350px) ═══
-   * Layout: [ Full | LT ] ... [ Delete ] [ ⋯ ]
+   * Layout: [ Full ▼ | LT ] ... [ Delete ] [ ⋯ ]
    * Hidden actions (children) go into the ⋯ overflow dropdown */
   if (compact) {
     return (
       <div className="dock-btm-toolbar dock-btm-toolbar--compact">
         <div className="dock-btm-toolbar__row">
-          {/* Segmented: Full | LT */}
+          {/* Segmented: Full ▼ | LT */}
           <div
             className={`dock-btm-segmented${morphing ? " dock-btm-segmented--morphing" : ""}`}
             role="group"
             aria-label={t("dock.bottomToolbar.overlayModeLabel")}
           >
-            <button
-              type="button"
-              className={`dock-btm-segmented__item${overlayMode === "fullscreen" ? " dock-btm-segmented__item--active" : ""}`}
-              onClick={() => onModeChange("fullscreen")}
-              title={t("dock.bottomToolbar.fullscreenTooltip")}
-            >
-              {t("dock.bottomToolbar.fullLabel")}
-            </button>
+            <div className="dock-btm-display-mode-anchor" ref={displayModeMenuRef}>
+              <button
+                type="button"
+                className={`dock-btm-segmented__item dock-btm-segmented__item--full${overlayMode === "fullscreen" ? " dock-btm-segmented__item--active" : ""}`}
+                onClick={() => onModeChange("fullscreen")}
+                title={t("dock.bottomToolbar.fullscreenTooltip")}
+              >
+                {t("dock.bottomToolbar.fullLabel")}
+                <span className="dock-btm-display-mode-arrow">▼</span>
+              </button>
+              {showDisplayModeMenu && onDisplayModeChange && (
+                <div className="dock-btm-display-mode-menu" role="menu">
+                  {DISPLAY_MODES.map((mode) => (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      className={`dock-btm-display-mode-menu__item${displayMode === mode.id ? " dock-btm-display-mode-menu__item--active" : ""}`}
+                      onClick={() => handleDisplayModeSelect(mode.id)}
+                      role="menuitem"
+                    >
+                      {t(mode.labelKey)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               type="button"
               className={`dock-btm-segmented__item${overlayMode === "lower-third" ? " dock-btm-segmented__item--active" : ""}`}
@@ -174,14 +225,32 @@ export default function DockBottomToolbar({
           role="group"
           aria-label={t("dock.bottomToolbar.overlayModeLabel")}
         >
-          <button
-            type="button"
-            className={`dock-btm-segmented__item${overlayMode === "fullscreen" ? " dock-btm-segmented__item--active" : ""}`}
-            onClick={() => onModeChange("fullscreen")}
-            title={t("dock.bottomToolbar.fullscreenTooltip")}
-          >
-            {t("dock.bottomToolbar.fullLabel")}
-          </button>
+          <div className="dock-btm-display-mode-anchor" ref={displayModeMenuRef}>
+            <button
+              type="button"
+              className={`dock-btm-segmented__item dock-btm-segmented__item--full${overlayMode === "fullscreen" ? " dock-btm-segmented__item--active" : ""}`}
+              onClick={() => onModeChange("fullscreen")}
+              title={t("dock.bottomToolbar.fullscreenTooltip")}
+            >
+              {t("dock.bottomToolbar.fullLabel")}
+              <span className="dock-btm-display-mode-arrow">▼</span>
+            </button>
+            {showDisplayModeMenu && onDisplayModeChange && (
+              <div className="dock-btm-display-mode-menu" role="menu">
+                {DISPLAY_MODES.map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    className={`dock-btm-display-mode-menu__item${displayMode === mode.id ? " dock-btm-display-mode-menu__item--active" : ""}`}
+                    onClick={() => handleDisplayModeSelect(mode.id)}
+                    role="menuitem"
+                  >
+                    {t(mode.labelKey)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             className={`dock-btm-segmented__item${overlayMode === "lower-third" ? " dock-btm-segmented__item--active" : ""}`}

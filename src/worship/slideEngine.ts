@@ -199,66 +199,6 @@ const LYRIC_LABEL_RE =
   /^(Verse|Chorus|Bridge|Pre[-\s]?Chorus|Refrain|Tag|Intro|Outro)\s*\d*:?\s*[:\-]?\s*(.*)/i;
 
 /**
- * Expand a single lyric line into shorter display lines:
- *  1. Extract section labels (Verse:, Chorus:) to their own line
- *  2. Split remaining text at comma / semicolon boundaries
- *
- * Rules satisfied:
- *  • Labels stay with at least the next line
- *  • Splits at sentence boundaries (after , or ;)
- *  • Never breaks mid-thought — each piece is a coherent phrase
- */
-function expandLine(raw: string): string[] {
-  const trimmed = raw.trim();
-  if (!trimmed) return [];
-
-  // 1. Check for a section label at the start of the line
-  const labelMatch = trimmed.match(LYRIC_LABEL_RE);
-  if (labelMatch) {
-    const num = trimmed.match(/\d+/)?.[0] ?? "";
-    const label = labelMatch[1] + (num ? ` ${num}` : "") + ":";
-    const rest = labelMatch[2]?.trim() ?? "";
-    if (rest) {
-      // Label + remaining content — expand the rest recursively
-      return [label, ...expandLine(rest)];
-    }
-    return [label];
-  }
-
-  // 2. Split at commas / semicolons followed by whitespace
-  const parts = trimmed.split(/([,;])\s+/);
-  if (parts.length <= 1) return [trimmed];
-
-  const result: string[] = [];
-  let current = "";
-
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    if (/^[,;]$/.test(part)) {
-      // Punctuation — attach to the piece before it
-      current += part;
-    } else if (i === 0) {
-      current = part;
-    } else {
-      // New text segment after punctuation
-      if (current.trim()) result.push(current.trim());
-      current = part;
-    }
-  }
-  if (current.trim()) result.push(current.trim());
-
-  return result;
-}
-
-/**
- * Flatten an array of lyric lines by expanding each one at natural
- * boundaries (labels, commas, semicolons).
- */
-function expandLines(lines: string[]): string[] {
-  return lines.flatMap(expandLine);
-}
-
-/**
  * Detect the dominant section type from a group of display lines.
  */
 function detectGroupType(lines: string[]): Slide["type"] {
@@ -385,11 +325,13 @@ export function generateSlides(
   }
 
   // ── Auto-split ON ──────────────────────────────────────────────────────
-  // Flatten all sections into one continuous list of display lines,
-  // expand at natural boundaries, then balance into slides.
+  // Use the original user-entered lines directly — only newline characters
+  // (\n) count as line breaks.  Visual word-wrapping is handled by CSS, not
+  // by the slide engine.  Expanding at comma/semicolon boundaries here would
+  // inflate the line count and cause unexpected slide breaks.
   const displayLines: string[] = [];
   for (const section of sections) {
-    displayLines.push(...expandLines(section.lines));
+    displayLines.push(...section.lines);
   }
 
   const groups = splitIntoBalancedSlides(displayLines, linesPerSlide);

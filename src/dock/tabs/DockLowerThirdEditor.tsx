@@ -8,10 +8,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { ContentSlot, SlotState } from "../../lowerthirds/contentSlots";
+import {
+  deleteSlot,
+  loadSlots,
+  renameSlot, resolveSlotState,
+  saveSlot,
+} from "../../lowerthirds/contentSlots";
 import { buildOverlayUrl } from "../../lowerthirds/lowerThirdObsService";
 import { isSpeakerTheme } from "../../lowerthirds/speakerThemeUtils";
-import { getMinistryData, buildSpeakerRoleMap, refreshMinistry, ensureMinistryData } from "../../services/ministryStore";
-import { MV_SETTINGS_UPDATED_EVENT } from "../../multiview/mvStore";
 import type {
   LTAnimationIn,
   LTCustomStyle,
@@ -24,11 +29,9 @@ import type {
 import {
   LT_DEFAULT_CUSTOM_STYLE,
 } from "../../lowerthirds/types";
+import { MV_SETTINGS_UPDATED_EVENT } from "../../multiview/mvStore";
+import { buildSpeakerRoleMap, ensureMinistryData, getMinistryData, refreshMinistry } from "../../services/ministryStore";
 import Icon from "../DockIcon";
-import {
-  loadSlots, saveSlot, deleteSlot, renameSlot, resolveSlotState,
-} from "../../lowerthirds/contentSlots";
-import type { ContentSlot, SlotState } from "../../lowerthirds/contentSlots";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -256,8 +259,22 @@ export default function DockLowerThirdEditor({
   const prevThemeId = useRef(theme.id);
   useEffect(() => {
     if (prevThemeId.current !== theme.id) {
+      // Flush pending auto-save for the OLD theme before switching
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+        if (!isSavingRef.current && activeSlotIndex !== null) {
+          const fullState: SlotState = {
+            variableValues: { ...variableValues },
+            customStyles: { ...customStyles },
+            position,
+            animationIn,
+            exitStyle,
+          };
+          saveSlot(prevThemeId.current, "default", activeSlotIndex, variableValues, theme, fullState);
+        }
+      }
       prevThemeId.current = theme.id;
-      if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null; }
       const init: Record<string, string> = {};
       for (const v of theme.variables) {
         init[v.key] = v.defaultValue ?? "";
@@ -320,6 +337,8 @@ export default function DockLowerThirdEditor({
   }, [theme.id, renamingSlotName, reloadSlots]);
 
   // ── Auto-save active slot on editor changes (debounced 300ms) ──
+  // Use theme.id (not theme object ref) so parent re-renders with the same
+  // theme don't cancel the debounce timer before it fires.
   useEffect(() => {
     if (activeSlotIndex === null) return;
     if (isSavingRef.current) return;
@@ -334,12 +353,27 @@ export default function DockLowerThirdEditor({
         exitStyle,
       };
       saveSlot(theme.id, "default", activeSlotIndex, variableValues, theme, fullState);
+      autoSaveTimerRef.current = null;
       reloadSlots();
     }, 300);
     return () => {
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+        // Flush pending save so data isn't lost on unmount / effect re-run
+        if (!isSavingRef.current) {
+          const fullState: SlotState = {
+            variableValues: { ...variableValues },
+            customStyles: { ...customStyles },
+            position,
+            animationIn,
+            exitStyle,
+          };
+          saveSlot(theme.id, "default", activeSlotIndex, variableValues, theme, fullState);
+        }
+      }
     };
-  }, [activeSlotIndex, variableValues, customStyles, position, animationIn, exitStyle, theme, reloadSlots]);
+  }, [activeSlotIndex, variableValues, customStyles, position, animationIn, exitStyle, theme.id, reloadSlots]);
 
   // ── Context menu open (right-click or left-click empty slot) ──
   const openContextMenu = useCallback((slotIndex: number, x: number, y: number) => {
@@ -481,62 +515,7 @@ export default function DockLowerThirdEditor({
   return (
     <div className="dock-lt-editor-layout">
       {/* ── Preview (fixed top) ── */}
-      <div className="dock-lt-editor-layout__preview" style={{ zoom: previewZoom }}>
-        <iframe
-          key={previewUrl}
-          src={previewUrl}
-          title="lt-preview"
-          sandbox="allow-scripts allow-same-origin"
-        />
-        {/* Zoom controls */}
-        <div style={{
-          position: "absolute",
-          bottom: 4,
-          right: 4,
-          display: "flex",
-          alignItems: "center",
-          gap: 2,
-          background: "rgba(0,0,0,0.65)",
-          borderRadius: 4,
-          padding: "2px 4px",
-          zIndex: 10,
-        }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            onClick={() => adjustZoom(-0.05)}
-            style={{
-              width: 18, height: 18, border: "none", borderRadius: 3,
-              background: "var(--dock-surface, #222)", color: "var(--dock-text, #ccc)",
-              cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex",
-              alignItems: "center", justifyContent: "center", padding: 0,
-            }}
-            title="Zoom out"
-          >
-            −
-          </button>
-          <span style={{
-            fontSize: 9, color: "var(--dock-text-dim, #888)",
-            minWidth: 28, textAlign: "center", userSelect: "none",
-          }}>
-            {Math.round(previewZoom * 100)}%
-          </span>
-          <button
-            type="button"
-            onClick={() => adjustZoom(0.05)}
-            style={{
-              width: 18, height: 18, border: "none", borderRadius: 3,
-              background: "var(--dock-surface, #222)", color: "var(--dock-text, #ccc)",
-              cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex",
-              alignItems: "center", justifyContent: "center", padding: 0,
-            }}
-            title="Zoom in"
-          >
-            +
-          </button>
-        </div>
-      </div>
+
 
       {/* ── Scrollable settings ── */}
       <div className="dock-lt-editor-layout__scroll">
@@ -710,38 +689,7 @@ export default function DockLowerThirdEditor({
                           onChange={(e) => setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
                           placeholder={v.label || v.key}
                         />
-                        <div className="dock-lt-field-toolbar">
-                          <label className="dock-lt-app-btn">
-                            <input
-                              type="checkbox"
-                              checked={isPrimary ? customStyles.nameUpper : isSecondary ? customStyles.infoUpper : false}
-                              onChange={(e) => {
-                                if (isPrimary) setCustomStyles((p) => ({ ...p, nameUpper: e.target.checked }));
-                                else if (isSecondary) setCustomStyles((p) => ({ ...p, infoUpper: e.target.checked }));
-                              }}
-                            />
-                            <span className="material-icons">text_fields</span>
-                          </label>
-                          <label className="dock-lt-app-btn">
-                            <input
-                              type="checkbox"
-                              checked={isPrimary ? customStyles.nameBold : isSecondary ? customStyles.infoBold : false}
-                              onChange={(e) => {
-                                if (isPrimary) setCustomStyles((p) => ({ ...p, nameBold: e.target.checked }));
-                                else if (isSecondary) setCustomStyles((p) => ({ ...p, infoBold: e.target.checked }));
-                              }}
-                            />
-                            <span className="material-icons">format_bold</span>
-                          </label>
-                          <input
-                            type="color"
-                            value={isPrimary ? customStyles.nameColor : isSecondary ? customStyles.infoColor : ""}
-                            onChange={(e) => {
-                              if (isPrimary) setCustomStyles((p) => ({ ...p, nameColor: e.target.value }));
-                              else if (isSecondary) setCustomStyles((p) => ({ ...p, infoColor: e.target.value }));
-                            }}
-                          />
-                        </div>
+
                       </div>
                     );
                   })}

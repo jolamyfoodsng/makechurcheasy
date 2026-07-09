@@ -12,10 +12,7 @@ import { BIBLE_THEMES } from "./bibleThemes";
 export type ThemeCategory = "bible" | "worship" | "general" | string;
 
 
-export const GOOGLE_FONTS = [
-  "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Work+Sans:wght@300;400;500;600;700;900&display=swap",
-  "https://fonts.googleapis.com/icon?family=Material+Icons",
-];
+export const GOOGLE_FONTS: string[] = [];
 
 
 export const SHARED_CSS = `

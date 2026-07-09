@@ -258,7 +258,7 @@ export function getUserPlan(user: AuthUser | null): PlanTier {
     }
   }
 
-  return user.plan || "free";
+  return (user.plan || "free") as PlanTier;
 }
 
 /** Whether the user's trial is currently active. */
@@ -514,7 +514,7 @@ export function getRemainingDeviceSlots(user: AuthUser | null, currentDeviceCoun
 /**
  * Downgrade protection: returns warnings when the user's current usage
  * exceeds their plan limits. Used when a user downgrades from a higher plan
- * (e.g. Growth → Starter) and has more resources than the lower plan allows.
+ * (e.g. Growth → Basic) and has more resources than the lower plan allows.
  *
  * Does NOT delete data. Only blocks adding new resources.
  */

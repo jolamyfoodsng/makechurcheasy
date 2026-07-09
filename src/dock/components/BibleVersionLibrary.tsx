@@ -3,11 +3,14 @@
  *
  * Combines version selection and downloads into a single workflow.
  * Supports search, installed versions, and available online versions.
+ * Enforces plan-based bible version limits for free/basic users.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
+import { getDockPlan, showUpgradeModal } from "../dockEntitlement";
+import { checkEntitlementSync } from "../../services/entitlementClient";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,6 +43,13 @@ export default function BibleVersionLibrary({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // ── Plan-based bible version limit ──
+  const plan = getDockPlan();
+  const { limit: bibleVersionLimit } = checkEntitlementSync("bibleVersions", plan);
+  const isUnlimited = bibleVersionLimit === -1;
+  const installedCount = availableTranslations.length;
+  const hasExceededLimit = !isUnlimited && installedCount > bibleVersionLimit;
+
   // ── Close on click outside ──
   useEffect(() => {
     if (!isOpen) return;
@@ -59,16 +69,28 @@ export default function BibleVersionLibrary({
     }
   }, [isOpen]);
 
-  // ── Filter translations by search ──
+  // ── Filter translations by search and sort (allowed first, locked after) ──
   const filteredTranslations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return availableTranslations;
-    return availableTranslations.filter(
-      (t) =>
-        t.value.toLowerCase().includes(query) ||
-        t.label.toLowerCase().includes(query)
-    );
-  }, [availableTranslations, searchQuery]);
+    let list = availableTranslations;
+    if (query) {
+      list = list.filter(
+        (tr) =>
+          tr.value.toLowerCase().includes(query) ||
+          tr.label.toLowerCase().includes(query)
+      );
+    }
+    if (!hasExceededLimit || isUnlimited) return list;
+    // Sort: allowed versions first, then locked versions
+    return [...list].sort((a, b) => {
+      const ai = availableTranslations.findIndex((tr) => tr.value === a.value);
+      const bi = availableTranslations.findIndex((tr) => tr.value === b.value);
+      const aLocked = ai >= bibleVersionLimit;
+      const bLocked = bi >= bibleVersionLimit;
+      if (aLocked === bLocked) return ai - bi;
+      return aLocked ? 1 : -1;
+    });
+  }, [availableTranslations, searchQuery, hasExceededLimit, isUnlimited, bibleVersionLimit]);
 
   // ── Find full name for active translation ──
   const activeTranslationInfo = useMemo(() => {
@@ -79,11 +101,17 @@ export default function BibleVersionLibrary({
 
   // ── Handle version select ──
   const handleSelectVersion = useCallback(
-    (abbr: string) => {
+    (abbr: string, locked: boolean) => {
+      if (locked) {
+        showUpgradeModal(
+          `You've reached your Bible version limit (${bibleVersionLimit}). Upgrade your plan to unlock more versions.`
+        );
+        return;
+      }
       onVersionChange(abbr);
       setIsOpen(false);
     },
-    [onVersionChange]
+    [onVersionChange, bibleVersionLimit]
   );
 
   return (
@@ -94,7 +122,7 @@ export default function BibleVersionLibrary({
         onClick={() => setIsOpen(!isOpen)}
         aria-label={t("bible.selectBibleVersion")}
         aria-expanded={isOpen}
-       title="bible-version-library__trigger-abbr">
+        title="bible-version-library__trigger-abbr">
         <span className="bible-version-library__trigger-abbr">
           {activeTranslationInfo.abbr}
         </span>
@@ -121,7 +149,7 @@ export default function BibleVersionLibrary({
                 className="bible-version-library__search-clear"
                 onClick={() => setSearchQuery("")}
                 aria-label={t("common.clear")}
-               title="Close">
+                title="Close">
                 <Icon name="close" size={12} />
               </button>
             )}
@@ -133,29 +161,64 @@ export default function BibleVersionLibrary({
             {filteredTranslations.length > 0 && (
               <div className="bible-version-library__section">
                 <div className="bible-version-library__section-header">
-                  {t("bible.installed")}
+                  <span>{t("bible.installed")}</span>
+                  {!isUnlimited && (
+                    <span className="bible-version-library__usage">
+                      <span className="bible-version-library__usage-count">
+                        {Math.min(installedCount, bibleVersionLimit)}
+                      </span>
+                      <span className="bible-version-library__usage-sep">/</span>
+                      <span className="bible-version-library__usage-limit">
+                        {bibleVersionLimit}
+                      </span>
+                    </span>
+                  )}
                 </div>
                 <div className="bible-version-library__list">
-                  {filteredTranslations.map((translation) => (
-                    <button
-                      key={translation.value}
-                      className={`bible-version-library__row${translation.value === activeTranslation ? " bible-version-library__row--active" : ""
-                        }`}
-                      onClick={() => handleSelectVersion(translation.value)}
-                     title="Confirm">
-                      <div className="bible-version-library__row-info">
-                        <span className="bible-version-library__row-abbr">
-                          {translation.value}
-                        </span>
-                        {/* <span className="bible-version-library__row-name">
-                          {translation.label}
-                        </span> */}
-                      </div>
-                      {translation.value === activeTranslation && (
-                        <Icon name="check" size={16} className="bible-version-library__row-check" />
-                      )}
-                    </button>
-                  ))}
+                  {filteredTranslations.map((translation) => {
+                    const origIndex = availableTranslations.findIndex(
+                      (tr) => tr.value === translation.value
+                    );
+                    const locked =
+                      hasExceededLimit && !isUnlimited && origIndex >= bibleVersionLimit;
+                    const isActive = translation.value === activeTranslation;
+
+                    return (
+                      <button
+                        key={translation.value}
+                        className={[
+                          "bible-version-library__row",
+                          isActive && "bible-version-library__row--active",
+                          locked && "bible-version-library__row--locked",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        onClick={() =>
+                          handleSelectVersion(translation.value, locked)
+                        }
+                        title={locked ? "Upgrade to unlock" : "Confirm"}>
+                        <div className="bible-version-library__row-info">
+                          <span className="bible-version-library__row-abbr">
+                            {translation.value}
+                          </span>
+                          {/* <span className="bible-version-library__row-name">
+                            {translation.label}
+                          </span> */}
+                        </div>
+                        {locked ? (
+                          <span className="bible-version-library__row-premium">
+                            <Icon name="lock" size={14} />
+                          </span>
+                        ) : isActive ? (
+                          <Icon
+                            name="check"
+                            size={16}
+                            className="bible-version-library__row-check"
+                          />
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

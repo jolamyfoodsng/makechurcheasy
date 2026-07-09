@@ -175,6 +175,7 @@ export interface CreditDetails {
   totalConsumed: number;
   planAllocation: number;
   adminGranted: number;
+  isAdmin: boolean;
 }
 
 /**
@@ -194,6 +195,7 @@ export async function fetchCreditDetails(): Promise<CreditDetails | null> {
         totalConsumed: data.totalConsumed ?? 0,
         planAllocation: data.planAllocation ?? 0,
         adminGranted: data.adminGranted ?? 0,
+        isAdmin: data.isAdmin ?? false,
       };
     }
     return null;

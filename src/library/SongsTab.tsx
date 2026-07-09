@@ -178,24 +178,65 @@ export function SongsTab() {
     return () => document.removeEventListener("mousedown", handler);
   }, [overflowMenuOpen]);
 
+  // ── Accessible songs: only the songs the current plan allows ──
+  const accessibleSongs = useMemo(() => {
+    if (isSongUnlimited) return songs;
+    return songs.slice(0, songLimit);
+  }, [songs, isSongUnlimited, songLimit]);
+
   const visible = useMemo(() => {
-    const filtered = songs.filter((s) => {
-      if (languageFilter !== "all" && s.metadata.language !== languageFilter) return false;
-      if (!search) return true;
-      const words = search.trim().split(/\s+/);
-      const fields = [s.metadata.title, s.metadata.artist, s.lyrics];
-      return words.every((w) => fields.some((f) => fuzzyMatch(w, f)));
-    });
-    return filtered;
-  }, [search, songs, languageFilter]);
+    const languageFiltered = languageFilter !== "all"
+      ? accessibleSongs.filter((s) => s.metadata.language === languageFilter)
+      : accessibleSongs;
+
+    if (!search.trim()) return languageFiltered;
+
+    const q = search.trim();
+    const qLower = q.toLowerCase();
+    const numMatch = qLower.match(/(\d+)/);
+    const searchNumber = numMatch ? numMatch[1] : null;
+
+    const scored = languageFiltered
+      .map((song) => {
+        const title = song.metadata.title.toLowerCase();
+        const searchText = `${song.metadata.title}\n${song.metadata.artist}\n${song.lyrics}`.toLowerCase();
+        let score = 0;
+
+        if (searchNumber) {
+          const exactTitleRe = new RegExp(`^hymn\\s+${searchNumber}$`);
+          const numDotRe = new RegExp(`^${searchNumber}[.\\s]`);
+          const bareNumRe = new RegExp(`^${searchNumber}$`);
+          if (exactTitleRe.test(title)) score += 10000;
+          else if (bareNumRe.test(title)) score += 10000;
+          else if (numDotRe.test(title)) score += 10000;
+          else if (title.includes(`hymn ${searchNumber}`)) score += 5000;
+          else if (title.includes(searchNumber)) score += 2000;
+        }
+
+        if (score === 0 && title.startsWith(qLower)) score += 3000;
+        if (score === 0 && title.includes(qLower)) score += 1000;
+        if (score === 0 && searchText.includes(qLower)) score += 500;
+        if (score === 0 && fuzzyMatch(q, searchText)) score += 100;
+
+        return { song, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    const bestScore = scored.length > 0 ? scored[0].score : 0;
+    if (bestScore >= 500) {
+      return scored.filter((item) => item.score >= 500).map((item) => item.song);
+    }
+    return scored.map((item) => item.song);
+  }, [search, accessibleSongs, languageFilter]);
 
   const availableLanguages = useMemo(() => {
     const langs = new Set<string>();
-    for (const song of songs) {
+    for (const song of accessibleSongs) {
       if (song.metadata.language) langs.add(song.metadata.language);
     }
     return Array.from(langs).sort();
-  }, [songs]);
+  }, [accessibleSongs]);
 
   const importedSongsLookup = useMemo(() => {
     const lookup = new Map<string, Song>();
@@ -865,7 +906,7 @@ export function SongsTab() {
       {/* Song limit / import restriction modal */}
       {showSongLimitModal && (
         <div className="ssm-backdrop" onClick={() => setShowSongLimitModal(false)}>
-          <div className="ssm-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="ssm-modal um-modal" onClick={(e) => e.stopPropagation()}>
             <button
               className="um-close"
               onClick={() => setShowSongLimitModal(false)}
@@ -873,14 +914,14 @@ export function SongsTab() {
               title="Close">
               <Icon name="close" size={18} />
             </button>
-            <div className="dock-upgrade">
-              <div className="dock-upgrade__icon">
-                <Icon name="lock" size={28} />
+            <div className="um-header">
+              <div className="um-icon">
+                <Icon name="lock" size={20} />
               </div>
-              <h2 className="dock-upgrade__title">
+              <h2 className="um-title">
                 {songLimitModalType === "import" ? "Mass Import Restricted" : "Song Limit Reached"}
               </h2>
-              <p className="dock-upgrade__message">
+              <p className="um-subtitle">
                 {songLimitModalType === "import" ? (
                   <>
                     Mass Import is available on <strong>Basic</strong> and above.
@@ -900,23 +941,23 @@ export function SongsTab() {
                   </>
                 )}
               </p>
-              <div className="dock-upgrade__actions">
-                <button
-                  className="dock-upgrade__btn dock-upgrade__btn--secondary"
-                  onClick={() => setShowSongLimitModal(false)}
-                  title="Maybe Later">
-                  Maybe Later
-                </button>
-                <button
-                  className="dock-upgrade__btn dock-upgrade__btn--primary"
-                  onClick={() => {
-                    window.open("https://makechurcheasy.creatorstudioslabs.stream/pricing", "_blank");
-                    setShowSongLimitModal(false);
-                  }}
-                  title="Upgrade">
-                  Upgrade
-                </button>
-              </div>
+            </div>
+            <div className="um-footer">
+              <button
+                className="um-btn-secondary"
+                onClick={() => setShowSongLimitModal(false)}
+                title="Maybe Later">
+                Maybe Later
+              </button>
+              <button
+                className="um-btn-upgrade"
+                onClick={() => {
+                  window.open("https://makechurcheasy.creatorstudioslabs.stream/pricing", "_blank");
+                  setShowSongLimitModal(false);
+                }}
+                title="Upgrade">
+                Upgrade
+              </button>
             </div>
           </div>
         </div>

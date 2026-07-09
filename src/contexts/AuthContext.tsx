@@ -168,8 +168,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return true;
     }
 
-    // Heartbeat: ping every 2 minutes to keep lastSeen fresh
-    const HEARTBEAT_MS = 2 * 60 * 1000;
+    // Heartbeat: ping every 30s to keep lastSeen fresh and reflect admin plan changes quickly
+    const HEARTBEAT_MS = 30 * 1000;
     const heartbeatId = setInterval(() => {
       void checkDevice().then((ok) => {
         if (ok) {

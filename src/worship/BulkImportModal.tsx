@@ -14,9 +14,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import Icon from "../components/Icon";
 import {
   extractTextFromFile,
+  extractTextElementsFromFile,
   importDetectedSongs,
   getFileTypeLabel,
 } from "./bulkImportService";
+import { cleanText, removeEmptyLines, removeVerseNumbers, removeMetadata, autoSplit } from "./textCleanup";
 import {
   bulkImportHymns,
   parseBilingualHymns,
@@ -24,10 +26,17 @@ import {
 } from "./pdfImportService";
 import {
   detectSongs,
+  detectLanguage,
   estimateSlideCount,
   type DetectedSong,
   type DetectionResult,
 } from "./songDetector";
+import {
+  parseLayoutSongs,
+  confidenceLabel,
+  confidenceClass,
+  type LayoutParseResult,
+} from "./layoutParser";
 import "./bulkImportModal.css";
 
 // ── Props & types ──────────────────────────────────────────────────────────
@@ -93,6 +102,10 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
   // Detection
   const [detection, setDetection] = useState<DetectionResult | null>(null);
 
+  // Layout-aware parsing (for PDFs)
+  const [layoutResult, setLayoutResult] = useState<LayoutParseResult | null>(null);
+  const [usedLayoutParser, setUsedLayoutParser] = useState(false);
+
   // Preview — editable song list
   const [songs, setSongs] = useState<DetectedSong[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -107,6 +120,9 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Cleanup history for undo
+  const cleanupHistoryRef = useRef<DetectedSong[][]>([]);
 
   // ── Focus management ─────────────────────────────────────────────────────
 
@@ -156,12 +172,54 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
   const handleFile = useCallback(
     async (file: File) => {
       setError("");
+      const ext = file.name.split(".").pop()?.toLowerCase();
+
+      // Try layout-aware parsing for PDFs
+      if (ext === "pdf") {
+        try {
+          const elements = await extractTextElementsFromFile(file);
+          if (elements.length > 0) {
+            const layout = parseLayoutSongs(elements);
+            setLayoutResult(layout);
+            setUsedLayoutParser(true);
+
+            // Convert ParsedSong[] to DetectedSong[] for existing UI
+            const detected: DetectedSong[] = layout.songs.map((s) => ({
+              title: s.title,
+              lyrics: `${s.title}\n${s.lyrics}`,
+              lineCount: s.lyrics.split("\n").filter((l) => l.trim()).length,
+              language: detectLanguage(s.lyrics),
+            }));
+
+            // Create a DetectionResult-compatible object
+            const detResult: DetectionResult = {
+              pattern: "titled",
+              confidence: layout.overallConfidence,
+              songs: detected,
+            };
+
+            setDetection(detResult);
+            setSongs(detected);
+            setSelected(new Set(detected.map((_, i) => i)));
+            setFileName(file.name);
+            setFileType(getFileTypeLabel(file.name));
+            setStep("detect");
+            return;
+          }
+        } catch {
+          // Fall through to text extraction
+        }
+      }
+
+      // Fallback: text extraction + detection
       try {
         const text = await extractTextFromFile(file);
         if (!text.trim()) {
           setError("No text could be extracted from this file.");
           return;
         }
+        setUsedLayoutParser(false);
+        setLayoutResult(null);
         goToExtract(text, file.name, getFileTypeLabel(file.name));
       } catch (err) {
         setError(`Extraction failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -240,6 +298,45 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
 
   const editTitle = useCallback((idx: number, newTitle: string) => {
     setSongs((prev) => prev.map((s, i) => (i === idx ? { ...s, title: newTitle } : s)));
+  }, []);
+
+  // ── Cleanup actions ──────────────────────────────────────────────────────
+
+  const applyCleanup = useCallback(
+    (action: "clean" | "remove-empty" | "remove-verse-numbers" | "remove-metadata" | "autosplit") => {
+      // Save current state for undo (max 10 entries)
+      setSongs((prev) => {
+        const snapshot = prev.map((s) => ({ ...s }));
+        cleanupHistoryRef.current.push(snapshot);
+        if (cleanupHistoryRef.current.length > 10) {
+          cleanupHistoryRef.current.shift();
+        }
+
+        return prev.map((s) => {
+          if (!s.lyrics) return s;
+          let cleaned = s.lyrics;
+          switch (action) {
+            case "clean": cleaned = cleanText(cleaned); break;
+            case "remove-empty": cleaned = removeEmptyLines(cleaned); break;
+            case "remove-verse-numbers": cleaned = removeVerseNumbers(cleaned); break;
+            case "remove-metadata": cleaned = removeMetadata(cleaned); break;
+            case "autosplit": cleaned = autoSplit(cleaned); break;
+          }
+          return {
+            ...s,
+            lyrics: cleaned,
+            lineCount: cleaned.split("\n").filter((l) => l.trim()).length,
+            language: detectLanguage(cleaned),
+          };
+        });
+      });
+    },
+    [],
+  );
+
+  const handleCleanupUndo = useCallback(() => {
+    const prev = cleanupHistoryRef.current.pop();
+    if (prev) setSongs(prev);
   }, []);
 
   // ── Import ───────────────────────────────────────────────────────────────
@@ -456,13 +553,15 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
             <>
               <div className="bulk-import-detect-result">
                 <div className="bulk-import-detect-row">
-                  <span className="bulk-import-detect-label">Pattern</span>
-                  <span className={`bulk-import-detect-badge bulk-import-detect-badge--${detection.pattern}`}>
-                    {detection.pattern === "ccc"
-                      ? "CCC Hymnal"
-                      : detection.pattern === "numbered"
-                        ? "Numbered Songs"
-                        : "Titled Songs"}
+                  <span className="bulk-import-detect-label">Method</span>
+                  <span className={`bulk-import-detect-badge bulk-import-detect-badge--${usedLayoutParser ? "layout" : detection.pattern}`}>
+                    {usedLayoutParser
+                      ? "Layout Parser"
+                      : detection.pattern === "ccc"
+                        ? "CCC Hymnal"
+                        : detection.pattern === "numbered"
+                          ? "Numbered Songs"
+                          : "Titled Songs"}
                   </span>
                 </div>
                 <div className="bulk-import-detect-row">
@@ -473,21 +572,42 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                       style={{
                         width: `${detection.confidence}%`,
                         background:
-                          detection.confidence >= 60
+                          detection.confidence >= 80
                             ? "var(--primary)"
-                            : detection.confidence >= 30
+                            : detection.confidence >= 60
                               ? "#f59e0b"
                               : "#ef4444",
                       }}
                     />
                   </div>
-                  <span className="bulk-import-confidence-num">{detection.confidence}%</span>
+                  <span className={`bulk-import-confidence-num ${confidenceClass(detection.confidence)}`}>
+                    {detection.confidence}% — {confidenceLabel(detection.confidence)}
+                  </span>
                 </div>
                 <div className="bulk-import-detect-row">
                   <span className="bulk-import-detect-label">Songs found</span>
                   <span className="bulk-import-detect-count">{detection.songs.length}</span>
                 </div>
+                {usedLayoutParser && layoutResult && (
+                  <>
+                    <div className="bulk-import-detect-row">
+                      <span className="bulk-import-detect-label">Columns</span>
+                      <span className="bulk-import-detect-count">{layoutResult.columnsDetected}</span>
+                    </div>
+                    <div className="bulk-import-detect-row">
+                      <span className="bulk-import-detect-label">Text elements</span>
+                      <span className="bulk-import-detect-count">{layoutResult.totalElements.toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
               </div>
+
+              {layoutResult && layoutResult.warnings.length > 0 && (
+                <div className="bulk-import-detect-warn">
+                  <Icon name="info" size={16} />
+                  <span>{layoutResult.warnings.join(" ")}</span>
+                </div>
+              )}
 
               {detection.songs.length < 2 && (
                 <div className="bulk-import-detect-warn">
@@ -526,6 +646,20 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                   Select all
                 </label>
               </div>
+
+              {selected.size > 0 && (
+                <div className="bulk-import-cleanup-toolbar">
+                  <span className="bulk-import-cleanup-label">Cleanup:</span>
+                  <button type="button" className="bulk-import-cleanup-btn" onClick={() => applyCleanup("clean")} title="Clean text (normalize spacing, trim)">Clean Text</button>
+                  <button type="button" className="bulk-import-cleanup-btn" onClick={() => applyCleanup("remove-empty")} title="Remove empty lines">Remove Empty Lines</button>
+                  <button type="button" className="bulk-import-cleanup-btn" onClick={() => applyCleanup("remove-verse-numbers")} title="Strip verse number prefixes">Remove Verse Numbers</button>
+                  <button type="button" className="bulk-import-cleanup-btn" onClick={() => applyCleanup("remove-metadata")} title="Remove author names and hymn references">Remove Metadata</button>
+                  <button type="button" className="bulk-import-cleanup-btn" onClick={() => applyCleanup("autosplit")} title="Group lyrics into slide-sized chunks">Auto Split</button>
+                  {cleanupHistoryRef.current.length > 0 && (
+                    <button type="button" className="bulk-import-cleanup-btn bulk-import-cleanup-btn--undo" onClick={handleCleanupUndo} title="Undo last cleanup">Undo</button>
+                  )}
+                </div>
+              )}
 
               <div className="bulk-import-song-list">
                 {songs.map((song, idx) => (

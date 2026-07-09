@@ -328,6 +328,10 @@ function extractQuickThemeSettings(settings: BibleThemeSettings): DockFullscreen
     lowerThirdSize: settings.lowerThirdSize || "medium",
     lowerThirdWidthPreset: settings.lowerThirdWidthPreset || "full",
     lowerThirdOffsetX: clampNumber(settings.lowerThirdOffsetX ?? 0, -50, 50),
+    backgroundPattern: settings.backgroundPattern ?? "",
+    lowerThirdCaptionPosition: settings.lowerThirdCaptionPosition || "bottom",
+    compareTranslationWidth: clampNumber(settings.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth, 30, 50),
+    compareTranslationGap: clampNumber(settings.compareTranslationGap ?? DEFAULT_THEME_SETTINGS.compareTranslationGap, 0, 200),
   };
 }
 
@@ -448,6 +452,21 @@ function sanitizeQuickThemeSettings(
       -50,
       50,
     ),
+    backgroundPattern: typeof source.backgroundPattern === "string" ? source.backgroundPattern : "",
+    lowerThirdCaptionPosition:
+      source.lowerThirdCaptionPosition === "top" || source.lowerThirdCaptionPosition === "bottom"
+        ? source.lowerThirdCaptionPosition
+        : "bottom",
+    compareTranslationWidth: clampNumber(
+      Number(source.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth),
+      30,
+      50,
+    ),
+    compareTranslationGap: clampNumber(
+      Number(source.compareTranslationGap ?? DEFAULT_THEME_SETTINGS.compareTranslationGap),
+      0,
+      200,
+    ),
   };
 }
 
@@ -475,6 +494,7 @@ function applyQuickThemeSettings(
       textShadow: quickSettings.textShadow,
       animation: quickSettings.animation,
       animationDuration: quickSettings.animationDuration,
+      backgroundPattern: quickSettings.backgroundPattern,
       backgroundImage: quickSettings.backgroundImage,
       backgroundImageFilePath: quickSettings.backgroundImageFilePath,
       backgroundVideo: quickSettings.backgroundVideo,
@@ -536,6 +556,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
   // Keep the ref in sync so callbacks (openNewSongModal, handleSaveNewSong)
   // always read the latest limit even though they can't depend on state directly.
   useEffect(() => { songLimitRef.current = songLimit; }, [songLimit]);
+
+  // ── Plan-filtered songs: only songs within the user's plan limit ──
+  const accessibleSongs = useMemo(() => {
+    const isUnlimited = !songLimit || songLimit <= 0 || songLimit >= 9999;
+    if (isUnlimited) return songs;
+    return songs.slice(0, songLimit);
+  }, [songs, songLimit]);
+
   // Skip auto-selecting a song from the persisted staged item on first mount.
   // The staged item is restored from localStorage on reload; we only want to
   // navigate into a song when the user explicitly stages a new one.
@@ -592,18 +620,28 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
   const suppressAutoProjectionRef = useRef(true);
   const suppressAutoProjectionTimerRef = useRef<number | null>(null);
   const songsPollBusyRef = useRef(false);
+  const showThemeSettingsRef = useRef(false);
 
   const selectedSongSections = useMemo(
-    () => (selectedSong ? parseLyricSections(selectedSong.lyrics, selectedSong.linesPerSlide ?? linesPerSlide, selectedSong.autoSplit ?? false) : []),
+    () => (selectedSong ? parseLyricSections(selectedSong.lyrics, linesPerSlide, selectedSong.autoSplit ?? false) : []),
     [linesPerSlide, selectedSong],
   );
+
+  const totalLyricLines = useMemo(
+    () => selectedSongSections.reduce((total, section) => {
+      const nonEmpty = section.text.split("\n").filter((l) => l.trim().length > 0).length;
+      return total + nonEmpty;
+    }, 0),
+    [selectedSongSections],
+  );
+
   const searchableSongs = useMemo(
     () =>
-      songs.map((song) => ({
+      accessibleSongs.map((song) => ({
         song,
         searchText: `${song.title}\n${song.artist}\n${song.lyrics}`.toLowerCase(),
       })),
-    [songs],
+    [accessibleSongs],
   );
   const persistedPrefs = useMemo<DockWorshipPreferences>(() => ({
     overlayMode,
@@ -669,6 +707,10 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
       window.clearTimeout(suppressAutoProjectionTimerRef.current);
     }
   }, []);
+
+  // Keep showThemeSettingsRef in sync with the modal open state so auto-push
+  // effects can bail out without needing the state value in their dep array.
+  useEffect(() => { showThemeSettingsRef.current = showThemeSettings; }, [showThemeSettings]);
 
   // Use primitive IDs as effect dependencies to avoid re-running when the backend
   // sends new object references for themes that haven't actually changed.
@@ -887,6 +929,9 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
       if (lineCountPopoverRef.current && !lineCountPopoverRef.current.contains(event.target as Node)) {
         setShowLineCountPopover(false);
       }
+      if (autoSplitPopoverRef.current && !autoSplitPopoverRef.current.contains(event.target as Node)) {
+        setShowAutoSplitPopover(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -894,13 +939,47 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
 
   const filteredSongs = useMemo(() => {
     if (!searchQuery.trim()) {
-      return songs;
+      return accessibleSongs;
     }
-    const needle = searchQuery.toLowerCase();
-    return searchableSongs
-      .filter((entry) => entry.searchText.includes(needle))
-      .map((entry) => entry.song);
-  }, [searchQuery, searchableSongs, songs]);
+    const q = searchQuery.trim();
+    const qLower = q.toLowerCase();
+    const numMatch = qLower.match(/(\d+)/);
+    const searchNumber = numMatch ? numMatch[1] : null;
+
+    let scored = searchableSongs
+      .map((entry) => {
+        const title = entry.song.title.toLowerCase();
+        let score = 0;
+
+        if (searchNumber) {
+          const exactTitleRe = new RegExp(`^hymn\\s+${searchNumber}$`);
+          const numDotRe = new RegExp(`^${searchNumber}[.\\s]`);
+          const bareNumRe = new RegExp(`^${searchNumber}$`);
+          if (exactTitleRe.test(title)) score += 10000;
+          else if (bareNumRe.test(title)) score += 10000;
+          else if (numDotRe.test(title)) score += 10000;
+          else if (title.includes(`hymn ${searchNumber}`)) score += 5000;
+          else if (title.includes(searchNumber)) score += 2000;
+        }
+
+        if (score === 0 && title.startsWith(qLower)) score += 3000;
+        if (score === 0 && title.includes(qLower)) score += 1000;
+        if (score === 0 && entry.searchText.includes(qLower)) score += 500;
+        if (score === 0 && fuzzyMatch(q, entry.searchText)) score += 100;
+
+        return { entry, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    // When real matches exist, suppress low-confidence fuzzy-only results
+    const bestScore = scored.length > 0 ? scored[0].score : 0;
+    if (bestScore >= 500) {
+      scored = scored.filter((item) => item.score >= 500);
+    }
+
+    return scored.map((item) => item.entry.song);
+  }, [searchQuery, searchableSongs, accessibleSongs]);
 
   // ── Plan-locked songs: songs beyond the plan limit get a blur + padlock ──
   const lockedSongIds = useMemo(() => {
@@ -1208,6 +1287,110 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     showToast(t('worship.defaultRestored'));
   }, [showToast, songEditor]);
 
+  const formatLyricsUndoRef = useRef<string>("");
+  const [showAutoSplitPopover, setShowAutoSplitPopover] = useState(false);
+  const autoSplitPopoverRef = useRef<HTMLDivElement>(null);
+
+  const formatLyrics = useCallback((action: "autosplit" | "clean" | "remove-empty" | "remove-verse-numbers", autosplitLines?: number) => {
+    setSongDraft((draft) => {
+      formatLyricsUndoRef.current = draft.lyrics;
+      let result = draft.lyrics;
+
+      switch (action) {
+        case "clean": {
+          // Process each line independently so that punctuation fixes
+          // never merge paragraphs across \n boundaries.
+          result = result
+            .split("\n")
+            .map((line) => {
+              let l = line;
+              l = l.replace(/\t/g, " ");                // tabs → spaces
+              l = l.replace(/\s{2,}/g, " ");            // collapse duplicate spaces
+              l = l.replace(/ ,/g, ",");                // space before comma
+              l = l.replace(/ \./g, ".");               // space before period
+              l = l.replace(/ :/g, ":");                // space before colon
+              l = l.replace(/([,:;.])([A-Za-z])/g, "$1 $2"); // ensure space after punctuation
+              l = l.replace(/\s+$/g, "");               // trailing whitespace
+              l = l.trimStart();                         // leading whitespace
+              return l;
+            })
+            .join("\n");
+          break;
+        }
+        case "remove-empty": {
+          const lines = result.split("\n");
+          const collapsed: string[] = [];
+          let blankCount = 0;
+          for (const line of lines) {
+            const trimmed = line.trim();
+            // Treat blank lines AND lines containing only non-word
+            // characters (quotes "", '', punctuation ...) as empty.
+            const isBlank = trimmed === "" || /^[^\w]+$/.test(trimmed);
+            if (isBlank) {
+              blankCount++;
+              if (blankCount <= 1) collapsed.push("");
+            } else {
+              blankCount = 0;
+              collapsed.push(line);
+            }
+          }
+          result = collapsed.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
+          break;
+        }
+        case "remove-verse-numbers": {
+          result = result
+            .replace(/^\d+[.)]\s*/gm, "")
+            .replace(/^\[[\d]+\]\s*/gm, "")
+            .replace(/^\([\d]+\)\s*/gm, "")
+            .replace(/^Verse\s+\d+\s*:?\s*/gim, "");
+          break;
+        }
+        case "autosplit": {
+          const linesPerChunk = Math.max(1, Math.min(6, autosplitLines ?? 3));
+          const lines = result.split("\n");
+          // Split into sections separated by blank lines
+          const sections: string[][] = [];
+          let current: string[] = [];
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed === "") {
+              if (current.length > 0) {
+                sections.push(current);
+                current = [];
+              }
+            } else {
+              current.push(trimmed);
+            }
+          }
+          if (current.length > 0) sections.push(current);
+          // Chunk each section into groups of N lines, separated by blank lines
+          const output: string[] = [];
+          for (let s = 0; s < sections.length; s++) {
+            const sec = sections[s];
+            for (let i = 0; i < sec.length; i += linesPerChunk) {
+              const chunk = sec.slice(i, i + linesPerChunk);
+              if (output.length > 0) output.push("");
+              output.push(...chunk);
+            }
+          }
+          result = output.join("\n");
+          break;
+        }
+      }
+
+      return { ...draft, lyrics: result };
+    });
+  }, []);
+
+  const handleUndoFormatting = useCallback(() => {
+    if (!formatLyricsUndoRef.current) return;
+    setSongDraft((draft) => ({
+      ...draft,
+      lyrics: formatLyricsUndoRef.current,
+    }));
+    formatLyricsUndoRef.current = "";
+  }, []);
+
   const openNewSongModal = useCallback(async (draft?: Partial<DockSongDraft>) => {
     if (!(await requireEntitlement("songs", rawSongsRef.current.length))) return;
     setNewSongDraft({
@@ -1319,7 +1502,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
       setShowRecentSearches(false);
       if (!title) return;
 
-      const exactSong = songs.find((song) => song.title.toLowerCase() === title.toLowerCase());
+      const exactSong = accessibleSongs.find((song) => song.title.toLowerCase() === title.toLowerCase());
       if (exactSong) {
         setSearchQuery("");
         handleSelectSong(exactSong);
@@ -1328,7 +1511,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
 
       setSearchQuery(title);
     },
-    [handleSelectSong, songs],
+    [handleSelectSong, accessibleSongs],
   );
 
   const handleBackToSongList = useCallback(() => {
@@ -1404,6 +1587,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     setVisibleIdx(null);
     setShowLineCountPopover(false);
   }, []);
+
+  // Auto-clamp linesPerSlide when selected song has fewer lines than the current setting
+  useEffect(() => {
+    if (!selectedSong || totalLyricLines === 0) return;
+    if (linesPerSlide > totalLyricLines) {
+      setLinesPerSlide(clampLinesPerSlide(totalLyricLines));
+    }
+  }, [selectedSong, totalLyricLines, linesPerSlide]);
 
   const handleImportOnlineResult = useCallback(
     (result: OnlineLyricsSearchResult) => {
@@ -1525,6 +1716,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     prevOverlayMode.current = overlayMode;
     if (!changed) return;
     if (suppressAutoProjectionRef.current) return;
+    if (showThemeSettingsRef.current) return;
+    if (!prefsReadyRef.current) return;
     if (selectedSong && activeSectionIndex !== null) {
       void restageCurrent();
     }
@@ -1537,6 +1730,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     prevThemeSignature.current = nextSignature;
     if (!changed) return;
     if (suppressAutoProjectionRef.current) return;
+    if (showThemeSettingsRef.current) return;
+    if (!prefsReadyRef.current) return;
     if (selectedSong && activeSectionIndex !== null) {
       void restageCurrent();
     }
@@ -1551,6 +1746,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     prevFullscreenQuickSettingsSignature.current = nextSignature;
     if (!changed) return;
     if (suppressAutoProjectionRef.current) return;
+    if (showThemeSettingsRef.current) return;
+    if (!prefsReadyRef.current) return;
     if (overlayMode === "fullscreen" && selectedSong && activeSectionIndex !== null) {
       void restageCurrent();
     }
@@ -1573,6 +1770,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     if (!changed) return;
     if (overlayMode !== "lower-third") return;
     if (suppressAutoProjectionRef.current) return;
+    if (showThemeSettingsRef.current) return;
+    if (!prefsReadyRef.current) return;
 
     if (!selectedSong || activeSectionIndex === null) return;
     const section = selectedSongSections[activeSectionIndex];
@@ -1601,17 +1800,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     selectedSongSections,
     showWorshipBackgroundOnly,
   ]);
-
-  const prevLinesPerSlide = useRef(linesPerSlide);
-  useEffect(() => {
-    const changed = prevLinesPerSlide.current !== linesPerSlide;
-    prevLinesPerSlide.current = linesPerSlide;
-    if (!changed) return;
-    if (suppressAutoProjectionRef.current) return;
-    if (selectedSong && activeSectionIndex !== null) {
-      void restageCurrent();
-    }
-  }, [activeSectionIndex, linesPerSlide, restageCurrent, selectedSong]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1931,6 +2119,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
                     <div
                       key={section.id}
                       className={`dock-worship-slide-card${isVisible ? " dock-worship-slide-card--visible" : ""}${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}`}
+                      title="Click to view in OBS"
                     >
                       <button
                         type="button"
@@ -1943,18 +2132,13 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
                               <span className="dock-worship-slide-card__name">{displayLabel}</span>
                             ) : (
                               <span className="dock-worship-slide-card__name dock-worship-slide-card__name--muted">
-                                {t('worship.slideNumber', { number: idx + 1 })}
+                                {t('wthis orship.slideNumber', { number: idx + 1 })}
                               </span>
                             )}
                             <span className="dock-worship-slide-card__index">{idx + 1}</span>
                           </div>
                           <div className="dock-worship-slide-card__badges">
-                            {isVisible && (
-                              <span className="dock-worship-slide-card__badge dock-worship-slide-card__badge--visible">
-                                <Icon name="visibility" size={8} />
-                                {t('worship.showSection')}
-                              </span>
-                            )}
+
                           </div>
                         </div>
                         <div className="dock-worship-slide-card__text">{section.text}</div>
@@ -2035,16 +2219,20 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
                           {Array.from(
                             { length: MAX_LINES_PER_SLIDE - MIN_LINES_PER_SLIDE + 1 },
                             (_, index) => MIN_LINES_PER_SLIDE + index,
-                          ).map((count) => (
-                            <button
-                              key={`worship-line-choice-${count}`}
-                              type="button"
-                              className={`dock-line-popover__option${linesPerSlide === count ? " dock-line-popover__option--active" : ""}`}
-                              onClick={() => handleLinesPerSlideChange(count)}
-                            >
-                              {count}
-                            </button>
-                          ))}
+                          ).map((count) => {
+                            const isDisabled = totalLyricLines > 0 && count > totalLyricLines;
+                            return (
+                              <button
+                                key={`worship-line-choice-${count}`}
+                                type="button"
+                                disabled={isDisabled}
+                                className={`dock-line-popover__option${linesPerSlide === count ? " dock-line-popover__option--active" : ""}${isDisabled ? " dock-line-popover__option--disabled" : ""}`}
+                                onClick={() => handleLinesPerSlideChange(count)}
+                              >
+                                {count}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -2109,6 +2297,47 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
               </div>
               <label className="dock-dialog-field dock-dialog-field--lyrics">
                 <span>{t('worship.songLyrics')}</span>
+                <div className="dock-lyrics-toolbar">
+                  <div className="dock-lyrics-autosplit" ref={autoSplitPopoverRef}>
+                    <button
+                      type="button"
+                      className={`dock-lyrics-toolbar__btn${showAutoSplitPopover ? " dock-lyrics-toolbar__btn--active" : ""}`}
+                      onClick={() => setShowAutoSplitPopover((v) => !v)}
+                      title="Auto Split"
+                    >
+                      <Icon name="format_align_left" size={12} /> Auto Split ▾
+                    </button>
+                    {showAutoSplitPopover && (
+                      <div className="dock-lyrics-autosplit__menu">
+                        {[2, 3, 4].map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            className="dock-lyrics-autosplit__option"
+                            onClick={() => {
+                              formatLyrics("autosplit", n);
+                              setShowAutoSplitPopover(false);
+                            }}
+                          >
+                            {n} lines
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics("clean")} title="Clean Text">
+                    <Icon name="auto_fix_high" size={12} /> Clean Text
+                  </button>
+                  <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics("remove-empty")} title="Remove Empty">
+                    <Icon name="remove" size={12} /> Remove Empty
+                  </button>
+                  <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics("remove-verse-numbers")} title="Verse Numbers">
+                    <Icon name="tag" size={12} /> Verse Numbers
+                  </button>
+                  <button type="button" className="dock-lyrics-toolbar__btn" onClick={handleUndoFormatting} title="Undo">
+                    <Icon name="undo" size={12} /> Undo
+                  </button>
+                </div>
                 <textarea
                   className="dock-input dock-dialog-textarea"
                   value={songDraft.lyrics}
@@ -2347,9 +2576,12 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
         onQuickSettingsSave={(next) => {
           if (overlayMode === "fullscreen") {
             setSavedFullscreenQuickThemeSettings(next);
+            setFullscreenQuickThemeSettings(next);
           } else {
             setSavedLowerThirdQuickThemeSettings(next);
+            setLowerThirdQuickThemeSettings(next);
           }
+          requestAnimationFrame(() => { void restageCurrent(); });
         }}
         onQuickSettingsChange={(next) => {
           if (overlayMode === "fullscreen") {

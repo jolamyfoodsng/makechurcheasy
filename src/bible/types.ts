@@ -278,6 +278,7 @@ export interface BibleThemeSettings {
   bgGradientAngle?: number;      // gradient angle in degrees (optional, default 135)
   backgroundImage: string;   // URL or data URL
   backgroundImageFilePath?: string; // Absolute local file path for OBS-native image background
+  backgroundPattern: string; // SVG data URI from BACKGROUND_PATTERNS, or legacy CSS pattern slug (e.g. "diagonal-lines")
   backgroundVideo: string;   // URL or data URL
   backgroundVideoFilePath?: string; // Absolute local file path for OBS-native video background
   backgroundOpacity: number; // 0–1
@@ -309,6 +310,14 @@ export interface BibleThemeSettings {
   lowerThirdWidthPreset: LowerThirdWidthPreset;
   /** Horizontal offset in pixels after width/placement are applied */
   lowerThirdOffsetX: number;
+  /** Lower-third vertical caption position — "bottom" anchors text at bottom (default), "top" anchors at top */
+  lowerThirdCaptionPosition: "top" | "bottom";
+
+  // Compare Translation layout
+  /** Width percentage of each translation panel in compare mode (30–50, default 40) */
+  compareTranslationWidth: number;
+  /** Horizontal gap in pixels between translation panels in compare mode (0–200, default 40) */
+  compareTranslationGap: number;
 
   // Animation
   animation: "none" | "fade" | "slide-up" | "slide-left" | "scale-in" | "reveal-bg-then-text";
@@ -346,6 +355,7 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
 
   backgroundColor: "#000000",
   backgroundImage: "",
+  backgroundPattern: "",
   backgroundVideo: "",
   backgroundOpacity: 1,
   fullscreenShadeEnabled: true,
@@ -368,6 +378,10 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   lowerThirdHeight: 0,
   lowerThirdWidthPreset: "full",
   lowerThirdOffsetX: 0,
+  lowerThirdCaptionPosition: "bottom",
+
+  compareTranslationWidth: 40,
+  compareTranslationGap: 40,
 
   animation: "fade",
   animationDuration: 400,

@@ -173,6 +173,17 @@ function isInternalUploadFile(name: string): boolean {
   return INTERNAL_UPLOAD_PREFIXES.some((prefix) => name.startsWith(prefix));
 }
 
+/** Extract createdAt ISO string from "media_<timestamp>_<safeName>" filename. */
+function extractUploadTimestamp(filename: string): string {
+  const match = filename.match(/^media_(\d{10,13})_/);
+  if (!match) return "";
+  const ts = Number(match[1]);
+  // Accept both seconds (10 digits) and milliseconds (13 digits)
+  const ms = match[1].length <= 10 ? ts * 1000 : ts;
+  const d = new Date(ms);
+  return Number.isFinite(d.getTime()) ? d.toISOString() : "";
+}
+
 function loadMediaPreferences(): DockMediaPreferences {
   try {
     const stored = localStorage.getItem(getUserScopedKey(MEDIA_PREFS_STORAGE_KEY));
@@ -933,7 +944,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         prefKey,
         name: file,
         kind,
-        createdAt: "",
+        createdAt: extractUploadTimestamp(file),
         originLabel: t('media.uploads'),
         mimeLabel: file.split(".").pop()?.toUpperCase(),
         uploadFile: file,
@@ -977,16 +988,16 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         // Both unused — fall back to createdAt DESC
         const aCreatedAt = a.createdAt ?? "";
         const bCreatedAt = b.createdAt ?? "";
-        if (aCreatedAt === "" && bCreatedAt !== "") return -1;
-        if (aCreatedAt !== "" && bCreatedAt === "") return 1;
+        if (aCreatedAt === "" && bCreatedAt !== "") return 1;
+        if (aCreatedAt !== "" && bCreatedAt === "") return -1;
         return bCreatedAt.localeCompare(aCreatedAt);
       }
       // Newly Uploaded (default): sort by createdAt DESC, lastUsedAt as tiebreaker
       const aCreatedAt = a.createdAt ?? "";
       const bCreatedAt = b.createdAt ?? "";
-      // Empty createdAt (uploads without timestamps) should sort first
-      if (aCreatedAt === "" && bCreatedAt !== "") return -1;
-      if (aCreatedAt !== "" && bCreatedAt === "") return 1;
+      // Items without timestamps go to the bottom
+      if (aCreatedAt === "" && bCreatedAt !== "") return 1;
+      if (aCreatedAt !== "" && bCreatedAt === "") return -1;
       if (aCreatedAt !== bCreatedAt) {
         return bCreatedAt.localeCompare(aCreatedAt);
       }
@@ -1000,13 +1011,6 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
   const videoEntries = useMemo(() => mediaEntries.filter((entry) => entry.kind === "video"), [mediaEntries]);
   const imageEntries = useMemo(() => mediaEntries.filter((entry) => entry.kind === "image"), [mediaEntries]);
   const patternEntries = useMemo(() => BACKGROUND_PATTERNS.map((p) => createPatternEntry(p, t('media.pattern'))), []);
-  const filteredUploadEntries = useMemo(() => {
-    const pool = activeKind === "all" ? mediaEntries : activeKind === "video" ? videoEntries : imageEntries;
-    const query = assetSearch.trim().toLowerCase();
-    if (!query) return pool;
-    return pool.filter((entry) => entry.name.toLowerCase().includes(query));
-  }, [activeKind, assetSearch, imageEntries, mediaEntries, videoEntries]);
-
   // ── Plan-locked items: items beyond the plan limit get a blur + padlock ──
   const lockedKeys = useMemo(() => {
     const locked = new Set<string>();
@@ -1056,6 +1060,27 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
     return locked;
   }, [mediaEntries]);
+
+  // Free-plan gating: restrict visible uploads to the allowed count only
+  const isFreePlan = useMemo(() => {
+    try {
+      return (localStorage.getItem("ocs-dock-plan") || "free").toLowerCase() === "free";
+    } catch {
+      return true;
+    }
+  }, []);
+
+  const filteredUploadEntries = useMemo(() => {
+    const pool = activeKind === "all" ? mediaEntries : activeKind === "video" ? videoEntries : imageEntries;
+    const query = assetSearch.trim().toLowerCase();
+    let result = !query ? pool : pool.filter((entry) => entry.name.toLowerCase().includes(query));
+    // Free plan: only show the allowed items so search never reveals locked media
+    if (isFreePlan) {
+      result = result.filter((entry) => !lockedKeys.has(entry.key));
+    }
+    return result;
+  }, [activeKind, assetSearch, imageEntries, isFreePlan, lockedKeys, mediaEntries, videoEntries]);
+
   const filteredPatternEntries = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
     if (!query) return patternEntries;
@@ -1900,16 +1925,27 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
             type="button"
             className="dock-btn dock-btn--compact dock-btn--primary"
             onClick={() => {
-              console.log("[UPLOAD] Add button clicked", { uploading, browserTab });
-              console.log("[UPLOAD] Input ref:", uploadInputRef.current);
-              // Always open the file picker — per-file quota is enforced inside handleUploadFiles
-              uploadInputRef.current?.click();
+              if (browserTab === "animations") {
+                openAddMediaModal("template-videos");
+              } else {
+                uploadInputRef.current?.click();
+              }
             }}
-            disabled={uploading || browserTab !== "uploads"}
-            title={browserTab !== "uploads" ? t('media.uploadRestricted') : (uploading ? t('media.preparing') : t('media.addMedia'))}
+            disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations")}
+            title={
+              browserTab === "animations"
+                ? t('media.addAnimation')
+                : browserTab !== "uploads"
+                  ? t('media.uploadRestricted')
+                  : uploading ? t('media.preparing') : t('media.addMedia')
+            }
           >
             <Icon name="add" size={12} />
-            {uploading ? t('media.preparing') : t('media.addMedia')}
+            {uploading
+              ? t('media.preparing')
+              : browserTab === "animations"
+                ? t('media.addAnimation')
+                : t('media.addMedia')}
           </button>
           <button
             type="button"
@@ -2082,27 +2118,29 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   </button>
                 </div>
 
-                {/* View mode toggle */}
-                <div className="dock-media-pills dock-media-pills--secondary" role="tablist" aria-label={t('media.sortOrder')}>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={viewMode === "recent"}
-                    className={`dock-media-pill dock-media-pill--small${viewMode === "recent" ? " dock-media-pill--active" : ""}`}
-                    onClick={() => setViewMode("recent")}
-                    title={t('media.recentlyUsed')}>
-                    {t('media.recentlyUsed')}
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={viewMode === "uploaded"}
-                    className={`dock-media-pill dock-media-pill--small${viewMode === "uploaded" ? " dock-media-pill--active" : ""}`}
-                    onClick={() => setViewMode("uploaded")}
-                    title={t('media.newlyUploaded')}>
-                    {t('media.newlyUploaded')}
-                  </button>
-                </div>
+                {/* View mode toggle — hidden for free plan users */}
+                {!isFreePlan && (
+                  <div className="dock-media-pills dock-media-pills--secondary" role="tablist" aria-label={t('media.sortOrder')}>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={viewMode === "recent"}
+                      className={`dock-media-pill dock-media-pill--small${viewMode === "recent" ? " dock-media-pill--active" : ""}`}
+                      onClick={() => setViewMode("recent")}
+                      title={t('media.recentlyUsed')}>
+                      {t('media.recentlyUsed')}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={viewMode === "uploaded"}
+                      className={`dock-media-pill dock-media-pill--small${viewMode === "uploaded" ? " dock-media-pill--active" : ""}`}
+                      onClick={() => setViewMode("uploaded")}
+                      title={t('media.newlyUploaded')}>
+                      {t('media.newlyUploaded')}
+                    </button>
+                  </div>
+                )}
 
                 {/* Error banner */}
                 {sendError && (

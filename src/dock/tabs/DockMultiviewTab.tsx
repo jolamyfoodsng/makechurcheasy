@@ -867,7 +867,12 @@ export default function DockMultiviewTab() {
 
   const handlePush = useCallback(async (mv: SavedMultiView) => {
     if (!(await requireEntitlement("multiview", 0))) return;
-    await ensureObsConnected();
+    try {
+      await ensureObsConnected();
+    } catch (err) {
+      showFeedback("error", err instanceof Error ? err.message : t('multiview.connectFailed'));
+      return;
+    }
     if (!dockObsClient.isConnected) return;
 
     const layout = resolveLayout(mv.layoutId);
@@ -978,7 +983,7 @@ export default function DockMultiviewTab() {
             itemId = resp.sceneItemId;
           } catch { /* skip */ }
         }
-        if (itemId > 0) {
+        if (itemId >= 0) {
           await dockObsClient.animateSceneItemWithMove(sceneName, itemId, slot.x, slot.y, slot.width, slot.height);
         }
       }
@@ -995,7 +1000,11 @@ export default function DockMultiviewTab() {
   }, [ensureScene, refreshObsScenes, showFeedback, t]);
 
   const handleClear = useCallback(async (mv: SavedMultiView) => {
-    await ensureObsConnected();
+    try {
+      await ensureObsConnected();
+    } catch {
+      return;
+    }
     if (!dockObsClient.isConnected) return;
     setClearingId(mv.id);
     try {

@@ -1617,7 +1617,7 @@ export function MVSettings() {
                       </div>
                       <div className="credits-stat">
                         <span className="credits-stat-label">Credits Remaining</span>
-                        <span className="credits-stat-value credits-accent">{isUnlimited ? "Unlimited" : formatCredits(creditBalance)}</span>
+                        <span className="credits-stat-value credits-accent">{isUnlimited ? "Unlimited" : formatCredits(planCredits)}</span>
                       </div>
                       <div className="credits-stat">
                         <span className="credits-stat-label">This Month</span>

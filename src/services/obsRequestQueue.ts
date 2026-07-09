@@ -43,7 +43,10 @@ export interface RequestStats {
 
 interface LatencyEntry {
   timestamp: number;
+  /** Total time including queue wait — used for stats/display */
   latencyMs: number;
+  /** Actual WebSocket round-trip time (fn() duration only) — used for backoff */
+  callLatencyMs: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +190,10 @@ function checkBackoff(): void {
   const recent = latencies.filter(l => now - l.timestamp < BACKOFF_SUSTAINED_SECONDS * 1000);
   if (recent.length < 10) return; // need enough samples
 
-  const sorted = recent.map(l => l.latencyMs).sort((a, b) => a - b);
+  // Use actual WebSocket call latency for backoff decisions, NOT total queue time.
+  // This prevents the backoff feedback loop where rate limiter wait inflates latency
+  // → backoff reduces budget → more wait → more backoff → death spiral.
+  const sorted = recent.map(l => l.callLatencyMs).sort((a, b) => a - b);
   const p95Index = Math.floor(sorted.length * 0.95);
   const p95 = sorted[p95Index];
 
@@ -242,6 +248,8 @@ export async function enqueue<T>(
   startStatsLogging();
 
   const execute = async (): Promise<T> => {
+    const queueStartTime = performance.now();
+
     // Acquire concurrency slot
     await semaphore.acquire();
 
@@ -250,23 +258,26 @@ export async function enqueue<T>(
       await rateLimiter.waitForSlot();
     }
 
-    const startTime = performance.now();
+    // Now measure the actual WebSocket call time (after all queue/rate-limiting)
+    const callStartTime = performance.now();
     try {
       const result = await withTimeout(fn(), timeoutMs);
-      const latency = performance.now() - startTime;
+      const callLatencyMs = performance.now() - callStartTime;
+      const totalTime = performance.now() - queueStartTime;
 
       completedRequests++;
-      recordLatency(latency);
+      recordLatency(totalTime, callLatencyMs);
 
-      if (latency > 500) {
-        console.warn(`${LOG_PREFIX} Slow response: ${label} took ${latency.toFixed(0)}ms`);
+      if (callLatencyMs > 500) {
+        console.warn(`${LOG_PREFIX} Slow call: ${label} actual call took ${callLatencyMs.toFixed(0)}ms`);
       }
 
       return result;
     } catch (err) {
-      const latency = performance.now() - startTime;
+      const callLatencyMs = performance.now() - callStartTime;
+      const totalTime = performance.now() - queueStartTime;
       failedRequests++;
-      recordLatency(latency);
+      recordLatency(totalTime, callLatencyMs);
       throw err;
     } finally {
       semaphore.release();
@@ -331,8 +342,8 @@ export function resetStats(): void {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function recordLatency(latencyMs: number): void {
-  latencies.push({ timestamp: Date.now(), latencyMs });
+function recordLatency(latencyMs: number, callLatencyMs: number): void {
+  latencies.push({ timestamp: Date.now(), latencyMs, callLatencyMs });
   if (latencies.length > LATENCY_WINDOW * 2) {
     latencies.splice(0, latencies.length - LATENCY_WINDOW);
   }

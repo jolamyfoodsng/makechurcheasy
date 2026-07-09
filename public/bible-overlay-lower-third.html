@@ -5,10 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1920,height=1080">
   <title>Bible Overlay — Lower Third</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap"
-    rel="stylesheet">
+  <link href="/fonts/google/google-fonts.css" rel="stylesheet">
   <style>
     @font-face {
       font-family: 'Charis SIL';
@@ -24,6 +21,10 @@
       font-weight: 700;
       font-display: swap;
       src: url('/fonts/charis-sil/CharisSIL-Bold.ttf') format('truetype');
+    }
+
+    html {
+      background: transparent !important;
     }
 
     * {
@@ -113,13 +114,14 @@
 
     #overlay {
       position: absolute;
-      bottom: 0;
+      top: var(--lt-v-top, auto);
+      bottom: var(--lt-v-bottom, 0px);
       left: 0;
       right: 0;
       display: flex;
-      align-items: flex-end;
+      align-items: var(--lt-v-align, flex-end);
       justify-content: var(--lt-justify, flex-start);
-      padding: 0 var(--safe-area, 40px) var(--safe-area, 40px);
+      padding: var(--safe-area, 40px) var(--safe-area, 40px) 0;
       z-index: 1;
       transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -127,7 +129,7 @@
     }
 
     #overlay.hidden {
-      transform: translateY(100%);
+      transform: var(--lt-hide-transform, translateY(100%));
       opacity: 0;
     }
 
@@ -417,6 +419,20 @@
 
     let barMaxHeight = 400; // updated by size preset
 
+    const PATTERN_CSS = {
+      'diagonal-lines': 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.15) 4px, rgba(255,255,255,0.15) 5px)',
+      'horizontal-lines': 'repeating-linear-gradient(0deg, transparent, transparent 6px, rgba(255,255,255,0.12) 6px, rgba(255,255,255,0.12) 7px)',
+      'vertical-lines': 'repeating-linear-gradient(90deg, transparent, transparent 6px, rgba(255,255,255,0.12) 6px, rgba(255,255,255,0.12) 7px)',
+      'dots': 'radial-gradient(circle, rgba(255,255,255,0.2) 1.5px, transparent 1.5px) 0 0 / 12px 12px',
+      'grid': 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px) 0 0 / 14px 14px',
+      'chevrons': 'linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%), linear-gradient(225deg, rgba(255,255,255,0.15) 25%, transparent 25%) 0 0 / 12px 12px',
+      'cross-hatch': 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 5px), repeating-linear-gradient(-45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 5px)',
+      'diagonal-checker': 'linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%), linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%) 0 0 / 16px 16px',
+      'zigzag': 'linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%) -6px 0, linear-gradient(225deg, rgba(255,255,255,0.15) 25%, transparent 25%) -6px 0, linear-gradient(315deg, rgba(255,255,255,0.15) 25%, transparent 25%), linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%) 0 0 / 12px 12px',
+      'subtle-noise': "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E\")",
+      'star-field': "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.3) 1px, transparent 1px), radial-gradient(circle at 80% 70%, rgba(255,255,255,0.2) 1px, transparent 1px), radial-gradient(circle at 50% 10%, rgba(255,255,255,0.25) 0.5px, transparent 0.5px) 0 0 / 20px 20px, 30px 30px, 15px 15px",
+    };
+
     const overlay = document.getElementById('overlay');
     const background = document.getElementById('background');
     const bgCrossfade = document.getElementById('bg-crossfade');
@@ -550,6 +566,22 @@
       );
       root.setProperty('--lt-width-reduction', safeWidthReduction + 'px');
       root.setProperty('--lt-offset-x', safeOffset + 'px');
+
+      // Caption vertical position (top vs bottom)
+      const captionPos = s.lowerThirdCaptionPosition || 'bottom';
+      if (captionPos === 'top') {
+        root.setProperty('--lt-v-top', '0px');
+        root.setProperty('--lt-v-bottom', 'auto');
+        root.setProperty('--lt-v-align', 'flex-start');
+        root.setProperty('--lt-hide-transform', 'translateY(-100%)');
+        root.setProperty('--safe-area-padding', 'var(--safe-area, 40px)');
+      } else {
+        root.setProperty('--lt-v-top', 'auto');
+        root.setProperty('--lt-v-bottom', '0px');
+        root.setProperty('--lt-v-align', 'flex-end');
+        root.setProperty('--lt-hide-transform', 'translateY(100%)');
+        root.setProperty('--safe-area-padding', '0px');
+      }
       // When lowerThirdHeight is 0 (auto), derive a sensible minimum bar height
       // from the preset so short verses don't collapse to a tiny strip.
       // Skipped for the "smallest" preset where compactness is intentional.
@@ -623,434 +655,447 @@
           barBackgroundVideoEl.style.display = 'none';
         }
 
-        let resolvedBgImage = boxImageValue;
-        if (!resolvedBgImage && bgImageValue) {
-          resolvedBgImage = bgImageValue;
+        // Pattern: SVG data URIs (from BACKGROUND_PATTERNS) or legacy CSS patterns
+        let patternCss = '';
+        if (s.backgroundPattern) {
+          if (s.backgroundPattern.startsWith('data:')) {
+            patternCss = 'url(' + s.backgroundPattern + ')';
+          } else if (PATTERN_CSS[s.backgroundPattern]) {
+            patternCss = PATTERN_CSS[s.backgroundPattern];
+          }
         }
-        if (resolvedBgImage === '__FROM_CSS__') {
-          const cssVal = getComputedStyle(document.documentElement).getPropertyValue('--bg-image').trim();
-          resolvedBgImage = cssVal || '';
-        } else if (resolvedBgImage === '__FROM_LOCALSTORAGE__') {
-          const stored = localStorage.getItem('bible-overlay-bg-image');
-          resolvedBgImage = stored || '';
-        }
-
-        if (resolvedBgImage) {
-          root.setProperty('--box-bg-image', resolvedBgImage.startsWith('url(') ? resolvedBgImage : `url(${resolvedBgImage})`);
-          root.setProperty('--box-background', hasGradient ? bgColorFinal : (bgColorSolid && bgColorSolid !== 'transparent' ? bgColorSolid : (boxBackgroundValue || 'transparent')));
-        } else if (hasGradient) {
-          // Gradients must go through --box-bg-image (background-image) since
-          // --box-background only controls background-color and gradients are
-          // not valid CSS for background-color.
-          root.setProperty('--box-bg-image', bgColorFinal);
+        if (patternCss) {
+          root.setProperty('--box-bg-image', patternCss);
           root.setProperty('--box-background', 'transparent');
         } else {
-          root.setProperty('--box-bg-image', 'none');
-          root.setProperty('--box-background', bgColorSolid && bgColorSolid !== 'transparent' ? bgColorSolid : (boxBackgroundValue || 'transparent'));
-        }
-        root.setProperty('--box-opacity', bgOpacity);
-      }
-
-      if (s.refPosition === 'top') {
-        reference.classList.add('top');
-      } else {
-        reference.classList.remove('top');
-      }
-
-      if (s.logoUrl) {
-        if (s.logoUrl === '__FROM_CSS__') {
-          const cssVal = getComputedStyle(document.documentElement).getPropertyValue('--logo-data-uri').trim();
-          if (cssVal && cssVal.startsWith('url(')) {
-            const inner = cssVal.slice(4, -1).replace(/^["']|["']$/g, '');
-            logo.src = inner;
+          let resolvedBgImage = boxImageValue;
+          if (!resolvedBgImage && bgImageValue) {
+            resolvedBgImage = bgImageValue;
           }
+          if (resolvedBgImage === '__FROM_CSS__') {
+            const cssVal = getComputedStyle(document.documentElement).getPropertyValue('--bg-image').trim();
+            resolvedBgImage = cssVal || '';
+          } else if (resolvedBgImage === '__FROM_LOCALSTORAGE__') {
+            const stored = localStorage.getItem('bible-overlay-bg-image');
+            resolvedBgImage = stored || '';
+          }
+
+          if (resolvedBgImage) {
+            root.setProperty('--box-bg-image', resolvedBgImage.startsWith('url(') ? resolvedBgImage : `url(${resolvedBgImage})`);
+            root.setProperty('--box-background', hasGradient ? bgColorFinal : (bgColorSolid && bgColorSolid !== 'transparent' ? bgColorSolid : (boxBackgroundValue || 'transparent')));
+          } else if (hasGradient) {
+            // Gradients must go through --box-bg-image (background-image) since
+            // --box-background only controls background-color and gradients are
+            // not valid CSS for background-color.
+            root.setProperty('--box-bg-image', bgColorFinal);
+            root.setProperty('--box-background', 'transparent');
+          } else {
+            root.setProperty('--box-bg-image', 'none');
+            root.setProperty('--box-background', bgColorSolid && bgColorSolid !== 'transparent' ? bgColorSolid : (boxBackgroundValue || 'transparent'));
+          }
+          root.setProperty('--box-opacity', bgOpacity);
+        }
+
+        if (s.refPosition === 'top') {
+          reference.classList.add('top');
         } else {
-          logo.src = s.logoUrl;
+          reference.classList.remove('top');
         }
-        logo.className = 'visible ' + (s.logoPosition || 'bottom-right');
-        root.setProperty('--logo-size', (s.logoSize || 60) + 'px');
-      } else {
-        logo.className = '';
+
+        if (s.logoUrl) {
+          if (s.logoUrl === '__FROM_CSS__') {
+            const cssVal = getComputedStyle(document.documentElement).getPropertyValue('--logo-data-uri').trim();
+            if (cssVal && cssVal.startsWith('url(')) {
+              const inner = cssVal.slice(4, -1).replace(/^["']|["']$/g, '');
+              logo.src = inner;
+            }
+          } else {
+            logo.src = s.logoUrl;
+          }
+          logo.className = 'visible ' + (s.logoPosition || 'bottom-right');
+          root.setProperty('--logo-size', (s.logoSize || 60) + 'px');
+        } else {
+          logo.className = '';
+        }
       }
-    }
 
-    function resolveSafeArea() {
-      const raw = getComputedStyle(document.documentElement)
-        .getPropertyValue("--safe-area")
-        .trim()
-        .replace("px", "");
-      return Number(raw) || 40;
-    }
+      function resolveSafeArea() {
+        const raw = getComputedStyle(document.documentElement)
+          .getPropertyValue("--safe-area")
+          .trim()
+          .replace("px", "");
+        return Number(raw) || 40;
+      }
 
-    function isOverflowing(node, width, height) {
-      if (!node) return false;
-      const epsilon = 1;
-      const measuredWidth = Math.max(node.scrollWidth, node.getBoundingClientRect().width);
-      const measuredHeight = Math.max(node.scrollHeight, node.getBoundingClientRect().height);
-      return measuredWidth > width + epsilon || measuredHeight > height + epsilon;
-    }
+      function isOverflowing(node, width, height) {
+        if (!node) return false;
+        const epsilon = 1;
+        const measuredWidth = Math.max(node.scrollWidth, node.getBoundingClientRect().width);
+        const measuredHeight = Math.max(node.scrollHeight, node.getBoundingClientRect().height);
+        return measuredWidth > width + epsilon || measuredHeight > height + epsilon;
+      }
 
-    function isLowerThirdOverflowing() {
-      if (!bar) return false;
-      const safeArea = resolveSafeArea();
-      const viewportWidth = document.body?.clientWidth || 1920;
-      const viewportHeight = document.body?.clientHeight || 1080;
-      const availableWidth = Math.max(320, viewportWidth - safeArea * 2);
-      const availableHeight = Math.max(120, Math.min(barMaxHeight, viewportHeight - safeArea * 2));
-      return (
-        isOverflowing(bar, availableWidth, availableHeight) ||
-        isOverflowing(verseText, verseText.clientWidth || availableWidth, availableHeight) ||
-        (reference.style.display !== "none" && isOverflowing(reference, reference.clientWidth || availableWidth, availableHeight))
-      );
-    }
+      function isLowerThirdOverflowing() {
+        if (!bar) return false;
+        const safeArea = resolveSafeArea();
+        const viewportWidth = document.body?.clientWidth || 1920;
+        const viewportHeight = document.body?.clientHeight || 1080;
+        const availableWidth = Math.max(320, viewportWidth - safeArea * 2);
+        const availableHeight = Math.max(120, Math.min(barMaxHeight, viewportHeight - safeArea * 2));
+        return (
+          isOverflowing(bar, availableWidth, availableHeight) ||
+          isOverflowing(verseText, verseText.clientWidth || availableWidth, availableHeight) ||
+          (reference.style.display !== "none" && isOverflowing(reference, reference.clientWidth || availableWidth, availableHeight))
+        );
+      }
 
-    /**
-     * Auto-scale font size so the bar fits the visible OBS frame.
-     * Phase 1 (shrink): starts from baseFontSize and steps down until content fits.
-     * Phase 2 (grow): if the bar is below its minimum height, grows font back up
-     * so short verses aren't rendered as a tiny strip.
-     */
-    function autoScaleFont() {
-      if (!bar) return;
-      let size = baseFontSize;
-      let refSize = Math.max(REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
-      let padding = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding));
-      let lineHeight = Math.max(BAR_LINE_HEIGHT_MIN, Number(getComputedStyle(document.documentElement).getPropertyValue("--line-height")) || 1.5);
-      let referenceSpacing = 12;
-      const ratio = baseFontSize > 0 ? (baseRefFontSize / baseFontSize) : 0.5;
-      verseText.style.fontSize = size + 'px';
-      reference.style.fontSize = refSize + 'px';
-      verseText.style.lineHeight = String(lineHeight);
-      bar.style.padding = padding + 'px calc(' + padding + 'px + 20px)';
-      reference.style.marginTop = reference.classList.contains("top") ? "0px" : referenceSpacing + "px";
-      reference.style.marginBottom = reference.classList.contains("top") ? referenceSpacing + "px" : "0px";
-      // Measure after setting — allow reflow
-      let guard = 0;
-      while (
-        isLowerThirdOverflowing() &&
-        (
-          size > FONT_SIZE_MIN ||
-          refSize > REF_FONT_SIZE_MIN ||
-          padding > BAR_PADDING_MIN ||
-          lineHeight > BAR_LINE_HEIGHT_MIN ||
-          referenceSpacing > 6
-        ) &&
-        guard < 240
-      ) {
-        if (size > FONT_SIZE_MIN) {
-          size -= 1;
-        }
-        refSize = Math.max(REF_FONT_SIZE_MIN, Math.round(size * ratio));
-        if (isLowerThirdOverflowing() && padding > BAR_PADDING_MIN) {
-          padding = Math.max(BAR_PADDING_MIN, padding - 1);
-        }
-        if (isLowerThirdOverflowing() && lineHeight > BAR_LINE_HEIGHT_MIN) {
-          lineHeight = Math.max(BAR_LINE_HEIGHT_MIN, Number((lineHeight - 0.02).toFixed(2)));
-        }
-        if (isLowerThirdOverflowing() && referenceSpacing > 6) {
-          referenceSpacing = Math.max(6, referenceSpacing - 1);
-        }
+      /**
+       * Auto-scale font size so the bar fits the visible OBS frame.
+       * Phase 1 (shrink): starts from baseFontSize and steps down until content fits.
+       * Phase 2 (grow): if the bar is below its minimum height, grows font back up
+       * so short verses aren't rendered as a tiny strip.
+       */
+      function autoScaleFont() {
+        if (!bar) return;
+        let size = baseFontSize;
+        let refSize = Math.max(REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
+        let padding = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding));
+        let lineHeight = Math.max(BAR_LINE_HEIGHT_MIN, Number(getComputedStyle(document.documentElement).getPropertyValue("--line-height")) || 1.5);
+        let referenceSpacing = 12;
+        const ratio = baseFontSize > 0 ? (baseRefFontSize / baseFontSize) : 0.5;
         verseText.style.fontSize = size + 'px';
         reference.style.fontSize = refSize + 'px';
         verseText.style.lineHeight = String(lineHeight);
         bar.style.padding = padding + 'px calc(' + padding + 'px + 20px)';
         reference.style.marginTop = reference.classList.contains("top") ? "0px" : referenceSpacing + "px";
         reference.style.marginBottom = reference.classList.contains("top") ? referenceSpacing + "px" : "0px";
-        guard += 1;
-      }
-
-      // ── Phase 2: GROW ──
-      // When the bar has a minimum height and content fits with room to spare,
-      // grow font/spacing back up so short verses fill the bar instead of
-      // rendering as a tiny strip. This reverses unnecessary shrinking from Phase 1
-      // for short verses, while long verses that shrank a lot are unaffected
-      // (their bar already fills the available space).
-      const minBarHeight = Math.max(0, Number(getComputedStyle(document.documentElement).getPropertyValue("--lt-min-height")) || 0);
-      const viewH = window.innerHeight || 1080;
-      const safeArea = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--safe-area")) || 0;
-      const effectiveMax = Math.min(barMaxHeight, viewH - safeArea * 2);
-      const growTarget = Math.max(minBarHeight, Math.round(effectiveMax * 0.55));
-      const maxFont = Math.round(baseFontSize * 1.5);
-
-      if (bar.scrollHeight < growTarget && size < maxFont) {
-        guard = 0;
-        while (bar.scrollHeight < growTarget && size < maxFont && guard < 200) {
-          size += 2;
+        // Measure after setting — allow reflow
+        let guard = 0;
+        while (
+          isLowerThirdOverflowing() &&
+          (
+            size > FONT_SIZE_MIN ||
+            refSize > REF_FONT_SIZE_MIN ||
+            padding > BAR_PADDING_MIN ||
+            lineHeight > BAR_LINE_HEIGHT_MIN ||
+            referenceSpacing > 6
+          ) &&
+          guard < 240
+        ) {
+          if (size > FONT_SIZE_MIN) {
+            size -= 1;
+          }
           refSize = Math.max(REF_FONT_SIZE_MIN, Math.round(size * ratio));
-          padding = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding * (size / baseFontSize)));
-          lineHeight = Math.max(BAR_LINE_HEIGHT_MIN, Number(getComputedStyle(document.documentElement).getPropertyValue("--line-height")) || 1.5);
+          if (isLowerThirdOverflowing() && padding > BAR_PADDING_MIN) {
+            padding = Math.max(BAR_PADDING_MIN, padding - 1);
+          }
+          if (isLowerThirdOverflowing() && lineHeight > BAR_LINE_HEIGHT_MIN) {
+            lineHeight = Math.max(BAR_LINE_HEIGHT_MIN, Number((lineHeight - 0.02).toFixed(2)));
+          }
+          if (isLowerThirdOverflowing() && referenceSpacing > 6) {
+            referenceSpacing = Math.max(6, referenceSpacing - 1);
+          }
           verseText.style.fontSize = size + 'px';
           reference.style.fontSize = refSize + 'px';
           verseText.style.lineHeight = String(lineHeight);
           bar.style.padding = padding + 'px calc(' + padding + 'px + 20px)';
+          reference.style.marginTop = reference.classList.contains("top") ? "0px" : referenceSpacing + "px";
+          reference.style.marginBottom = reference.classList.contains("top") ? referenceSpacing + "px" : "0px";
           guard += 1;
         }
-        // If we overshot, step back one increment
-        if (bar.scrollHeight > growTarget && size > baseFontSize) {
-          size -= 2;
-          refSize = Math.max(REF_FONT_SIZE_MIN, Math.round(size * ratio));
-          padding = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding * (size / baseFontSize)));
-          verseText.style.fontSize = size + 'px';
-          reference.style.fontSize = refSize + 'px';
-          bar.style.padding = padding + 'px calc(' + padding + 'px + 20px)';
+
+        // ── Phase 2: GROW ──
+        // When the bar has a minimum height and content fits with room to spare,
+        // grow font/spacing back up so short verses fill the bar instead of
+        // rendering as a tiny strip. This reverses unnecessary shrinking from Phase 1
+        // for short verses, while long verses that shrank a lot are unaffected
+        // (their bar already fills the available space).
+        const minBarHeight = Math.max(0, Number(getComputedStyle(document.documentElement).getPropertyValue("--lt-min-height")) || 0);
+        const viewH = window.innerHeight || 1080;
+        const safeArea = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--safe-area")) || 0;
+        const effectiveMax = Math.min(barMaxHeight, viewH - safeArea * 2);
+        const growTarget = Math.max(minBarHeight, Math.round(effectiveMax * 0.55));
+        const maxFont = Math.round(baseFontSize * 1.5);
+
+        if (bar.scrollHeight < growTarget && size < maxFont) {
+          guard = 0;
+          while (bar.scrollHeight < growTarget && size < maxFont && guard < 200) {
+            size += 2;
+            refSize = Math.max(REF_FONT_SIZE_MIN, Math.round(size * ratio));
+            padding = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding * (size / baseFontSize)));
+            lineHeight = Math.max(BAR_LINE_HEIGHT_MIN, Number(getComputedStyle(document.documentElement).getPropertyValue("--line-height")) || 1.5);
+            verseText.style.fontSize = size + 'px';
+            reference.style.fontSize = refSize + 'px';
+            verseText.style.lineHeight = String(lineHeight);
+            bar.style.padding = padding + 'px calc(' + padding + 'px + 20px)';
+            guard += 1;
+          }
+          // If we overshot, step back one increment
+          if (bar.scrollHeight > growTarget && size > baseFontSize) {
+            size -= 2;
+            refSize = Math.max(REF_FONT_SIZE_MIN, Math.round(size * ratio));
+            padding = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding * (size / baseFontSize)));
+            verseText.style.fontSize = size + 'px';
+            reference.style.fontSize = refSize + 'px';
+            bar.style.padding = padding + 'px calc(' + padding + 'px + 20px)';
+          }
         }
       }
-    }
 
-    function scheduleAutoScaleFont() {
-      if (fitRafId) {
-        cancelAnimationFrame(fitRafId);
+      function scheduleAutoScaleFont() {
+        if (fitRafId) {
+          cancelAnimationFrame(fitRafId);
+        }
+        fitRafId = requestAnimationFrame(() => {
+          fitRafId = 0;
+          autoScaleFont();
+        });
+        if (document.fonts && document.fonts.ready) {
+          document.fonts.ready.then(() => {
+            requestAnimationFrame(() => autoScaleFont());
+          }).catch(() => { });
+        }
       }
-      fitRafId = requestAnimationFrame(() => {
-        fitRafId = 0;
-        autoScaleFont();
+
+      function clearEntranceAnimationClasses() {
+        bar.classList.remove('anim-slide-up-enter', 'anim-slide-left-enter', 'anim-fade-enter', 'anim-scale-in-enter', 'anim-reveal-bg-enter');
+        verseText.classList.remove('anim-text-delayed-enter');
+        reference.classList.remove('anim-text-delayed-enter');
+      }
+
+      function runEntranceAnimation(anim) {
+        clearEntranceAnimationClasses();
+        void bar.offsetWidth;
+
+        if (anim === 'none') return;
+
+        if (anim === 'reveal-bg-then-text') {
+          bar.classList.add('anim-reveal-bg-enter');
+          verseText.classList.add('anim-text-delayed-enter');
+          reference.classList.add('anim-text-delayed-enter');
+          return;
+        }
+
+        if (anim === 'fade') {
+          bar.classList.add('anim-fade-enter');
+          return;
+        }
+
+        if (anim === 'scale-in') {
+          bar.classList.add('anim-scale-in-enter');
+          return;
+        }
+
+        if (anim === 'slide-left') {
+          bar.classList.add('anim-slide-left-enter');
+          return;
+        }
+
+        bar.classList.add('anim-slide-up-enter');
+      }
+
+      /* ── Animate-out completion signaling ── */
+      let _animateOutResolve = null;
+      overlay.addEventListener('transitionend', (e) => {
+        if (e.propertyName === 'opacity' && overlay.classList.contains('blank')) {
+          overlay.classList.add('hidden');
+          signalAnimateOutComplete();
+        }
       });
-      if (document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(() => {
-          requestAnimationFrame(() => autoScaleFont());
-        }).catch(() => { });
-      }
-    }
 
-    function clearEntranceAnimationClasses() {
-      bar.classList.remove('anim-slide-up-enter', 'anim-slide-left-enter', 'anim-fade-enter', 'anim-scale-in-enter', 'anim-reveal-bg-enter');
-      verseText.classList.remove('anim-text-delayed-enter');
-      reference.classList.remove('anim-text-delayed-enter');
-    }
-
-    function runEntranceAnimation(anim) {
-      clearEntranceAnimationClasses();
-      void bar.offsetWidth;
-
-      if (anim === 'none') return;
-
-      if (anim === 'reveal-bg-then-text') {
-        bar.classList.add('anim-reveal-bg-enter');
-        verseText.classList.add('anim-text-delayed-enter');
-        reference.classList.add('anim-text-delayed-enter');
-        return;
+      function signalAnimateOutComplete() {
+        if (_animateOutResolve) {
+          _animateOutResolve();
+          _animateOutResolve = null;
+        }
+        try {
+          const bc = new BroadcastChannel(_channelName);
+          bc.postMessage({ type: 'lower-third-animation-complete' });
+          bc.close();
+        } catch { }
       }
 
-      if (anim === 'fade') {
-        bar.classList.add('anim-fade-enter');
-        return;
+      function applySlide(data) {
+        if (!data) return;
+        // De-duplicate by timestamp
+        if (data.timestamp && data.timestamp <= lastTimestamp) return;
+        lastTimestamp = data.timestamp || 0;
+
+        /* ── Animate out: play exit then signal completion ── */
+        if (data.action === 'animate-out') {
+          overlay.classList.remove('hidden');
+          overlay.classList.add('blank');
+          // Return a promise the host can await
+          return new Promise((resolve) => { _animateOutResolve = resolve; });
+        }
+
+        if (!data.slide) {
+          // ── Smooth clear: fade out gracefully, cancel any pending clear ──
+          bgClearToken++;
+          overlay.classList.add('blank');
+          const token = bgClearToken;
+          setTimeout(() => {
+            if (token === bgClearToken) {
+              overlay.classList.add('hidden');
+              currentSlideId = null;
+              hasShownOnce = false;
+            }
+          }, 280);
+          return;
+        }
+
+        // Cancel any pending clear from a previous empty slide
+        bgClearToken++;
+
+        const slide = data.slide;
+        const isNew = slide.id !== currentSlideId;
+        const isSameVerse = slide.id === currentSlideId && !isNew;
+        currentSlideId = slide.id;
+
+        if (data.theme) applyTheme(data.theme);
+
+        if (data.blanked) {
+          overlay.classList.add('blank');
+          return;
+        } else {
+          overlay.classList.remove('blank');
+        }
+
+        // Always show the overlay when we have a slide — the dock/app controls
+        // visibility via OBS scene item enabled state, not via this flag.
+        overlay.classList.remove('hidden');
+
+        const displayText = safeSupText(slide.text);
+        verseText.innerHTML = displayText;
+        const referenceText = typeof slide.reference === "string" ? slide.reference.trim() : "";
+        refText.textContent = referenceText;
+        reference.style.display = referenceText ? "block" : "none";
+
+        // Auto-scale: shrink font so bar stays within max height
+        scheduleAutoScaleFont();
+
+        const anim = data.theme?.animation || 'slide-up';
+        lastAnimation = anim;
+
+        if (isNew) {
+          // First show — run entrance animation from start
+          if (!hasShownOnce) {
+            hasShownOnce = true;
+            runEntranceAnimation(anim);
+          }
+        } else if (isSameVerse) {
+          // Re-render of same verse — re-sync animation to avoid visual restart
+          if (anim !== 'none' && hasShownOnce && !contentFadeLock) {
+            clearEntranceAnimationClasses();
+            void bar.offsetWidth;
+            const effectiveDur = Math.max(95, Math.min(170, Math.round((data.theme?.animationDuration || 400) * 0.38)));
+            const elapsed = Date.now() % effectiveDur;
+            const delay = -(elapsed);
+            if (anim === 'fade') {
+              bar.style.animationDelay = delay + 'ms';
+              bar.classList.add('anim-fade-enter');
+            } else if (anim === 'slide-up') {
+              bar.style.animationDelay = delay + 'ms';
+              bar.classList.add('anim-slide-up-enter');
+            } else if (anim === 'slide-left') {
+              bar.style.animationDelay = delay + 'ms';
+              bar.classList.add('anim-slide-left-enter');
+            } else if (anim === 'scale-in') {
+              bar.style.animationDelay = delay + 'ms';
+              bar.classList.add('anim-scale-in-enter');
+            }
+            setTimeout(() => { bar.style.animationDelay = ''; }, effectiveDur + 50);
+          }
+        }
       }
 
-      if (anim === 'scale-in') {
-        bar.classList.add('anim-scale-in-enter');
-        return;
+      function readFromCssVar() {
+        try {
+          const raw = getComputedStyle(document.documentElement).getPropertyValue('--overlay-data').trim();
+          if (!raw || raw === lastCssOverlayData) return false;
+          lastCssOverlayData = raw;
+          const normalized = raw.replace(/^['"]|['"]$/g, '');
+          if (!normalized) return false;
+          const data = JSON.parse(decodeURIComponent(normalized));
+          applySlide(data);
+          return true;
+        } catch { /* parse error */ }
+        return false;
       }
 
-      if (anim === 'slide-left') {
-        bar.classList.add('anim-slide-left-enter');
-        return;
+      // --- Method 1: Read from URL hash (OBS updates URL via SetInputSettings) ---
+      function readFromUrlHash() {
+        try {
+          const hash = window.location.hash;
+          if (hash && hash.startsWith('#data=')) {
+            const encoded = hash.slice(6); // remove '#data='
+            const data = JSON.parse(decodeURIComponent(encoded));
+            applySlide(data);
+            return true;
+          }
+        } catch { /* parse error */ }
+        return false;
       }
 
-      bar.classList.add('anim-slide-up-enter');
-    }
+      // --- Determine tab-specific data channel from URL query param ---
+      const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
+      const _storageKey = _tabParam === 'worship' ? 'worship-overlay-data' : 'bible-overlay-data';
+      const _channelName = _tabParam === 'worship' ? 'obs-church-studio-worship-overlay' : 'obs-church-studio-bible-overlay';
 
-    /* ── Animate-out completion signaling ── */
-    let _animateOutResolve = null;
-    overlay.addEventListener('transitionend', (e) => {
-      if (e.propertyName === 'opacity' && overlay.classList.contains('blank')) {
-        overlay.classList.add('hidden');
-        signalAnimateOutComplete();
-      }
-    });
-
-    function signalAnimateOutComplete() {
-      if (_animateOutResolve) {
-        _animateOutResolve();
-        _animateOutResolve = null;
-      }
+      // --- Method 2: BroadcastChannel (same-origin windows) ---
       try {
         const bc = new BroadcastChannel(_channelName);
-        bc.postMessage({ type: 'lower-third-animation-complete' });
-        bc.close();
-      } catch { }
-    }
+        bc.onmessage = (e) => {
+          applySlide(e.data);
+        };
+      } catch { /* not supported */ }
 
-    function applySlide(data) {
-      if (!data) return;
-      // De-duplicate by timestamp
-      if (data.timestamp && data.timestamp <= lastTimestamp) return;
-      lastTimestamp = data.timestamp || 0;
-
-      /* ── Animate out: play exit then signal completion ── */
-      if (data.action === 'animate-out') {
-        overlay.classList.remove('hidden');
-        overlay.classList.add('blank');
-        // Return a promise the host can await
-        return new Promise((resolve) => { _animateOutResolve = resolve; });
-      }
-
-      if (!data.slide) {
-        // ── Smooth clear: fade out gracefully, cancel any pending clear ──
-        bgClearToken++;
-        overlay.classList.add('blank');
-        const token = bgClearToken;
-        setTimeout(() => {
-          if (token === bgClearToken) {
-            overlay.classList.add('hidden');
-            currentSlideId = null;
-            hasShownOnce = false;
-          }
-        }, 280);
-        return;
-      }
-
-      // Cancel any pending clear from a previous empty slide
-      bgClearToken++;
-
-      const slide = data.slide;
-      const isNew = slide.id !== currentSlideId;
-      const isSameVerse = slide.id === currentSlideId && !isNew;
-      currentSlideId = slide.id;
-
-      if (data.theme) applyTheme(data.theme);
-
-      if (data.blanked) {
-        overlay.classList.add('blank');
-        return;
-      } else {
-        overlay.classList.remove('blank');
-      }
-
-      // Always show the overlay when we have a slide — the dock/app controls
-      // visibility via OBS scene item enabled state, not via this flag.
-      overlay.classList.remove('hidden');
-
-      const displayText = safeSupText(slide.text);
-      verseText.innerHTML = displayText;
-      const referenceText = typeof slide.reference === "string" ? slide.reference.trim() : "";
-      refText.textContent = referenceText;
-      reference.style.display = referenceText ? "block" : "none";
-
-      // Auto-scale: shrink font so bar stays within max height
-      scheduleAutoScaleFont();
-
-      const anim = data.theme?.animation || 'slide-up';
-      lastAnimation = anim;
-
-      if (isNew) {
-        // First show — run entrance animation from start
-        if (!hasShownOnce) {
-          hasShownOnce = true;
-          runEntranceAnimation(anim);
+      // Listen for animate-out commands from the host
+      window.addEventListener('message', (e) => {
+        if (e.data && e.data.action === 'animate-out') {
+          applySlide(e.data);
         }
-      } else if (isSameVerse) {
-        // Re-render of same verse — re-sync animation to avoid visual restart
-        if (anim !== 'none' && hasShownOnce && !contentFadeLock) {
-          clearEntranceAnimationClasses();
-          void bar.offsetWidth;
-          const effectiveDur = Math.max(95, Math.min(170, Math.round((data.theme?.animationDuration || 400) * 0.38)));
-          const elapsed = Date.now() % effectiveDur;
-          const delay = -(elapsed);
-          if (anim === 'fade') {
-            bar.style.animationDelay = delay + 'ms';
-            bar.classList.add('anim-fade-enter');
-          } else if (anim === 'slide-up') {
-            bar.style.animationDelay = delay + 'ms';
-            bar.classList.add('anim-slide-up-enter');
-          } else if (anim === 'slide-left') {
-            bar.style.animationDelay = delay + 'ms';
-            bar.classList.add('anim-slide-left-enter');
-          } else if (anim === 'scale-in') {
-            bar.style.animationDelay = delay + 'ms';
-            bar.classList.add('anim-scale-in-enter');
-          }
-          setTimeout(() => { bar.style.animationDelay = ''; }, effectiveDur + 50);
-        }
-      }
-    }
-
-    function readFromCssVar() {
-      try {
-        const raw = getComputedStyle(document.documentElement).getPropertyValue('--overlay-data').trim();
-        if (!raw || raw === lastCssOverlayData) return false;
-        lastCssOverlayData = raw;
-        const normalized = raw.replace(/^['"]|['"]$/g, '');
-        if (!normalized) return false;
-        const data = JSON.parse(decodeURIComponent(normalized));
-        applySlide(data);
-        return true;
-      } catch { /* parse error */ }
-      return false;
-    }
-
-    // --- Method 1: Read from URL hash (OBS updates URL via SetInputSettings) ---
-    function readFromUrlHash() {
-      try {
-        const hash = window.location.hash;
-        if (hash && hash.startsWith('#data=')) {
-          const encoded = hash.slice(6); // remove '#data='
-          const data = JSON.parse(decodeURIComponent(encoded));
-          applySlide(data);
-          return true;
-        }
-      } catch { /* parse error */ }
-      return false;
-    }
-
-    // --- Determine tab-specific data channel from URL query param ---
-    const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
-    const _storageKey = _tabParam === 'worship' ? 'worship-overlay-data' : 'bible-overlay-data';
-    const _channelName = _tabParam === 'worship' ? 'obs-church-studio-worship-overlay' : 'obs-church-studio-bible-overlay';
-
-    // --- Method 2: BroadcastChannel (same-origin windows) ---
-    try {
-      const bc = new BroadcastChannel(_channelName);
-      bc.onmessage = (e) => {
-        applySlide(e.data);
-      };
-    } catch { /* not supported */ }
-
-    // Listen for animate-out commands from the host
-    window.addEventListener('message', (e) => {
-      if (e.data && e.data.action === 'animate-out') {
-        applySlide(e.data);
-      }
-    });
-
-    // --- Method 3: localStorage polling (same-origin fallback) ---
-    function readFromLocalStorage() {
-      try {
-        const raw = localStorage.getItem(_storageKey);
-        if (raw) {
-          const data = JSON.parse(raw);
-          applySlide(data);
-          return true;
-        }
-      } catch { /* parse error */ }
-      return false;
-    }
-
-    // --- hashchange listener: OBS updates the URL hash without reloading ---
-    // This is the primary update path. When bibleObsService calls SetInputSettings
-    // with only the hash fragment changed, OBS/CEF fires hashchange instead of
-    // reloading the page. The background stays static and only text updates.
-    window.addEventListener('hashchange', () => {
-      readFromUrlHash();
-    });
-
-    // --- Unified polling loop ---
-    setInterval(() => {
-      // Try URL hash first (OBS), then localStorage (same-origin)
-      if (!readFromCssVar() && !readFromUrlHash()) {
-        readFromLocalStorage();
-      }
-    }, POLL_INTERVAL);
-
-    if (window.ResizeObserver) {
-      const resizeObserver = new ResizeObserver(() => {
-        scheduleAutoScaleFont();
       });
-      resizeObserver.observe(document.body);
-      resizeObserver.observe(bar);
-    }
 
-    // Initial read
-    readFromCssVar() || readFromUrlHash() || readFromLocalStorage();
+      // --- Method 3: localStorage polling (same-origin fallback) ---
+      function readFromLocalStorage() {
+        try {
+          const raw = localStorage.getItem(_storageKey);
+          if (raw) {
+            const data = JSON.parse(raw);
+            applySlide(data);
+            return true;
+          }
+        } catch { /* parse error */ }
+        return false;
+      }
+
+      // --- hashchange listener: OBS updates the URL hash without reloading ---
+      // This is the primary update path. When bibleObsService calls SetInputSettings
+      // with only the hash fragment changed, OBS/CEF fires hashchange instead of
+      // reloading the page. The background stays static and only text updates.
+      window.addEventListener('hashchange', () => {
+        readFromUrlHash();
+      });
+
+      // --- Unified polling loop ---
+      setInterval(() => {
+        // Try URL hash first (OBS), then localStorage (same-origin)
+        if (!readFromCssVar() && !readFromUrlHash()) {
+          readFromLocalStorage();
+        }
+      }, POLL_INTERVAL);
+
+      if (window.ResizeObserver) {
+        const resizeObserver = new ResizeObserver(() => {
+          scheduleAutoScaleFont();
+        });
+        resizeObserver.observe(document.body);
+        resizeObserver.observe(bar);
+      }
+
+      // Initial read
+      readFromCssVar() || readFromUrlHash() || readFromLocalStorage();
   </script>
 </body>
 

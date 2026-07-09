@@ -5,10 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1920,height=1080">
   <title>Bible Overlay — Background Only</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap"
-    rel="stylesheet">
+  <link href="/fonts/google/google-fonts.css" rel="stylesheet">
   <style>
     @font-face {
       font-family: 'Charis SIL';
@@ -87,6 +84,20 @@
     let lastTimestamp = 0;
     const backgroundVideoEl = document.getElementById('background-video');
 
+    const PATTERN_CSS = {
+      'diagonal-lines': 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.15) 4px, rgba(255,255,255,0.15) 5px)',
+      'horizontal-lines': 'repeating-linear-gradient(0deg, transparent, transparent 6px, rgba(255,255,255,0.12) 6px, rgba(255,255,255,0.12) 7px)',
+      'vertical-lines': 'repeating-linear-gradient(90deg, transparent, transparent 6px, rgba(255,255,255,0.12) 6px, rgba(255,255,255,0.12) 7px)',
+      'dots': 'radial-gradient(circle, rgba(255,255,255,0.2) 1.5px, transparent 1.5px) 0 0 / 12px 12px',
+      'grid': 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px) 0 0 / 14px 14px',
+      'chevrons': 'linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%), linear-gradient(225deg, rgba(255,255,255,0.15) 25%, transparent 25%) 0 0 / 12px 12px',
+      'cross-hatch': 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 5px), repeating-linear-gradient(-45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 5px)',
+      'diagonal-checker': 'linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%), linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%) 0 0 / 16px 16px',
+      'zigzag': 'linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%) -6px 0, linear-gradient(225deg, rgba(255,255,255,0.15) 25%, transparent 25%) -6px 0, linear-gradient(315deg, rgba(255,255,255,0.15) 25%, transparent 25%), linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%) 0 0 / 12px 12px',
+      'subtle-noise': "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E\")",
+      'star-field': "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.3) 1px, transparent 1px), radial-gradient(circle at 80% 70%, rgba(255,255,255,0.2) 1px, transparent 1px), radial-gradient(circle at 50% 10%, rgba(255,255,255,0.25) 0.5px, transparent 0.5px) 0 0 / 20px 20px, 30px 30px, 15px 15px",
+    };
+
     function applyBackground(data) {
       if (!data) return;
       if (data.timestamp && data.timestamp <= lastTimestamp) return;
@@ -134,6 +145,21 @@
         backgroundVideoEl.load();
       }
       backgroundVideoEl.style.display = 'none';
+
+      // Pattern: SVG data URIs (from BACKGROUND_PATTERNS) or legacy CSS patterns
+      if (theme.backgroundPattern) {
+        let patternCss = '';
+        if (theme.backgroundPattern.startsWith('data:')) {
+          patternCss = 'url(' + theme.backgroundPattern + ')';
+        } else if (PATTERN_CSS[theme.backgroundPattern]) {
+          patternCss = PATTERN_CSS[theme.backgroundPattern];
+        }
+        if (patternCss) {
+          root.setProperty('--bg-image', patternCss);
+          root.setProperty('--bg-color', 'transparent');
+          return;
+        }
+      }
 
       if (hasGradient) {
         root.setProperty('--bg-color', 'transparent');

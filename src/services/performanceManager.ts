@@ -73,8 +73,8 @@ const TIER_CONFIG: Record<PerformanceTier, {
     minScore: 3,
     maxScore: 5,
     pollingCap: 3000,
-    maxConcurrent: 2,
-    requestsPerSecond: 3,
+    maxConcurrent: 4,
+    requestsPerSecond: 15,
     browser: {
       allowAnimations: false,
       allowBlurEffects: false,
@@ -88,8 +88,8 @@ const TIER_CONFIG: Record<PerformanceTier, {
     minScore: 6,
     maxScore: 9,
     pollingCap: 1500,
-    maxConcurrent: 4,
-    requestsPerSecond: 8,
+    maxConcurrent: 8,
+    requestsPerSecond: 30,
     browser: {
       allowAnimations: true,
       allowBlurEffects: false,
@@ -103,8 +103,8 @@ const TIER_CONFIG: Record<PerformanceTier, {
     minScore: 10,
     maxScore: 12,
     pollingCap: 1000,
-    maxConcurrent: 8,
-    requestsPerSecond: 15,
+    maxConcurrent: 12,
+    requestsPerSecond: 50,
     browser: {
       allowAnimations: true,
       allowBlurEffects: true,

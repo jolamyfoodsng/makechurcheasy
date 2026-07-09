@@ -12,7 +12,7 @@ import { dockClient } from "../services/dockBridge";
 import { compressImage, compressVideo } from "./mediaCompression";
 import { isSupportedMediaFile } from "../services/mediaValidation";
 import { getUserScopedKey } from "../services/userScopedStorage";
-import { getDefaultImageTargetBytes, getDefaultVideoTargetBytes } from "../services/desktopConfig";
+import { getDefaultImageTargetBytes, getDefaultVideoTargetBytes, isCompressionEnabled } from "../services/desktopConfig";
 
 const LOCAL_LIBRARY_KEY = "ocs-dock-media-library-v1";
 
@@ -238,26 +238,28 @@ export async function uploadFileToDock(
   }
   const category = file.type.startsWith("video/") ? "video" : "image";
 
-  // Compress before saving
+  // Compress before saving (respects admin compression toggle)
   let processedFile: File = file;
-  try {
-    if (category === "image") {
-      if (file.size > getDefaultImageTargetBytes()) {
-        console.log("[UPLOAD] Compressing image…");
-        onProgress?.("Compressing image…");
-        processedFile = await compressImage(file);
-        console.log("[UPLOAD] Image compressed:", processedFile.size);
+  if (isCompressionEnabled()) {
+    try {
+      if (category === "image") {
+        if (file.size > getDefaultImageTargetBytes()) {
+          console.log("[UPLOAD] Compressing image…");
+          onProgress?.("Compressing image…");
+          processedFile = await compressImage(file);
+          console.log("[UPLOAD] Image compressed:", processedFile.size);
+        }
+      } else {
+        if (file.size > getDefaultVideoTargetBytes()) {
+          console.log("[UPLOAD] Compressing video…");
+          onProgress?.("Compressing video…");
+          processedFile = await compressVideo(file);
+          console.log("[UPLOAD] Video compressed:", processedFile.size);
+        }
       }
-    } else {
-      if (file.size > getDefaultVideoTargetBytes()) {
-        console.log("[UPLOAD] Compressing video…");
-        onProgress?.("Compressing video…");
-        processedFile = await compressVideo(file);
-        console.log("[UPLOAD] Video compressed:", processedFile.size);
-      }
+    } catch (err) {
+      console.warn("[UPLOAD] Compression failed, using original:", err);
     }
-  } catch (err) {
-    console.warn("[UPLOAD] Compression failed, using original:", err);
   }
 
   const safeName = `media_${Date.now()}_${getSafeFileName(processedFile.name)}`;

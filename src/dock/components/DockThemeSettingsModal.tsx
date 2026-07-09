@@ -27,6 +27,8 @@ interface Props {
   overlayMode?: "fullscreen" | "lower-third";
   /** Show the Reference section in BackgroundPickerCard (only for Bible tab) */
   showReferences?: boolean;
+  /** Active display mode — controls whether Compare Layout section is visible */
+  displayMode?: "single" | "compare";
 }
 
 type StudioView = "closed" | "settings";
@@ -71,6 +73,7 @@ export default function DockThemeSettingsModal({
   onBackgroundPresetChange,
   overlayMode = "fullscreen",
   showReferences = true,
+  displayMode = "single",
 }: Props) {
   const { t } = useTranslation();
   const [internalView, setInternalView] = useState<StudioView>("closed");
@@ -90,6 +93,7 @@ export default function DockThemeSettingsModal({
   const modalRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(view !== "closed");
   const originalSettingsRef = useRef(quickSettings);
+  const isUserChangeRef = useRef(false);
 
   useEffect(() => {
     const isOpen = view !== "closed";
@@ -101,15 +105,21 @@ export default function DockThemeSettingsModal({
     }
   }, [view, quickSettings]);
 
+  // Notify parent of draft changes — only when user-initiated (via updateDraft),
+  // not when draftSettings is synced from quickSettings on modal open.
+  useEffect(() => {
+    if (isUserChangeRef.current) {
+      isUserChangeRef.current = false;
+      onQuickSettingsChange?.(draftSettings);
+    }
+  }, [draftSettings, onQuickSettingsChange]);
+
   const updateDraft = useCallback(
     (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => {
-      setDraftSettings((prev) => {
-        const next = updater(prev);
-        onQuickSettingsChange?.(next);
-        return next;
-      });
+      isUserChangeRef.current = true;
+      setDraftSettings((prev) => updater(prev));
     },
-    [onQuickSettingsChange],
+    [],
   );
 
   const EFFECT_DEFS = useMemo(() => [
@@ -225,6 +235,7 @@ export default function DockThemeSettingsModal({
       lowerThirdSize: ts.lowerThirdSize,
       lowerThirdWidthPreset: ts.lowerThirdWidthPreset,
       lowerThirdOffsetX: ts.lowerThirdOffsetX,
+      lowerThirdCaptionPosition: ts.lowerThirdCaptionPosition || "bottom",
     }));
   }, [onSelect, updateDraft, overlayMode]);
 
@@ -309,6 +320,7 @@ export default function DockThemeSettingsModal({
                   onBackgroundPresetChange={onBackgroundPresetChange}
                   showReferences={showReferences}
                   overlayMode={overlayMode}
+                  displayMode={displayMode}
                 />
 
                 {/* Lower-Third Positioning — only shown in lower-third mode */}
@@ -368,22 +380,27 @@ export default function DockThemeSettingsModal({
                         </div>
                       </div>
 
-                      <div className="dtb-slider-field">
-                        <div className="dtb-slider-field__head">
-                          <span>{t('worship.horizontalOffset')}</span>
-                          <span className="dtb-slider-field__value">{draftSettings.lowerThirdOffsetX}px</span>
+                      <div className="dtb-align-group">
+                        <span className="dtb-align-group__label">{t('worship.captionPosition')}</span>
+                        <div className="dtb-segmented" role="group" aria-label={t('worship.captionPosition')}>
+                          {([
+                            { value: "bottom" as const, icon: "vertical_align_bottom", label: t('worship.bottom') },
+                            { value: "top" as const, icon: "vertical_align_top", label: t('worship.top') },
+                          ]).map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              className={`dtb-segmented__item${draftSettings.lowerThirdCaptionPosition === opt.value ? " dtb-segmented__item--active" : ""}`}
+                              onClick={() => updateDraft((c) => withPatch(c, { lowerThirdCaptionPosition: opt.value }))}
+                              aria-pressed={draftSettings.lowerThirdCaptionPosition === opt.value}
+                              title={opt.label}
+                            >
+                              <Icon name={opt.icon} size={14} />
+                            </button>
+                          ))}
                         </div>
-                        <input
-                          type="range"
-                          className="dtb-slider"
-                          min={-300}
-                          max={300}
-                          step={1}
-                          value={draftSettings.lowerThirdOffsetX}
-                          onChange={(e) => updateDraft((c) => withPatch(c, { lowerThirdOffsetX: Number(e.target.value) }))}
-                          aria-label={t('worship.horizontalOffset')}
-                        />
                       </div>
+
                     </div>
                   </div>
                 )}

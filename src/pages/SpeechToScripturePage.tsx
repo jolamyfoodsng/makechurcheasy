@@ -127,7 +127,7 @@ export default function SpeechToScripturePage() {
   }), [t]);
 
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const effectivePlan = getEffectivePlan(user);
 
   // ── Tutorial state ──
@@ -152,6 +152,7 @@ export default function SpeechToScripturePage() {
 
   // ── Upfront plan gate — block immediately if plan doesn't include Verse AI ──
   useEffect(() => {
+    if (isAdmin) return; // Admins bypass all entitlement checks
     const result = checkEntitlementSync("speechToScripture", effectivePlan);
     if (!result.allowed) {
       setAccessDenied({
@@ -160,7 +161,7 @@ export default function SpeechToScripturePage() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectivePlan]);
+  }, [effectivePlan, isAdmin]);
 
   // ── Auto-logout on device_not_found (device was removed from admin) ──
   useEffect(() => {
@@ -172,18 +173,24 @@ export default function SpeechToScripturePage() {
 
   // ── Track credit balance for Start button gating ──
   const [creditBalance, setCreditBalance] = useState(() => getCreditsBalance());
+  const [isUnlimited, setIsUnlimited] = useState(false);
   const isPro = effectivePlan === "pro";
 
   useEffect(() => {
     if (isPro) return;
     void syncCreditsWithBackend().then((bal) => {
-      if (bal >= 0) setCreditBalance(bal);
+      if (bal === -1) {
+        setIsUnlimited(true);
+      } else if (bal >= 0) {
+        setIsUnlimited(false);
+        setCreditBalance(bal);
+      }
     });
     const unsub = onCreditChange((bal) => setCreditBalance(bal));
     return unsub;
   }, [isPro]);
 
-  const hasCredits = isPro || creditBalance > 0;
+  const hasCredits = isAdmin || isPro || isUnlimited || creditBalance > 0;
 
   // ── LM state ──
   const [snapshot, setSnapshot] = useState<LmDockSnapshot>(lmDockService.getSnapshot());

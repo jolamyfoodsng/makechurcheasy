@@ -2428,6 +2428,462 @@ fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
         .map_err(|e| format!("PDF extraction failed: {}", e))
 }
 
+// ── Layout-aware PDF extraction (lopdf) ────────────────────────────────────
+
+/// Minimal PDF content stream parser — produces lopdf Operations from raw bytes.
+/// Handles only the operators needed for text extraction (BT, ET, Tf, Tm, Td, TD, Tj, TJ, T*)
+/// plus enough of the operand grammar to reach them.
+fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
+    let mut ops = Vec::new();
+    let mut operands: Vec<lopdf::Object> = Vec::new();
+    let bytes = raw;
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        let b = bytes[i];
+        match b {
+            // Skip whitespace
+            b' ' | b'\t' | b'\r' | b'\n' | b'\x0C' => { i += 1; }
+            // Skip comments (% to end of line)
+            b'%' => {
+                while i < len && bytes[i] != b'\n' { i += 1; }
+            }
+            // Integer or real number
+            b'0'..=b'9' | b'-' | b'+' | b'.' => {
+                let start = i;
+                i += 1;
+                while i < len && matches!(bytes[i], b'0'..=b'9' | b'.' | b'-' | b'+') { i += 1; }
+                let s = std::str::from_utf8(&bytes[start..i]).unwrap_or("0");
+                if s.contains('.') {
+                    if let Ok(v) = s.parse::<f64>() {
+                        operands.push(lopdf::Object::Real(v as f32));
+                    }
+                } else if let Ok(v) = s.parse::<i64>() {
+                    operands.push(lopdf::Object::Integer(v));
+                }
+            }
+            // Name object (/Something)
+            b'/' => {
+                i += 1;
+                let start = i;
+                while i < len {
+                    match bytes[i] {
+                        b' ' | b'\t' | b'\r' | b'\n' | b'/' | b'(' | b')' | b'<' | b'>' | b'[' | b']' | b'{' | b'}' => break,
+                        _ => { i += 1; }
+                    }
+                }
+                let name = bytes[start..i].to_vec();
+                operands.push(lopdf::Object::Name(name));
+            }
+            // Literal string (text in parentheses)
+            b'(' => {
+                i += 1;
+                let mut s = Vec::new();
+                let mut depth = 0i32;
+                while i < len {
+                    match bytes[i] {
+                        b'(' => { depth += 1; s.push(b'('); i += 1; }
+                        b')' => {
+                            if depth > 0 { depth -= 1; s.push(b')'); i += 1; }
+                            else { i += 1; break; }
+                        }
+                        b'\\' => {
+                            i += 1;
+                            if i < len {
+                                match bytes[i] {
+                                    b'n' => s.push(b'\n'),
+                                    b'r' => s.push(b'\r'),
+                                    b't' => s.push(b'\t'),
+                                    b'\\' => s.push(b'\\'),
+                                    b'(' => s.push(b'('),
+                                    b')' => s.push(b')'),
+                                    d @ b'0'..=b'7' => {
+                                        let mut oct = (d - b'0') as u32;
+                                        i += 1;
+                                        for _ in 0..2 {
+                                            if i < len && matches!(bytes[i], b'0'..=b'7') {
+                                                oct = oct * 8 + (bytes[i] - b'0') as u32;
+                                                i += 1;
+                                            } else { break; }
+                                        }
+                                        s.push(oct as u8);
+                                        continue; // already advanced i
+                                    }
+                                    other => s.push(other),
+                                }
+                                i += 1;
+                            }
+                        }
+                        _ => { s.push(bytes[i]); i += 1; }
+                    }
+                }
+                operands.push(lopdf::Object::String(s, lopdf::StringFormat::Literal));
+            }
+            // Hex string <AABB>
+            b'<' => {
+                i += 1;
+                let mut hex = Vec::new();
+                while i < len && bytes[i] != b'>' { hex.push(bytes[i]); i += 1; }
+                if i < len { i += 1; } // skip >
+                // Pad to even length
+                if hex.len() % 2 != 0 { hex.push(b'0'); }
+                let mut bytes_out = Vec::new();
+                for chunk in hex.chunks(2) {
+                    if let Ok(h) = std::str::from_utf8(chunk) {
+                        if let Ok(b) = u8::from_str_radix(h, 16) {
+                            bytes_out.push(b);
+                        }
+                    }
+                }
+                operands.push(lopdf::Object::String(bytes_out, lopdf::StringFormat::Hexadecimal));
+            }
+            // Array [...]
+            b'[' => {
+                i += 1;
+                let mut arr = Vec::new();
+                // Parse array elements recursively (simplified — only strings and numbers)
+                while i < len && bytes[i] != b']' {
+                    match bytes[i] {
+                        b' ' | b'\t' | b'\r' | b'\n' => { i += 1; }
+                        b'(' => {
+                            // literal string inside array
+                            i += 1;
+                            let mut s = Vec::new();
+                            while i < len && bytes[i] != b')' {
+                                if bytes[i] == b'\\' && i + 1 < len {
+                                    i += 1;
+                                    match bytes[i] {
+                                        b'n' => s.push(b'\n'),
+                                        b'r' => s.push(b'\r'),
+                                        b'\\' => s.push(b'\\'),
+                                        b'(' => s.push(b'('),
+                                        b')' => s.push(b')'),
+                                        other => s.push(other),
+                                    }
+                                } else {
+                                    s.push(bytes[i]);
+                                }
+                                i += 1;
+                            }
+                            if i < len { i += 1; }
+                            arr.push(lopdf::Object::String(s, lopdf::StringFormat::Literal));
+                        }
+                        b'0'..=b'9' | b'-' | b'+' | b'.' => {
+                            let start = i;
+                            i += 1;
+                            while i < len && matches!(bytes[i], b'0'..=b'9' | b'.' | b'-' | b'+') { i += 1; }
+                            let s = std::str::from_utf8(&bytes[start..i]).unwrap_or("0");
+                            if s.contains('.') {
+                                if let Ok(v) = s.parse::<f64>() {
+                                    arr.push(lopdf::Object::Real(v as f32));
+                                }
+                            } else if let Ok(v) = s.parse::<i64>() {
+                                arr.push(lopdf::Object::Integer(v));
+                            }
+                        }
+                        _ => { i += 1; } // skip unknown in arrays
+                    }
+                }
+                if i < len { i += 1; } // skip ]
+                operands.push(lopdf::Object::Array(arr));
+            }
+            // Boolean true / false
+            b't' if i + 3 < len && &bytes[i..i+4] == b"true" => {
+                operands.push(lopdf::Object::Boolean(true));
+                i += 4;
+            }
+            b'f' if i + 4 < len && &bytes[i..i+5] == b"false" => {
+                operands.push(lopdf::Object::Boolean(false));
+                i += 5;
+            }
+            // Operator (keyword)
+            b'A'..=b'Z' | b'a'..=b'z' => {
+                let start = i;
+                while i < len && matches!(bytes[i], b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'*') { i += 1; }
+                let op = std::str::from_utf8(&bytes[start..i]).unwrap_or("");
+                ops.push(lopdf::content::Operation {
+                    operator: op.to_string(),
+                    operands: operands.drain(..).collect(),
+                });
+            }
+            // Object reference (obj gen R) — skip
+            _ => { i += 1; }
+        }
+    }
+    ops
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PdfTextElement {
+    text: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    font_size: f64,
+    is_bold: bool,
+    page: u32,
+}
+
+/// Decode a PDF string object to UTF-8, trying raw bytes first then Latin-1 fallback.
+fn decode_pdf_string(obj: &lopdf::Object) -> Option<String> {
+    if let lopdf::Object::String(bytes, _format) = obj {
+        if let Ok(s) = String::from_utf8(bytes.clone()) {
+            return Some(s);
+        }
+        // Latin-1 fallback — every byte maps to a valid codepoint
+        Some(bytes.iter().map(|&b| b as char).collect())
+    } else {
+        None
+    }
+}
+
+/// Build a map of font_name → is_bold from a page's resource dictionary.
+fn build_page_font_map(
+    doc: &lopdf::Document,
+    page_id: lopdf::ObjectId,
+) -> std::collections::HashMap<String, bool> {
+    let mut font_map = std::collections::HashMap::new();
+    let Ok(page) = doc.get_object(page_id) else { return font_map };
+    let Ok(page_dict) = page.as_dict() else { return font_map };
+    let Ok(resources) = page_dict.get(b"Resources") else { return font_map };
+    let Ok(resources_dict) = resources.as_dict() else { return font_map };
+    let Ok(fonts) = resources_dict.get(b"Font") else { return font_map };
+    let Ok(font_dict) = fonts.as_dict() else { return font_map };
+
+    for (name, font_ref) in font_dict.iter() {
+        let name_str = String::from_utf8_lossy(name).to_string();
+        // Font dict values can be direct dicts or references — resolve either way
+        let font_obj_result = match font_ref {
+            lopdf::Object::Reference(id) => doc.get_object(*id),
+            other => Ok(other),
+        };
+        if let Ok(font_obj) = font_obj_result {
+            if let Ok(font) = font_obj.as_dict() {
+                let is_bold = font
+                    .get(b"BaseFont")
+                    .and_then(|bf| bf.as_name())
+                    .map(|n| {
+                        let lower = String::from_utf8_lossy(n).to_lowercase();
+                        lower.contains("bold")
+                    })
+                    .unwrap_or(false);
+                font_map.insert(name_str, is_bold);
+            }
+        }
+    }
+    font_map
+}
+
+/// Extract text elements with position metadata from a page's content stream.
+fn extract_page_text_elements(
+    operations: &[lopdf::content::Operation],
+    font_map: &std::collections::HashMap<String, bool>,
+    page_num: u32,
+    page_height: f64,
+) -> Vec<PdfTextElement> {
+    let mut elements = Vec::new();
+    // Current text matrix [a, b, c, d, e, f]
+    let mut tm = [1.0f64, 0.0, 0.0, 1.0, 0.0, 0.0];
+    let mut font_size = 12.0f64;
+    let mut is_bold = false;
+    let mut buf = String::new();
+    let mut line_x = 0.0f64;
+    let mut line_y = 0.0f64;
+
+    let flush = |buf: &mut String, elements: &mut Vec<PdfTextElement>,
+                 line_x: f64, line_y: f64, font_size: f64, is_bold: bool, page_num: u32, page_height: f64| {
+        if !buf.is_empty() {
+            let text = fix_winansi_twi(buf.clone());
+            let char_count = text.chars().count() as f64;
+            elements.push(PdfTextElement {
+                text,
+                x: line_x,
+                y: page_height - line_y, // flip to top-down coordinates
+                width: char_count * font_size * 0.6,
+                height: font_size * 1.2,
+                font_size,
+                is_bold,
+                page: page_num,
+            });
+            buf.clear();
+        }
+    };
+
+    for op in operations {
+        match op.operator.as_str() {
+            "BT" => {
+                // Begin text — flush any pending text
+                flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                tm = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+                line_x = 0.0;
+                line_y = 0.0;
+            }
+            "ET" => {
+                flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+            }
+            "Tf" => {
+                // Set font: [name, size]
+                if let Some(lopdf::Object::Name(name)) = op.operands.first() {
+                    let name_str = String::from_utf8_lossy(name).to_string();
+                    if let Some(&bold) = font_map.get(&name_str) {
+                        is_bold = bold;
+                    }
+                }
+                if let Some(size_obj) = op.operands.get(1) {
+                    font_size = match size_obj {
+                        lopdf::Object::Integer(i) => *i as f64,
+                        lopdf::Object::Real(r) => *r as f64,
+                        _ => font_size,
+                    };
+                }
+            }
+            "Tm" => {
+                // Set text matrix: [a, b, c, d, e, f]
+                if op.operands.len() >= 6 {
+                    for i in 0..6 {
+                        if let Some(obj) = op.operands.get(i) {
+                            tm[i] = match obj {
+                                lopdf::Object::Integer(v) => *v as f64,
+                                lopdf::Object::Real(v) => *v as f64,
+                                _ => tm[i],
+                            };
+                        }
+                    }
+                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                    line_x = tm[4];
+                    line_y = tm[5];
+                }
+            }
+            "Td" | "TD" => {
+                // Relative text move: [tx, ty]
+                if op.operands.len() >= 2 {
+                    let tx = match &op.operands[0] {
+                        lopdf::Object::Integer(v) => *v as f64,
+                        lopdf::Object::Real(v) => *v as f64,
+                        _ => 0.0,
+                    };
+                    let ty = match &op.operands[1] {
+                        lopdf::Object::Integer(v) => *v as f64,
+                        lopdf::Object::Real(v) => *v as f64,
+                        _ => 0.0,
+                    };
+                    // For non-rotated text (b=c=0, a=d=1), Td adds directly
+                    line_x += tx * tm[0] + ty * tm[2];
+                    line_y += tx * tm[1] + ty * tm[3];
+                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                }
+            }
+            "Tj" => {
+                // Show text string
+                if let Some(text_obj) = op.operands.first() {
+                    if let Some(text) = decode_pdf_string(text_obj) {
+                        if buf.is_empty() {
+                            line_x = tm[4];
+                            line_y = tm[5];
+                        }
+                        buf.push_str(&text);
+                    }
+                }
+            }
+            "TJ" => {
+                // Show text with individual glyph positioning: array of strings and numbers
+                if let Some(lopdf::Object::Array(items)) = op.operands.first() {
+                    for item in items {
+                        match item {
+                            lopdf::Object::String(..) => {
+                                if let Some(text) = decode_pdf_string(item) {
+                                    if buf.is_empty() {
+                                        line_x = tm[4];
+                                        line_y = tm[5];
+                                    }
+                                    buf.push_str(&text);
+                                }
+                            }
+                            lopdf::Object::Integer(offset) => {
+                                // Large negative offset → kerning gap, flush segment
+                                if *offset < -100 && !buf.is_empty() {
+                                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                                }
+                            }
+                            lopdf::Object::Real(offset) => {
+                                if (*offset as f64) < -100.0 && !buf.is_empty() {
+                                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            "T*" => {
+                // Move to next line (vertical tab) — default leading = font_size
+                if !buf.is_empty() {
+                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                }
+                line_y -= font_size;
+            }
+            _ => {}
+        }
+    }
+
+    // Flush any remaining text
+    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+    elements
+}
+
+/// Extract text elements with full position and font metadata from a PDF.
+///
+/// Returns a JSON-serializable array of `{ text, x, y, width, height, fontSize, isBold, page }`.
+/// Coordinates use top-down y (y=0 at top of page). Font sizes are in PDF points (1/72 inch).
+#[tauri::command]
+fn extract_text_elements_from_pdf(file_data: Vec<u8>) -> Result<Vec<PdfTextElement>, String> {
+    let doc = lopdf::Document::load_mem(&file_data)
+        .map_err(|e| format!("Failed to parse PDF with lopdf: {}", e))?;
+
+    let pages = doc.get_pages();
+    let mut all_elements = Vec::new();
+
+    for (&page_num, &page_id) in pages.iter() {
+        // Get page height from MediaBox
+        let page_height = {
+            let mut h = 792.0; // default letter size
+            if let Ok(page) = doc.get_object(page_id) {
+                if let Ok(dict) = page.as_dict() {
+                    if let Ok(mb) = dict.get(b"MediaBox") {
+                        if let Ok(arr) = mb.as_array() {
+                            if arr.len() >= 4 {
+                                h = match &arr[3] {
+                                    lopdf::Object::Integer(v) => *v as f64,
+                                    lopdf::Object::Real(v) => *v as f64,
+                                    _ => h,
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+            h
+        };
+
+        let font_map = build_page_font_map(&doc, page_id);
+
+        // Decode content stream using our custom parser
+        let raw_content = match doc.get_page_content(page_id) {
+            Ok(bytes) => bytes,
+            Err(_) => continue,
+        };
+        let operations = parse_content_stream(&raw_content);
+
+        let elements = extract_page_text_elements(&operations, &font_map, page_num, page_height);
+        all_elements.extend(elements);
+    }
+
+    Ok(all_elements)
+}
+
 /// Start a tiny HTTP server that serves files from the frontend dist folder.
 /// Runs in a background thread. Returns the port it bound to, or 0 if it failed.
 fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
@@ -3050,13 +3506,17 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     continue;
                 }
 
-                // Extract ?url= parameter
-                let url = if let Some(qpos) = clean.find('?') {
-                    let qs = &clean[qpos + 1..];
+                // Extract ?url= parameter (use url_path which retains the query string — clean already had it stripped)
+                let url = if let Some(qpos) = url_path.find('?') {
+                    let qs = &url_path[qpos + 1..];
                     qs.split('&')
                         .find_map(|p| {
                             let (k, v) = p.split_once('=')?;
-                            if k == "url" { Some(v.to_string()) } else { None }
+                            if k == "url" {
+                                Some(urlencoding::decode(v).unwrap_or_default().into_owned())
+                            } else {
+                                None
+                            }
                         })
                         .unwrap_or_default()
                 } else {
@@ -3573,6 +4033,7 @@ pub fn run() {
             get_transcript_stats,
             translate_transcript,
             extract_text_from_pdf,
+            extract_text_elements_from_pdf,
             audio_capture::list_audio_devices,
             audio_capture::start_audio_capture,
             audio_capture::stop_audio_capture,

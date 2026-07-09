@@ -11,10 +11,10 @@
 
 // ── Core Types ───────────────────────────────────────────────────────────────
 
-export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador";
+export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador" | "unlimited";
 
 /** Ordered list of tiers from lowest to highest (excludes "trial" — it's a temporary state, not a purchasable tier). */
-export const ALL_TIERS: PlanTier[] = ["free", "basic", "growth", "pro", "ambassador"];
+export const ALL_TIERS: PlanTier[] = ["free", "basic", "growth", "pro", "ambassador", "unlimited"];
 
 /**
  * Entitlements define what a plan tier can access.
@@ -207,7 +207,7 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         USD: { monthly: 0, yearly: 0 },
       },
       paystack: { monthlyPlanCode: "", yearlyPlanCode: "" },
-      credits: 20,
+      credits: 50,
       entitlements: {
         songs: 3, images: 3, videos: 3, themes: 2, lowerThirds: 1, devices: 1,
         bibleVersions: 3, multiviewTemplates: 0, tickerThemes: 0, themePresets: 0,
@@ -321,6 +321,26 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
         songs: -1, images: -1, videos: -1, themes: -1, lowerThirds: -1, devices: -1,
         bibleVersions: -1, multiviewTemplates: -1, tickerThemes: -1, themePresets: -1,
         cloudStorageGB: 200,
+        multiview: true, tickers: true, massImport: true, easyWorshipImport: true,
+        proPresenterImport: true, translation: true, speechToScripture: true,
+        sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,
+        customReports: true, mobileControl: true, apiAccess: true,
+        teamManagement: true, campusManagement: true, slideshow: true,
+        countdowns: true,
+      },
+    },
+    unlimited: {
+      label: "Unlimited",
+      pricing: {
+        NGN: { monthly: 0, yearly: 0 },
+        USD: { monthly: 0, yearly: 0 },
+      },
+      paystack: { monthlyPlanCode: "", yearlyPlanCode: "" },
+      credits: -1,
+      entitlements: {
+        songs: -1, images: -1, videos: -1, themes: -1, lowerThirds: -1, devices: -1,
+        bibleVersions: -1, multiviewTemplates: -1, tickerThemes: -1, themePresets: -1,
+        cloudStorageGB: -1,
         multiview: true, tickers: true, massImport: true, easyWorshipImport: true,
         proPresenterImport: true, translation: true, speechToScripture: true,
         sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,

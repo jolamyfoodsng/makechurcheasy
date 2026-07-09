@@ -459,9 +459,18 @@ export function WorshipModule({
   }, [isActive, obsConnected, loadLtScenes]);
 
   // ── Selected song + slides ──
+
+  // Accessible songs: only the first N songs the user's plan allows.
+  // All downstream operations (search, sort, display, count) MUST use this
+  // instead of the raw `songs` array to enforce plan limits.
+  const accessibleSongs = useMemo(() => {
+    if (isSongUnlimited) return songs;
+    return songs.slice(0, songLimit);
+  }, [songs, isSongUnlimited, songLimit]);
+
   const selectedSong = useMemo(
-    () => songs.find((s) => s.id === selectedSongId) ?? songs[0],
-    [songs, selectedSongId]
+    () => accessibleSongs.find((s) => s.id === selectedSongId) ?? accessibleSongs[0],
+    [accessibleSongs, selectedSongId]
   );
 
   // Auto-select the song's saved theme when a song is loaded
@@ -488,31 +497,69 @@ export function WorshipModule({
 
   const searchableSongs = useMemo(
     () =>
-      songs.map((song) => ({
+      accessibleSongs.map((song) => ({
         song,
         searchText: `${song.metadata.title}\n${song.metadata.artist}\n${song.lyrics}`.toLowerCase(),
       })),
-    [songs],
+    [accessibleSongs],
   );
 
   const filteredSongs = useMemo(() => {
-    let result = songs;
-    if (songSearch.trim()) {
-      const q = songSearch;
-      result = searchableSongs
-        .filter((entry) => fuzzyMatch(q, entry.searchText))
-        .map((entry) => entry.song);
+    if (!songSearch.trim()) {
+      return accessibleSongs;
     }
-    if (!isSongUnlimited && result.length > songLimit) {
-      result = result.slice(0, songLimit);
+    const q = songSearch.trim();
+    const qLower = q.toLowerCase();
+    const numMatch = qLower.match(/(\d+)/);
+    const searchNumber = numMatch ? numMatch[1] : null;
+
+    let scored = searchableSongs
+      .map((entry) => {
+        const title = entry.song.metadata.title.toLowerCase();
+        let score = 0;
+
+        // Priority 1 — exact hymn number match
+        if (searchNumber) {
+          const exactTitleRe = new RegExp(`^hymn\\s+${searchNumber}$`);
+          const numDotRe = new RegExp(`^${searchNumber}[.\\s]`);
+          const bareNumRe = new RegExp(`^${searchNumber}$`);
+          if (exactTitleRe.test(title)) score += 10000;
+          else if (bareNumRe.test(title)) score += 10000;
+          else if (numDotRe.test(title)) score += 10000;
+          else if (title.includes(`hymn ${searchNumber}`)) score += 5000;
+          else if (title.includes(searchNumber)) score += 2000;
+        }
+
+        // Priority 2 — title starts with full search query
+        if (score === 0 && title.startsWith(qLower)) score += 3000;
+
+        // Priority 3 — title contains full search query
+        if (score === 0 && title.includes(qLower)) score += 1000;
+
+        // Priority 4 — lyrics/artist contain full search query
+        if (score === 0 && entry.searchText.includes(qLower)) score += 500;
+
+        // Priority 5 — fuzzy subsequence match (only if nothing else matched)
+        if (score === 0 && fuzzyMatch(q, entry.searchText)) score += 100;
+
+        return { entry, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    // When real matches exist, suppress low-confidence fuzzy-only results
+    const bestScore = scored.length > 0 ? scored[0].score : 0;
+    if (bestScore >= 500) {
+      scored = scored.filter((item) => item.score >= 500);
     }
-    return result;
-  }, [songSearch, searchableSongs, songs, isSongUnlimited, songLimit]);
+
+    return scored.map((item) => item.entry.song);
+  }, [songSearch, searchableSongs, accessibleSongs]);
 
   const importedSongsLookup = useMemo(() => {
     const lookup = new Map<string, Song>();
 
-    for (const song of songs) {
+    for (const song of accessibleSongs) {
       for (const key of buildSongLookupKeys(song.metadata.title, song.metadata.artist)) {
         if (!lookup.has(key)) {
           lookup.set(key, song);
@@ -521,7 +568,7 @@ export function WorshipModule({
     }
 
     return lookup;
-  }, [songs]);
+  }, [accessibleSongs]);
 
   const findImportedSong = useCallback((result: OnlineLyricsSearchResult): Song | undefined => {
     for (const key of buildSongLookupKeys(result.title, result.artist)) {
@@ -2006,7 +2053,7 @@ export function WorshipModule({
       {/* ── Song limit modal ── */}
       {showSongLimitModal && (
         <div className="ssm-backdrop" onClick={() => setShowSongLimitModal(false)}>
-          <div className="ssm-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="ssm-modal ssm-modal--prompt" onClick={(e) => e.stopPropagation()}>
             <button
               className="ssm-close"
               onClick={() => setShowSongLimitModal(false)}
@@ -2034,7 +2081,7 @@ export function WorshipModule({
               </button>
               <a
                 className="ssm-btn-upgrade"
-                href="https://makechurcheasy.creatorstudioslabs.stream/pricing"
+                href="https://makechurcheasy.creatorstudioslabs.stream/subscription/plans"
                 target="_blank"
                 rel="noopener noreferrer"
               >

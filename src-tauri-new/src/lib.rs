@@ -2941,13 +2941,17 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     continue;
                 }
 
-                // Extract ?url= parameter
-                let url = if let Some(qpos) = clean.find('?') {
-                    let qs = &clean[qpos + 1..];
+                // Extract ?url= parameter (use url_path which retains the query string — clean already had it stripped)
+                let url = if let Some(qpos) = url_path.find('?') {
+                    let qs = &url_path[qpos + 1..];
                     qs.split('&')
                         .find_map(|p| {
                             let (k, v) = p.split_once('=')?;
-                            if k == "url" { Some(v.to_string()) } else { None }
+                            if k == "url" {
+                                Some(urlencoding::decode(v).unwrap_or_default().into_owned())
+                            } else {
+                                None
+                            }
                         })
                         .unwrap_or_default()
                 } else {

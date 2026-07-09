@@ -29,6 +29,7 @@ export type DockFullscreenQuickThemeSettings = Pick<
   | "animationDuration"
   | "backgroundImage"
   | "backgroundImageFilePath"
+  | "backgroundPattern"
   | "backgroundVideo"
   | "backgroundVideoFilePath"
   | "backgroundOpacity"
@@ -44,9 +45,13 @@ export type DockFullscreenQuickThemeSettings = Pick<
   | "lowerThirdSize"
   | "lowerThirdWidthPreset"
   | "lowerThirdOffsetX"
+  | "lowerThirdCaptionPosition"
+  // Compare Translation layout
+  | "compareTranslationWidth"
+  | "compareTranslationGap"
 > & {
-  /** Dock-only: persisted background mode (off/theme/color/image/video) */
-  backgroundType?: "off" | "theme" | "color" | "image" | "video";
+  /** Dock-only: persisted background mode (off/theme/color/image/pattern/video) */
+  backgroundType?: "off" | "theme" | "color" | "image" | "pattern" | "video";
 };
 
 interface Props {
@@ -93,6 +98,7 @@ const PRESETS: ThemePreset[] = [
       animationDuration: 400,
       backgroundImage: "",
       backgroundImageFilePath: "",
+      backgroundPattern: "",
       backgroundVideo: "",
       backgroundVideoFilePath: "",
       backgroundOpacity: 1,
@@ -107,6 +113,9 @@ const PRESETS: ThemePreset[] = [
       lowerThirdSize: "medium",
       lowerThirdWidthPreset: "full",
       lowerThirdOffsetX: 0,
+      lowerThirdCaptionPosition: "bottom",
+      compareTranslationWidth: 40,
+      compareTranslationGap: 40,
     },
   },
   {
@@ -136,6 +145,7 @@ const PRESETS: ThemePreset[] = [
       animationDuration: 300,
       backgroundImage: "",
       backgroundImageFilePath: "",
+      backgroundPattern: "",
       backgroundVideo: "",
       backgroundVideoFilePath: "",
       backgroundOpacity: 1,
@@ -150,6 +160,9 @@ const PRESETS: ThemePreset[] = [
       lowerThirdSize: "medium",
       lowerThirdWidthPreset: "full",
       lowerThirdOffsetX: 0,
+      lowerThirdCaptionPosition: "bottom",
+      compareTranslationWidth: 40,
+      compareTranslationGap: 40,
     },
   },
   {
@@ -179,6 +192,7 @@ const PRESETS: ThemePreset[] = [
       animationDuration: 400,
       backgroundImage: "",
       backgroundImageFilePath: "",
+      backgroundPattern: "",
       backgroundVideo: "",
       backgroundVideoFilePath: "",
       backgroundOpacity: 1,
@@ -193,6 +207,9 @@ const PRESETS: ThemePreset[] = [
       lowerThirdSize: "medium",
       lowerThirdWidthPreset: "full",
       lowerThirdOffsetX: 0,
+      lowerThirdCaptionPosition: "bottom",
+      compareTranslationWidth: 40,
+      compareTranslationGap: 40,
     },
   },
   {
@@ -222,6 +239,7 @@ const PRESETS: ThemePreset[] = [
       animationDuration: 400,
       backgroundImage: "",
       backgroundImageFilePath: "",
+      backgroundPattern: "",
       backgroundVideo: "",
       backgroundVideoFilePath: "",
       backgroundOpacity: 1,
@@ -236,6 +254,9 @@ const PRESETS: ThemePreset[] = [
       lowerThirdSize: "medium",
       lowerThirdWidthPreset: "full",
       lowerThirdOffsetX: 0,
+      lowerThirdCaptionPosition: "bottom",
+      compareTranslationWidth: 40,
+      compareTranslationGap: 40,
     },
   },
 ];

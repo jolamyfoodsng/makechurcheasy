@@ -47,6 +47,7 @@ import { getSettings, MV_SETTINGS_UPDATED_EVENT, seedTemplates, syncLayoutsToDoc
 import { STARTER_TEMPLATES } from "./multiview/templates";
 import { applyBrandingSettingsToDom } from "./services/branding";
 import { useAppTheme } from "./hooks/useAppTheme";
+import { UpgradeModalBridge } from "./hooks/useFeatureGate";
 import DevDashboard from "./pages/DevDashboard";
 
 import { dockBridge } from "./services/dockBridge";
@@ -1287,6 +1288,9 @@ function App() {
           onDismiss={handleTrialModalDismiss}
         />
       )}
+
+      {/* Global upgrade modal — triggered by useFeatureGate.checkFeature() */}
+      <UpgradeModalBridge />
 
       {globalMediaDragging && !splashVisible && (
         <div className="app-global-media-drop-overlay" aria-hidden="true">

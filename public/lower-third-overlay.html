@@ -5,17 +5,17 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lower Third Overlay</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap"
-    rel="stylesheet">
+  <!-- Local Tailwind CSS (bundled for offline use) -->
+  <link href="/tailwind.min.css" rel="stylesheet" />
 
-  <!-- Tailwind CDN (used by all themes) -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Local Google Fonts (Noto Sans, Material Icons, Inter, Work Sans, Montserrat, etc.) -->
+  <link href="/fonts/google/google-fonts.css" rel="stylesheet" />
 
-  <!-- CMG Sans + Material Icons -->
+  <!-- Local Font Awesome (for themes that use it) -->
+  <link href="/fonts/fontawesome/all.min.css" rel="stylesheet" />
+
+  <!-- CMG Sans -->
   <link href="/fonts/cmg-sans-fonts.css" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
 
   <!-- Dynamic font imports container (populated by JS when theme has fontImports) -->
   <div id="dynamic-fonts"></div>
@@ -1578,11 +1578,14 @@
       for (var i = 0; i < imports.length; i++) {
         var url = imports[i];
         if (loadedFonts[url]) continue;
+        // Skip CDN URLs — Google Fonts and Font Awesome are already loaded locally via <head> stylesheets
+        if (url.indexOf("https://fonts.googleapis.com") === 0) continue;
+        if (url.indexOf("https://fonts.gstatic.com") === 0) continue;
+        if (url.indexOf("https://cdnjs.cloudflare.com") === 0) continue;
         loadedFonts[url] = true;
         var link = document.createElement("link");
         link.rel = "stylesheet";
         link.href = url;
-        link.crossOrigin = "anonymous";
         container.appendChild(link);
       }
     }

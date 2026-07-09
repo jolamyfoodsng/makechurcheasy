@@ -27,6 +27,23 @@ import { getUserScopedKey } from "../services/userScopedStorage";
 import Icon from "../components/Icon";
 import "./MultiViewGalleryPage.css";
 
+// ── Color conversion helper (CSS hex → OBS 32-bit integer for color_source_v3) ──
+
+function cssColorToObsInt(cssColor: string): number {
+  const hex = cssColor.replace("#", "");
+  let r = 0, g = 0, b = 0;
+  if (hex.length === 3) {
+    r = parseInt(hex[0] + hex[0], 16);
+    g = parseInt(hex[1] + hex[1], 16);
+    b = parseInt(hex[2] + hex[2], 16);
+  } else if (hex.length >= 6) {
+    r = parseInt(hex.slice(0, 2), 16);
+    g = parseInt(hex.slice(2, 4), 16);
+    b = parseInt(hex.slice(4, 6), 16);
+  }
+  return (0xFF << 24 | b << 16 | g << 8 | r) >>> 0;
+}
+
 // ── Added layout tracking ──────────────────────────────────────────────────
 
 const ADDED_IDS_KEY = "mvg-added-ids";
@@ -337,13 +354,13 @@ export default function MultiViewGalleryPage() {
   }, []);
 
   // ── Listen to OBS status ──
-  useState(() => {
+  useEffect(() => {
     setObsConnected(obsService.status === "connected");
     const unsub = obsService.onStatusChange((status) => {
       setObsConnected(status === "connected");
     });
     return unsub;
-  });
+  }, []);
 
   // ── Added count for filter badge ──
   const addedCount = useMemo(() => addedIds.size, [addedIds]);
@@ -432,13 +449,13 @@ export default function MultiViewGalleryPage() {
             inputName,
             "color_source_v3",
             {
-              color: info.color,
+              color: cssColorToObsInt(info.color),
               width: slot.width,
               height: slot.height,
             }
           );
 
-          if (itemId) {
+          if (itemId >= 0) {
             await obsService.setSceneItemTransform(sceneName, itemId, {
               positionX: slot.x,
               positionY: slot.y,
