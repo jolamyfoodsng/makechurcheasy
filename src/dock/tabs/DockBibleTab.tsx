@@ -49,7 +49,7 @@ import {
 } from "../dockConsoleTheme";
 import Icon from "../DockIcon";
 import DockBottomToolbar from "../components/DockBottomToolbar";
-import { dockObsClient } from "../dockObsClient";
+
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { trackBiblePresent } from "../../services/tracking";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
