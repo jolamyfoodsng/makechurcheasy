@@ -1,7 +1,7 @@
 /**
  * TrialBanner.tsx — Persistent notification when trial expires
  *
- * Shown on the dashboard after the 14-day trial ends.
+ * Shown on the dashboard after the Growth trial ends.
  * Informs the user they're now on Free plan and prompts upgrade.
  */
 

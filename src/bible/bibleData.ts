@@ -82,14 +82,26 @@ async function loadTranslation(t: BibleTranslation): Promise<RawBibleData> {
 
   // Fallback: bundled KJV JSON in public/
   if (key === "KJV") {
-    const url = `${import.meta.env.BASE_URL}bible-kjv.json`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`Failed to load bundled KJV: ${res.statusText}`);
+    try {
+      const url = `${import.meta.env.BASE_URL}bible-kjv.json`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data: RawBibleData = await res.json();
+        translationCache.set(key, data);
+        return data;
+      }
+    } catch {
+      // Ignore fetch failure and try the bundled module fallback below.
     }
-    const data: RawBibleData = await res.json();
-    translationCache.set(key, data);
-    return data;
+
+    try {
+      const bundled = await import("../../public/bible-kjv.json");
+      const data = bundled.default as RawBibleData;
+      translationCache.set(key, data);
+      return data;
+    } catch (err) {
+      throw new Error(`Failed to load bundled KJV: ${(err as Error).message}`);
+    }
   }
 
   throw new Error(
@@ -280,7 +292,7 @@ export interface SearchResult {
   snippet: string;
 }
 
-interface RankedSearchResult extends SearchResult {
+export interface RankedSearchResult extends SearchResult {
   score: number;
 }
 
@@ -654,11 +666,11 @@ async function searchBibleInTranslation(
  * Keyword search across the entire Bible.
  * Returns up to `limit` results.
  */
-export async function searchBible(
+export async function searchBibleRanked(
   query: string,
   translation: BibleTranslation = "KJV",
   limit = 50
-): Promise<SearchResult[]> {
+): Promise<RankedSearchResult[]> {
   if (!query.trim()) return [];
 
   const selectedTranslation = translation.toUpperCase() as BibleTranslation;
@@ -689,6 +701,15 @@ export async function searchBible(
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 
+  return merged;
+}
+
+export async function searchBible(
+  query: string,
+  translation: BibleTranslation = "KJV",
+  limit = 50
+): Promise<SearchResult[]> {
+  const merged = await searchBibleRanked(query, translation, limit);
   return merged.map(({ score: _score, ...result }) => result);
 }
 

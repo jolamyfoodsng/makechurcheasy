@@ -57,7 +57,7 @@ void initAuthStore().then(async () => {
   // Load desktop config from API (with cache/fallback) and apply theme overrides
   try {
     const { getDesktopConfig, refreshDesktopConfig } = await import("./services/desktopConfig");
-    await getDesktopConfig();
+    await refreshDesktopConfig().catch(() => getDesktopConfig());
 
     // Apply admin-configured theme overrides to DEFAULT_THEME_SETTINGS
     const { applyThemeConfigOverrides } = await import("./bible/types");

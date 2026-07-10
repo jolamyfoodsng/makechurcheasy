@@ -21,14 +21,23 @@ import {
   type EntitlementResult,
   type FeatureKey,
 } from "./planConfigTypes";
+import { readPlanConfigCache } from "./planConfig";
 import { getUserScopedKey } from "./userScopedStorage";
+import {
+  getEffectivePlan as resolveCanonicalPlan,
+  normalizePlanId,
+} from "../../../shared/subscription/sourceOfTruth";
 
-export type { EntitlementResult, FeatureKey };
+export type { EntitlementResult, FeatureKey, PlanTier };
 
 // ── Cache for derived feature→tier mapping ───────────────────────────────────
 
 let _cachedConfig: PlanConfig | null = null;
 let _featureRequiredPlan: Record<string, PlanTier> | null = null;
+
+function getActiveConfig(): PlanConfig {
+  return readPlanConfigCache() || DEFAULT_PLAN_CONFIG;
+}
 
 function getFeatureRequiredPlan(config: PlanConfig): Record<string, PlanTier> {
   if (_cachedConfig === config && _featureRequiredPlan) return _featureRequiredPlan;
@@ -58,17 +67,15 @@ export async function fetchPlanFromOverlayServer(): Promise<string> {
     if (res.ok) {
       const data = await res.json();
       if (data.user?.plan) {
-        // Trial users get pro-tier regardless of their base plan.
-        const trialActive = data.user.trial?.active
-          && data.user.trial?.endsAt
-          && Date.now() < new Date(data.user.trial.endsAt).getTime();
-        const effectivePlan = trialActive ? "pro" : data.user.plan;
+        const effectivePlan = normalizePlanId(
+          data.user.effectivePlan || resolveCanonicalPlan(data.user as any)
+        );
         try { localStorage.setItem(getUserScopedKey("ocs-dock-plan"), effectivePlan); } catch { }
         return effectivePlan;
       }
     }
   } catch { /* overlay server not reachable */ }
-  try { return localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free"; } catch { return "free"; }
+  try { return normalizePlanId(localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free"); } catch { return "free"; }
 }
 
 /**
@@ -101,8 +108,8 @@ export function checkEntitlementSync(
   plan?: PlanTier | string,
   currentCount: number = 0,
 ): EntitlementResult {
-  const planKey = (plan || "free").toLowerCase() as PlanTier;
-  const config = DEFAULT_PLAN_CONFIG;
+  const planKey = normalizePlanId(plan || "free") as PlanTier;
+  const config = getActiveConfig();
   const planTier = config.plans[planKey] || config.plans.free;
   const limit = planTier.entitlements[feature];
   const label = FEATURE_LABELS[feature] || feature;
@@ -146,7 +153,7 @@ export function checkEntitlementSync(
  * Get the full entitlement config as a record of tier → entitlements.
  */
 export async function getEntitlementConfig(): Promise<Record<string, Record<string, number | boolean>>> {
-  const config = DEFAULT_PLAN_CONFIG;
+  const config = getActiveConfig();
   const result: Record<string, Record<string, number | boolean>> = {};
   for (const [tier, tierConfig] of Object.entries(config.plans)) {
     result[tier] = tierConfig.entitlements as unknown as Record<string, number | boolean>;
@@ -164,8 +171,8 @@ export function getFeatureLimit(
   feature: FeatureKey,
   plan?: PlanTier | string,
 ): number {
-  const planKey = (plan || "free").toLowerCase() as PlanTier;
-  const config = DEFAULT_PLAN_CONFIG;
+  const planKey = normalizePlanId(plan || "free") as PlanTier;
+  const config = getActiveConfig();
   const planTier = config.plans[planKey] || config.plans.free;
   const val = planTier.entitlements[feature];
   if (typeof val === "number") return val;

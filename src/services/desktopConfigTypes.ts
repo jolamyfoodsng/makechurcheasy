@@ -18,6 +18,14 @@ export interface DesktopConfig {
     emergencyLockDelay: number;
     gracePeriodHours: number;
     updateMessage: string;
+    emergencyLockMessage: string;
+    windowsDownloadUrl: string;
+    macDownloadUrl: string;
+    linuxDownloadUrl: string;
+    releaseNotesUrl: string;
+    policyPublishedAt: string;
+    emergencyLockEnabledAt: string | null;
+    emergencyLockEffectiveAt: string | null;
   };
   trial: {
     enabled: boolean;
@@ -125,10 +133,18 @@ export const DEFAULT_DESKTOP_CONFIG: DesktopConfig = {
     emergencyLockDelay: 0,
     gracePeriodHours: 48,
     updateMessage: "A new version is available. Please update to continue.",
+    emergencyLockMessage: "MakeChurchEasy is temporarily unavailable due to emergency maintenance.",
+    windowsDownloadUrl: "",
+    macDownloadUrl: "",
+    linuxDownloadUrl: "",
+    releaseNotesUrl: "",
+    policyPublishedAt: new Date(0).toISOString(),
+    emergencyLockEnabledAt: null,
+    emergencyLockEffectiveAt: null,
   },
   trial: {
     enabled: true,
-    defaultDurationDays: 14,
+    defaultDurationDays: 20,
   },
   credits: {
     translationCost: 1,

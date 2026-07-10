@@ -5,6 +5,11 @@
  * The user authorizes the desktop app through the browser.
  */
 
+import {
+  getEffectivePlan as resolveEffectivePlan,
+  normalizePlanId,
+} from "../../../shared/subscription/sourceOfTruth";
+
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 /** App version sent with every API request for server-side version gating */
@@ -23,6 +28,7 @@ export interface AuthUser {
   createdAt: string;
   role?: "admin" | "user";
   plan?: PlanTier;
+  effectivePlan?: PlanTier;
   entitlements?: Record<string, number | boolean>;
   trial?: {
     active?: boolean;
@@ -158,18 +164,23 @@ export async function syncSessionToOverlay(session: AuthSession | null): Promise
   if (session?.user) {
     try {
       const { DEFAULT_PLAN_CONFIG } = await import("./planConfigTypes");
-      // Trial users get pro-tier entitlements regardless of their base plan.
-      const trialActive = session.user.trial?.active
-        && session.user.trial?.endsAt
-        && Date.now() < new Date(session.user.trial.endsAt).getTime();
-      const planKey = trialActive
-        ? "pro"
-        : (session.user.plan || "free").toLowerCase() as keyof typeof DEFAULT_PLAN_CONFIG.plans;
-      const tier = DEFAULT_PLAN_CONFIG.plans[planKey];
+      const { readPlanConfigCache } = await import("./planConfig");
+      const config = readPlanConfigCache() || DEFAULT_PLAN_CONFIG;
+      const planKey = normalizePlanId(
+        session.user.effectivePlan
+        || resolveEffectivePlan(session.user as any)
+        || session.user.plan
+        || "free"
+      ) as keyof typeof config.plans;
+      const tier = config.plans[planKey];
       if (tier?.entitlements) {
         enriched = {
           ...session,
-          user: { ...session.user, entitlements: tier.entitlements as unknown as Record<string, number | boolean> },
+          user: {
+            ...session.user,
+            effectivePlan: planKey,
+            entitlements: tier.entitlements as unknown as Record<string, number | boolean>,
+          },
         };
       }
     } catch { /* import failed — send session without entitlements */ }
@@ -270,7 +281,9 @@ export async function refreshPlanFromServer(): Promise<void> {
 
     const current = _session.user;
     const planChanged = remote.plan !== current.plan;
+    const effectivePlanChanged = remote.effectivePlan !== current.effectivePlan;
     const roleChanged = remote.role && remote.role !== current.role;
+    const entitlementsChanged = JSON.stringify(remote.entitlements || null) !== JSON.stringify(current.entitlements || null);
     const remoteTrial = remote.trial || {};
     const currentTrial = current.trial || {};
     const trialActiveChanged =
@@ -280,10 +293,12 @@ export async function refreshPlanFromServer(): Promise<void> {
       remoteTrial.startedAt !== currentTrial.startedAt;
     const trialChanged = trialActiveChanged || trialDatesChanged;
 
-    if (planChanged || roleChanged || trialChanged) {
+    if (planChanged || effectivePlanChanged || roleChanged || trialChanged || entitlementsChanged) {
       console.debug(
-        "[authService] refreshPlanFromServer: changes detected — plan=%s→%s role=%s trial.active=%s→%s trial.status=%s",
-        current.plan, remote.plan, remote.role ?? current.role,
+        "[authService] refreshPlanFromServer: changes detected — plan=%s→%s effective=%s→%s role=%s trial.active=%s→%s trial.status=%s",
+        current.plan, remote.plan,
+        current.effectivePlan, remote.effectivePlan,
+        remote.role ?? current.role,
         currentTrial.active, remoteTrial.active,
         remoteTrial.status ?? currentTrial.status,
       );
@@ -292,6 +307,8 @@ export async function refreshPlanFromServer(): Promise<void> {
         user: {
           ...current,
           plan: remote.plan || current.plan,
+          effectivePlan: remote.effectivePlan || current.effectivePlan,
+          entitlements: remote.entitlements || current.entitlements,
           role: remote.role || current.role,
           trial: {
             active: remoteTrial.active ?? currentTrial.active,
@@ -416,6 +433,11 @@ export async function redeemPairingCode(
       createdAt: data.user.createdAt || "",
       role: data.user.role || "user",
       plan: data.user.plan || "free",
+      effectivePlan: resolveEffectivePlan({
+        plan: data.user.plan || "free",
+        role: data.user.role || "user",
+        trial: data.user.trial || undefined,
+      }) as PlanTier,
       trial: data.user.trial || undefined,
     };
 
@@ -468,6 +490,11 @@ export function watchPairingStatus(
       createdAt: data.user.createdAt || "",
       role: data.user.role || "user",
       plan: data.user.plan || "free",
+      effectivePlan: resolveEffectivePlan({
+        plan: data.user.plan || "free",
+        role: data.user.role || "user",
+        trial: data.user.trial || undefined,
+      }) as PlanTier,
       trial: data.user.trial || undefined,
     };
 

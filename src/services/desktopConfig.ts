@@ -76,7 +76,7 @@ async function fetchConfig(): Promise<DesktopConfig> {
 
 async function doFetch(): Promise<DesktopConfig> {
   try {
-    const res = await fetch(`${API_BASE}/api/config/desktop`);
+    const res = await fetch(`${API_BASE}/api/config/desktop`, { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       if (data && data.obs && data.storage) {

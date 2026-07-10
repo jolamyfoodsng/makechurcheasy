@@ -36,6 +36,8 @@ export const VOICE_BIBLE_DOCK_COMMAND_TYPES: VoiceBibleDockCommandType[] = [
   "voice-bible:cancel",
 ];
 
+let voiceBibleStateMissingUntil = 0;
+
 function parseJson<T>(raw: string): T | null {
   try {
     return JSON.parse(raw) as T;
@@ -85,11 +87,18 @@ export async function loadVoiceBibleDockState(
   baseUrl = getOverlayBaseUrlSync(),
 ): Promise<VoiceBibleDockStateEnvelope | null> {
   try {
+    if (Date.now() < voiceBibleStateMissingUntil) return null;
     const response = await fetch(
       `${baseUrl}/uploads/${VOICE_BIBLE_DOCK_STATE_NAME}.json?_=${Date.now()}`,
       { cache: "no-store" },
     );
-    if (!response.ok) return null;
+    if (!response.ok) {
+      if (response.status === 404) {
+        voiceBibleStateMissingUntil = Date.now() + 30_000;
+      }
+      return null;
+    }
+    voiceBibleStateMissingUntil = 0;
     const raw = await response.text();
     return parseJson<VoiceBibleDockStateEnvelope>(raw);
   } catch {
@@ -103,6 +112,7 @@ export async function saveVoiceBibleDockState(state: VoiceBibleDockStateEnvelope
     name: VOICE_BIBLE_DOCK_STATE_NAME,
     data: JSON.stringify(state),
   });
+  voiceBibleStateMissingUntil = 0;
 }
 
 export async function loadVoiceBibleDockCommand(

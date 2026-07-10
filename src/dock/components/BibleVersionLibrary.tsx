@@ -25,6 +25,8 @@ interface BibleVersionLibraryProps {
   onVersionChange: (version: string) => void;
   /** Called when translations change so parent can refresh */
   onTranslationsChanged?: () => void;
+  /** Disable the selector when compare mode is active */
+  disabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -36,6 +38,7 @@ export default function BibleVersionLibrary({
   availableTranslations,
   onVersionChange,
   onTranslationsChanged: _onTranslationsChanged,
+  disabled = false,
 }: BibleVersionLibraryProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
@@ -68,6 +71,13 @@ export default function BibleVersionLibrary({
       setTimeout(() => searchInputRef.current?.focus(), 100);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (disabled) {
+      setIsOpen(false);
+      setSearchQuery("");
+    }
+  }, [disabled]);
 
   // ── Filter translations by search and sort (allowed first, locked after) ──
   const filteredTranslations = useMemo(() => {
@@ -119,10 +129,11 @@ export default function BibleVersionLibrary({
       {/* Trigger Button */}
       <button
         className="bible-version-library__trigger"
+        disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
         aria-label={t("bible.selectBibleVersion")}
         aria-expanded={isOpen}
-        title="bible-version-library__trigger-abbr">
+        title={disabled ? t("bible.compareModeActive", "Disabled while compare mode is active") : t("bible.selectBibleVersion")}>
         <span className="bible-version-library__trigger-abbr">
           {activeTranslationInfo.abbr}
         </span>

@@ -32,10 +32,10 @@ export async function ensureObsConnected(url?: string, password?: string): Promi
 
   inFlightPromise = (async () => {
     try {
-      // Kick off connection (with the user-supplied URL/password if any)
-      void dockObsClient.connect(url, password);
+      // Start or join the client's deduped connection attempt.
+      await dockObsClient.connect(url, password);
 
-      // Poll until connected or failed — max 15s
+      // Poll until connected or failed — max 15s.
       const deadline = Date.now() + 15000;
       while (Date.now() < deadline) {
         if (dockObsClient.isConnected) return;

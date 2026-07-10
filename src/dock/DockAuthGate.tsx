@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import { DEFAULT_PLAN_CONFIG } from "../services/planConfigTypes";
+import {
+  getEffectivePlan as resolveCanonicalPlan,
+  normalizePlanId,
+} from "../../../shared/subscription/sourceOfTruth";
 
 /**
  * Auth gate for the OBS Dock.
@@ -25,20 +29,19 @@ async function checkLocalAuth(): Promise<boolean> {
       const data = await res.json();
       const hasDevice = data.deviceId != null && String(data.deviceId).trim() !== "";
       if (hasDevice && data.user?.plan) {
-        // Trial users get pro-tier entitlements regardless of their base plan.
-        const trialActive = data.user.trial?.active
-          && data.user.trial?.endsAt
-          && Date.now() < new Date(data.user.trial.endsAt).getTime();
-        const effectivePlan = trialActive ? "pro" : data.user.plan;
+        const effectivePlan = normalizePlanId(
+          data.user.effectivePlan || resolveCanonicalPlan(data.user as any)
+        );
 
         try {
           localStorage.setItem(getUserScopedKey("ocs-dock-plan"), effectivePlan);
         } catch { /* ignore */ }
 
-        if (data.user?.entitlements) {
-          const entitlements = trialActive
-            ? (DEFAULT_PLAN_CONFIG.plans.pro?.entitlements as unknown as Record<string, number | boolean>) || data.user.entitlements
-            : data.user.entitlements;
+        const entitlements =
+          data.user?.entitlements
+          || (DEFAULT_PLAN_CONFIG.plans[effectivePlan]?.entitlements as unknown as Record<string, number | boolean> | undefined);
+
+        if (entitlements) {
           try {
             localStorage.setItem(getUserScopedKey("ocs-dock-entitlements"), JSON.stringify(entitlements));
           } catch { /* ignore */ }
@@ -72,9 +75,17 @@ async function checkDeviceOnline(deviceId: string): Promise<boolean> {
           if (profileRes.ok) {
             const profile = await profileRes.json();
             if (profile.user?.plan) {
+              const effectivePlan = normalizePlanId(
+                profile.user.effectivePlan || resolveCanonicalPlan(profile.user as any)
+              );
               try {
-                localStorage.setItem(getUserScopedKey("ocs-dock-plan"), profile.user.plan);
+                localStorage.setItem(getUserScopedKey("ocs-dock-plan"), effectivePlan);
               } catch { /* ignore */ }
+              if (profile.user?.entitlements) {
+                try {
+                  localStorage.setItem(getUserScopedKey("ocs-dock-entitlements"), JSON.stringify(profile.user.entitlements));
+                } catch { /* ignore */ }
+              }
             }
           }
         } catch { /* profile fetch failed — still authenticated */ }

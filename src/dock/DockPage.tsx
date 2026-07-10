@@ -6,8 +6,13 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import i18n from "../i18n";
-import { dockClient, dockBridge, type DockStateMessage } from "../services/dockBridge";
+import { dockClient, type DockStateMessage } from "../services/dockBridge";
+import { INTERFACE_LOCALES } from "../i18n/localeCatalog";
+import {
+  applyInterfaceLanguagePreference,
+  getInterfaceLanguageLabel,
+  getResolvedInterfaceLanguage,
+} from "../services/interfaceLanguage";
 import { dockObsClient, type DockObsStatus } from "./dockObsClient";
 import { DOCK_TABS, type DockTab, type DockStagedItem } from "./dockTypes";
 import DockBibleTab from "./tabs/DockBibleTab";
@@ -33,6 +38,25 @@ import { ensureObsConnected } from "./obsConnectionGuard";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import { getRecommendedPollingInterval } from "../services/performanceManager";
 import { getDefaultOBSUrl, readDesktopConfigCache, DEFAULT_DESKTOP_CONFIG } from "../services/desktopConfig";
+import { coerce, lt } from "semver";
+
+function isOlderVersion(currentVersion: string, targetVersion: string): boolean {
+  const current = coerce(currentVersion)?.version;
+  const target = coerce(targetVersion)?.version;
+  if (!current || !target) return false;
+  return lt(current, target);
+}
+
+function getDockDownloadUrl(
+  cfg: typeof DEFAULT_DESKTOP_CONFIG,
+): string {
+  const ua = navigator.userAgent;
+  if (ua.includes("Windows")) return cfg.appUpdates.windowsDownloadUrl || cfg.appUpdates.releaseNotesUrl;
+  if (ua.includes("Mac") || ua.includes("Macintosh")) {
+    return cfg.appUpdates.macDownloadUrl || cfg.appUpdates.releaseNotesUrl;
+  }
+  return cfg.appUpdates.linuxDownloadUrl || cfg.appUpdates.releaseNotesUrl;
+}
 import DockDropOverlay from "./DockDropOverlay";
 import DockUploadToasts from "./DockUploadToasts";
 import { DockUpgradeModal } from "./components/DockUpgradeModal";
@@ -288,52 +312,16 @@ export default function DockPage() {
     void loadDockProductionSettings().then(setProductionSettings).catch(() => { });
   }, []);
 
-  // ── Force update: fetch latest release info and check pub_date ──
+  // ── Version policy: show latest-version notice without locking the dock ──
   useEffect(() => {
-    const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-releases/releases/latest";
-    const CACHE_KEY = "ocs-dock-update-cache-v1";
-
-    // Use config for force-update settings (fallback: 21 days, enabled)
-    const FORCE_UPDATE_DAYS = Math.round((cfg.appUpdates.gracePeriodHours || 24 * 21) / 24);
-    const forceEnabled = cfg.appUpdates.forceUpdatesEnabled;
-
     const currentVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined;
-
-    if (!forceEnabled) return;
-
-    fetch(RELEASES_API)
-      .then((r) => r.json())
-      .then((release: { published_at?: string; tag_name?: string }) => {
-        if (!release.published_at) return;
-        const releaseDate = new Date(release.published_at);
-        const now = new Date();
-        const daysOld = Math.floor((now.getTime() - releaseDate.getTime()) / (1000 * 60 * 60 * 24));
-
-        // Cache for offline fallback
-        try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ date: release.published_at, version: release.tag_name }));
-        } catch { /* non-critical */ }
-
-        if (daysOld >= FORCE_UPDATE_DAYS) {
-          setVersionAge({ daysOld, forceUpdate: true, currentVersion, latestVersion: release.tag_name });
-        }
-      })
-      .catch(() => {
-        // Offline fallback: use cached release date to still enforce 21-day lockout
-        try {
-          const raw = localStorage.getItem(CACHE_KEY);
-          if (raw) {
-            const cached = JSON.parse(raw) as { date: string; version: string };
-            const releaseDate = new Date(cached.date);
-            const now = new Date();
-            const daysOld = Math.floor((now.getTime() - releaseDate.getTime()) / (1000 * 60 * 60 * 24));
-            if (daysOld >= FORCE_UPDATE_DAYS) {
-              setVersionAge({ daysOld, forceUpdate: true, currentVersion, latestVersion: cached.version });
-            }
-          }
-        } catch { /* non-critical */ }
-      });
-  }, []);
+    const latestVersion = cfg.appUpdates.latestVersion;
+    if (!currentVersion || !latestVersion || !isOlderVersion(currentVersion, latestVersion)) {
+      setVersionAge({ daysOld: 0, forceUpdate: false });
+      return;
+    }
+    setVersionAge({ daysOld: 0, forceUpdate: true, currentVersion, latestVersion });
+  }, [cfg.appUpdates.latestVersion]);
 
   const waitForDockObsConnected = useCallback(async (timeoutMs = 4000) => {
     const startedAt = Date.now();
@@ -582,8 +570,7 @@ export default function DockPage() {
   const [clearScenesLoading, setClearScenesLoading] = useState(false);
 
   // ── Language Selector ──
-  const ALL_LANGUAGES: string[] = ["English", "French", "Spanish", "Portuguese", "Yoruba", "Igbo", "Hausa", "Ghanaian"];
-  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => localStorage.getItem("mce_interface_language") || "English");
+  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => getResolvedInterfaceLanguage());
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
 
@@ -614,13 +601,13 @@ export default function DockPage() {
           <div className="dock-force-update-banner">
             <Icon name="warning" size={14} />
             <span>
-              {t('page.forceUpdate')} — {t('page.updateReady', { days: versionAge.daysOld })}
+              {t('page.forceUpdate')}
               {versionAge.currentVersion && versionAge.latestVersion && (
                 <> v{versionAge.currentVersion} → v{versionAge.latestVersion}</>
               )}
             </span>
             <a
-              href="https://github.com/nicholasracisz/makechurcheasy/releases/latest"
+              href={getDockDownloadUrl(cfg) || "https://downloads.makechurcheasy.com"}
               target="_blank"
               rel="noopener noreferrer"
               className="dock-force-update-banner__link"
@@ -729,8 +716,8 @@ export default function DockPage() {
                       padding: 0,
                     }}
                   >
-                    {ALL_LANGUAGES.map((lang) => (
-                      <option key={lang} value={lang}>{lang}</option>
+                    {INTERFACE_LOCALES.map((lang) => (
+                      <option key={lang.code} value={lang.code}>{lang.nativeName}</option>
                     ))}
                   </select>
                 </div>
@@ -1322,7 +1309,7 @@ export default function DockPage() {
               <h3>{t('dock.changeLanguage') || 'Change Language'}</h3>
             </div>
             <div className="dock-modal__body">
-              <p>{t('dock.changeLanguageConfirm', { language: pendingLanguage }) || `Change interface language to ${pendingLanguage}?`}</p>
+              <p>{t('dock.changeLanguageConfirm', { language: getInterfaceLanguageLabel(pendingLanguage) }) || `Change interface language to ${getInterfaceLanguageLabel(pendingLanguage)}?`}</p>
             </div>
             <div className="dock-modal__footer">
               <button
@@ -1336,16 +1323,9 @@ export default function DockPage() {
                 type="button"
                 className="dock-btn dock-btn--primary"
                 onClick={() => {
-                  const lang = pendingLanguage!;
-                  const langToCode: Record<string, string> = {
-                    English: "en", French: "fr", Spanish: "es", Portuguese: "pt",
-                    Yoruba: "yo", Igbo: "ig", Hausa: "ha", Ghanaian: "gh",
-                  };
-                  const code = langToCode[lang] || "en";
-                  localStorage.setItem("mce_interface_language", lang);
-                  i18n.changeLanguage(code);
-                  dockBridge.sendLanguageChanged(lang, code);
-                  setInterfaceLanguage(lang);
+                  const code = pendingLanguage!;
+                  void applyInterfaceLanguagePreference(code, { broadcast: true });
+                  setInterfaceLanguage(code);
                   setShowLanguageModal(false);
                   setPendingLanguage(null);
                 }}

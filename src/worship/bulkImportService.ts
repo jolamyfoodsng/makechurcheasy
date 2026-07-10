@@ -11,6 +11,10 @@ import { saveSong } from "./worshipDb";
 import type { Song } from "./types";
 import type { DetectedSong } from "./songDetector";
 import type { TextElement } from "./layoutParser";
+import {
+  extractPdfTextElementsWithPdfJs,
+  extractPdfTextWithPdfJs,
+} from "./pdfFallback";
 
 // ── Text extraction ────────────────────────────────────────────────────────
 
@@ -38,8 +42,17 @@ export async function extractTextFromFile(file: File): Promise<string> {
 async function extractPdfText(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const data = Array.from(new Uint8Array(buffer));
-  const raw = await invoke<string>("extract_text_from_pdf", { fileData: data });
-  return reorderTwoColumnText(raw);
+  try {
+    const raw = await invoke<string>("extract_text_from_pdf", { fileData: data });
+    if (raw.trim()) {
+      return reorderTwoColumnText(raw);
+    }
+  } catch {
+    // Fall through to the in-browser repair/extraction path.
+  }
+
+  const fallback = await extractPdfTextWithPdfJs(file);
+  return reorderTwoColumnText(fallback);
 }
 
 // ── Two-column text reordering ─────────────────────────────────────────────
@@ -188,7 +201,17 @@ export async function extractTextElementsFromFile(file: File): Promise<TextEleme
   }
   const buffer = await file.arrayBuffer();
   const data = Array.from(new Uint8Array(buffer));
-  return invoke<TextElement[]>("extract_text_elements_from_pdf", { fileData: data });
+
+  try {
+    const elements = await invoke<TextElement[]>("extract_text_elements_from_pdf", { fileData: data });
+    if (elements.length > 0) {
+      return elements;
+    }
+  } catch {
+    // Fall through to the in-browser repair/extraction path.
+  }
+
+  return extractPdfTextElementsWithPdfJs(file);
 }
 
 // ── Song import ────────────────────────────────────────────────────────────

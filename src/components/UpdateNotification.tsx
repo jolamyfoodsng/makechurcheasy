@@ -23,6 +23,9 @@ interface UpdateNotificationProps {
   result: UpdateCheckResult;
   onDismiss: () => void;
   onRemindLater: () => void;
+  manualDownloadUrl?: string;
+  releaseNotesUrl?: string;
+  message?: string;
 }
 
 type UpdateStatus = "prompt" | "downloading" | "installing" | "relaunching" | "error";
@@ -61,7 +64,14 @@ function shouldShowNotification(result: UpdateCheckResult): boolean {
   return true;
 }
 
-export default function UpdateNotification({ result, onDismiss, onRemindLater }: UpdateNotificationProps) {
+export default function UpdateNotification({
+  result,
+  onDismiss,
+  onRemindLater,
+  manualDownloadUrl,
+  releaseNotesUrl,
+  message,
+}: UpdateNotificationProps) {
   const [status, setStatus] = useState<UpdateStatus>("prompt");
   const [progress, setProgress] = useState<DownloadProgress>({ contentLength: 0, downloaded: 0 });
   const [errorMsg, setErrorMsg] = useState("");
@@ -94,7 +104,15 @@ export default function UpdateNotification({ result, onDismiss, onRemindLater }:
   };
 
   const handleUpdate = useCallback(async () => {
-    if (!result.update) return;
+    if (!result.update) {
+      if (manualDownloadUrl) {
+        window.open(manualDownloadUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      setErrorMsg("No update package is available for this device yet.");
+      setStatus("error");
+      return;
+    }
     try {
       setStatus("downloading");
       await downloadAndInstallUpdate(
@@ -107,7 +125,7 @@ export default function UpdateNotification({ result, onDismiss, onRemindLater }:
       setErrorMsg(err?.message || "Update failed. Please try again.");
       setStatus("error");
     }
-  }, [result.update]);
+  }, [manualDownloadUrl, result.update]);
 
   const handleRetry = useCallback(() => {
     setStatus("prompt");
@@ -173,7 +191,7 @@ export default function UpdateNotification({ result, onDismiss, onRemindLater }:
           {status === "prompt" && (
             <>
               <p className="update-notification__message">
-                A new version of MakeChurchEasy ({result.version}) is ready to install.
+                {message || `A new version of MakeChurchEasy (${result.version}) is ready to install.`}
               </p>
 
               <div className="update-notification__versions">
@@ -182,14 +200,20 @@ export default function UpdateNotification({ result, onDismiss, onRemindLater }:
                 <span className="update-notification__version-new">v{result.version}</span>
               </div>
 
-              {result.notes && (
+              {(releaseNotesUrl || result.notes) && (
                 <button
                   type="button"
                   className="update-notification__changelog-btn"
-                  onClick={() => setShowChangelog(!showChangelog)}
+                  onClick={() => {
+                    if (releaseNotesUrl) {
+                      window.open(releaseNotesUrl, "_blank", "noopener,noreferrer");
+                      return;
+                    }
+                    setShowChangelog(!showChangelog);
+                  }}
                  title="What's New">
-                  <Icon name={showChangelog ? "expand_less" : "expand_more"} size={12} />
-                  What's New
+                  <Icon name={releaseNotesUrl ? "open_in_new" : showChangelog ? "expand_less" : "expand_more"} size={12} />
+                  {releaseNotesUrl ? "Release Notes" : "What's New"}
                 </button>
               )}
 

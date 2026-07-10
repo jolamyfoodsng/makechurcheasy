@@ -129,6 +129,7 @@ function App() {
 
   // ── Update state ──
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+  const hasBlockingUpdate = !!(updateResult?.available && updateResult.update);
 
   const startupDone = useRef(false);
   const updatePollBusyRef = useRef(false);
@@ -198,7 +199,7 @@ function App() {
   // ── Continuous update polling while app is running ──
   useEffect(() => {
     if (splashVisible) return;
-    if (updateResult?.available && updateResult.update) return;
+    if (hasBlockingUpdate) return;
 
     let cancelled = false;
 
@@ -232,7 +233,7 @@ function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [splashVisible, updateResult?.available, updateResult?.update, updateResult?.version]);
+  }, [hasBlockingUpdate, splashVisible, updateResult?.version]);
 
   // ── Update: dismiss (close the app) ──
   const handleDismissUpdate = useCallback(async () => {
@@ -252,7 +253,7 @@ function App() {
       )}
 
       {/* 2. Mandatory update modal — downloads + installs + relaunches */}
-      {!splashVisible && updateResult && (
+      {!splashVisible && hasBlockingUpdate && updateResult && (
         <UpdateModal
           result={updateResult}
           onDismiss={handleDismissUpdate}
@@ -260,7 +261,7 @@ function App() {
       )}
 
       {/* 3. Main app — only rendered when no update is blocking */}
-      {!splashVisible && !updateResult && (
+      {!splashVisible && !hasBlockingUpdate && (
         <OBSConnectGate>
           <LowerThirdProvider>
           <Routes>

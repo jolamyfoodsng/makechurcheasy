@@ -24,7 +24,6 @@ import {
   type FeatureKey,
   type PlanTier,
 } from "../services/entitlementClient";
-import { getEffectivePlan } from "../services/licenseService";
 import { getUserScopedKey } from "../services/userScopedStorage";
 
 export type { FeatureKey, PlanTier };
@@ -116,8 +115,8 @@ export function useFeatureGate(): FeatureGateState {
 
     (async () => {
       try {
-        // fetchPlanFromOverlayServer already returns "trial" → "pro" mapping
-        // but we also want the raw base plan for the modal display.
+        // fetchPlanFromOverlayServer resolves the canonical effective plan
+        // from the overlay session or device profile response.
         const plan = await fetchPlanFromOverlayServer();
         if (!cancelled) {
           setCurrentPlan((plan || "free") as PlanTier);
@@ -197,7 +196,7 @@ export function FeatureGate({
   children,
   fallback,
 }: FeatureGateProps) {
-  const { checkFeature, loading } = useFeatureGate();
+  const { checkFeature, loading, currentPlan } = useFeatureGate();
 
   if (loading) return null;
 

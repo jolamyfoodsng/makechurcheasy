@@ -8,8 +8,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import i18n from "../../i18n";
-import { dockBridge } from "../../services/dockBridge";
+import {
+  INTERFACE_LOCALES,
+} from "../../i18n/localeCatalog";
+import {
+  applyInterfaceLanguagePreference,
+  getInterfaceLanguageLabel,
+  getResolvedInterfaceLanguage,
+} from "../../services/interfaceLanguage";
 import { getBibleSettings, getInstalledTranslations, saveBibleSettings } from "../../bible/bibleDb";
 import { useBible } from "../../bible/bibleStore";
 import type { BibleTranslation } from "../../bible/types";
@@ -187,13 +193,13 @@ export function MVSettings() {
   const effectivePlan = getEffectivePlan(authUser);
   const hasMobileAccess = canUseMobileControl(authUser);
   const [showMobileUpgrade, setShowMobileUpgrade] = useState(false);
-  const [creditBalance, setCreditBalance] = useState<number>(0);
+  const [, setCreditBalance] = useState<number>(0);
   const [creditsUsedThisMonth, setCreditsUsedThisMonth] = useState<number>(0);
   const [planConfig, setPlanConfig] = useState<PlanConfig | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<CreditTransaction[]>([]);
   const userPlan = proUnlocked ? "pro" as const : getUserPlan(authUser);
   const trialActive = !proUnlocked && isInTrial(authUser);
-  // During trial, user gets pro-level credits — use effective plan for credit lookup
+  // During trial, user gets Growth-level credits — use the trial config tier for lookup
   const effectivePlanForCredits = trialActive ? "trial" as const : userPlan;
   const planCredits = planConfig ? getPlanCredits(planConfig, effectivePlanForCredits) : (proUnlocked ? -1 : 1000);
   const trialDaysLeft = trialActive ? getTrialDaysRemaining(authUser) : 0;
@@ -264,9 +270,7 @@ export function MVSettings() {
   const [highContrastUI, setHighContrastUI] = useState<boolean>(settings.highContrast ?? false);
   const [reduceMotion, setReduceMotion] = useState<boolean>(false);
   const [roundedCorners, setRoundedCorners] = useState<boolean>(true);
-  const ALL_LANGUAGES: string[] = ["English", "French", "Spanish", "Portuguese", "Yoruba", "Igbo", "Hausa", "Ghanaian"];
-  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => localStorage.getItem("mce_interface_language") || "English");
-  const [allLanguages] = useState<string[]>(ALL_LANGUAGES);
+  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => getResolvedInterfaceLanguage());
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
 
@@ -538,10 +542,8 @@ export function MVSettings() {
     setHighContrastUI(false);
     setReduceMotion(false);
     setRoundedCorners(true);
-    setInterfaceLanguage("English");
-    localStorage.setItem("mce_interface_language", "English");
-    i18n.changeLanguage("en");
-    dockBridge.sendLanguageChanged("English", "en");
+    setInterfaceLanguage("en-US");
+    void applyInterfaceLanguagePreference("en-US", { broadcast: true });
     update({ theme: "dark", highContrast: false });
     triggerToast(t("mvSettings.toast.appearanceResetToDefaults"), "success");
   }, [update, triggerToast]);
@@ -784,8 +786,8 @@ export function MVSettings() {
                       </div>
                       <div className="form-select-container" style={{ width: "180px" }}>
                         <select className="custom-select" value={interfaceLanguage} onChange={(e) => { setPendingLanguage(e.target.value); setShowLanguageModal(true); }}>
-                          {allLanguages.map((lang) => (
-                            <option key={lang} value={lang}>{lang}</option>
+                          {INTERFACE_LOCALES.map((lang) => (
+                            <option key={lang.code} value={lang.code}>{lang.nativeName}</option>
                           ))}
                         </select>
                         <span className="select-arrow"><ChevronDown size={14} /></span>
@@ -2111,7 +2113,7 @@ export function MVSettings() {
             <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
               <h3 className="mv-modal-title">Change Language</h3>
               <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.85rem", lineHeight: 1.5, margin: "0 0 4px" }}>
-                Switch interface language to <strong>{pendingLanguage}</strong>?
+                Switch interface language to <strong>{getInterfaceLanguageLabel(pendingLanguage)}</strong>?
               </p>
               <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.8rem", lineHeight: 1.5 }}>
                 The interface will update immediately.
@@ -2121,19 +2123,9 @@ export function MVSettings() {
                 <button
                   className="mv-btn mv-btn--primary"
                   onClick={() => {
-                    const lang = pendingLanguage!;
-                    const langToCode: Record<string, string> = {
-                      English: "en", French: "fr", Spanish: "es", Portuguese: "pt",
-                      Yoruba: "yo", Igbo: "ig", Hausa: "ha", Ghanaian: "gh",
-                    };
-                    const code = langToCode[lang] || "en";
-                    console.log(`[MCE-i18n] User clicked Change Language → "${lang}" → code="${code}", current lng=${i18n.language}`);
-                    localStorage.setItem("mce_interface_language", lang);
-                    i18n.changeLanguage(code).then(() => {
-                      console.log(`[MCE-i18n] changeLanguage resolved. New lng=${i18n.language}`);
-                    });
-                    dockBridge.sendLanguageChanged(lang, code);
-                    setInterfaceLanguage(lang);
+                    const code = pendingLanguage!;
+                    void applyInterfaceLanguagePreference(code, { broadcast: true });
+                    setInterfaceLanguage(code);
                     setShowLanguageModal(false);
                     setPendingLanguage(null);
                   }}

@@ -180,7 +180,46 @@
     }
 
     #overlay.lt-mode #compare-layout {
-      display: none !important;
+      max-width: var(--lt-max-width, 55%);
+      width: var(--lt-bar-width, auto);
+      margin: 0;
+      margin-left: var(--safe-area, 40px);
+      margin-bottom: var(--safe-area, 40px);
+      padding: var(--lt-padding, 28px) calc(var(--lt-padding, 28px) + 20px);
+      border-radius: var(--lt-border-radius, 12px);
+      background: var(--lt-box-background, rgba(0, 0, 0, 0.65));
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+      text-align: left;
+      align-items: flex-start;
+      min-height: 0;
+      transition: max-width 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+        width 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+        margin 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+        padding 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+        border-radius 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        background 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #overlay.lt-mode #compare-layout .compare-column {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    #overlay.lt-mode #compare-layout .compare-column__reference {
+      font-size: var(--lt-ref-font-size, 18px);
+    }
+
+    #overlay.lt-mode #compare-layout .compare-column__translation {
+      font-size: calc(var(--lt-ref-font-size, 18px) * 0.8);
+    }
+
+    #overlay.lt-mode #compare-layout .compare-column__text {
+      font-size: var(--lt-font-size, 36px);
+      line-height: var(--lt-line-height, 1.5);
     }
 
     /* Transition from fullscreen to lower-third: collapse content to bottom */
@@ -1407,12 +1446,24 @@
       // We scale content FIRST so the user never sees the unscaled font flash.
 
       const compareColumns = Array.isArray(slide.columns) ? slide.columns.slice(0, 2) : [];
-      const isCompareLayout = slide.layout === 'compare' && compareColumns.length === 2;
+      const compareLayoutMode = slide.compareLayout === 'side-by-side'
+        ? 'side-by-side'
+        : slide.compareLayout === 'line-by-line'
+          ? 'line-by-line'
+          : (slide.compareEnabled ? 'line-by-line' : (slide.layout === 'compare' ? 'side-by-side' : ''));
+      const isCompareLayout = Boolean(compareLayoutMode) && compareColumns.length === 2;
 
       if (isCompareLayout) {
         setSingleLayoutVisible(false);
         const [left, right] = compareColumns;
         const normalizeCompareText = (value) => safeSupText(value);
+
+        if (compareLayout) {
+          compareLayout.style.gridTemplateColumns = compareLayoutMode === 'side-by-side'
+            ? 'minmax(0, 1fr) minmax(0, 1fr)'
+            : 'minmax(0, 1fr)';
+          compareLayout.style.gridAutoFlow = 'row';
+        }
 
         compareReferenceLeft.textContent = String(left.reference || '').trim();
         compareReferenceRight.textContent = String(right.reference || '').trim();

@@ -26,19 +26,20 @@ import { BibleProvider } from "./bible/bibleStore";
 import { LowerThirdProvider } from "./lowerthirds/lowerThirdStore";
 import SplashScreen from "./components/SplashScreen";
 import UpdateNotification from "./components/UpdateNotification";
-import ForceUpdateModal from "./components/ForceUpdateModal";
 import ForcedUpdateOverlay from "./components/ForcedUpdateOverlay";
 import VersionFloorWarningBanner from "./components/VersionFloorWarningBanner";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
 import VerificationGate from "./components/VerificationGate";
 import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
-import { checkForUpdate, downloadAndInstallUpdate, downloadAndInstallFromGitHub, getVersionAge, fetchVersionFloor, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
+import { checkForUpdate, downloadAndInstallUpdate, downloadAndInstallFromGitHub, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
 import {
-  fetchAppSettings,
   getForcedUpdateState,
-  shouldReshowOverlay,
+  getPolicyUpdateNotice,
   recordOverlayDismiss,
+  refreshAppSettings,
+  shouldReshowOverlay,
+  type PolicyUpdateNotice,
   type ForcedUpdateState,
 } from "./services/forcedUpdateService";
 import { initOverlayUrl } from "./services/overlayUrl";
@@ -560,7 +561,7 @@ function App() {
 
   // ── Update state ──
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
-  const [versionAge, setVersionAge] = useState<{ daysOld: number; forceUpdate: boolean; persistent: boolean }>({ daysOld: 0, forceUpdate: false, persistent: false });
+  const [policyUpdateNotice, setPolicyUpdateNotice] = useState<PolicyUpdateNotice | null>(null);
 
   // ── Version floor check (fetched from server — admin-controlled) ──
   const [versionFloorBlocked, setVersionFloorBlocked] = useState<{
@@ -590,7 +591,11 @@ function App() {
     hoursRemaining: null,
     gracePeriodHours: null,
     startedAt: null,
+    lockAt: null,
     updateMessage: "",
+    currentVersion: typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0",
+    downloadUrl: "",
+    releaseNotesUrl: "",
     loading: true,
   });
 
@@ -638,11 +643,9 @@ function App() {
       .then((result) => {
         if (result.available && result.update) {
           setUpdateResult(result);
-          setVersionAge(getVersionAge(result, result.currentVersion ?? (typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined)));
         } else if (result.date) {
           // Offline fallback: check returned a cached date but no update available
           setUpdateResult(result);
-          setVersionAge(getVersionAge(result, typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined));
         }
       })
       .catch(() => {
@@ -650,65 +653,13 @@ function App() {
       });
 
     // Fetch server-driven forced update settings
-    const forcedUpdateCheck = fetchAppSettings()
+    const forcedUpdateCheck = refreshAppSettings()
       .then((settings) => {
         setForcedUpdateState(getForcedUpdateState(settings));
+        setPolicyUpdateNotice(getPolicyUpdateNotice(settings));
       })
       .catch(() => {
         // If fetch fails, proceed without server-driven forced update
-      });
-
-    // Fetch version floor from server (admin-configured minimum)
-    const FLOOR_GRACE_KEY = "ocs-version-floor-grace-v1";
-    fetchVersionFloor()
-      .then((result) => {
-        if (!result) return;
-
-        if (result.gracePeriodHours > 0) {
-          // Grace period configured — track it in localStorage
-          let startedAt: string;
-          try {
-            const existing = localStorage.getItem(FLOOR_GRACE_KEY);
-            if (existing) {
-              const rec = JSON.parse(existing) as { startedAt: string; minimumVersion: string };
-              // If the minimum version changed, reset the grace period
-              if (rec.minimumVersion === result.minimumVersion) {
-                startedAt = rec.startedAt;
-              } else {
-                startedAt = new Date().toISOString();
-              }
-            } else {
-              startedAt = new Date().toISOString();
-            }
-          } catch {
-            startedAt = new Date().toISOString();
-          }
-
-          // Persist the grace record
-          try {
-            localStorage.setItem(
-              FLOOR_GRACE_KEY,
-              JSON.stringify({ startedAt, minimumVersion: result.minimumVersion })
-            );
-          } catch { /* non-critical */ }
-
-          // Check if grace period has already expired
-          const endMs = new Date(startedAt).getTime() + result.gracePeriodHours * 60 * 60 * 1000;
-          if (Date.now() >= endMs) {
-            // Grace period expired — show hard lock
-            setVersionFloorBlocked(result);
-          } else {
-            // Still in grace — show warning banner
-            setVersionFloorBlocked({ ...result, blocked: false });
-            setVersionFloorGraceStartedAt(startedAt);
-          }
-        } else {
-          // No grace period — immediate hard lock (original behavior)
-          setVersionFloorBlocked(result);
-        }
-      })
-      .catch(() => {
-        // If fetch fails, don't block — proceed normally
       });
 
     // Initialize the overlay URL (queries Tauri for the local server port)
@@ -735,7 +686,7 @@ function App() {
       }),
     );
 
-    // Seed starter multiview templates into IndexedDB (non-blocking, skips existing)
+    // Seed default multiview templates into IndexedDB (non-blocking, skips existing)
     seedTemplates(STARTER_TEMPLATES).then(() => {
       // Sync layouts to dock after seeding completes
       syncLayoutsToDock().catch(() => { });
@@ -829,8 +780,6 @@ function App() {
   useEffect(() => {
     if (splashVisible) return;
     if (updateResult?.available && updateResult.update) return;
-    // Stop polling when force update is already shown (e.g. from cached offline data)
-    if (versionAge.forceUpdate && updateResult) return;
 
     let cancelled = false;
 
@@ -840,7 +789,6 @@ function App() {
       try {
         const result = await checkForUpdate();
         if (cancelled) return;
-        const curVer = result.currentVersion ?? (typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined);
         if (result.available && result.update) {
           setUpdateResult((prev) => {
             if (prev?.available && prev.version === result.version) {
@@ -848,7 +796,6 @@ function App() {
             }
             return result;
           });
-          setVersionAge(getVersionAge(result, curVer));
         } else if (result.date) {
           // Offline fallback: cached date returned, check if version is stale
           setUpdateResult((prev) => {
@@ -857,7 +804,6 @@ function App() {
             }
             return result;
           });
-          setVersionAge(getVersionAge(result, curVer));
         }
       } catch {
         // Keep polling.
@@ -875,23 +821,26 @@ function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [splashVisible, updateResult?.available, updateResult?.update, updateResult?.version, versionAge.forceUpdate, updateResult]);
+  }, [splashVisible, updateResult?.available, updateResult?.update, updateResult?.version, updateResult]);
 
   // ── Update: dismiss (hide notification, app continues) ──
   const handleDismissUpdate = useCallback(() => {
     setUpdateResult(null);
+    setPolicyUpdateNotice(null);
   }, []);
 
   // ── Update: remind later (hide temporarily, app continues) ──
   const handleRemindLaterUpdate = useCallback(() => {
     setUpdateResult(null);
+    setPolicyUpdateNotice(null);
   }, []);
 
   // ── Server-driven forced update / emergency lock check ──
   const refetchForcedUpdate = useCallback(() => {
-    fetchAppSettings()
+    refreshAppSettings()
       .then((settings) => {
         setForcedUpdateState(getForcedUpdateState(settings));
+        setPolicyUpdateNotice(getPolicyUpdateNotice(settings));
       })
       .catch(() => { /* non-critical */ });
   }, []);
@@ -1053,6 +1002,17 @@ function App() {
     }
   }, []);
 
+  const updateNotificationResult =
+    updateResult ??
+    (policyUpdateNotice
+      ? {
+        available: true,
+        version: policyUpdateNotice.latestVersion,
+        currentVersion: policyUpdateNotice.currentVersion,
+        notes: policyUpdateNotice.message,
+      }
+      : null);
+
   return (
     <div className="app">
       <input
@@ -1195,21 +1155,15 @@ function App() {
           />
         )}
 
-      {/* 2b. Force update modal — blocks app when version is too old (age-based) */}
-      {!splashVisible && !versionFloorBlocked && updateResult && versionAge.forceUpdate && (
-        <ForceUpdateModal
-          result={updateResult}
-          daysOld={versionAge.daysOld}
-          locked={true}
-        />
-      )}
-
       {/* 3. Non-blocking update notification — floats in bottom-right (only when not forced) */}
-      {!splashVisible && !versionFloorBlocked && updateResult && !versionAge.forceUpdate && (
+      {!splashVisible && !versionFloorBlocked && !forcedUpdateState.active && updateNotificationResult && (
         <UpdateNotification
-          result={updateResult}
+          result={updateNotificationResult}
           onDismiss={handleDismissUpdate}
           onRemindLater={handleRemindLaterUpdate}
+          manualDownloadUrl={policyUpdateNotice?.downloadUrl}
+          releaseNotesUrl={policyUpdateNotice?.releaseNotesUrl}
+          message={policyUpdateNotice?.message}
         />
       )}
 
@@ -1282,7 +1236,7 @@ function App() {
       {/* 5. Trial welcome modal — overlays app after auth */}
       {showTrialModal && user?.trial?.endsAt && (
         <TrialModal
-          trialDays={user.trial?.durationDays || 14}
+          trialDays={user.trial?.durationDays || 20}
           trialEndsAt={user.trial.endsAt}
           isExistingUser={(user.trial?.durationDays || 0) >= 10}
           onDismiss={handleTrialModalDismiss}

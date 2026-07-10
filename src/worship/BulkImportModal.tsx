@@ -180,31 +180,33 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
           const elements = await extractTextElementsFromFile(file);
           if (elements.length > 0) {
             const layout = parseLayoutSongs(elements);
-            setLayoutResult(layout);
-            setUsedLayoutParser(true);
+            if (layout.songs.length > 0) {
+              setLayoutResult(layout);
+              setUsedLayoutParser(true);
 
-            // Convert ParsedSong[] to DetectedSong[] for existing UI
-            const detected: DetectedSong[] = layout.songs.map((s) => ({
-              title: s.title,
-              lyrics: `${s.title}\n${s.lyrics}`,
-              lineCount: s.lyrics.split("\n").filter((l) => l.trim()).length,
-              language: detectLanguage(s.lyrics),
-            }));
+              // Convert ParsedSong[] to DetectedSong[] for existing UI
+              const detected: DetectedSong[] = layout.songs.map((s) => ({
+                title: s.title,
+                lyrics: `${s.title}\n${s.lyrics}`,
+                lineCount: s.lyrics.split("\n").filter((l) => l.trim()).length,
+                language: detectLanguage(s.lyrics),
+              }));
 
-            // Create a DetectionResult-compatible object
-            const detResult: DetectionResult = {
-              pattern: "titled",
-              confidence: layout.overallConfidence,
-              songs: detected,
-            };
+              // Create a DetectionResult-compatible object
+              const detResult: DetectionResult = {
+                pattern: "titled",
+                confidence: layout.overallConfidence,
+                songs: detected,
+              };
 
-            setDetection(detResult);
-            setSongs(detected);
-            setSelected(new Set(detected.map((_, i) => i)));
-            setFileName(file.name);
-            setFileType(getFileTypeLabel(file.name));
-            setStep("detect");
-            return;
+              setDetection(detResult);
+              setSongs(detected);
+              setSelected(new Set(detected.map((_, i) => i)));
+              setFileName(file.name);
+              setFileType(getFileTypeLabel(file.name));
+              setStep("detect");
+              return;
+            }
           }
         } catch {
           // Fall through to text extraction

@@ -77,6 +77,7 @@ interface Props {
 
 type OverlayMode = "fullscreen" | "lower-third";
 type DisplayMode = "single" | "compare";
+type CompareLayout = "line-by-line" | "side-by-side";
 const DOCK_BIBLE_PREFS_KEY = "ocs-dock-bible-preferences";
 const DOCK_BIBLE_UI_PREFS_KEY = "ocs-dock-bible-ui-preferences";
 const MAX_VERSE_LINES = 4;
@@ -94,6 +95,8 @@ interface DockBiblePreferences {
   translations?: string[];
   translationA?: string;
   translationB?: string;
+  compareEnabled?: boolean;
+  compareLayout?: CompareLayout;
   verseLineCount?: number;
   fullscreenThemeId?: string;
   lowerThirdThemeId?: string;
@@ -627,6 +630,8 @@ export default function DockBibleTab({
   );
   const [overlayMode, setOverlayMode] = useState<OverlayMode>(productionDefaults.defaultMode);
   const [displayMode, setDisplayMode] = useState<DisplayMode>("single");
+  const [compareEnabled, setCompareEnabled] = useState(false);
+  const [compareLayout, setCompareLayout] = useState<CompareLayout>("line-by-line");
   const [translationA, setTranslationA] = useState("KJV");
   const [translationB, setTranslationB] = useState("NIV");
   const [availableTranslations, setAvailableTranslations] = useState<Array<{ value: string; label: string }>>([
@@ -660,8 +665,14 @@ export default function DockBibleTab({
   const [lowerThirdQuickThemeSettingsLinkedToFullscreen, setLowerThirdQuickThemeSettingsLinkedToFullscreen] =
     useState(false);
   const [chapterPassages, setChapterPassages] = useState<Array<BiblePassage | null>>(() => createEmptyPassages());
+  const [comparePassages, setComparePassages] = useState<{ translationA: BiblePassage | null; translationB: BiblePassage | null }>(() => ({
+    translationA: null,
+    translationB: null,
+  }));
+  const [compareChapterLoading, setCompareChapterLoading] = useState(false);
   const [chapterLoading, setChapterLoading] = useState(false);
   const [chapterErrors, setChapterErrors] = useState<string[]>(() => createEmptyErrors());
+  const [compareChapterErrors, setCompareChapterErrors] = useState<[string, string]>(["", ""]);
   const [highlightVerse, setHighlightVerse] = useState<number | null>(null);
   const [favoriteRefs, setFavoriteRefs] = useState<Set<string>>(new Set());
   const [isUtilityCollapsed, _setIsUtilityCollapsed] = useState(
@@ -876,7 +887,12 @@ export default function DockBibleTab({
     setSelectedBibleTheme(productionDefaults.fullscreenTheme ?? BUILTIN_THEMES[0]);
     setSelectedLowerThirdTheme(productionDefaults.lowerThirdTheme ?? BUILTIN_THEMES[0]);
     setOverlayMode(prefs.overlayMode ?? productionDefaults.defaultMode);
-    setDisplayMode(prefs.displayMode ?? "single");
+    const restoredCompareEnabled = typeof prefs.compareEnabled === "boolean"
+      ? prefs.compareEnabled
+      : prefs.displayMode === "compare";
+    setCompareEnabled(restoredCompareEnabled);
+    setDisplayMode(restoredCompareEnabled ? "compare" : "single");
+    setCompareLayout(prefs.compareLayout ?? "line-by-line");
     setTranslationA(prefs.translationA ?? "KJV");
     setTranslationB(prefs.translationB ?? "NIV");
     setColumnTranslations(
@@ -980,6 +996,8 @@ export default function DockBibleTab({
         translations: [...columnTranslations],
         translationA,
         translationB,
+        compareEnabled,
+        compareLayout,
         verseLineCount,
         fullscreenThemeId: selectedBibleTheme.id,
         lowerThirdThemeId: selectedLowerThirdTheme.id,
@@ -997,6 +1015,8 @@ export default function DockBibleTab({
     displayMode,
     translationA,
     translationB,
+    compareEnabled,
+    compareLayout,
     savedLowerThirdQuickThemeSettings,
     lowerThirdQuickThemeSettingsLinkedToFullscreen,
     columnTranslations,
@@ -1246,6 +1266,44 @@ export default function DockBibleTab({
     };
   }, [columnTranslations, quickTranslations, selectedBook, selectedChapter]);
 
+  useEffect(() => {
+    if (!compareEnabled || !selectedBook || !selectedChapter) {
+      setComparePassages({ translationA: null, translationB: null });
+      setCompareChapterErrors(["", ""]);
+      setCompareChapterLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCompareChapterLoading(true);
+    setCompareChapterErrors(["", ""]);
+
+    (async () => {
+      try {
+        const { getChapter } = await import("../../bible/bibleData");
+        const [passageA, passageB] = await Promise.all([
+          getChapter(selectedBook, selectedChapter, translationA),
+          getChapter(selectedBook, selectedChapter, translationB),
+        ]);
+        if (cancelled) return;
+        setComparePassages({ translationA: passageA, translationB: passageB });
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : t("bible.unableToLoad");
+        setComparePassages({ translationA: null, translationB: null });
+        setCompareChapterErrors([message, message]);
+      } finally {
+        if (!cancelled) {
+          setCompareChapterLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [compareEnabled, selectedBook, selectedChapter, translationA, translationB, t]);
+
   const resolveVerseSelection = useCallback(
     async (
       book: string,
@@ -1328,50 +1386,138 @@ export default function DockBibleTab({
       );
       setVerseText(selection.text);
       const referenceLabel = `${book} ${chapter}:${selection.verseRange}`;
+      const columnIndex = typeof options?.columnIndex === "number"
+        ? Math.min(Math.max(options.columnIndex, 0), QUICK_SELECT_VERSION_COUNT - 1)
+        : activeColumnIndex;
+      const compareMode = compareEnabled;
 
-      const stageData = {
-        book,
-        chapter,
-        verse,
-        columnIndex:
-          typeof options?.columnIndex === "number"
-            ? Math.min(Math.max(options.columnIndex, 0), QUICK_SELECT_VERSION_COUNT - 1)
-            : activeColumnIndex,
-        verseEnd: selection.verseEnd,
-        verseRange: selection.verseRange,
-        referenceLabel,
-        lineCount: effectiveLineCount,
-        translation: effectiveTranslation,
-        verseText: selection.text,
-        overlayMode,
-        theme: overlayMode === "fullscreen" ? effectiveSelectedBibleTheme.id : selectedLowerThirdTheme.id,
-        bibleThemeSettings: (
-          overlayMode === "fullscreen"
-            ? effectiveSelectedBibleTheme.settings
-            : effectiveSelectedLowerThirdTheme.settings
-        ) as unknown as Record<string, unknown>,
-        liveOverrides:
-          overlayMode === "fullscreen"
-            ? (fullscreenLiveOverrides as Record<string, unknown> | null)
-            : null,
-        backgroundOnly: bibleBgOnly,
-        reveal: options?.reveal !== false,
-      };
+      let stageData: Record<string, unknown>;
+      let stageLabel = referenceLabel;
+      let stageSubtitle = selection.text;
+
+      if (compareMode) {
+        const [selectionA, selectionB] = await Promise.all([
+          resolveVerseSelection(
+            book,
+            chapter,
+            verse,
+            translationA,
+            effectiveLineCount,
+            options?.rangeEndVerse ?? null,
+          ),
+          resolveVerseSelection(
+            book,
+            chapter,
+            verse,
+            translationB,
+            effectiveLineCount,
+            options?.rangeEndVerse ?? null,
+          ),
+        ]);
+        const compareReferenceLabel = `${book} ${chapter}:${selectionA.verseRange}`;
+        stageLabel = compareReferenceLabel;
+        stageSubtitle = selectionA.text;
+        stageData = {
+          book,
+          chapter,
+          verse,
+          columnIndex,
+          verseEnd: selectionA.verseEnd,
+          verseRange: selectionA.verseRange,
+          referenceLabel: compareReferenceLabel,
+          lineCount: effectiveLineCount,
+          translation: translationA,
+          translationA,
+          translationB,
+          compareEnabled: true,
+          compareLayout,
+          verseText: selectionA.text,
+          overlayMode,
+          theme: overlayMode === "fullscreen" ? effectiveSelectedBibleTheme.id : selectedLowerThirdTheme.id,
+          bibleThemeSettings: (
+            overlayMode === "fullscreen"
+              ? effectiveSelectedBibleTheme.settings
+              : effectiveSelectedLowerThirdTheme.settings
+          ) as unknown as Record<string, unknown>,
+          liveOverrides:
+            overlayMode === "fullscreen"
+              ? (fullscreenLiveOverrides as Record<string, unknown> | null)
+              : null,
+          backgroundOnly: bibleBgOnly,
+          reveal: options?.reveal !== false,
+          compare: {
+            enabled: true,
+            layout: compareLayout,
+            columns: [
+              {
+                book,
+                chapter,
+                verse,
+                verseEnd: selectionA.verseEnd,
+                verseRange: selectionA.verseRange,
+                referenceLabel: compareReferenceLabel,
+                translation: translationA,
+                verseText: selectionA.text,
+              },
+              {
+                book,
+                chapter,
+                verse,
+                verseEnd: selectionB.verseEnd,
+                verseRange: selectionB.verseRange,
+                referenceLabel: compareReferenceLabel,
+                translation: translationB,
+                verseText: selectionB.text,
+              },
+            ],
+          },
+        };
+      } else {
+        stageData = {
+          book,
+          chapter,
+          verse,
+          columnIndex,
+          verseEnd: selection.verseEnd,
+          verseRange: selection.verseRange,
+          referenceLabel,
+          lineCount: effectiveLineCount,
+          translation: effectiveTranslation,
+          verseText: selection.text,
+          overlayMode,
+          theme: overlayMode === "fullscreen" ? effectiveSelectedBibleTheme.id : selectedLowerThirdTheme.id,
+          bibleThemeSettings: (
+            overlayMode === "fullscreen"
+              ? effectiveSelectedBibleTheme.settings
+              : effectiveSelectedLowerThirdTheme.settings
+          ) as unknown as Record<string, unknown>,
+          liveOverrides:
+            overlayMode === "fullscreen"
+              ? (fullscreenLiveOverrides as Record<string, unknown> | null)
+              : null,
+          backgroundOnly: bibleBgOnly,
+          reveal: options?.reveal !== false,
+        };
+      }
 
       onStage({
         type: "bible",
-        label: referenceLabel,
-        subtitle: selection.text,
+        label: stageLabel,
+        subtitle: stageSubtitle,
         data: stageData,
       });
     },
     [
       focusReference,
       focusReferenceWithoutReload,
+      compareEnabled,
+      compareLayout,
       fullscreenLiveOverrides,
       onStage,
       overlayMode,
       resolveVerseSelection,
+      translationA,
+      translationB,
       effectiveSelectedBibleTheme.id,
       effectiveSelectedBibleTheme.settings,
       effectiveSelectedLowerThirdTheme.settings,
@@ -1413,47 +1559,132 @@ export default function DockBibleTab({
         );
         setVerseText(selection.text);
         const referenceLabel = `${book} ${chapter}:${selection.verseRange}`;
+        const columnIndex = typeof options?.columnIndex === "number"
+          ? Math.min(Math.max(options.columnIndex, 0), QUICK_SELECT_VERSION_COUNT - 1)
+          : activeColumnIndex;
+        const compareMode = compareEnabled;
 
-        const stageData = {
-          book,
-          chapter,
-          verse,
-          columnIndex:
-            typeof options?.columnIndex === "number"
-              ? Math.min(Math.max(options.columnIndex, 0), QUICK_SELECT_VERSION_COUNT - 1)
-              : activeColumnIndex,
-          verseEnd: selection.verseEnd,
-          verseRange: selection.verseRange,
-          referenceLabel,
-          lineCount: effectiveLineCount,
-          translation: effectiveTranslation,
-          verseText: selection.text,
-          overlayMode,
-          theme: overlayMode === "fullscreen" ? effectiveSelectedBibleTheme.id : selectedLowerThirdTheme.id,
-          bibleThemeSettings: (
-            overlayMode === "fullscreen"
-              ? effectiveSelectedBibleTheme.settings
-              : effectiveSelectedLowerThirdTheme.settings
-          ) as unknown as Record<string, unknown>,
-          liveOverrides:
-            overlayMode === "fullscreen"
-              ? (fullscreenLiveOverrides as Record<string, unknown> | null)
-              : null,
-          backgroundOnly: bibleBgOnly,
-          reveal: options?.reveal !== false,
-          _dockLive: true,
-        };
+        let stageData: Record<string, unknown>;
+        let stageLabel = referenceLabel;
+        let stageSubtitle = selection.text;
+
+        if (compareMode) {
+          const [selectionA, selectionB] = await Promise.all([
+            resolveVerseSelection(
+              book,
+              chapter,
+              verse,
+              translationA,
+              effectiveLineCount,
+              options?.rangeEndVerse ?? null,
+            ),
+            resolveVerseSelection(
+              book,
+              chapter,
+              verse,
+              translationB,
+              effectiveLineCount,
+              options?.rangeEndVerse ?? null,
+            ),
+          ]);
+          const compareReferenceLabel = `${book} ${chapter}:${selectionA.verseRange}`;
+          stageLabel = compareReferenceLabel;
+          stageSubtitle = selectionA.text;
+          stageData = {
+            book,
+            chapter,
+            verse,
+            columnIndex,
+            verseEnd: selectionA.verseEnd,
+            verseRange: selectionA.verseRange,
+            referenceLabel: compareReferenceLabel,
+            lineCount: effectiveLineCount,
+            translation: translationA,
+            translationA,
+            translationB,
+            compareEnabled: true,
+            compareLayout,
+            verseText: selectionA.text,
+            overlayMode,
+            theme: overlayMode === "fullscreen" ? effectiveSelectedBibleTheme.id : selectedLowerThirdTheme.id,
+            bibleThemeSettings: (
+              overlayMode === "fullscreen"
+                ? effectiveSelectedBibleTheme.settings
+                : effectiveSelectedLowerThirdTheme.settings
+            ) as unknown as Record<string, unknown>,
+            liveOverrides:
+              overlayMode === "fullscreen"
+                ? (fullscreenLiveOverrides as Record<string, unknown> | null)
+                : null,
+            backgroundOnly: bibleBgOnly,
+            reveal: options?.reveal !== false,
+            _dockLive: true,
+            compare: {
+              enabled: true,
+              layout: compareLayout,
+              columns: [
+                {
+                  book,
+                  chapter,
+                  verse,
+                  verseEnd: selectionA.verseEnd,
+                  verseRange: selectionA.verseRange,
+                  referenceLabel: compareReferenceLabel,
+                  translation: translationA,
+                  verseText: selectionA.text,
+                },
+                {
+                  book,
+                  chapter,
+                  verse,
+                  verseEnd: selectionB.verseEnd,
+                  verseRange: selectionB.verseRange,
+                  referenceLabel: compareReferenceLabel,
+                  translation: translationB,
+                  verseText: selectionB.text,
+                },
+              ],
+            },
+          };
+        } else {
+          stageData = {
+            book,
+            chapter,
+            verse,
+            columnIndex,
+            verseEnd: selection.verseEnd,
+            verseRange: selection.verseRange,
+            referenceLabel,
+            lineCount: effectiveLineCount,
+            translation: effectiveTranslation,
+            verseText: selection.text,
+            overlayMode,
+            theme: overlayMode === "fullscreen" ? effectiveSelectedBibleTheme.id : selectedLowerThirdTheme.id,
+            bibleThemeSettings: (
+              overlayMode === "fullscreen"
+                ? effectiveSelectedBibleTheme.settings
+                : effectiveSelectedLowerThirdTheme.settings
+            ) as unknown as Record<string, unknown>,
+            liveOverrides:
+              overlayMode === "fullscreen"
+                ? (fullscreenLiveOverrides as Record<string, unknown> | null)
+                : null,
+            backgroundOnly: bibleBgOnly,
+            reveal: options?.reveal !== false,
+            _dockLive: true,
+          };
+        }
 
         onStage({
           type: "bible",
-          label: referenceLabel,
-          subtitle: selection.text,
+          label: stageLabel,
+          subtitle: stageSubtitle,
           data: stageData,
         });
 
         // Fire-and-forget OBS push — UI is already updated via onStage (Rule 1)
         ensureObsConnected()
-          .then(() => dockObsClient.pushBible(stageData))
+          .then(() => dockObsClient.pushBible(stageData as Parameters<typeof dockObsClient.pushBible>[0]))
           .then(() => trackBiblePresent(selection.text))
           .catch((err) => {
             const message = err instanceof Error ? err.message : String(err);
@@ -1476,10 +1707,14 @@ export default function DockBibleTab({
       }
     },
     [
+      compareEnabled,
+      compareLayout,
       fullscreenLiveOverrides,
       onStage,
       overlayMode,
       resolveVerseSelection,
+      translationA,
+      translationB,
       effectiveSelectedBibleTheme.id,
       effectiveSelectedBibleTheme.settings,
       effectiveSelectedLowerThirdTheme.settings,
@@ -1519,12 +1754,17 @@ export default function DockBibleTab({
       verseRange: d.verseRange as string | undefined,
       referenceLabel: d.referenceLabel as string | undefined,
       translation: (d.translation as string) ?? "KJV",
+      translationA: d.translationA as string | undefined,
+      translationB: d.translationB as string | undefined,
       verseText: d.verseText as string | undefined,
       overlayMode: (d.overlayMode as "fullscreen" | "lower-third") ?? "fullscreen",
       theme: d.theme as string | undefined,
       bibleThemeSettings: mergedSettings.settings as unknown as Record<string, unknown>,
       liveOverrides: fullscreenLiveOverrides as Record<string, unknown> | null,
       backgroundOnly: Boolean(d.backgroundOnly),
+      compareEnabled: Boolean(d.compareEnabled),
+      compareLayout: (d.compareLayout as CompareLayout | undefined) ?? compareLayout,
+      compare: d.compare as Record<string, unknown> | undefined,
     };
 
     ensureObsConnected()
@@ -1532,7 +1772,7 @@ export default function DockBibleTab({
       .catch((err) => {
         console.warn("[DockBibleTab] Save push failed:", err);
       });
-  }, [fullscreenLiveOverrides, lowerThirdQuickThemeSettingsLinkedToFullscreen, overlayMode, selectedBibleTheme]);
+  }, [compareLayout, fullscreenLiveOverrides, lowerThirdQuickThemeSettingsLinkedToFullscreen, overlayMode, selectedBibleTheme]);
 
   const handlePreviewFullscreenQuickThemeSettings = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
     const nextPreviewSettings = { ...nextSettings };
@@ -1568,12 +1808,17 @@ export default function DockBibleTab({
       verseRange: d.verseRange as string | undefined,
       referenceLabel: d.referenceLabel as string | undefined,
       translation: (d.translation as string) ?? "KJV",
+      translationA: d.translationA as string | undefined,
+      translationB: d.translationB as string | undefined,
       verseText: d.verseText as string | undefined,
       overlayMode: "lower-third" as const,
       theme: d.theme as string | undefined,
       bibleThemeSettings: mergedSettings.settings as unknown as Record<string, unknown>,
       liveOverrides: null,
       backgroundOnly: Boolean(d.backgroundOnly),
+      compareEnabled: Boolean(d.compareEnabled),
+      compareLayout: (d.compareLayout as CompareLayout | undefined) ?? compareLayout,
+      compare: d.compare as Record<string, unknown> | undefined,
     };
 
     ensureObsConnected()
@@ -1581,13 +1826,23 @@ export default function DockBibleTab({
       .catch((err) => {
         console.warn("[DockBibleTab] Lower-third save push failed:", err);
       });
-  }, [selectedLowerThirdTheme]);
+  }, [compareLayout, selectedLowerThirdTheme]);
 
   const handlePreviewLowerThirdQuickThemeSettings = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
     startTransition(() => {
       setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
       setLowerThirdQuickThemeSettings({ ...nextSettings });
     });
+  }, []);
+
+  const handleDisplayModeChange = useCallback((mode: DisplayMode) => {
+    setDisplayMode(mode);
+    setCompareEnabled(mode === "compare");
+  }, []);
+
+  const handleCompareEnabledChange = useCallback((enabled: boolean) => {
+    setCompareEnabled(enabled);
+    setDisplayMode(enabled ? "compare" : "single");
   }, []);
 
   // ── Re-fetch verse text when the active column translation changes ──
@@ -1741,12 +1996,17 @@ export default function DockBibleTab({
             verseRange: d.verseRange as string | undefined,
             referenceLabel: d.referenceLabel as string | undefined,
             translation: (d.translation as string) ?? "KJV",
+            translationA: d.translationA as string | undefined,
+            translationB: d.translationB as string | undefined,
             verseText: d.verseText as string | undefined,
             overlayMode: (d.overlayMode as "fullscreen" | "lower-third") ?? "fullscreen",
             theme: d.theme as string | undefined,
             bibleThemeSettings: effectiveSelectedBibleTheme.settings as unknown as Record<string, unknown>,
             liveOverrides: fullscreenLiveOverrides as Record<string, unknown> | null,
             backgroundOnly: Boolean(d.backgroundOnly),
+            compareEnabled: Boolean(d.compareEnabled),
+            compareLayout: (d.compareLayout as CompareLayout | undefined) ?? compareLayout,
+            compare: d.compare as Record<string, unknown> | undefined,
           };
           ensureObsConnected()
             .then(() => dockObsClient.pushBible(pushData))
@@ -1760,6 +2020,7 @@ export default function DockBibleTab({
     activeColumnIndex,
     activeFullscreenQuickThemeSettings,
     activeTranslation,
+    compareLayout,
     effectiveSelectedBibleTheme.settings,
     fullscreenLiveOverrides,
     overlayMode,
@@ -1799,12 +2060,17 @@ export default function DockBibleTab({
         verseRange: d.verseRange as string | undefined,
         referenceLabel: d.referenceLabel as string | undefined,
         translation: (d.translation as string) ?? "KJV",
+        translationA: d.translationA as string | undefined,
+        translationB: d.translationB as string | undefined,
         verseText: d.verseText as string | undefined,
         overlayMode: "lower-third" as const,
         theme: selectedLowerThirdTheme.id,
         bibleThemeSettings: effectiveSelectedLowerThirdTheme.settings as unknown as Record<string, unknown>,
         liveOverrides: null,
         backgroundOnly: Boolean(d.backgroundOnly),
+        compareEnabled: Boolean(d.compareEnabled),
+        compareLayout: (d.compareLayout as CompareLayout | undefined) ?? compareLayout,
+        compare: d.compare as Record<string, unknown> | undefined,
       };
       ensureObsConnected()
         .then(() => dockObsClient.pushBible(pushData))
@@ -1813,6 +2079,7 @@ export default function DockBibleTab({
         });
     }, 100);
   }, [
+    compareLayout,
     effectiveSelectedLowerThirdTheme.settings,
     selectedLowerThirdTheme.id,
   ]);
@@ -1855,7 +2122,7 @@ export default function DockBibleTab({
   // cause extra re-renders or loops).
   useEffect(() => {
     latestStagedRef.current = staged;
-  }, [staged]);
+  }, [compareLayout, staged]);
 
   useEffect(() => {
     if (staged === previousStagedRef.current) return;
@@ -2375,7 +2642,7 @@ export default function DockBibleTab({
   }, [translationA, translationB]);
 
   const handleSendCompareToObs = useCallback(async () => {
-    if (!selectedBook || !selectedChapter || !selectedVerse) return;
+    if (!compareEnabled || !selectedBook || !selectedChapter || !selectedVerse) return;
     setActionError("");
     try {
       const lineCount = clampVerseLineCount(verseLineCount);
@@ -2395,6 +2662,10 @@ export default function DockBibleTab({
         referenceLabel: refA,
         lineCount,
         translation: translationA,
+        translationA,
+        translationB,
+        compareEnabled: true,
+        compareLayout,
         verseText: selA.text,
         overlayMode,
         theme,
@@ -2412,6 +2683,7 @@ export default function DockBibleTab({
         _dockLive: true,
         compare: {
           enabled: true,
+          layout: compareLayout,
           columns: [
             {
               book: selectedBook,
@@ -2443,7 +2715,7 @@ export default function DockBibleTab({
         data: stageData,
       });
       ensureObsConnected()
-        .then(() => dockObsClient.pushBible(stageData))
+        .then(() => dockObsClient.pushBible(stageData as Parameters<typeof dockObsClient.pushBible>[0]))
         .then(() => trackBiblePresent(selA.text))
         .catch((err) => {
           const message = err instanceof Error ? err.message : String(err);
@@ -2493,12 +2765,17 @@ export default function DockBibleTab({
             verseRange: data.verseRange as string | undefined,
             referenceLabel: data.referenceLabel as string | undefined,
             translation: (data.translation as string) ?? "KJV",
+            translationA: data.translationA as string | undefined,
+            translationB: data.translationB as string | undefined,
             verseText: data.verseText as string | undefined,
             overlayMode: (data.overlayMode as "fullscreen" | "lower-third") ?? "fullscreen",
             theme: data.theme as string | undefined,
             bibleThemeSettings: data.bibleThemeSettings as Record<string, unknown> | null | undefined,
             liveOverrides: data.liveOverrides as Record<string, unknown> | null | undefined,
             backgroundOnly: next,
+            compareEnabled: Boolean(data.compareEnabled),
+            compareLayout: (data.compareLayout as CompareLayout | undefined) ?? compareLayout,
+            compare: data.compare as Record<string, unknown> | undefined,
           })).catch((err) => {
             const message = err instanceof Error ? err.message : String(err);
             const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
@@ -2618,8 +2895,11 @@ export default function DockBibleTab({
 
   const handleVerseRowDelegated = useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
-      const target = (event.target as HTMLElement).closest<HTMLElement>("[data-verse-row]");
-      if (!target) return;
+      const targetElement =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>("[data-verse-row]")
+          : null;
+      if (!targetElement) return;
       if (event.type === "keydown") {
         const ke = event as React.KeyboardEvent;
         if (ke.key !== "Enter" && ke.key !== " ") return;
@@ -2629,7 +2909,7 @@ export default function DockBibleTab({
         const ce = event as React.MouseEvent;
         if (ce.detail > 1) return;
       }
-      const verseNum = Number(target.dataset.verseRow);
+      const verseNum = Number(targetElement.dataset.verseRow);
       if (!verseNum) return;
       void handleVerseClick(verseNum, activeColumnIndex, activeTranslation);
     },
@@ -2928,6 +3208,19 @@ export default function DockBibleTab({
   const chapterCount = selectedBook ? BOOK_CHAPTERS[selectedBook] ?? 0 : 0;
   const activePassage = chapterPassages[activeColumnIndex] ?? null;
   const activeChapterError = chapterErrors[activeColumnIndex] ?? "";
+  const comparePassageA = comparePassages.translationA;
+  const comparePassageB = comparePassages.translationB;
+  const compareVerseRows = compareEnabled
+    ? (comparePassageA?.verses ?? activePassage?.verses ?? [])
+    : (activePassage?.verses ?? []);
+  const readerLoading = compareEnabled ? compareChapterLoading : chapterLoading;
+  const readerError = compareEnabled
+    ? (compareChapterErrors.find((message) => Boolean(message)) ?? "")
+    : activeChapterError;
+  const hasReaderVerses = compareVerseRows.length > 0;
+  const compareDisplayLabel = compareEnabled
+    ? `${translationA} vs ${translationB}`
+    : activeTranslation;
   const currentVerseNumber = selectedVerse ?? activePassage?.verses[0]?.verse ?? null;
   const currentReferenceLabel = selectedBook && selectedChapter
     ? `${selectedBook} ${selectedChapter}${currentVerseNumber ? `:${currentVerseNumber}` : ""}${verseLineCount > 1 && currentVerseNumber
@@ -2951,6 +3244,7 @@ export default function DockBibleTab({
       selectedChapter={selectedChapter}
       selectedVerse={selectedVerse}
       activeTranslation={activeTranslation}
+      compareEnabled={compareEnabled}
       chapterCount={chapterCount}
       verseCount={verseCount}
       isBookDropdownOpen={isBookDropdownOpen}
@@ -2977,15 +3271,46 @@ export default function DockBibleTab({
             onClick={() => setShowComparePopover((prev) => !prev)}
             title={t("dock.compare.toggle", "Compare Translations")}
           >
-            <Icon name="swap_horiz" size={14} />
-          </button>
+              <Icon name="swap_horiz" size={14} />
+            </button>
           {showComparePopover && (
             <div className="dock-bible-compare-popover">
               <div className="dock-bible-compare-popover__header">{t("dock.compare.title", "Compare Translations")}</div>
+              <div className="dock-bible-compare-popover__section">
+                <div className="dock-bible-compare-popover__toggle-row">
+                  <div className="dock-bible-compare-popover__toggle-copy">
+                    <div className="dock-bible-compare-popover__label">{t("dock.compare.enable", "Enable Compare Translations")}</div>
+                    <div className="dock-bible-compare-popover__hint">{t("dock.compare.enableHint", "Load two translations and keep the reader in compare mode.")}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`dtb-toggle${compareEnabled ? " dtb-toggle--on" : ""}`}
+                    onClick={() => handleCompareEnabledChange(!compareEnabled)}
+                    role="switch"
+                    aria-checked={compareEnabled}
+                    aria-label={t("dock.compare.enable", "Enable Compare Translations")}
+                    title={compareEnabled ? t("dock.compare.disableCompare", "Disable compare mode") : t("dock.compare.enableCompare", "Enable compare mode")}
+                  >
+                    <span className="dtb-toggle__knob" />
+                  </button>
+                </div>
+              </div>
+              <div className="dock-bible-compare-popover__section">
+                <div className="dock-bible-compare-popover__label">{t("dock.compare.layout", "Layout")}</div>
+                <select
+                  className="dock-select dock-bible-compare-popover__select"
+                  value={compareLayout}
+                  onChange={(e) => setCompareLayout(e.target.value as CompareLayout)}
+                  disabled={!compareEnabled}
+                >
+                  <option value="line-by-line">{t("dock.compare.lineByLine", "Line By Line")}</option>
+                  <option value="side-by-side">{t("dock.compare.sideBySide", "Side By Side")}</option>
+                </select>
+              </div>
               <div className="dock-bible-compare-popover__row">
                 <label className="dock-bible-compare-popover__label">{t("dock.compare.translationA", "Translation A")}</label>
                 <select
-                  className="dock-bible-compare-selectors__dropdown"
+                  className="dock-select dock-bible-compare-popover__select"
                   value={translationA}
                   onChange={(e) => handleTranslationAChange(e.target.value)}
                 >
@@ -2997,7 +3322,7 @@ export default function DockBibleTab({
               <div className="dock-bible-compare-popover__row">
                 <label className="dock-bible-compare-popover__label">{t("dock.compare.translationB", "Translation B")}</label>
                 <select
-                  className="dock-bible-compare-selectors__dropdown"
+                  className="dock-select dock-bible-compare-popover__select"
                   value={translationB}
                   onChange={(e) => handleTranslationBChange(e.target.value)}
                 >
@@ -3006,15 +3331,17 @@ export default function DockBibleTab({
                   ))}
                 </select>
               </div>
-              <button
-                type="button"
-                className="dock-bible-compare-popover__send"
-                onClick={handleSendCompareToObs}
-                disabled={!selectedBook || !selectedChapter || !selectedVerse}
-              >
-                <Icon name="send" size={12} />
-                {t("dock.compare.sendToObs", "Send to OBS")}
-              </button>
+              <div className="dock-bible-compare-popover__row">
+                <button
+                  type="button"
+                  className="dock-bible-compare-popover__send"
+                  onClick={handleSendCompareToObs}
+                  disabled={!compareEnabled || !selectedBook || !selectedChapter || !selectedVerse}
+                >
+                  <Icon name="send" size={12} />
+                  {t("dock.compare.sendToObs", "Send to OBS")}
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -3131,7 +3458,7 @@ export default function DockBibleTab({
     >
       <section className="dock-console-panel dock-console-panel--workspace" data-toolbar-collapsed={toolbarCollapsed || undefined}>
         <div className="dock-bible-reader" ref={verseGridRef} onClick={handleVerseRowDelegated} onKeyDown={handleVerseRowDelegated}>
-          {activePassage && activePassage.verses.length > 0 && (
+          {hasReaderVerses && (
             <div className="dock-bible-reader__ref-header">
               <div>
                 <span className="dock-bible-reader__ref-header-label">{t("bible.reading")}</span>
@@ -3147,9 +3474,9 @@ export default function DockBibleTab({
 
               </div>
               <span className="dock-bible-reader__ref-header-reference">{currentReferenceLabel}</span>
-              {displayMode === "compare" ? (
+              {compareEnabled ? (
                 <span className="dock-bible-reader__ref-header-translation dock-bible-reader__ref-header-translation--compare">
-                  {translationA} vs {translationB}
+                  {compareDisplayLabel}
                 </span>
               ) : (
                 <span className="dock-bible-reader__ref-header-translation">{activeTranslation}</span>
@@ -3165,49 +3492,90 @@ export default function DockBibleTab({
               </button>
             </div>
           )}
-          {chapterLoading && !activePassage?.verses.length && (
+          {readerLoading && !hasReaderVerses && (
             <div className="dock-console-placeholder">{t("common.loading")} {currentChapterLabel}...</div>
           )}
 
-          {chapterLoading && activeChapterError && !activePassage?.verses.length && (
+          {readerLoading && readerError && !hasReaderVerses && (
             <div className="dock-action-error dock-action-error--console">
               <Icon name="warning" size={14} />
-              <span style={{ flex: 1 }}>{activeChapterError}</span>
+              <span style={{ flex: 1 }}>{readerError}</span>
             </div>
           )}
 
-          {!chapterLoading && !activePassage?.verses.length && !activeChapterError && (
+          {!readerLoading && !hasReaderVerses && !readerError && (
             <div className="dock-console-placeholder">
               {t("bible.noVersesAvailable")}
             </div>
           )}
 
-          {activePassage?.verses.map((verse) => (
-            <div
-              key={verse.verse}
-              data-verse-row={verse.verse}
-              className={[
-                "dock-bible-verse-row",
-                selectedVerse === verse.verse ? "dock-bible-verse-row--selected" : "",
-                highlightVerse === verse.verse ? "dock-bible-verse-row--highlighted" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onDoubleClick={stopVerseActionEvent}
-              tabIndex={0}
-              role="button"
-              aria-current={selectedVerse === verse.verse ? "true" : undefined}
-              aria-label={t("bible.verseAriaLabel", { verse: verse.verse, translation: activeTranslation, text: verse.text })}
-              title={`${activeTranslation} ${selectedBook} ${selectedChapter}:${verse.verse} — Click to view in OBS`}
-            >
-              <div className="dock-bible-verse-row__main">
-                <span className="dock-bible-verse-row__num">{verse.verse}</span>
-                <span className="dock-bible-verse-row__text">{verse.text}</span>
+          {compareVerseRows.map((verse) => {
+            const verseA = comparePassageA?.verses.find((entry) => entry.verse === verse.verse) ?? verse;
+            const verseB = comparePassageB?.verses.find((entry) => entry.verse === verse.verse) ?? verseA;
+            const isSelected = selectedVerse === verse.verse;
+            const isHighlighted = highlightVerse === verse.verse;
+            const rowClassName = [
+              "dock-bible-verse-row",
+              compareEnabled ? "dock-bible-verse-row--compare" : "",
+              isSelected ? "dock-bible-verse-row--selected" : "",
+              isHighlighted ? "dock-bible-verse-row--highlighted" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
+
+            return (
+              <div
+                key={verse.verse}
+                data-verse-row={verse.verse}
+                className={rowClassName}
+                onDoubleClick={stopVerseActionEvent}
+                tabIndex={0}
+                role="button"
+                aria-current={isSelected ? "true" : undefined}
+                aria-label={
+                  compareEnabled
+                    ? `${selectedBook} ${selectedChapter}:${verse.verse} ${translationA} ${verseA.text} ${translationB} ${verseB.text}`
+                    : t("bible.verseAriaLabel", { verse: verse.verse, translation: activeTranslation, text: verse.text })
+                }
+                title={
+                  compareEnabled
+                    ? `${selectedBook} ${selectedChapter}:${verse.verse} — ${translationA} / ${translationB}`
+                    : `${activeTranslation} ${selectedBook} ${selectedChapter}:${verse.verse} — Click to view in OBS`
+                }
+              >
+                <div className="dock-bible-verse-row__num">{verse.verse}</div>
+                {compareEnabled ? (
+                  compareLayout === "side-by-side" ? (
+                    <div className="dock-bible-compare-grid">
+                      <div className="dock-bible-compare-card">
+                        <span className="translation-badge">{translationA}</span>
+                        <div className="dock-bible-compare-card__text">{verseA.text}</div>
+                      </div>
+                      <div className="dock-bible-compare-card">
+                        <span className="translation-badge">{translationB}</span>
+                        <div className="dock-bible-compare-card__text">{verseB.text}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="dock-bible-compare-stack">
+                      <div className="dock-bible-compare-block">
+                        <span className="translation-badge">{translationA}</span>
+                        <div className="dock-bible-compare-block__text">{verseA.text}</div>
+                      </div>
+                      <div className="dock-bible-compare-block">
+                        <span className="translation-badge">{translationB}</span>
+                        <div className="dock-bible-compare-block__text">{verseB.text}</div>
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  <div className="dock-bible-verse-row__main">
+                    <span className="dock-bible-verse-row__text">{verse.text}</span>
+                  </div>
+                )}
               </div>
-
-
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {actionError && (
@@ -3225,12 +3593,12 @@ export default function DockBibleTab({
         )}
 
         {/* ── Toolbar ── */}
-        <DockBottomToolbar
-          overlayMode={overlayMode}
-          onModeChange={handleOverlayModeChange}
-          displayMode={displayMode}
-          onDisplayModeChange={setDisplayMode}
-          morphing={modeMorphing}
+      <DockBottomToolbar
+        overlayMode={overlayMode}
+        onModeChange={handleOverlayModeChange}
+        displayMode={displayMode}
+        onDisplayModeChange={handleDisplayModeChange}
+        morphing={modeMorphing}
           clearLabel={t("common.clear")}
           onClear={handleClearBible}
           clearDisabled={false}

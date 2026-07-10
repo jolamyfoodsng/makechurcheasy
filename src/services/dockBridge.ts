@@ -243,10 +243,10 @@ class DockBridge {
   }
 
   /** Notify all dock instances that the interface language changed */
-  sendLanguageChanged(language: string, code: string) {
+  sendLanguageChanged(code: string) {
     this.sendState({
       type: "state:language-changed",
-      payload: { language, code },
+      payload: { code },
       timestamp: Date.now(),
     });
   }

@@ -31,6 +31,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { usePerformanceMonitor } from "../dock/usePerformanceMonitor";
 import SpeechToScriptureTutorial, {
   isSpeechToScriptureTutorialCompleted,
   markSpeechToScriptureTutorialCompleted,
@@ -133,6 +134,7 @@ export default function SpeechToScripturePage() {
   // ── Tutorial state ──
   const [tourActive, setTourActive] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // ── Backend access check (declared early for use in useEffects below) ──
   const [checkingAccess, setCheckingAccess] = useState(false);
@@ -218,6 +220,11 @@ export default function SpeechToScripturePage() {
     return unsub;
   }, []);
 
+  // Keep the live mic service from running if the route unmounts.
+  useEffect(() => {
+    return () => lmDockService.stopListening();
+  }, []);
+
   // ── Subscribe to lmDockService ──
   useEffect(() => {
     return lmDockService.subscribe(setSnapshot);
@@ -258,6 +265,63 @@ export default function SpeechToScripturePage() {
   // ── Connectivity & service states ──
   const isOnline = useOnlineStatus();
   const isOffline = !isOnline;
+  const performanceMonitor = usePerformanceMonitor(true);
+  const performanceSnapshotRef = useRef(performanceMonitor.current);
+  const lmDiagnostics = lmDockService.getDiagnostics();
+  const lmDiagnosticsRef = useRef(lmDiagnostics);
+
+  useEffect(() => {
+    performanceSnapshotRef.current = performanceMonitor.current;
+  }, [performanceMonitor.current]);
+
+  useEffect(() => {
+    lmDiagnosticsRef.current = lmDiagnostics;
+  }, [lmDiagnostics]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.altKey && e.shiftKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        setShowDiagnostics((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  useEffect(() => {
+    const sample = () => {
+      const perf = performanceSnapshotRef.current;
+      if (!performanceMonitor.memorySupported || perf.heapUsedMB <= 0) return;
+
+      const diag = lmDiagnosticsRef.current;
+      const logPayload = {
+        heapUsedMB: perf.heapUsedMB,
+        heapLimitMB: perf.heapLimitMB,
+        heapFraction: perf.heapFraction,
+        fps: perf.fps,
+        avgFrameMs: perf.avgFrameMs,
+        obsWebSockets: obsConnected ? 1 : 0,
+        speechWebSockets: diag.status !== "idle" ? 1 : 0,
+        audioContexts: 0,
+        recognitionSessions: diag.status !== "idle" ? 1 : 0,
+        activeTimers: diag.activeTimers,
+        transcriptEntries: diag.entryCount,
+      };
+
+      if (perf.heapUsedMB >= 2000) {
+        console.error("[SpeechToScripture] High Memory Critical", logPayload);
+      } else if (perf.heapUsedMB >= 1500) {
+        console.warn("[SpeechToScripture] High Memory Warning", logPayload);
+      } else {
+        console.info("[SpeechToScripture] Memory sample", logPayload);
+      }
+    };
+
+    sample();
+    const interval = window.setInterval(sample, 60_000);
+    return () => window.clearInterval(interval);
+  }, [obsConnected, performanceMonitor.memorySupported]);
 
   // ── Start / Stop ──
   const [showStopConfirm, setShowStopConfirm] = useState(false);
@@ -660,8 +724,8 @@ export default function SpeechToScripturePage() {
   }, [snapshot.entries]);
 
   // ── Copy / Download transcript ──
-  const finalizedEntries = snapshot.entries.filter((e) => e.finalized);
-  const fullTranscript = finalizedEntries.map((e) => e.text).join("\n");
+  const finalizedEntries = useMemo(() => snapshot.entries.filter((e) => e.finalized), [snapshot.entries]);
+  const fullTranscript = useMemo(() => finalizedEntries.map((e) => e.text).join("\n"), [finalizedEntries]);
   const [copyToast, setCopyToast] = useState(false);
 
   const handleCopyTranscript = useCallback(() => {
@@ -799,11 +863,17 @@ export default function SpeechToScripturePage() {
     return snapshot.entries.filter((e) => e.text.toLowerCase().includes(q));
   }, [snapshot.entries, transcriptSearch]);
 
+  const visibleEntries = useMemo(() => filteredEntries.slice(-250), [filteredEntries]);
+  const hiddenEntryCount = Math.max(0, filteredEntries.length - visibleEntries.length);
+
   // ── Scripture engine active ──
   const _scriptureActive = isListening || snapshot.suggestions.length > 0 || snapshot.queue.length > 0;
   void _scriptureActive;
 
   const isBroadcastConnected = obsConnected;
+  const perf = performanceMonitor.current;
+  const diagnostics = lmDiagnostics;
+  const websocketCount = (obsConnected ? 1 : 0) + (snapshot.status !== "idle" ? 1 : 0);
 
   return (
     <div className="sts3-root">
@@ -908,6 +978,110 @@ export default function SpeechToScripturePage() {
           {whisperStatus === "loading" && <span className="sts3-banner-status">{t("verseAi.loadingModel")}</span>}
           {whisperStatus === "ready" && <span className="sts3-banner-status sts3-banner-status--ready">{t("verseAi.ready")}</span>}
         </div>
+      )}
+
+      {showDiagnostics && (
+        <section
+          aria-label="Speech diagnostics"
+          style={{
+            position: "fixed",
+            right: 16,
+            bottom: 16,
+            zIndex: 1200,
+            width: 360,
+            maxWidth: "calc(100vw - 32px)",
+            border: "1px solid var(--border)",
+            borderRadius: 14,
+            background: "rgba(12, 14, 18, 0.96)",
+            boxShadow: "0 18px 60px rgba(0, 0, 0, 0.35)",
+            color: "var(--text)",
+            padding: 14,
+            backdropFilter: "blur(10px)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: "0.8rem", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+                Hidden Diagnostics
+              </div>
+              <div style={{ fontSize: "1rem", fontWeight: 700 }}>Speech-to-Scripture</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowDiagnostics(false)}
+              style={{
+                border: "1px solid var(--border)",
+                background: "transparent",
+                color: "var(--text-muted)",
+                borderRadius: 999,
+                padding: "4px 10px",
+                fontSize: "0.75rem",
+                cursor: "pointer",
+              }}
+            >
+              Close
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>RAM Usage</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>
+                {performanceMonitor.memorySupported ? `${perf.heapUsedMB} MB` : "Unsupported"}
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                {performanceMonitor.memorySupported && perf.heapLimitMB > 0 ? `of ${perf.heapLimitMB} MB` : "performance.memory unavailable"}
+              </div>
+            </div>
+
+            <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>CPU / Render</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>{perf.fps} FPS</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                {perf.avgFrameMs} ms/frame
+              </div>
+            </div>
+
+            <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>WebSocket Count</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>{websocketCount}</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                OBS {obsConnected ? "connected" : "disconnected"} · Speech {snapshot.status !== "idle" ? "active" : "idle"}
+              </div>
+            </div>
+
+            <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Audio Context Count</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>0</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                Mic capture runs in Rust, not the browser
+              </div>
+            </div>
+
+            <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Recognition Sessions</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>{snapshot.status !== "idle" ? 1 : 0}</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                Session token {diagnostics.sessionToken}
+              </div>
+            </div>
+
+            <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Active Timers</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>{diagnostics.activeTimers}</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                poll, pause, quote search, interim search
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, fontSize: "0.75rem", color: "var(--text-muted)" }}>
+            <span>Entries: {diagnostics.entryCount}</span>
+            <span>Queue: {diagnostics.queueCount}</span>
+            <span>Suggestions: {diagnostics.suggestionCount}</span>
+            <span>Finalized chunks: {diagnostics.finalizedChunkCount}</span>
+          </div>
+        </section>
       )}
 
       {/* ── Main Layout ── */}
@@ -1050,8 +1224,20 @@ export default function SpeechToScripturePage() {
               )}
 
               {/* Transcript entries */}
-              {filteredEntries.map((entry) => {
-                const isActive = entry === filteredEntries[filteredEntries.length - 1] && entry.finalized;
+              {hiddenEntryCount > 0 && (
+                <div className="sts3-transcript-item sts3-transcript-item--placeholder">
+                  <div className="sts3-transcript-time"></div>
+                  <div className="sts3-transcript-text-wrap">
+                    <div className="sts3-t-dot" />
+                    <div className="sts3-transcript-text sts3-transcript-text--muted">
+                      Showing latest {visibleEntries.length} of {filteredEntries.length} transcript lines
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {visibleEntries.map((entry) => {
+                const isActive = entry === visibleEntries[visibleEntries.length - 1] && entry.finalized;
                 const isCopied = copiedId === entry.id;
                 return (
                   <div

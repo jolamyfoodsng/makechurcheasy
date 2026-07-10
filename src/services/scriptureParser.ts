@@ -27,6 +27,26 @@ export interface ParsedReference {
   isRelative: boolean;
 }
 
+export type ScriptureReferenceKind =
+  | "book_reference"
+  | "chapter_reference"
+  | "verse_reference"
+  | "range_reference"
+  | "relative_reference";
+
+export interface ScriptureSpeechState {
+  lastBook: string | null;
+  lastChapter: number | null;
+  lastVerse: number | null;
+  lastReferenceTimestamp: number;
+}
+
+export interface ScriptureSpeechResolution extends ParsedReference {
+  kind: ScriptureReferenceKind;
+  shouldProject: boolean;
+  isCorrection: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Book aliases — spoken forms, misspellings, abbreviations, Nigerian accents
 // ---------------------------------------------------------------------------
@@ -371,6 +391,9 @@ aliases("Hebrews", ["hebrews", "heb", "he", "hebrew", "ebrews", "heebrews", "heb
 aliases("James", ["james", "jas", "ja", "jm", "jims", "jams", "jaymes", "jaims"]);
 numberedBook("Peter", "1 Peter", ["pet", "pe", "pt", "peter"]);
 numberedBook("John", "1 John", ["jn", "jo", "joh", "john"]);
+aliases("1 Peter", ["firstpetter", "first petter", "first peta"]);
+aliases("1 Corinthians", ["first cors"]);
+aliases("2 Timothy", ["second timoty"]);
 aliases("Jude", ["jude", "jud", "jd", "judy", "jood", "joode", "judde"]);
 aliases("Revelation", [
   "revelation", "rev", "re", "rv", "revelations", "revelating",
@@ -396,6 +419,9 @@ const NUMBER_WORDS: Record<string, number> = {
   seventy: 70, eighty: 80, ninety: 90, hundred: 100,
   first: 1, second: 2, third: 3, fourth: 4, fifth: 5,
 };
+
+const CORRECTION_PREFIX_RE = /^(?:sorry(?:\s+sorry)?|rather|i\s+mean|correction|let\s+me\s+correct\s+that|make\s+that|change\s+that\s+to|not)\b\s*/i;
+const CORRECTION_WINDOW_MS = 8_000;
 
 function parseNumberWord(text: string): number | null {
   const key = text.toLowerCase().trim();
@@ -564,7 +590,10 @@ export function parseScriptureIntent(text: string): ScriptureIntent {
   if (directRef.length > 0) {
     const primary = directRef[0];
     if (primary.book) {
-      const hasVerse = primary.verse != null;
+      const hasVerse = primary.verse != null || primary.endVerse != null;
+      if (primary.chapter === null && !hasVerse) {
+        return null;
+      }
       const candidates = directRef
         .filter((r) => r.book === primary.book && r.chapter !== null)
         .map((r) => ({ chapter: r.chapter!, verse: r.verse ?? undefined, endVerse: r.endVerse ?? undefined }));
@@ -572,7 +601,7 @@ export function parseScriptureIntent(text: string): ScriptureIntent {
       return {
         type: "open",
         book: primary.book,
-        chapter: primary.chapter ?? 1,
+        chapter: primary.chapter!,
         verse: primary.verse ?? undefined,
         endVerse: primary.endVerse ?? undefined,
         navigationOnly: !hasVerse,
@@ -723,7 +752,7 @@ function cleanTranscript(text: string): string {
     .replace(/\b(bible|scripture|passage|text|word|page)\b/g, " ")
     .replace(/\b(chapter|chap|ch|chapt|capter|captor|capture)\b/g, " chapter ")
     .replace(/\b(verse|verses|vs|vrs|vas|vass|buzz|by|bi|bah|bus|bas)\b/g, " verse ")
-    .replace(/[^\w\s:]/g, " ")
+    .replace(/[^\w\s:-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -1028,6 +1057,191 @@ export function parseScriptureReferenceAll(text: string): ParsedReference[] {
   }
 
   return [result];
+}
+
+export function createScriptureSpeechState(): ScriptureSpeechState {
+  return {
+    lastBook: null,
+    lastChapter: null,
+    lastVerse: null,
+    lastReferenceTimestamp: 0,
+  };
+}
+
+function stripCorrectionPrefix(text: string): { text: string; isCorrection: boolean } {
+  let current = text.trim();
+  let isCorrection = false;
+
+  while (current) {
+    const next = current.replace(CORRECTION_PREFIX_RE, "");
+    if (next === current) break;
+    current = next.trimStart();
+    isCorrection = true;
+  }
+
+  return { text: current, isCorrection };
+}
+
+function classifySpeechReference(reference: ParsedReference, hasCorrection: boolean): ScriptureReferenceKind {
+  if (reference.book && reference.chapter === null && reference.verse === null) {
+    return "book_reference";
+  }
+
+  if (reference.verse !== null && reference.endVerse !== null) {
+    return "range_reference";
+  }
+
+  if (reference.book && reference.chapter !== null) {
+    return reference.verse !== null ? "verse_reference" : "chapter_reference";
+  }
+
+  if (!reference.book && reference.chapter !== null && reference.verse !== null) {
+    return "relative_reference";
+  }
+
+  if (!reference.book && reference.chapter !== null) {
+    return "relative_reference";
+  }
+
+  if (!reference.book && reference.verse !== null) {
+    return hasCorrection ? "verse_reference" : "relative_reference";
+  }
+
+  return "relative_reference";
+}
+
+function updateSpeechState(state: ScriptureSpeechState, reference: ParsedReference, timestamp: number): void {
+  if (reference.book) {
+    state.lastBook = reference.book;
+  }
+  if (reference.chapter !== null) {
+    state.lastChapter = reference.chapter;
+  }
+  if (reference.verse !== null) {
+    state.lastVerse = reference.verse;
+  }
+  if (reference.book || reference.chapter !== null || reference.verse !== null) {
+    state.lastReferenceTimestamp = timestamp;
+  }
+}
+
+function resolveWithSpeechState(
+  parsed: ParsedReference,
+  state: ScriptureSpeechState,
+  isCorrection: boolean,
+  timestamp: number,
+): ParsedReference | null {
+  const resolved: ParsedReference = { ...parsed };
+
+  if (!resolved.book && state.lastBook && (resolved.chapter !== null || resolved.verse !== null)) {
+    resolved.book = state.lastBook;
+  }
+
+  if (resolved.book && resolved.chapter === null && resolved.verse !== null && state.lastChapter !== null) {
+    resolved.chapter = state.lastChapter;
+  }
+
+  if (resolved.book && resolved.chapter !== null && resolved.verse === null && isCorrection && state.lastVerse !== null) {
+    resolved.verse = state.lastVerse;
+  }
+
+  if (!resolved.book && !resolved.chapter && !resolved.verse) {
+    return null;
+  }
+
+  if (!resolved.book && !resolved.chapter && parsed.verse !== null) {
+    if (state.lastBook && state.lastChapter !== null) {
+      resolved.book = state.lastBook;
+      resolved.chapter = state.lastChapter;
+    } else {
+      return null;
+    }
+  }
+
+  if (!resolved.book && resolved.chapter !== null && state.lastBook) {
+    resolved.book = state.lastBook;
+  }
+
+  if (isCorrection && !resolved.book && state.lastBook && state.lastChapter !== null && parsed.verse !== null) {
+    resolved.book = state.lastBook;
+    resolved.chapter = state.lastChapter;
+  }
+
+  if (isCorrection && resolved.book && resolved.chapter === null && state.lastChapter !== null) {
+    resolved.chapter = state.lastChapter;
+  }
+
+  if (isCorrection && resolved.book && resolved.chapter !== null && resolved.verse === null && state.lastVerse !== null) {
+    resolved.verse = state.lastVerse;
+  }
+
+  if (resolved.book === null && state.lastBook && resolved.chapter !== null) {
+    resolved.book = state.lastBook;
+  }
+
+  if (resolved.book === null) {
+    return null;
+  }
+
+  updateSpeechState(state, resolved, timestamp);
+  return resolved;
+}
+
+/**
+ * Resolve spoken scripture using conversational state.
+ * This is the fast live path for book/chapter continuations and corrections.
+ */
+export function resolveScriptureSpeech(
+  text: string,
+  state: ScriptureSpeechState,
+  timestamp = Date.now(),
+): ScriptureSpeechResolution | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const lower = trimmed.toLowerCase();
+  const { text: stripped, isCorrection } = stripCorrectionPrefix(lower);
+  const normalized = stripped.trim();
+  if (!normalized) return null;
+
+  const bareNumber = normalized.match(/^(?:verse\s+)?(\d+|one|two|three|first|second|third|1st|2nd|3rd)$/i);
+  if (bareNumber && state.lastBook && state.lastChapter !== null && (timestamp - state.lastReferenceTimestamp) <= CORRECTION_WINDOW_MS) {
+    const verse = parseNumberWord(bareNumber[1]);
+    if (verse !== null) {
+      const resolved: ParsedReference = {
+        book: state.lastBook,
+        chapter: state.lastChapter,
+        verse,
+        endVerse: null,
+        isRelative: true,
+      };
+      updateSpeechState(state, resolved, timestamp);
+      return {
+        ...resolved,
+        kind: "verse_reference",
+        shouldProject: true,
+        isCorrection,
+      };
+    }
+  }
+
+  const explicit = parseScriptureReference(normalized);
+  let parsed = explicit;
+
+  if (!parsed) return null;
+
+  const resolved = resolveWithSpeechState(parsed, state, isCorrection, timestamp);
+  if (!resolved) return null;
+
+  const kind = classifySpeechReference(resolved, isCorrection);
+  const shouldProject = resolved.verse !== null || resolved.endVerse !== null;
+
+  return {
+    ...resolved,
+    kind,
+    shouldProject,
+    isCorrection,
+  };
 }
 
 /**

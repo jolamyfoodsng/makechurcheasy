@@ -28,6 +28,8 @@ interface UpdateModalProps {
 type UpdateStatus = "prompt" | "downloading" | "installing" | "relaunching" | "error";
 
 export default function UpdateModal({ result, onDismiss }: UpdateModalProps) {
+  if (!result.available || !result.update) return null;
+
   const [status, setStatus] = useState<UpdateStatus>("prompt");
   const [progress, setProgress] = useState<DownloadProgress>({ contentLength: 0, downloaded: 0 });
   const [errorMsg, setErrorMsg] = useState("");
@@ -45,8 +47,6 @@ export default function UpdateModal({ result, onDismiss }: UpdateModalProps) {
   };
 
   const handleUpdate = useCallback(async () => {
-    if (!result.update) return;
-
     try {
       setStatus("downloading");
       await downloadAndInstallUpdate(

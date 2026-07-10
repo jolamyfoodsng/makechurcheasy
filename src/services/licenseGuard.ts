@@ -634,7 +634,7 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
         icon: "timer_off",
         title: "Free Trial Ended",
         description:
-          "Your 14-day trial has expired. Subscribe to continue using MakeChurchEasy.",
+          "Your Growth trial has expired. Subscribe to continue using MakeChurchEasy.",
         primaryAction: "subscribe",
         primaryLabel: "Choose a Plan",
       };

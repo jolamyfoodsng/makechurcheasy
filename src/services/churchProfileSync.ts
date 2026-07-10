@@ -11,6 +11,7 @@
 
 import { updateSettings } from "../multiview/mvStore";
 import { getSession, initAuthStore } from "./authService";
+import { applyInterfaceLanguagePreference } from "./interfaceLanguage";
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
@@ -31,8 +32,12 @@ interface ChurchSpeaker {
 
 interface ChurchProfile {
   churchName: string;
+  country?: string;
   branding: ChurchBranding;
   speakers: ChurchSpeaker[];
+  presentationDefaults?: {
+    language?: string;
+  };
 }
 
 export interface SyncResult {
@@ -138,6 +143,13 @@ export async function syncChurchProfile(): Promise<SyncResult> {
       patch.pastorSpeakers = profile.speakers.map((s) => ({ name: s.name, role: s.role, isMain: s.isMain }));
       const mainSpeaker = profile.speakers.find((s) => s.isMain);
       patch.mainPastorName = mainSpeaker?.name ?? "";
+    }
+
+    if (profile.presentationDefaults?.language) {
+      await applyInterfaceLanguagePreference(profile.presentationDefaults.language, {
+        country: profile.country,
+        broadcast: true,
+      });
     }
 
     // Logo — download URL to disk via existing save_upload_file Tauri command

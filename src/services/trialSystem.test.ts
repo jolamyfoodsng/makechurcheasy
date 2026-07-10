@@ -30,8 +30,8 @@ interface TrialUser {
   subscriptionExpiresAt?: string;
 }
 
-/** Activate a 14-day trial for a free user. */
-function activateTrial(user: TrialUser, now: Date, durationDays = 14): TrialUser {
+/** Activate a 20-day trial for a free user. */
+function activateTrial(user: TrialUser, now: Date, durationDays = 20): TrialUser {
   const endsAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
   return {
     ...user,
@@ -50,9 +50,9 @@ function isTrialActive(user: TrialUser, now: Date): boolean {
   return new Date(user.trial.endsAt).getTime() > now.getTime();
 }
 
-/** Get effective plan — trial users on "free" get "basic" entitlements. */
+/** Get effective plan — trial users on "free" get Growth entitlements. */
 function getEffectivePlan(user: TrialUser, now: Date): string {
-  if (user.plan === "free" && isTrialActive(user, now)) return "basic";
+  if (user.plan === "free" && isTrialActive(user, now)) return "growth";
   return user.plan;
 }
 
@@ -105,17 +105,17 @@ describe("Trial activation", () => {
     const result = activateTrial(user, now);
 
     expect(result.trial?.startedAt).toBe("2026-04-01T00:00:00.000Z");
-    expect(result.trial?.endsAt).toBe("2026-04-15T00:00:00.000Z");
-    expect(result.trial?.durationDays).toBe(14);
+    expect(result.trial?.endsAt).toBe("2026-04-21T00:00:00.000Z");
+    expect(result.trial?.durationDays).toBe(20);
   });
 
-  it("defaults to 14-day duration", () => {
+  it("defaults to 20-day duration", () => {
     const user: TrialUser = { _id: "u1", email: "a@test.com", name: "A", plan: "free", credits: 25 };
     const now = new Date("2026-04-01T00:00:00Z");
     const result = activateTrial(user, now);
 
     const daysDiff = (new Date(result.trial?.endsAt!).getTime() - new Date(result.trial?.startedAt!).getTime()) / (24 * 60 * 60 * 1000);
-    expect(daysDiff).toBe(14);
+    expect(daysDiff).toBe(20);
   });
 
   it("does not change plan (still 'free' during trial)", () => {
@@ -150,12 +150,12 @@ describe("Trial active check", () => {
 });
 
 describe("Effective plan during trial", () => {
-  it("free user with active trial gets basic", () => {
+  it("free user with active trial gets growth", () => {
     const user: TrialUser = {
       _id: "u1", email: "a@test.com", name: "A", plan: "free", credits: 25,
       trial: { endsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() },
     };
-    expect(getEffectivePlan(user, new Date())).toBe("basic");
+    expect(getEffectivePlan(user, new Date())).toBe("growth");
   });
 
   it("free user with expired trial stays free", () => {

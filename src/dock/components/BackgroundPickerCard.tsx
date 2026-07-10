@@ -97,7 +97,7 @@ export default function BackgroundPickerCard({
   displayMode = "single",
 }: Props) {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<"background" | "text">("background");
+  const [activeTab, setActiveTab] = useState<"background" | "text" | "compare">("background");
   const [bgType, setBgType] = useState<BackgroundType>(() => {
     try {
       const stored = localStorage.getItem(getUserScopedKey(BG_TYPE_KEY));
@@ -108,6 +108,14 @@ export default function BackgroundPickerCard({
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const compareBackdropValue: "off" | "theme" | "color" =
+    bgType === "off" ? "off" : bgType === "color" ? "color" : "theme";
+
+  useEffect(() => {
+    if (displayMode !== "compare" && activeTab === "compare") {
+      setActiveTab("background");
+    }
+  }, [activeTab, displayMode]);
 
   const handleTypeChange = useCallback((type: BackgroundType) => {
     setBgType(type);
@@ -238,6 +246,20 @@ export default function BackgroundPickerCard({
           >
             <Icon name="text_fields" size={13} />
             <span>{t('bgPicker.text')}</span>
+          </button>
+          <button
+            type="button"
+            className={`dtb-bg-picker__tab${activeTab === "compare" ? " dtb-bg-picker__tab--active" : ""}`}
+            onClick={() => {
+              if (displayMode !== "compare") return;
+              setActiveTab("compare");
+            }}
+            disabled={displayMode !== "compare"}
+            aria-disabled={displayMode !== "compare"}
+            title={displayMode === "compare" ? t("bgPicker.compare", "Compare") : t("bgPicker.compareDisabled", "Enable compare mode to edit compare settings")}
+          >
+            <Icon name="compare_arrows" size={13} />
+            <span>{t("bgPicker.compare", "Compare")}</span>
           </button>
         </div>
 
@@ -487,13 +509,36 @@ export default function BackgroundPickerCard({
             />
           )}
 
-          {/* Compare Layout (only in compare mode) */}
-          {displayMode === "compare" && (
-            <CompareLayoutSection
-              quickSettings={quickSettings}
-              onQuickSettingsChange={onQuickSettingsChange}
-            />
+            </>
           )}
+
+          {/* Compare Tab */}
+          {displayMode === "compare" && activeTab === "compare" && (
+            <>
+              <div className="dtb-bg-picker__settings">
+                <div className="dtb-section-title">{t("bgPicker.compareBackdrop", "Compare Backdrop")}</div>
+                <p className="dtb-colors__preset-desc">
+                  {t("bgPicker.compareBackdropHint", "Choose the background treatment used behind compare mode.")}
+                </p>
+                <label className="dtb-position-label" htmlFor="dtb-bg-picker-compare-backdrop">
+                  {t("bgPicker.backdrop", "Backdrop")}
+                </label>
+                <select
+                  id="dtb-bg-picker-compare-backdrop"
+                  className="dock-select dtb-bg-picker__select"
+                  value={compareBackdropValue}
+                  onChange={(event) => handleTypeChange(event.target.value as BackgroundType)}
+                >
+                  <option value="off">{t("bgPicker.transparent", "Transparent")}</option>
+                  <option value="theme">{t("bgPicker.theme", "Theme")}</option>
+                  <option value="color">{t("common.color")}</option>
+                </select>
+              </div>
+
+              <CompareLayoutSection
+                quickSettings={quickSettings}
+                onQuickSettingsChange={onQuickSettingsChange}
+              />
             </>
           )}
         </div>
@@ -1744,96 +1789,99 @@ function CompareLayoutSection({
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const { t } = useTranslation();
+  const activePreset = COMPARE_PRESETS.find(
+    (preset) =>
+      quickSettings.compareTranslationWidth === preset.width &&
+      quickSettings.compareTranslationGap === preset.gap,
+  );
+  const presetValue = activePreset
+    ? `${activePreset.width}:${activePreset.gap}`
+    : "custom";
 
   return (
-    <div className="dtb-colors__section dtb-colors__section--collapsible">
-      <button
-        type="button"
-        className="dtb-colors__collapsible-header"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}>
-        <span className="dtb-colors__label">Compare Layout</span>
-        <Icon name={open ? "expand_less" : "expand_more"} size={14} />
-      </button>
-      {open && (
-        <>
-          {/* ── Translation Panel Width slider ── */}
-          <div className="dtb-slider-field">
-            <div className="dtb-slider-field__head">
-              <span>Translation Panel Width</span>
-              <span className="dtb-slider-field__value">
-                {quickSettings.compareTranslationWidth}%
-              </span>
-            </div>
-            <input
-              type="range"
-              className="dtb-slider"
-              min={30}
-              max={50}
-              step={1}
-              value={quickSettings.compareTranslationWidth}
-              onChange={(e) =>
-                onQuickSettingsChange((prev) => ({
-                  ...prev,
-                  compareTranslationWidth: Number(e.target.value),
-                }))
-              }
-              aria-label="Translation Panel Width"
-            />
-          </div>
+    <div className="dtb-bg-picker__settings">
+      <div className="dtb-section-title">{t("bgPicker.compareLayout", "Compare Layout")}</div>
+      <p className="dtb-colors__preset-desc">
+        {t("bgPicker.compareLayoutHint", "Tune the translation widths and spacing for compare mode.")}
+      </p>
 
-          {/* ── Space Between Translations slider ── */}
-          <div className="dtb-slider-field">
-            <div className="dtb-slider-field__head">
-              <span>Space Between Translations</span>
-              <span className="dtb-slider-field__value">
-                {quickSettings.compareTranslationGap}px
-              </span>
-            </div>
-            <input
-              type="range"
-              className="dtb-slider"
-              min={0}
-              max={200}
-              step={1}
-              value={quickSettings.compareTranslationGap}
-              onChange={(e) =>
-                onQuickSettingsChange((prev) => ({
-                  ...prev,
-                  compareTranslationGap: Number(e.target.value),
-                }))
-              }
-              aria-label="Space Between Translations"
-            />
-          </div>
+      <div className="dtb-position-row">
+        <label className="dtb-position-label" htmlFor="dtb-compare-layout-preset">
+          {t("bgPicker.layoutPreset", "Layout Preset")}
+        </label>
+        <select
+          id="dtb-compare-layout-preset"
+          className="dock-select dtb-bg-picker__select"
+          value={presetValue}
+          onChange={(e) => {
+            const preset = COMPARE_PRESETS.find((item) => `${item.width}:${item.gap}` === e.target.value);
+            if (!preset) return;
+            onQuickSettingsChange((prev) => ({
+              ...prev,
+              compareTranslationWidth: preset.width,
+              compareTranslationGap: preset.gap,
+            }));
+          }}
+        >
+          <option value="custom">{t("bgPicker.custom", "Custom")}</option>
+          {COMPARE_PRESETS.map((preset) => (
+            <option key={preset.label} value={`${preset.width}:${preset.gap}`}>
+              {preset.label} ({preset.width}% / {preset.gap}px)
+            </option>
+          ))}
+        </select>
+      </div>
 
-          {/* ── Compare Layout Presets ── */}
-          <div className="dtb-colors__presets" style={{ padding: "0 12px 4px" }}>
-            {COMPARE_PRESETS.map((preset) => {
-              const isActive =
-                quickSettings.compareTranslationWidth === preset.width &&
-                quickSettings.compareTranslationGap === preset.gap;
-              return (
-                <button
-                  key={preset.label}
-                  type="button"
-                  className={`dtb-colors__preset${isActive ? " dtb-colors__preset--active" : ""}`}
-                  onClick={() =>
-                    onQuickSettingsChange((prev) => ({
-                      ...prev,
-                      compareTranslationWidth: preset.width,
-                      compareTranslationGap: preset.gap,
-                    }))
-                  }>
-                  <span className="dtb-colors__preset-label">{preset.label}</span>
-                  <span className="dtb-colors__preset-hint">{preset.width}% / {preset.gap}px</span>
-                </button>
-              );
-            })}
-          </div>
-        </>
-      )}
+      {/* ── Translation Panel Width slider ── */}
+      <div className="dtb-slider-field">
+        <div className="dtb-slider-field__head">
+          <span>{t("bgPicker.translationPanelWidth", "Translation Panel Width")}</span>
+          <span className="dtb-slider-field__value">
+            {quickSettings.compareTranslationWidth}%
+          </span>
+        </div>
+        <input
+          type="range"
+          className="dtb-slider"
+          min={30}
+          max={50}
+          step={1}
+          value={quickSettings.compareTranslationWidth}
+          onChange={(e) =>
+            onQuickSettingsChange((prev) => ({
+              ...prev,
+              compareTranslationWidth: Number(e.target.value),
+            }))
+          }
+          aria-label={t("bgPicker.translationPanelWidth", "Translation Panel Width")}
+        />
+      </div>
+
+      {/* ── Space Between Translations slider ── */}
+      <div className="dtb-slider-field">
+        <div className="dtb-slider-field__head">
+          <span>{t("bgPicker.spaceBetweenTranslations", "Space Between Translations")}</span>
+          <span className="dtb-slider-field__value">
+            {quickSettings.compareTranslationGap}px
+          </span>
+        </div>
+        <input
+          type="range"
+          className="dtb-slider"
+          min={0}
+          max={200}
+          step={1}
+          value={quickSettings.compareTranslationGap}
+          onChange={(e) =>
+            onQuickSettingsChange((prev) => ({
+              ...prev,
+              compareTranslationGap: Number(e.target.value),
+            }))
+          }
+          aria-label={t("bgPicker.spaceBetweenTranslations", "Space Between Translations")}
+        />
+      </div>
     </div>
   );
 }

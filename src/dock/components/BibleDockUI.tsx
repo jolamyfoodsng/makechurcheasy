@@ -251,6 +251,7 @@ interface BibleDockContainerProps {
   isChapterDropdownOpen: boolean;
   isVerseDropdownOpen: boolean;
   availableTranslations: Array<{ value: string; label: string }>;
+  compareEnabled?: boolean;
   onBookToggle: (event: React.MouseEvent) => void;
   onBookSelect: (book: string) => void;
   onChapterToggle: (event: React.MouseEvent) => void;
@@ -282,6 +283,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
   isChapterDropdownOpen,
   isVerseDropdownOpen,
   availableTranslations: _availableTranslations,
+  compareEnabled = false,
   onBookToggle,
   onBookSelect,
   onChapterToggle,
@@ -331,6 +333,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
             availableTranslations={_availableTranslations}
             onVersionChange={onVersionChange}
             onTranslationsChanged={onTranslationsChanged}
+            disabled={compareEnabled}
           />
           {!isCompact && (
             <BibleTopbar

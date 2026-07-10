@@ -6321,12 +6321,44 @@
   gap: 3px;
 }
 
+.dock-bible-compare-popover__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+
 .dock-bible-compare-popover__label {
   font-size: 10px;
   font-weight: 600;
   color: var(--dock-text-dim, #6B7280);
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+.dock-bible-compare-popover__toggle-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dock-bible-compare-popover__toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dock-bible-compare-popover__hint {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--dock-text-dim, #6B7280);
+}
+
+.dock-bible-compare-popover__select {
+  min-height: 35px;
+  font-size: 12px;
 }
 
 .dock-bible-compare-popover__send {
@@ -7866,6 +7898,11 @@
   will-change: transform;
 }
 
+.dock-bible-verse-row--compare {
+  align-items: stretch;
+  gap: 12px;
+}
+
 .dock-bible-verse-row:active {
   transform: scale(0.98);
   transition: transform 0.08s ease;
@@ -7912,12 +7949,58 @@
 }
 
 .dock-bible-verse-row__text {
-  min-width: 0;
+  min-width: 200px;
   color: var(--dock-text);
   font-size: 12px;
   line-height: 1.55;
   word-break: break-word;
   letter-spacing: 0.01em;
+}
+
+.translation-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dock-accent) 18%, var(--dock-surface));
+  color: var(--dock-accent-strong, #93C5FD);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dock-bible-compare-grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  min-width: 0;
+}
+
+.dock-bible-compare-card,
+.dock-bible-compare-block {
+  min-width: 0;
+}
+
+.dock-bible-compare-card__text,
+.dock-bible-compare-block__text {
+  color: var(--dock-text);
+  font-size: 12px;
+  line-height: 1.55;
+  word-break: break-word;
+  letter-spacing: 0.01em;
+}
+
+.dock-bible-compare-stack {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  min-width: 0;
 }
 
 .dock-bible-verse-row__actions {
@@ -11236,6 +11319,15 @@
 
 .bible-version-library__trigger:hover {
   border-color: color-mix(in srgb, var(--dock-accent) 28%, var(--dock-border));
+}
+
+.bible-version-library__trigger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: color-mix(in srgb, var(--dock-surface-alt) 58%, var(--dock-surface));
+  border-color: color-mix(in srgb, var(--dock-border) 60%, transparent);
+  color: var(--dock-text-dim);
+  box-shadow: none;
 }
 
 .bible-version-library__trigger-abbr {
@@ -21015,22 +21107,25 @@
 .dtb-bg-picker__tabs {
   display: flex;
   gap: 2px;
-  padding: 0 12px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--dock-border);
+  padding: 4px;
+  margin-bottom: 12px;
+  border: 1px solid var(--dock-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dock-surface-1) 72%, var(--dock-surface));
 }
 
 .dtb-bg-picker__tab {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  min-height: 44px;
+  padding: 0 14px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--dock-text-tertiary);
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 10px;
   cursor: pointer;
   transition: all 0.15s ease;
   flex: 1;
@@ -21042,13 +21137,33 @@
   background: var(--dock-surface-hover);
 }
 
+.dtb-bg-picker__tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: transparent;
+}
+
 .dtb-bg-picker__tab--active {
-  color: var(--dock-accent);
-  border-bottom-color: var(--dock-accent);
+  color: #fff;
+  background: var(--dock-accent);
 }
 
 .dtb-bg-picker__tab svg {
   flex-shrink: 0;
+}
+
+.dtb-position-options--wrap {
+  flex-wrap: wrap;
+}
+
+.dtb-bg-picker__select {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 12px;
+  padding-left: 12px;
+  padding-right: 34px;
+  background-position: right 12px center;
+  font-size: 12px;
 }
 
 /* Header */

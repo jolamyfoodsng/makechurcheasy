@@ -20,10 +20,10 @@ dockClient.init();
 // Listen for language changes from the main app
 dockClient.onState((msg) => {
   if (msg.type === "state:language-changed") {
-    const payload = msg.payload as { language: string; code: string } | null;
+    const payload = msg.payload as { code: string } | null;
     if (payload?.code) {
       void i18n.changeLanguage(payload.code);
-      localStorage.setItem("mce_interface_language", payload.language);
+      localStorage.setItem("mce_interface_language", payload.code);
     }
   }
 });

@@ -21,6 +21,7 @@ import { getUserScopedKey } from "../services/userScopedStorage";
 export interface PlanPrice {
   monthly: number;
   yearly: number;
+  introductoryMonthly?: number;
 }
 
 export interface CountryPricing {
@@ -34,7 +35,8 @@ export interface CountryPricing {
     pro: PlanPrice;
   };
   pricingVersion: number;
-  source: "country" | "regional" | "global";
+  region?: "NG" | "AFRICA" | "ROW";
+  source: "country" | "billing" | "geoip" | "override" | "regional" | "global";
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -123,6 +125,7 @@ interface UseCountryPricingResult {
     planId: "basic" | "growth" | "pro",
     cycle: "monthly" | "yearly"
   ) => string;
+  getIntroPrice: (planId: "basic" | "growth" | "pro") => number | undefined;
   currency: string;
   currencySymbol: string;
 }
@@ -203,6 +206,13 @@ export function useCountryPricing(): UseCountryPricingResult {
     [getPlanPrice, formatPrice]
   );
 
+  const getIntroPrice = useCallback(
+    (planId: "basic" | "growth" | "pro"): number | undefined => {
+      return pricing?.plans[planId]?.introductoryMonthly;
+    },
+    [pricing]
+  );
+
   return {
     pricing,
     loading,
@@ -211,6 +221,7 @@ export function useCountryPricing(): UseCountryPricingResult {
     formatPrice,
     getPlanPrice,
     getFormattedPlanPrice,
+    getIntroPrice,
     currency: pricing?.currency ?? "",
     currencySymbol: pricing?.currencySymbol ?? "",
   };
