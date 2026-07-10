@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, initial-scale=1">
+  <title>MCE Bible Overlay</title>
+  <style>
+    /* ── Shared: Font-face ── */
+    @font-face {
+      font-family: 'Charis SIL';
+      src: url('fonts/CharisSIL-Regular.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    @font-face {
+      font-family: 'Charis SIL';
+      src: url('fonts/CharisSIL-Bold.woff2') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+    }
+
+    /* ── Shared: Reset ── */
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      background: transparent !important;
+      color: #ffffff;
+      --font-size: 48px;
+      --ref-font-size: 24px;
+      --line-height: 1.6;
+      --text-align: center;
+      --text-shadow: none;
+      --outline-width: 0px;
+      --outline-color: transparent;
+      --ref-font-weight: 400;
+      --ref-font-color: #ffffff;
+      --ref-text-transform: none;
+      --ref-letter-spacing: 0px;
+      --ref-opacity: 1;
+      --ref-spacing: 24px;
+      --ref-width: 100%;
+      --ref-bg-color: transparent;
+      --ref-bg-padding: 0;
+      --ref-bg-radius: 0;
+      --ref-bg-border: none;
+      --bg-color: transparent;
+      --bg-image: none;
+      --bg-opacity: 1;
+      --bg-shade-gradient: linear-gradient(180deg, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.42));
+      --bg-shade-display: block;
+      --padding: 60px;
+      --safe-area: 40px;
+      --anim-duration: 152ms;
+      --bg-enter-duration: 64ms;
+      --text-enter-duration: 82ms;
+      --text-enter-delay: 12ms;
+      --text-transform: none;
+      --logo-size: 80px;
+    }
+
+    html {
+      background: transparent !important;
+    }
+
+    /* ── Shared: Background layers ── */
+    #background {
+      position: absolute;
+      inset: 0;
+      background-color: var(--bg-color);
+      background-image: var(--bg-image);
+      background-size: cover;
+      background-position: center;
+      opacity: var(--bg-opacity);
+      z-index: 0;
+    }
+
+    #bg-crossfade {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    #background-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+      z-index: 0;
+    }
+
+    /* ── Shared: Logo ── */
+    #logo {
+      position: absolute;
+      width: var(--logo-size);
+      height: var(--logo-size);
+      object-fit: contain;
+      z-index: 10;
+      display: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #logo.visible {
+      display: block;
+      opacity: 1;
+    }
+
+    #logo.bottom-right {
+      bottom: var(--safe-area);
+      right: var(--safe-area);
+    }
+
+    #logo.bottom-left {
+      bottom: var(--safe-area);
+      left: var(--safe-area);
+    }
+
+    #logo.top-right {
+      top: var(--safe-area);
+      right: var(--safe-area);
+    }
+
+    #logo.top-left {
+      top: var(--safe-area);
+      left: var(--safe-area);
+    }
+
+    /* ── Shared: Verse container ── */
+    #verse-container {
+      display: flex;
+      flex-direction: column;
+      align-items: var(--text-align, center);
+      justify-content: center;
+      width: 100%;
+    }
+
+    #verse-text {
+      font-size: var(--font-size);
+      font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      line-height: var(--line-height);
+      color: #ffffff;
+      text-align: var(--text-align);
+      text-shadow: var(--text-shadow);
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
+      text-transform: var(--text-transform);
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    #reference {
+      font-size: var(--ref-font-size);
+      font-weight: var(--ref-font-weight);
+      color: var(--ref-font-color);
+      text-align: var(--text-align);
+      margin-top: var(--ref-spacing);
+      width: var(--ref-width);
+      padding: var(--ref-bg-padding);
+      background: var(--ref-bg-color);
+      border-radius: var(--ref-bg-radius);
+      border: var(--ref-bg-border);
+      opacity: var(--ref-opacity);
+      text-transform: var(--ref-text-transform);
+      letter-spacing: var(--ref-letter-spacing);
+    }
+
+    #reference.top {
+      margin-top: 0;
+      margin-bottom: var(--ref-spacing);
+    }
+
+    #reference:empty {
+      display: none;
+    }
+
+    /* ══════════════════════════════════════════════════════
+       FULLSCREEN MODE
+       ══════════════════════════════════════════════════════ */
+    body:not([data-mode="lower-third"]) #background-shade {
+      position: absolute;
+      inset: 0;
+      background: var(--bg-shade-gradient);
+      display: var(--bg-shade-display);
+      z-index: 2;
+    }
+
+    body:not([data-mode="lower-third"]) #fs-content {
+      position: relative;
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      align-items: var(--text-align, center);
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      padding: var(--padding);
+      opacity: 1;
+      transition: opacity var(--anim-duration) ease;
+    }
+
+    body:not([data-mode="lower-third"]) #fs-content.hidden {
+      opacity: 0;
+    }
+
+    body:not([data-mode="lower-third"]) #fs-content.blank {
+      opacity: 0;
+    }
+
+    /* Compare layout (fullscreen only) */
+    #compare-layout {
+      display: none;
+      grid-template-columns: minmax(0, 40fr) minmax(0, 40fr);
+      gap: 40px;
+      width: 100%;
+      height: 100%;
+      padding: var(--padding);
+      position: relative;
+      z-index: 3;
+    }
+
+    body:not([data-mode="lower-third"]) #compare-layout.is-visible {
+      display: grid;
+    }
+
+    .compare-column {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 38px;
+    }
+
+    .compare-column__text-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .compare-column__verse {
+      font-size: var(--compare-font-size, 36px);
+      font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      line-height: var(--compare-line-height, 1.4);
+      color: #ffffff;
+      text-align: var(--text-align);
+      text-shadow: var(--text-shadow);
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    .compare-column__reference {
+      font-size: var(--compare-ref-font-size, 20px);
+      font-weight: var(--ref-font-weight);
+      color: var(--ref-font-color);
+      text-align: var(--text-align);
+      margin-top: 12px;
+      width: var(--ref-width);
+      padding: var(--ref-bg-padding);
+      background: var(--ref-bg-color);
+      border-radius: var(--ref-bg-radius);
+      border: var(--ref-bg-border);
+      opacity: var(--ref-opacity);
+    }
+
+    .compare-column__translation {
+      font-size: var(--compare-ref-meta-size, 12px);
+      color: rgba(255, 255, 255, 0.5);
+      text-align: var(--text-align);
+      margin-top: 4px;
+    }
+
+    /* ══════════════════════════════════════════════════════
+       LOWER-THIRD MODE
+       ══════════════════════════════════════════════════════ */
+    body[data-mode="lower-third"] #fs-content {
+      display: none !important;
+    }
+
+    body[data-mode="lower-third"] #background-shade {
+      display: none !important;
+    }
+
+    body[data-mode="lower-third"] #compare-layout {
+      display: none !important;
+    }
+
+    body[data-mode="lower-third"] #overlay {
+      position: absolute;
+      left: 0;
+      right: 0;
+      z-index: 1;
+      display: flex;
+      justify-content: center;
+      transition: opacity var(--anim-duration) ease;
+    }
+
+    body[data-mode="lower-third"] #overlay.pos-bottom {
+      bottom: var(--lt-v-bottom, 60px);
+    }
+
+    body[data-mode="lower-third"] #overlay.pos-top {
+      top: var(--lt-v-top, 60px);
+    }
+
+    body[data-mode="lower-third"] #overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    body[data-mode="lower-third"] #overlay.blank {
+      opacity: 0;
+    }
+
+    body[data-mode="lower-third"] #lt-bar {
+      position: relative;
+      width: calc(100vw - var(--lt-h-margin, 120px));
+      max-width: var(--lt-max-width, 1680px);
+      max-height: var(--lt-max-height, 600px);
+      padding: var(--lt-card-padding, 28px 48px);
+      border-radius: var(--lt-card-radius, 18px);
+      overflow: hidden;
+      z-index: 1;
+      isolation: isolate;
+    }
+
+    body[data-mode="lower-third"] #lt-bar::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--box-background, rgba(0, 0, 0, 0.65));
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: inherit;
+      z-index: 0;
+    }
+
+    body[data-mode="lower-third"] #lt-bar>* {
+      position: relative;
+      z-index: 1;
+    }
+
+    body[data-mode="lower-third"] #lt-bar #verse-text {
+      font-size: var(--font-size);
+      text-align: left;
+      color: #ffffff;
+    }
+
+    body[data-mode="lower-third"] #lt-bar #reference {
+      font-size: var(--ref-font-size);
+      font-weight: 700;
+      text-align: left;
+      margin-top: 12px;
+      width: auto;
+      padding: 0;
+      background: none;
+      border: none;
+      border-radius: 0;
+    }
+
+    body[data-mode="lower-third"] #lt-bar #reference.top {
+      margin-top: 0;
+      margin-bottom: 12px;
+    }
+
+    body[data-mode="lower-third"] #lt-ref-text {
+      font-size: var(--ref-font-size);
+      font-weight: 700;
+      color: var(--ref-font-color);
+    }
+
+    #bar-background-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: inherit;
+      display: none;
+      z-index: 0;
+    }
+
+    #bar-background-video.visible {
+      display: block;
+    }
+
+    body[data-mode="lower-third"] #lt-bar-bg {
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      z-index: 0;
+    }
+
+    /* ══════════════════════════════════════════════════════
+       ANIMATIONS
+       ══════════════════════════════════════════════════════ */
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes slideLeft {
+      from {
+        opacity: 0;
+        transform: translateX(-40px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes scaleIn {
+      from {
+        opacity: 0;
+        transform: scale(0.92);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes textDelayed {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes shadeEnter {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes revealBg {
+      from {
+        clip-path: inset(0 0 100% 0);
+      }
+
+      to {
+        clip-path: inset(0 0 0% 0);
+      }
+    }
+
+    .anim-fade-enter {
+      animation: fadeIn var(--anim-duration) ease both;
+    }
+
+    .anim-slide-up-enter {
+      animation: slideUp var(--anim-duration) ease both;
+    }
+
+    .anim-slide-left-enter {
+      animation: slideLeft var(--anim-duration) ease both;
+    }
+
+    .anim-scale-in-enter {
+      animation: scaleIn var(--anim-duration) ease both;
+    }
+
+    .anim-text-delayed-enter {
+      animation: textDelayed var(--text-enter-duration) ease var(--text-enter-delay) both;
+    }
+
+    .anim-shade-enter {
+      animation: shadeEnter var(--bg-enter-duration) ease both;
+    }
+
+    .anim-reveal-bg-enter {
+      animation: revealBg var(--anim-duration) ease both;
+    }
+  </style>
+</head>
+
+<body data-mode="fullscreen">
+
+  <!-- ═══ Shared: Background layers ═══ -->
+  <div id="background"></div>
+  <div id="bg-crossfade"></div>
+  <video id="background-video" muted playsinline></video>
+
+  <!-- ═══ Fullscreen-only: Shade ═══ -->
+  <div id="background-shade"></div>
+
+  <!-- ═══ Fullscreen-only: Overlay ═══ -->
+  <div id="overlay" class="hidden">
+    <div id="verse-container">
+      <div id="verse-text"></div>
+      <div id="reference"></div>
+    </div>
+  </div>
+
+  <!-- ═══ Fullscreen-only: Compare layout ═══ -->
+  <div id="compare-layout">
+    <div class="compare-column">
+      <div class="compare-column__text-wrap">
+        <div class="compare-column__verse" id="compare-text-left"></div>
+      </div>
+      <div class="compare-column__reference" id="compare-reference-left"></div>
+      <div class="compare-column__translation" id="compare-translation-left"></div>
+    </div>
+    <div class="compare-column">
+      <div class="compare-column__text-wrap">
+        <div class="compare-column__verse" id="compare-text-right"></div>
+      </div>
+      <div class="compare-column__reference" id="compare-reference-right"></div>
+      <div class="compare-column__translation" id="compare-translation-right"></div>
+    </div>
+  </div>
+
+  <!-- ═══ Lower-third-only: Bar ═══ -->
+  <div id="lt-bar">
+    <video id="bar-background-video" muted playsinline></video>
+    <div id="lt-bar-bg"></div>
+    <div id="ref-text"></div>
+  </div>
+
+  <img id="logo" alt="">
+
+  <script>
+    (function () {
+      'use strict';
+
+      const FONT_SIZE_MIN = 12;
+      const REF_FONT_SIZE_MIN = 10;
+      const COMPARE_TEXT_MIN = 16;
+      const COMPARE_REF_MIN = 12;
+      const COMPARE_META_MIN = 10;
+      const COMPARE_PADDING_MIN = 16;
+      const COMPARE_LAYOUT_PADDING_MIN = 20;
+      const CONTENT_PADDING_MIN = 16;
+      const CONTENT_LINE_HEIGHT_MIN = 1.1;
+      const BAR_PADDING_MIN = 12;
+      const BAR_LINE_HEIGHT_MIN = 1.2;
+
+      const SIZE_PRESETS = {
+        'very-small': { fontSize: 24, refFontSize: 14, lineHeight: 1.4 },
+        'small': { fontSize: 30, refFontSize: 16, lineHeight: 1.45 },
+        'medium': { fontSize: 36, refFontSize: 18, lineHeight: 1.5 },
+        'large': { fontSize: 42, refFontSize: 20, lineHeight: 1.55 },
+        'very-large': { fontSize: 52, refFontSize: 24, lineHeight: 1.6 },
+        'huge': { fontSize: 64, refFontSize: 28, lineHeight: 1.65 },
+        'massive': { fontSize: 76, refFontSize: 32, lineHeight: 1.7 },
+      };
+      const WIDTH_PRESETS = {
+        'narrow': { maxWidth: 1000, hMargin: 460 },
+        'compact': { maxWidth: 1200, hMargin: 360 },
+        'medium': { maxWidth: 1440, hMargin: 240 },
+        'wide': { maxWidth: 1680, hMargin: 120 },
+        'wider': { maxWidth: 1800, hMargin: 60 },
+        'full': { maxWidth: 1920, hMargin: 0 },
+      };
+
+      function escapeHtml(s) { const d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
+      function safeSupText(h) {
+        if (typeof h !== 'string') return '';
+        return h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      const PATTERN_CSS = {
+        'dots': 'url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Ccircle cx=\'2\' cy=\'2\' r=\'1.5\' fill=\'rgba(255,255,255,0.15)\'/%3E%3C/svg%3E")',
+        'lines': 'url("data:image/svg+xml,%3Csvg width=\'40\' height=\'40\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cline x1=\'0\' y1=\'20\' x2=\'40\' y2=\'20\' stroke=\'rgba(255,255,255,0.08)\' stroke-width=\'1\'/%3E%3C/svg%3E")',
+        'grid': 'url("data:image/svg+xml,%3Csvg width=\'40\' height=\'40\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Crect width=\'40\' height=\'40\' fill=\'none\' stroke=\'rgba(255,255,255,0.07)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        'crosshatch': 'url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 0L20 20M20 0L0 20\' stroke=\'rgba(255,255,255,0.06)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        'diagonal': 'url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 20L20 0\' stroke=\'rgba(255,255,255,0.1)\' stroke-width=\'1\'/%3E%3C/svg%3E")',
+        'hexagons': 'url("data:image/svg+xml,%3Csvg width=\'28\' height=\'49\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M14 0l14 8v16l-14 8-14-8V8z\' fill=\'none\' stroke=\'rgba(255,255,255,0.07)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        'waves': 'url("data:image/svg+xml,%3Csvg width=\'80\' height=\'20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 10q20-10 40 0t40 0\' fill=\'none\' stroke=\'rgba(255,255,255,0.08)\' stroke-width=\'1\'/%3E%3C/svg%3E")',
+        'plus': 'url("data:image/svg+xml,%3Csvg width=\'24\' height=\'24\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M11 4h2v16h-2zM4 11h16v2H4z\' fill=\'rgba(255,255,255,0.07)\'/%3E%3C/svg%3E")',
+        'diamonds': 'url("data:image/svg+xml,%3Csvg width=\'24\' height=\'24\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M12 0l12 12-12 12L0 12z\' fill=\'none\' stroke=\'rgba(255,255,255,0.06)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        'circles': 'url("data:image/svg+xml,%3Csvg width=\'30\' height=\'30\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Ccircle cx=\'15\' cy=\'15\' r=\'12\' fill=\'none\' stroke=\'rgba(255,255,255,0.06)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        'triangle': 'url("data:image/svg+xml,%3Csvg width=\'24\' height=\'24\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M12 2l10 18H2z\' fill=\'none\' stroke=\'rgba(255,255,255,0.07)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+      };
+
+      const root = document.documentElement;
+      const body = document.body;
+      const background = document.getElementById('background');
+      const bgCrossfade = document.getElementById('bg-crossfade');
+      const backgroundVideoEl = document.getElementById('background-video');
+      const backgroundShade = document.getElementById('background-shade');
+      const overlay = document.getElementById('overlay');
+      const verseContainer = document.getElementById('verse-container');
+      const verseText = document.getElementById('verse-text');
+      const reference = document.getElementById('reference');
+      const compareLayout = document.getElementById('compare-layout');
+      const compareTextLeft = document.getElementById('compare-text-left');
+      const compareTextRight = document.getElementById('compare-text-right');
+      const compareReferenceLeft = document.getElementById('compare-reference-left');
+      const compareReferenceRight = document.getElementById('compare-reference-right');
+      const compareTranslationLeft = document.getElementById('compare-translation-left');
+      const compareTranslationRight = document.getElementById('compare-translation-right');
+      const ltBar = document.getElementById('lt-bar');
+      const ltBarBg = document.getElementById('lt-bar-bg');
+      const barBackgroundVideoEl = document.getElementById('bar-background-video');
+      const ltRefText = document.getElementById('ref-text');
+      const logo = document.getElementById('logo');
+
+      let currentMode = 'fullscreen';
+      let currentOverlayData = null;
+      let lastTimestamp = 0;
+      let currentSlideId = null;
+      let hasShownOnce = false;
+      let lastAnimation = 'fade';
+      let bgClearToken = 0;
+      let lastCssOverlayData = '';
+      let fitRafId = 0;
+      let lastBgFingerprint = '';
+      let lastBgType = 'none';
+      let bgTransitionSuppressed = false;
+      let contentFadeLock = false;
+      let baseFontSize = 48;
+      let baseRefFontSize = 24;
+      let baseCompareFontSize = 36;
+      let baseCompareRefFontSize = 20;
+      let basePadding = 60;
+      let baseBarPadding = 28;
+      let barMaxHeight = 600;
+
+      function toCssFontWeight(w, fb) {
+        const n = Number(w); if (!n || isNaN(n)) return fb || '400';
+        if (n <= 100) return '100'; if (n <= 200) return '200'; if (n <= 300) return '300';
+        if (n <= 400) return '400'; if (n <= 500) return '500'; if (n <= 600) return '600';
+        if (n <= 700) return '700'; if (n <= 800) return '800'; return '900';
+      }
+
+      function ensureCmgSansFont() {
+        body.style.fontFamily = '"CMG Sans","Noto Sans","Charis SIL",Arial,sans-serif';
+      }
+
+      function parseColorToRgb(c) {
+        if (!c) return null;
+        const ctx = document.createElement('canvas').getContext('2d');
+        ctx.fillStyle = c; const v = ctx.fillStyle;
+        if (v && v.startsWith('#')) {
+          const h = v.slice(1);
+          return { r: parseInt(h.substring(0, 2), 16), g: parseInt(h.substring(2, 4), 16), b: parseInt(h.substring(4, 6), 16) };
+        }
+        return null;
+      }
+
+      function invertColorForBg(bg) {
+        const rgb = parseColorToRgb(bg); if (!rgb) return '#fff';
+        return (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255 > 0.55 ? '#000' : '#fff';
+      }
+
+      function buildShadeGradient(color, opacity) {
+        const rgb = parseColorToRgb(color);
+        if (!rgb) return `linear-gradient(180deg,rgba(0,0,0,${opacity}),rgba(0,0,0,${opacity}))`;
+        return `linear-gradient(180deg,rgba(${rgb.r},${rgb.g},${rgb.b},${opacity}),rgba(${rgb.r},${rgb.g},${rgb.b},${opacity}))`;
+      }
+
+      function resolveSafeArea() {
+        return Number(getComputedStyle(root).getPropertyValue('--safe-area').trim().replace('px', '')) || 40;
+      }
+
+      function isOverflowing(node, w, h) {
+        if (!node) return false;
+        return Math.max(node.scrollWidth, node.getBoundingClientRect().width) > w + 1 ||
+          Math.max(node.scrollHeight, node.getBoundingClientRect().height) > h + 1;
+      }
+
+      /* ── Seamless video loop ── */
+      const seamlessLoopControllers = new WeakMap();
+      function getSeamlessLoopController(el) {
+        let c = seamlessLoopControllers.get(el);
+        if (!c) {
+          const sec = document.createElement('video');
+          sec.muted = true; sec.playsInline = true;
+          sec.style.cssText = el.style.cssText; sec.className = el.className; sec.id = el.id + '-secondary';
+          el.parentElement.insertBefore(sec, el.nextSibling);
+          c = { primary: el, secondary: sec, active: el, inactive: sec, enabled: false, src: '', timerId: null };
+          seamlessLoopControllers.set(el, c);
+        }
+        return c;
+      }
+      function hideVideoEl(el, hide) {
+        el.style.opacity = hide ? '0' : '';
+        el.style.pointerEvents = hide ? 'none' : '';
+      }
+      function startSeamlessLoopMonitor(c) {
+        if (c.timerId) clearInterval(c.timerId);
+        c.timerId = setInterval(() => {
+          if (!c.enabled) return;
+          const a = c.active;
+          if (a.ended || (a.duration > 0 && a.currentTime >= a.duration - 0.5)) {
+            const b = c.inactive; b.src = c.src; b.load(); b.play().catch(() => { });
+            b.style.opacity = c.active.style.opacity || '1'; c.active.style.opacity = '0';
+            const old = c.active; c.active = c.inactive; c.inactive = old;
+          }
+        }, 250);
+      }
+      function stopSeamlessLoop(c, opts) {
+        if (c.timerId) { clearInterval(c.timerId); c.timerId = null; }
+        c.enabled = false;
+        if (opts?.clearSrc) { c.primary.src = ''; c.secondary.src = ''; }
+        if (opts?.resetActiveToPrimary) { c.active = c.primary; c.inactive = c.secondary; }
+      }
+
+      /* ═══ MODE SWITCHING ═══ */
+      function setMode(newMode) {
+        if (newMode === currentMode) return;
+        currentMode = newMode;
+        body.setAttribute('data-mode', newMode);
+        if (newMode === 'lower-third') {
+          ltBar.insertBefore(verseContainer, ltRefText);
+          overlay.style.display = 'none';
+          compareLayout.classList.remove('is-visible');
+          backgroundShade.style.display = 'none';
+          ltBar.style.display = '';
+          overlay.classList.remove('hidden');
+        } else {
+          overlay.insertBefore(verseContainer, null);
+          overlay.style.display = '';
+          backgroundShade.style.display = '';
+          ltBar.style.display = 'none';
+        }
+        if (currentOverlayData) processOverlayUpdate(currentOverlayData);
+      }
+
+      /* ═══ FULLSCREEN: Auto-scaling ═══ */
+      function isSingleLayoutOverflowing(tw, th) {
+        return isOverflowing(verseContainer, tw, th) ||
+          isOverflowing(verseText, verseText.clientWidth || tw, th) ||
+          (reference.style.display !== 'none' && isOverflowing(reference, reference.clientWidth || tw, th));
+      }
+
+      function autoScaleContent() {
+        if (!verseContainer) return;
+        const isWin = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
+        if (!isWin) {
+          verseText.style.fontSize = Math.round(baseFontSize) + 'px';
+          reference.style.fontSize = Math.round(baseRefFontSize) + 'px';
+          verseText.style.lineHeight = String(Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.6);
+          return;
+        }
+        let vs = Math.max(FONT_SIZE_MIN, Math.round(baseFontSize));
+        let rs = Math.max(REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
+        let pd = Math.max(CONTENT_PADDING_MIN, Math.round(basePadding));
+        let lh = Math.max(CONTENT_LINE_HEIGHT_MIN, Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.6);
+        let sp = reference.classList.contains('top') ? 24 : 24;
+        const ratio = baseFontSize > 0 ? Math.max(0.6, baseRefFontSize / baseFontSize) : 0.6;
+        const sa = resolveSafeArea();
+        const vw = document.body?.clientWidth || 1920, vh = document.body?.clientHeight || 1080;
+        const tw = Math.max(420, vw - sa * 2), th = Math.max(260, vh - sa * 2);
+        const apply = () => {
+          verseText.style.fontSize = vs + 'px'; reference.style.fontSize = rs + 'px';
+          verseText.style.lineHeight = String(lh); verseContainer.style.padding = pd + 'px';
+          reference.style.marginTop = reference.classList.contains('top') ? '0px' : sp + 'px';
+          reference.style.marginBottom = reference.classList.contains('top') ? sp + 'px' : '0px';
+        };
+        apply();
+        let g = 0;
+        while (isSingleLayoutOverflowing(tw, th) && (vs > FONT_SIZE_MIN || rs > REF_FONT_SIZE_MIN || pd > CONTENT_PADDING_MIN || lh > CONTENT_LINE_HEIGHT_MIN || sp > 8) && g < 220) {
+          if (vs > FONT_SIZE_MIN) vs -= 1;
+          rs = Math.max(REF_FONT_SIZE_MIN, Math.round(vs * ratio));
+          if (isSingleLayoutOverflowing(tw, th) && pd > CONTENT_PADDING_MIN) pd = Math.max(CONTENT_PADDING_MIN, pd - 2);
+          if (isSingleLayoutOverflowing(tw, th) && lh > CONTENT_LINE_HEIGHT_MIN) lh = Math.max(CONTENT_LINE_HEIGHT_MIN, +(lh - 0.02).toFixed(2));
+          if (isSingleLayoutOverflowing(tw, th) && sp > 8) sp = Math.max(8, sp - 2);
+          apply(); g++;
+        }
+      }
+
+      function autoScaleCompareContent() {
+        if (!compareLayout || !compareTextLeft || !compareTextRight) return;
+        const isWin = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
+        if (!isWin) return;
+        const tn = [compareTextLeft, compareTextRight], rn = [compareReferenceLeft, compareReferenceRight], trn = [compareTranslationLeft, compareTranslationRight];
+        const wr = Array.from(compareLayout.querySelectorAll('.compare-column__text-wrap'));
+        const bT = Math.max(22, Math.round(baseCompareFontSize)), bR = Math.max(14, Math.round(baseCompareRefFontSize));
+        const bM = Math.max(12, Math.round(bR * 0.62));
+        let ts = bT, rs2 = bR, ms = bM, cp = 38, lp = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(basePadding));
+        let lh = Math.max(1.08, Number(getComputedStyle(root).getPropertyValue('--compare-line-height')) || 1.4);
+        const sa = resolveSafeArea(), vw = document.body?.clientWidth || 1920, vh = document.body?.clientHeight || 1080;
+        const tw = Math.max(600, vw - sa * 2), th = Math.max(320, vh - sa * 2);
+        const cols = Array.from(compareLayout.querySelectorAll('.compare-column'));
+        const apply = () => { compareLayout.style.padding = lp + 'px'; cols.forEach(c => c.style.padding = cp + 'px'); tn.forEach(n => { n.style.fontSize = ts + 'px'; n.style.lineHeight = String(lh) }); rn.forEach(n => n.style.fontSize = rs2 + 'px'); trn.forEach(n => n.style.fontSize = ms + 'px'); };
+        const ov = () => { if (isOverflowing(compareLayout, tw, th)) return true; return cols.some((c, i) => { const w = wr[i]; return isOverflowing(c, c.clientWidth || tw, c.clientHeight || th) || (w && isOverflowing(w, w.clientWidth || tw, w.clientHeight || th)) || isOverflowing(tn[i], tn[i].clientWidth || tw, th); }); };
+        apply(); let g = 0;
+        while (ov() && (ts > COMPARE_TEXT_MIN || rs2 > COMPARE_REF_MIN || ms > COMPARE_META_MIN || cp > COMPARE_PADDING_MIN || lp > COMPARE_LAYOUT_PADDING_MIN || lh > 1.08) && g < 240) {
+          if (ts > COMPARE_TEXT_MIN) ts--; if (rs2 > COMPARE_REF_MIN) rs2 = Math.max(COMPARE_REF_MIN, rs2 - 1); if (ms > COMPARE_META_MIN) ms = Math.max(COMPARE_META_MIN, ms - 1);
+          if (ov() && cp > COMPARE_PADDING_MIN) cp = Math.max(COMPARE_PADDING_MIN, cp - 1);
+          if (ov() && lp > COMPARE_LAYOUT_PADDING_MIN) lp = Math.max(COMPARE_LAYOUT_PADDING_MIN, lp - 2);
+          if (ov() && lh > 1.08) lh = Math.max(1.08, +((lh - 0.02).toFixed(2)));
+          apply(); g++;
+        }
+      }
+
+      function scheduleContentFit() {
+        if (fitRafId) cancelAnimationFrame(fitRafId);
+        fitRafId = requestAnimationFrame(() => { fitRafId = 0; if (currentMode === 'fullscreen') { if (compareLayout && compareLayout.classList.contains('is-visible')) autoScaleCompareContent(); else autoScaleContent(); } });
+        if (document.fonts?.ready) { document.fonts.ready.then(() => { requestAnimationFrame(() => { if (currentMode === 'fullscreen') { if (compareLayout?.classList.contains('is-visible')) autoScaleCompareContent(); else autoScaleContent(); } }); }).catch(() => { }); }
+      }
+
+      /* ═══ LOWER-THIRD: Auto-scaling (shrink + grow) ═══ */
+      function isLowerThirdOverflowing() {
+        if (!ltBar) return false;
+        const sa = resolveSafeArea(), vw = document.body?.clientWidth || 1920, vh = document.body?.clientHeight || 1080;
+        const aw = Math.max(320, vw - sa * 2), ah = Math.max(120, Math.min(barMaxHeight, vh - sa * 2));
+        return isOverflowing(ltBar, aw, ah) || isOverflowing(verseText, verseText.clientWidth || aw, ah) || (reference.style.display !== 'none' && isOverflowing(reference, reference.clientWidth || aw, ah));
+      }
+
+      function autoScaleFont() {
+        if (!ltBar) return;
+        let sz = baseFontSize, rs = Math.max(REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
+        let pd = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding));
+        let lh = Math.max(BAR_LINE_HEIGHT_MIN, Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.5);
+        let sp = 12;
+        const ratio = baseFontSize > 0 ? (baseRefFontSize / baseFontSize) : 0.5;
+        const apply = () => {
+          verseText.style.fontSize = sz + 'px'; reference.style.fontSize = rs + 'px';
+          verseText.style.lineHeight = String(lh);
+          ltBar.style.padding = pd + 'px calc(' + pd + 'px + 20px)';
+          reference.style.marginTop = reference.classList.contains('top') ? '0px' : sp + 'px';
+          reference.style.marginBottom = reference.classList.contains('top') ? sp + 'px' : '0px';
+        };
+        apply(); let g = 0;
+        while (isLowerThirdOverflowing() && (sz > FONT_SIZE_MIN || rs > REF_FONT_SIZE_MIN || pd > BAR_PADDING_MIN || lh > BAR_LINE_HEIGHT_MIN || sp > 6) && g < 240) {
+          if (sz > FONT_SIZE_MIN) sz--; rs = Math.max(REF_FONT_SIZE_MIN, Math.round(sz * ratio));
+          if (isLowerThirdOverflowing() && pd > BAR_PADDING_MIN) pd = Math.max(BAR_PADDING_MIN, pd - 1);
+          if (isLowerThirdOverflowing() && lh > BAR_LINE_HEIGHT_MIN) lh = Math.max(BAR_LINE_HEIGHT_MIN, +((lh - 0.02).toFixed(2)));
+          if (isLowerThirdOverflowing() && sp > 6) sp = Math.max(6, sp - 1);
+          apply(); g++;
+        }
+        // Phase 2: GROW
+        const minH = Math.max(0, Number(getComputedStyle(root).getPropertyValue('--lt-min-height')) || 0);
+        const vh = window.innerHeight || 1080, sa = parseInt(getComputedStyle(root).getPropertyValue('--safe-area')) || 0;
+        const eff = Math.min(barMaxHeight, vh - sa * 2), gt = Math.max(minH, Math.round(eff * 0.55)), mf = Math.round(baseFontSize * 1.5);
+        if (ltBar.scrollHeight < gt && sz < mf) {
+          g = 0; while (ltBar.scrollHeight < gt && sz < mf && g < 200) { sz += 2; rs = Math.max(REF_FONT_SIZE_MIN, Math.round(sz * ratio)); pd = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding * (sz / baseFontSize))); lh = Math.max(BAR_LINE_HEIGHT_MIN, Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.5); verseText.style.fontSize = sz + 'px'; reference.style.fontSize = rs + 'px'; verseText.style.lineHeight = String(lh); ltBar.style.padding = pd + 'px calc(' + pd + 'px + 20px)'; g++; }
+          if (ltBar.scrollHeight > gt && sz > baseFontSize) { sz -= 2; rs = Math.max(REF_FONT_SIZE_MIN, Math.round(sz * ratio)); pd = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding * (sz / baseFontSize))); verseText.style.fontSize = sz + 'px'; reference.style.fontSize = rs + 'px'; ltBar.style.padding = pd + 'px calc(' + pd + 'px + 20px)'; }
+        }
+      }
+
+      function scheduleAutoScaleFont() {
+        if (fitRafId) cancelAnimationFrame(fitRafId);
+        fitRafId = requestAnimationFrame(() => { fitRafId = 0; autoScaleFont(); });
+        if (document.fonts?.ready) { document.fonts.ready.then(() => requestAnimationFrame(() => autoScaleFont())).catch(() => { }); }
+      }
+
+      /* ═══ ANIMATIONS ═══ */
+      function getAnimTarget() { return currentMode === 'lower-third' ? ltBar : verseContainer; }
+      function clearEntranceAnimationClasses() {
+        const t = getAnimTarget();
+        t.classList.remove('anim-fade-enter', 'anim-slide-up-enter', 'anim-slide-left-enter', 'anim-scale-in-enter', 'anim-reveal-bg-enter');
+        verseText.classList.remove('anim-text-delayed-enter'); reference.classList.remove('anim-text-delayed-enter');
+        if (currentMode === 'fullscreen' && backgroundShade) backgroundShade.classList.remove('anim-shade-enter');
+      }
+      function runEntranceAnimation(anim) {
+        clearEntranceAnimationClasses(); const t = getAnimTarget(); void t.offsetWidth;
+        if (anim === 'none') return;
+        if (anim === 'reveal-bg-then-text') { if (currentMode === 'fullscreen' && backgroundShade) backgroundShade.classList.add('anim-shade-enter'); else if (currentMode === 'lower-third') t.classList.add('anim-reveal-bg-enter'); verseText.classList.add('anim-text-delayed-enter'); reference.classList.add('anim-text-delayed-enter'); return; }
+        if (anim === 'fade') { t.classList.add('anim-fade-enter'); return; }
+        if (anim === 'slide-up') { t.classList.add('anim-slide-up-enter'); return; }
+        if (anim === 'scale-in') { t.classList.add('anim-scale-in-enter'); return; }
+        t.classList.add('anim-slide-left-enter');
+      }
+
+      /* ═══ LOWER-THIRD: Animate-out ═══ */
+      let _animateOutResolve = null;
+      overlay.addEventListener('transitionend', (e) => { if (currentMode === 'lower-third' && e.propertyName === 'opacity' && overlay.classList.contains('blank')) { overlay.classList.add('hidden'); signalAnimateOutComplete(); } });
+      function signalAnimateOutComplete() {
+        if (_animateOutResolve) { _animateOutResolve(); _animateOutResolve = null; }
+        try { const tp = new URLSearchParams(window.location.search).get('tab') || 'bible'; const cn = tp === 'worship' ? 'obs-church-studio-worship-overlay' : 'obs-church-studio-bible-overlay'; const bc = new BroadcastChannel(cn); bc.postMessage({ type: 'lower-third-animation-complete' }); bc.close(); } catch { }
+      }
+
+      /* ═══ THEME: Shared base ═══ */
+      function applyThemeBase(s) {
+        ensureCmgSansFont();
+        const bs = Number(s.fontSize || 48); baseFontSize = bs; baseRefFontSize = Math.max(14, Math.round(bs * 0.5));
+        root.setProperty('--font-size', baseFontSize + 'px');
+        root.setProperty('--line-height', String(s.lineHeight || 1.6));
+        root.setProperty('--text-align', s.textAlign || 'center');
+        root.setProperty('--text-shadow', s.textShadow || 'none');
+        root.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
+        root.setProperty('--outline-color', s.textOutline ? (s.textOutlineColor || '#000') : 'transparent');
+        root.setProperty('--ref-font-size', baseRefFontSize + 'px');
+        root.setProperty('--ref-font-weight', toCssFontWeight(s.refFontWeight, '400'));
+        root.setProperty('--ref-font-color', s.refFontColor || '#fff');
+        root.setProperty('--ref-text-transform', s.refTextTransform || 'none');
+        root.setProperty('--ref-letter-spacing', (s.refLetterSpacing || 0) + 'px');
+        root.setProperty('--ref-opacity', String(s.refOpacity ?? 1));
+        root.setProperty('--ref-spacing', (s.refSpacing ?? 24) + 'px');
+        if (s.refTextAlign && s.refTextAlign !== 'match') root.setProperty('--ref-text-align', s.refTextAlign); else root.removeProperty('--ref-text-align');
+
+        const rbe = s.referenceBackgroundEnabled === true, rbc = s.referenceBackgroundColor || '#F4D17B', rbs = s.referenceBackgroundStyle || 'solid', rbr = Number(s.referenceBackgroundRadius ?? 12);
+        if (rbe) {
+          root.setProperty('--ref-width', 'fit-content');
+          if (rbs === 'solid') { root.setProperty('--ref-bg-color', rbc); root.setProperty('--ref-bg-padding', '6px 14px'); root.setProperty('--ref-bg-radius', rbr + 'px'); root.setProperty('--ref-bg-border', 'none'); root.setProperty('--ref-font-color', invertColorForBg(rbc)); }
+          else if (rbs === 'pill') { root.setProperty('--ref-bg-color', rbc); root.setProperty('--ref-bg-padding', '6px 20px'); root.setProperty('--ref-bg-radius', '999px'); root.setProperty('--ref-bg-border', 'none'); root.setProperty('--ref-font-color', invertColorForBg(rbc)); }
+          else if (rbs === 'outline') { root.setProperty('--ref-bg-color', 'transparent'); root.setProperty('--ref-bg-padding', '5px 13px'); root.setProperty('--ref-bg-radius', rbr + 'px'); root.setProperty('--ref-bg-border', '2px solid ' + rbc); root.setProperty('--ref-font-color', rbc); }
+        } else { root.setProperty('--ref-width', '100%'); root.setProperty('--ref-bg-color', 'transparent'); root.setProperty('--ref-bg-padding', '0'); root.setProperty('--ref-bg-radius', '0'); root.setProperty('--ref-bg-border', 'none'); }
+
+        root.setProperty('--text-transform', s.textTransform || 'none');
+        const ead = Math.max(95, Math.min(170, Math.round((s.animationDuration || 400) * 0.38)));
+        root.setProperty('--anim-duration', ead + 'ms');
+        root.setProperty('--bg-enter-duration', Math.max(70, Math.round(ead * 0.42)) + 'ms');
+        root.setProperty('--text-enter-duration', Math.max(82, Math.round(ead * 0.54)) + 'ms');
+        root.setProperty('--text-enter-delay', Math.max(12, Math.round(ead * 0.08)) + 'ms');
+        root.setProperty('--bg-opacity', String(s.backgroundOpacity ?? 1));
+
+        if (s.logoUrl) { if (s.logoUrl === '__FROM_CSS__') { const cv = getComputedStyle(root).getPropertyValue('--logo-data-uri').trim(); if (cv && cv.startsWith('url(')) { logo.src = cv.slice(4, -1).replace(/^["']|["']$/g, ''); } } else { logo.src = s.logoUrl; } logo.className = 'visible ' + (s.logoPosition || 'bottom-right'); root.setProperty('--logo-size', (s.logoSize || (currentMode === 'lower-third' ? 60 : 80)) + 'px'); } else { logo.className = ''; }
+      }
+
+      /* ═══ THEME: Fullscreen ═══ */
+      function applyThemeFullscreen(s) {
+        applyThemeBase(s);
+        baseCompareFontSize = Math.max(24, Math.round(baseFontSize * 0.76));
+        baseCompareRefFontSize = Math.max(16, Math.round(baseRefFontSize * 0.95));
+        root.setProperty('--compare-font-size', baseCompareFontSize + 'px');
+        root.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
+        root.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
+        root.setProperty('--compare-line-height', String(Math.max(1.22, Number(s.lineHeight || 1.6) - 0.08)));
+        const cw = Math.max(30, Math.min(50, Number(s.compareTranslationWidth ?? 40)));
+        const cg = Math.max(0, Math.min(200, Number(s.compareTranslationGap ?? 40)));
+        root.setProperty('--compare-panel-width', cw + '%'); root.setProperty('--compare-gap', cg + 'px');
+        if (compareLayout) { compareLayout.style.gridTemplateColumns = `minmax(0,${cw}fr) minmax(0,${cw}fr)`; compareLayout.style.gap = cg + 'px'; }
+        root.setProperty('--bg-shade-gradient', buildShadeGradient(s.fullscreenShadeColor || '#000', s.fullscreenShadeOpacity ?? 0.42));
+        root.setProperty('--bg-shade-display', s.fullscreenShadeEnabled === false ? 'none' : 'block');
+        basePadding = Number(s.padding || 60); root.setProperty('--padding', basePadding + 'px');
+        root.setProperty('--safe-area', (s.safeArea || 40) + 'px');
+        if (s.refPosition === 'top') reference.classList.add('top'); else reference.classList.remove('top');
+
+        // Background with crossfade
+        const bgVideoUrl = String(s.backgroundVideo || '').trim(), bgOp = String(s.backgroundOpacity ?? 1);
+        const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor;
+        const bcs = s.backgroundColor || 'transparent', bgc = hasG ? `linear-gradient(${ga}deg,${bcs},${ge})` : bcs;
+        let nbt = 'none';
+        if (bgVideoUrl) nbt = 'video'; else if (s.backgroundPattern && (s.backgroundPattern === '__FROM_CSS__' || s.backgroundPattern.startsWith('data:') || PATTERN_CSS[s.backgroundPattern])) nbt = 'pattern';
+        else if (s.backgroundImage && s.backgroundImage !== '__BG_SOURCE__') nbt = 'image'; else if (hasG) nbt = 'gradient'; else if (s.backgroundColor && s.backgroundColor !== 'transparent') nbt = 'color';
+        const fp = [bgVideoUrl, bgc, s.backgroundImage || '', s.backgroundPattern || '', bgOp].join('||');
+        if (fp === lastBgFingerprint) bgTransitionSuppressed = true; else { bgTransitionSuppressed = false; lastBgFingerprint = fp; }
+        const btc = nbt !== lastBgType, ittv = btc && nbt === 'video' && lastBgType !== 'none' && lastBgType !== 'video', itfv = btc && lastBgType === 'video' && nbt !== 'video';
+        const skipBg = bgTransitionSuppressed && !btc;
+        if (!bgTransitionSuppressed && bgCrossfade) { bgCrossfade.style.transition = 'none'; const cs = getComputedStyle(background); bgCrossfade.style.backgroundImage = cs.backgroundImage; bgCrossfade.style.backgroundColor = cs.backgroundColor; bgCrossfade.style.background = cs.background; }
+        if (!skipBg) {
+          if (bgVideoUrl) {
+            root.setProperty('--bg-image', 'none'); root.setProperty('--bg-color', 'transparent'); backgroundVideoEl.style.display = 'block';
+            const srcCh = backgroundVideoEl.getAttribute('src') !== bgVideoUrl, ctrl = getSeamlessLoopController(backgroundVideoEl);
+            if (srcCh) {
+              stopSeamlessLoop(ctrl, { clearSrc: true, resetActiveToPrimary: true }); backgroundVideoEl.dataset.src = bgVideoUrl; backgroundVideoEl.src = bgVideoUrl; backgroundVideoEl.load(); ctrl.secondary.src = bgVideoUrl; ctrl.secondary.load(); ctrl.src = bgVideoUrl; backgroundVideoEl.loop = false; ctrl.enabled = true; startSeamlessLoopMonitor(ctrl); backgroundVideoEl.style.opacity = '0';
+              const onCP = () => { backgroundVideoEl.removeEventListener('canplay', onCP); backgroundVideoEl.style.transition = 'opacity 0.4s cubic-bezier(0.4,0,0.2,1)'; backgroundVideoEl.style.opacity = bgOp; if (bgCrossfade && bgCrossfade.style.opacity !== '0') requestAnimationFrame(() => requestAnimationFrame(() => { bgCrossfade.style.transition = 'opacity 0.5s cubic-bezier(0.4,0,0.2,1)'; bgCrossfade.style.opacity = '0'; })); const pp = backgroundVideoEl.play(); if (pp && typeof pp.catch === 'function') pp.catch(() => { }); };
+              backgroundVideoEl.addEventListener('canplay', onCP, { once: true }); setTimeout(() => { if (bgCrossfade && bgCrossfade.style.opacity !== '0') { bgCrossfade.style.transition = 'opacity 0.5s cubic-bezier(0.4,0,0.2,1)'; bgCrossfade.style.opacity = '0'; } }, 3000);
+            }
+          } else {
+            if (itfv && backgroundVideoEl.style.display !== 'none') { backgroundVideoEl.style.transition = 'opacity 0.5s cubic-bezier(0.4,0,0.2,1)'; backgroundVideoEl.style.opacity = '0'; const c = seamlessLoopControllers.get(backgroundVideoEl); if (c) { if (c.active) { c.active.style.transition = 'opacity 0.5s cubic-bezier(0.4,0,0.2,1)'; c.active.style.opacity = '0'; } if (c.inactive) hideVideoEl(c.inactive, false); } setTimeout(() => { backgroundVideoEl.style.transition = ''; const c2 = seamlessLoopControllers.get(backgroundVideoEl); if (c2) stopSeamlessLoop(c2, { clearSrc: true, resetActiveToPrimary: true }); if (backgroundVideoEl.getAttribute('src')) { backgroundVideoEl.pause(); backgroundVideoEl.removeAttribute('src'); backgroundVideoEl.load(); } backgroundVideoEl.style.display = 'none'; }, 550); }
+            else { const c = seamlessLoopControllers.get(backgroundVideoEl); if (c) stopSeamlessLoop(c, { clearSrc: true, resetActiveToPrimary: true }); if (backgroundVideoEl.getAttribute('src')) { backgroundVideoEl.pause(); backgroundVideoEl.removeAttribute('src'); backgroundVideoEl.load(); } backgroundVideoEl.style.display = 'none'; }
+          }
+          let pc = ''; if (!bgVideoUrl && s.backgroundPattern) { if (s.backgroundPattern.startsWith('data:')) pc = 'url(' + s.backgroundPattern + ')'; else if (s.backgroundPattern === '__FROM_CSS__') { const cv = getComputedStyle(root).getPropertyValue('--bg-pattern-data').trim(); if (cv) pc = cv; } else if (PATTERN_CSS[s.backgroundPattern]) pc = PATTERN_CSS[s.backgroundPattern]; }
+          if (pc) { root.setProperty('--bg-image', pc); root.setProperty('--bg-color', 'transparent'); }
+          else if (!bgVideoUrl && s.backgroundImage) { let bu = s.backgroundImage; if (bu === '__BG_SOURCE__') { root.setProperty('--bg-image', 'none'); root.setProperty('--bg-color', 'transparent'); root.setProperty('--bg-opacity', '1'); } else if (bu === '__FROM_CSS__') { const cv = getComputedStyle(root).getPropertyValue('--bg-image').trim(); root.setProperty('--bg-image', cv || 'none'); if (cv) { root.setProperty('--bg-color', 'transparent'); root.setProperty('--bg-opacity', bgOp); } } else if (bu === '__FROM_LOCALSTORAGE__') { const st = localStorage.getItem('bible-overlay-bg-image'); bu = st || ''; root.setProperty('--bg-image', bu ? `url(${bu})` : 'none'); } else { root.setProperty('--bg-image', `url(${bu})`); } }
+          else if (!bgVideoUrl) root.setProperty('--bg-image', 'none');
+          if (!pc) { if (hasG) { root.setProperty('--bg-color', 'transparent'); if (!bgVideoUrl && !s.backgroundImage) root.setProperty('--bg-image', bgc); } else root.setProperty('--bg-color', bgc); }
+          if (!bgTransitionSuppressed && bgCrossfade) { if (ittv) { bgCrossfade.style.transition = 'none'; bgCrossfade.style.opacity = bgOp; } else if (!bgVideoUrl) { bgCrossfade.style.transition = 'none'; bgCrossfade.style.opacity = bgOp; requestAnimationFrame(() => requestAnimationFrame(() => { bgCrossfade.style.transition = 'opacity 0.5s cubic-bezier(0.4,0,0.2,1)'; bgCrossfade.style.opacity = '0'; })); } } else if (bgTransitionSuppressed && bgCrossfade) { bgCrossfade.style.transition = 'none'; bgCrossfade.style.opacity = '0'; }
+          lastBgType = nbt;
+        }
+      }
+
+      /* ═══ THEME: Lower-third ═══ */
+      function applyThemeLowerThird(s) {
+        applyThemeBase(s);
+        baseBarPadding = Number(s.padding || 28); root.setProperty('--safe-area', (s.safeArea || 40) + 'px');
+        const sp = s.lowerThirdSizePreset || 'medium', preset = SIZE_PRESETS[sp] || SIZE_PRESETS['medium'];
+        if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.setProperty('--font-size', baseFontSize + 'px'); root.setProperty('--ref-font-size', baseRefFontSize + 'px'); root.setProperty('--line-height', String(preset.lineHeight)); }
+        const wp2 = s.lowerThirdWidthPreset || 'wide', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['wide'];
+        root.setProperty('--lt-max-width', (s.lowerThirdMaxWidth || wpr.maxWidth) + 'px');
+        root.setProperty('--lt-h-margin', (s.lowerThirdHMargin ?? wpr.hMargin) + 'px');
+        barMaxHeight = Math.max(120, Math.min(900, Number(s.lowerThirdBarMaxHeight) || 600));
+        root.setProperty('--lt-max-height', barMaxHeight + 'px');
+        root.setProperty('--lt-min-height', (s.lowerThirdBarMinHeight || 0) + 'px');
+        root.setProperty('--lt-card-padding', s.lowerThirdCardPadding || '28px 48px');
+        root.setProperty('--lt-card-radius', (s.lowerThirdCardRadius || 18) + 'px');
+        const pos = s.lowerThirdPosition || 'bottom';
+        root.setProperty('--lt-v-top', (s.lowerThirdVTop ?? 60) + 'px'); root.setProperty('--lt-v-bottom', (s.lowerThirdVBottom ?? 60) + 'px');
+        if (pos === 'top') { overlay.classList.add('pos-top'); overlay.classList.remove('pos-bottom'); } else { overlay.classList.add('pos-bottom'); overlay.classList.remove('pos-top'); }
+        const bb = s.boxBackground || 'rgba(0,0,0,0.65)', bo = s.boxOpacity ?? 1; let fbb = bb;
+        if (bo < 1 && bb.startsWith('rgba')) fbb = bb.replace(/[\d.]+\)$/, bo + ')'); else if (bo < 1 && bb.startsWith('rgb(')) fbb = bb.replace('rgb(', 'rgba(').replace(')', ',' + bo + ')');
+        root.setProperty('--box-background', fbb);
+        if (s.boxBorderEnabled) { ltBar.style.border = (s.boxBorderWidth || 1) + 'px ' + (s.boxBorderStyle || 'solid') + ' ' + (s.boxBorderColor || 'rgba(255,255,255,0.2)'); } else ltBar.style.border = 'none';
+        if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
+        const barBgV = String(s.backgroundVideo || '').trim();
+        if (barBgV && currentMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
+        if (!barBgV && currentMode === 'lower-third') { const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent'; ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } else ltBarBg.style.display = 'none';
+        if (s.refPosition === 'top') reference.classList.add('top'); else reference.classList.remove('top');
+      }
+
+      function applyTheme(theme) {
+        if (currentMode === 'lower-third') applyThemeLowerThird(theme); else applyThemeFullscreen(theme);
+      }
+
+      /* ═══ SINGLE RENDERER ═══ */
+      function processOverlayUpdate(data) {
+        if (!data) return; if (data.timestamp && data.timestamp <= lastTimestamp) return; lastTimestamp = data.timestamp || 0;
+        currentOverlayData = data;
+        if (data.displayMode && data.displayMode !== currentMode) setMode(data.displayMode);
+        if (currentMode === 'lower-third') processSlideLowerThird(data); else processSlideFullscreen(data);
+      }
+
+      function processSlideFullscreen(data) {
+        if (!data.slide) { bgClearToken++; overlay.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
+        bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId, isSame = sl.id === currentSlideId && !isNew; currentSlideId = sl.id;
+        if (data.theme) applyTheme(data.theme);
+        if (data.blanked) { overlay.classList.add('blank'); return; } else overlay.classList.remove('blank');
+        const cc = Array.isArray(sl.columns) ? sl.columns.slice(0, 2) : [], isCL = sl.layout === 'compare' && cc.length === 2;
+        if (isCL) { verseContainer.style.display = 'none'; compareLayout.classList.add('is-visible'); const [l, r] = cc; compareReferenceLeft.textContent = String(l.reference || '').trim(); compareReferenceRight.textContent = String(r.reference || '').trim(); compareTranslationLeft.textContent = String(l.translation || '').trim(); compareTranslationRight.textContent = String(r.translation || '').trim(); compareTextLeft.innerHTML = safeSupText(l.text); compareTextRight.innerHTML = safeSupText(r.text); autoScaleCompareContent(); }
+        else { compareLayout.classList.remove('is-visible'); verseContainer.style.display = 'flex'; verseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; reference.textContent = rt; reference.style.display = rt ? 'block' : 'none'; autoScaleContent(); scheduleContentFit(); }
+        overlay.classList.remove('hidden');
+        const anim = data.theme?.animation || 'fade'; lastAnimation = anim;
+        if (isNew) { if (!hasShownOnce) { hasShownOnce = true; runEntranceAnimation(anim); } }
+        else if (isSame && anim !== 'none' && hasShownOnce) { clearEntranceAnimationClasses(); void verseContainer.offsetWidth; const ed = Math.max(95, Math.min(170, Math.round((data.theme?.animationDuration || 400) * 0.38))); const el = Date.now() % ed, d = -el; if (anim === 'fade') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-fade-enter'); } else if (anim === 'slide-up') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-slide-up-enter'); } else if (anim === 'slide-left') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-slide-left-enter'); } else if (anim === 'scale-in') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-scale-in-enter'); } setTimeout(() => { verseContainer.style.animationDelay = ''; }, ed + 50); }
+      }
+
+      function processSlideLowerThird(data) {
+        if (data.action === 'animate-out') { overlay.classList.remove('hidden'); overlay.classList.add('blank'); return new Promise((r) => { _animateOutResolve = r; }); }
+        if (!data.slide) { bgClearToken++; overlay.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
+        bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId, isSame = sl.id === currentSlideId && !isNew; currentSlideId = sl.id;
+        if (data.theme) applyTheme(data.theme);
+        if (data.blanked) { overlay.classList.add('blank'); return; } else overlay.classList.remove('blank');
+        overlay.classList.remove('hidden');
+        verseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; reference.style.display = rt ? 'block' : 'none';
+        scheduleAutoScaleFont();
+        const anim = data.theme?.animation || 'slide-up'; lastAnimation = anim;
+        if (isNew) { if (!hasShownOnce) { hasShownOnce = true; runEntranceAnimation(anim); } }
+        else if (isSame && anim !== 'none' && hasShownOnce && !contentFadeLock) { clearEntranceAnimationClasses(); void ltBar.offsetWidth; const ed = Math.max(95, Math.min(170, Math.round((data.theme?.animationDuration || 400) * 0.38))); const el = Date.now() % ed, d = -el; if (anim === 'fade') { ltBar.style.animationDelay = d + 'ms'; ltBar.classList.add('anim-fade-enter'); } else if (anim === 'slide-up') { ltBar.style.animationDelay = d + 'ms'; ltBar.classList.add('anim-slide-up-enter'); } else if (anim === 'slide-left') { ltBar.style.animationDelay = d + 'ms'; ltBar.classList.add('anim-slide-left-enter'); } else if (anim === 'scale-in') { ltBar.style.animationDelay = d + 'ms'; ltBar.classList.add('anim-scale-in-enter'); } setTimeout(() => { ltBar.style.animationDelay = ''; }, ed + 50); }
+      }
+
+      /* ═══ EVENT-DRIVEN UPDATE PIPELINE ═══ */
+      function readFromCssVar() { try { const raw = getComputedStyle(root).getPropertyValue('--overlay-data').trim(); if (!raw || raw === lastCssOverlayData) return false; lastCssOverlayData = raw; const n = raw.replace(/^['"]|['"]$/g, ''); if (!n) return false; processOverlayUpdate(JSON.parse(decodeURIComponent(n))); return true; } catch { } return false; }
+      function readModeFromCssVar() { try { const raw = getComputedStyle(root).getPropertyValue('--display-mode').trim().replace(/^['"]|['"]$/g, ''); if (raw === 'lower-third' || raw === 'fullscreen') { if (raw !== currentMode) setMode(raw); } } catch { } }
+      function readFromUrlHash() { try { const h = window.location.hash; if (h && h.startsWith('#data=')) { processOverlayUpdate(JSON.parse(decodeURIComponent(h.slice(6)))); return true; } } catch { } return false; }
+      function readFromLocalStorage() { try { const raw = localStorage.getItem(_storageKey); if (raw) { processOverlayUpdate(JSON.parse(raw)); return true; } } catch { } return false; }
+
+      const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
+      const _storageKey = _tabParam === 'worship' ? 'worship-overlay-data' : 'bible-overlay-data';
+      const _channelName = _tabParam === 'worship' ? 'obs-church-studio-worship-overlay' : 'obs-church-studio-bible-overlay';
+
+      try { const bc = new BroadcastChannel(_channelName); bc.onmessage = (e) => { processOverlayUpdate(e.data); }; } catch { }
+      window.addEventListener('message', (e) => { if (e.data?.action === 'animate-out') processOverlayUpdate(e.data); });
+      window.addEventListener('hashchange', () => { readFromUrlHash(); });
+
+      const _observer = new MutationObserver(() => { readModeFromCssVar(); readFromCssVar(); });
+      _observer.observe(root, { attributes: true, attributeFilter: ['style'] });
+
+      if (window.ResizeObserver) { const ro = new ResizeObserver(() => { if (currentMode === 'lower-third') scheduleAutoScaleFont(); else scheduleContentFit(); }); ro.observe(document.body); ro.observe(verseContainer); ro.observe(currentMode === 'lower-third' ? ltBar : compareLayout); }
+
+      /* ═══ INITIAL ═══ */
+      ltBar.style.display = 'none';
+      readModeFromCssVar();
+      readFromCssVar() || readFromUrlHash() || readFromLocalStorage();
+
+      /* ═══ POLLING — detect CSS variable updates from OBS SetInputSettings ═══
+         OBS injects CSS via a <style> element (obs-cssoverride), NOT via the
+         style attribute on <html>. The MutationObserver above only fires for
+         style attribute changes, so CSS-only SetInputSettings calls are
+         invisible to it. A lightweight poll bridges that gap. */
+      setInterval(() => { readModeFromCssVar(); readFromCssVar(); }, 150);
+    })();
+  </script>
+</body>
+
+</html>

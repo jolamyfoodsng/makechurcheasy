@@ -242,7 +242,7 @@ class PresentationSceneManager {
 
     // Create the source
     try {
-      const overlayUrl = `${getOverlayBaseUrlSync()}/bible-overlay-fullscreen.html`;
+      const overlayUrl = `${getOverlayBaseUrlSync()}/mce-bible-overlay.html`;
       const sceneItemId = await obsService.createInput(
         sceneName,
         sourceName,

@@ -84,9 +84,14 @@ class WorshipObsService {
     }
   }
 
-  private buildOverlayDataCss(packet: Record<string, unknown>, customCss = ""): string {
+  private buildOverlayDataCss(
+    packet: Record<string, unknown>,
+    customCss = "",
+    displayMode?: "fullscreen" | "lower-third",
+  ): string {
     const encodedPacket = encodeURIComponent(JSON.stringify(packet));
-    const overlayCss = `:root { --overlay-data: "${encodedPacket}"; }`;
+    const modeVar = displayMode ? ` --display-mode: "${displayMode}";` : "";
+    const overlayCss = `:root { --overlay-data: "${encodedPacket}";${modeVar} }`;
     return customCss ? `${overlayCss}\n${customCss}` : overlayCss;
   }
 
@@ -291,7 +296,7 @@ class WorshipObsService {
     await presentationSceneManager.ensurePresentationScene();
 
     // ── 2. Update the browser source URL ──
-    const overlayUrl = `${getOverlayBaseUrlSync()}/bible-overlay-fullscreen.html`;
+    const overlayUrl = `${getOverlayBaseUrlSync()}/mce-bible-overlay.html`;
 
     let currentSourceName: string = WORSHIP_SOURCE_NAME;
     const regInput = await getInputBySlot(SLOT_INPUT);
@@ -324,7 +329,11 @@ class WorshipObsService {
           };
           const { themeForHash, customCss } = this.buildThemePayload(this._liveTheme);
           const packet = { slide, theme: themeForHash, live: true, blanked: this._isBlanked, timestamp: Date.now() };
-          overlayCss = this.buildOverlayDataCss(packet as unknown as Record<string, unknown>, customCss || "");
+          overlayCss = this.buildOverlayDataCss(
+            packet as unknown as Record<string, unknown>,
+            customCss || "",
+            "fullscreen",
+          );
         }
         await obsService.call("SetInputSettings", {
           inputName: existing.sourceName,
@@ -754,8 +763,12 @@ class WorshipObsService {
 
       const packet = { slide, theme: themeForHash, live, blanked, timestamp: Date.now() };
       const base = getOverlayBaseUrlSync();
-      const baseUrl = `${base}/bible-overlay-fullscreen.html`;
-      const overlayCss = this.buildOverlayDataCss(packet as unknown as Record<string, unknown>, customCss || "");
+      const baseUrl = `${base}/mce-bible-overlay.html`;
+      const overlayCss = this.buildOverlayDataCss(
+        packet as unknown as Record<string, unknown>,
+        customCss || "",
+        "fullscreen",
+      );
       const sourceSignature = JSON.stringify({
         baseUrl,
         css: customCss || "",

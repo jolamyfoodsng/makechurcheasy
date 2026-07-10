@@ -29,7 +29,7 @@ export interface FullscreenSceneDef {
   sceneName: string;
   /** OBS browser source name inside MCE Presentation */
   browserSourceName: string;
-  /** Overlay HTML file (e.g. "bible-overlay-fullscreen.html") */
+  /** Overlay HTML file (e.g. "mce-bible-overlay.html") */
   overlayFile: string;
 }
 
@@ -38,13 +38,13 @@ export const FULLSCREEN_SCENES: Record<string, FullscreenSceneDef> = {
     key: "bible",
     sceneName: PRESENTATION_SCENE_NAME,
     browserSourceName: FULLSCREEN_SOURCE_NAMES.BIBLE,
-    overlayFile: "bible-overlay-fullscreen.html",
+    overlayFile: "mce-bible-overlay.html",
   },
   worship: {
     key: "worship",
     sceneName: PRESENTATION_SCENE_NAME,
     browserSourceName: FULLSCREEN_SOURCE_NAMES.WORSHIP,
-    overlayFile: "bible-overlay-fullscreen.html",
+    overlayFile: "mce-bible-overlay.html",
   },
   countdown: {
     key: "countdown",
@@ -56,13 +56,13 @@ export const FULLSCREEN_SCENES: Record<string, FullscreenSceneDef> = {
     key: "welcome",
     sceneName: PRESENTATION_SCENE_NAME,
     browserSourceName: FULLSCREEN_SOURCE_NAMES.COUNTDOWN, // reuse countdown source for welcome
-    overlayFile: "bible-overlay-fullscreen.html",
+    overlayFile: "mce-bible-overlay.html",
   },
   sermon: {
     key: "sermon",
     sceneName: PRESENTATION_SCENE_NAME,
     browserSourceName: FULLSCREEN_SOURCE_NAMES.BIBLE, // reuse bible source for sermon
-    overlayFile: "bible-overlay-fullscreen.html",
+    overlayFile: "mce-bible-overlay.html",
   },
 };
 
@@ -72,10 +72,12 @@ export const FULLSCREEN_SCENES: Record<string, FullscreenSceneDef> = {
 
 function buildOverlayDataCss(
   packet: Record<string, unknown>,
-  customCss = ""
+  customCss = "",
+  displayMode?: "fullscreen" | "lower-third",
 ): string {
   const encodedPacket = encodeURIComponent(JSON.stringify(packet));
-  const overlayCss = `:root { --overlay-data: "${encodedPacket}"; }`;
+  const modeVar = displayMode ? ` --display-mode: "${displayMode}";` : "";
+  const overlayCss = `:root { --overlay-data: "${encodedPacket}";${modeVar} }`;
   return customCss ? `${overlayCss}\n${customCss}` : overlayCss;
 }
 
@@ -147,7 +149,7 @@ class FullscreenSceneManager {
   ): Promise<void> {
     await this.ensureScene(def);
 
-    const overlayCss = buildOverlayDataCss(packet, customCss || "");
+    const overlayCss = buildOverlayDataCss(packet, customCss || "", "fullscreen");
 
     await obsService.call("SetInputSettings", {
       inputName: def.browserSourceName,

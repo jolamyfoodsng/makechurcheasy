@@ -126,7 +126,20 @@ export function useBibleSync(options: UseBibleSyncOptions = {}): {
             }) as { inputSettings: { url?: string } };
 
             const url = inputSettings.inputSettings?.url || "";
-            if (url.includes("bible-overlay-fullscreen")) {
+            const css = (inputSettings.inputSettings as { css?: string })?.css || "";
+
+            if (url.includes("mce-bible-overlay")) {
+              // Single merged overlay — detect mode from --display-mode CSS variable
+              const modeMatch = css.match(/--display-mode:\s*"?(\w[\w-]*)"?/);
+              const detectedMode = modeMatch?.[1] as BibleTemplateType | undefined;
+              if (detectedMode === "fullscreen") {
+                activeTemplateType = "fullscreen";
+                isFullscreenActive = true;
+              } else if (detectedMode === "lower-third") {
+                activeTemplateType = "lower-third";
+                isLowerThirdActive = true;
+              }
+            } else if (url.includes("bible-overlay-fullscreen")) {
               activeTemplateType = "fullscreen";
               isFullscreenActive = true;
             } else if (url.includes("bible-overlay-lower-third")) {

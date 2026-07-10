@@ -2139,7 +2139,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
                               <span className="dock-worship-slide-card__name">{displayLabel}</span>
                             ) : (
                               <span className="dock-worship-slide-card__name dock-worship-slide-card__name--muted">
-                                {t('wthis orship.slideNumber', { number: idx + 1 })}
+                                {t('worship.slideNumber', { number: idx + 1 })}
                               </span>
                             )}
                             <span className="dock-worship-slide-card__index">{idx + 1}</span>

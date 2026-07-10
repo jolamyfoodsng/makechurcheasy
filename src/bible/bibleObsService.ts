@@ -107,9 +107,14 @@ class BibleObsService {
     }
   }
 
-  private buildOverlayDataCss(packet: Record<string, unknown>, customCss = ""): string {
+  private buildOverlayDataCss(
+    packet: Record<string, unknown>,
+    customCss = "",
+    displayMode?: "fullscreen" | "lower-third",
+  ): string {
     const encodedPacket = encodeURIComponent(JSON.stringify(packet));
-    const overlayCss = `:root { --overlay-data: "${encodedPacket}"; }`;
+    const modeVar = displayMode ? ` --display-mode: "${displayMode}";` : "";
+    const overlayCss = `:root { --overlay-data: "${encodedPacket}";${modeVar} }`;
     return customCss ? `${overlayCss}\n${customCss}` : overlayCss;
   }
 
@@ -403,7 +408,11 @@ class BibleObsService {
             blanked: this._isBlanked,
             timestamp: Date.now(),
           };
-          overlayCss = this.buildOverlayDataCss(packet as unknown as Record<string, unknown>, customCss);
+          overlayCss = this.buildOverlayDataCss(
+            packet as unknown as Record<string, unknown>,
+            customCss,
+            this.currentTemplateType as "fullscreen" | "lower-third" | undefined,
+          );
         }
         // Only include the URL when it has actually changed — setting the URL
         // on an OBS browser source triggers a full page reload (flicker).
@@ -951,11 +960,13 @@ class BibleObsService {
           timestamp: Date.now(),
         };
         const base = getOverlayBaseUrlSync();
-        const overlayFile = this.currentTemplateType === "fullscreen"
-          ? "bible-overlay-fullscreen.html"
-          : "bible-overlay-lower-third.html";
+        const overlayFile = "mce-bible-overlay.html";
         const baseUrl = `${base}/${overlayFile}`;
-        const overlayCss = this.buildOverlayDataCss(packet as unknown as Record<string, unknown>, customCss || "");
+        const overlayCss = this.buildOverlayDataCss(
+          packet as unknown as Record<string, unknown>,
+          customCss || "",
+          this.currentTemplateType as "fullscreen" | "lower-third" | undefined,
+        );
         const sourceSignature = baseUrl;
         if (this.bgSceneItemId !== null) {
           await this.enforceBgPlacement(BIBLE_SCENE_NAME, this.bgSceneItemId);
@@ -1155,7 +1166,11 @@ class BibleObsService {
           const baseUrl = currentUrl.split("#")[0] || currentUrl;
 
           const baseCss = this.stripOverlayDataCss(currentSettings.css || "");
-          const overlayCss = this.buildOverlayDataCss(packet as unknown as Record<string, unknown>, baseCss);
+          const overlayCss = this.buildOverlayDataCss(
+            packet as unknown as Record<string, unknown>,
+            baseCss,
+            this.currentTemplateType as "fullscreen" | "lower-third" | undefined,
+          );
 
           const inputSettings = currentUrl.split("#")[0] === baseUrl
             ? { css: overlayCss }
