@@ -49,6 +49,7 @@ import {
 } from "../dockConsoleTheme";
 import Icon from "../DockIcon";
 import DockBottomToolbar from "../components/DockBottomToolbar";
+import { normalizeCompareThemeSettings } from "../compareThemeConfig";
 
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { trackBiblePresent } from "../../services/tracking";
@@ -78,6 +79,7 @@ interface Props {
 type OverlayMode = "fullscreen" | "lower-third";
 type DisplayMode = "single" | "compare";
 type CompareLayout = "line-by-line" | "side-by-side";
+type ThemeSettingsTab = "text" | "background" | "compare";
 const DOCK_BIBLE_PREFS_KEY = "ocs-dock-bible-preferences";
 const DOCK_BIBLE_UI_PREFS_KEY = "ocs-dock-bible-ui-preferences";
 const MAX_VERSE_LINES = 4;
@@ -166,6 +168,7 @@ function extractFullscreenQuickThemeSettings(
   settings: BibleThemeSettings,
   backgroundType?: DockFullscreenQuickThemeSettings["backgroundType"],
 ): DockFullscreenQuickThemeSettings {
+  const compareSettings = normalizeCompareThemeSettings(settings as unknown as Record<string, unknown>);
   return {
     backgroundType,
     fontSize: clampNumber(settings.fontSize, 28, 200),
@@ -211,6 +214,7 @@ function extractFullscreenQuickThemeSettings(
     lowerThirdCaptionPosition: settings.lowerThirdCaptionPosition || "bottom",
     compareTranslationWidth: settings.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth,
     compareTranslationGap: settings.compareTranslationGap ?? DEFAULT_THEME_SETTINGS.compareTranslationGap,
+    ...compareSettings,
   };
 }
 
@@ -249,6 +253,7 @@ function sanitizeFullscreenQuickThemeSettings(
   const animation = validAnimations.includes(source.animation as typeof validAnimations[number])
     ? source.animation as typeof validAnimations[number]
     : DEFAULT_THEME_SETTINGS.animation;
+  const compareSettings = normalizeCompareThemeSettings(source as Record<string, unknown>);
 
   return {
     fontSize: clampNumber(Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize), 28, 200),
@@ -358,6 +363,7 @@ function sanitizeFullscreenQuickThemeSettings(
     compareTranslationWidth: clampNumber(Number(source.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth), 30, 50),
     compareTranslationGap: clampNumber(Number(source.compareTranslationGap ?? DEFAULT_THEME_SETTINGS.compareTranslationGap), 0, 200),
     backgroundType: source.backgroundType,
+    ...compareSettings,
   };
 }
 
@@ -369,6 +375,7 @@ function applyFullscreenQuickThemeSettings(
   const bgType = quickSettings.backgroundType;
   const useThemeBg = bgType === "theme";
   const useNoBg = bgType === "off";
+  const compareSettings = normalizeCompareThemeSettings(quickSettings as Record<string, unknown>);
   return {
     ...theme,
     settings: {
@@ -412,6 +419,7 @@ function applyFullscreenQuickThemeSettings(
       lowerThirdSize: quickSettings.lowerThirdSize,
       lowerThirdWidthPreset: quickSettings.lowerThirdWidthPreset,
       lowerThirdOffsetX: quickSettings.lowerThirdOffsetX,
+      ...compareSettings,
     },
   };
 }
@@ -710,6 +718,7 @@ export default function DockBibleTab({
   const [showVerseLinePopover, setShowVerseLinePopover] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
+  const [themeSettingsInitialTab, setThemeSettingsInitialTab] = useState<ThemeSettingsTab>("text");
   const [showBibleHistory, setShowBibleHistory] = useState(false);
 
   // Compact layout when container height ≤ 450px
@@ -2641,6 +2650,12 @@ export default function DockBibleTab({
     setTranslationB(newTranslation);
   }, [translationA, translationB]);
 
+  const openThemeSettings = useCallback((tab: ThemeSettingsTab = "text") => {
+    setThemeSettingsInitialTab(tab);
+    setShowComparePopover(false);
+    setShowThemeSettings(true);
+  }, []);
+
   const handleSendCompareToObs = useCallback(async () => {
     if (!compareEnabled || !selectedBook || !selectedChapter || !selectedVerse) return;
     setActionError("");
@@ -3296,7 +3311,23 @@ export default function DockBibleTab({
                 </div>
               </div>
               <div className="dock-bible-compare-popover__section">
-                <div className="dock-bible-compare-popover__label">{t("dock.compare.layout", "Layout")}</div>
+                <div className="dock-bible-compare-popover__label-row">
+                  <div className="dock-bible-compare-popover__label">{t("dock.compare.layout", "Layout")}</div>
+                  <button
+                    type="button"
+                    className="dock-bible-compare-popover__settings"
+                    onClick={() => openThemeSettings("compare")}
+                    disabled={!compareEnabled}
+                    aria-label={t("dock.compare.openCompareSettings", "Open compare design settings")}
+                    title={
+                      compareEnabled
+                        ? t("dock.compare.openCompareSettings", "Open compare design settings")
+                        : t("dock.compare.enableCompareFirst", "Enable compare mode first")
+                    }
+                  >
+                    <Icon name="settings" size={12} />
+                  </button>
+                </div>
                 <select
                   className="dock-select dock-bible-compare-popover__select"
                   value={compareLayout}
@@ -3656,7 +3687,7 @@ export default function DockBibleTab({
           <button
             type="button"
             className="dock-btm-toolbar__icon-btn"
-            onClick={() => setShowThemeSettings(true)}
+            onClick={() => openThemeSettings("text")}
             title={t("bible.quickEdits")}
           >
             <Icon name="edit" size={14} />
@@ -3728,7 +3759,7 @@ export default function DockBibleTab({
                   <button
                     type="button"
                     className="dock-btn dock-btn--ghost dock-btn--compact"
-                    onClick={() => { setShowOptionsModal(false); setShowThemeSettings(true); }}
+                    onClick={() => { setShowOptionsModal(false); openThemeSettings("text"); }}
                     style={{ width: "100%" }}
                     title={t("bible.openThemeSettings")}>
                     <Icon name="palette" size={14} />
@@ -3873,6 +3904,7 @@ export default function DockBibleTab({
         onClose={() => setShowThemeSettings(false)}
         onBackgroundPresetChange={setBackgroundPreset}
         overlayMode={overlayMode}
+        initialTab={themeSettingsInitialTab}
       />
 
       {showBibleHistory && (

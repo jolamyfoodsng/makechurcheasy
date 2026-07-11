@@ -31,7 +31,7 @@
     "createUpdaterArtifacts": true,
     "resources": [
       "../dist/bible-overlay-fullscreen.html",
-      "../dist/bible-overlay-lower-third.html",
+      "../dist/mce-bible-overlay.html",
       "../dist/bible-overlay-bg.html",
       "../dist/bible-kjv.json",
       "../dist/lower-third-overlay.html",

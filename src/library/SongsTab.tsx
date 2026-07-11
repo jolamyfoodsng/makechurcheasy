@@ -898,7 +898,6 @@ export function SongsTab() {
           onClose={() => setBulkImportOpen(false)}
           onImported={() => {
             void reload();
-            setBulkImportOpen(false);
           }}
         />
       )}

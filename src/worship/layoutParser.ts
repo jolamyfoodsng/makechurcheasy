@@ -117,7 +117,6 @@ export function detectColumns(elements: TextElement[]): Column[] {
   centers.sort((a, b) => a - b);
 
   // ── Pass 2: Assign each element to the nearest center ──
-  const tolerance = 80; // pt — absorbs x-position variation within a column
   const columnElements: TextElement[][] = centers.map(() => []);
 
   for (const el of elements) {

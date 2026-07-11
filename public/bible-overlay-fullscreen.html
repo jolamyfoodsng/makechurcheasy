@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=1920,height=1080">
   <title>Bible Overlay — Fullscreen</title>
   <link href="/fonts/google/google-fonts.css" rel="stylesheet">
+  <link href="/fonts/cmg-sans-fonts.css" rel="stylesheet">
   <style>
     @font-face {
       font-family: 'Charis SIL';
@@ -28,8 +29,6 @@
       padding: 0;
       box-sizing: border-box;
     }
-
-    @import url('/fonts/cmg-sans-fonts.css');
 
     body {
       width: 1920px;
@@ -249,9 +248,9 @@
       display: none;
       width: min(1800px, calc(100% - var(--safe-area, 80px) * 2));
       min-height: min(820px, calc(100% - var(--safe-area, 80px) * 2));
-      padding: var(--padding, 60px);
+      padding: var(--compare-pad-top, 24px) var(--compare-pad-right, 24px) var(--compare-pad-bottom, 24px) var(--compare-pad-left, 24px);
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: clamp(28px, 2vw, 42px);
+      gap: var(--compare-gap, 24px);
       align-items: stretch;
     }
 
@@ -265,48 +264,65 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
-      gap: 18px;
-      padding: clamp(28px, 2vw, 38px);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      background: rgba(8, 12, 20, 0.3);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      gap: var(--compare-paragraph-spacing, 12px);
+      padding: var(--compare-panel-padding, 20px);
+      border: var(--compare-panel-border-width, 1px) solid var(--compare-panel-border-color, rgba(255, 255, 255, 0.14));
+      border-radius: var(--compare-panel-radius, 4px);
+      background: var(--compare-panel-background, rgba(8, 12, 20, 0.28));
+      box-shadow: var(--compare-panel-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.05));
+      overflow: hidden;
     }
 
-    .compare-column__header {
+    .compare-column__meta {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: var(--compare-meta-gap, 8px);
+      min-height: 0;
+    }
+
+    .compare-column__meta--row {
+      flex-direction: row;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .compare-column__meta:empty {
+      display: none;
     }
 
     .compare-column__reference {
-      font-size: var(--compare-ref-font-size, 24px);
+      font-size: var(--compare-ref-font-size, 22px);
       line-height: 1.2;
-      letter-spacing: 0.02em;
-      font-weight: var(--ref-font-weight, 400);
+      letter-spacing: var(--compare-letter-spacing, 0px);
+      font-weight: var(--compare-font-weight, 400);
       color: var(--ref-font-color, #cccccc);
-      text-transform: uppercase;
+      text-transform: var(--compare-ref-transform, uppercase);
+      text-align: var(--compare-ref-align, left);
     }
 
     .compare-column__translation {
-      font-size: var(--compare-ref-meta-size, 15px);
+      font-size: var(--compare-ref-meta-size, 13px);
       line-height: 1.2;
-      letter-spacing: 0.12em;
+      letter-spacing: var(--compare-letter-spacing, 0.12em);
       font-weight: 600;
       color: rgba(255, 255, 255, 0.72);
-      text-transform: uppercase;
+      text-transform: var(--compare-badge-transform, uppercase);
+      text-align: var(--compare-badge-align, left);
     }
 
     .compare-column__text-wrap {
       min-height: 0;
       flex: 1;
       display: flex;
-      align-items: center;
+      align-items: var(--compare-vertical-align, flex-start);
+      overflow: hidden;
     }
 
     .compare-column__text {
       width: 100%;
+      font-family: var(--compare-font-family, var(--font-family, "Charis SIL", "CMG Sans", "Noto Sans", sans-serif));
       font-size: var(--compare-font-size, 40px);
-      font-weight: var(--font-weight, 400);
+      font-weight: var(--compare-font-weight, var(--font-weight, 400));
       font-style: var(--font-style, normal);
       color: var(--font-color, #FFFFFF);
       line-height: var(--compare-line-height, var(--line-height, 1.6));
@@ -316,6 +332,19 @@
       overflow-wrap: anywhere;
       word-break: break-word;
       text-transform: var(--text-transform, none);
+      text-align: var(--compare-text-align, left);
+      letter-spacing: var(--compare-letter-spacing, 0px);
+      overflow: hidden;
+    }
+
+    #compare-divider {
+      position: absolute;
+      top: var(--compare-pad-top, 24px);
+      bottom: var(--compare-pad-bottom, 24px);
+      width: var(--compare-divider-thickness, 1px);
+      background: var(--compare-divider-color, rgba(255, 255, 255, 0.18));
+      display: none;
+      opacity: 0.8;
     }
 
     #verse-text {
@@ -500,24 +529,27 @@
       <div id="reference"></div>
     </div>
     <div id="compare-layout">
-      <section class="compare-column">
-        <div class="compare-column__header">
+      <section class="compare-column" id="compare-column-left">
+        <div class="compare-column__meta compare-column__meta--top" id="compare-meta-top-left">
           <div class="compare-column__reference" id="compare-reference-left"></div>
           <div class="compare-column__translation" id="compare-translation-left"></div>
         </div>
-        <div class="compare-column__text-wrap">
+        <div class="compare-column__text-wrap" id="compare-text-wrap-left">
           <div class="compare-column__text" id="compare-text-left"></div>
         </div>
+        <div class="compare-column__meta compare-column__meta--bottom" id="compare-meta-bottom-left"></div>
       </section>
-      <section class="compare-column">
-        <div class="compare-column__header">
+      <section class="compare-column" id="compare-column-right">
+        <div class="compare-column__meta compare-column__meta--top" id="compare-meta-top-right">
           <div class="compare-column__reference" id="compare-reference-right"></div>
           <div class="compare-column__translation" id="compare-translation-right"></div>
         </div>
-        <div class="compare-column__text-wrap">
+        <div class="compare-column__text-wrap" id="compare-text-wrap-right">
           <div class="compare-column__text" id="compare-text-right"></div>
         </div>
+        <div class="compare-column__meta compare-column__meta--bottom" id="compare-meta-bottom-right"></div>
       </section>
+      <div id="compare-divider"></div>
     </div>
     <img id="logo" src="" alt="">
   </div>
@@ -568,10 +600,19 @@
     const verseText = document.getElementById('verse-text');
     const reference = document.getElementById('reference');
     const compareLayout = document.getElementById('compare-layout');
+    const compareDivider = document.getElementById('compare-divider');
+    const compareColumnLeft = document.getElementById('compare-column-left');
+    const compareColumnRight = document.getElementById('compare-column-right');
+    const compareMetaTopLeft = document.getElementById('compare-meta-top-left');
+    const compareMetaTopRight = document.getElementById('compare-meta-top-right');
+    const compareMetaBottomLeft = document.getElementById('compare-meta-bottom-left');
+    const compareMetaBottomRight = document.getElementById('compare-meta-bottom-right');
     const compareReferenceLeft = document.getElementById('compare-reference-left');
     const compareReferenceRight = document.getElementById('compare-reference-right');
     const compareTranslationLeft = document.getElementById('compare-translation-left');
     const compareTranslationRight = document.getElementById('compare-translation-right');
+    const compareTextWrapLeft = document.getElementById('compare-text-wrap-left');
+    const compareTextWrapRight = document.getElementById('compare-text-wrap-right');
     const compareTextLeft = document.getElementById('compare-text-left');
     const compareTextRight = document.getElementById('compare-text-right');
     const logo = document.getElementById('logo');
@@ -610,6 +651,175 @@
     let baseCompareFontSize = 40;
     let baseCompareRefFontSize = 24;
     let fitRafId = 0;
+    let currentCompareSettings = null;
+    let applyCompareThemeStyles = null;
+
+    const compareDefaults = {
+      leftWidth: 40,
+      rightWidth: 40,
+      gap: 24,
+      padTop: 24,
+      padBottom: 24,
+      padLeft: 24,
+      padRight: 24,
+      innerPadding: 20,
+      refVerseSpacing: 12,
+      paragraphSpacing: 12,
+      leftFontFamily: '',
+      rightFontFamily: '',
+      leftFontSize: 40,
+      rightFontSize: 40,
+      leftRefSize: 22,
+      rightRefSize: 22,
+      leftBadgeSize: 13,
+      rightBadgeSize: 13,
+      leftWeight: 'regular',
+      rightWeight: 'regular',
+      leftLineHeight: 1.4,
+      rightLineHeight: 1.4,
+      leftLetterSpacing: 0,
+      rightLetterSpacing: 0,
+      leftAlign: 'left',
+      rightAlign: 'left',
+      leftRefTransform: 'uppercase',
+      rightRefTransform: 'uppercase',
+      leftBadgeTransform: 'uppercase',
+      rightBadgeTransform: 'uppercase',
+      overflow: 'auto-fit',
+      minFontSize: 18,
+      maxFontSize: 120,
+      keepSameSize: true,
+      leftVertical: 'top',
+      rightVertical: 'top',
+      panelHeightMode: 'fill-available-height',
+      panelBgLeft: '#081018',
+      panelBgRight: '#081018',
+      panelBgOpacityLeft: 0.28,
+      panelBgOpacityRight: 0.28,
+      panelBorderColorLeft: '#334155',
+      panelBorderColorRight: '#334155',
+      panelBorderWidthLeft: 1,
+      panelBorderWidthRight: 1,
+      panelRadiusLeft: 4,
+      panelRadiusRight: 4,
+      panelShadowLeft: true,
+      panelShadowRight: true,
+      dividerVisible: false,
+      dividerColor: '#475569',
+      dividerThickness: 1,
+      leftReferencePosition: 'above-verse',
+      rightReferencePosition: 'above-verse',
+      leftBadgePosition: 'above-verse',
+      rightBadgePosition: 'above-verse',
+      leftReferenceAlign: 'left',
+      rightReferenceAlign: 'left',
+      leftBadgeAlign: 'left',
+      rightBadgeAlign: 'left',
+      leftMetaGap: 8,
+      rightMetaGap: 8,
+      leftMetaBottomSpacing: 12,
+      rightMetaBottomSpacing: 12,
+    };
+
+    function clampNumber(value, min, max) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return min;
+      return Math.min(max, Math.max(min, numeric));
+    }
+
+    function readCompareSettings(settings) {
+      const s = settings || {};
+      const legacyWidth = clampNumber(s.compareTranslationWidth ?? compareDefaults.leftWidth, 25, 75);
+      const minFontSize = clampNumber(s.compareAutoFitMinFontSize ?? compareDefaults.minFontSize, 10, 120);
+      return {
+        leftWidth: clampNumber(s.compareLeftWidth ?? legacyWidth, 25, 75),
+        rightWidth: clampNumber(s.compareRightWidth ?? legacyWidth, 25, 75),
+        gap: clampNumber(s.compareTranslationGap ?? compareDefaults.gap, 0, 100),
+        padTop: clampNumber(s.compareOuterPaddingTop ?? compareDefaults.padTop, 0, 150),
+        padBottom: clampNumber(s.compareOuterPaddingBottom ?? compareDefaults.padBottom, 0, 150),
+        padLeft: clampNumber(s.compareOuterPaddingLeft ?? compareDefaults.padLeft, 0, 150),
+        padRight: clampNumber(s.compareOuterPaddingRight ?? compareDefaults.padRight, 0, 150),
+        innerPadding: clampNumber(s.comparePanelInnerPadding ?? compareDefaults.innerPadding, 0, 80),
+        refVerseSpacing: clampNumber(s.compareReferenceVerseSpacing ?? compareDefaults.refVerseSpacing, 0, 40),
+        paragraphSpacing: clampNumber(s.compareParagraphSpacing ?? compareDefaults.paragraphSpacing, 0, 40),
+        leftFontFamily: String(s.compareFontFamilyLeft ?? compareDefaults.leftFontFamily).trim(),
+        rightFontFamily: String(s.compareFontFamilyRight ?? compareDefaults.rightFontFamily).trim(),
+        leftFontSize: clampNumber(s.compareVerseFontSizeLeft ?? baseCompareFontSize ?? compareDefaults.leftFontSize, 18, 120),
+        rightFontSize: clampNumber(s.compareVerseFontSizeRight ?? baseCompareFontSize ?? compareDefaults.rightFontSize, 18, 120),
+        leftRefSize: clampNumber(s.compareReferenceFontSizeLeft ?? baseCompareRefFontSize ?? compareDefaults.leftRefSize, 10, 48),
+        rightRefSize: clampNumber(s.compareReferenceFontSizeRight ?? baseCompareRefFontSize ?? compareDefaults.rightRefSize, 10, 48),
+        leftBadgeSize: clampNumber(s.compareBadgeFontSizeLeft ?? compareDefaults.leftBadgeSize, 8, 32),
+        rightBadgeSize: clampNumber(s.compareBadgeFontSizeRight ?? compareDefaults.rightBadgeSize, 8, 32),
+        leftWeight: String(s.compareFontWeightLeft ?? compareDefaults.leftWeight),
+        rightWeight: String(s.compareFontWeightRight ?? compareDefaults.rightWeight),
+        leftLineHeight: clampNumber(s.compareLineHeightLeft ?? compareDefaults.leftLineHeight, 0.9, 2),
+        rightLineHeight: clampNumber(s.compareLineHeightRight ?? compareDefaults.rightLineHeight, 0.9, 2),
+        leftLetterSpacing: clampNumber(s.compareLetterSpacingLeft ?? compareDefaults.leftLetterSpacing, -2, 10),
+        rightLetterSpacing: clampNumber(s.compareLetterSpacingRight ?? compareDefaults.rightLetterSpacing, -2, 10),
+        leftAlign: String(s.compareTextAlignLeft ?? compareDefaults.leftAlign),
+        rightAlign: String(s.compareTextAlignRight ?? compareDefaults.rightAlign),
+        leftRefTransform: String(s.compareReferenceTextTransformLeft ?? compareDefaults.leftRefTransform),
+        rightRefTransform: String(s.compareReferenceTextTransformRight ?? compareDefaults.rightRefTransform),
+        leftBadgeTransform: String(s.compareBadgeTextTransformLeft ?? compareDefaults.leftBadgeTransform),
+        rightBadgeTransform: String(s.compareBadgeTextTransformRight ?? compareDefaults.rightBadgeTransform),
+        overflow: String(s.compareOverflowBehavior ?? compareDefaults.overflow),
+        minFontSize,
+        maxFontSize: clampNumber(s.compareAutoFitMaxFontSize ?? compareDefaults.maxFontSize, minFontSize, 160),
+        keepSameSize: Boolean(s.compareKeepSameFontSize ?? compareDefaults.keepSameSize),
+        leftVertical: String(s.compareVerticalAlignLeft ?? compareDefaults.leftVertical),
+        rightVertical: String(s.compareVerticalAlignRight ?? compareDefaults.rightVertical),
+        panelHeightMode: String(s.comparePanelHeightMode ?? compareDefaults.panelHeightMode),
+        panelBgLeft: String(s.comparePanelBgColorLeft ?? compareDefaults.panelBgLeft),
+        panelBgRight: String(s.comparePanelBgColorRight ?? compareDefaults.panelBgRight),
+        panelBgOpacityLeft: clampNumber(s.comparePanelBgOpacityLeft ?? compareDefaults.panelBgOpacityLeft, 0, 1),
+        panelBgOpacityRight: clampNumber(s.comparePanelBgOpacityRight ?? compareDefaults.panelBgOpacityRight, 0, 1),
+        panelBorderColorLeft: String(s.comparePanelBorderColorLeft ?? compareDefaults.panelBorderColorLeft),
+        panelBorderColorRight: String(s.comparePanelBorderColorRight ?? compareDefaults.panelBorderColorRight),
+        panelBorderWidthLeft: clampNumber(s.comparePanelBorderWidthLeft ?? compareDefaults.panelBorderWidthLeft, 0, 12),
+        panelBorderWidthRight: clampNumber(s.comparePanelBorderWidthRight ?? compareDefaults.panelBorderWidthRight, 0, 12),
+        panelRadiusLeft: clampNumber(s.comparePanelRadiusLeft ?? compareDefaults.panelRadiusLeft, 0, 40),
+        panelRadiusRight: clampNumber(s.comparePanelRadiusRight ?? compareDefaults.panelRadiusRight, 0, 40),
+        panelShadowLeft: Boolean(s.comparePanelShadowLeft ?? compareDefaults.panelShadowLeft),
+        panelShadowRight: Boolean(s.comparePanelShadowRight ?? compareDefaults.panelShadowRight),
+        dividerVisible: Boolean(s.compareDividerVisible ?? compareDefaults.dividerVisible),
+        dividerColor: String(s.compareDividerColor ?? compareDefaults.dividerColor),
+        dividerThickness: clampNumber(s.compareDividerThickness ?? compareDefaults.dividerThickness, 1, 12),
+        leftReferencePosition: String(s.compareReferencePositionLeft ?? compareDefaults.leftReferencePosition),
+        rightReferencePosition: String(s.compareReferencePositionRight ?? compareDefaults.rightReferencePosition),
+        leftBadgePosition: String(s.compareBadgePositionLeft ?? compareDefaults.leftBadgePosition),
+        rightBadgePosition: String(s.compareBadgePositionRight ?? compareDefaults.rightBadgePosition),
+        leftReferenceAlign: String(s.compareReferenceAlignmentLeft ?? compareDefaults.leftReferenceAlign),
+        rightReferenceAlign: String(s.compareReferenceAlignmentRight ?? compareDefaults.rightReferenceAlign),
+        leftBadgeAlign: String(s.compareBadgeAlignmentLeft ?? compareDefaults.leftBadgeAlign),
+        rightBadgeAlign: String(s.compareBadgeAlignmentRight ?? compareDefaults.rightBadgeAlign),
+        leftMetaGap: clampNumber(s.compareMetaGapLeft ?? compareDefaults.leftMetaGap, 0, 40),
+        rightMetaGap: clampNumber(s.compareMetaGapRight ?? compareDefaults.rightMetaGap, 0, 40),
+        leftMetaBottomSpacing: clampNumber(s.compareMetaBottomSpacingLeft ?? compareDefaults.leftMetaBottomSpacing, 0, 40),
+        rightMetaBottomSpacing: clampNumber(s.compareMetaBottomSpacingRight ?? compareDefaults.rightMetaBottomSpacing, 0, 40),
+      };
+    }
+
+    function fontWeightValue(value) {
+      switch (value) {
+        case 'medium': return '500';
+        case 'semibold': return '600';
+        case 'bold': return '700';
+        case 'extrabold': return '800';
+        default: return '400';
+      }
+    }
+
+    function panelBackgroundColor(hex, opacity) {
+      if (typeof hex !== 'string' || !hex.trim()) return `rgba(8, 16, 24, ${opacity})`;
+      if (!hex.startsWith('#') || (hex.length !== 7 && hex.length !== 4)) return hex;
+      let normalized = hex.slice(1);
+      if (normalized.length === 3) normalized = normalized.split('').map((char) => char + char).join('');
+      const int = parseInt(normalized, 16);
+      const r = (int >> 16) & 255;
+      const g = (int >> 8) & 255;
+      const b = int & 255;
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
 
     // ── Seamless video loop controller ──
     // Uses dual video elements to eliminate the brief black flash when a video
@@ -798,6 +1008,173 @@
       const s = theme;
       const root = document.documentElement.style;
 
+      applyCompareThemeStyles = (compareSettings, layoutMode) => {
+        const isSideBySide = layoutMode !== 'line-by-line';
+        const leftRatio = Math.max(1, compareSettings.leftWidth);
+        const rightRatio = Math.max(1, compareSettings.rightWidth);
+        root.setProperty('--compare-gap', compareSettings.gap + 'px');
+        root.setProperty('--compare-pad-top', compareSettings.padTop + 'px');
+        root.setProperty('--compare-pad-bottom', compareSettings.padBottom + 'px');
+        root.setProperty('--compare-pad-left', compareSettings.padLeft + 'px');
+        root.setProperty('--compare-pad-right', compareSettings.padRight + 'px');
+        if (compareLayout) {
+          compareLayout.style.gridTemplateColumns = isSideBySide
+            ? `minmax(0, ${leftRatio}fr) minmax(0, ${rightRatio}fr)`
+            : 'minmax(0, 1fr)';
+          compareLayout.style.gap = compareSettings.gap + 'px';
+          compareLayout.style.padding = `${compareSettings.padTop}px ${compareSettings.padRight}px ${compareSettings.padBottom}px ${compareSettings.padLeft}px`;
+          compareLayout.style.alignItems = compareSettings.panelHeightMode === 'fit-content' ? 'start' : 'stretch';
+        }
+
+        const columns = [
+          {
+            column: compareColumnLeft,
+            textWrap: compareTextWrapLeft,
+            topMeta: compareMetaTopLeft,
+            bottomMeta: compareMetaBottomLeft,
+            reference: compareReferenceLeft,
+            badge: compareTranslationLeft,
+            fontFamily: compareSettings.leftFontFamily,
+            fontSize: compareSettings.leftFontSize,
+            refSize: compareSettings.leftRefSize,
+            badgeSize: compareSettings.leftBadgeSize,
+            fontWeight: compareSettings.leftWeight,
+            lineHeight: compareSettings.leftLineHeight,
+            letterSpacing: compareSettings.leftLetterSpacing,
+            textAlign: compareSettings.leftAlign,
+            refTransform: compareSettings.leftRefTransform,
+            badgeTransform: compareSettings.leftBadgeTransform,
+            vertical: compareSettings.leftVertical,
+            panelBg: compareSettings.panelBgLeft,
+            panelBgOpacity: compareSettings.panelBgOpacityLeft,
+            panelBorderColor: compareSettings.panelBorderColorLeft,
+            panelBorderWidth: compareSettings.panelBorderWidthLeft,
+            panelRadius: compareSettings.panelRadiusLeft,
+            panelShadow: compareSettings.panelShadowLeft,
+            referencePosition: compareSettings.leftReferencePosition,
+            badgePosition: compareSettings.leftBadgePosition,
+            referenceAlign: compareSettings.leftReferenceAlign,
+            badgeAlign: compareSettings.leftBadgeAlign,
+            metaGap: compareSettings.leftMetaGap,
+            metaBottomSpacing: compareSettings.leftMetaBottomSpacing,
+          },
+          {
+            column: compareColumnRight,
+            textWrap: compareTextWrapRight,
+            topMeta: compareMetaTopRight,
+            bottomMeta: compareMetaBottomRight,
+            reference: compareReferenceRight,
+            badge: compareTranslationRight,
+            fontFamily: compareSettings.rightFontFamily,
+            fontSize: compareSettings.rightFontSize,
+            refSize: compareSettings.rightRefSize,
+            badgeSize: compareSettings.rightBadgeSize,
+            fontWeight: compareSettings.rightWeight,
+            lineHeight: compareSettings.rightLineHeight,
+            letterSpacing: compareSettings.rightLetterSpacing,
+            textAlign: compareSettings.rightAlign,
+            refTransform: compareSettings.rightRefTransform,
+            badgeTransform: compareSettings.rightBadgeTransform,
+            vertical: compareSettings.rightVertical,
+            panelBg: compareSettings.panelBgRight,
+            panelBgOpacity: compareSettings.panelBgOpacityRight,
+            panelBorderColor: compareSettings.panelBorderColorRight,
+            panelBorderWidth: compareSettings.panelBorderWidthRight,
+            panelRadius: compareSettings.panelRadiusRight,
+            panelShadow: compareSettings.panelShadowRight,
+            referencePosition: compareSettings.rightReferencePosition,
+            badgePosition: compareSettings.rightBadgePosition,
+            referenceAlign: compareSettings.rightReferenceAlign,
+            badgeAlign: compareSettings.rightBadgeAlign,
+            metaGap: compareSettings.rightMetaGap,
+            metaBottomSpacing: compareSettings.rightMetaBottomSpacing,
+          },
+        ];
+
+        const placeMeta = (metaNode, position, topMeta, bottomMeta, sameRowWithOther) => {
+          if (!metaNode || !topMeta || !bottomMeta) return;
+          metaNode.style.display = position === 'hidden' ? 'none' : 'block';
+          metaNode.style.order = position === 'same-row' ? '0' : metaNode === compareReferenceLeft || metaNode === compareReferenceRight ? '0' : '1';
+          if (position === 'hidden') return;
+          if (position === 'below-verse') {
+            bottomMeta.appendChild(metaNode);
+            return;
+          }
+          if (position === 'same-row' && sameRowWithOther === 'below-verse') {
+            bottomMeta.appendChild(metaNode);
+            return;
+          }
+          topMeta.appendChild(metaNode);
+        };
+
+        columns.forEach((entry, index) => {
+          if (!entry.column || !entry.textWrap || !entry.topMeta || !entry.bottomMeta) return;
+          entry.column.style.padding = compareSettings.innerPadding + 'px';
+          entry.column.style.gap = compareSettings.paragraphSpacing + 'px';
+          entry.column.style.borderWidth = entry.panelBorderWidth + 'px';
+          entry.column.style.borderColor = entry.panelBorderColor;
+          entry.column.style.borderRadius = entry.panelRadius + 'px';
+          entry.column.style.background = panelBackgroundColor(entry.panelBg, entry.panelBgOpacity);
+          entry.column.style.boxShadow = entry.panelShadow
+            ? 'inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 34px rgba(2, 6, 23, 0.22)'
+            : 'none';
+          entry.column.style.justifyContent = 'flex-start';
+          entry.column.style.height = compareSettings.panelHeightMode === 'fit-content' ? 'auto' : '100%';
+          entry.textWrap.style.alignItems = entry.vertical === 'center' ? 'center' : entry.vertical === 'bottom' ? 'flex-end' : 'flex-start';
+          entry.textWrap.style.overflowY = compareSettings.overflow === 'scroll' ? 'auto' : 'hidden';
+          entry.textWrap.style.overflowX = 'hidden';
+
+          const textNode = index === 0 ? compareTextLeft : compareTextRight;
+          if (textNode) {
+            textNode.style.fontFamily = entry.fontFamily || root.getPropertyValue('--font-family');
+            textNode.style.fontSize = entry.fontSize + 'px';
+            textNode.style.lineHeight = String(entry.lineHeight);
+            textNode.style.letterSpacing = entry.letterSpacing + 'px';
+            textNode.style.textAlign = entry.textAlign;
+            textNode.style.fontWeight = fontWeightValue(entry.fontWeight);
+          }
+
+          entry.reference.style.fontSize = entry.refSize + 'px';
+          entry.reference.style.textTransform = entry.refTransform;
+          entry.reference.style.textAlign = entry.referenceAlign;
+          entry.reference.style.fontWeight = fontWeightValue(entry.fontWeight);
+          entry.reference.style.letterSpacing = entry.letterSpacing + 'px';
+          entry.badge.style.textTransform = entry.badgeTransform;
+          entry.badge.style.textAlign = entry.badgeAlign;
+          entry.badge.style.letterSpacing = entry.letterSpacing + 'px';
+
+          entry.topMeta.className = 'compare-column__meta compare-column__meta--top';
+          entry.bottomMeta.className = 'compare-column__meta compare-column__meta--bottom';
+          placeMeta(entry.reference, entry.referencePosition, entry.topMeta, entry.bottomMeta, entry.badgePosition);
+          placeMeta(entry.badge, entry.badgePosition, entry.topMeta, entry.bottomMeta, entry.referencePosition);
+
+          const topHasSameRow = entry.referencePosition === 'same-row' || entry.badgePosition === 'same-row';
+          const bottomHasSameRow = (entry.referencePosition === 'same-row' && entry.badgePosition === 'below-verse') || (entry.badgePosition === 'same-row' && entry.referencePosition === 'below-verse');
+          entry.topMeta.classList.toggle('compare-column__meta--row', topHasSameRow);
+          entry.bottomMeta.classList.toggle('compare-column__meta--row', bottomHasSameRow);
+          entry.topMeta.style.gap = entry.metaGap + 'px';
+          entry.bottomMeta.style.gap = entry.metaGap + 'px';
+          const hasVisibleTopMeta = Array.from(entry.topMeta.children).some((node) => node.style.display !== 'none');
+          const hasVisibleBottomMeta = Array.from(entry.bottomMeta.children).some((node) => node.style.display !== 'none');
+          const metaOffset = compareSettings.refVerseSpacing + entry.metaBottomSpacing;
+          entry.topMeta.style.marginBottom = hasVisibleTopMeta ? metaOffset + 'px' : '0px';
+          entry.bottomMeta.style.marginTop = hasVisibleBottomMeta ? metaOffset + 'px' : '0px';
+        });
+
+        if (compareDivider) {
+          compareDivider.style.display = compareSettings.dividerVisible && isSideBySide ? 'block' : 'none';
+          compareDivider.style.width = compareSettings.dividerThickness + 'px';
+          compareDivider.style.background = compareSettings.dividerColor;
+          if (compareSettings.dividerVisible && isSideBySide && compareColumnLeft && compareColumnRight) {
+            const leftRect = compareColumnLeft.getBoundingClientRect();
+            const rightRect = compareColumnRight.getBoundingClientRect();
+            const layoutRect = compareLayout.getBoundingClientRect();
+            const x = ((leftRect.right + rightRect.left) / 2) - layoutRect.left - (compareSettings.dividerThickness / 2);
+            compareDivider.style.left = x + 'px';
+          }
+        }
+      };
+
       root.setProperty('--font-family', ensureCmgSansFont(s.fontFamily));
       baseFontSize = Number(s.fontSize || 48);
       baseRefFontSize = Number(s.refFontSize || 24);
@@ -859,23 +1236,15 @@
         root.setProperty('--ref-bg-radius', '0');
         root.setProperty('--ref-bg-border', 'none');
       }
+      const compareSettings = readCompareSettings(s);
+      currentCompareSettings = compareSettings;
       baseCompareFontSize = Math.max(24, Math.round(baseFontSize * 0.76));
       baseCompareRefFontSize = Math.max(16, Math.round(baseRefFontSize * 0.95));
       root.setProperty('--compare-font-size', baseCompareFontSize + 'px');
       root.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
       root.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
       root.setProperty('--compare-line-height', String(Math.max(1.22, Number(s.lineHeight || 1.6) - 0.08)));
-
-      // Compare layout grid: width per panel (30-50%) and gap (0-200px)
-      const cmpWidth = Math.max(30, Math.min(50, Number(s.compareTranslationWidth ?? 40)));
-      const cmpGap = Math.max(0, Math.min(200, Number(s.compareTranslationGap ?? 40)));
-      root.setProperty('--compare-panel-width', cmpWidth + '%');
-      root.setProperty('--compare-gap', cmpGap + 'px');
-      const compareLayoutEl = document.getElementById('compare-layout');
-      if (compareLayoutEl) {
-        compareLayoutEl.style.gridTemplateColumns = `minmax(0, ${cmpWidth}fr) minmax(0, ${cmpWidth}fr)`;
-        compareLayoutEl.style.gap = cmpGap + 'px';
-      }
+      applyCompareThemeStyles(compareSettings, compareLayout?.dataset.layoutMode || 'side-by-side');
 
       root.setProperty('--bg-opacity', String(s.backgroundOpacity ?? 1));
       root.setProperty(
@@ -1240,44 +1609,59 @@
     function autoScaleCompareContent() {
       if (!compareLayout || !compareTextLeft || !compareTextRight) return;
 
+      if (applyCompareThemeStyles && currentCompareSettings) {
+        applyCompareThemeStyles(currentCompareSettings, compareLayout.dataset.layoutMode || 'side-by-side');
+      }
+
       const isWindows = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
       if (!isWindows) return;
+
+      const compareSettings = currentCompareSettings || readCompareSettings(null);
+      if (compareSettings.overflow === 'scroll' || compareSettings.overflow === 'clip') {
+        return;
+      }
 
       const textNodes = [compareTextLeft, compareTextRight];
       const refNodes = [compareReferenceLeft, compareReferenceRight];
       const translationNodes = [compareTranslationLeft, compareTranslationRight];
-      const wrappers = Array.from(compareLayout.querySelectorAll('.compare-column__text-wrap'));
+      const wrappers = [compareTextWrapLeft, compareTextWrapRight].filter(Boolean);
 
-      const baseText = Math.max(22, Math.round(baseCompareFontSize));
-      const baseRef = Math.max(14, Math.round(baseCompareRefFontSize));
-      const baseMeta = Math.max(12, Math.round(baseRef * 0.62));
-      let textSize = baseText;
-      let refSize = baseRef;
-      let metaSize = baseMeta;
-      let columnPadding = 38;
-      let layoutPadding = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(basePadding));
-      let lineHeight = Math.max(1.08, Number(getComputedStyle(document.documentElement).getPropertyValue("--compare-line-height")) || 1.4);
+      const baseText = [
+        clampNumber(compareSettings.leftFontSize, compareSettings.minFontSize, compareSettings.maxFontSize),
+        clampNumber(compareSettings.rightFontSize, compareSettings.minFontSize, compareSettings.maxFontSize),
+      ];
+      const baseRef = [compareSettings.leftRefSize, compareSettings.rightRefSize];
+      const baseMeta = [compareSettings.leftBadgeSize, compareSettings.rightBadgeSize];
+      let textSize = [...baseText];
+      let refSize = [...baseRef];
+      let metaSize = [...baseMeta];
+      let columnPadding = compareSettings.innerPadding;
+      let layoutPaddingTop = compareSettings.padTop;
+      let layoutPaddingBottom = compareSettings.padBottom;
+      let layoutPaddingLeft = compareSettings.padLeft;
+      let layoutPaddingRight = compareSettings.padRight;
+      let lineHeight = [compareSettings.leftLineHeight, compareSettings.rightLineHeight];
       const safeArea = resolveSafeArea();
       const viewportWidth = document.body?.clientWidth || 1920;
       const viewportHeight = document.body?.clientHeight || 1080;
       const targetWidth = Math.max(600, viewportWidth - (safeArea * 2));
       const targetHeight = Math.max(320, viewportHeight - (safeArea * 2));
-      const columns = Array.from(compareLayout.querySelectorAll(".compare-column"));
+      const columns = [compareColumnLeft, compareColumnRight].filter(Boolean);
 
       const applyCompareValues = () => {
-        compareLayout.style.padding = layoutPadding + "px";
+        compareLayout.style.padding = `${layoutPaddingTop}px ${layoutPaddingRight}px ${layoutPaddingBottom}px ${layoutPaddingLeft}px`;
         columns.forEach((column) => {
           column.style.padding = columnPadding + "px";
         });
-        textNodes.forEach((node) => {
-          node.style.fontSize = textSize + "px";
-          node.style.lineHeight = String(lineHeight);
+        textNodes.forEach((node, index) => {
+          node.style.fontSize = textSize[index] + "px";
+          node.style.lineHeight = String(lineHeight[index]);
         });
-        refNodes.forEach((node) => {
-          node.style.fontSize = refSize + "px";
+        refNodes.forEach((node, index) => {
+          node.style.fontSize = refSize[index] + "px";
         });
-        translationNodes.forEach((node) => {
-          node.style.fontSize = metaSize + "px";
+        translationNodes.forEach((node, index) => {
+          node.style.fontSize = metaSize[index] + "px";
         });
       };
 
@@ -1298,26 +1682,43 @@
       while (
         compareOverflowing() &&
         (
-          textSize > COMPARE_TEXT_MIN ||
-          refSize > COMPARE_REF_MIN ||
-          metaSize > COMPARE_META_MIN ||
+          textSize.some((value) => value > compareSettings.minFontSize) ||
+          refSize.some((value) => value > COMPARE_REF_MIN) ||
+          metaSize.some((value) => value > COMPARE_META_MIN) ||
           columnPadding > COMPARE_PADDING_MIN ||
-          layoutPadding > COMPARE_LAYOUT_PADDING_MIN ||
-          lineHeight > 1.08
+          layoutPaddingTop > COMPARE_LAYOUT_PADDING_MIN ||
+          layoutPaddingBottom > COMPARE_LAYOUT_PADDING_MIN ||
+          layoutPaddingLeft > COMPARE_LAYOUT_PADDING_MIN ||
+          layoutPaddingRight > COMPARE_LAYOUT_PADDING_MIN ||
+          lineHeight.some((value) => value > 1.02)
         ) &&
         guard < 240
       ) {
-        if (textSize > COMPARE_TEXT_MIN) textSize -= 1;
-        if (refSize > COMPARE_REF_MIN) refSize = Math.max(COMPARE_REF_MIN, refSize - 1);
-        if (metaSize > COMPARE_META_MIN) metaSize = Math.max(COMPARE_META_MIN, metaSize - 1);
-        if (compareOverflowing() && columnPadding > COMPARE_PADDING_MIN) {
+        if (compareSettings.keepSameSize) {
+          const nextTextSize = Math.max(compareSettings.minFontSize, Math.min(textSize[0], textSize[1]) - 1);
+          textSize = [nextTextSize, nextTextSize];
+        } else {
+          textSize = textSize.map((value) => Math.max(compareSettings.minFontSize, value - 1));
+        }
+        refSize = refSize.map((value, index) => {
+          const ratio = baseText[index] > 0 ? baseRef[index] / baseText[index] : 0.55;
+          return Math.max(COMPARE_REF_MIN, Math.round(textSize[index] * ratio));
+        });
+        metaSize = metaSize.map((value, index) => {
+          const ratio = baseText[index] > 0 ? baseMeta[index] / baseText[index] : 0.32;
+          return Math.max(COMPARE_META_MIN, Math.round(textSize[index] * ratio));
+        });
+        if (compareSettings.overflow === 'auto-fit' && compareOverflowing() && columnPadding > COMPARE_PADDING_MIN) {
           columnPadding = Math.max(COMPARE_PADDING_MIN, columnPadding - 1);
         }
-        if (compareOverflowing() && layoutPadding > COMPARE_LAYOUT_PADDING_MIN) {
-          layoutPadding = Math.max(COMPARE_LAYOUT_PADDING_MIN, layoutPadding - 2);
+        if (compareSettings.overflow === 'auto-fit' && compareOverflowing()) {
+          layoutPaddingTop = Math.max(COMPARE_LAYOUT_PADDING_MIN, layoutPaddingTop - 1);
+          layoutPaddingBottom = Math.max(COMPARE_LAYOUT_PADDING_MIN, layoutPaddingBottom - 1);
+          layoutPaddingLeft = Math.max(COMPARE_LAYOUT_PADDING_MIN, layoutPaddingLeft - 1);
+          layoutPaddingRight = Math.max(COMPARE_LAYOUT_PADDING_MIN, layoutPaddingRight - 1);
         }
-        if (compareOverflowing() && lineHeight > 1.08) {
-          lineHeight = Math.max(1.08, Number((lineHeight - 0.02).toFixed(2)));
+        if (compareOverflowing()) {
+          lineHeight = lineHeight.map((value) => Math.max(1.02, Number((value - 0.02).toFixed(2))));
         }
         applyCompareValues();
         guard += 1;
@@ -1459,10 +1860,11 @@
         const normalizeCompareText = (value) => safeSupText(value);
 
         if (compareLayout) {
-          compareLayout.style.gridTemplateColumns = compareLayoutMode === 'side-by-side'
-            ? 'minmax(0, 1fr) minmax(0, 1fr)'
-            : 'minmax(0, 1fr)';
-          compareLayout.style.gridAutoFlow = 'row';
+          compareLayout.dataset.layoutMode = compareLayoutMode;
+        }
+
+        if (applyCompareThemeStyles && currentCompareSettings) {
+          applyCompareThemeStyles(currentCompareSettings, compareLayoutMode);
         }
 
         compareReferenceLeft.textContent = String(left.reference || '').trim();

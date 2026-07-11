@@ -2,7 +2,15 @@
  * pdfImportService.ts — Extract text from PDF and parse bilingual hymns
  *
  * Designed for CCC (Celestial Church of Christ) hymnals that contain
- * Yoruba lyrics followed by English translations.
+ * Yoruba lyrics followed by English translations in a two-column layout.
+ *
+ * Layout produced by pdftotext -layout:
+ *   ORIN AKOWOLE                                PROCESSIONAL HYMN
+ *   Orin 1                                 Hymn 1
+ *   Jerih mo yah mah,                      Jerih moh Yah mah
+ *   ...
+ *
+ * Column split is at character position ~38 (detected dynamically).
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -33,188 +41,255 @@ export async function extractPdfText(file: File): Promise<string> {
   return invoke<string>("extract_text_from_pdf", { fileData: data });
 }
 
-// ── Bilingual hymn parser ──────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────
 
-const ORIN_HEADER_RE = /Orin\s+(\d+)/i;
-const HYMN_HEADER_RE = /Hymn\s+(\d+)/i;
-const SECTION_HEADER_RE = /^(ORIN\s+[A-ZÀ-Ỹ][A-ZÀ-Ỹ\s]*?)$/;
-const MUSICAL_NOTATION_RE = /^[m:s:d:f:l:r:t:\-\s]+$/i;
+/** Matches "Orin N" anywhere on a line (the Yoruba hymn header). */
+const ORIN_RE = /Orin\s+(\d+)/i;
+/** Matches a standalone "Orin N" line. */
+const STANDALONE_ORIN_RE = /^\s*Orin\s+(\d+)\s*$/i;
+/** Matches a standalone "Hymn N" line (right-column header when Orin is alone). */
+const STANDALONE_HYMN_RE = /^\s*Hymn\s+(\d+)\s*$/i;
+/** Musical notation lines — skip entirely. */
+const MUSICAL_RE = /^[msdflrt:\-\s\.]+$/i;
+/** Trailing Amin/Amen to strip from lyric lines. */
+const AMEN_RE = /\s*\b(Amin|Amen)\b\.?\s*$/i;
+/** Default column split position (chars). Overridden by dynamic detection. */
+const DEFAULT_SPLIT_COL = 38;
+
+// ── Column split detection ─────────────────────────────────────────────────
 
 /**
- * Parse extracted PDF text into structured bilingual hymns.
- *
- * The CCC hymnal format is:
- *   - Optional section header (e.g., "ORIN AKOWOLE")
- *   - "Orin N" (Yoruba hymn number)
- *   - "Hymn N" (English hymn number)
- *   - Yoruba lyrics
- *   - English lyrics
- *   - "Amin" / "Amen"
+ * Detect the column split position from same-line "Orin N  Hymn N" headers.
+ * Returns the character index where the right column starts.
  */
-export function parseBilingualHymns(text: string): ParsedHymn[] {
-  const lines = text.split("\n");
-  const hymns: ParsedHymn[] = [];
-
-  // Pass 1: find all "Orin N" header positions
-  const orinHeaders: { lineIdx: number; number: number }[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(ORIN_HEADER_RE);
-    if (m) {
-      orinHeaders.push({ lineIdx: i, number: parseInt(m[1], 10) });
+function detectSplitCol(lines: string[]): number {
+  const positions: number[] = [];
+  const sameLineRe = /Orin\s+\d+\s+(Hymn\s+\d+)/i;
+  for (const line of lines) {
+    const m = sameLineRe.exec(line);
+    if (m && m.index !== undefined) {
+      // m.index is where 'Orin' starts; find where 'Hymn' starts
+      const hymnIdx = line.indexOf(m[1]);
+      if (hymnIdx > 0) positions.push(hymnIdx);
     }
   }
-
-  // Pass 2: for each Orin header, find the next "Hymn N" and extract both blocks
-  for (let h = 0; h < orinHeaders.length; h++) {
-    const orin = orinHeaders[h];
-    const nextOrinLine = h + 1 < orinHeaders.length ? orinHeaders[h + 1].lineIdx : lines.length;
-
-    // Check if "Hymn N" is on the same line as "Orin N" (two-column PDF layout)
-    const headerLine = lines[orin.lineIdx];
-    const hymnSameLine = headerLine.match(HYMN_HEADER_RE);
-
-    let hymnLineIdx = -1;
-    let hymnNumber = orin.number;
-    let columnSplitCol = -1;
-
-    if (hymnSameLine && hymnSameLine.index! > 0) {
-      // Both headers on same line — two-column format
-      hymnLineIdx = orin.lineIdx;
-      hymnNumber = parseInt(hymnSameLine[1], 10);
-      columnSplitCol = hymnSameLine.index!;
-    } else {
-      // Search next 5 lines for "Hymn N"
-      for (let i = orin.lineIdx + 1; i < Math.min(orin.lineIdx + 5, lines.length); i++) {
-        const m = lines[i].match(HYMN_HEADER_RE);
-        if (m) {
-          hymnLineIdx = i;
-          hymnNumber = parseInt(m[1], 10);
-          break;
-        }
-      }
-    }
-
-    if (hymnLineIdx === -1) {
-      // No English header found — treat the whole block as Yoruba-only
-      const yorubaLines = lines.slice(orin.lineIdx + 1, nextOrinLine);
-      const yoruba = cleanLyricBlock(yorubaLines);
-      if (!yoruba) continue;
-
-      hymns.push({
-        id: `hymn-${orin.number}`,
-        number: orin.number,
-        title: `Hymn ${orin.number}`,
-        sectionLabel: "",
-        yoruba,
-        english: "",
-      });
-      continue;
-    }
-
-    let yoruba: string;
-    let english: string;
-
-    if (columnSplitCol > 0) {
-      // Two-column format: split each lyrics line at the column position
-      const yorubaParts: string[] = [];
-      const englishParts: string[] = [];
-
-      for (let i = orin.lineIdx + 1; i < nextOrinLine; i++) {
-        const line = lines[i];
-        if (!line.trim()) continue;
-
-        const breakIdx = findColumnBreak(line, columnSplitCol);
-
-        if (breakIdx > 0 && breakIdx < line.length) {
-          const left = line.substring(0, breakIdx).trim();
-          const right = line.substring(breakIdx).trim();
-          if (left) yorubaParts.push(left);
-          if (right) englishParts.push(right);
-        } else {
-          // Can't split — treat as Yoruba only
-          yorubaParts.push(line.trim());
-        }
-      }
-
-      yoruba = cleanLyricBlock(yorubaParts);
-      english = cleanLyricBlock(englishParts);
-    } else {
-      // Single-column format: extract Yoruba between Orin and Hymn, English after Hymn
-      yoruba = cleanLyricBlock(lines.slice(orin.lineIdx + 1, hymnLineIdx));
-      english = cleanLyricBlock(lines.slice(hymnLineIdx + 1, nextOrinLine));
-    }
-
-    if (!yoruba && !english) continue;
-
-    // Look for a section label above this Orin header
-    const sectionLabel = findSectionLabel(lines, orin.lineIdx);
-
-    hymns.push({
-      id: `hymn-${orin.number}`,
-      number: orin.number,
-      title: `Hymn ${hymnNumber}`,
-      sectionLabel,
-      yoruba,
-      english,
-    });
-  }
-
-  return hymns;
+  if (positions.length === 0) return DEFAULT_SPLIT_COL;
+  positions.sort((a, b) => a - b);
+  return positions[Math.floor(positions.length / 2)]; // median
 }
 
-function findSectionLabel(lines: string[], orinLineIdx: number): string {
-  // Look backwards from the Orin header for an uppercase section label
-  for (let i = orinLineIdx - 1; i >= Math.max(0, orinLineIdx - 6); i--) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    const m = line.match(SECTION_HEADER_RE);
-    if (m) return m[1].trim();
-    // If we hit a non-empty, non-section line, stop
-    if (line.length > 0 && !/^[A-ZÀ-Ỹ\s]+$/.test(line)) break;
+// ── Section header detection ───────────────────────────────────────────────
+
+/**
+ * Returns true if a line is an ALL-CAPS section header
+ * (e.g. "ORIN AKOWOLE   PROCESSIONAL HYMN").
+ */
+function isSectionHeader(line: string): boolean {
+  const s = line.trim();
+  if (!s || ORIN_RE.test(s)) return false;
+  const alpha = s.split("").filter((c) => /[a-zA-Z]/.test(c));
+  if (alpha.length < 4) return false;
+  const upperRatio = alpha.filter((c) => c === c.toUpperCase()).length / alpha.length;
+  return upperRatio > 0.85;
+}
+
+/**
+ * Extract the English section label from a section header line.
+ * The right half (after the split column) is the English label.
+ */
+function parseSectionLabel(line: string, splitCol: number): string {
+  if (line.length > splitCol) {
+    const right = line.slice(splitCol).trim();
+    if (right) return right;
+  }
+  return line.trim();
+}
+
+function stripTrailingAmen(line: string): string {
+  return AMEN_RE.test(line) ? line.replace(AMEN_RE, "").trimEnd() : line;
+}
+
+function findSectionLabel(lines: string[], startI: number, splitCol: number): string {
+  for (let j = startI - 1; j >= Math.max(0, startI - 5); j--) {
+    const candidate = lines[j];
+    if (!candidate.trim()) continue;
+    if (isSectionHeader(candidate)) {
+      return parseSectionLabel(candidate, splitCol);
+    }
+    break;
   }
   return "";
 }
 
-function cleanLyricBlock(lines: string[]): string {
-  const cleaned: string[] = [];
-  for (const raw of lines) {
-    const line = raw.trimEnd();
-    // Skip empty lines at start
-    if (!line.trim() && cleaned.length === 0) continue;
-    // Skip musical notation lines
-    if (MUSICAL_NOTATION_RE.test(line.trim())) continue;
-    // Skip standalone "Amin" / "Amen" at the end (we'll add it back when building songs)
-    if (/^Amin\.?\s*$/i.test(line.trim())) continue;
-    if (/^Amen\.?\s*$/i.test(line.trim())) continue;
-    cleaned.push(line);
+function collectPlainBlock(lines: string[], startI: number, endI: number): string {
+  const block: string[] = [];
+  for (let j = startI; j < endI; j++) {
+    const line = lines[j];
+    if (!line.trim()) continue;
+    if (isSectionHeader(line)) continue;
+    if (MUSICAL_RE.test(line.trim())) continue;
+    if (STANDALONE_ORIN_RE.test(line) || STANDALONE_HYMN_RE.test(line)) continue;
+    block.push(stripTrailingAmen(line));
   }
-  // Trim trailing empty lines
-  while (cleaned.length > 0 && !cleaned[cleaned.length - 1].trim()) {
-    cleaned.pop();
-  }
-  return cleaned.join("\n").trim();
+  return cleanLyricLines(block);
 }
 
-/**
- * Find the nearest whitespace gap (2+ consecutive spaces) around a target
- * column position. Used to split two-column PDF text into left/right halves.
- */
-function findColumnBreak(line: string, targetCol: number): number {
-  for (let offset = 0; offset <= 20; offset++) {
-    const rightIdx = targetCol + offset;
-    if (rightIdx > 0 && rightIdx < line.length - 1) {
-      if (line[rightIdx] === " " && line[rightIdx + 1] === " ") {
-        return rightIdx;
-      }
-    }
-    const leftIdx = targetCol - offset;
-    if (leftIdx > 0 && leftIdx < line.length - 1) {
-      if (line[leftIdx] === " " && line[leftIdx + 1] === " ") {
-        return leftIdx;
-      }
-    }
+function getOrCreateHymn(
+  hymns: ParsedHymn[],
+  byNumber: Map<number, ParsedHymn>,
+  hymnNum: number,
+): ParsedHymn {
+  const existing = byNumber.get(hymnNum);
+  if (existing) return existing;
+
+  const created: ParsedHymn = {
+    id: `hymn-${hymnNum}`,
+    number: hymnNum,
+    title: `Hymn ${hymnNum}`,
+    sectionLabel: "",
+    yoruba: "",
+    english: "",
+  };
+  byNumber.set(hymnNum, created);
+  hymns.push(created);
+  return created;
+}
+
+// ── Line splitting ─────────────────────────────────────────────────────────
+
+/** Split a two-column line at splitCol into [left, right]. */
+function splitLine(line: string, splitCol: number): [string, string] {
+  if (line.length <= splitCol) return [line.trimEnd(), ""];
+  return [line.slice(0, splitCol).trimEnd(), line.slice(splitCol).trim()];
+}
+
+// ── Lyric block cleanup ────────────────────────────────────────────────────
+
+function cleanLyricLines(lines: string[]): string {
+  const out: string[] = [];
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (!line.trim() && out.length === 0) continue; // skip leading blanks
+    if (MUSICAL_RE.test(line.trim())) continue;
+    if (/^Amin\.?\s*$/i.test(line.trim())) continue;
+    if (/^Amen\.?\s*$/i.test(line.trim())) continue;
+    out.push(line);
   }
-  return -1;
+  while (out.length > 0 && !out[out.length - 1].trim()) out.pop();
+  return out.join("\n").trim();
+}
+
+// ── Main parser ────────────────────────────────────────────────────────────
+
+/**
+ * Parse pdftotext -layout output of a CCC bilingual hymnal into structured hymns.
+ *
+ * Handles:
+ *   - Two-column layout (Yoruba left, English right)
+ *   - Same-line "Orin N  Hymn N" headers
+ *   - Standalone "Orin N" with "Hymn N" on the next line
+ *   - ALL-CAPS section headers above hymn groups
+ *   - Musical notation lines (m:s:d:f:...)
+ *   - Trailing Amin/Amen stripping
+ */
+export function parseBilingualHymns(text: string): ParsedHymn[] {
+  // Strip form-feed characters (page breaks from pdftotext)
+  const lines = text.replace(/\f/g, "").split("\n");
+  const hymns: ParsedHymn[] = [];
+  const byNumber = new Map<number, ParsedHymn>();
+
+  const splitCol = detectSplitCol(lines);
+
+  // Pass 1: locate all "Orin N" header line indices for merged two-column text.
+  const orinHeaders: { lineIdx: number; number: number }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = ORIN_RE.exec(lines[i]);
+    if (m) orinHeaders.push({ lineIdx: i, number: parseInt(m[1], 10) });
+  }
+
+  if (orinHeaders.length === 0) return [];
+
+  // Pass 2: for each Orin header, extract Yoruba (left) and English (right)
+  // from raw two-column text where both languages still share the same rows.
+  for (let h = 0; h < orinHeaders.length; h++) {
+    const { lineIdx: startI, number: hymnNum } = orinHeaders[h];
+    const endI = h + 1 < orinHeaders.length ? orinHeaders[h + 1].lineIdx : lines.length;
+    const hymn = getOrCreateHymn(hymns, byNumber, hymnNum);
+    const sectionLabel = findSectionLabel(lines, startI, splitCol);
+    if (!hymn.sectionLabel && sectionLabel) hymn.sectionLabel = sectionLabel;
+
+    const yorubaLines: string[] = [];
+    const englishLines: string[] = [];
+
+    for (let j = startI + 1; j < endI; j++) {
+      const line = lines[j];
+      if (!line.trim()) continue;
+      if (isSectionHeader(line)) continue;
+      if (MUSICAL_RE.test(line.trim())) continue;
+      if (STANDALONE_HYMN_RE.test(line)) continue; // skip right-col "Hymn N" header
+
+      const [left, right] = splitLine(line, splitCol);
+      const cleanLeft = stripTrailingAmen(left);
+      const cleanRight = stripTrailingAmen(right);
+
+      if (cleanLeft) yorubaLines.push(cleanLeft);
+      if (cleanRight) englishLines.push(cleanRight);
+    }
+
+    const yoruba = cleanLyricLines(yorubaLines);
+    const english = cleanLyricLines(englishLines);
+    if (yoruba) hymn.yoruba = yoruba;
+    if (english) hymn.english = english;
+  }
+
+  // Pass 3: standalone Orin blocks. This covers text that has already been
+  // reordered into single-column reading order before reaching this parser.
+  const standaloneOrinHeaders = lines.flatMap((line, lineIdx) => {
+    const match = STANDALONE_ORIN_RE.exec(line);
+    return match ? [{ lineIdx, number: parseInt(match[1], 10) }] : [];
+  });
+
+  const standaloneHymnHeaders = lines.flatMap((line, lineIdx) => {
+    const match = STANDALONE_HYMN_RE.exec(line);
+    return match ? [{ lineIdx, number: parseInt(match[1], 10) }] : [];
+  });
+
+  for (let i = 0; i < standaloneOrinHeaders.length; i++) {
+    const { lineIdx: startI, number: hymnNum } = standaloneOrinHeaders[i];
+    const nextOrinI = i + 1 < standaloneOrinHeaders.length
+      ? standaloneOrinHeaders[i + 1].lineIdx
+      : lines.length;
+    const pairedHymn = standaloneHymnHeaders.find(
+      (header) => header.number === hymnNum && header.lineIdx > startI && header.lineIdx < nextOrinI,
+    );
+    const endI = pairedHymn?.lineIdx ?? nextOrinI;
+
+    const hymn = getOrCreateHymn(hymns, byNumber, hymnNum);
+    const sectionLabel = findSectionLabel(lines, startI, splitCol);
+    if (!hymn.sectionLabel && sectionLabel) hymn.sectionLabel = sectionLabel;
+
+    const yoruba = collectPlainBlock(lines, startI + 1, endI);
+    if (yoruba) hymn.yoruba = yoruba;
+  }
+
+  // Pass 4: standalone Hymn blocks for reordered right-column text and for
+  // alternating Orin/Hymn text where English follows its header directly.
+  for (let i = 0; i < standaloneHymnHeaders.length; i++) {
+    const { lineIdx: startI, number: hymnNum } = standaloneHymnHeaders[i];
+    const nextHymnI = i + 1 < standaloneHymnHeaders.length
+      ? standaloneHymnHeaders[i + 1].lineIdx
+      : lines.length;
+    const nextOrinI = standaloneOrinHeaders.find((header) => header.lineIdx > startI)?.lineIdx ?? lines.length;
+    const endI = Math.min(nextHymnI, nextOrinI);
+
+    const english = collectPlainBlock(lines, startI + 1, endI);
+    if (!english) continue;
+
+    const hymn = getOrCreateHymn(hymns, byNumber, hymnNum);
+    hymn.english = english;
+  }
+
+  return hymns;
 }
 
 // ── Song creation ──────────────────────────────────────────────────────────

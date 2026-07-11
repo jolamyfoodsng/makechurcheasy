@@ -492,9 +492,14 @@ function buildThemePreviewDoc(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Oswald:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+  <style>
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 100 900;
+      src: local('Inter'), local('Inter-Regular'), local('-apple-system'), local('BlinkMacSystemFont');
+    }
+  </style>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -502,7 +507,7 @@ function buildThemePreviewDoc(
       height: 100%;
       overflow: hidden;
       background: transparent;
-      font-family: Inter, sans-serif;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
     }
     body { position: relative; }
     #preview-root {

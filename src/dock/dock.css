@@ -5163,8 +5163,7 @@
   min-width: 0;
   min-height: 0;
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -5175,14 +5174,21 @@
 .dock-module {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   gap: 8px;
-  min-height: 100%;
 }
 
 .dock-module--media {
   height: 100%;
   min-height: 100%;
+}
+
+.dock-module--bible {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .dock-console-panel {
@@ -6336,6 +6342,13 @@
   letter-spacing: 0.03em;
 }
 
+.dock-bible-compare-popover__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .dock-bible-compare-popover__toggle-row {
   display: flex;
   align-items: flex-start;
@@ -6359,6 +6372,32 @@
 .dock-bible-compare-popover__select {
   min-height: 35px;
   font-size: 12px;
+}
+
+.dock-bible-compare-popover__settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--dock-text-secondary, #CBD5E1);
+  background: transparent;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.dock-bible-compare-popover__settings:hover:not(:disabled) {
+  color: var(--dock-text, #F8FAFC);
+  background: var(--dock-surface-hover, #1E293B);
+  border-color: var(--dock-accent, #1D4ED8);
+}
+
+.dock-bible-compare-popover__settings:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .dock-bible-compare-popover__send {
@@ -6783,6 +6822,8 @@
 }
 
 .dock-worship-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -21150,6 +21191,108 @@
 
 .dtb-bg-picker__tab svg {
   flex-shrink: 0;
+}
+
+.dtb-compare-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dtb-compare-settings__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dtb-compare-settings__subtitle,
+.dtb-compare-settings__note,
+.dtb-compare-section__description,
+.dtb-compare-toggle-row__hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--dock-text-secondary, #94A3B8);
+}
+
+.dtb-compare-section {
+  border-top: 1px solid var(--dock-border);
+  padding-top: 12px;
+}
+
+.dtb-compare-section__toggle {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dtb-compare-section__trigger {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dtb-compare-section__heading {
+  min-width: 0;
+}
+
+.dtb-compare-section__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dtb-compare-section__reset {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--dock-accent, #1D4ED8);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dtb-compare-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.dtb-compare-field__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dtb-compare-field__number {
+  width: 78px;
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.dtb-compare-field__unit {
+  min-width: 18px;
+  text-align: right;
+}
+
+.dtb-compare-toggle-row {
+  gap: 12px;
+}
+
+.dtb-compare-toggle-row__copy {
+  min-width: 0;
 }
 
 .dtb-position-options--wrap {

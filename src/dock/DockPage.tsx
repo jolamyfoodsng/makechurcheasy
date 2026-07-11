@@ -607,7 +607,7 @@ export default function DockPage() {
               )}
             </span>
             <a
-              href={getDockDownloadUrl(cfg) || "https://downloads.makechurcheasy.com"}
+              href={getDockDownloadUrl(cfg) || "https://makechurcheasy.creatorstudioslabs.stream/downloads"}
               target="_blank"
               rel="noopener noreferrer"
               className="dock-force-update-banner__link"

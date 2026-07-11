@@ -89,17 +89,7 @@ export default function DockLowerThirdEditor({
   const [exitStyle, setExitStyle] = useState<LTExitStyle>("fade");
 
   // ── Preview zoom (persisted) ──
-  const ZOOM_KEY = "ocs-dock-lt-zoom";
-  const [previewZoom, setPreviewZoom] = useState<number>(() => {
-    try { return parseFloat(localStorage.getItem(ZOOM_KEY) ?? "0.3") || 0.3; } catch { return 0.3; }
-  });
-  const adjustZoom = useCallback((delta: number) => {
-    setPreviewZoom((prev) => {
-      const next = Math.round(Math.min(1, Math.max(0.1, prev + delta)) * 100) / 100;
-      try { localStorage.setItem(ZOOM_KEY, String(next)); } catch { /* noop */ }
-      return next;
-    });
-  }, []);
+  // Currently unused — will be wired to UI controls in a follow-up
 
   // ── Speaker theme detection & ministry data ──
   const isCurrentThemeSpeaker = useMemo(() => isSpeakerTheme(theme), [theme]);
@@ -505,13 +495,6 @@ export default function DockLowerThirdEditor({
     onAnimateOut(url);
   }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onAnimateOut]);
 
-  // ── Preview URL ──
-  const previewUrl = useMemo(() => buildOverlayUrl(
-    theme, variableValues, false, false, size, customStyles,
-    undefined as LTFontSize | undefined, position,
-    undefined, undefined, animationIn, exitStyle,
-  ), [theme, variableValues, size, customStyles, position, animationIn, exitStyle]);
-
   return (
     <div className="dock-lt-editor-layout">
       {/* ── Preview (fixed top) ── */}
@@ -678,8 +661,7 @@ export default function DockLowerThirdEditor({
                     return true;
                   })
                   .map((v, idx) => {
-                    const isPrimary = idx === 0;
-                    const isSecondary = idx === 1;
+                    void idx;
                     return (
                       <div className="dock-lt-field-row" key={v.key}>
                         <input

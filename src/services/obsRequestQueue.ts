@@ -153,7 +153,6 @@ let backoffMultiplier = 1;
 const latencies: LatencyEntry[] = [];
 const inFlightDedupes = new Map<string, Promise<unknown>>();
 const recentFailures: Array<{ label: string; error: string; time: string }> = [];
-const MAX_RECENT_FAILURES = 20;
 
 const semaphore = new Semaphore(perf.getMaxConcurrentRequests());
 const rateLimiter = new RateLimiter(perf.getOBSRequestBudget());

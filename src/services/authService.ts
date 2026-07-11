@@ -163,26 +163,23 @@ export async function syncSessionToOverlay(session: AuthSession | null): Promise
   let enriched = session;
   if (session?.user) {
     try {
-      const { DEFAULT_PLAN_CONFIG } = await import("./planConfigTypes");
-      const { readPlanConfigCache } = await import("./planConfig");
-      const config = readPlanConfigCache() || DEFAULT_PLAN_CONFIG;
+      const {
+        getLegacyCompatibleEntitlementsForPlan,
+      } = await import("../../../shared/subscription/sourceOfTruth");
       const planKey = normalizePlanId(
         session.user.effectivePlan
         || resolveEffectivePlan(session.user as any)
         || session.user.plan
         || "free"
-      ) as keyof typeof config.plans;
-      const tier = config.plans[planKey];
-      if (tier?.entitlements) {
-        enriched = {
-          ...session,
-          user: {
-            ...session.user,
-            effectivePlan: planKey,
-            entitlements: tier.entitlements as unknown as Record<string, number | boolean>,
-          },
-        };
-      }
+      );
+      enriched = {
+        ...session,
+        user: {
+          ...session.user,
+          effectivePlan: planKey,
+          entitlements: getLegacyCompatibleEntitlementsForPlan(planKey) as unknown as Record<string, number | boolean>,
+        },
+      };
     } catch { /* import failed — send session without entitlements */ }
   }
 

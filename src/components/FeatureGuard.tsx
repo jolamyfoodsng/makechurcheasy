@@ -4,16 +4,11 @@
  * Shows an inline upgrade CTA when a free-tier user tries to access
  * a premium feature. Consistent with CreditsGuard pattern.
  *
- * Fail-open: if offline or backend unreachable, let the user through.
  */
 
-import { useState, useEffect, useCallback } from "react";
 import { Lock, ExternalLink } from "lucide-react";
-import {
-  getRestrictionInfo,
-  refreshEntitlements,
-  type RestrictionInfo,
-} from "../services/licenseService";
+import { checkEntitlementSync, type FeatureKey } from "../services/entitlementClient";
+import { getEffectivePlan } from "../services/licenseService";
 import { useAuth } from "../contexts/AuthContext";
 
 const PRICING_URL =
@@ -43,35 +38,19 @@ interface FeatureGuardProps {
 
 export default function FeatureGuard({ feature, children }: FeatureGuardProps) {
   const { user } = useAuth();
-  const [info, setInfo] = useState<RestrictionInfo | null>(null);
-
-  const evaluate = useCallback(() => {
-    if (!user) return;
-    const restriction = getRestrictionInfo(user, feature);
-    setInfo(restriction);
-  }, [user, feature]);
-
-  useEffect(() => {
-    evaluate();
-  }, [evaluate]);
-
-  // Re-evaluate after plan config refreshes from server
-  useEffect(() => {
-    refreshEntitlements().then(() => evaluate());
-  }, [evaluate]);
 
   // No user yet — let children render (AuthGate handles auth)
   if (!user) return <>{children}</>;
 
-  // If info hasn't loaded yet, let through
-  if (!info) return <>{children}</>;
+  const effectivePlan = getEffectivePlan(user);
+  const info = checkEntitlementSync(feature as FeatureKey, effectivePlan);
 
   // Feature is not locked — pass through
-  if (!info.locked) return <>{children}</>;
+  if (info.allowed) return <>{children}</>;
 
   // Determine correct upgrade target — never suggest a plan the user
   // already has or a lower tier.
-  const currentPlan = info.currentPlan;
+  const currentPlan = effectivePlan;
   const nextPlanKey = NEXT_PLAN[currentPlan] || "growth";
   const upgradeLabel =
     PLAN_LABELS[nextPlanKey] ||
@@ -84,9 +63,9 @@ export default function FeatureGuard({ feature, children }: FeatureGuardProps) {
         <div style={styles.iconWrap}>
           <Lock size={28} />
         </div>
-        <h2 style={styles.title}>{info.feature}</h2>
+        <h2 style={styles.title}>{feature}</h2>
         <p style={styles.desc}>
-          {info.message}
+          {info.reason}
         </p>
         <p style={styles.currentPlan}>
           Your plan: <strong>{PLAN_LABELS[currentPlan] || currentPlan}</strong>

@@ -29,16 +29,10 @@ interface Props {
   showReferences?: boolean;
   /** Active display mode — controls whether Compare Layout section is visible */
   displayMode?: "single" | "compare";
+  initialTab?: "text" | "background" | "compare";
 }
 
 type StudioView = "closed" | "settings";
-
-function withPatch(
-  current: DockFullscreenQuickThemeSettings,
-  patch: Partial<DockFullscreenQuickThemeSettings>,
-): DockFullscreenQuickThemeSettings {
-  return { ...current, ...patch };
-}
 
 /* ── Section Divider ── */
 function SectionDivider() {
@@ -74,6 +68,7 @@ export default function DockThemeSettingsModal({
   overlayMode = "fullscreen",
   showReferences = true,
   displayMode = "single",
+  initialTab = "text",
 }: Props) {
   const { t } = useTranslation();
   const [internalView, setInternalView] = useState<StudioView>("closed");
@@ -321,6 +316,7 @@ export default function DockThemeSettingsModal({
                   showReferences={showReferences}
                   overlayMode={overlayMode}
                   displayMode={displayMode}
+                  initialTab={initialTab}
                 />
 
                 {/* Lower-Third Positioning — only shown in lower-third mode */}

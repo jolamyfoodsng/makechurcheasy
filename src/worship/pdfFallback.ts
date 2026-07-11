@@ -9,7 +9,6 @@ async function ensurePdfWorker(): Promise<void> {
   if (typeof Worker === "undefined") return;
   if (!pdfWorkerUrlPromise) {
     // Vite resolves the worker asset at build time.
-    // @ts-expect-error The `?url` suffix is a bundler-only import.
     pdfWorkerUrlPromise = import("pdfjs-dist/legacy/build/pdf.worker.mjs?url").then((mod) => mod.default);
   }
   const pdfWorkerUrl = await pdfWorkerUrlPromise;
@@ -19,6 +18,21 @@ async function ensurePdfWorker(): Promise<void> {
 
 function decodeLatin1(bytes: Uint8Array): string {
   return new TextDecoder("latin1").decode(bytes);
+}
+
+/**
+ * Strip a single stray leading byte if the PDF header starts at offset 1.
+ * Some export tools prepend a byte (e.g. 0x54 'T') before the %PDF marker.
+ */
+function stripLeadingByte(bytes: Uint8Array): Uint8Array {
+  if (
+    bytes[0] !== 0x25 &&
+    bytes.length > 5 &&
+    bytes[1] === 0x25 && bytes[2] === 0x50 && bytes[3] === 0x44 && bytes[4] === 0x46
+  ) {
+    return bytes.slice(1);
+  }
+  return bytes;
 }
 
 function findOriginalStartXref(text: string): number | null {
@@ -107,8 +121,10 @@ function buildRepairUpdate(
 }
 
 export function repairPdfBytes(sourceBytes: Uint8Array): Uint8Array | null {
-  const sourceText = decodeLatin1(sourceBytes);
-  return buildRepairUpdate(sourceBytes, sourceText);
+  const bytes = stripLeadingByte(sourceBytes);
+  const sourceText = decodeLatin1(bytes);
+  const repaired = buildRepairUpdate(bytes, sourceText);
+  return repaired;
 }
 
 async function loadPdfDocument(bytes: Uint8Array) {
@@ -124,7 +140,7 @@ async function loadPdfDocument(bytes: Uint8Array) {
 
 export async function extractPdfTextWithPdfJs(file: File): Promise<string> {
   const originalBytes = new Uint8Array(await file.arrayBuffer());
-  const repairedBytes = repairPdfBytes(originalBytes) ?? originalBytes;
+  const repairedBytes = repairPdfBytes(originalBytes) ?? stripLeadingByte(originalBytes);
   const doc = await loadPdfDocument(repairedBytes);
 
   const parts: string[] = [];
@@ -142,7 +158,7 @@ export async function extractPdfTextWithPdfJs(file: File): Promise<string> {
 
 export async function extractPdfTextElementsWithPdfJs(file: File): Promise<TextElement[]> {
   const originalBytes = new Uint8Array(await file.arrayBuffer());
-  const repairedBytes = repairPdfBytes(originalBytes) ?? originalBytes;
+  const repairedBytes = repairPdfBytes(originalBytes) ?? stripLeadingByte(originalBytes);
   const doc = await loadPdfDocument(repairedBytes);
 
   const elements: TextElement[] = [];

@@ -726,14 +726,14 @@ export default function DockCountdownsTab() {
     if (existing) {
       await dockObsClient.call("SetInputSettings", {
         inputName: sourceName,
-        inputSettings: { url, width: 1920, height: 1080, shutdown: false },
+        inputSettings: { url, width: 1920, height: 1080, shutdown: false, restart_when_active: false },
       });
     } else {
       await dockObsClient.call("CreateInput", {
         sceneName,
         inputName: sourceName,
         inputKind: "browser_source",
-        inputSettings: { url, width: 1920, height: 1080, shutdown: false },
+        inputSettings: { url, width: 1920, height: 1080, shutdown: false, restart_when_active: false },
       });
     }
 
@@ -805,11 +805,14 @@ export default function DockCountdownsTab() {
     }
   }, []);
 
-  const showInObs = useCallback(async (cd: CountdownConfig) => {
+  // ── Actions ─────────────────────────────────────────────────────────────
+
+  const handleShowInObs = useCallback(async (cd: CountdownConfig) => {
     await ensureObsConnected();
     if (!dockObsClient.isConnected) return;
 
     try {
+      // 1. Push BG first, then countdown overlay ONCE with running state
       const baseUrl = getOverlayBaseUrlSync();
       const targetScene = cd.obs.sceneName || PRESENTATION_SCENE;
 
@@ -817,33 +820,25 @@ export default function DockCountdownsTab() {
       const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
       await ensureObsSource(BG_SOURCE, bgUrl, targetScene, { setTransform: true });
 
-      const sync: OverlaySyncState = { paused: true, remaining: cd.timer.durationSeconds };
-      const contentPayload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
-      const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(contentPayload))}`;
+      setActiveId(cd.id);
+      setPlaybackState("running");
+      autoSwitchTriggeredRef.current = false;
+
+      // Use config's durationSeconds (reflects any inline edits via handleSetTime)
+      const remaining = Math.floor(cd.timer.durationSeconds);
+      writeLivePersistState({ id: cd.id, remaining, running: true, savedAt: Date.now() });
+      setLiveCountdownId(cd.id);
+
+      const sync: OverlaySyncState = { paused: false, remaining };
+      const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
+      const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
       await ensureObsSource(COUNTDOWN_SOURCE, contentUrl, targetScene, { setTransform: true });
 
-      setLiveCountdownId(cd.id);
+      timer.start();
     } catch (err) {
       console.warn("[DockCountdowns] Failed to show in OBS:", err);
     }
-  }, []);
-
-  // ── Actions ─────────────────────────────────────────────────────────────
-
-  const handleShowInObs = useCallback(async (cd: CountdownConfig) => {
-    await showInObs(cd);
-    setActiveId(cd.id);
-    setPlaybackState("running");
-    autoSwitchTriggeredRef.current = false;
-    setTimeout(async () => {
-      timer.start();
-      const duration = cd.timer.durationSeconds;
-      writeLivePersistState({ id: cd.id, remaining: duration, running: true, savedAt: Date.now() });
-      setLiveCountdownId(cd.id);
-      const sync: OverlaySyncState = { paused: false, remaining: Math.floor(duration) };
-      await pushToObs(cd, sync);
-    }, 50);
-  }, [showInObs, timer, pushToObs]);
+  }, [timer, pushToObs]);
 
   const handlePause = useCallback(async (cd: CountdownConfig) => {
     const currentRemaining = timer.pause();
@@ -888,23 +883,34 @@ export default function DockCountdownsTab() {
   }, [timer]);
 
   const handleAdjustTime = useCallback(async (cd: CountdownConfig, deltaSeconds: number) => {
-    timer.adjustTime(deltaSeconds);
-    const newRemaining = Math.max(0, timer.remaining + deltaSeconds);
-    if (liveCountdownId === cd.id) {
-      writeLivePersistState({ id: cd.id, remaining: newRemaining, running: timer.isRunning, savedAt: Date.now() });
+    const oldRemaining = timer.remaining;
+    const newRemaining = Math.max(0, oldRemaining + deltaSeconds);
+    setCountdowns((prev) => prev.map((c) =>
+      c.id === cd.id ? { ...c, timer: { ...c.timer, durationSeconds: newRemaining } } : c,
+    ));
+    if (activeId === cd.id) {
+      timer.adjustTime(deltaSeconds);
+      if (liveCountdownId === cd.id) {
+        writeLivePersistState({ id: cd.id, remaining: newRemaining, running: timer.isRunning, savedAt: Date.now() });
+      }
+      const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(newRemaining) };
+      await pushToObs(cd, sync);
     }
-    const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(newRemaining) };
-    await pushToObs(cd, sync);
-  }, [timer, pushToObs, liveCountdownId]);
+  }, [timer, pushToObs, liveCountdownId, activeId]);
 
   const handleSetTime = useCallback(async (cd: CountdownConfig, seconds: number) => {
-    timer.setRemainingDirect(seconds);
-    if (liveCountdownId === cd.id) {
-      writeLivePersistState({ id: cd.id, remaining: seconds, running: timer.isRunning, savedAt: Date.now() });
+    setCountdowns((prev) => prev.map((c) =>
+      c.id === cd.id ? { ...c, timer: { ...c.timer, durationSeconds: seconds } } : c,
+    ));
+    if (activeId === cd.id) {
+      timer.setRemainingDirect(seconds);
+      if (liveCountdownId === cd.id) {
+        writeLivePersistState({ id: cd.id, remaining: seconds, running: timer.isRunning, savedAt: Date.now() });
+      }
+      const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(seconds) };
+      await pushToObs(cd, sync);
     }
-    const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(seconds) };
-    await pushToObs(cd, sync);
-  }, [timer, pushToObs, liveCountdownId]);
+  }, [timer, pushToObs, liveCountdownId, activeId]);
 
   // ── Render ──────────────────────────────────────────────────────────────
 
@@ -936,8 +942,8 @@ export default function DockCountdownsTab() {
                 formattedTime={timeDisplay}
                 obsScenes={obsScenes}
                 onSelect={() => setActiveId(cd.id)}
-                onAdjustTime={isThisActive ? (delta) => handleAdjustTime(cd, delta) : () => { }}
-                onSetTime={isThisActive ? (secs) => handleSetTime(cd, secs) : () => { }}
+                onAdjustTime={(delta) => handleAdjustTime(cd, delta)}
+                onSetTime={(secs) => handleSetTime(cd, secs)}
                 onShowObs={() => handleShowInObs(cd)}
                 onPause={() => handlePause(cd)}
                 onResume={() => handleResume(cd)}

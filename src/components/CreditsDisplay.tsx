@@ -24,6 +24,26 @@ interface CreditsDisplayProps {
   sessionCreditsUsed?: number;
 }
 
+function PendingBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        fontSize: 10,
+        color: "var(--text-muted, #94a3b8)",
+        marginLeft: 4,
+      }}
+      title={`${count} transaction(s) pending sync`}
+    >
+      <CloudOff size={10} />
+      {count} pending
+    </span>
+  );
+}
+
 export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed = 0 }: CreditsDisplayProps) {
   const [balance, setBalance] = useState<number>(0);
   const [isUnlimited, setIsUnlimited] = useState(false);
@@ -55,6 +75,8 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
           setSynced(true);
         }
       }
+      // Refresh pending count — sync may have flushed offline queue
+      setPendingCount(getPendingCount());
     }
 
     // Initial sync
@@ -98,6 +120,7 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
         <span className="sts3-usage-value" style={{ color: "var(--gold)" }}>
           Unlimited
         </span>
+        <PendingBadge count={pendingCount} />
       </div>
     );
   }
@@ -110,29 +133,24 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
     <div
       className={`sts3-usage-pill sts3-usage-pill--${tier}`}
       style={{ gap: 6 }}
-      title={synced ? "Synced with server" : "Using local credits"}
+      title={
+        synced
+          ? "Synced with server"
+          : userId
+            ? "Loading…"
+            : "Using local credits"
+      }
     >
       <Zap size={12} />
       <span className="sts3-usage-label">CREDITS</span>
       <span className="sts3-usage-value">
-        {effectiveBalance <= 0 ? "0 — Buy Credits" : `${effectiveBalance} remaining`}
+        {!synced && userId
+          ? "…"
+          : effectiveBalance <= 0
+            ? "0 — Buy Credits"
+            : `${effectiveBalance} remaining`}
       </span>
-      {pendingCount > 0 && (
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 3,
-            fontSize: 10,
-            color: "var(--text-muted, #94a3b8)",
-            marginLeft: 4,
-          }}
-          title={`${pendingCount} transaction(s) pending sync`}
-        >
-          <CloudOff size={10} />
-          {pendingCount} pending
-        </span>
-      )}
+      <PendingBadge count={pendingCount} />
     </div>
   );
 }

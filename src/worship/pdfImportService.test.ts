@@ -62,6 +62,37 @@ describe("parseBilingualHymns — single-column", () => {
     expect(hymns[0].yoruba).not.toContain("Amin");
     expect(hymns[0].english).not.toContain("Amin");
   });
+
+  it("parses reordered left-column then right-column text", () => {
+    const text = [
+      "ORIN AKOWOLE                                PROCESSIONAL HYMN",
+      "Orin 1",
+      "Jerih mo yah mah,",
+      "Iwo Jehofa lo ye",
+      "",
+      "Orin 2",
+      "Mimo ni Oluwa,",
+      "Awa yio juba Re",
+      "",
+      "PROCESSIONAL HYMN",
+      "Hymn 1",
+      "Jerih moh Yah mah",
+      "Jehovah alone is worthy",
+      "",
+      "Hymn 2",
+      "Holy is the Lord,",
+      "We shall worship Thee",
+    ].join("\n");
+
+    const hymns = parseBilingualHymns(text);
+
+    expect(hymns.length).toBe(2);
+    expect(hymns[0].sectionLabel).toBe("PROCESSIONAL HYMN");
+    expect(hymns[0].yoruba).toContain("Jerih mo yah mah,");
+    expect(hymns[0].english).toContain("Jerih moh Yah mah");
+    expect(hymns[1].yoruba).toContain("Mimo ni Oluwa,");
+    expect(hymns[1].english).toContain("Holy is the Lord,");
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

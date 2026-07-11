@@ -236,7 +236,9 @@ export async function importDetectedSongs(
         artist: "",
         language: detected.language,
       },
-      lyrics: `${detected.title}\n${detected.lyrics}`,
+      lyrics: detected.lyrics.startsWith(detected.title)
+        ? detected.lyrics
+        : `${detected.title}\n${detected.lyrics}`,
       slides: [],
       createdAt: now,
       updatedAt: now,

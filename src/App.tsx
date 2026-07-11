@@ -1216,8 +1216,8 @@ function App() {
                       <Route path="worship" element={<Navigate to="/resources" replace />} />
                       <Route path="lower-thirds" element={<Navigate to="/production/themes" replace />} />
                       <Route path="scenes" element={<Navigate to="/settings" replace />} />
-                      <Route path="multiview" element={<MVShell />} />
-                      <Route path="multiview/*" element={<MVShell />} />
+                      <Route path="multiview" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
+                      <Route path="multiview/*" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
                       <Route path="new" element={<Navigate to="/" replace />} />
 
                       {/* Developer Tools */}

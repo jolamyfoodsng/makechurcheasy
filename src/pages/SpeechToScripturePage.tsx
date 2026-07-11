@@ -16,7 +16,6 @@ import {
   CheckCircle,
   ChevronDown,
   Copy,
-  CreditCard,
   Download,
   HelpCircle,
   Lock,
@@ -1558,27 +1557,12 @@ export default function SpeechToScripturePage() {
       {accessDenied && (
         <div className="sts3-lock-overlay">
           <div className="sts3-lock-card">
-            {accessDenied.reason === "subscription_expired" && (
-              <>
-                <CreditCard size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">{t("verseAi.subscriptionRequired")}</h2>
-                <p className="sts3-lock-desc">
-                  {t("verseAi.subscriptionExpiredDesc")}
-                </p>
-                <button
-                  className="sts3-btn sts3-btn--primary"
-                  onClick={() => navigate("/pricing")}
-                  title={t("verseAi.manageSubscription")}>
-                  {t("verseAi.manageSubscription")}
-                </button>
-              </>
-            )}
-            {accessDenied.reason === "trial_expired" && (
+            {(accessDenied.reason === "subscription_expired" || accessDenied.reason === "trial_expired") && (
               <>
                 <Zap size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">{t("verseAi.freeTrialEnded")}</h2>
+                <h2 className="sts3-lock-title">{t("verseAi.upgradeRequired")}</h2>
                 <p className="sts3-lock-desc">
-                  {t("verseAi.trialExpiredDesc")}
+                  {t("verseAi.upgradeRequiredDesc")}
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"

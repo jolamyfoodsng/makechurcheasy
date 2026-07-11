@@ -155,7 +155,7 @@ export const BIBLE_THEMES: ThemeLike[] = [
     "html": "<div class=\"lt pos-bc in-up\">\n  <div class=\"panel quote-panel\" style=\"--bg:#FFF9F4;--fg:#3E2A1F;--accent:#6D1F1F;--bd:rgba(109,31,31,.25);\">\n    <span class=\"kicker\">{{label}}</span>\n    <p class=\"quote-text\">{{verseText}}</p>\n    <p class=\"quote-ref\">{{reference}}</p>\n  </div>\n</div>",
     "usesTailwind": false,
     "fontImports": [
-      "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Source+Serif+4:wght@400;600;700&display=swap"
+      "/fonts/google/google-fonts.css"
     ],
     "animation": {
       "name": "fadeInUp",
@@ -208,7 +208,7 @@ export const BIBLE_THEMES: ThemeLike[] = [
     "html": "<div class=\"lt pos-bc in-up\">\n  <div class=\"panel quote-panel\" style=\"--bg:#FDFDFB;--fg:#2B312D;--accent:#344E41;--bd:rgba(52,78,65,.2);\">\n    <span class=\"kicker\">{{label}}</span>\n    <p class=\"quote-text\">{{verseText}}</p>\n    <p class=\"quote-ref\">{{reference}}</p>\n  </div>\n</div>",
     "usesTailwind": false,
     "fontImports": [
-      "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Source+Serif+4:wght@400;600;700&display=swap"
+      "/fonts/google/google-fonts.css"
     ],
     "animation": {
       "name": "fadeInUp",
@@ -261,7 +261,7 @@ export const BIBLE_THEMES: ThemeLike[] = [
     "html": "<div class=\"lt pos-bl in-up\">\n  <div class=\"panel quote-panel\" style=\"--bg:rgba(15,23,42,.86);--fg:#E2E8F0;--accent:#6A34DE;--bd:rgba(59,130,246,.3);\">\n    <span class=\"kicker\">{{label}}</span>\n    <p class=\"quote-text\">{{verseText}}</p>\n    <p class=\"quote-ref\">{{reference}}</p>\n  </div>\n</div>",
     "usesTailwind": false,
     "fontImports": [
-      "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Source+Serif+4:wght@400;600;700&display=swap"
+      "/fonts/google/google-fonts.css"
     ],
     "animation": {
       "name": "fadeInUp",
@@ -314,7 +314,7 @@ export const BIBLE_THEMES: ThemeLike[] = [
     "html": "<div class=\"lt pos-bc in-up\">\n  <div class=\"panel quote-panel\" style=\"--bg:rgba(17,24,39,.9);--fg:#ECFEFF;--accent:#14B8A6;--bd:rgba(20,184,166,.28);\">\n    <span class=\"kicker\">{{label}}</span>\n    <p class=\"quote-text\">{{verseText}}</p>\n    <p class=\"quote-ref\">{{reference}}</p>\n  </div>\n</div>",
     "usesTailwind": false,
     "fontImports": [
-      "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Source+Serif+4:wght@400;600;700&display=swap"
+      "/fonts/google/google-fonts.css"
     ],
     "animation": {
       "name": "fadeInUp",
@@ -367,7 +367,7 @@ export const BIBLE_THEMES: ThemeLike[] = [
     "html": "<div class=\"lt pos-bc in-up\">\n  <div class=\"panel quote-panel\" style=\"--bg:rgba(30,27,75,.9);--fg:#FAF5FF;--accent:#C026D3;--bd:rgba(192,38,211,.35);\">\n    <span class=\"kicker\">{{label}}</span>\n    <p class=\"quote-text\">{{verseText}}</p>\n    <p class=\"quote-ref\">{{reference}}</p>\n  </div>\n</div>",
     "usesTailwind": false,
     "fontImports": [
-      "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Source+Serif+4:wght@400;600;700&display=swap"
+      "/fonts/google/google-fonts.css"
     ],
     "animation": {
       "name": "fadeInUp",
@@ -461,7 +461,7 @@ export const BIBLE_THEMES: ThemeLike[] = [
     "html": "<div class=\"ylt y-pos-bc\" data-state=\"{{state}}\" data-mode=\"{{animMode}}\" style=\"--bg1:#0b122a;--bg2:#16203f;--fg:#f8fbff;--accent:#38bdf8;--muted:rgba(230,245,255,.82);--border:rgba(56,189,248,.34);--glow:rgba(56,189,248,.26);\">\n  <div class=\"y-shell y-scripture\">\n    <span class=\"y-kicker y-enter-3\">{{label}}</span>\n    <p class=\"y-scripture-main y-enter-1\">{{verseText}}</p>\n    <p class=\"y-scripture-ref y-enter-2\">{{reference}}</p>\n  </div>\n</div>",
     "usesTailwind": false,
     "fontImports": [
-      "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&display=swap"
+      "/fonts/google/google-fonts.css"
     ],
     "animation": {
       "name": "fadeInUp",
@@ -555,7 +555,7 @@ export const BIBLE_THEMES: ThemeLike[] = [
     "html": "<div class=\"ylt y-pos-bc\" data-state=\"{{state}}\" data-mode=\"{{animMode}}\" style=\"--bg1:#1e1232;--bg2:#2a1442;--fg:#fff6fd;--accent:#f472b6;--muted:rgba(255,227,248,.82);--border:rgba(244,114,182,.33);--glow:rgba(244,114,182,.24);\">\n  <div class=\"y-shell y-scripture\">\n    <span class=\"y-kicker y-enter-3\">{{label}}</span>\n    <p class=\"y-scripture-main y-enter-1\">{{verseText}}</p>\n    <p class=\"y-scripture-ref y-enter-2\">{{reference}}</p>\n  </div>\n</div>",
     "usesTailwind": false,
     "fontImports": [
-      "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&display=swap"
+      "/fonts/google/google-fonts.css"
     ],
     "animation": {
       "name": "fadeInUp",
@@ -649,7 +649,7 @@ export const BIBLE_THEMES: ThemeLike[] = [
     "html": "<div class=\"ylt y-pos-bc\" data-state=\"{{state}}\" data-mode=\"{{animMode}}\" style=\"--bg1:#072223;--bg2:#0c3134;--fg:#f1ffff;--accent:#2dd4bf;--muted:rgba(218,255,248,.8);--border:rgba(45,212,191,.33);--glow:rgba(45,212,191,.24);\">\n  <div class=\"y-shell y-scripture\">\n    <span class=\"y-kicker y-enter-3\">{{label}}</span>\n    <p class=\"y-scripture-main y-enter-1\">{{verseText}}</p>\n    <p class=\"y-scripture-ref y-enter-2\">{{reference}}</p>\n  </div>\n</div>",
     "usesTailwind": false,
     "fontImports": [
-      "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&display=swap"
+      "/fonts/google/google-fonts.css"
     ],
     "animation": {
       "name": "fadeInUp",
@@ -743,7 +743,7 @@ export const BIBLE_THEMES: ThemeLike[] = [
     "html": "<div class=\"ylt y-pos-bc\" data-state=\"{{state}}\" data-mode=\"{{animMode}}\" style=\"--bg1:#2b150b;--bg2:#3a1d10;--fg:#fff8f2;--accent:#fb923c;--muted:rgba(255,232,214,.82);--border:rgba(251,146,60,.35);--glow:rgba(251,146,60,.23);\">\n  <div class=\"y-shell y-scripture\">\n    <span class=\"y-kicker y-enter-3\">{{label}}</span>\n    <p class=\"y-scripture-main y-enter-1\">{{verseText}}</p>\n    <p class=\"y-scripture-ref y-enter-2\">{{reference}}</p>\n  </div>\n</div>",
     "usesTailwind": false,
     "fontImports": [
-      "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&display=swap"
+      "/fonts/google/google-fonts.css"
     ],
     "animation": {
       "name": "fadeInUp",
@@ -837,7 +837,7 @@ export const BIBLE_THEMES: ThemeLike[] = [
     "html": "<div class=\"ylt y-pos-bc\" data-state=\"{{state}}\" data-mode=\"{{animMode}}\" style=\"--bg1:#1a1338;--bg2:#25194c;--fg:#f8f5ff;--accent:#60A5FA;--muted:rgba(236,229,255,.82);--border:rgba(167,139,250,.34);--glow:rgba(167,139,250,.24);\">\n  <div class=\"y-shell y-scripture\">\n    <span class=\"y-kicker y-enter-3\">{{label}}</span>\n    <p class=\"y-scripture-main y-enter-1\">{{verseText}}</p>\n    <p class=\"y-scripture-ref y-enter-2\">{{reference}}</p>\n  </div>\n</div>",
     "usesTailwind": false,
     "fontImports": [
-      "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&display=swap"
+      "/fonts/google/google-fonts.css"
     ],
     "animation": {
       "name": "fadeInUp",

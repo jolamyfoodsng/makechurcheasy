@@ -342,6 +342,8 @@ class DockObsClient {
   private _bibleLtInitialized = false;
   /** Skip clearAllOverlays on slide-to-slide transitions within the same mode (worship) */
   private _worshipInitialized = false;
+  /** Skip SetInputSettings on slide-to-slide transitions to avoid OBS CEF reload */
+  private _worshipCssOverlayBootstrapped = false;
   /** Short-lived cache for GetSceneItemList results to avoid redundant round-trips within a single operation */
   private _sceneItemListCache: { sceneName: string; items: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex?: number }>; expiresAt: number } | null = null;
   /** Cache the program scene name; OBS scene-change events keep it fresh. */
@@ -3431,19 +3433,6 @@ class DockObsClient {
     return themeCss ? `${overlayCss}\n${themeCss}` : overlayCss;
   }
 
-  private shouldBootstrapCssOverlaySource(
-    inputName: string,
-    baseUrl: string,
-    themeCss = "",
-    force = false,
-  ): boolean {
-    return (
-      force ||
-      this._lastCssOverlayBaseUrlBySource[inputName] !== baseUrl ||
-      this._lastCssOverlayThemeCssBySource[inputName] !== themeCss
-    );
-  }
-
   private buildFullscreenBackgroundUrl(
     themeSettings?: Record<string, unknown> | null,
   ): string {
@@ -4605,37 +4594,30 @@ class DockObsClient {
           currentProgramSceneBeforeTarget,
           effectiveThemeSettings,
         );
-        if (!modeChanged && this._lastBibleFullscreenSetupSignature === fullscreenSetupSignature) {
-          const packetWithMode: Record<string, unknown> = { ...packet, mode };
-          try {
-            await this.ensureActiveMceOverlaySource(
-              sceneName,
-              def.browserSourceName,
-              [def.browserSourceName, def.bgSourceName, `${def.bgSourceName} 2`],
-              resources,
-            );
-            if (this.shouldBootstrapCssOverlaySource(def.browserSourceName, cssOverlayBaseUrl, themeCss || "", false)) {
-              const overlayThemeCss = this.buildCssOverlayDataCss(packetWithMode, themeCss);
-              await this.setBrowserSourceUrl(def.browserSourceName, cssOverlayBaseUrl, false, overlayThemeCss);
+          if (!modeChanged && this._lastBibleFullscreenSetupSignature === fullscreenSetupSignature) {
+            const packetWithMode: Record<string, unknown> = { ...packet, mode };
+            try {
+              await this.ensureActiveMceOverlaySource(
+                sceneName,
+                def.browserSourceName,
+                [def.browserSourceName, def.bgSourceName, `${def.bgSourceName} 2`],
+                resources,
+              );
+              this.publishFullscreenOverlayPacket({
+                slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
+                theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
+                live: true,
+                blanked: Boolean(packetWithMode.blanked),
+                timestamp: Number(packetWithMode.timestamp) || Date.now(),
+                mode: String(mode || "fullscreen"),
+              }, "bible");
+              this._bibleLtInitialized = true;
+              this._lastBiblePushSignature = pushSignature;
+              return;
+            } catch {
+              this._lastBibleFullscreenSetupSignature = "";
             }
-            this.publishFullscreenOverlayPacket({
-              slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
-              theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
-              live: true,
-              blanked: Boolean(packetWithMode.blanked),
-              timestamp: Number(packetWithMode.timestamp) || Date.now(),
-              mode: String(mode || "fullscreen"),
-            }, "bible");
-            this._lastCssOverlayPacketBySource[def.browserSourceName] = packetWithMode;
-            this._lastCssOverlayBaseUrlBySource[def.browserSourceName] = cssOverlayBaseUrl;
-            this._lastCssOverlayThemeCssBySource[def.browserSourceName] = themeCss || "";
-            this._bibleLtInitialized = true;
-            this._lastBiblePushSignature = pushSignature;
-            return;
-          } catch {
-            this._lastBibleFullscreenSetupSignature = "";
           }
-        }
 
         // Ensure the unified source exists in MCE Presentation
         await this._ensureFullscreenScene("bible");
@@ -4667,10 +4649,8 @@ class DockObsClient {
         {
           // Include mode so the fullscreen HTML removes lt-mode class when switching back
           const packetWithMode = { ...packet, mode };
-          if (this.shouldBootstrapCssOverlaySource(def.browserSourceName, cssOverlayBaseUrl, themeCss || "", modeChanged)) {
-            const overlayThemeCss = this.buildCssOverlayDataCss(packetWithMode, themeCss);
-            await this.setBrowserSourceUrl(def.browserSourceName, cssOverlayBaseUrl, false, overlayThemeCss);
-          }
+          const overlayThemeCss = this.buildCssOverlayDataCss(packetWithMode, themeCss);
+          await this.setBrowserSourceUrl(def.browserSourceName, cssOverlayBaseUrl, false, overlayThemeCss);
           this._lastCssOverlayPacketBySource[def.browserSourceName] = packetWithMode;
           this._lastCssOverlayBaseUrlBySource[def.browserSourceName] = cssOverlayBaseUrl;
           this._lastCssOverlayThemeCssBySource[def.browserSourceName] = themeCss || "";
@@ -4784,10 +4764,8 @@ class DockObsClient {
         // HTML detects the mode field and animates to lower-third layout.
         if (mode === "lower-third") {
           const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
-          if (this.shouldBootstrapCssOverlaySource(browserSourceName, cssOverlayBaseUrl, themeCss || "", modeChanged)) {
-            const overlayCss = this.buildCssOverlayDataCss(packetWithMode, themeCss);
-            await this.setBrowserSourceUrl(browserSourceName, cssOverlayBaseUrl, false, overlayCss);
-          }
+          const overlayCss = this.buildCssOverlayDataCss(packetWithMode, themeCss);
+          await this.setBrowserSourceUrl(browserSourceName, cssOverlayBaseUrl, false, overlayCss);
           this._lastCssOverlayPacketBySource[browserSourceName] = packetWithMode;
           this._lastCssOverlayBaseUrlBySource[browserSourceName] = cssOverlayBaseUrl;
           this._lastCssOverlayThemeCssBySource[browserSourceName] = themeCss || "";
@@ -5252,6 +5230,7 @@ class DockObsClient {
         } catch { /* ignore */ }
         await this.deleteClone(undefined, "worship").catch(() => { });
         this._worshipInitialized = false;
+        this._worshipCssOverlayBootstrapped = false;
         this._lastWorshipPushSignature = "";
         this._presentationProgramScene = "";
       }
@@ -5477,24 +5456,17 @@ class DockObsClient {
           timestamp: Number(cssOverlayPacket.timestamp) || Date.now(),
           mode: String(mode || "fullscreen"),
         }, "worship");
-        const sourceSignature = JSON.stringify({
-          baseUrl: cssOverlayBaseUrl,
-          css: themeCss || "",
-        });
-        const themeChanged = modeChanged || this._lastFullscreenSourceSignature[resources.worshipSource] !== sourceSignature;
-        if (themeChanged) {
-          // Theme/page setup changed: keep the same browser document loaded and
-          // update only the bootstrap CSS. Text changes are published above.
+        // Bootstrap browser source only on first load or mode change.
+        // Subsequent slide changes use publishFullscreenOverlayPacket
+        // (localStorage + BroadcastChannel) to avoid OBS CEF reload.
+        if (!this._worshipCssOverlayBootstrapped) {
           const overlayCss = this.buildCssOverlayDataCss(cssOverlayPacket, themeCss);
           await this.setBrowserSourceUrl(resources.worshipSource, cssOverlayBaseUrl, false, overlayCss);
-          this._lastFullscreenSourceSignature[resources.worshipSource] = sourceSignature;
+          this._worshipCssOverlayBootstrapped = true;
+          this._lastCssOverlayPacketBySource[resources.worshipSource] = cssOverlayPacket;
+          this._lastCssOverlayBaseUrlBySource[resources.worshipSource] = cssOverlayBaseUrl;
+          this._lastCssOverlayThemeCssBySource[resources.worshipSource] = themeCss || "";
         }
-        // Subsequent same-theme pushes: data delivered via publishFullscreenOverlayPacket
-        // (localStorage + BroadcastChannel). The overlay polling loop picks it up
-        // without any SetInputSettings call → no flicker.
-        this._lastCssOverlayPacketBySource[resources.worshipSource] = cssOverlayPacket;
-        this._lastCssOverlayBaseUrlBySource[resources.worshipSource] = cssOverlayBaseUrl;
-        this._lastCssOverlayThemeCssBySource[resources.worshipSource] = themeCss || "";
       } else {
         await this.setBrowserSourceUrl(resources.worshipSource, url, modeChanged, themeCss || undefined);
       }
@@ -6246,11 +6218,8 @@ class DockObsClient {
     // Ensure the live program scene is visible behind overlays in MCE Presentation
     await this.ensureProgramSceneAsSourceInPresentation();
 
-    // Ensure ticker is already on top before pushing media
-    const mediaSource = isImage ? mediaImageSource : mediaVideoSource;
-    await this.ensureTickerAboveSource(sceneName, mediaSource);
-
     // Hide the sources we DON'T need — only hide the opposite type with animation
+    const mediaSource = isImage ? mediaImageSource : mediaVideoSource;
     const hidePromises: Promise<void>[] = [];
     if (isImage) {
       // Switching to image: hide video with animation, just disable the rest
@@ -6332,9 +6301,14 @@ class DockObsClient {
       await this.animateMediaSceneItem(sceneName, sceneItemId, "in");
     }
 
-    // Bring text overlay to front
+    // Bring text overlay above media source
     try {
       await this.bringSceneSourceToFront(sceneName, mediaTextSource);
+    } catch { /* ignore */ }
+
+    // Ensure ticker is on top (above text and media)
+    try {
+      await this.ensureTickerAboveSource(sceneName, mediaSource);
     } catch { /* ignore */ }
 
   }
@@ -6355,9 +6329,6 @@ class DockObsClient {
     const target = await this.getTargetScene("media");
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
-
-    // Ensure ticker is already on top before pushing media
-    await this.ensureTickerAboveSource(sceneName, sourceName);
 
     // Build playlist items for VLC source
     const vlcPlaylist = playlist.map((path) => ({ path, selected: true }));
@@ -6402,6 +6373,11 @@ class DockObsClient {
       } catch { /* ignore */ }
     }
 
+    // Ensure ticker is on top after source exists
+    try {
+      await this.ensureTickerAboveSource(sceneName, sourceName);
+    } catch { /* ignore */ }
+
   }
 
   /**
@@ -6427,9 +6403,6 @@ class DockObsClient {
     const target = await this.getTargetScene("media");
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
-
-    // Ensure ticker is already on top before pushing media
-    await this.ensureTickerAboveSource(sceneName, sourceName);
 
     // Remove existing scene item with same name if present
     try {
@@ -6460,6 +6433,11 @@ class DockObsClient {
 
     // Stretch the image to fill the canvas so it takes full width
     await this.fitSceneItemToCanvas(sceneName, createResp.sceneItemId);
+
+    // Ensure ticker is on top after source exists
+    try {
+      await this.ensureTickerAboveSource(sceneName, sourceName);
+    } catch { /* ignore */ }
 
     // If only one image, nothing to rotate
     if (images.length === 1 || slideTime <= 0) return;
@@ -6518,9 +6496,6 @@ class DockObsClient {
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
 
-    // Ensure ticker is already on top before pushing media
-    await this.ensureTickerAboveSource(sceneName, mediaPatternSource);
-
     // Hide native media sources
     await this.hideMediaSourceWithAnimation(sceneName, mediaVideoSource);
     await this.hideMediaSourceWithAnimation(sceneName, mediaImageSource);
@@ -6528,6 +6503,11 @@ class DockObsClient {
 
     // Ensure pattern browser source exists directly in target scene
     await this.ensureOverlaySource(sceneName, mediaPatternSource, undefined, undefined, true);
+
+    // Ensure ticker is on top after source exists
+    try {
+      await this.ensureTickerAboveSource(sceneName, mediaPatternSource);
+    } catch { /* ignore */ }
     await this.setBrowserSourceUrl(
       mediaPatternSource,
       this.buildMediaPatternUrl(patternSrc, patternLabel),
@@ -6585,9 +6565,6 @@ class DockObsClient {
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
 
-    // Ensure ticker is already on top before making media visible
-    await this.ensureTickerAboveSource(sceneName, mediaTextSource);
-
     await this.ensureOverlaySource(sceneName, mediaTextSource, undefined, undefined, true);
     await this.setBrowserSourceUrl(
       mediaTextSource,
@@ -6606,6 +6583,11 @@ class DockObsClient {
       true,
     );
     await this.bringSceneSourceToFront(sceneName, mediaTextSource);
+
+    // Ensure ticker is on top (above text overlay)
+    try {
+      await this.ensureTickerAboveSource(sceneName, mediaTextSource);
+    } catch { /* ignore */ }
   }
 
   /**

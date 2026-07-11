@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { BibleThemeSettings } from "../../bible/types";
+import type { CompareThemeSettings } from "../compareThemeConfig";
 import Icon from "../DockIcon";
 
 export type DockFullscreenQuickThemeSettings = Pick<
@@ -49,7 +50,7 @@ export type DockFullscreenQuickThemeSettings = Pick<
   // Compare Translation layout
   | "compareTranslationWidth"
   | "compareTranslationGap"
-> & {
+> & Partial<CompareThemeSettings> & {
   /** Dock-only: persisted background mode (off/theme/color/image/pattern/video) */
   backgroundType?: "off" | "theme" | "color" | "image" | "pattern" | "video";
 };

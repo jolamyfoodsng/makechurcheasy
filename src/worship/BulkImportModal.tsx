@@ -187,7 +187,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
               // Convert ParsedSong[] to DetectedSong[] for existing UI
               const detected: DetectedSong[] = layout.songs.map((s) => ({
                 title: s.title,
-                lyrics: `${s.title}\n${s.lyrics}`,
+                lyrics: s.lyrics,
                 lineCount: s.lyrics.split("\n").filter((l) => l.trim()).length,
                 language: detectLanguage(s.lyrics),
               }));
@@ -343,12 +343,14 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
 
   // ── Import ───────────────────────────────────────────────────────────────
 
-  const isCCC = detection?.pattern === "ccc";
+  const isCCC = detection?.pattern === "ccc" && !!rawText.trim();
   const selectedSongs = songs.filter((_, i) => selected.has(i));
+  const importedCountRef = useRef(0);
 
   const handleImport = useCallback(async () => {
     if (selectedSongs.length === 0) return;
 
+    importedCountRef.current = selectedSongs.length;
     setImporting(true);
     setStep("importing");
     setProgress({ imported: 0, total: selectedSongs.length });
@@ -370,7 +372,6 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
         });
       }
       setStep("done");
-      onImported();
     } catch (err) {
       setError(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
       setStep("preview");
@@ -763,7 +764,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
               <Icon name="check_circle" size={40} />
               <p className="bulk-import-done-title">Import complete</p>
               <p className="bulk-import-done-text">
-                {selected.size} song{selected.size !== 1 ? "s" : ""} added to your worship library.
+                {importedCountRef.current} song{importedCountRef.current !== 1 ? "s" : ""} added to your worship library.
               </p>
             </div>
           )}
@@ -778,17 +779,19 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
             type="button"
             className="bulk-import-btn-secondary"
             onClick={
-              step === "extract"
-                ? () => setStep("pick")
-                : step === "detect"
-                  ? () => setStep("extract")
-                  : step === "preview"
-                    ? () => setStep("detect")
-                    : onClose
+              step === "done"
+                ? () => { onImported(); onClose(); }
+                : step === "extract"
+                  ? () => setStep("pick")
+                  : step === "detect"
+                    ? () => setStep("extract")
+                    : step === "preview"
+                      ? () => setStep("detect")
+                      : onClose
             }
             disabled={importing}
             title="Close">
-            {step === "done" ? "Close" : "Back"}
+            {step === "done" ? "Close" : step === "pick" ? "Close" : "Back"}
           </button>
 
           {step === "extract" && (
