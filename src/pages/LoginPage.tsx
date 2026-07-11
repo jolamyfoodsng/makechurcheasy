@@ -11,6 +11,7 @@ import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+
 const AUTH_API = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 console.log('AUTH_API :', AUTH_API);
 
@@ -29,7 +30,7 @@ type View = "initial" | "pairing" | "manual" | "qr";
 
 export default function LoginPage() {
   const { t } = useTranslation();
-  const { setUser } = useAuth();
+  const { setUser, user, authenticated } = useAuth();
   const [view, setView] = useState<View>("initial");
   const [code, setCode] = useState("");
   const [manualCode, setManualCode] = useState("");
@@ -49,6 +50,9 @@ export default function LoginPage() {
   const [checkStatus, setCheckStatus] = useState<"idle" | "checking" | "verified" | "not_verified" | "error">("idle");
 
   const cleanupRef = useRef<(() => void) | null>(null);
+  const welcomeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  if (authenticated && user) return null;
 
   const PAIRING_BASE = AUTH_API.startsWith("http://localhost")
     ? "http://localhost:4000"
@@ -96,10 +100,11 @@ export default function LoginPage() {
     }
   }
 
-  // Cleanup SSE on unmount
+  // Cleanup SSE and timeouts on unmount
   useEffect(() => {
     return () => {
       cleanupRef.current?.();
+      if (welcomeTimeoutRef.current) clearTimeout(welcomeTimeoutRef.current);
     };
   }, []);
 
@@ -124,7 +129,7 @@ export default function LoginPage() {
         const hasVisited = localStorage.getItem("mce_has_visited");
         if (hasVisited) {
           setWelcomeBack(true);
-          setTimeout(() => setWelcomeBack(false), 3000);
+          welcomeTimeoutRef.current = setTimeout(() => setWelcomeBack(false), 3000);
         }
         localStorage.setItem("mce_has_visited", "1");
         setUser(user);
@@ -171,7 +176,7 @@ export default function LoginPage() {
         const hasVisited = localStorage.getItem("mce_has_visited");
         if (hasVisited) {
           setWelcomeBack(true);
-          setTimeout(() => setWelcomeBack(false), 3000);
+          welcomeTimeoutRef.current = setTimeout(() => setWelcomeBack(false), 3000);
         }
         localStorage.setItem("mce_has_visited", "1");
         setUser(result.user);

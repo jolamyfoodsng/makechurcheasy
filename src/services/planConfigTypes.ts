@@ -9,7 +9,7 @@
  * for each feature at runtime from the entitlements data — never hardcoded.
  */
 
-import { buildLegacyCompatiblePlanConfig } from "../../../shared/subscription/sourceOfTruth";
+import { buildLegacyCompatiblePlanConfig } from "../lib/subscriptionSourceOfTruth";
 
 // ── Core Types ───────────────────────────────────────────────────────────────
 

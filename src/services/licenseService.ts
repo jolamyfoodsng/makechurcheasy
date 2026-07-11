@@ -40,7 +40,7 @@ import {
   getEffectivePlan as resolveCanonicalPlan,
   isActiveTrial as isCanonicalTrialActive,
   normalizePlanId,
-} from "../../../shared/subscription/sourceOfTruth";
+} from "../lib/subscriptionSourceOfTruth";
 
 export type { PlanTier } from "./planConfigTypes";
 

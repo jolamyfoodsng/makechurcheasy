@@ -35,7 +35,7 @@ import {
   type PlanEntitlements,
   type PlanTier,
 } from "../src/services/planConfigTypes";
-import { normalizePlanId } from "../../shared/subscription/sourceOfTruth";
+import { normalizePlanId } from "../src/lib/subscriptionSourceOfTruth";
 
 const PRICING_URL = "https://makechurcheasy.creatorstudioslabs.stream/pricing";
 const PLAN_ORDER: Array<"free" | "basic" | "growth" | "pro"> = ["free", "basic", "growth", "pro"];

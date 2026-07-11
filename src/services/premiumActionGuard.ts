@@ -11,7 +11,7 @@
 import { getDeviceId, getDeviceSecret } from "./authService";
 import { getLicensePayload, isUnlocked } from "./licenseGuard";
 import { checkEntitlementSync } from "./entitlementClient";
-import { normalizePlanId } from "../../../shared/subscription/sourceOfTruth";
+import { normalizePlanId } from "../lib/subscriptionSourceOfTruth";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||

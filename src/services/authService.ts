@@ -8,7 +8,7 @@
 import {
   getEffectivePlan as resolveEffectivePlan,
   normalizePlanId,
-} from "../../../shared/subscription/sourceOfTruth";
+} from "../lib/subscriptionSourceOfTruth";
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
@@ -165,7 +165,7 @@ export async function syncSessionToOverlay(session: AuthSession | null): Promise
     try {
       const {
         getLegacyCompatibleEntitlementsForPlan,
-      } = await import("../../../shared/subscription/sourceOfTruth");
+      } = await import("../lib/subscriptionSourceOfTruth");
       const planKey = normalizePlanId(
         session.user.effectivePlan
         || resolveEffectivePlan(session.user as any)

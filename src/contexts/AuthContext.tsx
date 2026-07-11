@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const STARTUP_GRACE_MS = 15_000;          // 15 s — no logout during this window
     const CHECK_RETRY_ATTEMPTS = 3;           // retries on exists:false before logout
     const CHECK_RETRY_DELAY_MS = 3_000;      // 3 s between retries
-    const REQUIRED_FAILURES_TO_LOGOUT = 2;    // require 2+ consecutive failed cycles
+    const REQUIRED_FAILURES_TO_LOGOUT = 4;    // require 4+ consecutive failed cycles
     const VISIBILITY_DEBOUNCE_MS = 5_000;     // 5 s debounce on visibility change
     const mountTimestamp = Date.now();
 
@@ -160,8 +160,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return false;
           }
         } catch (err) {
-          // Network error — skip (don't retry network failures, just skip this cycle)
-          console.debug("[AuthContext] checkDevice: network error — skipping", err);
+          // Network error — reset failure counter (transient issue, not a device problem)
+          consecutiveFailuresRef.current = 0;
+          console.debug("[AuthContext] checkDevice: network error — resetting failure counter", err);
           return true;
         }
       }

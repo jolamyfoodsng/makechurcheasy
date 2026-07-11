@@ -25,7 +25,7 @@ import { getUserScopedKey } from "../services/userScopedStorage";
 import {
   getEffectivePlan as resolveCanonicalPlan,
   normalizePlanId,
-} from "../../../shared/subscription/sourceOfTruth";
+} from "../lib/subscriptionSourceOfTruth";
 
 const PLAN_KEY = "ocs-dock-plan";
 const ENTITLEMENTS_KEY = "ocs-dock-entitlements";

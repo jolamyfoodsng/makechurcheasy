@@ -5,7 +5,7 @@ import { DEFAULT_PLAN_CONFIG } from "../services/planConfigTypes";
 import {
   getEffectivePlan as resolveCanonicalPlan,
   normalizePlanId,
-} from "../../../shared/subscription/sourceOfTruth";
+} from "../lib/subscriptionSourceOfTruth";
 
 /**
  * Auth gate for the OBS Dock.

@@ -25,7 +25,7 @@ import {
   getLegacyCompatibleEntitlementsForPlan,
   getEffectivePlan as resolveCanonicalPlan,
   normalizePlanId,
-} from "../../../shared/subscription/sourceOfTruth";
+} from "../lib/subscriptionSourceOfTruth";
 
 export type { EntitlementResult, FeatureKey, PlanTier };
 
