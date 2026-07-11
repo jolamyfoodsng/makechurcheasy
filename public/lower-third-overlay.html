@@ -632,23 +632,6 @@
      * Variables in the HTML are replaced: {{key}} → value
      */
 
-    // Tailwind config
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            primary: "#C8102E",
-            secondary: "#0033A0",
-          },
-          fontFamily: {
-            sans: ['"CMG Sans"', 'sans-serif'],
-            display: ['"CMG Sans"', 'sans-serif'],
-          }
-        },
-      },
-    };
-
     let currentThemeId = null;
     let currentThemePayload = null;
     let isVisible = false;
@@ -668,7 +651,7 @@
     const BACKGROUND_SNAPSHOT_HOLD_MS = 180;
     const FAST_ENTRY_DURATION_MIN_MS = 90;
     const FAST_ENTRY_DURATION_MAX_MS = 180;
-    const FAST_ENTRY_DELAY_MAX_MS = 70;
+    const FAST_ENTRY_DELAY_MAX_MS = 180;
     let backgroundSnapshotTimer = null;
 
     /**
@@ -1582,6 +1565,9 @@
         if (url.indexOf("https://fonts.googleapis.com") === 0) continue;
         if (url.indexOf("https://fonts.gstatic.com") === 0) continue;
         if (url.indexOf("https://cdnjs.cloudflare.com") === 0) continue;
+        if (url === "/fonts/google/google-fonts.css") continue;
+        if (url === "/fonts/fontawesome/all.min.css") continue;
+        if (url === "/fonts/cmg-sans-fonts.css") continue;
         loadedFonts[url] = true;
         var link = document.createElement("link");
         link.rel = "stylesheet";

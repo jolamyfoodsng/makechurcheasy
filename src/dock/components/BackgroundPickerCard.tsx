@@ -2011,7 +2011,7 @@ function CompareSettingsPanel({
         <div className="dtb-section-title">Layout</div>
 
         <SelectField
-          label="Backdrop"
+          label="Background"
           value={compareBackdropValue}
           onChange={(value) => onBackdropChange(value as BackgroundType)}
           options={[

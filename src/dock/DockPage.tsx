@@ -35,10 +35,14 @@ import { BibleProvider } from "../bible/bibleStore";
 import { useDockDragDrop } from "./useDockDragDrop";
 import { useDockUpload } from "./useDockUpload";
 import { ensureObsConnected } from "./obsConnectionGuard";
-import { getUserScopedKey } from "../services/userScopedStorage";
 import { getRecommendedPollingInterval } from "../services/performanceManager";
 import { getDefaultOBSUrl, readDesktopConfigCache, DEFAULT_DESKTOP_CONFIG } from "../services/desktopConfig";
 import { coerce, lt } from "semver";
+import {
+  type ProjectionSettings,
+  loadProjectionSettings,
+  saveProjectionSettings,
+} from "./dockProjectionSettings";
 
 function isOlderVersion(currentVersion: string, targetVersion: string): boolean {
   const current = coerce(currentVersion)?.version;
@@ -72,49 +76,6 @@ const DOCK_STAGED_ITEM_KEY = "ocs-dock-staged-item";
 interface DockShellPreferences {
   activeTab?: DockTab | "live";
   disabledTabs?: DockTab[];
-}
-
-interface ProjectionSettings {
-  /**
-   * Scene creation mode for projection:
-   * - "auto-duplicate": Clone current Program scene items at this moment (snapshot)
-   * - "reference": Add Program scene as a live Scene Source (always mirrors current)
-   * - "no-clone": Skip — projects directly without any Program scene copy
-   */
-  sceneMode: "auto-duplicate" | "reference" | "no-clone";
-  /** "ticker-above" = ticker stays on top; "content-above" = MCE content on top (default) */
-  tickerLayerPriority: "ticker-above" | "content-above";
-  /** When true, restore the original Program scene after projection ends */
-  restoreOriginalScene: boolean;
-  /** When true, lower-third overlays go to MCE Presentation only — not the Program scene */
-  presentationOnly: boolean;
-}
-
-const PROJECTION_SETTINGS_KEY = "ocs-dock-projection-settings";
-const DEFAULT_PROJECTION_SETTINGS: ProjectionSettings = {
-  sceneMode: "auto-duplicate",
-  tickerLayerPriority: "content-above",
-  restoreOriginalScene: false,
-  presentationOnly: false,
-};
-
-function loadProjectionSettings(): ProjectionSettings {
-  try {
-    const raw = localStorage.getItem(getUserScopedKey(PROJECTION_SETTINGS_KEY));
-    if (!raw) return { ...DEFAULT_PROJECTION_SETTINGS };
-    const parsed = JSON.parse(raw) as Partial<ProjectionSettings>;
-    return { ...DEFAULT_PROJECTION_SETTINGS, ...parsed };
-  } catch {
-    return { ...DEFAULT_PROJECTION_SETTINGS };
-  }
-}
-
-function saveProjectionSettings(next: ProjectionSettings): void {
-  try {
-    localStorage.setItem(getUserScopedKey(PROJECTION_SETTINGS_KEY), JSON.stringify(next));
-  } catch {
-    // ignore OBS CEF storage failures
-  }
 }
 
 function resolveDockTab(tab?: DockTab | "live" | null): DockTab {
@@ -291,6 +252,7 @@ export default function DockPage() {
 
   useEffect(() => {
     saveProjectionSettings(projectionSettings);
+    void dockObsClient.applyProjectionSettings().catch(() => { });
   }, [projectionSettings]);
 
   useEffect(() => installDockTextShortcuts(), []);
@@ -376,6 +338,8 @@ export default function DockPage() {
       if (status === "connected") {
         // Stop auto-reconnect — we're connected
         if (autoReconnectTimer) { clearInterval(autoReconnectTimer); autoReconnectTimer = null; }
+
+        void dockObsClient.applyProjectionSettings().catch(() => { });
 
         dockObsClient.recoverLiveState().then((recovered) => {
           setStaged((current) => {
@@ -937,8 +901,9 @@ export default function DockPage() {
                     >
                       <input
                         type="checkbox"
-                        checked={projectionSettings.presentationOnly}
-                        onChange={(e) => setProjectionSettings((s) => ({ ...s, presentationOnly: e.target.checked }))}
+                        checked
+                        disabled
+                        readOnly
                       />
                       <span>{t('page.presentationOnly', 'Lower Thirds in Presentation')}</span>
                     </label>

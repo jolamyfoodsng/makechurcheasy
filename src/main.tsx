@@ -63,23 +63,22 @@ void initAuthStore().then(async () => {
     const { applyThemeConfigOverrides } = await import("./bible/types");
     applyThemeConfigOverrides();
 
-    // Background refresh every 5 minutes
-    setInterval(() => {
+    const refreshDesktopSettings = () => {
       void refreshDesktopConfig().then(() => {
         applyThemeConfigOverrides();
       });
+    };
+
+    // Background refresh every 5 minutes
+    setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      refreshDesktopSettings();
     }, 5 * 60 * 1000);
 
     // Refresh on window focus and connectivity change
-    window.addEventListener("focus", () => {
-      void refreshDesktopConfig().then(() => {
-        applyThemeConfigOverrides();
-      });
-    });
+    window.addEventListener("focus", refreshDesktopSettings);
     window.addEventListener("online", () => {
-      void refreshDesktopConfig().then(() => {
-        applyThemeConfigOverrides();
-      });
+      refreshDesktopSettings();
       // Sync pending offline credit transactions when connectivity returns
       import("./services/credits").then(({ syncPendingTransactions }) => {
         void syncPendingTransactions();

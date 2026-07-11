@@ -30,16 +30,20 @@ interface CacheEntry {
   fetchedAt: number;
 }
 
-function readCache(): PlanConfig | null {
+function readCacheEntry(): CacheEntry | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const entry: CacheEntry = JSON.parse(raw);
     if (Date.now() - entry.fetchedAt > CACHE_TTL_MS * 10) return null; // expired after 50 min
-    return entry.config;
+    return entry;
   } catch {
     return null;
   }
+}
+
+function readCache(): PlanConfig | null {
+  return readCacheEntry()?.config ?? null;
 }
 
 /**
@@ -66,11 +70,12 @@ let inflight: Promise<PlanConfig> | null = null;
  * Concurrent calls are deduplicated via a shared promise.
  */
 export async function getPlanConfig(): Promise<PlanConfig> {
-  const cached = readCache();
-  if (cached) {
-    // Serve cache, refresh in background
-    refreshInBackground();
-    return cached;
+  const cachedEntry = readCacheEntry();
+  if (cachedEntry) {
+    if (Date.now() - cachedEntry.fetchedAt >= CACHE_TTL_MS) {
+      refreshInBackground();
+    }
+    return cachedEntry.config;
   }
   return fetchConfig();
 }

@@ -1602,5 +1602,8 @@
   "worship.width": "Width",
   "worship.top": "Top",
   "worship.bottom": "Bottom",
-  "worship.captionPosition": "Caption Position"
+  "worship.captionPosition": "Caption Position",
+  "announcements.lowerThirdTheme": "Lower Third Theme",
+  "announcements.lowerThirdThemeNone": "None (default)",
+  "announcements.lowerThirdPrefix": "LT: {{name}}"
 }

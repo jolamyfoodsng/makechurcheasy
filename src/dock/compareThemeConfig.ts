@@ -21,6 +21,7 @@ export interface CompareThemeSettings {
   compareLayoutPreset: CompareLayoutPresetId;
   compareGapPreset: CompareGapPresetId;
   gap: number;
+  compareTranslationGap: number;
   compareLeftWidth: number;
   compareRightWidth: number;
   compareLockWidths: boolean;
@@ -120,6 +121,7 @@ export const DEFAULT_COMPARE_THEME_SETTINGS: CompareThemeSettings = {
   compareLayoutPreset: "balanced",
   compareGapPreset: "balanced",
   gap: 24,
+  compareTranslationGap: 24,
   compareLeftWidth: 40,
   compareRightWidth: 40,
   compareLockWidths: true,
@@ -243,6 +245,7 @@ export function normalizeCompareThemeSettings(source: Record<string, unknown> | 
     compareLayoutPreset: stringValue(data, "compareLayoutPreset", DEFAULT_COMPARE_THEME_SETTINGS.compareLayoutPreset, ["compact", "balanced", "wide", "equal-columns", "left-emphasis", "right-emphasis", "custom"]),
     compareGapPreset: stringValue(data, "compareGapPreset", DEFAULT_COMPARE_THEME_SETTINGS.compareGapPreset, ["compact", "balanced", "spacious", "custom"]),
     gap: numberValue(data, "compareTranslationGap", DEFAULT_COMPARE_THEME_SETTINGS.gap, 0, 100),
+    compareTranslationGap: numberValue(data, "compareTranslationGap", DEFAULT_COMPARE_THEME_SETTINGS.compareTranslationGap, 0, 100),
     compareLeftWidth: leftWidth,
     compareRightWidth: rightWidth,
     compareLockWidths: boolValue(data, "compareLockWidths", DEFAULT_COMPARE_THEME_SETTINGS.compareLockWidths),

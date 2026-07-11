@@ -1,8 +1,9 @@
 /**
  * CreditsDisplay — Reusable inline badge showing the user's credit balance.
  *
- * When a userId is provided, polls the backend every 5 seconds so admin
- * credit additions reflect live without a page refresh.
+ * When a userId is provided, refreshes on mount, on visibility restore,
+ * and on a low-frequency background interval. Local credit mutations still
+ * update immediately through the shared event bus.
  */
 
 import { Zap, CloudOff } from "lucide-react";
@@ -18,11 +19,13 @@ import {
 interface CreditsDisplayProps {
   /** Force a re-render when external state changes (e.g. after deduction). */
   refreshKey?: number;
-  /** User ID for backend sync. When provided, polls every 5s. */
+  /** User ID for backend sync. When provided, enables authenticated refreshes. */
   userId?: string;
   /** Credits being consumed right now (e.g. during a live session). Subtracted from displayed balance. */
   sessionCreditsUsed?: number;
 }
+
+const BACKGROUND_REFRESH_MS = 10 * 60 * 1000;
 
 function PendingBadge({ count }: { count: number }) {
   if (count <= 0) return null;
@@ -54,15 +57,15 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
   // responses (initiated before the deduction) are discarded.
   const genRef = useRef(0);
 
-  // Sync from backend on mount and every 5 seconds
+  // Sync from backend on mount, on visibility restore, and on a low-frequency timer.
   useEffect(() => {
     if (!userId) return;
 
     let cancelled = false;
 
-    async function sync() {
+    async function sync(force = false) {
       const genBefore = genRef.current;
-      const result = await syncCreditsWithBackend();
+      const result = await syncCreditsWithBackend({ force });
       // If a deduction happened while the fetch was in flight, discard
       // the stale response — the deduction already set the correct balance.
       if (!cancelled && genBefore === genRef.current) {
@@ -80,14 +83,24 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
     }
 
     // Initial sync
-    sync();
+    void sync();
 
-    // Poll every 5 seconds
-    pollingRef.current = setInterval(sync, 5000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void sync(true);
+      }
+    };
+
+    pollingRef.current = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void sync(true);
+    }, BACKGROUND_REFRESH_MS);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       cancelled = true;
       if (pollingRef.current) clearInterval(pollingRef.current);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [userId]);
 

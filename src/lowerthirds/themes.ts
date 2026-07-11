@@ -8,6 +8,7 @@
  */
 
 import { BIBLE_THEMES } from "./bibleThemes";
+import { localizeLowerThirdThemeAssets, normalizeThemeFontImports } from "./runtimeBranding";
 
 export type ThemeCategory = "bible" | "worship" | "general" | string;
 
@@ -1330,21 +1331,20 @@ function withCanonicalThemeVariants(
 }
 
 function normalizeThemeBranding(theme: ThemeLike): ThemeLike {
-  const fontImports = Array.isArray(theme.fontImports)
-    ? theme.fontImports.filter((value): value is string => typeof value === "string")
-    : [];
+  const localizedTheme = localizeLowerThirdThemeAssets(theme);
+  const fontImports = normalizeThemeFontImports(localizedTheme.fontImports);
 
   if (!fontImports.includes(LT_BRAND_FONT_IMPORT)) {
     fontImports.unshift(LT_BRAND_FONT_IMPORT);
   }
 
-  const themeCss = typeof theme.css === "string" ? theme.css : "";
+  const themeCss = typeof localizedTheme.css === "string" ? localizedTheme.css : "";
   const css = themeCss.includes("Brand normalization: enforce one church-wide visual system")
     ? themeCss
     : `${themeCss}\n${LT_BRAND_OVERRIDE_CSS}`;
 
   return {
-    ...theme,
+    ...localizedTheme,
     accentColor: LT_BRAND_PRIMARY,
     fontImports,
     css,

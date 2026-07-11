@@ -10,7 +10,7 @@
  * - Shows download progress inline when updating
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   downloadAndInstallUpdate,
   type UpdateCheckResult,
@@ -77,19 +77,11 @@ export default function UpdateNotification({
   const [errorMsg, setErrorMsg] = useState("");
   const [showChangelog, setShowChangelog] = useState(false);
   const [visible, setVisible] = useState(() => shouldShowNotification(result));
-  const animFrameRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    animFrameRef.current = requestAnimationFrame(() => setVisible(true));
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
-  }, []);
 
   // Re-check visibility when update result changes (e.g., from polling)
   useEffect(() => {
     setVisible(shouldShowNotification(result));
-  }, [result.version]);
+  }, [result.version, result.available]);
 
   const percentComplete =
     progress.contentLength > 0

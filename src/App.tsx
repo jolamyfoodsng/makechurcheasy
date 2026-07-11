@@ -34,6 +34,7 @@ import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
 import { checkForUpdate, downloadAndInstallUpdate, downloadAndInstallFromGitHub, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
 import {
+  fetchAppSettings,
   getForcedUpdateState,
   getPolicyUpdateNotice,
   recordOverlayDismiss,
@@ -114,6 +115,7 @@ import "./compat-mode.css";
 import { getRecommendedPollingInterval } from "./services/performanceManager";
 
 const UPDATE_POLL_INTERVAL_MS = 30_000;
+const FORCED_UPDATE_POLL_INTERVAL_MS = 5 * 60 * 1000;
 const WORSHIP_DOCK_SAVE_POLL_INTERVAL_MS = 500;
 const DOCK_WORSHIP_PREFS_APP_KEY = "dock-worship-preferences";
 
@@ -653,7 +655,7 @@ function App() {
       });
 
     // Fetch server-driven forced update settings
-    const forcedUpdateCheck = refreshAppSettings()
+    const forcedUpdateCheck = fetchAppSettings()
       .then((settings) => {
         setForcedUpdateState(getForcedUpdateState(settings));
         setPolicyUpdateNotice(getPolicyUpdateNotice(settings));
@@ -845,11 +847,15 @@ function App() {
       .catch(() => { /* non-critical */ });
   }, []);
 
-  // Poll every 60 seconds (emergency lock needs to take effect quickly)
+  // Poll every 5 minutes while visible; focus/visibility resumes trigger
+  // immediate refreshes so admin-configured locks still propagate promptly.
   useEffect(() => {
     if (splashVisible) return;
 
-    const intervalId = window.setInterval(refetchForcedUpdate, 60 * 1000);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      refetchForcedUpdate();
+    }, FORCED_UPDATE_POLL_INTERVAL_MS);
     return () => window.clearInterval(intervalId);
   }, [splashVisible, refetchForcedUpdate]);
 
@@ -860,9 +866,11 @@ function App() {
     const handleFocus = () => refetchForcedUpdate();
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleFocus);
+    window.addEventListener("online", handleFocus);
     return () => {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleFocus);
+      window.removeEventListener("online", handleFocus);
     };
   }, [splashVisible, refetchForcedUpdate]);
 

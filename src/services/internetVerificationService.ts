@@ -11,8 +11,8 @@
  *   >maxOfflineDays → full lock screen
  *
  * Settings are consumed from the desktop config (platform settings → Security section)
- * and cached locally for offline fallback. The verification itself hits an existing
- * authenticated endpoint (/api/device/profile).
+ * and cached locally for offline fallback. The verification itself hits the
+ * desktop bootstrap endpoint (/api/device/bootstrap).
  */
 
 import { getUserScopedKey } from "./userScopedStorage";
@@ -302,7 +302,7 @@ export async function verify(): Promise<boolean> {
   try {
     const deviceId = getDeviceId();
     const deviceSecret = getDeviceSecret();
-    const url = `${API_BASE}/api/device/profile${deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : ""}`;
+    const url = `${API_BASE}/api/device/bootstrap${deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : ""}`;
     const res = await fetch(url, {
       headers: {
         "X-App-Version": APP_VERSION,

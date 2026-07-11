@@ -25,16 +25,20 @@ interface CacheEntry {
   fetchedAt: number;
 }
 
-function readCache(): DesktopConfig | null {
+function readCacheEntry(): CacheEntry | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const entry: CacheEntry = JSON.parse(raw);
     if (Date.now() - entry.fetchedAt > CACHE_TTL_MS * 10) return null; // expired after 50 min
-    return entry.config;
+    return entry;
   } catch {
     return null;
   }
+}
+
+function readCache(): DesktopConfig | null {
+  return readCacheEntry()?.config ?? null;
 }
 
 /**
@@ -60,10 +64,12 @@ let inflight: Promise<DesktopConfig> | null = null;
  * Concurrent calls are deduplicated via a shared promise.
  */
 export async function getDesktopConfig(): Promise<DesktopConfig> {
-  const cached = readCache();
-  if (cached) {
-    refreshInBackground();
-    return cached;
+  const cachedEntry = readCacheEntry();
+  if (cachedEntry) {
+    if (Date.now() - cachedEntry.fetchedAt >= CACHE_TTL_MS) {
+      refreshInBackground();
+    }
+    return cachedEntry.config;
   }
   return fetchConfig();
 }
@@ -76,7 +82,7 @@ async function fetchConfig(): Promise<DesktopConfig> {
 
 async function doFetch(): Promise<DesktopConfig> {
   try {
-    const res = await fetch(`${API_BASE}/api/config/desktop`, { cache: "no-store" });
+    const res = await fetch(`${API_BASE}/api/config/desktop`);
     if (res.ok) {
       const data = await res.json();
       if (data && data.obs && data.storage) {

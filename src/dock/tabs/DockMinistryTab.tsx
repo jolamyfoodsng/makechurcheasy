@@ -31,12 +31,14 @@ import DockCountdownsTab from "./DockCountdownsTab";
 import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
-import { normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
+import { localizeLowerThirdThemeAssets, normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
 
 const ALL_LT_THEMES: LowerThirdTheme[] = [
   ...LT_ALL_THEMES,
-  ...((allThemesData.themes as unknown as LowerThirdTheme[]) || []).filter(
-    (t) => !LT_ALL_THEMES.some((lt) => lt.id === t.id),
+  ...((allThemesData.themes as unknown as LowerThirdTheme[]) || [])
+    .map((t) => localizeLowerThirdThemeAssets(t))
+    .filter(
+      (t) => !LT_ALL_THEMES.some((lt) => lt.id === t.id),
   ),
 ];
 
@@ -440,9 +442,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
         },
       });
 
-      // Move ticker to top of scene (highest z-index)
-      const allItems = await dockObsClient.call("GetSceneItemList", { sceneName: targetScene }) as { sceneItems: Array<{ sceneItemId: number }> };
-      await dockObsClient.call("SetSceneItemIndex", { sceneName: targetScene, sceneItemId, sceneItemIndex: allItems.sceneItems.length - 1 });
+      await dockObsClient.applyProjectionSettings().catch(() => { });
 
       setRunning(true);
       setIsPaused(false);
@@ -1018,41 +1018,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       try {
                         await ensureObsConnected();
                         const scale = LT_SIZE_SCALE[ltSize] ?? 1;
-                        const srcW = Math.round(1920 / scale);
-                        const srcH = Math.round(1080 / scale);
-                        const sceneName = "MCE Presentation";
-                        const sourceName = "MCE Lower Third";
-                        // Ensure scene exists
-                        const scenes = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
-                        if (!scenes.scenes.some((s) => s.sceneName === sceneName)) {
-                          await dockObsClient.call("CreateScene", { sceneName });
-                          await new Promise((r) => setTimeout(r, 100));
-                        }
-                        const inputs = await dockObsClient.call("GetInputList") as { inputs: Array<{ inputName: string }> };
-                        const inputExists = inputs.inputs.some((i) => i.inputName === sourceName);
-                        let sceneItemId: number;
-                        if (inputExists) {
-                          await dockObsClient.call("SetInputSettings", {
-                            inputName: sourceName,
-                            inputSettings: { url, width: srcW, height: srcH, fps_custom: true, fps: 60, shutdown: false, restart_when_active: false },
-                          });
-                          const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
-                          const existing = items.sceneItems.find((i) => i.sourceName === sourceName);
-                          if (existing) {
-                            sceneItemId = existing.sceneItemId;
-                            await dockObsClient.call("SetSceneItemEnabled", { sceneName, sceneItemId, sceneItemEnabled: true });
-                          } else {
-                            sceneItemId = (await dockObsClient.call("CreateSceneItem", { sceneName, sourceName, sceneItemEnabled: true }) as { sceneItemId: number }).sceneItemId;
-                          }
-                        } else {
-                          sceneItemId = (await dockObsClient.call("CreateInput", { sceneName, inputName: sourceName, inputKind: "browser_source", inputSettings: { url, width: srcW, height: srcH, css: "", fps_custom: true, fps: 60, shutdown: false, restart_when_active: false }, sceneItemEnabled: true }) as { sceneItemId: number }).sceneItemId;
-                        }
-                        await dockObsClient.call("SetSceneItemTransform", {
-                          sceneName, sceneItemId,
-                          sceneItemTransform: { positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0, boundsType: "OBS_BOUNDS_STRETCH", boundsWidth: 1920, boundsHeight: 1080, boundsAlignment: 0, cropLeft: 0, cropTop: 0, cropRight: 0, cropBottom: 0 },
+                        await dockObsClient.pushLowerThirdOverlayUrl(url, {
+                          sourceWidth: Math.round(1920 / scale),
+                          sourceHeight: Math.round(1080 / scale),
                         });
-                        const allItems = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sceneItemId: number }> };
-                        await dockObsClient.call("SetSceneItemIndex", { sceneName, sceneItemId, sceneItemIndex: allItems.sceneItems.length - 1 });
                         setLtLive(true);
                         setLtFeedbackTone("success");
                         setLtFeedback(t("ministry.lowerThirdLive"));
@@ -1075,29 +1044,13 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       }
                     }}
                     onBlank={async (url) => {
+                      void url;
                       setLtSending(true);
                       setLtFeedback(null);
                       try {
                         await ensureObsConnected();
-                        const inputs = await dockObsClient.call("GetInputList") as { inputs: Array<{ inputName: string }> };
-                        const ltInput = inputs.inputs.find((i) => i.inputName === "MCE Lower Third");
-                        if (ltInput) {
-                          // Send blanked URL to trigger exit animation in overlay
-                          await dockObsClient.call("SetInputSettings", { inputName: "MCE Lower Third", inputSettings: { url } });
-                          // Wait for exit animation to finish, then disable the source
-                          const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
-                          await new Promise((r) => setTimeout(r, exitDuration));
-                          const sceneName = "MCE Presentation";
-                          const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
-                          const ltItem = items.sceneItems.find((i) => i.sourceName === "MCE Lower Third");
-                          if (ltItem) {
-                            await dockObsClient.call("SetSceneItemEnabled", {
-                              sceneName,
-                              sceneItemId: ltItem.sceneItemId,
-                              sceneItemEnabled: false,
-                            });
-                          }
-                        }
+                        const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
+                        await dockObsClient.clearLowerThirds(exitDuration);
                         setLtLive(false);
                         setLtFeedbackTone("success");
                         setLtFeedback(t("ministry.lowerThirdCleared"));
@@ -1109,29 +1062,13 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       }
                     }}
                     onAnimateOut={async (url) => {
+                      void url;
                       setLtSending(true);
                       setLtFeedback(null);
                       try {
                         await ensureObsConnected();
-                        const inputs = await dockObsClient.call("GetInputList") as { inputs: Array<{ inputName: string }> };
-                        const ltInput = inputs.inputs.find((i) => i.inputName === "MCE Lower Third");
-                        if (ltInput) {
-                          // Set blanked URL to trigger exit animation in overlay
-                          await dockObsClient.call("SetInputSettings", { inputName: "MCE Lower Third", inputSettings: { url } });
-                          // Wait for overlay's exit animation to finish (overlay self-times via resolveThemeExitDuration), then disable the source
-                          const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
-                          await new Promise((r) => setTimeout(r, exitDuration));
-                          const sceneName = "MCE Presentation";
-                          const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
-                          const ltItem = items.sceneItems.find((i) => i.sourceName === "MCE Lower Third");
-                          if (ltItem) {
-                            await dockObsClient.call("SetSceneItemEnabled", {
-                              sceneName,
-                              sceneItemId: ltItem.sceneItemId,
-                              sceneItemEnabled: false,
-                            });
-                          }
-                        }
+                        const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
+                        await dockObsClient.clearLowerThirds(exitDuration);
                         setLtLive(false);
                         setLtFeedbackTone("success");
                         setLtFeedback(t("ministry.lowerThirdAnimatedOut"));
@@ -1230,16 +1167,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                               // Wait for exit animation (use theme's animation duration), then disable the source
                               const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
                               await new Promise((r) => setTimeout(r, animDuration + 100));
-                              const sceneName = "MCE Presentation";
-                              const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
-                              const ltItem = items.sceneItems.find((i) => i.sourceName === "MCE Lower Third");
-                              if (ltItem) {
-                                await dockObsClient.call("SetSceneItemEnabled", {
-                                  sceneName,
-                                  sceneItemId: ltItem.sceneItemId,
-                                  sceneItemEnabled: false,
-                                });
-                              }
+                              await dockObsClient.clearBible();
                               setLtLive(false);
                               setLtFeedbackTone("success");
                               setLtFeedback(t("ministry.lowerThirdAnimatedOut"));
@@ -1265,36 +1193,27 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                         type="button"
                         className={`dock-btn dock-btn--sm ${ltSending ? "dock-btn--loading" : ""}`}
                         disabled={ltSending || !obsConnected}
-                        onClick={async () => {
-                          setLtSending(true);
-                          setLtFeedback(null);
-                          try {
-                            await ensureObsConnected();
-                            await dockObsClient.pushBible({
+                          onClick={async () => {
+                            setLtSending(true);
+                            setLtFeedback(null);
+                            try {
+                              await ensureObsConnected();
+                              await dockObsClient.pushBible({
                               book: "",
                               chapter: 0,
                               verse: 0,
                               translation: "",
                               verseText: "",
-                              overlayMode: "lower-third",
-                              bibleThemeSettings: ltSelectedEntry?.kind === "bible" ? ltSelectedEntry.theme.settings as unknown as Record<string, unknown> : null,
-                            });
-                            // Wait for exit animation (use theme's animation duration), then disable the source
-                            const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
-                            await new Promise((r) => setTimeout(r, animDuration + 100));
-                            const sceneName = "MCE Presentation";
-                            const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
-                            const ltItem = items.sceneItems.find((i) => i.sourceName === "MCE Lower Third");
-                            if (ltItem) {
-                              await dockObsClient.call("SetSceneItemEnabled", {
-                                sceneName,
-                                sceneItemId: ltItem.sceneItemId,
-                                sceneItemEnabled: false,
+                                overlayMode: "lower-third",
+                                bibleThemeSettings: ltSelectedEntry?.kind === "bible" ? ltSelectedEntry.theme.settings as unknown as Record<string, unknown> : null,
                               });
-                            }
-                            setLtLive(false);
-                            setLtFeedbackTone("success");
-                            setLtFeedback(t("ministry.lowerThirdCleared"));
+                              // Wait for exit animation (use theme's animation duration), then disable the source
+                              const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
+                              await new Promise((r) => setTimeout(r, animDuration + 100));
+                              await dockObsClient.clearBible();
+                              setLtLive(false);
+                              setLtFeedbackTone("success");
+                              setLtFeedback(t("ministry.lowerThirdCleared"));
                           } catch (err) {
                             setLtFeedbackTone("error");
                             setLtFeedback(err instanceof Error ? err.message : t("ministry.blankFailed"));

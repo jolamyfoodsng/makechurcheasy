@@ -56,16 +56,20 @@ interface CacheEntry {
   fetchedAt: number;
 }
 
-function readCache(): CountryPricing | null {
+function readCacheEntry(): CacheEntry | null {
   try {
     const raw = localStorage.getItem(getUserScopedKey(CACHE_KEY));
     if (!raw) return null;
     const entry: CacheEntry = JSON.parse(raw);
     if (Date.now() - entry.fetchedAt > HARD_EXPIRY_MS) return null;
-    return entry.pricing;
+    return entry;
   } catch {
     return null;
   }
+}
+
+function readCache(): CountryPricing | null {
+  return readCacheEntry()?.pricing ?? null;
 }
 
 function writeCache(pricing: CountryPricing): void {
@@ -138,14 +142,15 @@ export function useCountryPricing(): UseCountryPricingResult {
   const load = useCallback(async (force = false) => {
     // Serve cache unless forced refresh
     if (!force) {
-      const cached = readCache();
-      if (cached) {
-        setPricing(cached);
+      const cachedEntry = readCacheEntry();
+      if (cachedEntry) {
+        setPricing(cachedEntry.pricing);
         setLoading(false);
-        // Background refresh
-        fetchPricing()
-          .then((fresh) => setPricing(fresh))
-          .catch(() => { });
+        if (Date.now() - cachedEntry.fetchedAt >= CACHE_TTL_MS) {
+          fetchPricing()
+            .then((fresh) => setPricing(fresh))
+            .catch(() => { });
+        }
         return;
       }
     }

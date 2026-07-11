@@ -25,6 +25,7 @@ import {
   Play,
   ChevronDown,
   ChevronRight,
+  ArrowRight,
   HelpCircle,
   RotateCcw,
   AlertTriangle,
@@ -59,6 +60,7 @@ import { getEffectivePlan, getUserPlan, getUserPlanLimits, isInTrial, getTrialDa
 import { fetchCreditDetails, getCreditsBalance } from "../services/credits";
 import { getCachedSubscription } from "../services/subscriptionCache";
 import { getPlanConfig, getPlanLabel } from "../services/planConfig";
+import { useCountryPricing } from "../hooks/useCountryPricing";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -364,6 +366,51 @@ function DashboardSummaryCards() {
           <span className="summary-card-sub">{t("dashboard.summary.renewalSubtitle")}</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Plan Upgrade Banner ────────────────────────────────────────────────────
+
+function PlanUpgradeBanner() {
+  const { user } = useAuth();
+  const { getFormattedPlanPrice, loading } = useCountryPricing();
+  const trialActive = isInTrial(user);
+  const plan = getUserPlan(user);
+  const isFree = plan === "free";
+
+  if (!trialActive && !isFree) return null;
+
+  const handleUpgrade = () => {
+    openUrl("https://makechurcheasy.creatorstudioslabs.stream/pricing");
+  };
+
+  if (trialActive) {
+    const days = getTrialDaysRemaining(user);
+    return (
+      <div className="plan-upgrade-banner plan-upgrade-banner--trial">
+        <div className="plan-upgrade-banner-content">
+          <Crown size={16} className="plan-upgrade-banner-icon" />
+          <span>Free trial — {days} day{days !== 1 ? "s" : ""} remaining</span>
+        </div>
+        <button className="plan-upgrade-banner-btn" onClick={handleUpgrade}>
+          Upgrade <ArrowRight size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  const monthly = loading ? "..." : getFormattedPlanPrice("basic", "monthly");
+
+  return (
+    <div className="plan-upgrade-banner">
+      <div className="plan-upgrade-banner-content">
+        <Crown size={16} className="plan-upgrade-banner-icon" />
+        <span>Upgrade to Basic — from {monthly}/month</span>
+      </div>
+      <button className="plan-upgrade-banner-btn" onClick={handleUpgrade}>
+        Subscribe <ArrowRight size={14} />
+      </button>
     </div>
   );
 }
@@ -1301,6 +1348,7 @@ export default function ProductionHomePage() {
         }}
       />
       <DashboardSummaryCards />
+      <PlanUpgradeBanner />
       <FeatureGrid
         voiceBibleStatus={voiceBible.status}
         voiceBibleConnected={voiceBible.status !== "error"}

@@ -114,7 +114,11 @@ export async function getOverlayBaseUrl(): Promise<string> {
  * Call getOverlayBaseUrl() first to ensure it's initialized.
  */
 export function getOverlayBaseUrlSync(): string {
-  return _cachedBaseUrl || window.location.origin;
+  if (_cachedBaseUrl) return _cachedBaseUrl;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+  return "http://localhost";
 }
 
 /**

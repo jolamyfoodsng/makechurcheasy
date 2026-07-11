@@ -9,7 +9,7 @@
 
 import { getSession } from "./authService";
 
-const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 let _syncTimer: ReturnType<typeof setInterval> | null = null;
 let _syncing = false;
 
@@ -98,6 +98,16 @@ async function syncUsageToServer(): Promise<void> {
   }
 }
 
+function shouldSyncInCurrentState(): boolean {
+  if (typeof document === "undefined") return true;
+  return document.visibilityState === "visible";
+}
+
+function triggerSyncIfVisible(): void {
+  if (!shouldSyncInCurrentState()) return;
+  void syncUsageToServer();
+}
+
 /**
  * Start periodic usage sync. Safe to call multiple times.
  */
@@ -106,13 +116,16 @@ export function startUsageSync(): void {
 
   // Initial sync after a short delay (let the app settle)
   setTimeout(() => {
-    void syncUsageToServer();
+    triggerSyncIfVisible();
   }, 10_000);
 
   // Periodic sync
   _syncTimer = setInterval(() => {
-    void syncUsageToServer();
+    triggerSyncIfVisible();
   }, SYNC_INTERVAL_MS);
+
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  window.addEventListener("online", triggerSyncIfVisible);
 }
 
 /**
@@ -123,6 +136,8 @@ export function stopUsageSync(): void {
     clearInterval(_syncTimer);
     _syncTimer = null;
   }
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+  window.removeEventListener("online", triggerSyncIfVisible);
 }
 
 /**
@@ -130,4 +145,10 @@ export function stopUsageSync(): void {
  */
 export function triggerUsageSync(): void {
   void syncUsageToServer();
+}
+
+function handleVisibilityChange(): void {
+  if (document.visibilityState === "visible") {
+    void syncUsageToServer();
+  }
 }

@@ -24,6 +24,7 @@ import { getPlanConfig } from "./planConfig";
 import { getUserScopedKey } from "./userScopedStorage";
 import type { PlanConfig } from "./planConfig";
 import { getDeviceId } from "./authService";
+import { requestJsonWithRetry } from "./requestDedup";
 import {
   queueDeduction,
   getPendingTransactions,
@@ -55,7 +56,9 @@ export async function getTRANSLATION_WORDS_PER_CREDIT(): Promise<number> {
 }
 
 const STORAGE_KEY = "ocs-credits-balance";
+const FETCHED_AT_KEY = "ocs-credits-fetched-at";
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+const REMOTE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /** Build headers with device auth for desktop app API calls. */
 function authHeaders(): Record<string, string> {
@@ -77,7 +80,7 @@ export function getCreditsBalance(): number {
     const raw = localStorage.getItem(getUserScopedKey(STORAGE_KEY));
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (typeof parsed === "number" && parsed >= 0) return parsed;
+      if (typeof parsed === "number" && (parsed === -1 || parsed >= 0)) return parsed;
     }
   } catch { /* ignore */ }
   return 0;
@@ -86,8 +89,33 @@ export function getCreditsBalance(): number {
 /** Write balance to localStorage cache (called after backend sync). */
 function setCreditsBalance(amount: number): void {
   try {
-    localStorage.setItem(getUserScopedKey(STORAGE_KEY), JSON.stringify(Math.max(0, Math.round(amount))));
+    const normalized =
+      amount === -1 ? -1 : Math.max(0, Math.round(amount));
+    localStorage.setItem(getUserScopedKey(STORAGE_KEY), JSON.stringify(normalized));
+    localStorage.setItem(getUserScopedKey(FETCHED_AT_KEY), JSON.stringify(Date.now()));
   } catch { /* ignore */ }
+}
+
+function getLastFetchedAt(): number | null {
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(FETCHED_AT_KEY));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasFreshRemoteCache(): boolean {
+  const lastFetchedAt = getLastFetchedAt();
+  return lastFetchedAt !== null && (Date.now() - lastFetchedAt) < REMOTE_CACHE_TTL_MS;
+}
+
+export function applyCreditSnapshotFromServer(balance: number): void {
+  if (balance !== -1 && balance < 0) return;
+  setCreditsBalance(balance);
+  emitCreditChange(balance);
 }
 
 // ── Credit change event bus ──────────────────────────────────────────────────
@@ -184,11 +212,15 @@ export interface CreditDetails {
  */
 export async function fetchCreditDetails(): Promise<CreditDetails | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/user/credits`, {
-      headers: authHeaders(),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
+    const { response, data } = await requestJsonWithRetry<CreditDetails>(
+      `${API_BASE}/api/user/credits`,
+      {
+        dedupeKey: `credits:details:${getDeviceId() || "anonymous"}`,
+        headers: authHeaders(),
+        retryDelaysMs: [1000, 3000],
+      },
+    );
+    if (!response.ok || !data) return null;
     if (typeof data.credits === "number") {
       return {
         credits: data.credits,
@@ -219,12 +251,15 @@ export async function fetchCreditsFromBackend(): Promise<number> {
  * Sync credits with the backend. The backend is the single source of truth.
  * Local localStorage cache is updated to match what the backend reports.
  */
-export async function syncCreditsWithBackend(): Promise<number> {
+export async function syncCreditsWithBackend(options?: { force?: boolean }): Promise<number> {
+  if (!options?.force && hasFreshRemoteCache()) {
+    return getCreditsBalance();
+  }
+
   const backendCredits = await fetchCreditsFromBackend();
   if (backendCredits < 0) return -1;
 
-  setCreditsBalance(backendCredits);
-  emitCreditChange(backendCredits);
+  applyCreditSnapshotFromServer(backendCredits);
   return backendCredits;
 }
 
@@ -280,7 +315,7 @@ export async function syncPendingTransactions(): Promise<boolean> {
     }
 
     // Sync final balance from backend
-    await syncCreditsWithBackend();
+    await syncCreditsWithBackend({ force: true });
 
     if (failed === 0) {
       console.log("[Credits] All pending transactions synced successfully");

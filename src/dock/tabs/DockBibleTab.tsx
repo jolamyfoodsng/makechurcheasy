@@ -213,7 +213,6 @@ function extractFullscreenQuickThemeSettings(
     backgroundPattern: settings.backgroundPattern ?? "",
     lowerThirdCaptionPosition: settings.lowerThirdCaptionPosition || "bottom",
     compareTranslationWidth: settings.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth,
-    compareTranslationGap: settings.compareTranslationGap ?? DEFAULT_THEME_SETTINGS.compareTranslationGap,
     ...compareSettings,
   };
 }
@@ -361,7 +360,6 @@ function sanitizeFullscreenQuickThemeSettings(
         ? source.lowerThirdCaptionPosition
         : "bottom",
     compareTranslationWidth: clampNumber(Number(source.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth), 30, 50),
-    compareTranslationGap: clampNumber(Number(source.compareTranslationGap ?? DEFAULT_THEME_SETTINGS.compareTranslationGap), 0, 200),
     backgroundType: source.backgroundType,
     ...compareSettings,
   };

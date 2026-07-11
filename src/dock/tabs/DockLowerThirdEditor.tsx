@@ -63,10 +63,10 @@ export default function DockLowerThirdEditor({
   onSend,
   onBlank: _onBlank,
   onAnimateOut,
-  onUpdate: _onUpdate,
+  onUpdate,
   sending,
   size = "xl",
-  live: _live = false,
+  live = false,
 }: DockLTEditorProps) {
   const { t } = useTranslation();
   // ── Variable values ──
@@ -494,6 +494,29 @@ export default function DockLowerThirdEditor({
     );
     onAnimateOut(url);
   }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onAnimateOut]);
+
+  useEffect(() => {
+    if (!live || !onUpdate) return;
+    const timer = window.setTimeout(() => {
+      const url = buildOverlayUrl(
+        theme,
+        variableValues,
+        true,
+        false,
+        size,
+        customStyles,
+        undefined as LTFontSize | undefined,
+        position,
+        undefined,
+        undefined,
+        animationIn,
+        exitStyle,
+      );
+      onUpdate(url);
+    }, 180);
+
+    return () => window.clearTimeout(timer);
+  }, [live, onUpdate, theme, variableValues, customStyles, position, animationIn, exitStyle, size]);
 
   return (
     <div className="dock-lt-editor-layout">

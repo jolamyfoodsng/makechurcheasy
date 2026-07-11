@@ -106,6 +106,7 @@ export interface LicenseGuardState {
 const STORAGE_KEY = "ocs-license-cache";
 const DOWNGRADE_NOTIFIED_KEY = "ocs-downgrade-notified";
 const DEFAULT_MAX_OFFLINE_DAYS = 14;
+const VISIBILITY_REVERIFY_MIN_INTERVAL_MS = 15 * 60 * 1000;
 
 const FEATURE_ALIAS_MAP: Record<string, FeatureKey> = {
   multiview: "multiview",
@@ -134,6 +135,7 @@ let _verifying = false;
 let _initialized = false;
 let _revalidationTimer: ReturnType<typeof setInterval> | null = null;
 let _listeners: Array<(state: LicenseGuardState) => void> = [];
+let _lastVisibilityVerificationAt = 0;
 
 // ── Cache Read/Write ─────────────────────────────────────────────────────────
 
@@ -654,9 +656,15 @@ function startPeriodicVerification(): void {
  * Visibility change handler — re-verifies when tab becomes visible.
  */
 function _onVisibilityChange(): void {
-  if (document.visibilityState === "visible" && _initialized && !_verifying) {
-    void verify(true);
+  if (document.visibilityState !== "visible" || !_initialized || _verifying) return;
+
+  const now = Date.now();
+  if (now - _lastVisibilityVerificationAt < VISIBILITY_REVERIFY_MIN_INTERVAL_MS) {
+    return;
   }
+
+  _lastVisibilityVerificationAt = now;
+  void verify(true);
 }
 
 /**
@@ -680,6 +688,7 @@ export function resetLicenseGuard(): void {
   _lockReason = null;
   _verifying = false;
   _initialized = false;
+  _lastVisibilityVerificationAt = 0;
   clearCache();
   emit();
 }

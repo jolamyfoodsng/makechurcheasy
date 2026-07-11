@@ -560,6 +560,12 @@ export function stripCompatModeCSS(css: string): string {
     "box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;\n"
   );
 
+  // Strip `opacity: 0` and `visibility: hidden` so content is visible
+  // when animations are removed. Many themes start invisible then animate in.
+  // Use lookahead to avoid matching `opacity: 0.5` or `visibility: visible`.
+  out = out.replace(/opacity\s*:\s*0(?=\s|;|!|})/gi, "");
+  out = out.replace(/visibility\s*:\s*hidden(?=\s|;|!|})/gi, "");
+
   return out;
 }
 

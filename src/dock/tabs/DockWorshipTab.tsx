@@ -42,6 +42,7 @@ import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
 import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
+import { ALL_THEMES, type ThemeLike } from "../../lowerthirds/themes";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -51,6 +52,30 @@ interface Props {
 }
 
 type OverlayMode = "fullscreen" | "lower-third";
+
+type WorshipSubTab = "worship" | "announcements";
+type AnnouncementType = "general" | "speaker" | "event" | "welcome" | "giving";
+
+interface DockAnnouncement {
+  id: string;
+  type: AnnouncementType;
+  title: string;
+  subtitle: string;
+  content: string;
+  imageUrl?: string;
+  speakerName?: string;
+  speakerRole?: string;
+  speakerPhotoUrl?: string;
+  obsThemeId?: string;
+}
+
+const ANNOUNCEMENT_TYPES: { value: AnnouncementType; label: string }[] = [
+  { value: "general", label: "General" },
+  { value: "speaker", label: "Speaker" },
+  { value: "event", label: "Event" },
+  { value: "welcome", label: "Welcome" },
+  { value: "giving", label: "Giving" },
+];
 
 interface DockSong {
   id: string;
@@ -92,6 +117,7 @@ const DOCK_WORSHIP_SAVE_TIMEOUT_MS = 3500;
 const DOCK_WORSHIP_SAVE_FALLBACK_DELAY_MS = 350;
 const DOCK_WORSHIP_SAVE_RESULT_POLL_MS = 250;
 const DOCK_WORSHIP_RECENT_SEARCH_LIMIT = 6;
+const DOCK_ANNOUNCEMENTS_KEY = "ocs-dock-announcements-v1";
 
 interface DockSongDraft {
   title: string;
@@ -203,6 +229,123 @@ function rememberDockSongDefaults(songs: DockSong[]): void {
     changed = true;
   }
   if (changed) writeDockSongDefaults(defaults);
+}
+
+function getThemeFilterHintsForAnnouncementType(type: AnnouncementType): string[] {
+  switch (type) {
+    case "speaker": return ["speaker", "pastor", "name", "title"];
+    case "event": return ["event", "announcement", "date", "reminder"];
+    case "giving": return ["giving", "offering", "tithe"];
+    default: return ["announcement", "general", "welcome"];
+  }
+}
+
+function filterThemesByType(type: AnnouncementType): ThemeLike[] {
+  const hints = getThemeFilterHintsForAnnouncementType(type);
+  return ALL_THEMES.filter((t) => {
+    if (!t.html || !t.css) return false;
+    const tagList = (t.tags || []).map((tag) => tag.trim().toLowerCase());
+    const idName = `${t.id} ${t.name || ""} ${t.category || ""}`.toLowerCase();
+    return hints.some((hint) => {
+      if (idName.includes(hint)) return true;
+      return tagList.some((tag) => tag === hint || tag.includes(hint) || hint.includes(tag));
+    });
+  });
+}
+
+function buildAnnouncementValues(announcement: DockAnnouncement): Record<string, string> {
+  const v: Record<string, string> = {};
+  if (announcement.type === "speaker") {
+    const name = announcement.speakerName || announcement.title;
+    const role = announcement.speakerRole || announcement.subtitle;
+    v.name = name;
+    v.role = role;
+    v.title = role;
+    v.headline = name;
+    v.subtitle = role;
+    v.subline = role;
+    v.label = name;
+    v.details = role;
+    v.line1 = name;
+    v.line2 = role;
+  } else if (announcement.type === "event") {
+    const evName = announcement.title;
+    const evSub = announcement.subtitle;
+    const evDesc = announcement.content;
+    v.name = evName;
+    v.title = evName;
+    v.headline = evName;
+    v.subtitle = evSub;
+    v.subline = evSub;
+    v.role = evSub;
+    v.description = evDesc;
+    v.label = evName;
+    v.details = evDesc || evSub;
+    v.line1 = evName;
+    v.line2 = evSub;
+  } else {
+    v.name = announcement.title;
+    v.title = announcement.subtitle;
+    v.headline = announcement.title;
+    v.subtitle = announcement.subtitle;
+    v.role = announcement.subtitle;
+    v.description = announcement.content;
+    v.label = announcement.title;
+    v.details = announcement.subtitle || announcement.content;
+    v.line1 = announcement.title;
+    v.line2 = announcement.subtitle || announcement.content;
+  }
+  return v;
+}
+
+function generateAnnouncementSlides(announcement: DockAnnouncement): DockWorshipSection[] {
+  const slides: DockWorshipSection[] = [];
+
+  if (announcement.type === "speaker" && announcement.speakerName) {
+    slides.push({
+      id: crypto.randomUUID?.() ?? `slide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      label: "Speaker",
+      text: announcement.speakerName + (announcement.speakerRole ? "\n" + announcement.speakerRole : ""),
+    });
+  }
+
+  const sections = announcement.content.split(/\n\n+/).filter(Boolean);
+  if (sections.length > 0) {
+    sections.forEach((text) => {
+      slides.push({
+        id: crypto.randomUUID?.() ?? `slide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        label: announcement.title,
+        text,
+      });
+    });
+  } else if (announcement.title) {
+    slides.push({
+      id: crypto.randomUUID?.() ?? `slide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      label: announcement.subtitle || "",
+      text: announcement.title,
+    });
+  }
+
+  return slides;
+}
+
+function loadDockAnnouncements(): DockAnnouncement[] {
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(DOCK_ANNOUNCEMENTS_KEY));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDockAnnouncements(items: DockAnnouncement[]): void {
+  try {
+    localStorage.setItem(getUserScopedKey(DOCK_ANNOUNCEMENTS_KEY), JSON.stringify(items));
+  } catch {
+    /* ignore */
+  }
 }
 
 function mapAppSongToDockSong(song: {
@@ -577,6 +720,24 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>(() => readRecentWorshipSearches());
+  const [worshipSubTab, setWorshipSubTab] = useState<WorshipSubTab>("worship");
+  const [announcements, setAnnouncements] = useState<DockAnnouncement[]>(() => loadDockAnnouncements());
+  const [openedAnnouncement, setOpenedAnnouncement] = useState<DockAnnouncement | null>(null);
+  const [announcementSearchQuery, setAnnouncementSearchQuery] = useState("");
+  const [announcementSlideIdx, setAnnouncementSlideIdx] = useState<number | null>(null);
+  const [visibleAnnouncementSlideIdx, setVisibleAnnouncementSlideIdx] = useState<number | null>(null);
+  const [isNewAnnouncementModalOpen, setIsNewAnnouncementModalOpen] = useState(false);
+  const [announcementDraft, setAnnouncementDraft] = useState<{
+    type: AnnouncementType;
+    title: string;
+    subtitle: string;
+    content: string;
+    imageUrl: string;
+    speakerName: string;
+    speakerRole: string;
+    speakerPhotoUrl: string;
+    obsThemeId: string;
+  }>({ type: "general", title: "", subtitle: "", content: "", imageUrl: "", speakerName: "", speakerRole: "", speakerPhotoUrl: "", obsThemeId: "" });
   const [selectedSong, setSelectedSong] = useState<DockSong | null>(null);
   const [visibleIdx, setVisibleIdx] = useState<number | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
@@ -666,6 +827,38 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     () => selectedSongSections.map((_, index) => index).filter((index) => !hiddenSectionIndexes.has(index)),
     [hiddenSectionIndexes, selectedSongSections],
   );
+
+  const announcementSections = useMemo(
+    () => (openedAnnouncement ? generateAnnouncementSlides(openedAnnouncement) : []),
+    [openedAnnouncement],
+  );
+
+  const activeAnnouncementIndex = useMemo(() => {
+    if (!openedAnnouncement || announcementSections.length === 0) return null;
+    if (announcementSlideIdx !== null && announcementSlideIdx < announcementSections.length) {
+      return announcementSlideIdx;
+    }
+    if (visibleAnnouncementSlideIdx !== null && visibleAnnouncementSlideIdx < announcementSections.length) {
+      return visibleAnnouncementSlideIdx;
+    }
+    return 0;
+  }, [
+    announcementSections.length,
+    announcementSlideIdx,
+    openedAnnouncement,
+    visibleAnnouncementSlideIdx,
+  ]);
+
+  const filteredAnnouncements = useMemo(() => {
+    if (!announcementSearchQuery.trim()) return announcements;
+    const q = announcementSearchQuery.trim().toLowerCase();
+    return announcements.filter((a) =>
+      a.title.toLowerCase().includes(q) ||
+      a.subtitle.toLowerCase().includes(q) ||
+      a.content.toLowerCase().includes(q) ||
+      a.type.toLowerCase().includes(q),
+    );
+  }, [announcementSearchQuery, announcements]);
 
   const lyricsFilteredSectionIndexes = useMemo(() => {
     if (!lyricsSearchQuery.trim()) return visibleSectionIndexes;
@@ -1132,6 +1325,107 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
       }
     },
     [buildSectionPayload, onStage],
+  );
+
+  const buildAnnouncementPayload = useCallback(
+    (idx: number) => {
+      if (!openedAnnouncement) return null;
+      const section = announcementSections[idx];
+      if (!section) return null;
+
+      const theme = overlayMode === "fullscreen" ? effectiveSelectedFSTheme : effectiveSelectedLTTheme;
+      const sectionLabel = section.label || openedAnnouncement.title;
+      const stageItem = {
+        type: "worship" as const,
+        label: sectionLabel,
+        subtitle: openedAnnouncement.title,
+        data: {
+          announcement: openedAnnouncement,
+          sectionIdx: idx,
+          sectionText: section.text,
+          sectionLabel: section.label,
+          overlayMode,
+          theme: theme.id,
+          bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
+          liveOverrides: null,
+          backgroundOnly: false,
+        },
+      };
+
+      if (openedAnnouncement.obsThemeId && overlayMode === "lower-third") {
+        const customTheme = ALL_THEMES.find((entry) => entry.id === openedAnnouncement.obsThemeId);
+        if (customTheme?.html && customTheme?.css) {
+          return {
+            stageItem,
+            obsData: {
+              sectionText: section.text,
+              sectionLabel,
+              songTitle: openedAnnouncement.title,
+              overlayMode: "lower-third" as const,
+              ltTheme: { id: customTheme.id, html: customTheme.html, css: customTheme.css },
+              values: buildAnnouncementValues(openedAnnouncement),
+              bibleThemeSettings: null,
+              liveOverrides: null,
+              backgroundOnly: false,
+            },
+          };
+        }
+      }
+
+      return {
+        stageItem,
+        obsData: {
+          sectionText: section.text,
+          sectionLabel,
+          songTitle: openedAnnouncement.title,
+          overlayMode,
+          bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
+          liveOverrides: null,
+          backgroundOnly: false,
+        },
+      };
+    },
+    [
+      announcementSections,
+      effectiveSelectedFSTheme,
+      effectiveSelectedLTTheme,
+      openedAnnouncement,
+      overlayMode,
+    ],
+  );
+
+  const pushAnnouncementSection = useCallback(
+    async (idx: number) => {
+      const payload = buildAnnouncementPayload(idx);
+      if (!payload) return;
+
+      setActionError("");
+      setAnnouncementSlideIdx(idx);
+      setVisibleAnnouncementSlideIdx(idx);
+      onStage(payload.stageItem);
+
+      try {
+        await ensureObsConnected();
+      } catch {
+        return;
+      }
+
+      try {
+        await dockObsClient.pushAnnouncement(payload.obsData);
+      } catch (err) {
+        console.warn("[DockWorshipTab] Announcement OBS push failed:", err);
+        setActionError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [buildAnnouncementPayload, onStage],
+  );
+
+  const restageAnnouncementCurrent = useCallback(
+    async () => {
+      if (activeAnnouncementIndex === null) return;
+      await pushAnnouncementSection(activeAnnouncementIndex);
+    },
+    [activeAnnouncementIndex, pushAnnouncementSection],
   );
 
   const saveSongInMainApp = useCallback(
@@ -1725,10 +2019,22 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     if (suppressAutoProjectionRef.current) return;
     if (showThemeSettingsRef.current) return;
     if (!prefsReadyRef.current) return;
+    if (openedAnnouncement && activeAnnouncementIndex !== null) {
+      void restageAnnouncementCurrent();
+      return;
+    }
     if (selectedSong && activeSectionIndex !== null) {
       void restageCurrent();
     }
-  }, [activeSectionIndex, overlayMode, restageCurrent, selectedSong]);
+  }, [
+    activeAnnouncementIndex,
+    activeSectionIndex,
+    openedAnnouncement,
+    overlayMode,
+    restageAnnouncementCurrent,
+    restageCurrent,
+    selectedSong,
+  ]);
 
   const prevThemeSignature = useRef(`${selectedFSTheme.id}:${selectedLTTheme.id}`);
   useEffect(() => {
@@ -1739,10 +2045,23 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     if (suppressAutoProjectionRef.current) return;
     if (showThemeSettingsRef.current) return;
     if (!prefsReadyRef.current) return;
+    if (openedAnnouncement && activeAnnouncementIndex !== null) {
+      void restageAnnouncementCurrent();
+      return;
+    }
     if (selectedSong && activeSectionIndex !== null) {
       void restageCurrent();
     }
-  }, [activeSectionIndex, restageCurrent, selectedFSTheme.id, selectedLTTheme.id, selectedSong]);
+  }, [
+    activeAnnouncementIndex,
+    activeSectionIndex,
+    openedAnnouncement,
+    restageAnnouncementCurrent,
+    restageCurrent,
+    selectedFSTheme.id,
+    selectedLTTheme.id,
+    selectedSong,
+  ]);
 
   const prevFullscreenQuickSettingsSignature = useRef(
     JSON.stringify(activeFullscreenQuickThemeSettings),
@@ -1755,13 +2074,20 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     if (suppressAutoProjectionRef.current) return;
     if (showThemeSettingsRef.current) return;
     if (!prefsReadyRef.current) return;
+    if (overlayMode === "fullscreen" && openedAnnouncement && activeAnnouncementIndex !== null) {
+      void restageAnnouncementCurrent();
+      return;
+    }
     if (overlayMode === "fullscreen" && selectedSong && activeSectionIndex !== null) {
       void restageCurrent();
     }
   }, [
+    activeAnnouncementIndex,
     activeSectionIndex,
     activeFullscreenQuickThemeSettings,
+    openedAnnouncement,
     overlayMode,
+    restageAnnouncementCurrent,
     restageCurrent,
     selectedSong,
   ]);
@@ -1779,6 +2105,10 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     if (suppressAutoProjectionRef.current) return;
     if (showThemeSettingsRef.current) return;
     if (!prefsReadyRef.current) return;
+    if (openedAnnouncement && activeAnnouncementIndex !== null) {
+      void restageAnnouncementCurrent();
+      return;
+    }
 
     if (!selectedSong || activeSectionIndex === null) return;
     const section = selectedSongSections[activeSectionIndex];
@@ -1800,9 +2130,12 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
         console.warn("[DockWorshipTab] Lower-third auto-push on quick settings change failed:", err);
       });
   }, [
+    activeAnnouncementIndex,
     activeSectionIndex,
     effectiveSelectedLTTheme.settings,
+    openedAnnouncement,
     overlayMode,
+    restageAnnouncementCurrent,
     selectedSong,
     selectedSongSections,
     showWorshipBackgroundOnly,
@@ -1815,16 +2148,25 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
       if (event.key === "Escape") {
-        if (songEditor || slideEditor || isNewSongModalOpen || onlineSearchOpen) {
+        if (songEditor || slideEditor || isNewSongModalOpen || onlineSearchOpen || isNewAnnouncementModalOpen) {
           event.preventDefault();
           setSongEditor(null);
           setSlideEditor(null);
           setIsNewSongModalOpen(false);
           setOnlineSearchOpen(false);
           setNewSongSource(null);
+          setIsNewAnnouncementModalOpen(false);
           return;
         }
         if (targetElement?.closest(".dtb-modal, .dock-dialog")) return;
+        if (openedAnnouncement) {
+          setOpenedAnnouncement(null);
+          setAnnouncementSlideIdx(null);
+          setVisibleAnnouncementSlideIdx(null);
+          onStage(null);
+          ensureObsConnected().then(() => dockObsClient.clearAnnouncement()).catch(() => { });
+          return;
+        }
         event.preventDefault();
         handleClearLyrics();
         return;
@@ -1870,699 +2212,984 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
 
   return (
     <div className="dock-module dock-module--worship">
-      {/* Song Browser (when no song selected) */}
-      {!selectedSong ? (
-        <>
-          <section className="dock-console-panel dock-console-panel--toolbar">
-            <div className="dock-console-header">
-              <div>
-                <div className="dock-console-header__eyebrow"></div>
-                <div className="dock-console-header__eyebrow"></div>
-                <div className="dock-console-header__eyebrow"></div>
-                <div className="dock-console-header__eyebrow">{t('worship.searchSongs')}</div>
-                <div className="dock-console-header__eyebrow"></div>
+      {/* Sub-tab Navigation */}
+      <div className="dock-worship-subtabs">
+        <button
+          type="button"
+          className={`dock-worship-subtab${worshipSubTab === "worship" ? " dock-worship-subtab--active" : ""}`}
+          onClick={() => {
+            setWorshipSubTab("worship");
+            setSelectedSong(null);
+            setSelectedIdx(null);
+            setVisibleIdx(null);
+            setLyricsSearchQuery("");
+          }}
+        >
+          <Icon name="music_note" size={13} />
+          <span>Worship</span>
+        </button>
+        <button
+          type="button"
+          className={`dock-worship-subtab${worshipSubTab === "announcements" ? " dock-worship-subtab--active" : ""}`}
+          onClick={() => {
+            setWorshipSubTab("announcements");
+            setOpenedAnnouncement(null);
+            setAnnouncementSlideIdx(null);
+            setVisibleAnnouncementSlideIdx(null);
+            setAnnouncementSearchQuery("");
+          }}
+        >
+          <Icon name="campaign" size={13} />
+          <span>Announcements</span>
+        </button>
+      </div>
 
-              </div>
-              <div className="dock-console-actions dock-console-actions--song-browser">
-                <button
-                  type="button"
-                  className="dock-console-toggle"
-                  onClick={() => {
-                    setOnlineSearchQuery(searchQuery.trim());
-                    setOnlineSearchOpen(true);
-                    setOnlineSearchError("");
-                  }}
-                  title={t('worship.importOnline')}
-                  aria-label={t('worship.importOnline')}
-                >
-                  <Icon name="travel_explore" size={13} />
-                  <span className="dock-console-toggle__label">{t('worship.importOnline')}</span>
-                </button>
-                <button
-                  type="button"
-                  className="dock-console-toggle"
-                  onClick={() => openNewSongModal()}
-                  title={t('worship.addSong')}
-                  aria-label={t('worship.addSong')}
-                >
-                  <Icon name="add" size={13} />
-                  <span className="dock-console-toggle__label">{t('worship.addSong')}</span>
-                </button>
-              </div>
-            </div>
-            <div className="dock-search dock-search--console" style={{ marginBottom: 0 }} ref={searchRef}>
-              <Icon name="search" size={14} className="dock-search__icon" />
-              <input
-                className="dock-input"
-                placeholder={t('worship.searchPlaceholder')}
-                value={searchQuery}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setSearchQuery(next);
-                  setShowRecentSearches(next.trim().length === 0 && recentSearches.length > 0);
-                }}
-                onFocus={() => {
-                  if (!searchQuery.trim() && recentSearches.length > 0) {
-                    setShowRecentSearches(true);
-                  }
-                }}
-                aria-label={t('worship.searchSongs')}
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  className="dock-search__clear"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setShowRecentSearches(recentSearches.length > 0);
-                  }}
-                  aria-label={t('common.clear')}
-                  title={t('common.clear')}
-                >
-                  <Icon name="close" size={13} />
-                </button>
-              )}
-              {showRecentSearches && !searchQuery.trim() && recentSearches.length > 0 && (
-                <div className="dock-search-dropdown dock-search-dropdown--recent">
-                  <div className="dock-search-dropdown__heading">{t('worship.recentSearches')}</div>
-                  {recentSearches.map((item) => (
+      {worshipSubTab === "worship" ? (
+        <>
+          {/* Song Browser (when no song selected) */}
+          {!selectedSong ? (
+            <>
+              <section className="dock-console-panel dock-console-panel--toolbar">
+                <div className="dock-console-header">
+                  <div>
+                    <div className="dock-console-header__eyebrow"></div>
+                    <div className="dock-console-header__eyebrow"></div>
+                    <div className="dock-console-header__eyebrow"></div>
+                    <div className="dock-console-header__eyebrow">{t('worship.searchSongs')}</div>
+                    <div className="dock-console-header__eyebrow"></div>
+
+                  </div>
+                  <div className="dock-console-actions dock-console-actions--song-browser">
                     <button
                       type="button"
-                      key={item}
-                      className="dock-search-dropdown__item dock-search-dropdown__item--recent"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => applyRecentWorshipSearch(item)}
-                      title={t('common.search')}>
-                      <span className="dock-search-dropdown__content">
-                        <span className="dock-search-dropdown__label">{item}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace" data-toolbar-collapsed={toolbarCollapsed || undefined}>
-            {filteredSongs.length === 0 ? (
-              <div className="dock-empty dock-worship-workspace__empty">
-                <Icon name={songs.length === 0 ? "music_off" : "search_off"} size={20} />
-                <div className="dock-empty__title">
-                  {songs.length === 0 ? t('worship.noSongs') : t('worship.noSongsMatch')}
-                </div>
-                <div className="dock-empty__text">
-                  {songs.length === 0
-                    ? t('worship.loadSongsHint')
-                    : t('worship.noSongsMatchQuery', { query: searchQuery })}
-                </div>
-              </div>
-            ) : (
-              <div className="dock-console-list dock-worship-workspace__list">
-                {filteredSongs.map((song) => {
-                  const isLocked = lockedSongIds.has(song.id);
-                  return (
-                    <div
-                      key={song.id}
-                      className={`dock-card dock-card--console dock-song-card${isLocked ? " dock-song-card--locked" : ""}`}
+                      className="dock-console-toggle"
+                      onClick={() => {
+                        setOnlineSearchQuery(searchQuery.trim());
+                        setOnlineSearchOpen(true);
+                        setOnlineSearchError("");
+                      }}
+                      title={t('worship.importOnline')}
+                      aria-label={t('worship.importOnline')}
                     >
-                      <button
-                        type="button"
-                        className="dock-song-card__main"
-                        onClick={() => {
-                          if (isLocked) {
-                            void requireEntitlement("songs", 0);
-                            return;
-                          }
-                          handleSelectSong(song);
-                        }}
-                        title={isLocked ? t('common.locked') : song.title}>
-                        <span className="dock-card__title">{song.title}</span>
-                        <span className="dock-card__subtitle">
-                          {song.artist || t('worship.unknownArtist')}
-                        </span>
-                        {isLocked && (
-                          <span className="dock-song-card__lock-badge">
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                            </svg>
-                            {t('worship.upgrade')}
-                          </span>
-                        )}
-                      </button>
-                      {!isLocked && (
-                        <button
-                          type="button"
-                          className="dock-song-card__edit"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openSongEditor(song);
-                          }}
-                          aria-label={`${t('common.edit')} ${song.title}`}
-                          title={t('worship.editSong')}
-                        >
-                          <Icon name="edit" size={13} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        </>
-      ) : (
-        <>
-          {/* Song Summary Header */}
-          <section className="dock-console-panel dock-console-panel--toolbar dock-worship-summary">
-            <div className="dock-worship-summary__header">
-              <div className="dock-worship-summary__left">
-                <button
-                  type="button"
-                  className="dock-worship-back-btn"
-                  onClick={handleBackToSongList}
-                  title={t('common.back')}>
-                  <Icon name="arrow_back" size={14} />
-                  {/* <span>Back to Songs</span> */}
-                </button>
-                <div className="dock-worship-summary__copy">
-                  <div className="dock-worship-summary__title">{selectedSong.title}</div>
-                  {selectedSong.artist && (
-                    <div className="dock-worship-summary__artist">{selectedSong.artist}</div>
-                  )}
-                  <div className="dock-worship-summary__meta">
-                    <span>{t('worship.slideCount', { count: selectedSongSections.length })}</span>
-                    <span className="dock-worship-summary__meta-dot">·</span>
-                    <span>{t('worship.linesPerSlide')} ({linesPerSlide})</span>
+                      <Icon name="travel_explore" size={13} />
+                      <span className="dock-console-toggle__label">{t('worship.importOnline')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="dock-console-toggle"
+                      onClick={() => openNewSongModal()}
+                      title={t('worship.addSong')}
+                      aria-label={t('worship.addSong')}
+                    >
+                      <Icon name="add" size={13} />
+                      <span className="dock-console-toggle__label">{t('worship.addSong')}</span>
+                    </button>
                   </div>
                 </div>
-              </div>
-              <div className="dock-worship-summary__actions">
-                <button
-                  type="button"
-                  className="dock-shell-icon-btn"
-                  onClick={() => openSongEditor(selectedSong)}
-                  title={t('worship.editSong')}
-                >
-                  <Icon name="edit" size={14} />
-                </button>
-              </div>
-            </div>
-          </section>
-
-          {/* Lyrics Search */}
-          <section className="dock-console-panel dock-console-panel--toolbar dock-worship-lyrics-search">
-            <div className="dock-media-search">
-              <Icon name="search" size={14} className="dock-media-search__icon" />
-              <input
-                className="dock-media-search__input"
-                placeholder={t('worship.lyricsSearchPlaceholder')}
-                value={lyricsSearchQuery}
-                onChange={(e) => setLyricsSearchQuery(e.target.value)}
-                aria-label={t('worship.lyricsSearchPlaceholder')}
-              />
-              {lyricsSearchQuery && (
-                <button
-                  type="button"
-                  className="dock-media-search__clear"
-                  onClick={() => setLyricsSearchQuery("")}
-                  aria-label={t('common.clear')}
-                  title={t('common.close')}>
-                  <Icon name="close" size={13} />
-                </button>
-              )}
-            </div>
-          </section>
-
-          {/* Cue List */}
-          <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace" data-toolbar-collapsed={toolbarCollapsed || undefined}>
-
-
-            {selectedSongSections.length === 0 || visibleSectionIndexes.length === 0 ? (
-              <div className="dock-empty dock-worship-workspace__empty">
-                <Icon name="lyrics" size={18} />
-                <div className="dock-empty__text">
-                  {selectedSongSections.length === 0
-                    ? t('worship.noLyrics')
-                    : t('worship.allSlidesHidden')}
-                </div>
-              </div>
-            ) : lyricsFilteredSectionIndexes.length === 0 ? (
-              <div className="dock-empty dock-worship-workspace__empty">
-                <Icon name="search_off" size={18} />
-                <div className="dock-empty__text">
-                  {t('worship.noSlidesMatch', { query: lyricsSearchQuery })}
-                </div>
-              </div>
-            ) : (
-              <div className="dock-console-list dock-worship-workspace__list dock-worship-slide-queue">
-                {lyricsFilteredSectionIndexes.map((idx) => {
-                  const section = selectedSongSections[idx];
-                  if (!section) return null;
-                  const displayLabel = cleanWorshipSectionLabel(section.label);
-                  const isVisible = visibleIdx === idx;
-                  const isSelected = selectedIdx === idx;
-                  return (
-                    <div
-                      key={section.id}
-                      className={`dock-worship-slide-card${isVisible ? " dock-worship-slide-card--visible" : ""}${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}`}
-                      title="Click to view in OBS"
+                <div className="dock-search dock-search--console" style={{ marginBottom: 0 }} ref={searchRef}>
+                  <Icon name="search" size={14} className="dock-search__icon" />
+                  <input
+                    className="dock-input"
+                    placeholder={t('worship.searchPlaceholder')}
+                    value={searchQuery}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setSearchQuery(next);
+                      setShowRecentSearches(next.trim().length === 0 && recentSearches.length > 0);
+                    }}
+                    onFocus={() => {
+                      if (!searchQuery.trim() && recentSearches.length > 0) {
+                        setShowRecentSearches(true);
+                      }
+                    }}
+                    aria-label={t('worship.searchSongs')}
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      className="dock-search__clear"
+                      onClick={() => {
+                        setSearchQuery("");
+                        setShowRecentSearches(recentSearches.length > 0);
+                      }}
+                      aria-label={t('common.clear')}
+                      title={t('common.clear')}
                     >
-                      <button
-                        type="button"
-                        className="dock-worship-slide-card__main"
-                        onClick={() => handleSectionClick(idx)}
-                      >
-                        <div className="dock-worship-slide-card__header">
-                          <div className="dock-worship-slide-card__label">
-                            {displayLabel ? (
-                              <span className="dock-worship-slide-card__name">{displayLabel}</span>
-                            ) : (
-                              <span className="dock-worship-slide-card__name dock-worship-slide-card__name--muted">
-                                {t('worship.slideNumber', { number: idx + 1 })}
+                      <Icon name="close" size={13} />
+                    </button>
+                  )}
+                  {showRecentSearches && !searchQuery.trim() && recentSearches.length > 0 && (
+                    <div className="dock-search-dropdown dock-search-dropdown--recent">
+                      <div className="dock-search-dropdown__heading">{t('worship.recentSearches')}</div>
+                      {recentSearches.map((item) => (
+                        <button
+                          type="button"
+                          key={item}
+                          className="dock-search-dropdown__item dock-search-dropdown__item--recent"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => applyRecentWorshipSearch(item)}
+                          title={t('common.search')}>
+                          <span className="dock-search-dropdown__content">
+                            <span className="dock-search-dropdown__label">{item}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace" data-toolbar-collapsed={toolbarCollapsed || undefined}>
+                {filteredSongs.length === 0 ? (
+                  <div className="dock-empty dock-worship-workspace__empty">
+                    <Icon name={songs.length === 0 ? "music_off" : "search_off"} size={20} />
+                    <div className="dock-empty__title">
+                      {songs.length === 0 ? t('worship.noSongs') : t('worship.noSongsMatch')}
+                    </div>
+                    <div className="dock-empty__text">
+                      {songs.length === 0
+                        ? t('worship.loadSongsHint')
+                        : t('worship.noSongsMatchQuery', { query: searchQuery })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="dock-console-list dock-worship-workspace__list">
+                    {filteredSongs.map((song) => {
+                      const isLocked = lockedSongIds.has(song.id);
+                      return (
+                        <div
+                          key={song.id}
+                          className={`dock-card dock-card--console dock-song-card${isLocked ? " dock-song-card--locked" : ""}`}
+                        >
+                          <button
+                            type="button"
+                            className="dock-song-card__main"
+                            onClick={() => {
+                              if (isLocked) {
+                                void requireEntitlement("songs", 0);
+                                return;
+                              }
+                              handleSelectSong(song);
+                            }}
+                            title={isLocked ? t('common.locked') : song.title}>
+                            <span className="dock-card__title">{song.title}</span>
+                            <span className="dock-card__subtitle">
+                              {song.artist || t('worship.unknownArtist')}
+                            </span>
+                            {isLocked && (
+                              <span className="dock-song-card__lock-badge">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                </svg>
+                                {t('worship.upgrade')}
                               </span>
                             )}
-                            <span className="dock-worship-slide-card__index">{idx + 1}</span>
-                          </div>
-                          <div className="dock-worship-slide-card__badges">
+                          </button>
+                          {!isLocked && (
+                            <button
+                              type="button"
+                              className="dock-song-card__edit"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openSongEditor(song);
+                              }}
+                              aria-label={`${t('common.edit')} ${song.title}`}
+                              title={t('worship.editSong')}
+                            >
+                              <Icon name="edit" size={13} />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            </>
+          ) : (
+            <>
+              {/* Song Summary Header */}
+              <section className="dock-console-panel dock-console-panel--toolbar dock-worship-summary">
+                <div className="dock-worship-summary__header">
+                  <div className="dock-worship-summary__left">
+                    <button
+                      type="button"
+                      className="dock-worship-back-btn"
+                      onClick={handleBackToSongList}
+                      title={t('common.back')}>
+                      <Icon name="arrow_back" size={14} />
+                      {/* <span>Back to Songs</span> */}
+                    </button>
+                    <div className="dock-worship-summary__copy">
+                      <div className="dock-worship-summary__title">{selectedSong.title}</div>
+                      {selectedSong.artist && (
+                        <div className="dock-worship-summary__artist">{selectedSong.artist}</div>
+                      )}
+                      <div className="dock-worship-summary__meta">
+                        <span>{t('worship.slideCount', { count: selectedSongSections.length })}</span>
+                        <span className="dock-worship-summary__meta-dot">·</span>
+                        <span>{t('worship.linesPerSlide')} ({linesPerSlide})</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="dock-worship-summary__actions">
+                    <button
+                      type="button"
+                      className="dock-shell-icon-btn"
+                      onClick={() => openSongEditor(selectedSong)}
+                      title={t('worship.editSong')}
+                    >
+                      <Icon name="edit" size={14} />
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              {/* Lyrics Search */}
+              <section className="dock-console-panel dock-console-panel--toolbar dock-worship-lyrics-search">
+                <div className="dock-media-search">
+                  <Icon name="search" size={14} className="dock-media-search__icon" />
+                  <input
+                    className="dock-media-search__input"
+                    placeholder={t('worship.lyricsSearchPlaceholder')}
+                    value={lyricsSearchQuery}
+                    onChange={(e) => setLyricsSearchQuery(e.target.value)}
+                    aria-label={t('worship.lyricsSearchPlaceholder')}
+                  />
+                  {lyricsSearchQuery && (
+                    <button
+                      type="button"
+                      className="dock-media-search__clear"
+                      onClick={() => setLyricsSearchQuery("")}
+                      aria-label={t('common.clear')}
+                      title={t('common.close')}>
+                      <Icon name="close" size={13} />
+                    </button>
+                  )}
+                </div>
+              </section>
+
+              {/* Cue List */}
+              <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace" data-toolbar-collapsed={toolbarCollapsed || undefined}>
+
+
+                {selectedSongSections.length === 0 || visibleSectionIndexes.length === 0 ? (
+                  <div className="dock-empty dock-worship-workspace__empty">
+                    <Icon name="lyrics" size={18} />
+                    <div className="dock-empty__text">
+                      {selectedSongSections.length === 0
+                        ? t('worship.noLyrics')
+                        : t('worship.allSlidesHidden')}
+                    </div>
+                  </div>
+                ) : lyricsFilteredSectionIndexes.length === 0 ? (
+                  <div className="dock-empty dock-worship-workspace__empty">
+                    <Icon name="search_off" size={18} />
+                    <div className="dock-empty__text">
+                      {t('worship.noSlidesMatch', { query: lyricsSearchQuery })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="dock-console-list dock-worship-workspace__list dock-worship-slide-queue">
+                    {lyricsFilteredSectionIndexes.map((idx) => {
+                      const section = selectedSongSections[idx];
+                      if (!section) return null;
+                      const displayLabel = cleanWorshipSectionLabel(section.label);
+                      const isVisible = visibleIdx === idx;
+                      const isSelected = selectedIdx === idx;
+                      return (
+                        <div
+                          key={section.id}
+                          className={`dock-worship-slide-card${isVisible ? " dock-worship-slide-card--visible" : ""}${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}`}
+                          title="Click to view in OBS"
+                        >
+                          <button
+                            type="button"
+                            className="dock-worship-slide-card__main"
+                            onClick={() => handleSectionClick(idx)}
+                          >
+                            <div className="dock-worship-slide-card__header">
+                              <div className="dock-worship-slide-card__label">
+                                {displayLabel ? (
+                                  <span className="dock-worship-slide-card__name">{displayLabel}</span>
+                                ) : (
+                                  <span className="dock-worship-slide-card__name dock-worship-slide-card__name--muted">
+                                    {t('worship.slideNumber', { number: idx + 1 })}
+                                  </span>
+                                )}
+                                <span className="dock-worship-slide-card__index">{idx + 1}</span>
+                              </div>
+                              <div className="dock-worship-slide-card__badges">
+
+                              </div>
+                            </div>
+                            <div className="dock-worship-slide-card__text">{section.text}</div>
+                          </button>
+                          <div className="dock-worship-slide-card__actions">
+                            <button
+                              type="button"
+                              className="dock-worship-slide-card__action"
+                              onClick={() => openSlideEditor(idx)}
+                              title={t('worship.editSong')}
+                            >
+                              <Icon name="edit" size={12} />
+                            </button>
 
                           </div>
                         </div>
-                        <div className="dock-worship-slide-card__text">{section.text}</div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              {/* Output Controls */}
+              {selectedSong && (
+                <section className="dock-console-panel dock-console-panel--deck dock-console-panel--deck-static dock-console-panel--deck-worship">
+                  {actionError && (
+                    <div className="dock-action-error dock-action-error--console">
+                      <Icon name="warning" size={14} />
+                      <span style={{ flex: 1 }}>{actionError}</span>
+                      <button
+                        type="button"
+                        onClick={() => setActionError("")}
+                        style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0 }}
+                        title={t('common.close')}>
+                        <Icon name="close" size={14} />
                       </button>
-                      <div className="dock-worship-slide-card__actions">
+                    </div>
+                  )}
+
+                  <div className="dock-worship-toolbar">
+                    <DockBottomToolbar
+                      overlayMode={overlayMode}
+                      onModeChange={setOverlayMode}
+                      clearLabel={t('common.clear')}
+                      onClear={handleClearLyrics}
+                      collapsed={toolbarCollapsed}
+                      onCollapseChange={setToolbarCollapsed}
+                      compact={compactToolbar}
+                    >
+                      <button
+                        type="button"
+                        className={`dock-btm-toolbar__icon-btn${showWorshipBackgroundOnly ? " dock-btm-toolbar__icon-btn--active" : ""}`}
+                        onClick={handleShowWorshipBackgroundOnly}
+                        title={showWorshipBackgroundOnly ? t('worship.presentLyrics') : t('worship.backgroundOnly')}
+                      >
+                        <Icon name={showWorshipBackgroundOnly ? "visibility_off" : "visibility"} size={14} />
+                      </button>
+
+                      <div
+                        className={`dock-line-popover dock-line-popover--toolbar${showLineCountPopover ? " is-open" : ""}`}
+                        ref={lineCountPopoverRef}
+                      >
                         <button
                           type="button"
-                          className="dock-worship-slide-card__action"
-                          onClick={() => openSlideEditor(idx)}
-                          title={t('worship.editSong')}
+                          className={`dock-btm-toolbar__icon-btn${showLineCountPopover ? " dock-btm-toolbar__icon-btn--active" : ""}`}
+                          onClick={() => setShowLineCountPopover((current) => !current)}
+                          aria-haspopup="dialog"
+                          aria-expanded={showLineCountPopover}
+                          title={t('worship.linesPerSlide')}
                         >
-                          <Icon name="edit" size={12} />
+                          <Icon name="text_fields" size={14} />
                         </button>
 
+                        {showLineCountPopover && (
+                          <div className="dock-line-popover__menu" role="dialog" aria-label={t('worship.linesPerSlide')}>
+                            <div className="dock-line-popover__title">{t('worship.linesPerSlide')}</div>
+                            <div className="dock-line-popover__grid">
+                              {Array.from(
+                                { length: MAX_LINES_PER_SLIDE - MIN_LINES_PER_SLIDE + 1 },
+                                (_, index) => MIN_LINES_PER_SLIDE + index,
+                              ).map((count) => {
+                                const isDisabled = totalLyricLines > 0 && count > totalLyricLines;
+                                return (
+                                  <button
+                                    key={`worship-line-choice-${count}`}
+                                    type="button"
+                                    disabled={isDisabled}
+                                    className={`dock-line-popover__option${linesPerSlide === count ? " dock-line-popover__option--active" : ""}${isDisabled ? " dock-line-popover__option--disabled" : ""}`}
+                                    onClick={() => handleLinesPerSlideChange(count)}
+                                  >
+                                    {count}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
 
-          {/* Output Controls */}
-          {selectedSong && (
-            <section className="dock-console-panel dock-console-panel--deck dock-console-panel--deck-static dock-console-panel--deck-worship">
-              {actionError && (
-                <div className="dock-action-error dock-action-error--console">
-                  <Icon name="warning" size={14} />
-                  <span style={{ flex: 1 }}>{actionError}</span>
+                      <button
+                        type="button"
+                        className="dock-btm-toolbar__icon-btn"
+                        onClick={() => setShowThemeSettings(true)}
+                        title={t('worship.quickEdits')}
+                      >
+                        <Icon name="edit" size={14} />
+                      </button>
+                    </DockBottomToolbar>
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+
+          {songEditor && (
+            <div className="dock-dialog-backdrop" role="presentation">
+              <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-song-editor-title">
+                <div className="dock-dialog__header">
+                  <div>
+                    <div className="dock-dialog__eyebrow">{t('worship.editSong')}</div>
+                    <h2 id="dock-song-editor-title" className="dock-dialog__title">{t('worship.songDetails')}</h2>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setActionError("")}
-                    style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0 }}
+                    className="dock-dialog__close"
+                    onClick={() => setSongEditor(null)}
+                    aria-label={t('common.close')}
                     title={t('common.close')}>
                     <Icon name="close" size={14} />
                   </button>
                 </div>
-              )}
-
-              <div className="dock-worship-toolbar">
-                <DockBottomToolbar
-                  overlayMode={overlayMode}
-                  onModeChange={setOverlayMode}
-                  clearLabel={t('common.clear')}
-                  onClear={handleClearLyrics}
-                  collapsed={toolbarCollapsed}
-                  onCollapseChange={setToolbarCollapsed}
-                  compact={compactToolbar}
-                >
+                <div className="dock-dialog__body">
+                  <div className="dock-dialog__row dock-dialog__row--two">
+                    <label className="dock-dialog-field">
+                      <span className="dock-dialog-field__label">
+                        <span>{t('worship.songTitle')}</span>
+                        <span className="dock-dialog-field__tag dock-dialog-field__tag--required">{t('worship.required')}</span>
+                      </span>
+                      <input
+                        className="dock-input"
+                        value={songDraft.title}
+                        onChange={(event) => setSongDraft((draft) => ({ ...draft, title: event.target.value }))}
+                      />
+                    </label>
+                    <label className="dock-dialog-field">
+                      <span className="dock-dialog-field__label">
+                        <span>{t('worship.artist')}</span>
+                        <span className="dock-dialog-field__tag">{t('worship.optional')}</span>
+                      </span>
+                      <input
+                        className="dock-input"
+                        value={songDraft.artist}
+                        onChange={(event) => setSongDraft((draft) => ({ ...draft, artist: event.target.value }))}
+                      />
+                    </label>
+                  </div>
+                  <label className="dock-dialog-field dock-dialog-field--lyrics">
+                    <span>{t('worship.songLyrics')}</span>
+                    <div className="dock-lyrics-toolbar">
+                      <div className="dock-lyrics-autosplit" ref={autoSplitPopoverRef}>
+                        <button
+                          type="button"
+                          className={`dock-lyrics-toolbar__btn${showAutoSplitPopover ? " dock-lyrics-toolbar__btn--active" : ""}`}
+                          onClick={() => setShowAutoSplitPopover((v) => !v)}
+                          title="Auto Split"
+                        >
+                          <Icon name="format_align_left" size={12} /> Auto Split ▾
+                        </button>
+                        {showAutoSplitPopover && (
+                          <div className="dock-lyrics-autosplit__menu">
+                            {[2, 3, 4].map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                className="dock-lyrics-autosplit__option"
+                                onClick={() => {
+                                  formatLyrics("autosplit", n);
+                                  setShowAutoSplitPopover(false);
+                                }}
+                              >
+                                {n} lines
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics("clean")} title="Clean Text">
+                        <Icon name="auto_fix_high" size={12} /> Clean Text
+                      </button>
+                      <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics("remove-empty")} title="Remove Empty">
+                        <Icon name="remove" size={12} /> Remove Empty
+                      </button>
+                      <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics("remove-verse-numbers")} title="Verse Numbers">
+                        <Icon name="tag" size={12} /> Verse Numbers
+                      </button>
+                      <button type="button" className="dock-lyrics-toolbar__btn" onClick={handleUndoFormatting} title="Undo">
+                        <Icon name="undo" size={12} /> Undo
+                      </button>
+                    </div>
+                    <textarea
+                      className="dock-input dock-dialog-textarea"
+                      value={songDraft.lyrics}
+                      onChange={(event) => setSongDraft((draft) => ({ ...draft, lyrics: event.target.value }))}
+                    />
+                  </label>
+                </div>
+                <div className="dock-dialog__footer">
+                  <button type="button" className="dock-btn dock-btn--ghost" onClick={handleResetSongEditor} title={t('worship.resetDefault')}>
+                    {t('worship.resetDefault')}
+                  </button>
                   <button
                     type="button"
-                    className={`dock-btm-toolbar__icon-btn${showWorshipBackgroundOnly ? " dock-btm-toolbar__icon-btn--active" : ""}`}
-                    onClick={handleShowWorshipBackgroundOnly}
-                    title={showWorshipBackgroundOnly ? t('worship.presentLyrics') : t('worship.backgroundOnly')}
-                  >
-                    <Icon name={showWorshipBackgroundOnly ? "visibility_off" : "visibility"} size={14} />
+                    className="dock-btn dock-btn--primary"
+                    onClick={() => void handleSaveSongEditor()}
+                    disabled={savingSong || !songDraft.title.trim() || !songDraft.lyrics.trim()}
+                    title={t('worship.saving')}>
+                    {savingSong ? t('worship.saving') : t('common.save')}
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
 
-                  <div
-                    className={`dock-line-popover dock-line-popover--toolbar${showLineCountPopover ? " is-open" : ""}`}
-                    ref={lineCountPopoverRef}
-                  >
-                    <button
-                      type="button"
-                      className={`dock-btm-toolbar__icon-btn${showLineCountPopover ? " dock-btm-toolbar__icon-btn--active" : ""}`}
-                      onClick={() => setShowLineCountPopover((current) => !current)}
-                      aria-haspopup="dialog"
-                      aria-expanded={showLineCountPopover}
-                      title={t('worship.linesPerSlide')}
-                    >
-                      <Icon name="text_fields" size={14} />
-                    </button>
+          {slideEditor && (
+            <div className="dock-dialog-backdrop" role="presentation">
+              <div className="dock-dialog dock-dialog--compact" role="dialog" aria-modal="true" aria-labelledby="dock-slide-editor-title">
+                <div className="dock-dialog__header">
+                  <div>
+                    <div className="dock-dialog__eyebrow">{t('worship.quickEdit')}</div>
+                    <h2 id="dock-slide-editor-title" className="dock-dialog__title">{slideEditor.label}</h2>
+                  </div>
+                  <button
+                    type="button"
+                    className="dock-dialog__close"
+                    onClick={() => setSlideEditor(null)}
+                    aria-label={t('common.close')}
+                    title={t('common.close')}>
+                    <Icon name="close" size={14} />
+                  </button>
+                </div>
+                <div className="dock-dialog__body">
+                  <label className="dock-dialog-field">
+                    <span>{t('worship.slideText')}</span>
+                    <textarea
+                      className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
+                      value={slideEditor.text}
+                      onChange={(event) => setSlideEditor((draft) => draft ? { ...draft, text: event.target.value } : draft)}
+                    />
+                  </label>
+                </div>
+                <div className="dock-dialog__footer">
+                  <button type="button" className="dock-btn dock-btn--ghost" onClick={() => setSlideEditor(null)} title={t('common.cancel')}>
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="dock-btn dock-btn--primary"
+                    onClick={() => void handleSaveSlideEditor()}
+                    disabled={savingSong || !slideEditor.text.trim()}
+                    title={t('worship.saving')}>
+                    {savingSong ? t('worship.saving') : t('common.save')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
-                    {showLineCountPopover && (
-                      <div className="dock-line-popover__menu" role="dialog" aria-label={t('worship.linesPerSlide')}>
-                        <div className="dock-line-popover__title">{t('worship.linesPerSlide')}</div>
-                        <div className="dock-line-popover__grid">
-                          {Array.from(
-                            { length: MAX_LINES_PER_SLIDE - MIN_LINES_PER_SLIDE + 1 },
-                            (_, index) => MIN_LINES_PER_SLIDE + index,
-                          ).map((count) => {
-                            const isDisabled = totalLyricLines > 0 && count > totalLyricLines;
-                            return (
-                              <button
-                                key={`worship-line-choice-${count}`}
-                                type="button"
-                                disabled={isDisabled}
-                                className={`dock-line-popover__option${linesPerSlide === count ? " dock-line-popover__option--active" : ""}${isDisabled ? " dock-line-popover__option--disabled" : ""}`}
-                                onClick={() => handleLinesPerSlideChange(count)}
-                              >
-                                {count}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
+          {isNewSongModalOpen && (
+            <div className="dock-dialog-backdrop" role="presentation">
+              <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-new-song-title">
+                <div className="dock-dialog__header">
+                  <div>
+                    <div className="dock-dialog__eyebrow">{newSongSource?.importSourceType === "online" ? t('worship.reviewImport') : t('worship.addSong')}</div>
+                    <h2 id="dock-new-song-title" className="dock-dialog__title">
+                      {newSongSource?.importSourceType === "online" ? t('worship.reviewLyricsBeforeSaving') : t('worship.newWorshipSong')}
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    className="dock-dialog__close"
+                    onClick={() => {
+                      setIsNewSongModalOpen(false);
+                      setNewSongSource(null);
+                    }}
+                    aria-label={t('common.close')}
+                    title={t('common.close')}>
+                    <Icon name="close" size={14} />
+                  </button>
+                </div>
+                <div className="dock-dialog__body">
+                  <div className="dock-dialog__row dock-dialog__row--two">
+                    <label className="dock-dialog-field">
+                      <span className="dock-dialog-field__label">
+                        <span>{t('worship.songTitle')}</span>
+                        <span className="dock-dialog-field__tag dock-dialog-field__tag--required">{t('worship.required')}</span>
+                      </span>
+                      <input
+                        className="dock-input"
+                        value={newSongDraft.title}
+                        onChange={(event) => setNewSongDraft((draft) => ({ ...draft, title: event.target.value }))}
+                      />
+                    </label>
+                    <label className="dock-dialog-field">
+                      <span className="dock-dialog-field__label">
+                        <span>{t('worship.artist')}</span>
+                        <span className="dock-dialog-field__tag">{t('worship.optional')}</span>
+                      </span>
+                      <input
+                        className="dock-input"
+                        value={newSongDraft.artist}
+                        onChange={(event) => setNewSongDraft((draft) => ({ ...draft, artist: event.target.value }))}
+                      />
+                    </label>
+                  </div>
+                  <label className="dock-dialog-field dock-dialog-field--lyrics">
+                    <span>{t('worship.songLyrics')}</span>
+                    <textarea
+                      className="dock-input dock-dialog-textarea"
+                      value={newSongDraft.lyrics}
+                      onChange={(event) => setNewSongDraft((draft) => ({ ...draft, lyrics: event.target.value }))}
+                    />
+                  </label>
+                </div>
+                <div className="dock-dialog__footer">
+                  <button
+                    type="button"
+                    className="dock-btn dock-btn--ghost"
+                    onClick={() => {
+                      setIsNewSongModalOpen(false);
+                      setNewSongSource(null);
+                    }}
+                    title={t('common.cancel')}>
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="dock-btn dock-btn--primary"
+                    onClick={() => void handleSaveNewSong()}
+                    disabled={savingSong || !newSongDraft.title.trim() || !newSongDraft.lyrics.trim()}
+                    title={t('worship.saving')}>
+                    {savingSong ? t('worship.saving') : t('worship.saveSong')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {onlineSearchOpen && (
+            <div className="dock-dialog-backdrop" role="presentation">
+              <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-online-song-title">
+                <div className="dock-dialog__header">
+                  <div>
+                    <div className="dock-dialog__eyebrow">{t('worship.importOnline')}</div>
+                    <h2 id="dock-online-song-title" className="dock-dialog__title">{t('worship.importLyrics')}</h2>
+                  </div>
+                  <button
+                    type="button"
+                    className="dock-dialog__close"
+                    onClick={() => setOnlineSearchOpen(false)}
+                    aria-label={t('common.close')}
+                    title={t('common.close')}>
+                    <Icon name="close" size={14} />
+                  </button>
+                </div>
+                <div className="dock-dialog__body">
+                  <div className="dock-search dock-search--console">
+                    <Icon name="search" size={14} className="dock-search__icon" />
+                    <input
+                      className="dock-input"
+                      placeholder={t('worship.typeToSearch')}
+                      value={onlineSearchQuery}
+                      onChange={(event) => setOnlineSearchQuery(event.target.value)}
+                      aria-label={t('worship.searchOnline')}
+                      autoFocus
+                    />
+                    {onlineSearchQuery && (
+                      <button
+                        type="button"
+                        className="dock-search__clear"
+                        onClick={() => setOnlineSearchQuery("")}
+                        aria-label={t('common.clear')}
+                        title={t('common.clear')}
+                      >
+                        <Icon name="close" size={13} />
+                      </button>
                     )}
                   </div>
-
-                  <button
-                    type="button"
-                    className="dock-btm-toolbar__icon-btn"
-                    onClick={() => setShowThemeSettings(true)}
-                    title={t('worship.quickEdits')}
-                  >
-                    <Icon name="edit" size={14} />
-                  </button>
-                </DockBottomToolbar>
+                  {onlineSearchLoading && (
+                    <div className="dock-dialog__status">
+                      <Icon name="sync" size={13} />
+                      {t('worship.searchingOnline')}
+                    </div>
+                  )}
+                  {onlineSearchError && <div className="dock-dialog__error">{onlineSearchError}</div>}
+                  <div className="dock-dialog-results">
+                    {onlineResults.map((result) => (
+                      <div className="dock-dialog-result" key={result.id}>
+                        <div className="dock-dialog-result__body">
+                          <span className="dock-dialog-result__title">{result.title}</span>
+                          <span className="dock-dialog-result__meta">
+                            {[result.artist, result.sourceName].filter(Boolean).join(" · ") || t('worship.onlineLyrics')}
+                          </span>
+                          {result.preview && <span className="dock-dialog-result__preview">{result.preview}</span>}
+                        </div>
+                        <button
+                          type="button"
+                          className="dock-btn dock-btn--ghost dock-dialog-result__action"
+                          onClick={() => handleImportOnlineResult(result)}
+                          title={t('worship.importSong')}>
+                          {t('worship.importSong')}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </section>
-          )}
-        </>
-      )}
-
-      {songEditor && (
-        <div className="dock-dialog-backdrop" role="presentation">
-          <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-song-editor-title">
-            <div className="dock-dialog__header">
-              <div>
-                <div className="dock-dialog__eyebrow">{t('worship.editSong')}</div>
-                <h2 id="dock-song-editor-title" className="dock-dialog__title">{t('worship.songDetails')}</h2>
-              </div>
-              <button
-                type="button"
-                className="dock-dialog__close"
-                onClick={() => setSongEditor(null)}
-                aria-label={t('common.close')}
-                title={t('common.close')}>
-                <Icon name="close" size={14} />
-              </button>
             </div>
-            <div className="dock-dialog__body">
-              <div className="dock-dialog__row dock-dialog__row--two">
-                <label className="dock-dialog-field">
-                  <span className="dock-dialog-field__label">
-                    <span>{t('worship.songTitle')}</span>
-                    <span className="dock-dialog-field__tag dock-dialog-field__tag--required">{t('worship.required')}</span>
-                  </span>
-                  <input
-                    className="dock-input"
-                    value={songDraft.title}
-                    onChange={(event) => setSongDraft((draft) => ({ ...draft, title: event.target.value }))}
-                  />
-                </label>
-                <label className="dock-dialog-field">
-                  <span className="dock-dialog-field__label">
-                    <span>{t('worship.artist')}</span>
-                    <span className="dock-dialog-field__tag">{t('worship.optional')}</span>
-                  </span>
-                  <input
-                    className="dock-input"
-                    value={songDraft.artist}
-                    onChange={(event) => setSongDraft((draft) => ({ ...draft, artist: event.target.value }))}
-                  />
-                </label>
-              </div>
-              <label className="dock-dialog-field dock-dialog-field--lyrics">
-                <span>{t('worship.songLyrics')}</span>
-                <div className="dock-lyrics-toolbar">
-                  <div className="dock-lyrics-autosplit" ref={autoSplitPopoverRef}>
+          )}
+
+        </>
+      ) : (
+        <>
+          {/* Announcements Content */}
+          {!openedAnnouncement ? (
+            <>
+              {/* Announcement Browser */}
+              <section className="dock-console-panel dock-console-panel--toolbar">
+                <div className="dock-console-header">
+                  <div>
+                    <div className="dock-console-header__eyebrow"></div>
+                    <div className="dock-console-header__eyebrow"></div>
+                    <div className="dock-console-header__eyebrow"></div>
+                    <div className="dock-console-header__eyebrow">Search Announcements</div>
+                    <div className="dock-console-header__eyebrow"></div>
+                  </div>
+                  <div className="dock-console-actions dock-console-actions--song-browser">
                     <button
                       type="button"
-                      className={`dock-lyrics-toolbar__btn${showAutoSplitPopover ? " dock-lyrics-toolbar__btn--active" : ""}`}
-                      onClick={() => setShowAutoSplitPopover((v) => !v)}
-                      title="Auto Split"
+                      className="dock-console-toggle"
+                      onClick={() => {
+                        setAnnouncementDraft({ type: "general", title: "", subtitle: "", content: "", imageUrl: "", speakerName: "", speakerRole: "", speakerPhotoUrl: "", obsThemeId: "" });
+                        setIsNewAnnouncementModalOpen(true);
+                      }}
+                      title="Add Announcement"
+                      aria-label="Add Announcement"
                     >
-                      <Icon name="format_align_left" size={12} /> Auto Split ▾
+                      <Icon name="add" size={13} />
+                      <span className="dock-console-toggle__label">Add Announcement</span>
                     </button>
-                    {showAutoSplitPopover && (
-                      <div className="dock-lyrics-autosplit__menu">
-                        {[2, 3, 4].map((n) => (
+                  </div>
+                </div>
+                <div className="dock-search dock-search--console" style={{ marginBottom: 0 }}>
+                  <Icon name="search" size={14} className="dock-search__icon" />
+                  <input
+                    className="dock-input"
+                    placeholder="Search announcements..."
+                    value={announcementSearchQuery}
+                    onChange={(e) => setAnnouncementSearchQuery(e.target.value)}
+                    aria-label="Search announcements"
+                  />
+                  {announcementSearchQuery && (
+                    <button
+                      type="button"
+                      className="dock-search__clear"
+                      onClick={() => setAnnouncementSearchQuery("")}
+                      aria-label="Clear"
+                      title="Clear"
+                    >
+                      <Icon name="close" size={13} />
+                    </button>
+                  )}
+                </div>
+              </section>
+
+              <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace" data-toolbar-collapsed={toolbarCollapsed || undefined}>
+                {filteredAnnouncements.length === 0 ? (
+                  <div className="dock-empty dock-worship-workspace__empty">
+                    <Icon name={announcements.length === 0 ? "campaign" : "search_off"} size={20} />
+                    <div className="dock-empty__title">
+                      {announcements.length === 0 ? "No announcements yet" : "No announcements match"}
+                    </div>
+                    <div className="dock-empty__text">
+                      {announcements.length === 0
+                        ? "Click \"Add Announcement\" to create your first one."
+                        : `No results for "${announcementSearchQuery}"`}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="dock-console-list dock-worship-workspace__list">
+                    {filteredAnnouncements.map((announcement) => (
+                      <div
+                        key={announcement.id}
+                        className="dock-card dock-card--console dock-song-card"
+                      >
+                        <button
+                          type="button"
+                          className="dock-song-card__main"
+                          onClick={() => {
+                            setOpenedAnnouncement(announcement);
+                            setAnnouncementSlideIdx(0);
+                            setVisibleAnnouncementSlideIdx(null);
+                          }}
+                          title={announcement.title}
+                        >
+                          <span className="dock-card__title">{announcement.title}</span>
+                          <span className="dock-card__subtitle">
+                            {ANNOUNCEMENT_TYPES.find((t) => t.value === announcement.type)?.label ?? announcement.type}
+                            {announcement.subtitle ? ` · ${announcement.subtitle}` : ""}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="dock-song-card__edit"
+                          onClick={() => {
+                            setAnnouncementDraft({
+                              type: announcement.type,
+                              title: announcement.title,
+                              subtitle: announcement.subtitle,
+                              content: announcement.content,
+                              imageUrl: announcement.imageUrl || "",
+                              speakerName: announcement.speakerName || "",
+                              speakerRole: announcement.speakerRole || "",
+                              speakerPhotoUrl: announcement.speakerPhotoUrl || "",
+                              obsThemeId: announcement.obsThemeId || "",
+                            });
+                            setIsNewAnnouncementModalOpen(true);
+                          }}
+                          aria-label="Edit"
+                          title="Edit"
+                        >
+                          <Icon name="edit" size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          ) : (
+            <>
+              {/* Announcement Detail View */}
+              <section className="dock-console-panel dock-console-panel--toolbar dock-worship-summary">
+                <div className="dock-worship-summary__header">
+                  <div className="dock-worship-summary__left">
+                    <button
+                      type="button"
+                      className="dock-worship-back-btn"
+                      onClick={() => {
+                        setOpenedAnnouncement(null);
+                        setAnnouncementSlideIdx(null);
+                        setVisibleAnnouncementSlideIdx(null);
+                      }}
+                      title="Back"
+                    >
+                      <Icon name="arrow_back" size={14} />
+                    </button>
+                    <div className="dock-worship-summary__copy">
+                      <div className="dock-worship-summary__title">{openedAnnouncement.title}</div>
+                      {openedAnnouncement.subtitle && (
+                        <div className="dock-worship-summary__artist">{openedAnnouncement.subtitle}</div>
+                      )}
+
+                    </div>
+                  </div>
+                  <div className="dock-worship-summary__actions">
+                    <button
+                      type="button"
+                      className="dock-shell-icon-btn"
+                      onClick={() => {
+                        setAnnouncementDraft({
+                          type: openedAnnouncement.type,
+                          title: openedAnnouncement.title,
+                          subtitle: openedAnnouncement.subtitle,
+                          content: openedAnnouncement.content,
+                          imageUrl: openedAnnouncement.imageUrl || "",
+                          speakerName: openedAnnouncement.speakerName || "",
+                          speakerRole: openedAnnouncement.speakerRole || "",
+                          speakerPhotoUrl: openedAnnouncement.speakerPhotoUrl || "",
+                          obsThemeId: openedAnnouncement.obsThemeId || "",
+                        });
+                        setIsNewAnnouncementModalOpen(true);
+                      }}
+                      title="Edit"
+                    >
+                      <Icon name="edit" size={14} />
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              {/* Announcement Slide List */}
+              <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace" data-toolbar-collapsed={toolbarCollapsed || undefined}>
+                {announcementSections.length === 0 ? (
+                  <div className="dock-empty dock-worship-workspace__empty">
+                    <Icon name="campaign" size={18} />
+                    <div className="dock-empty__text">No content to display</div>
+                  </div>
+                ) : (
+                  <div className="dock-console-list dock-worship-workspace__list dock-worship-slide-queue">
+                    {announcementSections.map((section, idx) => {
+                      const isVisible = visibleAnnouncementSlideIdx === idx;
+                      const isSelected = announcementSlideIdx === idx;
+                      return (
+                        <div
+                          key={section.id}
+                          className={`dock-worship-slide-card${isVisible ? " dock-worship-slide-card--visible" : ""}${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}`}
+                          title="Click to view in OBS"
+                        >
                           <button
-                            key={n}
                             type="button"
-                            className="dock-lyrics-autosplit__option"
+                            className="dock-worship-slide-card__main"
                             onClick={() => {
-                              formatLyrics("autosplit", n);
-                              setShowAutoSplitPopover(false);
+                              void pushAnnouncementSection(idx);
                             }}
                           >
-                            {n} lines
+                            <div className="dock-worship-slide-card__header">
+                              <div className="dock-worship-slide-card__label">
+                                <span className="dock-worship-slide-card__name">
+                                  {section.label || `Slide ${idx + 1}`}
+                                </span>
+                                <span className="dock-worship-slide-card__index">{idx + 1}</span>
+                              </div>
+                              <div className="dock-worship-slide-card__badges" />
+                            </div>
+                            <div className="dock-worship-slide-card__text">{section.text}</div>
                           </button>
-                        ))}
-                      </div>
-                    )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics("clean")} title="Clean Text">
-                    <Icon name="auto_fix_high" size={12} /> Clean Text
-                  </button>
-                  <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics("remove-empty")} title="Remove Empty">
-                    <Icon name="remove" size={12} /> Remove Empty
-                  </button>
-                  <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics("remove-verse-numbers")} title="Verse Numbers">
-                    <Icon name="tag" size={12} /> Verse Numbers
-                  </button>
-                  <button type="button" className="dock-lyrics-toolbar__btn" onClick={handleUndoFormatting} title="Undo">
-                    <Icon name="undo" size={12} /> Undo
-                  </button>
-                </div>
-                <textarea
-                  className="dock-input dock-dialog-textarea"
-                  value={songDraft.lyrics}
-                  onChange={(event) => setSongDraft((draft) => ({ ...draft, lyrics: event.target.value }))}
-                />
-              </label>
-            </div>
-            <div className="dock-dialog__footer">
-              <button type="button" className="dock-btn dock-btn--ghost" onClick={handleResetSongEditor} title={t('worship.resetDefault')}>
-                {t('worship.resetDefault')}
-              </button>
-              <button
-                type="button"
-                className="dock-btn dock-btn--primary"
-                onClick={() => void handleSaveSongEditor()}
-                disabled={savingSong || !songDraft.title.trim() || !songDraft.lyrics.trim()}
-                title={t('worship.saving')}>
-                {savingSong ? t('worship.saving') : t('common.save')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {slideEditor && (
-        <div className="dock-dialog-backdrop" role="presentation">
-          <div className="dock-dialog dock-dialog--compact" role="dialog" aria-modal="true" aria-labelledby="dock-slide-editor-title">
-            <div className="dock-dialog__header">
-              <div>
-                <div className="dock-dialog__eyebrow">{t('worship.quickEdit')}</div>
-                <h2 id="dock-slide-editor-title" className="dock-dialog__title">{slideEditor.label}</h2>
-              </div>
-              <button
-                type="button"
-                className="dock-dialog__close"
-                onClick={() => setSlideEditor(null)}
-                aria-label={t('common.close')}
-                title={t('common.close')}>
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-            <div className="dock-dialog__body">
-              <label className="dock-dialog-field">
-                <span>{t('worship.slideText')}</span>
-                <textarea
-                  className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
-                  value={slideEditor.text}
-                  onChange={(event) => setSlideEditor((draft) => draft ? { ...draft, text: event.target.value } : draft)}
-                />
-              </label>
-            </div>
-            <div className="dock-dialog__footer">
-              <button type="button" className="dock-btn dock-btn--ghost" onClick={() => setSlideEditor(null)} title={t('common.cancel')}>
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="dock-btn dock-btn--primary"
-                onClick={() => void handleSaveSlideEditor()}
-                disabled={savingSong || !slideEditor.text.trim()}
-                title={t('worship.saving')}>
-                {savingSong ? t('worship.saving') : t('common.save')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isNewSongModalOpen && (
-        <div className="dock-dialog-backdrop" role="presentation">
-          <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-new-song-title">
-            <div className="dock-dialog__header">
-              <div>
-                <div className="dock-dialog__eyebrow">{newSongSource?.importSourceType === "online" ? t('worship.reviewImport') : t('worship.addSong')}</div>
-                <h2 id="dock-new-song-title" className="dock-dialog__title">
-                  {newSongSource?.importSourceType === "online" ? t('worship.reviewLyricsBeforeSaving') : t('worship.newWorshipSong')}
-                </h2>
-              </div>
-              <button
-                type="button"
-                className="dock-dialog__close"
-                onClick={() => {
-                  setIsNewSongModalOpen(false);
-                  setNewSongSource(null);
-                }}
-                aria-label={t('common.close')}
-                title={t('common.close')}>
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-            <div className="dock-dialog__body">
-              <div className="dock-dialog__row dock-dialog__row--two">
-                <label className="dock-dialog-field">
-                  <span className="dock-dialog-field__label">
-                    <span>{t('worship.songTitle')}</span>
-                    <span className="dock-dialog-field__tag dock-dialog-field__tag--required">{t('worship.required')}</span>
-                  </span>
-                  <input
-                    className="dock-input"
-                    value={newSongDraft.title}
-                    onChange={(event) => setNewSongDraft((draft) => ({ ...draft, title: event.target.value }))}
-                  />
-                </label>
-                <label className="dock-dialog-field">
-                  <span className="dock-dialog-field__label">
-                    <span>{t('worship.artist')}</span>
-                    <span className="dock-dialog-field__tag">{t('worship.optional')}</span>
-                  </span>
-                  <input
-                    className="dock-input"
-                    value={newSongDraft.artist}
-                    onChange={(event) => setNewSongDraft((draft) => ({ ...draft, artist: event.target.value }))}
-                  />
-                </label>
-              </div>
-              <label className="dock-dialog-field dock-dialog-field--lyrics">
-                <span>{t('worship.songLyrics')}</span>
-                <textarea
-                  className="dock-input dock-dialog-textarea"
-                  value={newSongDraft.lyrics}
-                  onChange={(event) => setNewSongDraft((draft) => ({ ...draft, lyrics: event.target.value }))}
-                />
-              </label>
-            </div>
-            <div className="dock-dialog__footer">
-              <button
-                type="button"
-                className="dock-btn dock-btn--ghost"
-                onClick={() => {
-                  setIsNewSongModalOpen(false);
-                  setNewSongSource(null);
-                }}
-                title={t('common.cancel')}>
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="dock-btn dock-btn--primary"
-                onClick={() => void handleSaveNewSong()}
-                disabled={savingSong || !newSongDraft.title.trim() || !newSongDraft.lyrics.trim()}
-                title={t('worship.saving')}>
-                {savingSong ? t('worship.saving') : t('worship.saveSong')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {onlineSearchOpen && (
-        <div className="dock-dialog-backdrop" role="presentation">
-          <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-online-song-title">
-            <div className="dock-dialog__header">
-              <div>
-                <div className="dock-dialog__eyebrow">{t('worship.importOnline')}</div>
-                <h2 id="dock-online-song-title" className="dock-dialog__title">{t('worship.importLyrics')}</h2>
-              </div>
-              <button
-                type="button"
-                className="dock-dialog__close"
-                onClick={() => setOnlineSearchOpen(false)}
-                aria-label={t('common.close')}
-                title={t('common.close')}>
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-            <div className="dock-dialog__body">
-              <div className="dock-search dock-search--console">
-                <Icon name="search" size={14} className="dock-search__icon" />
-                <input
-                  className="dock-input"
-                  placeholder={t('worship.typeToSearch')}
-                  value={onlineSearchQuery}
-                  onChange={(event) => setOnlineSearchQuery(event.target.value)}
-                  aria-label={t('worship.searchOnline')}
-                  autoFocus
-                />
-                {onlineSearchQuery && (
-                  <button
-                    type="button"
-                    className="dock-search__clear"
-                    onClick={() => setOnlineSearchQuery("")}
-                    aria-label={t('common.clear')}
-                    title={t('common.clear')}
-                  >
-                    <Icon name="close" size={13} />
-                  </button>
                 )}
-              </div>
-              {onlineSearchLoading && (
-                <div className="dock-dialog__status">
-                  <Icon name="sync" size={13} />
-                  {t('worship.searchingOnline')}
-                </div>
-              )}
-              {onlineSearchError && <div className="dock-dialog__error">{onlineSearchError}</div>}
-              <div className="dock-dialog-results">
-                {onlineResults.map((result) => (
-                  <div className="dock-dialog-result" key={result.id}>
-                    <div className="dock-dialog-result__body">
-                      <span className="dock-dialog-result__title">{result.title}</span>
-                      <span className="dock-dialog-result__meta">
-                        {[result.artist, result.sourceName].filter(Boolean).join(" · ") || t('worship.onlineLyrics')}
-                      </span>
-                      {result.preview && <span className="dock-dialog-result__preview">{result.preview}</span>}
-                    </div>
-                    <button
-                      type="button"
-                      className="dock-btn dock-btn--ghost dock-dialog-result__action"
-                      onClick={() => handleImportOnlineResult(result)}
-                      title={t('worship.importSong')}>
-                      {t('worship.importSong')}
-                    </button>
+              </section>
+
+              {/* Announcement Output Controls */}
+              {openedAnnouncement && (
+                <section className="dock-console-panel dock-console-panel--deck dock-console-panel--deck-static dock-console-panel--deck-worship">
+                  <div className="dock-worship-toolbar">
+                    <DockBottomToolbar
+                      overlayMode={overlayMode}
+                      onModeChange={setOverlayMode}
+                      clearLabel="Clear"
+                      onClear={() => {
+                        setVisibleAnnouncementSlideIdx(null);
+                        setAnnouncementSlideIdx(null);
+                        onStage(null);
+                        ensureObsConnected()
+                          .then(() => dockObsClient.clearAnnouncement())
+                          .catch((err) => console.warn("[DockWorshipTab] Clear announcement failed:", err));
+                      }}
+                      collapsed={toolbarCollapsed}
+                      onCollapseChange={setToolbarCollapsed}
+                      compact={compactToolbar}
+                    >
+                      <button
+                        type="button"
+                        className="dock-btm-toolbar__icon-btn"
+                        onClick={() => setShowThemeSettings(true)}
+                        title="Theme Settings"
+                      >
+                        <Icon name="edit" size={14} />
+                      </button>
+                    </DockBottomToolbar>
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+                </section>
+              )}
+            </>
+          )}
+        </>
       )}
 
       {/* Theme Settings Modal */}
@@ -2588,7 +3215,13 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
             setSavedLowerThirdQuickThemeSettings(next);
             setLowerThirdQuickThemeSettings(next);
           }
-          requestAnimationFrame(() => { void restageCurrent(); });
+          requestAnimationFrame(() => {
+            if (openedAnnouncement && activeAnnouncementIndex !== null) {
+              void restageAnnouncementCurrent();
+              return;
+            }
+            void restageCurrent();
+          });
         }}
         onQuickSettingsChange={(next) => {
           if (overlayMode === "fullscreen") {
@@ -2604,6 +3237,212 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
         overlayMode={overlayMode}
         showReferences={false}
       />
+
+      {/* New/Edit Announcement Modal */}
+      {isNewAnnouncementModalOpen && (
+        <div className="dock-dialog-backdrop" role="presentation">
+          <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-announcement-editor-title">
+            <div className="dock-dialog__header">
+              <div>
+                <div className="dock-dialog__eyebrow">{announcementDraft.title ? "Edit Announcement" : "Add Announcement"}</div>
+                <h2 id="dock-announcement-editor-title" className="dock-dialog__title">
+                  {announcementDraft.title ? "Edit Announcement" : "New Announcement"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="dock-dialog__close"
+                onClick={() => setIsNewAnnouncementModalOpen(false)}
+                aria-label="Close"
+                title="Close"
+              >
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+            <div className="dock-dialog__body">
+              <label className="dock-dialog-field">
+                <span className="dock-dialog-field__label">
+                  <span>Type</span>
+                  <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
+                </span>
+                <select
+                  className="dock-input"
+                  value={announcementDraft.type}
+                  onChange={(e) => setAnnouncementDraft((d) => ({ ...d, type: e.target.value as AnnouncementType }))}
+                >
+                  {ANNOUNCEMENT_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="dock-dialog__row dock-dialog__row--two">
+                <label className="dock-dialog-field">
+                  <span className="dock-dialog-field__label">
+                    <span>Title</span>
+                    <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
+                  </span>
+                  <input
+                    className="dock-input"
+                    value={announcementDraft.title}
+                    onChange={(e) => setAnnouncementDraft((d) => ({ ...d, title: e.target.value }))}
+                    placeholder="Announcement title"
+                  />
+                </label>
+                <label className="dock-dialog-field">
+                  <span className="dock-dialog-field__label">
+                    <span>Subtitle</span>
+                    <span className="dock-dialog-field__tag">Optional</span>
+                  </span>
+                  <input
+                    className="dock-input"
+                    value={announcementDraft.subtitle}
+                    onChange={(e) => setAnnouncementDraft((d) => ({ ...d, subtitle: e.target.value }))}
+                    placeholder="Short description"
+                  />
+                </label>
+              </div>
+
+              {announcementDraft.type === "speaker" && (
+                <div className="dock-dialog__row dock-dialog__row--two">
+                  <label className="dock-dialog-field">
+                    <span className="dock-dialog-field__label">
+                      <span>Speaker Name</span>
+                      <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
+                    </span>
+                    <input
+                      className="dock-input"
+                      value={announcementDraft.speakerName}
+                      onChange={(e) => setAnnouncementDraft((d) => ({ ...d, speakerName: e.target.value }))}
+                      placeholder="e.g. Pastor Henry Odewale"
+                    />
+                  </label>
+                  <label className="dock-dialog-field">
+                    <span className="dock-dialog-field__label">
+                      <span>Speaker Role</span>
+                      <span className="dock-dialog-field__tag">Optional</span>
+                    </span>
+                    <input
+                      className="dock-input"
+                      value={announcementDraft.speakerRole}
+                      onChange={(e) => setAnnouncementDraft((d) => ({ ...d, speakerRole: e.target.value }))}
+                      placeholder="e.g. Lead Pastor"
+                    />
+                  </label>
+                </div>
+              )}
+
+              <label className="dock-dialog-field">
+                <span className="dock-dialog-field__label">
+                  <span>Content</span>
+                  <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
+                </span>
+                <textarea
+                  className="dock-input dock-dialog-textarea"
+                  value={announcementDraft.content}
+                  onChange={(e) => setAnnouncementDraft((d) => ({ ...d, content: e.target.value }))}
+                  placeholder="Announcement content. Use blank lines to separate slides."
+                  rows={6}
+                />
+              </label>
+
+              <label className="dock-dialog-field">
+                <span className="dock-dialog-field__label">
+                  <span>Image URL</span>
+                  <span className="dock-dialog-field__tag">Optional</span>
+                </span>
+                <input
+                  className="dock-input"
+                  value={announcementDraft.imageUrl}
+                  onChange={(e) => setAnnouncementDraft((d) => ({ ...d, imageUrl: e.target.value }))}
+                  placeholder="https://example.com/image.jpg"
+                />
+              </label>
+
+              <label className="dock-dialog-field">
+                <span className="dock-dialog-field__label">
+                  <span>{t('announcements.lowerThirdTheme')}</span>
+                  <span className="dock-dialog-field__tag">{t('common.optional')}</span>
+                </span>
+                <select
+                  className="dock-input"
+                  value={announcementDraft.obsThemeId}
+                  onChange={(e) => setAnnouncementDraft((d) => ({ ...d, obsThemeId: e.target.value }))}
+                >
+                  <option value="">{t('announcements.lowerThirdThemeNone')}</option>
+                  {filterThemesByType(announcementDraft.type).map((theme) => (
+                    <option key={theme.id} value={theme.id}>
+                      {theme.name || theme.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="dock-dialog__footer">
+              <button
+                type="button"
+                className="dock-btn dock-btn--ghost"
+                onClick={() => setIsNewAnnouncementModalOpen(false)}
+                title="Cancel"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dock-btn dock-btn--primary"
+                onClick={() => {
+                  const trimmedTitle = announcementDraft.title.trim();
+                  const trimmedContent = announcementDraft.content.trim();
+                  if (!trimmedTitle || !trimmedContent) return;
+
+                  const isEditing = openedAnnouncement !== null && announcements.some((a) => a.id === openedAnnouncement.id);
+                  const now = Date.now();
+
+                  if (isEditing && openedAnnouncement) {
+                    const updated: DockAnnouncement = {
+                      ...openedAnnouncement,
+                      type: announcementDraft.type,
+                      title: trimmedTitle,
+                      subtitle: announcementDraft.subtitle.trim(),
+                      content: trimmedContent,
+                      imageUrl: announcementDraft.imageUrl.trim() || undefined,
+                      speakerName: announcementDraft.type === "speaker" ? announcementDraft.speakerName.trim() : undefined,
+                      speakerRole: announcementDraft.type === "speaker" ? announcementDraft.speakerRole.trim() : undefined,
+                      speakerPhotoUrl: announcementDraft.type === "speaker" ? announcementDraft.speakerPhotoUrl.trim() || undefined : undefined,
+                      obsThemeId: announcementDraft.obsThemeId.trim() || undefined,
+                    };
+                    const next = announcements.map((a) => a.id === updated.id ? updated : a);
+                    setAnnouncements(next);
+                    saveDockAnnouncements(next);
+                    setOpenedAnnouncement(updated);
+                  } else {
+                    const newAnnouncement: DockAnnouncement = {
+                      id: crypto.randomUUID?.() ?? `ann-${now}-${Math.random().toString(36).slice(2, 8)}`,
+                      type: announcementDraft.type,
+                      title: trimmedTitle,
+                      subtitle: announcementDraft.subtitle.trim(),
+                      content: trimmedContent,
+                      imageUrl: announcementDraft.imageUrl.trim() || undefined,
+                      speakerName: announcementDraft.type === "speaker" ? announcementDraft.speakerName.trim() : undefined,
+                      speakerRole: announcementDraft.type === "speaker" ? announcementDraft.speakerRole.trim() : undefined,
+                      speakerPhotoUrl: announcementDraft.type === "speaker" ? announcementDraft.speakerPhotoUrl.trim() || undefined : undefined,
+                      obsThemeId: announcementDraft.obsThemeId.trim() || undefined,
+                    };
+                    const next = [newAnnouncement, ...announcements];
+                    setAnnouncements(next);
+                    saveDockAnnouncements(next);
+                  }
+
+                  setIsNewAnnouncementModalOpen(false);
+                }}
+                disabled={!announcementDraft.title.trim() || !announcementDraft.content.trim()}
+                title="Save"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toasts.length > 0 && (
         <div className="dock-toast-stack" role="status" aria-live="polite">

@@ -62,33 +62,23 @@ async function checkLocalAuth(): Promise<boolean> {
 async function checkDeviceOnline(deviceId: string): Promise<boolean> {
   try {
     const res = await fetch(
-      `${ONLINE_API}/api/device/check?deviceId=${encodeURIComponent(deviceId)}`
+      `${ONLINE_API}/api/device/bootstrap?deviceId=${encodeURIComponent(deviceId)}`
     );
     if (res.ok) {
       const data = await res.json();
-      if (data.exists === true) {
-        // Fetch the full profile to get the plan
+      const profile = data?.account?.user;
+      if (profile?.plan) {
+        const effectivePlan = normalizePlanId(
+          profile.effectivePlan || resolveCanonicalPlan(profile as any)
+        );
         try {
-          const profileRes = await fetch(
-            `${ONLINE_API}/api/device/profile?deviceId=${encodeURIComponent(deviceId)}`
-          );
-          if (profileRes.ok) {
-            const profile = await profileRes.json();
-            if (profile.user?.plan) {
-              const effectivePlan = normalizePlanId(
-                profile.user.effectivePlan || resolveCanonicalPlan(profile.user as any)
-              );
-              try {
-                localStorage.setItem(getUserScopedKey("ocs-dock-plan"), effectivePlan);
-              } catch { /* ignore */ }
-              if (profile.user?.entitlements) {
-                try {
-                  localStorage.setItem(getUserScopedKey("ocs-dock-entitlements"), JSON.stringify(profile.user.entitlements));
-                } catch { /* ignore */ }
-              }
-            }
-          }
-        } catch { /* profile fetch failed — still authenticated */ }
+          localStorage.setItem(getUserScopedKey("ocs-dock-plan"), effectivePlan);
+        } catch { /* ignore */ }
+        if (profile?.entitlements) {
+          try {
+            localStorage.setItem(getUserScopedKey("ocs-dock-entitlements"), JSON.stringify(profile.entitlements));
+          } catch { /* ignore */ }
+        }
         return true;
       }
     }
@@ -152,10 +142,11 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
     checkAuth();
   }, [checkAuth]);
 
-  // Auto-poll every 3s while blocked (max 3 attempts)
+  // Auto-poll every 15s while blocked. Local overlay checks remain frequent;
+  // the online fallback is only a safety net when the overlay server is unavailable.
   useEffect(() => {
     if (authed || !ready || failedAttempts >= 3) return;
-    const id = setInterval(() => checkAuth(), 3000);
+    const id = setInterval(() => checkAuth(), 15_000);
     return () => clearInterval(id);
   }, [authed, ready, checkAuth, failedAttempts]);
 
