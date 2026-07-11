@@ -7949,7 +7949,7 @@
 }
 
 .dock-bible-verse-row__text {
-  min-width: 200px;
+  min-width: 300px;
   color: var(--dock-text);
   font-size: 12px;
   line-height: 1.55;
