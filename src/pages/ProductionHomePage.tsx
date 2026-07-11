@@ -55,8 +55,8 @@ import { track } from "../services/analytics";
 import { TutorialModal } from "../components/TutorialModal";
 import { OnboardingResumeBanner } from "./OnboardingPage";
 import { useAppTheme } from "../hooks/useAppTheme";
-import { getEffectivePlan, getUserPlanLimits, isInTrial, getTrialDaysRemaining } from "../services/licenseService";
-import { fetchCreditDetails } from "../services/credits";
+import { getEffectivePlan, getUserPlan, getUserPlanLimits, isInTrial, getTrialDaysRemaining } from "../services/licenseService";
+import { fetchCreditDetails, getCreditsBalance } from "../services/credits";
 import { getCachedSubscription } from "../services/subscriptionCache";
 import { getPlanConfig, getPlanLabel } from "../services/planConfig";
 
@@ -238,6 +238,7 @@ interface SummaryCardData {
   planLabel: string;
   credits: number | null;
   creditsTotal: number;
+  creditsConsumed: number | null;
   deviceLimit: number;
   deviceUnlimited: boolean;
   renewalDate: string | null;
@@ -256,20 +257,22 @@ function DashboardSummaryCards() {
     const load = async () => {
       try {
         const plan = getEffectivePlan(user);
+        const actualPlan = getUserPlan(user);
         const limits = getUserPlanLimits(user);
         const trial = isInTrial(user);
         const trialDays = getTrialDaysRemaining(user);
         const creditDetails = await fetchCreditDetails();
         const sub = getCachedSubscription();
         const config = await getPlanConfig();
-        const planLabel = getPlanLabel(config, plan);
+        const planLabel = getPlanLabel(config, actualPlan);
 
         if (!mounted) return;
         setData({
           plan,
           planLabel,
-          credits: creditDetails?.credits ?? null,
+          credits: creditDetails?.credits ?? getCreditsBalance(),
           creditsTotal: creditDetails?.planAllocation ?? 0,
+          creditsConsumed: creditDetails?.totalConsumed ?? null,
           deviceLimit: limits.devices,
           deviceUnlimited: limits.unlimitedDevices,
           renewalDate: sub?.payload?.expiresAt ?? null,
@@ -330,7 +333,7 @@ function DashboardSummaryCards() {
           <span className="summary-card-value">{creditsLabel}</span>
           <span className="summary-card-sub">
             {data.creditsTotal > 0
-              ? t("dashboard.summary.creditsOf", { used: data.creditsTotal })
+              ? t("dashboard.summary.creditsOf", { used: data.creditsConsumed ?? data.creditsTotal })
               : t("dashboard.summary.creditsSubtitle")}
           </span>
         </div>
