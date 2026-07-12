@@ -139,7 +139,7 @@ export function useBibleSync(options: UseBibleSyncOptions = {}): {
                 activeTemplateType = "lower-third";
                 isLowerThirdActive = true;
               }
-            } else if (url.includes("bible-overlay-fullscreen")) {
+            } else if (url.includes("mce-bible-overlay")) {
               activeTemplateType = "fullscreen";
               isFullscreenActive = true;
             } else if (url.includes("bible-overlay-lower-third")) {

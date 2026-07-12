@@ -30,7 +30,7 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "resources": [
-      "../dist/bible-overlay-fullscreen.html",
+      "../dist/mce-bible-overlay.html",
       "../dist/mce-bible-overlay.html",
       "../dist/bible-overlay-bg.html",
       "../dist/bible-kjv.json",

@@ -3600,8 +3600,13 @@ class DockObsClient {
     // Solid colors go to the card's --box-background (not --bg-color), so they
     // must stay in the overlay theme — delegating to a native OBS color_source
     // would fill the entire canvas instead of just the card.
-    if (hasImageOrVideo || hasPattern || isGradient || isSolidColor) {
+    if (hasImageOrVideo || hasPattern || isGradient) {
       return { overlayTheme: source, backgroundTheme: source };
+    }
+
+    // Solid colors: overlay handles via --box-background, no native OBS source needed
+    if (isSolidColor) {
+      return { overlayTheme: source, backgroundTheme: null };
     }
 
     // No background at all
@@ -4627,7 +4632,7 @@ class DockObsClient {
           };
           // Always use the fullscreen HTML — it handles both modes via .lt-mode CSS class.
           // Mode switching is done purely via CSS --overlay-data, never via URL change.
-          cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/bible-overlay-fullscreen.html?tab=bible`;
+          cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/mce-bible-overlay.html?tab=bible`;
           useCssOverlayTransport = true;
           url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(cssOverlayPacket))}`;
         } else {
@@ -4647,7 +4652,7 @@ class DockObsClient {
             timestamp: Date.now(),
             mode,
           };
-          cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/bible-overlay-fullscreen.html?tab=bible`;
+          cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/mce-bible-overlay.html?tab=bible`;
           useCssOverlayTransport = true;
           url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(cssOverlayPacket))}`;
 
@@ -4714,7 +4719,7 @@ class DockObsClient {
           mode,
         };
         cssOverlayPacket = packet;
-        cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/bible-overlay-fullscreen.html?tab=bible`;
+        cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/mce-bible-overlay.html?tab=bible`;
         useCssOverlayTransport = true;
 
         const def = this._fullscreenSceneDefs["bible"];
@@ -4740,6 +4745,17 @@ class DockObsClient {
                 timestamp: Number(packetWithMode.timestamp) || Date.now(),
                 mode: String(mode || "fullscreen"),
               }, "bible");
+
+              // Also update CSS overlay data — OBS BroadcastChannel may not
+              // deliver messages across CEF contexts. The CSS approach is the
+              // only reliable transport for typography-only theme updates
+              // that don't change the fullscreen setup signature.
+              const overlayThemeCss = this.buildCssOverlayDataCss(packetWithMode, themeCss);
+              await this.setBrowserSourceUrl(def.browserSourceName, cssOverlayBaseUrl, false, overlayThemeCss).catch(() => {});
+              this._lastCssOverlayPacketBySource[def.browserSourceName] = packetWithMode;
+              this._lastCssOverlayBaseUrlBySource[def.browserSourceName] = cssOverlayBaseUrl;
+              this._lastCssOverlayThemeCssBySource[def.browserSourceName] = themeCss || "";
+
               this._bibleLtInitialized = true;
               this._lastBiblePushSignature = pushSignature;
               return;
@@ -4891,10 +4907,26 @@ class DockObsClient {
         // For lower-third mode: keep the fullscreen HTML loaded (no URL change)
         // and send mode + data via CSS overlay transport only. The fullscreen
         // HTML detects the mode field and animates to lower-third layout.
+        // IMPORTANT: only change the URL on first load or mode switch. Normal
+        // verse pushes must NOT change the URL — that forces OBS CEF to reload
+        // the page, causing the card to disappear and reappear. Only the CSS
+        // --overlay-data variable is updated for verse-to-verse transitions.
         if (mode === "lower-third") {
           const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
           const overlayCss = this.buildCssOverlayDataCss(packetWithMode, themeCss);
-          await this.setBrowserSourceUrl(browserSourceName, cssOverlayBaseUrl, false, overlayCss);
+          if (!modeChanged && this._lastBrowserSourceUrlBySource[browserSourceName]) {
+            // Same mode, already bootstrapped — CSS-only update, no URL change
+            try {
+              await this.call("SetInputSettings", {
+                inputName: browserSourceName,
+                inputSettings: { css: overlayCss },
+              });
+            } catch { /* ignore */ }
+          } else {
+            // First load or mode switch — bootstrap with static URL.
+            // Data is delivered via CSS --overlay-data (set in overlayCss above).
+            await this.setBrowserSourceUrl(browserSourceName, cssOverlayBaseUrl, false, overlayCss);
+          }
           this._lastCssOverlayPacketBySource[browserSourceName] = packetWithMode;
           this._lastCssOverlayBaseUrlBySource[browserSourceName] = cssOverlayBaseUrl;
           this._lastCssOverlayThemeCssBySource[browserSourceName] = themeCss || "";
@@ -4911,12 +4943,127 @@ class DockObsClient {
             });
           } catch { /* best effort */ }
         } else {
-          await this.setBrowserSourceUrl(browserSourceName, url, modeChanged, themeCss || undefined);
+          await this.setBrowserSourceUrl(browserSourceName, cssOverlayBaseUrl || url, modeChanged, themeCss || undefined);
         }
       }
 
       this._lastBiblePushSignature = pushSignature;
     });
+  }
+
+  /**
+   * Fast path for lower-third overlay updates (theme changes, verse text changes).
+   *
+   * Skips ALL state recovery (GetSceneList, GetInputList, GetSceneItemList, etc.)
+   * and only calls SetInputSettings with the new CSS overlay data.
+   *
+   * Uses the request queue with `replaceExisting: true, key: "bible-overlay-update"`
+   * so rapid clicks only send the latest update to OBS.
+   *
+   * Falls back to the full `pushBible` if the source hasn't been bootstrapped yet.
+   */
+  async pushBibleOverlayFast(data: {
+    verseText?: string;
+    referenceText?: string;
+    verseRange?: string;
+    bibleThemeSettings?: Record<string, unknown> | null;
+    liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
+    themeId?: string;
+    compareEnabled?: boolean;
+    compareLayout?: string;
+    compare?: Record<string, unknown> | null;
+    translationA?: string;
+    translationB?: string;
+  }): Promise<void> {
+    const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
+
+    // If the source hasn't been bootstrapped with a URL yet, use the full push
+    if (!this._lastBrowserSourceUrlBySource[browserSourceName]) {
+      // Fall back to full pushBible — the source hasn't been bootstrapped yet.
+      // Build required fields from available data.
+      const verseRange = data.verseRange ?? "1";
+      const refText = data.referenceText ?? "";
+      return this.pushBible({
+        book: "",
+        chapter: 1,
+        verse: 1,
+        verseRange,
+        referenceLabel: refText.replace(/\s\(.*\)$/, ""),
+        translation: "KJV",
+        theme: data.themeId,
+        verseText: data.verseText,
+        overlayMode: "lower-third",
+        bibleThemeSettings: data.bibleThemeSettings,
+        liveOverrides: data.liveOverrides ?? null,
+        compareEnabled: data.compareEnabled,
+        compareLayout: (data.compareLayout || "line-by-line") as "line-by-line" | "side-by-side",
+        compare: data.compare ? {
+          ...data.compare,
+          layout: ((data.compare as Record<string, unknown>).layout as string || "line-by-line") as "line-by-line" | "side-by-side",
+        } as {
+          enabled?: boolean;
+          layout?: "line-by-line" | "side-by-side";
+          columns?: Array<{ book: string; chapter: number; verse: number; verseEnd?: number; verseRange?: string; referenceLabel: string; translation: string; verseText: string }>;
+        } : undefined,
+        translationA: data.translationA,
+        translationB: data.translationB,
+      });
+    }
+
+    const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
+      data.bibleThemeSettings,
+      data.liveOverrides,
+    );
+
+    if (!effectiveThemeSettings) {
+      // No theme to update — just skip
+      return;
+    }
+
+    const mode = "lower-third";
+    const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
+    const { cleanSettings: ltClean, css } = this.stripThemeDataUris(overlayTheme);
+    const themeCss = css;
+
+    const slide = this.buildBibleSlide(
+      data.verseText ?? "",
+      data.referenceText ?? "",
+      data.verseRange ?? "",
+    );
+
+    const cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/mce-bible-overlay.html?tab=bible`;
+
+    const cssOverlayPacket: Record<string, unknown> = {
+      slide,
+      theme: ltClean ?? null,
+      live: true,
+      blanked: false,
+      timestamp: Date.now(),
+      mode,
+    };
+
+    const packetWithMode = { ...cssOverlayPacket, mode };
+    const overlayCss = this.buildCssOverlayDataCss(packetWithMode, themeCss);
+
+    // Use the lightweight queue path with cancellation — only the latest update reaches OBS
+    await obsQueue.enqueue(
+      "SetInputSettings:bible",
+      async () => {
+        await this.call("SetInputSettings", {
+          inputName: browserSourceName,
+          inputSettings: { css: overlayCss },
+        });
+      },
+      {
+        key: "bible-overlay-update",
+        priority: "high",
+        replaceExisting: true,
+      },
+    );
+
+    this._lastCssOverlayPacketBySource[browserSourceName] = packetWithMode;
+    this._lastCssOverlayBaseUrlBySource[browserSourceName] = cssOverlayBaseUrl;
+    this._lastCssOverlayThemeCssBySource[browserSourceName] = themeCss || "";
   }
 
   /**
@@ -5257,7 +5404,7 @@ class DockObsClient {
       blanked: false,
       timestamp: Date.now(),
     };
-    const baseUrl = `${this.getOverlayBaseUrl()}/${mode === "fullscreen" ? "bible-overlay-fullscreen.html" : "bible-overlay-lower-third.html"}?tab=sermon`;
+    const baseUrl = `${this.getOverlayBaseUrl()}/${mode === "fullscreen" ? "mce-bible-overlay.html" : "bible-overlay-lower-third.html"}?tab=sermon`;
 
     this.publishFullscreenOverlayPacket(packet, "sermon");
     const sourceSignature = JSON.stringify({
@@ -5540,7 +5687,7 @@ class DockObsClient {
 
         this._hasSeparateFullscreenBg(effectiveThemeSettings);
         cssOverlayPacket = packet;
-        cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/bible-overlay-fullscreen.html?tab=${tab}`;
+        cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/mce-bible-overlay.html?tab=${tab}`;
         useCssOverlayTransport = true;
         url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(packet))}`;
       } else {
@@ -5611,7 +5758,7 @@ class DockObsClient {
             timestamp: Date.now(),
             mode,
           };
-          cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/bible-overlay-fullscreen.html?tab=${tab}`;
+          cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/mce-bible-overlay.html?tab=${tab}`;
           useCssOverlayTransport = true;
           url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(cssOverlayPacket))}`;
         } else {
@@ -5632,7 +5779,7 @@ class DockObsClient {
             timestamp: Date.now(),
             mode,
           };
-          cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/bible-overlay-fullscreen.html?tab=${tab}`;
+          cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/mce-bible-overlay.html?tab=${tab}`;
           useCssOverlayTransport = true;
           url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(cssOverlayPacket))}`;
 
@@ -5659,7 +5806,9 @@ class DockObsClient {
         }, tab);
         if (!getCssBootstrapped()) {
           const overlayCss = this.buildCssOverlayDataCss(cssOverlayPacket, themeCss);
-          await this.setBrowserSourceUrl(sourceName, cssOverlayBaseUrl, false, overlayCss);
+          const encodedBootstrapPacket = encodeURIComponent(JSON.stringify(cssOverlayPacket));
+          const bootstrapUrl = `${cssOverlayBaseUrl}&overlayData=${encodedBootstrapPacket}#data=${encodedBootstrapPacket}`;
+          await this.setBrowserSourceUrl(sourceName, bootstrapUrl, false, overlayCss);
           setCssBootstrapped(true);
           this._lastCssOverlayPacketBySource[sourceName] = cssOverlayPacket;
           this._lastCssOverlayBaseUrlBySource[sourceName] = cssOverlayBaseUrl;
@@ -7073,19 +7222,19 @@ class DockObsClient {
       sceneName: DOCK_PRESENTATION_SCENE,
       browserSourceName: "MCE Browser - Bible",
       bgSourceName: "MCE BG - Bible",
-      overlayFile: "bible-overlay-fullscreen.html",
+      overlayFile: "mce-bible-overlay.html",
     },
     worship: {
       sceneName: DOCK_PRESENTATION_SCENE,
       browserSourceName: "MCE Browser - Worship",
       bgSourceName: "MCE BG - Worship",
-      overlayFile: "bible-overlay-fullscreen.html",
+      overlayFile: "mce-bible-overlay.html",
     },
     announcements: {
       sceneName: DOCK_PRESENTATION_SCENE,
       browserSourceName: "MCE Browser - Announcements",
       bgSourceName: "MCE BG - Announcements",
-      overlayFile: "bible-overlay-fullscreen.html",
+      overlayFile: "mce-bible-overlay.html",
     },
     countdown: {
       sceneName: DOCK_PRESENTATION_SCENE,

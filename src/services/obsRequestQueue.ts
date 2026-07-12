@@ -22,10 +22,23 @@ import * as perf from "./performanceManager";
 export interface RequestOptions {
   /** Deduplication key — if identical key is in-flight, return existing promise */
   dedupeKey?: string;
-  /** Request priority — high bypasses rate limiter queue */
-  priority?: "high" | "normal";
+  /** Key for replaceExisting — if a pending (queued) request shares this key, it is cancelled and replaced */
+  key?: string;
+  /** When true, cancels any pending request with the same `key` and replaces it with this one */
+  replaceExisting?: boolean;
+  /** Request priority — high bypasses rate limiter queue, low yields to normal */
+  priority?: "high" | "normal" | "low";
   /** Timeout in ms — defaults to 5000 */
   timeoutMs?: number;
+}
+
+interface QueuedRequest {
+  key?: string;
+  priority: "high" | "normal" | "low";
+  cancelled: boolean;
+  fn: () => Promise<unknown>;
+  resolve: (value: unknown) => void;
+  reject: (reason: unknown) => void;
 }
 
 export interface RequestStats {
@@ -36,6 +49,7 @@ export interface RequestStats {
   p95LatencyMs: number;
   queueDepth: number;
   dedupCount: number;
+  replacedCount: number;
   backoffActive: boolean;
   backoffMultiplier: number;
   inFlight: number;
@@ -98,11 +112,18 @@ class RateLimiter {
 class Semaphore {
   private waitQueue: Array<() => void> = [];
   private running = 0;
+  private maxConcurrent = 0;
 
-  constructor(private max: number) { }
+  constructor(max: number) {
+    this.maxConcurrent = max;
+  }
+
+  get max(): number {
+    return this.maxConcurrent;
+  }
 
   updateMax(max: number): void {
-    this.max = max;
+    this.maxConcurrent = max;
   }
 
   async acquire(): Promise<void> {
@@ -148,10 +169,14 @@ let totalRequests = 0;
 let completedRequests = 0;
 let failedRequests = 0;
 let dedupCount = 0;
+let replacedCount = 0;
 let backoffActive = false;
 let backoffMultiplier = 1;
 const latencies: LatencyEntry[] = [];
 const inFlightDedupes = new Map<string, Promise<unknown>>();
+const pendingByKey = new Map<string, QueuedRequest>();
+const pendingQueue: QueuedRequest[] = [];
+let processingQueue = false;
 const recentFailures: Array<{ label: string; error: string; time: string }> = [];
 
 const semaphore = new Semaphore(perf.getMaxConcurrentRequests());
@@ -233,72 +258,142 @@ perf.onPerformanceTierChange((profile) => {
 
 /**
  * Enqueue an OBS WebSocket request.
- * Wraps the raw call with rate limiting, concurrency control, dedup, and backoff.
+ * Wraps the raw call with rate limiting, concurrency control, dedup,
+ * replaceExisting cancellation, priority queuing, and backoff.
  */
 export async function enqueue<T>(
-  label: string,
+  _label: string,
   fn: () => Promise<T>,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { dedupeKey, priority = "normal", timeoutMs = 5000 } = options;
+  const { dedupeKey, key, replaceExisting, priority = "normal" } = options;
 
-  // Deduplication — if same key is in-flight, return existing promise
+  // ── Deduplication ──
   if (dedupeKey && inFlightDedupes.has(dedupeKey)) {
     dedupCount++;
     return inFlightDedupes.get(dedupeKey) as Promise<T>;
   }
 
+  // ── replaceExisting: cancel any pending request with matching key ──
+  if (key && replaceExisting) {
+    const existing = pendingByKey.get(key);
+    if (existing) {
+      existing.cancelled = true;
+      pendingByKey.delete(key);
+      // Remove from pending queue
+      const idx = pendingQueue.indexOf(existing);
+      if (idx !== -1) pendingQueue.splice(idx, 1);
+      replacedCount++;
+    }
+  }
+
   totalRequests++;
   startStatsLogging();
 
-  const execute = async (): Promise<T> => {
-    const queueStartTime = performance.now();
+  return new Promise<T>((resolve, reject) => {
+    const request: QueuedRequest = {
+      key,
+      priority,
+      cancelled: false,
+      fn: () => fn().then(resolve, reject),
+      resolve: resolve as (value: unknown) => void,
+      reject,
+    };
 
+    if (key) {
+      pendingByKey.set(key, request);
+    }
+
+    // Insert into pending queue ordered by priority
+    const pOrder = { high: 0, normal: 1, low: 2 };
+    const insertIdx = pendingQueue.findIndex((r) => pOrder[r.priority] > pOrder[priority]);
+    if (insertIdx === -1) {
+      pendingQueue.push(request);
+    } else {
+      pendingQueue.splice(insertIdx, 0, request);
+    }
+
+    drainQueue();
+  });
+}
+
+/**
+ * Drain the pending queue: start as many requests as concurrency allows,
+ * picking the highest-priority non-cancelled items first.
+ */
+function drainQueue(): void {
+  if (processingQueue) return;
+  processingQueue = true;
+
+  while (pendingQueue.length > 0 && semaphore.inFlight < semaphore.max) {
+    // Pick the highest-priority non-cancelled request
+    const idx = pendingQueue.findIndex((r) => !r.cancelled);
+    if (idx === -1) {
+      pendingQueue.length = 0;
+      break;
+    }
+    const request = pendingQueue[idx];
+    pendingQueue.splice(idx, 1);
+    if (request.key) pendingByKey.delete(request.key);
+
+    // Fire and forget — concurrency is controlled by the semaphore
+    executeRequest(request).catch(() => {});
+  }
+
+  processingQueue = false;
+}
+
+async function executeRequest(request: QueuedRequest): Promise<void> {
+  const callStartTime = performance.now();
+
+  try {
     // Acquire concurrency slot
     await semaphore.acquire();
 
+    if (request.cancelled) {
+      semaphore.release();
+      return;
+    }
+
     // Rate limit (high-priority bypasses for critical scene switches)
-    if (priority !== "high") {
+    if (request.priority !== "high") {
       await rateLimiter.waitForSlot();
     }
 
-    // Now measure the actual WebSocket call time (after all queue/rate-limiting)
-    const callStartTime = performance.now();
+    if (request.cancelled) {
+      semaphore.release();
+      return;
+    }
+
+    // Execute the actual OBS call
+    const t0 = performance.now();
     try {
-      const result = await withTimeout(fn(), timeoutMs);
-      const callLatencyMs = performance.now() - callStartTime;
-      const totalTime = performance.now() - queueStartTime;
+      await withTimeout(request.fn(), 5000);
+      const callLatencyMs = performance.now() - t0;
+      const totalTime = performance.now() - callStartTime;
 
-      completedRequests++;
-      recordLatency(totalTime, callLatencyMs);
-
-      if (callLatencyMs > 500) {
-        console.warn(`${LOG_PREFIX} Slow call: ${label} actual call took ${callLatencyMs.toFixed(0)}ms`);
+      if (!request.cancelled) {
+        completedRequests++;
+        recordLatency(totalTime, callLatencyMs);
+        if (callLatencyMs > 500) {
+          console.warn(`${LOG_PREFIX} Slow call took ${callLatencyMs.toFixed(0)}ms`);
+        }
       }
-
-      return result;
     } catch (err) {
-      const callLatencyMs = performance.now() - callStartTime;
-      const totalTime = performance.now() - queueStartTime;
-      failedRequests++;
-      recordLatency(totalTime, callLatencyMs);
-      throw err;
+      const callLatencyMs = performance.now() - t0;
+      const totalTime = performance.now() - callStartTime;
+      if (!request.cancelled) {
+        failedRequests++;
+        recordLatency(totalTime, callLatencyMs);
+      }
     } finally {
       semaphore.release();
-      if (dedupeKey) {
-        inFlightDedupes.delete(dedupeKey);
-      }
+      drainQueue();
     }
-  };
-
-  const promise = execute();
-
-  // Track in-flight for deduplication
-  if (dedupeKey) {
-    inFlightDedupes.set(dedupeKey, promise);
+  } catch {
+    semaphore.release();
+    drainQueue();
   }
-
-  return promise;
 }
 
 /**
@@ -323,6 +418,7 @@ export function getStats(): RequestStats {
     p95LatencyMs,
     queueDepth: semaphore.queueLength,
     dedupCount,
+    replacedCount,
     backoffActive,
     backoffMultiplier,
     inFlight: semaphore.inFlight,
@@ -337,6 +433,7 @@ export function resetStats(): void {
   completedRequests = 0;
   failedRequests = 0;
   dedupCount = 0;
+  replacedCount = 0;
   backoffActive = false;
   backoffMultiplier = 1;
   latencies.length = 0;
@@ -375,4 +472,6 @@ function sleep(ms: number): Promise<void> {
 export function destroy(): void {
   stopStatsLogging();
   inFlightDedupes.clear();
+  pendingByKey.clear();
+  pendingQueue.length = 0;
 }

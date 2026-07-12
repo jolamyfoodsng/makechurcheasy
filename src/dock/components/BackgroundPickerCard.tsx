@@ -3,6 +3,7 @@ import { HexColorPicker } from "react-colorful";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { BibleTheme } from "../../bible/types";
+import { LOWER_THIRD_SIZE_PRESETS } from "../../bible/types";
 import {
   COMPARE_GAP_PRESETS,
   COMPARE_LAYOUT_PRESETS,
@@ -460,8 +461,8 @@ export default function BackgroundPickerCard({
                 <input
                   type="range"
                   className="dtb-slider"
-                  min={28}
-                  max={200}
+                  min={overlayMode === "lower-third" ? 14 : 28}
+                  max={overlayMode === "lower-third" ? 100 : 200}
                   step={1}
                   value={quickSettings.fontSize}
                   onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, fontSize: Number(e.target.value) }))}
@@ -539,6 +540,104 @@ export default function BackgroundPickerCard({
                 </div>
               </div>
             </div>
+
+            {/* ── Lower Third Sizes (only relevant in lower-third mode) ── */}
+            {overlayMode === "lower-third" && (
+              <div className="dtb-bg-picker__settings">
+                <div className="dtb-section-title">{t('bgPicker.lowerThird', 'Lower Third')}</div>
+
+                {/* Size */}
+                <div className="dtb-font-weight-row">
+                  <span className="dtb-position-label">{t('bgPicker.size', 'Size')}</span>
+                  <div className="dtb-position-options">
+                    {(["smallest", "smaller", "small", "medium", "big", "bigger", "biggest"] as const).map((s) => {
+                      const p = LOWER_THIRD_SIZE_PRESETS[s];
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          className={`dtb-position-btn${quickSettings.lowerThirdSize === s ? " dtb-position-btn--active" : ""}`}
+                          onClick={() => onQuickSettingsChange((prev) => ({
+                            ...prev,
+                            lowerThirdSize: s,
+                            fontSize: p.fontSize,
+                            refFontSize: p.refFontSize,
+                            lineHeight: p.lineHeight,
+                            refSpacing: p.refSpacing,
+                          }))}
+                        >
+                          {s === "smallest" ? "XS" : s === "smaller" ? "S" : s === "small" ? "S+" : s === "medium" ? "M" : s === "big" ? "L" : s === "bigger" ? "XL" : "XXL"}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Width */}
+                <div className="dtb-font-weight-row">
+                  <span className="dtb-position-label">{t('bgPicker.width', 'Width')}</span>
+                  <div className="dtb-position-options">
+                    <button
+                      type="button"
+                      className={`dtb-position-btn${quickSettings.lowerThirdWidthPreset === "full" ? " dtb-position-btn--active" : ""}`}
+                      onClick={() => onQuickSettingsChange((prev) => ({ ...prev, lowerThirdWidthPreset: "full" }))}
+                    >
+                      {t('bgPicker.fullWidth', 'Full')}
+                    </button>
+                    <button
+                      type="button"
+                      className={`dtb-position-btn${quickSettings.lowerThirdWidthPreset === "md" ? " dtb-position-btn--active" : ""}`}
+                      onClick={() => onQuickSettingsChange((prev) => ({ ...prev, lowerThirdWidthPreset: "md" }))}
+                    >
+                      {t('bgPicker.halfWidth', 'Half')}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Text Alignment */}
+                <div className="dtb-font-weight-row">
+                  <span className="dtb-position-label">{t('bgPicker.alignment', 'Alignment')}</span>
+                  <div className="dtb-position-options">
+                    {(["left", "center", "right"] as const).map((a) => (
+                      <button
+                        key={a}
+                        type="button"
+                        className={`dtb-position-btn${quickSettings.textAlign === a ? " dtb-position-btn--active" : ""}`}
+                        onClick={() => onQuickSettingsChange((prev) => ({
+                          ...prev,
+                          textAlign: a,
+                          refTextAlign: "match",
+                          lowerThirdPosition: a,
+                        }))}
+                      >
+                        {a === "left" ? t('common.left') : a === "center" ? t('common.center') : t('common.right')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Reference Position */}
+                <div className="dtb-font-weight-row">
+                  <span className="dtb-position-label">{t('bgPicker.referencePosition', 'Ref. Position')}</span>
+                  <div className="dtb-position-options">
+                    <button
+                      type="button"
+                      className={`dtb-position-btn${quickSettings.refPosition === "bottom" ? " dtb-position-btn--active" : ""}`}
+                      onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refPosition: "bottom" }))}
+                    >
+                      {t('bgPicker.below', 'Below')}
+                    </button>
+                    <button
+                      type="button"
+                      className={`dtb-position-btn${quickSettings.refPosition === "top" ? " dtb-position-btn--active" : ""}`}
+                      onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refPosition: "top" }))}
+                    >
+                      {t('bgPicker.above', 'Above')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* ── Reference Section ── */}
             {showReferences && (

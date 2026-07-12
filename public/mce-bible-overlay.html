@@ -9,14 +9,14 @@
     /* ── Shared: Font-face ── */
     @font-face {
       font-family: 'Charis SIL';
-      src: url('fonts/CharisSIL-Regular.woff2') format('woff2');
+      src: url('/fonts/charis-sil/CharisSIL-Regular.ttf') format('truetype');
       font-weight: 400;
       font-style: normal;
     }
 
     @font-face {
       font-family: 'Charis SIL';
-      src: url('fonts/CharisSIL-Bold.woff2') format('woff2');
+      src: url('/fonts/charis-sil/CharisSIL-Bold.ttf') format('truetype');
       font-weight: 700;
       font-style: normal;
     }
@@ -39,18 +39,24 @@
       background: transparent !important;
       color: #ffffff;
       --font-size: 48px;
-      --ref-font-size: 24px;
+      --font-color: #ffffff;
+      --font-weight: 400;
+      --font-style: normal;
       --line-height: 1.6;
+      --letter-spacing: 0px;
       --text-align: center;
       --text-shadow: none;
       --outline-width: 0px;
       --outline-color: transparent;
+      --ref-font-size: 24px;
       --ref-font-weight: 400;
+      --ref-font-style: normal;
       --ref-font-color: #ffffff;
       --ref-text-transform: none;
       --ref-letter-spacing: 0px;
       --ref-opacity: 1;
       --ref-spacing: 24px;
+      --ref-text-align: center;
       --ref-width: 100%;
       --ref-bg-color: transparent;
       --ref-bg-padding: 0;
@@ -154,8 +160,11 @@
     #verse-text {
       font-size: var(--font-size);
       font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      color: var(--font-color, #ffffff);
+      font-weight: var(--font-weight, 400);
+      font-style: var(--font-style, normal);
       line-height: var(--line-height);
-      color: #ffffff;
+      letter-spacing: var(--letter-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
@@ -167,8 +176,9 @@
     #reference {
       font-size: var(--ref-font-size);
       font-weight: var(--ref-font-weight);
+      font-style: var(--ref-font-style, normal);
       color: var(--ref-font-color);
-      text-align: var(--text-align);
+      text-align: var(--ref-text-align, var(--text-align));
       margin-top: var(--ref-spacing);
       width: var(--ref-width);
       padding: var(--ref-bg-padding);
@@ -200,25 +210,26 @@
       z-index: 2;
     }
 
-    body:not([data-mode="lower-third"]) #fs-content {
-      position: relative;
+    body:not([data-mode="lower-third"]) #overlay {
+      position: absolute;
+      inset: 0;
       z-index: 3;
       display: flex;
       flex-direction: column;
-      align-items: var(--text-align, center);
+      align-items: center;
       justify-content: center;
       width: 100%;
       height: 100%;
-      padding: var(--padding);
+      padding: var(--padding, 64px);
       opacity: 1;
       transition: opacity var(--anim-duration) ease;
     }
 
-    body:not([data-mode="lower-third"]) #fs-content.hidden {
+    body:not([data-mode="lower-third"]) #overlay.hidden {
       opacity: 0;
     }
 
-    body:not([data-mode="lower-third"]) #fs-content.blank {
+    body:not([data-mode="lower-third"]) #overlay.blank {
       opacity: 0;
     }
 
@@ -257,11 +268,15 @@
     .compare-column__verse {
       font-size: var(--compare-font-size, 36px);
       font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      color: var(--font-color, #ffffff);
+      font-weight: var(--font-weight, 400);
+      font-style: var(--font-style, normal);
       line-height: var(--compare-line-height, 1.4);
-      color: #ffffff;
+      letter-spacing: var(--letter-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
+      text-transform: var(--text-transform);
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
@@ -269,15 +284,18 @@
     .compare-column__reference {
       font-size: var(--compare-ref-font-size, 20px);
       font-weight: var(--ref-font-weight);
+      font-style: var(--ref-font-style, normal);
       color: var(--ref-font-color);
-      text-align: var(--text-align);
-      margin-top: 12px;
+      text-align: var(--ref-text-align, var(--text-align));
+      margin-top: 16px;
       width: var(--ref-width);
       padding: var(--ref-bg-padding);
       background: var(--ref-bg-color);
       border-radius: var(--ref-bg-radius);
       border: var(--ref-bg-border);
       opacity: var(--ref-opacity);
+      text-transform: var(--ref-text-transform);
+      letter-spacing: var(--ref-letter-spacing);
     }
 
     .compare-column__translation {
@@ -306,18 +324,13 @@
       position: absolute;
       left: 0;
       right: 0;
+      bottom: 0;
+      width: 100%;
       z-index: 1;
       display: flex;
+      align-items: center;
       justify-content: center;
       transition: opacity var(--anim-duration) ease;
-    }
-
-    body[data-mode="lower-third"] #overlay.pos-bottom {
-      bottom: var(--lt-v-bottom, 60px);
-    }
-
-    body[data-mode="lower-third"] #overlay.pos-top {
-      top: var(--lt-v-top, 60px);
     }
 
     body[data-mode="lower-third"] #overlay.hidden {
@@ -359,20 +372,31 @@
 
     body[data-mode="lower-third"] #lt-bar #verse-text {
       font-size: var(--font-size);
-      text-align: left;
-      color: #ffffff;
+      color: var(--font-color, #ffffff);
+      font-weight: var(--font-weight, 400);
+      font-style: var(--font-style, normal);
+      line-height: var(--line-height);
+      letter-spacing: var(--letter-spacing, 0px);
+      text-align: var(--text-align);
+      text-shadow: var(--text-shadow);
+      text-transform: var(--text-transform);
     }
 
     body[data-mode="lower-third"] #lt-bar #reference {
       font-size: var(--ref-font-size);
-      font-weight: 700;
-      text-align: left;
+      font-weight: var(--ref-font-weight);
+      font-style: var(--ref-font-style, normal);
+      color: var(--ref-font-color);
+      text-align: var(--ref-text-align, var(--text-align));
       margin-top: 12px;
       width: auto;
       padding: 0;
       background: none;
       border: none;
       border-radius: 0;
+      opacity: var(--ref-opacity);
+      text-transform: var(--ref-text-transform);
+      letter-spacing: var(--ref-letter-spacing);
     }
 
     body[data-mode="lower-third"] #lt-bar #reference.top {
@@ -382,8 +406,13 @@
 
     body[data-mode="lower-third"] #lt-ref-text {
       font-size: var(--ref-font-size);
-      font-weight: 700;
+      font-weight: var(--ref-font-weight);
+      font-style: var(--ref-font-style, normal);
       color: var(--ref-font-color);
+      text-align: var(--ref-text-align, var(--text-align));
+      opacity: var(--ref-opacity);
+      text-transform: var(--ref-text-transform);
+      letter-spacing: var(--ref-letter-spacing);
     }
 
     #bar-background-video {
@@ -579,20 +608,20 @@
       const BAR_LINE_HEIGHT_MIN = 1.2;
 
       const SIZE_PRESETS = {
-        'very-small': { fontSize: 24, refFontSize: 14, lineHeight: 1.4 },
-        'small': { fontSize: 30, refFontSize: 16, lineHeight: 1.45 },
-        'medium': { fontSize: 36, refFontSize: 18, lineHeight: 1.5 },
-        'large': { fontSize: 42, refFontSize: 20, lineHeight: 1.55 },
-        'very-large': { fontSize: 52, refFontSize: 24, lineHeight: 1.6 },
-        'huge': { fontSize: 64, refFontSize: 28, lineHeight: 1.65 },
-        'massive': { fontSize: 76, refFontSize: 32, lineHeight: 1.7 },
+        'smallest': { fontSize: 24, refFontSize: 13, lineHeight: 1.25 },
+        'smaller': { fontSize: 28, refFontSize: 14, lineHeight: 1.26 },
+        'small': { fontSize: 32, refFontSize: 16, lineHeight: 1.27 },
+        'medium': { fontSize: 36, refFontSize: 18, lineHeight: 1.28 },
+        'big': { fontSize: 42, refFontSize: 20, lineHeight: 1.29 },
+        'bigger': { fontSize: 48, refFontSize: 22, lineHeight: 1.3 },
+        'biggest': { fontSize: 56, refFontSize: 26, lineHeight: 1.32 },
       };
       const WIDTH_PRESETS = {
-        'narrow': { maxWidth: 1000, hMargin: 460 },
-        'compact': { maxWidth: 1200, hMargin: 360 },
-        'medium': { maxWidth: 1440, hMargin: 240 },
-        'wide': { maxWidth: 1680, hMargin: 120 },
-        'wider': { maxWidth: 1800, hMargin: 60 },
+        'sm': { maxWidth: 1000, hMargin: 460 },
+        'md': { maxWidth: 1200, hMargin: 360 },
+        'lg': { maxWidth: 1440, hMargin: 240 },
+        'xl': { maxWidth: 1680, hMargin: 120 },
+        'xxl': { maxWidth: 1800, hMargin: 60 },
         'full': { maxWidth: 1920, hMargin: 0 },
       };
 
@@ -665,6 +694,19 @@
         if (n <= 100) return '100'; if (n <= 200) return '200'; if (n <= 300) return '300';
         if (n <= 400) return '400'; if (n <= 500) return '500'; if (n <= 600) return '600';
         if (n <= 700) return '700'; if (n <= 800) return '800'; return '900';
+      }
+
+      function mapFontWeight(w) {
+        if (typeof w === 'number') return String(Math.min(900, Math.max(100, Math.round(w))));
+        if (!w) return '400';
+        var m = { 'thin': '100', 'extralight': '200', 'light': '300', 'regular': '400', 'normal': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800', 'black': '900' };
+        return m[w.toLowerCase()] || '400';
+      }
+
+      function mapTextTransform(t) {
+        if (!t || t === 'none') return 'none';
+        var m = { 'uppercase': 'uppercase', 'upper': 'uppercase', 'lowercase': 'lowercase', 'lower': 'lowercase', 'capitalize': 'capitalize', 'title': 'capitalize' };
+        return m[t.toLowerCase()] || 'none';
       }
 
       function ensureCmgSansFont() {
@@ -744,16 +786,19 @@
       function setMode(newMode) {
         if (newMode === currentMode) return;
         currentMode = newMode;
-        body.setAttribute('data-mode', newMode);
+        body.dataset.mode = newMode;
         if (newMode === 'lower-third') {
+          if (ltBar.parentElement !== overlay) {
+            overlay.appendChild(ltBar);
+          }
           ltBar.insertBefore(verseContainer, ltRefText);
-          overlay.style.display = 'none';
+          overlay.style.display = '';
           compareLayout.classList.remove('is-visible');
           backgroundShade.style.display = 'none';
           ltBar.style.display = '';
           overlay.classList.remove('hidden');
         } else {
-          overlay.insertBefore(verseContainer, null);
+          overlay.insertBefore(verseContainer, ltBar.parentElement === overlay ? ltBar : null);
           overlay.style.display = '';
           backgroundShade.style.display = '';
           ltBar.style.display = 'none';
@@ -835,52 +880,6 @@
         if (document.fonts?.ready) { document.fonts.ready.then(() => { requestAnimationFrame(() => { if (currentMode === 'fullscreen') { if (compareLayout?.classList.contains('is-visible')) autoScaleCompareContent(); else autoScaleContent(); } }); }).catch(() => { }); }
       }
 
-      /* ═══ LOWER-THIRD: Auto-scaling (shrink + grow) ═══ */
-      function isLowerThirdOverflowing() {
-        if (!ltBar) return false;
-        const sa = resolveSafeArea(), vw = document.body?.clientWidth || 1920, vh = document.body?.clientHeight || 1080;
-        const aw = Math.max(320, vw - sa * 2), ah = Math.max(120, Math.min(barMaxHeight, vh - sa * 2));
-        return isOverflowing(ltBar, aw, ah) || isOverflowing(verseText, verseText.clientWidth || aw, ah) || (reference.style.display !== 'none' && isOverflowing(reference, reference.clientWidth || aw, ah));
-      }
-
-      function autoScaleFont() {
-        if (!ltBar) return;
-        let sz = baseFontSize, rs = Math.max(REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
-        let pd = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding));
-        let lh = Math.max(BAR_LINE_HEIGHT_MIN, Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.5);
-        let sp = 12;
-        const ratio = baseFontSize > 0 ? (baseRefFontSize / baseFontSize) : 0.5;
-        const apply = () => {
-          verseText.style.fontSize = sz + 'px'; reference.style.fontSize = rs + 'px';
-          verseText.style.lineHeight = String(lh);
-          ltBar.style.padding = pd + 'px calc(' + pd + 'px + 20px)';
-          reference.style.marginTop = reference.classList.contains('top') ? '0px' : sp + 'px';
-          reference.style.marginBottom = reference.classList.contains('top') ? sp + 'px' : '0px';
-        };
-        apply(); let g = 0;
-        while (isLowerThirdOverflowing() && (sz > FONT_SIZE_MIN || rs > REF_FONT_SIZE_MIN || pd > BAR_PADDING_MIN || lh > BAR_LINE_HEIGHT_MIN || sp > 6) && g < 240) {
-          if (sz > FONT_SIZE_MIN) sz--; rs = Math.max(REF_FONT_SIZE_MIN, Math.round(sz * ratio));
-          if (isLowerThirdOverflowing() && pd > BAR_PADDING_MIN) pd = Math.max(BAR_PADDING_MIN, pd - 1);
-          if (isLowerThirdOverflowing() && lh > BAR_LINE_HEIGHT_MIN) lh = Math.max(BAR_LINE_HEIGHT_MIN, +((lh - 0.02).toFixed(2)));
-          if (isLowerThirdOverflowing() && sp > 6) sp = Math.max(6, sp - 1);
-          apply(); g++;
-        }
-        // Phase 2: GROW
-        const minH = Math.max(0, Number(getComputedStyle(root).getPropertyValue('--lt-min-height')) || 0);
-        const vh = window.innerHeight || 1080, sa = parseInt(getComputedStyle(root).getPropertyValue('--safe-area')) || 0;
-        const eff = Math.min(barMaxHeight, vh - sa * 2), gt = Math.max(minH, Math.round(eff * 0.55)), mf = Math.round(baseFontSize * 1.5);
-        if (ltBar.scrollHeight < gt && sz < mf) {
-          g = 0; while (ltBar.scrollHeight < gt && sz < mf && g < 200) { sz += 2; rs = Math.max(REF_FONT_SIZE_MIN, Math.round(sz * ratio)); pd = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding * (sz / baseFontSize))); lh = Math.max(BAR_LINE_HEIGHT_MIN, Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.5); verseText.style.fontSize = sz + 'px'; reference.style.fontSize = rs + 'px'; verseText.style.lineHeight = String(lh); ltBar.style.padding = pd + 'px calc(' + pd + 'px + 20px)'; g++; }
-          if (ltBar.scrollHeight > gt && sz > baseFontSize) { sz -= 2; rs = Math.max(REF_FONT_SIZE_MIN, Math.round(sz * ratio)); pd = Math.max(BAR_PADDING_MIN, Math.round(baseBarPadding * (sz / baseFontSize))); verseText.style.fontSize = sz + 'px'; reference.style.fontSize = rs + 'px'; ltBar.style.padding = pd + 'px calc(' + pd + 'px + 20px)'; }
-        }
-      }
-
-      function scheduleAutoScaleFont() {
-        if (fitRafId) cancelAnimationFrame(fitRafId);
-        fitRafId = requestAnimationFrame(() => { fitRafId = 0; autoScaleFont(); });
-        if (document.fonts?.ready) { document.fonts.ready.then(() => requestAnimationFrame(() => autoScaleFont())).catch(() => { }); }
-      }
-
       /* ═══ ANIMATIONS ═══ */
       function getAnimTarget() { return currentMode === 'lower-third' ? ltBar : verseContainer; }
       function clearEntranceAnimationClasses() {
@@ -910,21 +909,26 @@
       /* ═══ THEME: Shared base ═══ */
       function applyThemeBase(s) {
         ensureCmgSansFont();
-        const bs = Number(s.fontSize || 48); baseFontSize = bs; baseRefFontSize = Math.max(14, Math.round(bs * 0.5));
+        const bs = Number(s.fontSize || 48); baseFontSize = bs; baseRefFontSize = Number(s.refFontSize) || Math.max(14, Math.round(bs * 0.5));
         root.setProperty('--font-size', baseFontSize + 'px');
+        root.setProperty('--font-color', s.fontColor || '#ffffff');
+        root.setProperty('--font-weight', mapFontWeight(s.fontWeight));
+        root.setProperty('--font-style', s.fontStyle === 'italic' ? 'italic' : 'normal');
         root.setProperty('--line-height', String(s.lineHeight || 1.6));
+        root.setProperty('--letter-spacing', (s.letterSpacing || 0) + 'px');
         root.setProperty('--text-align', s.textAlign || 'center');
         root.setProperty('--text-shadow', s.textShadow || 'none');
         root.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
         root.setProperty('--outline-color', s.textOutline ? (s.textOutlineColor || '#000') : 'transparent');
         root.setProperty('--ref-font-size', baseRefFontSize + 'px');
-        root.setProperty('--ref-font-weight', toCssFontWeight(s.refFontWeight, '400'));
+        root.setProperty('--ref-font-weight', mapFontWeight(s.refFontWeight));
+        root.setProperty('--ref-font-style', 'normal');
         root.setProperty('--ref-font-color', s.refFontColor || '#fff');
-        root.setProperty('--ref-text-transform', s.refTextTransform || 'none');
+        root.setProperty('--ref-text-transform', mapTextTransform(s.refTextTransform));
         root.setProperty('--ref-letter-spacing', (s.refLetterSpacing || 0) + 'px');
         root.setProperty('--ref-opacity', String(s.refOpacity ?? 1));
         root.setProperty('--ref-spacing', (s.refSpacing ?? 24) + 'px');
-        if (s.refTextAlign && s.refTextAlign !== 'match') root.setProperty('--ref-text-align', s.refTextAlign); else root.removeProperty('--ref-text-align');
+        if (s.refTextAlign && s.refTextAlign !== 'match') root.setProperty('--ref-text-align', s.refTextAlign); else root.setProperty('--ref-text-align', s.textAlign || 'center');
 
         const rbe = s.referenceBackgroundEnabled === true, rbc = s.referenceBackgroundColor || '#F4D17B', rbs = s.referenceBackgroundStyle || 'solid', rbr = Number(s.referenceBackgroundRadius ?? 12);
         if (rbe) {
@@ -934,7 +938,7 @@
           else if (rbs === 'outline') { root.setProperty('--ref-bg-color', 'transparent'); root.setProperty('--ref-bg-padding', '5px 13px'); root.setProperty('--ref-bg-radius', rbr + 'px'); root.setProperty('--ref-bg-border', '2px solid ' + rbc); root.setProperty('--ref-font-color', rbc); }
         } else { root.setProperty('--ref-width', '100%'); root.setProperty('--ref-bg-color', 'transparent'); root.setProperty('--ref-bg-padding', '0'); root.setProperty('--ref-bg-radius', '0'); root.setProperty('--ref-bg-border', 'none'); }
 
-        root.setProperty('--text-transform', s.textTransform || 'none');
+        root.setProperty('--text-transform', mapTextTransform(s.textTransform));
         const ead = Math.max(95, Math.min(170, Math.round((s.animationDuration || 400) * 0.38)));
         root.setProperty('--anim-duration', ead + 'ms');
         root.setProperty('--bg-enter-duration', Math.max(70, Math.round(ead * 0.42)) + 'ms');
@@ -963,6 +967,15 @@
         basePadding = Number(s.padding || 60); root.setProperty('--padding', basePadding + 'px');
         root.setProperty('--safe-area', (s.safeArea || 40) + 'px');
         if (s.refPosition === 'top') reference.classList.add('top'); else reference.classList.remove('top');
+        root.dataset.refBgEnabled = s.referenceBackgroundEnabled === true ? 'true' : 'false';
+
+        console.log('[BibleOverlay] fullscreen css vars', {
+          fontColor: root.style.getPropertyValue('--font-color'),
+          fontWeight: root.style.getPropertyValue('--font-weight'),
+          fontStyle: root.style.getPropertyValue('--font-style'),
+          refColor: root.style.getPropertyValue('--ref-font-color'),
+          refWeight: root.style.getPropertyValue('--ref-font-weight'),
+        });
 
         // Background with crossfade
         const bgVideoUrl = String(s.backgroundVideo || '').trim(), bgOp = String(s.backgroundOpacity ?? 1);
@@ -1002,20 +1015,19 @@
       /* ═══ THEME: Lower-third ═══ */
       function applyThemeLowerThird(s) {
         applyThemeBase(s);
-        baseBarPadding = Number(s.padding || 28); root.setProperty('--safe-area', (s.safeArea || 40) + 'px');
-        const sp = s.lowerThirdSizePreset || 'medium', preset = SIZE_PRESETS[sp] || SIZE_PRESETS['medium'];
-        if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.setProperty('--font-size', baseFontSize + 'px'); root.setProperty('--ref-font-size', baseRefFontSize + 'px'); root.setProperty('--line-height', String(preset.lineHeight)); }
-        const wp2 = s.lowerThirdWidthPreset || 'wide', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['wide'];
+        baseBarPadding = Number(s.padding || 18); root.setProperty('--safe-area', (s.safeArea || 40) + 'px');
+        const sp = s.lowerThirdSize || 'medium', preset = SIZE_PRESETS[sp] || SIZE_PRESETS['medium'];
+        if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.setProperty('--font-size', baseFontSize + 'px'); root.setProperty('--ref-font-size', baseRefFontSize + 'px'); }
+        root.setProperty('--line-height', String(s.lineHeight || preset.lineHeight));
+        root.setProperty('--ref-spacing', (s.refSpacing ?? 16) + 'px');
+        const wp2 = s.lowerThirdWidthPreset || 'md', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['md'];
         root.setProperty('--lt-max-width', (s.lowerThirdMaxWidth || wpr.maxWidth) + 'px');
         root.setProperty('--lt-h-margin', (s.lowerThirdHMargin ?? wpr.hMargin) + 'px');
         barMaxHeight = Math.max(120, Math.min(900, Number(s.lowerThirdBarMaxHeight) || 600));
         root.setProperty('--lt-max-height', barMaxHeight + 'px');
         root.setProperty('--lt-min-height', (s.lowerThirdBarMinHeight || 0) + 'px');
-        root.setProperty('--lt-card-padding', s.lowerThirdCardPadding || '28px 48px');
+        root.setProperty('--lt-card-padding', s.lowerThirdCardPadding || `${baseBarPadding}px`);
         root.setProperty('--lt-card-radius', (s.lowerThirdCardRadius || 18) + 'px');
-        const pos = s.lowerThirdPosition || 'bottom';
-        root.setProperty('--lt-v-top', (s.lowerThirdVTop ?? 60) + 'px'); root.setProperty('--lt-v-bottom', (s.lowerThirdVBottom ?? 60) + 'px');
-        if (pos === 'top') { overlay.classList.add('pos-top'); overlay.classList.remove('pos-bottom'); } else { overlay.classList.add('pos-bottom'); overlay.classList.remove('pos-top'); }
         const bb = s.boxBackground || 'rgba(0,0,0,0.65)', bo = s.boxOpacity ?? 1; let fbb = bb;
         if (bo < 1 && bb.startsWith('rgba')) fbb = bb.replace(/[\d.]+\)$/, bo + ')'); else if (bo < 1 && bb.startsWith('rgb(')) fbb = bb.replace('rgb(', 'rgba(').replace(')', ',' + bo + ')');
         root.setProperty('--box-background', fbb);
@@ -1032,22 +1044,50 @@
       }
 
       /* ═══ SINGLE RENDERER ═══ */
+      function hasRenderableSlide(data) {
+        return Boolean(data && data.slide && data.blanked !== true);
+      }
+
       function processOverlayUpdate(data) {
-        if (!data) return; if (data.timestamp && data.timestamp <= lastTimestamp) return; lastTimestamp = data.timestamp || 0;
+        if (!data) return;
+        const incomingTs = Number(data.timestamp) || 0;
+        const incomingHasSlide = hasRenderableSlide(data);
+        const currentHasSlide = hasRenderableSlide(currentOverlayData);
+        if (incomingTs && incomingTs <= lastTimestamp && !(incomingHasSlide && !currentHasSlide)) return;
+        lastTimestamp = Math.max(lastTimestamp, incomingTs);
         currentOverlayData = data;
-        if (data.displayMode && data.displayMode !== currentMode) setMode(data.displayMode);
+        if (data.mode && data.mode !== currentMode) setMode(data.mode);
         if (currentMode === 'lower-third') processSlideLowerThird(data); else processSlideFullscreen(data);
       }
 
       function processSlideFullscreen(data) {
         if (!data.slide) { bgClearToken++; overlay.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
         bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId, isSame = sl.id === currentSlideId && !isNew; currentSlideId = sl.id;
-        if (data.theme) applyTheme(data.theme);
         if (data.blanked) { overlay.classList.add('blank'); return; } else overlay.classList.remove('blank');
         const cc = Array.isArray(sl.columns) ? sl.columns.slice(0, 2) : [], isCL = sl.layout === 'compare' && cc.length === 2;
-        if (isCL) { verseContainer.style.display = 'none'; compareLayout.classList.add('is-visible'); const [l, r] = cc; compareReferenceLeft.textContent = String(l.reference || '').trim(); compareReferenceRight.textContent = String(r.reference || '').trim(); compareTranslationLeft.textContent = String(l.translation || '').trim(); compareTranslationRight.textContent = String(r.translation || '').trim(); compareTextLeft.innerHTML = safeSupText(l.text); compareTextRight.innerHTML = safeSupText(r.text); autoScaleCompareContent(); }
-        else { compareLayout.classList.remove('is-visible'); verseContainer.style.display = 'flex'; verseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; reference.textContent = rt; reference.style.display = rt ? 'block' : 'none'; autoScaleContent(); scheduleContentFit(); }
         overlay.classList.remove('hidden');
+        if (isCL) {
+          verseContainer.style.display = 'none';
+          compareLayout.classList.add('is-visible');
+          const [l, r] = cc;
+          compareReferenceLeft.textContent = String(l.reference || '').trim();
+          compareReferenceRight.textContent = String(r.reference || '').trim();
+          compareTranslationLeft.textContent = String(l.translation || '').trim();
+          compareTranslationRight.textContent = String(r.translation || '').trim();
+          compareTextLeft.innerHTML = safeSupText(l.text);
+          compareTextRight.innerHTML = safeSupText(r.text);
+        }
+        else {
+          compareLayout.classList.remove('is-visible');
+          verseContainer.style.display = 'flex';
+          verseText.innerHTML = safeSupText(sl.text);
+          const rt = typeof sl.reference === 'string' ? sl.reference.trim() : '';
+          reference.textContent = rt;
+          reference.style.display = rt ? 'block' : 'none';
+        }
+        try { applyTheme(data.theme || {}); } catch (error) { console.error('mce-bible-overlay fullscreen theme error', error); }
+        if (isCL) autoScaleCompareContent();
+        else { autoScaleContent(); scheduleContentFit(); }
         const anim = data.theme?.animation || 'fade'; lastAnimation = anim;
         if (isNew) { if (!hasShownOnce) { hasShownOnce = true; runEntranceAnimation(anim); } }
         else if (isSame && anim !== 'none' && hasShownOnce) { clearEntranceAnimationClasses(); void verseContainer.offsetWidth; const ed = Math.max(95, Math.min(170, Math.round((data.theme?.animationDuration || 400) * 0.38))); const el = Date.now() % ed, d = -el; if (anim === 'fade') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-fade-enter'); } else if (anim === 'slide-up') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-slide-up-enter'); } else if (anim === 'slide-left') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-slide-left-enter'); } else if (anim === 'scale-in') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-scale-in-enter'); } setTimeout(() => { verseContainer.style.animationDelay = ''; }, ed + 50); }
@@ -1056,21 +1096,20 @@
       function processSlideLowerThird(data) {
         if (data.action === 'animate-out') { overlay.classList.remove('hidden'); overlay.classList.add('blank'); return new Promise((r) => { _animateOutResolve = r; }); }
         if (!data.slide) { bgClearToken++; overlay.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
-        bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId, isSame = sl.id === currentSlideId && !isNew; currentSlideId = sl.id;
-        if (data.theme) applyTheme(data.theme);
+        bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId; currentSlideId = sl.id;
         if (data.blanked) { overlay.classList.add('blank'); return; } else overlay.classList.remove('blank');
         overlay.classList.remove('hidden');
         verseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; reference.style.display = rt ? 'block' : 'none';
-        scheduleAutoScaleFont();
+        try { applyTheme(data.theme || {}); } catch (error) { console.error('mce-bible-overlay lower-third theme error', error); }
         const anim = data.theme?.animation || 'slide-up'; lastAnimation = anim;
-        if (isNew) { if (!hasShownOnce) { hasShownOnce = true; runEntranceAnimation(anim); } }
-        else if (isSame && anim !== 'none' && hasShownOnce && !contentFadeLock) { clearEntranceAnimationClasses(); void ltBar.offsetWidth; const ed = Math.max(95, Math.min(170, Math.round((data.theme?.animationDuration || 400) * 0.38))); const el = Date.now() % ed, d = -el; if (anim === 'fade') { ltBar.style.animationDelay = d + 'ms'; ltBar.classList.add('anim-fade-enter'); } else if (anim === 'slide-up') { ltBar.style.animationDelay = d + 'ms'; ltBar.classList.add('anim-slide-up-enter'); } else if (anim === 'slide-left') { ltBar.style.animationDelay = d + 'ms'; ltBar.classList.add('anim-slide-left-enter'); } else if (anim === 'scale-in') { ltBar.style.animationDelay = d + 'ms'; ltBar.classList.add('anim-scale-in-enter'); } setTimeout(() => { ltBar.style.animationDelay = ''; }, ed + 50); }
+        if (isNew && !hasShownOnce) { hasShownOnce = true; runEntranceAnimation(anim); }
       }
 
       /* ═══ EVENT-DRIVEN UPDATE PIPELINE ═══ */
       function readFromCssVar() { try { const raw = getComputedStyle(root).getPropertyValue('--overlay-data').trim(); if (!raw || raw === lastCssOverlayData) return false; lastCssOverlayData = raw; const n = raw.replace(/^['"]|['"]$/g, ''); if (!n) return false; processOverlayUpdate(JSON.parse(decodeURIComponent(n))); return true; } catch { } return false; }
       function readModeFromCssVar() { try { const raw = getComputedStyle(root).getPropertyValue('--display-mode').trim().replace(/^['"]|['"]$/g, ''); if (raw === 'lower-third' || raw === 'fullscreen') { if (raw !== currentMode) setMode(raw); } } catch { } }
       function readFromUrlHash() { try { const h = window.location.hash; if (h && h.startsWith('#data=')) { processOverlayUpdate(JSON.parse(decodeURIComponent(h.slice(6)))); return true; } } catch { } return false; }
+      function readFromUrlSearch() { try { const raw = new URLSearchParams(window.location.search).get('overlayData'); if (raw) { processOverlayUpdate(JSON.parse(decodeURIComponent(raw))); return true; } } catch { } return false; }
       function readFromLocalStorage() { try { const raw = localStorage.getItem(_storageKey); if (raw) { processOverlayUpdate(JSON.parse(raw)); return true; } } catch { } return false; }
 
       const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
@@ -1084,19 +1123,27 @@
       const _observer = new MutationObserver(() => { readModeFromCssVar(); readFromCssVar(); });
       _observer.observe(root, { attributes: true, attributeFilter: ['style'] });
 
-      if (window.ResizeObserver) { const ro = new ResizeObserver(() => { if (currentMode === 'lower-third') scheduleAutoScaleFont(); else scheduleContentFit(); }); ro.observe(document.body); ro.observe(verseContainer); ro.observe(currentMode === 'lower-third' ? ltBar : compareLayout); }
+      if (window.ResizeObserver) { const ro = new ResizeObserver(() => { scheduleContentFit(); }); ro.observe(document.body); ro.observe(verseContainer); ro.observe(compareLayout); }
 
       /* ═══ INITIAL ═══ */
       ltBar.style.display = 'none';
+      readFromUrlHash();
+      readFromUrlSearch();
+      readFromLocalStorage();
       readModeFromCssVar();
-      readFromCssVar() || readFromUrlHash() || readFromLocalStorage();
+      // CSS --overlay-data may not be injected by OBS yet — retry with backoff
+      (function retryReadFromCssVar(attempts, delay) {
+        if (!readFromCssVar() && attempts > 0) {
+          setTimeout(function () { retryReadFromCssVar(attempts - 1, Math.round(delay * 1.5)); }, delay);
+        }
+      })(5, 50);
 
       /* ═══ POLLING — detect CSS variable updates from OBS SetInputSettings ═══
          OBS injects CSS via a <style> element (obs-cssoverride), NOT via the
          style attribute on <html>. The MutationObserver above only fires for
          style attribute changes, so CSS-only SetInputSettings calls are
          invisible to it. A lightweight poll bridges that gap. */
-      setInterval(() => { readModeFromCssVar(); readFromCssVar(); }, 150);
+      setInterval(() => { readFromUrlHash(); readFromUrlSearch(); readFromLocalStorage(); readModeFromCssVar(); readFromCssVar(); }, 150);
     })();
   </script>
 </body>

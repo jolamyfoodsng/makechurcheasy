@@ -169,7 +169,7 @@ type HmacSha256 = Hmac<Sha256>;
 
 /// True if the directory contains the overlay HTML entrypoint(s).
 fn has_overlay_assets(dir: &std::path::Path) -> bool {
-    dir.join("bible-overlay-fullscreen.html").is_file()
+    dir.join("mce-bible-overlay.html").is_file()
 }
 
 /// Resolve where bundled overlay HTML files were placed.

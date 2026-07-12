@@ -230,14 +230,16 @@ export const LOWER_THIRD_SIZE_PRESETS: Record<LowerThirdSize, {
   fontSize: number;   // px — base font size
   refFontSize: number;// px — reference label font size
   safeArea: number;   // px — margin from screen edges
+  lineHeight: number; // line-height multiplier
+  refSpacing: number; // px — gap between verse and reference
 }> = {
-  smallest: { maxHeight: 180, padding: 14, fontSize: 24, refFontSize: 13, safeArea: 30 },
-  smaller: { maxHeight: 240, padding: 20, fontSize: 28, refFontSize: 14, safeArea: 35 },
-  small: { maxHeight: 320, padding: 24, fontSize: 32, refFontSize: 16, safeArea: 38 },
-  medium: { maxHeight: 400, padding: 30, fontSize: 36, refFontSize: 18, safeArea: 40 },
-  big: { maxHeight: 486, padding: 36, fontSize: 42, refFontSize: 20, safeArea: 44 },
-  bigger: { maxHeight: 560, padding: 42, fontSize: 48, refFontSize: 22, safeArea: 48 },
-  biggest: { maxHeight: 650, padding: 50, fontSize: 56, refFontSize: 26, safeArea: 52 },
+  smallest: { maxHeight: 180, padding: 14, fontSize: 24, refFontSize: 13, safeArea: 30, lineHeight: 1.25, refSpacing: 10 },
+  smaller: { maxHeight: 240, padding: 20, fontSize: 28, refFontSize: 14, safeArea: 35, lineHeight: 1.26, refSpacing: 12 },
+  small: { maxHeight: 320, padding: 24, fontSize: 32, refFontSize: 16, safeArea: 38, lineHeight: 1.27, refSpacing: 14 },
+  medium: { maxHeight: 400, padding: 30, fontSize: 36, refFontSize: 18, safeArea: 40, lineHeight: 1.28, refSpacing: 16 },
+  big: { maxHeight: 486, padding: 36, fontSize: 42, refFontSize: 20, safeArea: 44, lineHeight: 1.29, refSpacing: 18 },
+  bigger: { maxHeight: 560, padding: 42, fontSize: 48, refFontSize: 22, safeArea: 48, lineHeight: 1.3, refSpacing: 20 },
+  biggest: { maxHeight: 650, padding: 50, fontSize: 56, refFontSize: 26, safeArea: 52, lineHeight: 1.32, refSpacing: 24 },
 };
 
 export interface BibleThemeSettings {
@@ -376,7 +378,7 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   lowerThirdSize: "medium",
   lowerThirdPosition: "left",
   lowerThirdHeight: 0,
-  lowerThirdWidthPreset: "full",
+  lowerThirdWidthPreset: "md",
   lowerThirdOffsetX: 0,
   lowerThirdCaptionPosition: "bottom",
 
