@@ -105,7 +105,6 @@ export interface LicenseGuardState {
 
 const STORAGE_KEY = "ocs-license-cache";
 const DOWNGRADE_NOTIFIED_KEY = "ocs-downgrade-notified";
-const DEFAULT_MAX_OFFLINE_DAYS = 14;
 const VISIBILITY_REVERIFY_MIN_INTERVAL_MS = 15 * 60 * 1000;
 
 const FEATURE_ALIAS_MAP: Record<string, FeatureKey> = {
@@ -320,23 +319,7 @@ function evaluateLicense(payload: LicensePayload): LockReason {
   return null;
 }
 
-/**
- * Evaluate offline validity based on the cached payload.
- * Returns "internet_required" if offline window expired, null otherwise.
- *
- * Uses cachedAt (local wall-clock when cache was written) plus the server
- * time from the payload to avoid relying solely on the client clock for
- * the offline-day calculation.
- */
-function evaluateOfflineValidity(cached: LicenseCache): LockReason {
-  const elapsed = Date.now() - cached.cachedAt;
-  const daysOffline = Math.floor(elapsed / (1000 * 60 * 60 * 24));
-  const maxOfflineDays = cached.payload.internetVerificationDays || DEFAULT_MAX_OFFLINE_DAYS;
-
-  if (daysOffline >= maxOfflineDays) {
-    return "internet_required";
-  }
-
+function evaluateOfflineValidity(_cached: LicenseCache): LockReason {
   return null;
 }
 
@@ -491,7 +474,7 @@ export function subscribe(listener: (state: LicenseGuardState) => void): Unsubsc
  *
  * Returns true if verification succeeded, false otherwise.
  */
-export async function verify(allowOffline: boolean = false): Promise<boolean> {
+export async function verify(): Promise<boolean> {
   if (_verifying) return false;
   _verifying = true;
   emit();
@@ -500,23 +483,15 @@ export async function verify(allowOffline: boolean = false): Promise<boolean> {
     const online = await checkInternet();
 
     if (!online) {
-      if (allowOffline) {
-        // Offline but within grace period — keep existing cache
-        if (_cache) {
-          const offlineReason = evaluateOfflineValidity(_cache);
-          _lockReason = offlineReason;
-          emit();
-          return _lockReason === null;
-        }
-        // No cache at all — must be online for first verification
-        _lockReason = "internet_required";
-        emit();
-        return false;
+      // Offline — never lock. Use cached license if available, otherwise
+      // allow the app to proceed unlocked (offline usage is always permitted).
+      if (_cache) {
+        _lockReason = evaluateOfflineValidity(_cache);
+      } else {
+        _lockReason = null;
       }
-      // Not allowing offline — lock immediately
-      _lockReason = "internet_required";
       emit();
-      return false;
+      return _lockReason === null;
     }
 
     // Online — fetch from backend
@@ -561,7 +536,7 @@ export async function verify(allowOffline: boolean = false): Promise<boolean> {
  * Retry verification (called from lock screen "Retry" button).
  */
 export async function retryVerification(): Promise<boolean> {
-  return verify(false);
+  return verify();
 }
 
 /**
@@ -572,7 +547,7 @@ export async function retryVerification(): Promise<boolean> {
 export async function reverifyOnAuth(): Promise<boolean> {
   // Reset initialized flag so initLicenseGuard can run again if needed
   // but the main purpose here is to force a fresh backend check.
-  return verify(false);
+  return verify();
 }
 
 // ── Initialization ───────────────────────────────────────────────────────────
@@ -603,17 +578,10 @@ export async function initLicenseGuard(): Promise<void> {
 
   if (isOnline) {
     // Online — verify with backend
-    await verify(true);
+    await verify();
   } else {
-    // Offline — check if within grace period
-    if (_cache) {
-      const offlineReason = evaluateOfflineValidity(_cache);
-      _lockReason = offlineReason;
-    } else {
-      // No cache and offline — can't verify, but don't lock
-      // (first launch without internet is handled by AuthGate)
-      _lockReason = null;
-    }
+    // Offline — never lock the app
+    _lockReason = null;
     emit();
   }
 
@@ -635,7 +603,7 @@ function startPeriodicVerification(): void {
   _revalidationTimer = setInterval(async () => {
     const online = await checkInternet();
     if (online) {
-      await verify(true);
+      await verify();
     } else {
       // Check offline validity
       if (_cache) {
@@ -664,7 +632,7 @@ function _onVisibilityChange(): void {
   }
 
   _lastVisibilityVerificationAt = now;
-  void verify(true);
+  void verify();
 }
 
 /**
