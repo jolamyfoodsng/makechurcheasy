@@ -77,7 +77,7 @@ async function syncUsageToServer(): Promise<void> {
     };
 
     // Determine API base URL
-    const apiBase = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+    const apiBase = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
     const res = await fetch(`${apiBase}/api/user/usage`, {
       method: "POST",

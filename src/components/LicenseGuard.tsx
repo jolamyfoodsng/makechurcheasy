@@ -26,7 +26,7 @@ import {
 } from "@/services/licenseGuard";
 import Icon from "./Icon";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
 interface LicenseGuardProps {
   children: ReactNode;

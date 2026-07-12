@@ -46,7 +46,7 @@ const TOTAL_STEPS = 6;
 const YOUTUBE_URL = "https://www.youtube.com/watch?v=08UjSYtjmLU";
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.makechurcheasy.creatorstudioslabs.stream";
+  "https://api.creatorstudioslabs.stream";
 
 const STEP_NAMES = [
   "Welcome",

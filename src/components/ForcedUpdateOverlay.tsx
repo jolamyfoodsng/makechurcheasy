@@ -143,7 +143,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
   const handleSupport = useCallback(() => {
     const base =
       import.meta.env.VITE_AUTH_API_URL ||
-      "https://api.makechurcheasy.creatorstudioslabs.stream";
+      "https://api.creatorstudioslabs.stream";
     window.open(`${base}/support`, "_blank", "noopener,noreferrer");
   }, []);
 

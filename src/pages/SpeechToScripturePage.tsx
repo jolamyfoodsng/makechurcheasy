@@ -56,7 +56,7 @@ import { createTranscript, saveTranscript } from "../transcripts/transcriptServi
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.makechurcheasy.creatorstudioslabs.stream";
+  "https://api.creatorstudioslabs.stream";
 
 // ── Connectivity hook ──
 function useOnlineStatus(): boolean {

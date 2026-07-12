@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 
-const AUTH_API = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+const AUTH_API = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 console.log('AUTH_API :', AUTH_API);
 
 

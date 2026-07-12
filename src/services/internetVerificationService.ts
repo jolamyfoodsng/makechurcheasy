@@ -56,7 +56,7 @@ export type Listener = (state: GracePeriodState) => void;
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.makechurcheasy.creatorstudioslabs.stream";
+  "https://api.creatorstudioslabs.stream";
 
 const SETTINGS_KEY = "ocs-internet-verification-settings";
 const SETTINGS_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes

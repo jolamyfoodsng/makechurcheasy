@@ -15,7 +15,7 @@ import {
  * so the dock can verify locally without needing internet access.
  */
 
-const ONLINE_API = "https://api.makechurcheasy.creatorstudioslabs.stream";
+const ONLINE_API = "https://api.creatorstudioslabs.stream";
 
 /**
  * Check the local overlay server for an active auth session.

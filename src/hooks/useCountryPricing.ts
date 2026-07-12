@@ -43,7 +43,7 @@ export interface CountryPricing {
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.makechurcheasy.creatorstudioslabs.stream";
+  "https://api.creatorstudioslabs.stream";
 
 const CACHE_KEY = "ocs-country-pricing";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes

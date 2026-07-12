@@ -10,7 +10,7 @@ import { getDeviceId } from "../services/authService";
 import "./CountryPicker.css";
 import "./ProfileCompletionModal.css";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
 /** List of required profile fields. Add more fields here in the future. */
 const requiredProfileFields = ["country"];

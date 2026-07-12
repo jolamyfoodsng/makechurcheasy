@@ -893,7 +893,7 @@ function App() {
     setShowTrialModal(false);
     if (user) {
       try {
-        const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+        const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
         const deviceId = getDeviceId();
         await fetch(`${API_BASE}/api/auth/trial-welcome`, {
           method: "POST",

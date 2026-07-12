@@ -16,7 +16,7 @@
 import type { MVSettings, SpeakerProfileSetting } from "../multiview/mvStore";
 import { MV_SETTINGS_UPDATED_EVENT } from "../multiview/mvStore";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
 export interface MinistryData {
   churchName: string;

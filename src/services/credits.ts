@@ -57,7 +57,7 @@ export async function getTRANSLATION_WORDS_PER_CREDIT(): Promise<number> {
 
 const STORAGE_KEY = "ocs-credits-balance";
 const FETCHED_AT_KEY = "ocs-credits-fetched-at";
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 const REMOTE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /** Build headers with device auth for desktop app API calls. */

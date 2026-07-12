@@ -50,7 +50,7 @@
           "url": "http://localhost:4000/*"
         },
         {
-          "url": "https://api.makechurcheasy.creatorstudioslabs.stream/*"
+          "url": "https://api.creatorstudioslabs.stream/*"
         },
         {
           "url": "https://accounts.google.com/*"

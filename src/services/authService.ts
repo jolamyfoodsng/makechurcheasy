@@ -11,7 +11,7 @@ import {
 } from "../lib/subscriptionSourceOfTruth";
 import { requestJsonWithRetry } from "./requestDedup";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
 /** App version sent with every API request for server-side version gating */
 const APP_VERSION: string =

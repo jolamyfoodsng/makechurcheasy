@@ -33,7 +33,7 @@ import { getDeviceId, getDeviceSecret, getSession } from "./authService";
 import { checkEntitlementSync, type FeatureKey } from "./entitlementClient";
 import { normalizePlanId } from "../lib/subscriptionSourceOfTruth";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
