@@ -43,6 +43,14 @@ function notifySongsChanged(): void {
   import("../services/usageSync").then((m) => m.triggerUsageSync()).catch(() => { });
 }
 
+export interface SaveSongOptions {
+  notify?: boolean;
+}
+
+export interface SaveSongsBatchOptions extends SaveSongOptions {
+  onProgress?: (saved: number, total: number) => void;
+}
+
 function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
@@ -135,12 +143,36 @@ export async function getSong(id: string): Promise<Song | undefined> {
 }
 
 /** Create or update a song — auto-injects userId for the current user */
-export async function saveSong(song: Song): Promise<void> {
+export async function saveSong(song: Song, options: SaveSongOptions = {}): Promise<void> {
   const db = await getDb();
   const uid = getCurrentUserId();
   const tagged = uid ? { ...song, userId: uid } : song;
   await db.put("songs", tagged);
-  notifySongsChanged();
+  if (options.notify !== false) {
+    notifySongsChanged();
+  }
+}
+
+/** Create or update many songs in one transaction, then notify once. */
+export async function saveSongsBatch(songs: Song[], options: SaveSongsBatchOptions = {}): Promise<void> {
+  if (songs.length === 0) return;
+
+  const db = await getDb();
+  const uid = getCurrentUserId();
+  const tx = db.transaction("songs", "readwrite");
+
+  for (let i = 0; i < songs.length; i += 1) {
+    const song = songs[i];
+    const tagged = uid ? { ...song, userId: uid } : song;
+    await tx.store.put(tagged);
+    options.onProgress?.(i + 1, songs.length);
+  }
+
+  await tx.done;
+
+  if (options.notify !== false) {
+    notifySongsChanged();
+  }
 }
 
 /** Archive a song by id so it is removed from active views without being deleted */

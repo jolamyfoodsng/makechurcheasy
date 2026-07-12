@@ -46,14 +46,21 @@ function readFromStorage(): MinistryData {
 
     // Resolve speakers: try structured array first, fall back to legacy pastorNames string
     let speakers = Array.isArray(s.pastorSpeakers)
-      ? s.pastorSpeakers.filter((sp) => sp && typeof sp.name === "string" && sp.name.trim())
+      ? s.pastorSpeakers
+        .filter((sp) => sp && typeof sp.name === "string" && sp.name.trim())
+        .map((sp) => ({
+          name: sp.name.trim(),
+          role: (sp.role || "").trim(),
+          imageUrl: (sp.imageUrl || "").trim(),
+          isMain: sp.isMain,
+        }))
       : [];
     if (speakers.length === 0 && typeof s.pastorNames === "string" && s.pastorNames.trim()) {
       speakers = s.pastorNames
         .split(/\r?\n|,/)
         .map((n) => n.trim())
         .filter(Boolean)
-        .map((n) => ({ name: n, role: "" }));
+        .map((n) => ({ name: n, role: "", imageUrl: "", isMain: false }));
     }
 
     const mainSpeaker = speakers.find((sp) => sp.isMain);
@@ -141,6 +148,7 @@ async function fetchFromOverlayServer(): Promise<MinistryData | null> {
           .map((s: SpeakerProfileSetting) => ({
             name: s.name.trim(),
             role: (s.role || "").trim(),
+            imageUrl: (s.imageUrl || "").trim(),
             isMain: s.isMain,
           }));
       }
@@ -194,9 +202,10 @@ async function fetchFromWebApi(): Promise<MinistryData | null> {
     const speakers: SpeakerProfileSetting[] = Array.isArray(profile.speakers)
       ? profile.speakers
         .filter((s: { name?: string }) => s && typeof s.name === "string" && s.name.trim())
-        .map((s: { name: string; role?: string; isMain?: boolean }) => ({
+        .map((s: { name: string; role?: string; imageUrl?: string; isMain?: boolean }) => ({
           name: s.name.trim(),
           role: (s.role || "").trim(),
+          imageUrl: typeof s.imageUrl === "string" ? s.imageUrl.trim() : "",
           isMain: s.isMain,
         }))
       : [];

@@ -437,26 +437,49 @@ export function getLegacyFeatureValue(
 export function findRequiredPlanForLegacyFeature(
   feature: LegacyCompatibleFeatureKey,
 ): CanonicalPlanId {
-  for (const planId of CANONICAL_PLAN_IDS) {
+  const freeValue = getLegacyFeatureValue("free", feature);
+  if (typeof freeValue === "boolean") {
+    for (const planId of CANONICAL_PLAN_IDS) {
+      if (getLegacyFeatureValue(planId, feature) === true) {
+        return planId;
+      }
+    }
+    return "pro";
+  }
+
+  for (const planId of CANONICAL_PLAN_IDS.slice(1)) {
     const value = getLegacyFeatureValue(planId, feature);
-    if (typeof value === "boolean" ? value : value !== 0) {
+    if (typeof value === "number" && (value === -1 || value > freeValue)) {
       return planId;
     }
   }
-  return "pro";
+
+  return freeValue !== 0 ? "free" : "pro";
 }
 
 export function findRequiredPlanForCanonicalFeature(
   feature: CanonicalBooleanEntitlementKey | CanonicalLimitEntitlementKey,
 ): CanonicalPlanId {
   const featureKey = feature as keyof CanonicalPlanEntitlements;
-  for (const planId of CANONICAL_PLAN_IDS) {
+  const freeValue = PLAN_ENTITLEMENTS.free[featureKey] ?? 0;
+
+  if (typeof freeValue === "boolean") {
+    for (const planId of CANONICAL_PLAN_IDS) {
+      if (PLAN_ENTITLEMENTS[planId][featureKey] === true) {
+        return planId;
+      }
+    }
+    return "pro";
+  }
+
+  for (const planId of CANONICAL_PLAN_IDS.slice(1)) {
     const value = PLAN_ENTITLEMENTS[planId][featureKey];
-    if (typeof value === "boolean" ? value : value !== 0) {
+    if (typeof value === "number" && (value === -1 || value > freeValue)) {
       return planId;
     }
   }
-  return "pro";
+
+  return freeValue !== 0 ? "free" : "pro";
 }
 
 function buildTierConfig(

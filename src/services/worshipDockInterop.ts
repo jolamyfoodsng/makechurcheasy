@@ -6,7 +6,7 @@ export interface WorshipDockSongSavePayload {
   artist: string;
   lyrics: string;
   importSourceName?: string;
-  importSourceType?: "manual" | "online";
+  importSourceType?: "manual" | "online" | "document";
   importSourceUrl?: string;
   autoSplit?: boolean;
   linesPerSlide?: number;

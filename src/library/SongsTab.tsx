@@ -70,6 +70,10 @@ function normalizeSongLookupPart(value: string): string {
   return unicodeSearchNormalize(value);
 }
 
+function normalizeCompactSearch(value: string): string {
+  return unicodeStripDiacritics(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function buildSongLookupKeys(title: string, artist: string): string[] {
   const normalizedTitle = normalizeSongLookupPart(title);
   const normalizedArtist = normalizeSongLookupPart(artist);
@@ -193,25 +197,33 @@ export function SongsTab() {
 
     const q = search.trim();
     const qLower = q.toLowerCase();
+    const qCompact = normalizeCompactSearch(q);
     const numMatch = qLower.match(/(\d+)/);
     const searchNumber = numMatch ? numMatch[1] : null;
 
     const scored = languageFiltered
       .map((song) => {
         const title = song.metadata.title.toLowerCase();
-        const searchText = `${song.metadata.title}\n${song.metadata.artist}\n${song.lyrics}`.toLowerCase();
+        const hymnNumber = song.metadata.hymnNumber?.trim() ?? "";
+        const hymnNumberCompact = normalizeCompactSearch(hymnNumber);
+        const hymnLabelCompact = hymnNumberCompact ? `hymn${hymnNumberCompact}` : "";
+        const searchText = `${song.metadata.title}\n${song.metadata.artist}\n${song.lyrics}\n${hymnNumber}\nHymn ${hymnNumber}`.toLowerCase();
         let score = 0;
 
         if (searchNumber) {
           const exactTitleRe = new RegExp(`^hymn\\s+${searchNumber}$`);
           const numDotRe = new RegExp(`^${searchNumber}[.\\s]`);
           const bareNumRe = new RegExp(`^${searchNumber}$`);
-          if (exactTitleRe.test(title)) score += 10000;
+          if (hymnNumberCompact === searchNumber) score += 12000;
+          else if (hymnNumberCompact.includes(searchNumber)) score += 7000;
+          else if (exactTitleRe.test(title)) score += 10000;
           else if (bareNumRe.test(title)) score += 10000;
           else if (numDotRe.test(title)) score += 10000;
           else if (title.includes(`hymn ${searchNumber}`)) score += 5000;
           else if (title.includes(searchNumber)) score += 2000;
         }
+
+        if (score === 0 && hymnLabelCompact && hymnLabelCompact.includes(qCompact)) score += 9000;
 
         if (score === 0 && title.startsWith(qLower)) score += 3000;
         if (score === 0 && title.includes(qLower)) score += 1000;
@@ -436,14 +448,14 @@ export function SongsTab() {
         <div className="lib-toolbar-left">
           <div className="lib-search-wrap">
             {/* <Icon name="search" size={18} className="lib-search-icon" /> */}
-            <input
-              className="lib-search-input"
-              type="text"
-              placeholder="Search songs..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search songs"
-            />
+              <input
+                className="lib-search-input"
+                type="text"
+                placeholder="Search songs or hymn number..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                aria-label="Search songs"
+              />
             {search && (
               <button
                 type="button"
@@ -484,6 +496,15 @@ export function SongsTab() {
             <Icon name="add" size={20} />
             Add Song
           </button>
+          <button
+            type="button"
+            className="lib-add-btn"
+            onClick={handleBulkImport}
+            title="Import DOCX, PDF, or TXT"
+          >
+            <Icon name="upload_file" size={20} />
+            Import File
+          </button>
           <div className="lib-overflow-wrapper" ref={overflowMenuRef}>
             <button
               type="button"
@@ -504,7 +525,7 @@ export function SongsTab() {
                     handleBulkImport();
                   }}>
                   <Icon name="upload_file" size={18} />
-                  <span>Bulk Import</span>
+                  <span>Import DOCX/PDF/TXT</span>
                 </button>
                 <button
                   type="button"
@@ -553,10 +574,16 @@ export function SongsTab() {
             <div className="lib-empty">
               <Icon name="music_note" size={48} style={{ opacity: 0.3 }} />
               <p>No songs found</p>
-              <button type="button" className="lib-add-btn" onClick={() => setShowAddModal(true)} title="Add">
-                <Icon name="add" size={20} />
-                Add Song
-              </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                <button type="button" className="lib-add-btn" onClick={handleAddSong} title="Add">
+                  <Icon name="add" size={20} />
+                  Add Song
+                </button>
+                <button type="button" className="lib-add-btn" onClick={handleBulkImport} title="Import DOCX, PDF, or TXT">
+                  <Icon name="upload_file" size={20} />
+                  Import File
+                </button>
+              </div>
             </div>
           ))}
 
@@ -591,6 +618,9 @@ export function SongsTab() {
                         <div className="lib-song-content">
                           <div className="lib-song-title-row">
                             <h3 className="lib-song-title">{s.metadata.title}</h3>
+                            {s.metadata.hymnNumber && (
+                              <span className="lib-song-artist-badge">Hymn {s.metadata.hymnNumber}</span>
+                            )}
                             {s.metadata.artist && (
                               <span className="lib-song-artist-badge">{s.metadata.artist}</span>
                             )}
@@ -602,6 +632,11 @@ export function SongsTab() {
                             {s.importSourceType === "online" && (
                               <span className="lib-song-imported-badge">
                                 Imported{s.importSourceName ? ` from ${s.importSourceName}` : ""}
+                              </span>
+                            )}
+                            {s.importSourceType === "document" && (
+                              <span className="lib-song-imported-badge">
+                                Smart import{s.importSourceName ? ` · ${s.importSourceName}` : ""}
                               </span>
                             )}
                           </div>

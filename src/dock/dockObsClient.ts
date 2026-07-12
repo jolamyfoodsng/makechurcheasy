@@ -6684,6 +6684,41 @@ class DockObsClient {
     this._slideshowTimers.set(sourceName, timer);
   }
 
+  async addImageSourceToScene(options: {
+    sceneName: string;
+    sourceName: string;
+    filePath: string;
+    fitMode?: "cover" | "contain" | "stretch";
+  }): Promise<void> {
+    const sceneName = options.sceneName.trim();
+    const sourceName = options.sourceName.trim();
+    const filePath = options.filePath.trim();
+
+    if (!sceneName) throw new Error("Scene name is required");
+    if (!sourceName) throw new Error("Source name is required");
+    if (!filePath) throw new Error("Image file path is required");
+
+    if (!(await this.hasObsScene(sceneName))) {
+      await this.call("CreateScene", { sceneName });
+    }
+
+    const sceneItemId = await this._ensureNativeMediaSource(
+      sceneName,
+      sourceName,
+      "image_source",
+      { file: filePath },
+      true,
+    );
+
+    await this.applyMediaFitMode(sceneName, sceneItemId, options.fitMode ?? "cover");
+
+    try {
+      await this.ensureTickerAboveSource(sceneName, sourceName);
+    } catch {
+      // Ignore ticker ordering failures for arbitrary user scenes.
+    }
+  }
+
   /**
    * Stop a running image-slideshow rotation timer.
    */

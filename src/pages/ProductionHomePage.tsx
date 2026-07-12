@@ -1,41 +1,39 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
-  Mic,
-  Images,
-  BookOpen,
-  Music,
-  Monitor,
-  MonitorSmartphone,
-  ExternalLink,
-  ListMusic,
-  Video,
-  History,
   Activity,
-  Image as ImageIcon,
   AlertCircle,
-  Link,
-  Copy,
+  AlertTriangle,
+  ArrowRight,
+  BookOpen,
+  Calendar,
   Check,
-  Info,
-  Sun,
-  Moon,
-  Play,
   ChevronDown,
   ChevronRight,
-  ArrowRight,
-  HelpCircle,
-  RotateCcw,
-  AlertTriangle,
-  Crown,
   Coins,
-  Calendar,
-  Wifi,
+  Copy,
+  Crown,
+  ExternalLink,
+  HelpCircle,
+  History,
+  Image as ImageIcon,
+  Images,
+  Info,
+  Link,
+  ListMusic,
+  Mic,
+  Monitor,
+  MonitorSmartphone,
+  Moon,
+  Music,
   Newspaper,
-  Zap,
+  Play,
+  RotateCcw,
+  Sun,
+  Video
 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
 import DashboardTutorial, {
   isDashboardTutorialCompleted,
@@ -43,24 +41,24 @@ import DashboardTutorial, {
   resetDashboardTutorial,
 } from "./DashboardTutorial";
 
-import { obsService, type ConnectionStatus } from "../services/obsService";
-import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
-import { getInstalledTranslations, getBibleSettings } from "../bible/bibleDb";
-import { getAllSongs } from "../worship/worshipDb";
-import { getAllMedia } from "../library/libraryDb";
-import { useAuth } from "../contexts/AuthContext";
-import { getSettings } from "../multiview/mvStore";
-import { getOverlayBaseUrlSync } from "../services/overlayUrl";
-import { getDeviceId } from "../services/authService";
-import { track } from "../services/analytics";
+import { getBibleSettings, getInstalledTranslations } from "../bible/bibleDb";
 import { TutorialModal } from "../components/TutorialModal";
-import { OnboardingResumeBanner } from "./OnboardingPage";
+import { useAuth } from "../contexts/AuthContext";
 import { useAppTheme } from "../hooks/useAppTheme";
-import { getEffectivePlan, getUserPlan, getUserPlanLimits, isInTrial, getTrialDaysRemaining } from "../services/licenseService";
-import { fetchCreditDetails, getCreditsBalance } from "../services/credits";
-import { getCachedSubscription } from "../services/subscriptionCache";
-import { getPlanConfig, getPlanLabel } from "../services/planConfig";
 import { useCountryPricing } from "../hooks/useCountryPricing";
+import { getAllMedia } from "../library/libraryDb";
+import { getSettings } from "../multiview/mvStore";
+import { track } from "../services/analytics";
+import { getDeviceId } from "../services/authService";
+import { fetchCreditDetails, getCreditsBalance } from "../services/credits";
+import { getEffectivePlan, getTrialDaysRemaining, getUserPlan, getUserPlanLimits, isInTrial } from "../services/licenseService";
+import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
+import { obsService, type ConnectionStatus } from "../services/obsService";
+import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { getPlanConfig, getPlanLabel } from "../services/planConfig";
+import { getCachedSubscription } from "../services/subscriptionCache";
+import { getAllSongs } from "../worship/worshipDb";
+import { OnboardingResumeBanner } from "./OnboardingPage";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -417,138 +415,11 @@ function PlanUpgradeBanner() {
 
 // ── Monthly Usage Widget ────────────────────────────────────────────────────
 
-interface UsageItem {
-  icon: typeof Mic;
-  label: string;
-  used: number;
-  limit: number;
-  color: string;
-}
 
-function MonthlyUsageWidget() {
-  const { t } = useTranslation();
-  const { user } = useAuth();
-  const [items, setItems] = useState<UsageItem[]>([]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const load = async () => {
-      try {
-        const limits = getUserPlanLimits(user);
-        const creditDetails = await fetchCreditDetails();
-        const creditsUsed = creditDetails?.totalConsumed ?? 0;
-        const creditsTotal = creditDetails?.planAllocation ?? 0;
-
-        if (!mounted) return;
-        setItems([
-          {
-            icon: BookOpen,
-            label: t("dashboard.monthlyUsage.translation"),
-            used: 0,
-            limit: limits.translation ? -1 : 0,
-            color: "var(--accent-blue)",
-          },
-          {
-            icon: Zap,
-            label: t("dashboard.monthlyUsage.aiSummary"),
-            used: 0,
-            limit: limits.aiFeatures ? -1 : 0,
-            color: "var(--primary)",
-          },
-          {
-            icon: Mic,
-            label: t("dashboard.monthlyUsage.speechToScripture"),
-            used: 0,
-            limit: limits.speechToScripture ? -1 : 0,
-            color: "var(--success)",
-          },
-          {
-            icon: Coins,
-            label: t("dashboard.monthlyUsage.creditsUsed"),
-            used: creditsUsed,
-            limit: creditsTotal,
-            color: "var(--accent-orange)",
-          },
-        ]);
-      } catch {
-        if (!mounted) return;
-      }
-    };
-
-    load();
-    return () => { mounted = false; };
-  }, [user, t]);
-
-  if (items.length === 0) return null;
-
-  return (
-    <div className="panel usage-widget" data-dt-tutorial="monthly-usage">
-      <h3 className="panel-title">
-        <Activity className="panel-icon" /> {t("dashboard.monthlyUsage.title")}
-      </h3>
-      <div className="usage-grid">
-        {items.map((item) => {
-          const IconComp = item.icon;
-          const isUnlimited = item.limit === -1;
-          const pct = isUnlimited ? 0 : item.limit > 0 ? Math.min((item.used / item.limit) * 100, 100) : 0;
-
-          return (
-            <div key={item.label} className="usage-item">
-              <div className="usage-item-header">
-                <IconComp size={14} style={{ color: item.color }} />
-                <span className="usage-item-label">{item.label}</span>
-              </div>
-              <div className="usage-bar-track">
-                <div
-                  className="usage-bar-fill"
-                  style={{ width: `${pct}%`, backgroundColor: item.color }}
-                />
-              </div>
-              <span className="usage-item-value">
-                {isUnlimited
-                  ? t("dashboard.monthlyUsage.unlimited")
-                  : item.limit > 0
-                    ? `${item.used} / ${item.limit}`
-                    : "—"}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 // ── Remote Presentation Status ─────────────────────────────────────────────
 
-function RemotePresentationStatus() {
-  const { t } = useTranslation();
-  const mockConnected = true;
-  const mockDeviceCount = 2;
 
-  return (
-    <div className="panel remote-panel" data-dt-tutorial="remote-status">
-      <div className="remote-header">
-        <div className="remote-header-left">
-          <Wifi size={18} className="remote-icon" />
-          <h3 className="panel-title" style={{ marginBottom: 0 }}>{t("dashboard.remote.title")}</h3>
-        </div>
-        <span className={`remote-badge ${mockConnected ? "remote-badge--connected" : "remote-badge--disconnected"}`}>
-          {mockConnected ? t("dashboard.remote.connected") : t("dashboard.remote.disconnected")}
-        </span>
-      </div>
-      <div className="remote-body">
-        <p className="remote-detail">
-          {mockConnected
-            ? t("dashboard.remote.devicesActive", { count: mockDeviceCount })
-            : t("dashboard.remote.noDevices")}
-        </p>
-        <p className="remote-hint">{t("dashboard.remote.controlHint")}</p>
-      </div>
-    </div>
-  );
-}
 
 // ── What's New Section ─────────────────────────────────────────────────────
 
@@ -1361,11 +1232,10 @@ export default function ProductionHomePage() {
         onStartVoiceBible={handleToggleVoiceBible}
         onNavigate={handleNavigate}
       />
-      <MonthlyUsageWidget />
       <div data-dt-tutorial="connection-urls">
         <ConnectionUrls obsStatus={obsStatus} />
       </div>
-      <RemotePresentationStatus />
+      {/* <RemotePresentationStatus /> */}
       <div data-dt-tutorial="activity-log">
         <ActivityAndStatus
           activities={activities}

@@ -212,8 +212,7 @@ function scoreHeaderElement(
   el: TextElement,
   prevInColumn: TextElement | null,
   medianFontSize: number,
-  elements: TextElement[],
-  _index: number,
+  columnMinX: number,
 ): number {
   let score = 0;
 
@@ -247,12 +246,8 @@ function scoreHeaderElement(
     score += 30;
   }
 
-  // 5. Left-aligned (x near the left margin of its column)
-  const colElements = elements.filter(
-    (e) => Math.abs(e.x - el.x) < 30 && e.page === el.page,
-  );
-  const minX = Math.min(...colElements.map((e) => e.x));
-  if (el.x <= minX + 5) {
+  // 5. Left-aligned (x near the left margin of its detected column)
+  if (el.x <= columnMinX + 5) {
     score += SCORE_LEFT_ALIGNED;
   }
 
@@ -371,7 +366,8 @@ export function parseLayoutSongs(elements: TextElement[]): LayoutParseResult {
 
     const colIdx = elementToColumn.get(el);
     const prev = colIdx !== undefined ? prevInColumn[colIdx] : null;
-    const score = scoreHeaderElement(el, prev, medianFontSize, ordered, i);
+    const columnMinX = colIdx !== undefined ? columns[colIdx]?.xMin ?? el.x : el.x;
+    const score = scoreHeaderElement(el, prev, medianFontSize, columnMinX);
     headers.push({ element: el, score, index: i });
 
     // Update per-column tracker

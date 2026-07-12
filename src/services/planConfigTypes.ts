@@ -166,7 +166,7 @@ export const FEATURE_LABELS: Record<string, string> = {
  * Derived at runtime from the entitlements — NOT hardcoded.
  *
  * For boolean features: the first tier where the feature is `true`.
- * For numeric features: the first tier where the value is not 0.
+ * For numeric quota features: the first paid tier that increases the free limit.
  */
 export function deriveFeatureRequiredPlan(
   config: PlanConfig,
@@ -176,6 +176,9 @@ export function deriveFeatureRequiredPlan(
 
   for (const key of allKeys) {
     let found: PlanTier = "pro"; // default to highest if nothing found
+    const freeEnt = config.plans.free?.entitlements;
+    const freeVal = freeEnt?.[key];
+
     for (const tier of ALL_TIERS) {
       const ent = config.plans[tier]?.entitlements;
       if (!ent) continue;
@@ -183,9 +186,22 @@ export function deriveFeatureRequiredPlan(
       if (typeof val === "boolean") {
         if (val) { found = tier; break; }
       } else if (typeof val === "number") {
-        if (val !== 0) { found = tier; break; }
+        if (typeof freeVal === "number") {
+          if (tier !== "free" && (val === -1 || val > freeVal)) {
+            found = tier;
+            break;
+          }
+        } else if (val !== 0) {
+          found = tier;
+          break;
+        }
       }
     }
+
+    if (typeof freeVal === "number" && found === "pro" && freeVal !== 0) {
+      found = "free";
+    }
+
     result[key] = found;
   }
   return result;

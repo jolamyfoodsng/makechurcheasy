@@ -1,130 +1,211 @@
-/**
- * BulkImportModal.tsx — Multi-step modal for importing songs from various formats.
- *
- * Steps:
- *   1. Pick — drop PDF/TXT/DOCX or paste text
- *   2. Extract — review raw extracted text
- *   3. Detect — auto-detect songs, show pattern + confidence
- *   4. Preview — select/deselect songs, edit titles, choose language mode (CCC)
- *   5. Importing — progress bar
- *   6. Done — success confirmation
- */
-
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import Icon from "../components/Icon";
 import {
-  extractTextFromFile,
   extractTextElementsFromFile,
-  importDetectedSongs,
+  extractTextFromFile,
   getFileTypeLabel,
 } from "./bulkImportService";
-import { cleanText, removeEmptyLines, removeVerseNumbers, removeMetadata, autoSplit } from "./textCleanup";
 import {
-  bulkImportHymns,
-  parseBilingualHymns,
-  type LanguageMode,
-} from "./pdfImportService";
+  createEmptyImportSection,
+  estimateDraftSlideCount,
+  formatDraftLyrics,
+  importSmartSongs,
+} from "./smartImportService";
 import {
-  detectSongs,
-  detectLanguage,
-  estimateSlideCount,
-  type DetectedSong,
-  type DetectionResult,
-} from "./songDetector";
-import {
-  parseLayoutSongs,
-  confidenceLabel,
-  confidenceClass,
-  type LayoutParseResult,
-} from "./layoutParser";
+  analyzeSmartImportInBackground,
+  parseLayoutSongsInBackground,
+} from "./smartImportBackgroundService";
+import { getSmartImportRuntimeStatus, reviewSmartImportSongs } from "./smartImportAiService";
+import type {
+  SmartImportAiReviewStatus,
+  SmartImportAnalysis,
+  SmartImportSectionDraft,
+  SmartImportSectionType,
+  SmartImportSongDraft,
+} from "./smartImportTypes";
+import type { LayoutParseResult } from "./layoutParser";
+import { generateSlides } from "./slideEngine";
+import type { LanguageMode } from "./pdfImportService";
 import "./bulkImportModal.css";
-
-// ── Props & types ──────────────────────────────────────────────────────────
 
 interface BulkImportModalProps {
   onClose: () => void;
   onImported: () => void;
 }
 
-type Step = "pick" | "extract" | "detect" | "preview" | "importing" | "done";
+type Step = "pick" | "extract" | "process" | "review" | "importing" | "done";
 
-// ── Constants ──────────────────────────────────────────────────────────────
-
-const LANGUAGE_MODES: { value: LanguageMode; label: string; description: string }[] = [
-  {
-    value: "two-songs",
-    label: "Two songs per hymn",
-    description: "Each hymn becomes two songs — one in Yoruba, one in English.",
-  },
-  {
-    value: "single-both",
-    label: "Single song, both languages",
-    description: "Each hymn is one song with [Yoruba] and [English] sections.",
-  },
-  {
-    value: "side-by-side",
-    label: "Side-by-side slides",
-    description: "Each slide shows the Yoruba line followed by the English translation.",
-  },
-];
-
-const STEP_LABELS: Record<string, string> = {
+const STEP_LABELS: Record<Step, string> = {
   pick: "Pick",
   extract: "Extract",
-  detect: "Detect",
-  preview: "Review",
+  process: "Analyze",
+  review: "Review",
   importing: "Import",
   done: "Done",
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+const LANGUAGE_MODES: Array<{ value: LanguageMode; label: string; description: string }> = [
+  {
+    value: "two-songs",
+    label: "Two songs per hymn",
+    description: "Split Yoruba and English hymns into separate songs before review.",
+  },
+  {
+    value: "single-both",
+    label: "Single song, both languages",
+    description: "Keep each hymn together and review it as one structured import.",
+  },
+  {
+    value: "side-by-side",
+    label: "Side-by-side slides",
+    description: "Pair bilingual lines inside one song before slide generation.",
+  },
+];
 
-function firstNLines(text: string, n: number): string {
-  const lines = text.split("\n").filter((l) => l.trim());
-  const preview = lines.slice(0, n).join("\n");
-  return lines.length > n ? preview + "\n…" : preview;
-}
+const SECTION_TYPE_OPTIONS: Array<{ value: SmartImportSectionType; label: string }> = [
+  { value: "verse", label: "Verse" },
+  { value: "chorus", label: "Chorus" },
+  { value: "refrain", label: "Refrain" },
+  { value: "bridge", label: "Bridge" },
+  { value: "pre-chorus", label: "Pre-Chorus" },
+  { value: "tag", label: "Tag" },
+  { value: "intro", label: "Intro" },
+  { value: "outro", label: "Outro" },
+  { value: "other", label: "Other" },
+];
+
+const SLIDE_LAYOUT_OPTIONS = [
+  { value: 1, label: "1 line" },
+  { value: 2, label: "2 lines" },
+  { value: 3, label: "3 lines" },
+  { value: 4, label: "4 lines" },
+];
+
+const PREVIEW_MAX_LINES = 180;
+const PREVIEW_MAX_CHARS = 12_000;
 
 function wordCount(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
+function firstLines(text: string, count: number): string {
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, count);
+  return lines.join("\n");
+}
+
+function nextSongAfterRemoval(songs: SmartImportSongDraft[], currentId: string): string {
+  if (songs.length === 0) return "";
+  const currentIndex = songs.findIndex((song) => song.id === currentId);
+  if (currentIndex === -1) return songs[0].id;
+  const next = songs[currentIndex + 1] ?? songs[currentIndex - 1] ?? songs[0];
+  return next?.id ?? "";
+}
+
+function smartImportErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/OPENCODE_API_KEY/i.test(message)) {
+    return "AI review is unavailable because no OpenCode API key is configured. Falling back to local review.";
+  }
+  if (/failed|network|timed out|dns|connection/i.test(message.toLowerCase())) {
+    return "AI review could not reach the network service. Falling back to local review.";
+  }
+  return message;
+}
+
+function pauseForPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+function buildExtractPreview(text: string): { text: string; truncated: boolean; lineCount: number; charCount: number } {
+  const lines = text.split("\n");
+  const previewLines: string[] = [];
+  let charCount = 0;
+
+  for (const line of lines) {
+    if (previewLines.length >= PREVIEW_MAX_LINES || charCount >= PREVIEW_MAX_CHARS) {
+      break;
+    }
+    previewLines.push(line);
+    charCount += line.length + 1;
+  }
+
+  const previewText = previewLines.join("\n");
+  const truncated = previewLines.length < lines.length || previewText.length < text.length;
+
+  return {
+    text: previewText,
+    truncated,
+    lineCount: previewLines.length,
+    charCount: previewText.length,
+  };
+}
+
+function splitSectionDraft(section: SmartImportSectionDraft): SmartImportSectionDraft[] {
+  const lines = section.content
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) {
+    return [section];
+  }
+
+  const splitPoint = Math.ceil(lines.length / 2);
+  const first = lines.slice(0, splitPoint).join("\n");
+  const second = lines.slice(splitPoint).join("\n");
+
+  return [
+    { ...section, content: first },
+    {
+      ...section,
+      id: `${section.id}-split`,
+      label: `${section.label} (cont)`,
+      content: second,
+    },
+  ];
+}
 
 export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
   const [step, setStep] = useState<Step>("pick");
   const [rawText, setRawText] = useState("");
   const [fileName, setFileName] = useState("");
   const [fileType, setFileType] = useState("");
-  const [pasting, setPasting] = useState(false);
+  const [pasteMode, setPasteMode] = useState(false);
   const [pasteText, setPasteText] = useState("");
-
-  // Detection
-  const [detection, setDetection] = useState<DetectionResult | null>(null);
-
-  // Layout-aware parsing (for PDFs)
   const [layoutResult, setLayoutResult] = useState<LayoutParseResult | null>(null);
   const [usedLayoutParser, setUsedLayoutParser] = useState(false);
-
-  // Preview — editable song list
-  const [songs, setSongs] = useState<DetectedSong[]>([]);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [languageMode, setLanguageMode] = useState<LanguageMode>("two-songs");
-
-  // Import state
+  const [analysis, setAnalysis] = useState<SmartImportAnalysis | null>(null);
+  const [reviewSongs, setReviewSongs] = useState<SmartImportSongDraft[]>([]);
+  const [selectedSongIds, setSelectedSongIds] = useState<Set<string>>(new Set());
+  const [activeSongId, setActiveSongId] = useState("");
+  const [processing, setProcessing] = useState(false);
+  const [languageMode, setLanguageMode] = useState<LanguageMode>("single-both");
+  const [linesPerSlide, setLinesPerSlide] = useState(2);
+  const [autoSplit, setAutoSplit] = useState(true);
+  const [aiStatus, setAiStatus] = useState<SmartImportAiReviewStatus>({
+    attempted: false,
+    applied: false,
+    error: "",
+    mode: "online",
+  });
+  const [error, setError] = useState("");
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ imported: 0, total: 0 });
-  const [error, setError] = useState("");
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Cleanup history for undo
-  const cleanupHistoryRef = useRef<DetectedSong[][]>([]);
-
-  // ── Focus management ─────────────────────────────────────────────────────
+  const importedCountRef = useRef(0);
+  const processRequestRef = useRef(0);
 
   useEffect(() => {
     previousFocusRef.current =
@@ -134,261 +215,24 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
     };
   }, []);
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "Escape" && !importing) {
-        event.preventDefault();
-        onClose();
-      }
-    },
-    [importing, onClose],
+  const activeSong = useMemo(
+    () => reviewSongs.find((song) => song.id === activeSongId) ?? reviewSongs[0] ?? null,
+    [activeSongId, reviewSongs],
   );
 
-  // ── Step navigation helpers ──────────────────────────────────────────────
+  const activeSongSlides = useMemo(() => {
+    if (!activeSong) return [];
+    const lyrics = formatDraftLyrics(activeSong);
+    return generateSlides(lyrics, linesPerSlide, autoSplit);
+  }, [activeSong, autoSplit, linesPerSlide]);
 
-  const goToExtract = useCallback((text: string, name: string, type: string) => {
-    setRawText(text);
-    setFileName(name);
-    setFileType(type);
-    setError("");
-    setStep("extract");
-  }, []);
-
-  const goToDetect = useCallback(() => {
-    setError("");
-    const result = detectSongs(rawText);
-    setDetection(result);
-    setSongs(result.songs);
-    setSelected(new Set(result.songs.map((_, i) => i)));
-    setStep("detect");
-  }, [rawText]);
-
-  const goToPreview = useCallback(() => {
-    setStep("preview");
-  }, []);
-
-  // ── File handling ────────────────────────────────────────────────────────
-
-  const handleFile = useCallback(
-    async (file: File) => {
-      setError("");
-      const ext = file.name.split(".").pop()?.toLowerCase();
-
-      // Try layout-aware parsing for PDFs
-      if (ext === "pdf") {
-        try {
-          const elements = await extractTextElementsFromFile(file);
-          if (elements.length > 0) {
-            const layout = parseLayoutSongs(elements);
-            if (layout.songs.length > 0) {
-              setLayoutResult(layout);
-              setUsedLayoutParser(true);
-
-              // Convert ParsedSong[] to DetectedSong[] for existing UI
-              const detected: DetectedSong[] = layout.songs.map((s) => ({
-                title: s.title,
-                lyrics: s.lyrics,
-                lineCount: s.lyrics.split("\n").filter((l) => l.trim()).length,
-                language: detectLanguage(s.lyrics),
-              }));
-
-              // Create a DetectionResult-compatible object
-              const detResult: DetectionResult = {
-                pattern: "titled",
-                confidence: layout.overallConfidence,
-                songs: detected,
-              };
-
-              setDetection(detResult);
-              setSongs(detected);
-              setSelected(new Set(detected.map((_, i) => i)));
-              setFileName(file.name);
-              setFileType(getFileTypeLabel(file.name));
-              setStep("detect");
-              return;
-            }
-          }
-        } catch {
-          // Fall through to text extraction
-        }
-      }
-
-      // Fallback: text extraction + detection
-      try {
-        const text = await extractTextFromFile(file);
-        if (!text.trim()) {
-          setError("No text could be extracted from this file.");
-          return;
-        }
-        setUsedLayoutParser(false);
-        setLayoutResult(null);
-        goToExtract(text, file.name, getFileTypeLabel(file.name));
-      } catch (err) {
-        setError(`Extraction failed: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    },
-    [goToExtract],
+  const selectedSongs = useMemo(
+    () => reviewSongs.filter((song) => selectedSongIds.has(song.id)),
+    [reviewSongs, selectedSongIds],
   );
-
-  const handleFileInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) handleFile(file);
-      e.target.value = "";
-    },
-    [handleFile],
-  );
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
-    },
-    [handleFile],
-  );
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handlePasteSubmit = useCallback(() => {
-    if (!pasteText.trim()) {
-      setError("Please paste some text containing songs.");
-      return;
-    }
-    goToExtract(pasteText.trim(), "Pasted text", "Text");
-    setPasteText("");
-    setPasting(false);
-  }, [pasteText, goToExtract]);
-
-  // ── Song editing ─────────────────────────────────────────────────────────
-
-  const toggleSong = useCallback((idx: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
-      return next;
-    });
-  }, []);
-
-  const toggleAll = useCallback(() => {
-    if (selected.size === songs.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(songs.map((_, i) => i)));
-    }
-  }, [songs, selected.size]);
-
-  const removeSong = useCallback(
-    (idx: number) => {
-      setSongs((prev) => prev.filter((_, i) => i !== idx));
-      setSelected((prev) => {
-        const next = new Set<number>();
-        for (const s of prev) {
-          if (s < idx) next.add(s);
-          else if (s > idx) next.add(s - 1);
-        }
-        return next;
-      });
-    },
-    [],
-  );
-
-  const editTitle = useCallback((idx: number, newTitle: string) => {
-    setSongs((prev) => prev.map((s, i) => (i === idx ? { ...s, title: newTitle } : s)));
-  }, []);
-
-  // ── Cleanup actions ──────────────────────────────────────────────────────
-
-  const applyCleanup = useCallback(
-    (action: "clean" | "remove-empty" | "remove-verse-numbers" | "remove-metadata" | "autosplit") => {
-      // Save current state for undo (max 10 entries)
-      setSongs((prev) => {
-        const snapshot = prev.map((s) => ({ ...s }));
-        cleanupHistoryRef.current.push(snapshot);
-        if (cleanupHistoryRef.current.length > 10) {
-          cleanupHistoryRef.current.shift();
-        }
-
-        return prev.map((s) => {
-          if (!s.lyrics) return s;
-          let cleaned = s.lyrics;
-          switch (action) {
-            case "clean": cleaned = cleanText(cleaned); break;
-            case "remove-empty": cleaned = removeEmptyLines(cleaned); break;
-            case "remove-verse-numbers": cleaned = removeVerseNumbers(cleaned); break;
-            case "remove-metadata": cleaned = removeMetadata(cleaned); break;
-            case "autosplit": cleaned = autoSplit(cleaned); break;
-          }
-          return {
-            ...s,
-            lyrics: cleaned,
-            lineCount: cleaned.split("\n").filter((l) => l.trim()).length,
-            language: detectLanguage(cleaned),
-          };
-        });
-      });
-    },
-    [],
-  );
-
-  const handleCleanupUndo = useCallback(() => {
-    const prev = cleanupHistoryRef.current.pop();
-    if (prev) setSongs(prev);
-  }, []);
-
-  // ── Import ───────────────────────────────────────────────────────────────
-
-  const isCCC = detection?.pattern === "ccc" && !!rawText.trim();
-  const selectedSongs = songs.filter((_, i) => selected.has(i));
-  const importedCountRef = useRef(0);
-
-  const handleImport = useCallback(async () => {
-    if (selectedSongs.length === 0) return;
-
-    importedCountRef.current = selectedSongs.length;
-    setImporting(true);
-    setStep("importing");
-    setProgress({ imported: 0, total: selectedSongs.length });
-
-    try {
-      if (isCCC) {
-        // CCC path — use existing bilingual import with language mode
-        const cccHymns = parseBilingualHymns(rawText);
-        // Filter to only selected songs by matching titles
-        const selectedTitles = new Set(selectedSongs.map((s) => s.title));
-        const filtered = cccHymns.filter((h) => selectedTitles.has(h.title));
-        await bulkImportHymns(filtered, languageMode, (imported, total) => {
-          setProgress({ imported, total });
-        });
-      } else {
-        // Generic path — use new import service
-        await importDetectedSongs(selectedSongs, (imported, total) => {
-          setProgress({ imported, total });
-        });
-      }
-      setStep("done");
-    } catch (err) {
-      setError(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
-      setStep("preview");
-    } finally {
-      setImporting(false);
-    }
-  }, [selectedSongs, isCCC, rawText, languageMode, onImported]);
-
-  // ── Step index for indicator ─────────────────────────────────────────────
-
-  const stepOrder: Step[] = ["pick", "extract", "detect", "preview", "importing"];
-  const stepIdx = stepOrder.indexOf(step);
-
-  // ── Stats ────────────────────────────────────────────────────────────────
 
   const textStats = useMemo(() => {
-    if (!rawText) return null;
+    if (!rawText.trim()) return null;
     return {
       chars: rawText.length,
       words: wordCount(rawText),
@@ -396,64 +240,433 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
     };
   }, [rawText]);
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  const extractPreview = useMemo(
+    () => (rawText.trim() ? buildExtractPreview(rawText) : null),
+    [rawText],
+  );
+
+  const isCccImport = analysis?.method === "ccc";
+
+  const handleKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Escape" && !processing && !importing) {
+        event.preventDefault();
+        onClose();
+      }
+    },
+    [importing, onClose, processing],
+  );
+
+  const resetProcessState = useCallback(() => {
+    setAnalysis(null);
+    setReviewSongs([]);
+    setSelectedSongIds(new Set());
+    setActiveSongId("");
+    setAiStatus({
+      attempted: false,
+      applied: false,
+      error: "",
+      mode: "online",
+    });
+  }, []);
+
+  const goToExtract = useCallback((text: string, nextFileName: string, nextFileType: string) => {
+    setRawText(text);
+    setFileName(nextFileName);
+    setFileType(nextFileType);
+    setError("");
+    resetProcessState();
+    setStep("extract");
+  }, [resetProcessState]);
+
+  const handleFile = useCallback(async (file: File) => {
+    setError("");
+
+    try {
+      let nextLayoutResult: LayoutParseResult | null = null;
+      let nextUsedLayoutParser = false;
+
+      if (file.name.toLowerCase().endsWith(".pdf")) {
+        try {
+          const elements = await extractTextElementsFromFile(file);
+          if (elements.length > 0) {
+            const parsedLayout = await parseLayoutSongsInBackground(elements);
+            if (parsedLayout.songs.length > 0) {
+              nextLayoutResult = parsedLayout;
+              nextUsedLayoutParser = true;
+            }
+          }
+        } catch {
+          // Keep local extraction functional even when layout parsing fails.
+        }
+      }
+
+      const text = await extractTextFromFile(file);
+      if (!text.trim()) {
+        setError("No text could be extracted from this file.");
+        return;
+      }
+
+      setLayoutResult(nextLayoutResult);
+      setUsedLayoutParser(nextUsedLayoutParser);
+      goToExtract(text, file.name, getFileTypeLabel(file.name));
+    } catch (nextError) {
+      setError(`Extraction failed: ${nextError instanceof Error ? nextError.message : String(nextError)}`);
+    }
+  }, [goToExtract]);
+
+  const handleFileInput = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      void handleFile(file);
+    }
+    event.target.value = "";
+  }, [handleFile]);
+
+  const handleDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const file = event.dataTransfer.files[0];
+    if (file) {
+      void handleFile(file);
+    }
+  }, [handleFile]);
+
+  const handlePasteSubmit = useCallback(() => {
+    const text = pasteText.trim();
+    if (!text) {
+      setError("Paste some worship content before continuing.");
+      return;
+    }
+
+    setLayoutResult(null);
+    setUsedLayoutParser(false);
+    goToExtract(text, "Pasted text", "Text");
+    setPasteText("");
+    setPasteMode(false);
+  }, [goToExtract, pasteText]);
+
+  const runProcessing = useCallback(async (nextLanguageMode: LanguageMode = languageMode) => {
+    const raw = rawText.trim();
+    if (!raw) {
+      setError("No extracted text is available to analyze.");
+      return;
+    }
+
+    const requestId = processRequestRef.current + 1;
+    processRequestRef.current = requestId;
+
+    setProcessing(true);
+    setError("");
+    setStep("process");
+    setAiStatus({
+      attempted: false,
+      applied: false,
+      error: "",
+      mode: "online",
+    });
+
+    try {
+      await pauseForPaint();
+
+      const localAnalysis = await analyzeSmartImportInBackground({
+        rawText,
+        layoutResult,
+        usedLayoutParser,
+        languageMode: nextLanguageMode,
+      });
+
+      if (processRequestRef.current !== requestId) {
+        return;
+      }
+
+      setAnalysis(localAnalysis);
+      setReviewSongs(localAnalysis.songs);
+      setSelectedSongIds(new Set(localAnalysis.songs.map((song) => song.id)));
+      setActiveSongId(localAnalysis.songs[0]?.id ?? "");
+
+      const runtime = await getSmartImportRuntimeStatus();
+
+      if (processRequestRef.current !== requestId) {
+        return;
+      }
+
+      if (runtime.aiReady && localAnalysis.songs.length > 0) {
+        setAiStatus({
+          attempted: true,
+          applied: false,
+          error: "",
+          mode: "online",
+        });
+
+        try {
+          const reviewed = await reviewSmartImportSongs(localAnalysis.songs);
+          if (processRequestRef.current !== requestId) {
+            return;
+          }
+
+          setReviewSongs(reviewed);
+          setSelectedSongIds(new Set(reviewed.map((song) => song.id)));
+          setActiveSongId((current) => current || reviewed[0]?.id || "");
+          setAiStatus({
+            attempted: true,
+            applied: true,
+            error: "",
+            mode: "online",
+          });
+        } catch (reviewError) {
+          if (processRequestRef.current !== requestId) {
+            return;
+          }
+
+          setAiStatus({
+            attempted: true,
+            applied: false,
+            error: smartImportErrorMessage(reviewError),
+            mode: "online",
+          });
+        }
+      } else {
+        setAiStatus({
+          attempted: false,
+          applied: false,
+          error: !runtime.aiConfigured
+            ? "AI review is unavailable because the OpenCode API key is not configured. Using local review."
+            : localAnalysis.songs.length === 0
+              ? "No songs were detected for AI review. Using local review."
+              : "",
+          mode: runtime.aiConfigured ? "online" : "offline",
+        });
+      }
+    } catch (statusError) {
+      if (processRequestRef.current === requestId) {
+        setStep("extract");
+        setError(`Analysis failed: ${smartImportErrorMessage(statusError)}`);
+        setAiStatus({
+          attempted: false,
+          applied: false,
+          error: "",
+          mode: "online",
+        });
+      }
+    } finally {
+      if (processRequestRef.current === requestId) {
+        setProcessing(false);
+      }
+    }
+  }, [languageMode, layoutResult, rawText, usedLayoutParser]);
+
+  const toggleSongSelection = useCallback((songId: string) => {
+    setSelectedSongIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(songId)) next.delete(songId);
+      else next.add(songId);
+      return next;
+    });
+  }, []);
+
+  const toggleAllSongs = useCallback(() => {
+    setSelectedSongIds((previous) => {
+      if (previous.size === reviewSongs.length) {
+        return new Set();
+      }
+      return new Set(reviewSongs.map((song) => song.id));
+    });
+  }, [reviewSongs]);
+
+  const updateSong = useCallback((songId: string, updater: (song: SmartImportSongDraft) => SmartImportSongDraft) => {
+    setReviewSongs((previous) => previous.map((song) => (song.id === songId ? updater(song) : song)));
+  }, []);
+
+  const updateSongField = useCallback((
+    songId: string,
+    field: "title" | "hymnNumber" | "artist",
+    value: string,
+  ) => {
+    updateSong(songId, (song) => ({ ...song, [field]: value }));
+  }, [updateSong]);
+
+  const updateSection = useCallback((
+    songId: string,
+    sectionId: string,
+    updater: (section: SmartImportSectionDraft) => SmartImportSectionDraft,
+  ) => {
+    updateSong(songId, (song) => ({
+      ...song,
+      sections: song.sections.map((section) => (section.id === sectionId ? updater(section) : section)),
+    }));
+  }, [updateSong]);
+
+  const addSection = useCallback((songId: string) => {
+    updateSong(songId, (song) => ({
+      ...song,
+      sections: [...song.sections, createEmptyImportSection("verse")],
+    }));
+  }, [updateSong]);
+
+  const deleteSection = useCallback((songId: string, sectionId: string) => {
+    updateSong(songId, (song) => ({
+      ...song,
+      sections: song.sections.filter((section) => section.id !== sectionId),
+    }));
+  }, [updateSong]);
+
+  const moveSection = useCallback((songId: string, sectionId: string, direction: -1 | 1) => {
+    updateSong(songId, (song) => {
+      const index = song.sections.findIndex((section) => section.id === sectionId);
+      const nextIndex = index + direction;
+      if (index === -1 || nextIndex < 0 || nextIndex >= song.sections.length) {
+        return song;
+      }
+
+      const nextSections = [...song.sections];
+      const [section] = nextSections.splice(index, 1);
+      nextSections.splice(nextIndex, 0, section);
+      return { ...song, sections: nextSections };
+    });
+  }, [updateSong]);
+
+  const mergeSectionDown = useCallback((songId: string, sectionId: string) => {
+    updateSong(songId, (song) => {
+      const index = song.sections.findIndex((section) => section.id === sectionId);
+      if (index === -1 || index >= song.sections.length - 1) {
+        return song;
+      }
+
+      const current = song.sections[index];
+      const next = song.sections[index + 1];
+      const merged: SmartImportSectionDraft = {
+        ...current,
+        content: [current.content, next.content].filter(Boolean).join("\n"),
+        warnings: [...current.warnings, ...next.warnings],
+      };
+
+      const nextSections = [...song.sections];
+      nextSections.splice(index, 2, merged);
+      return { ...song, sections: nextSections };
+    });
+  }, [updateSong]);
+
+  const splitSection = useCallback((songId: string, sectionId: string) => {
+    updateSong(songId, (song) => {
+      const index = song.sections.findIndex((section) => section.id === sectionId);
+      if (index === -1) {
+        return song;
+      }
+
+      const nextSections = [...song.sections];
+      const [section] = nextSections.splice(index, 1);
+      nextSections.splice(index, 0, ...splitSectionDraft(section));
+      return { ...song, sections: nextSections };
+    });
+  }, [updateSong]);
+
+  const removeSong = useCallback((songId: string) => {
+    setReviewSongs((previous) => {
+      const next = previous.filter((song) => song.id !== songId);
+      setActiveSongId((current) => (current === songId ? nextSongAfterRemoval(next, current) : current));
+      return next;
+    });
+    setSelectedSongIds((previous) => {
+      const next = new Set(previous);
+      next.delete(songId);
+      return next;
+    });
+  }, []);
+
+  const handleImport = useCallback(async () => {
+    if (selectedSongs.length === 0) return;
+
+    const importable = selectedSongs.filter((song) => song.title.trim() && formatDraftLyrics(song).trim());
+    if (importable.length === 0) {
+      setError("No selected songs have enough content to import.");
+      return;
+    }
+
+    importedCountRef.current = importable.length;
+    setImporting(true);
+    setProgress({ imported: 0, total: importable.length });
+    setStep("importing");
+
+    try {
+      await importSmartSongs(
+        importable,
+        {
+          sourceName: fileName,
+          linesPerSlide,
+          autoSplit,
+        },
+        (imported, total) => setProgress({ imported, total }),
+      );
+      onImported();
+      setStep("done");
+    } catch (importError) {
+      setError(`Import failed: ${importError instanceof Error ? importError.message : String(importError)}`);
+      setStep("review");
+    } finally {
+      setImporting(false);
+    }
+  }, [autoSplit, fileName, linesPerSlide, onImported, selectedSongs]);
+
+  const stepOrder: Step[] = ["pick", "extract", "process", "review", "importing"];
+  const stepIdx = stepOrder.indexOf(step);
+
+  const canClose = !processing && !importing;
 
   return (
-    <div className="bulk-import-backdrop" onMouseDown={importing ? undefined : onClose}>
+    <div className="bulk-import-backdrop" onMouseDown={canClose ? onClose : undefined}>
       <div
         ref={dialogRef}
-        className="bulk-import-modal"
+        className="bulk-import-modal bulk-import-modal--smart"
         role="dialog"
         aria-modal="true"
-        aria-label="Bulk import songs"
+        aria-label="Smart worship import"
         onKeyDown={handleKeyDown}
-        onMouseDown={(e) => e.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
       >
-        {/* Header */}
         <div className="bulk-import-header">
           <div className="bulk-import-header-text">
-            <p className="bulk-import-eyebrow">Bulk Import</p>
-            <h2>Import Songs</h2>
-            <p>Import songs from PDF, TXT, DOCX files, or pasted text.</p>
+            <p className="bulk-import-eyebrow">Smart Worship Import</p>
+            <h2>Import Worship Documents</h2>
+            <p>Extract locally, attempt AI review automatically first when available, then review before importing.</p>
           </div>
           <button
             type="button"
             className="bulk-import-close"
             aria-label="Close"
             onClick={onClose}
-            disabled={importing}
-            title="Close">
+            disabled={!canClose}
+            title="Close"
+          >
             x
           </button>
         </div>
 
-        {/* Step indicator */}
         {step !== "done" && (
           <div className="bulk-import-steps">
-            {stepOrder.map((s, i) => (
-              <span key={s} className="bulk-import-step-group">
-                {i > 0 && <div className="bulk-import-step-divider" />}
-                <div
-                  className={`bulk-import-step${i === stepIdx ? " active" : i < stepIdx ? " done" : ""}`}
-                >
-                  <span className="bulk-import-step-num">{i + 1}</span>
-                  <span>{STEP_LABELS[s]}</span>
+            {stepOrder.map((stepName, index) => (
+              <span key={stepName} className="bulk-import-step-group">
+                {index > 0 && <div className="bulk-import-step-divider" />}
+                <div className={`bulk-import-step${index === stepIdx ? " active" : index < stepIdx ? " done" : ""}`}>
+                  <span className="bulk-import-step-num">{index + 1}</span>
+                  <span>{STEP_LABELS[stepName]}</span>
                 </div>
               </span>
             ))}
           </div>
         )}
 
-        {/* Content */}
         <div className="bulk-import-body">
-          {/* ── Step 1: Pick ─────────────────────────────────────────────── */}
           {step === "pick" && (
             <>
               <div
                 className="bulk-import-dropzone"
                 onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                onClick={() => !pasting && fileInputRef.current?.click()}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={() => !pasteMode && fileInputRef.current?.click()}
               >
                 <input
                   ref={fileInputRef}
@@ -464,12 +677,12 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                 />
                 <Icon name="upload_file" size={32} />
                 <p className="bulk-import-dropzone-title">
-                  {pasting ? "Switch to file upload" : "Drop a file here or click to browse"}
+                  {pasteMode ? "Switch back to file upload" : "Drop a PDF, DOCX, or TXT file here"}
                 </p>
                 <p className="bulk-import-dropzone-hint">
-                  {pasting
-                    ? "Click to switch back to file upload"
-                    : "Supports PDF, TXT, and DOCX files"}
+                  {pasteMode
+                    ? "Click to return to file upload"
+                    : "Hymn books, worship sheets, choir lyrics, and order-of-service documents are supported."}
                 </p>
               </div>
 
@@ -478,25 +691,24 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                   type="button"
                   className="bulk-import-paste-toggle-btn"
                   onClick={() => {
-                    setPasting((p) => !p);
+                    setPasteMode((current) => !current);
                     setError("");
                   }}
-                  title="Upload">
-                  <Icon name={pasting ? "description" : "content_paste"} size={14} />
-                  {pasting ? "Upload a file instead" : "Or paste text"}
+                  title="Paste text"
+                >
+                  <Icon name={pasteMode ? "description" : "content_paste"} size={14} />
+                  {pasteMode ? "Use file upload instead" : "Or paste extracted text"}
                 </button>
               </div>
 
-              {pasting && (
+              {pasteMode && (
                 <div className="bulk-import-paste-area">
                   <textarea
-                    ref={textareaRef}
                     className="bulk-import-paste-textarea"
-                    style={{ fontFamily: '"Charis SIL", "SF Mono", "Noto Sans Mono", monospace' }}
-                    placeholder="Paste song lyrics here...&#10;&#10;1. Amazing Grace&#10;Amazing grace how sweet the sound&#10;That saved a wretch like me&#10;&#10;2. How Great Thou Art&#10;O Lord my God when I in awesome wonder"
+                    placeholder={"Paste worship content here…\n\nHymn 101\nAmazing Grace\nVerse 1\nAmazing grace how sweet the sound"}
                     value={pasteText}
-                    onChange={(e) => setPasteText(e.target.value)}
-                    rows={10}
+                    onChange={(event) => setPasteText(event.target.value)}
+                    rows={12}
                     autoFocus
                   />
                   <div className="bulk-import-paste-actions">
@@ -504,11 +716,12 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                       type="button"
                       className="bulk-import-btn-secondary"
                       onClick={() => {
-                        setPasting(false);
+                        setPasteMode(false);
                         setPasteText("");
                         setError("");
                       }}
-                      title="Cancel">
+                      title="Cancel"
+                    >
                       Cancel
                     </button>
                     <button
@@ -516,8 +729,9 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                       className="bulk-import-btn-primary"
                       disabled={!pasteText.trim()}
                       onClick={handlePasteSubmit}
-                      title="Extract Songs">
-                      Extract Songs
+                      title="Use pasted text"
+                    >
+                      Use Pasted Text
                     </button>
                   </div>
                 </div>
@@ -525,7 +739,6 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
             </>
           )}
 
-          {/* ── Step 2: Extract ──────────────────────────────────────────── */}
           {step === "extract" && (
             <>
               <div className="bulk-import-preview-header">
@@ -542,283 +755,490 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
               </div>
 
               <div className="bulk-import-text-preview">
-                <pre style={{ fontFamily: '"Charis SIL", "SF Mono", "Noto Sans Mono", monospace' }}>{rawText}</pre>
+                <pre>{extractPreview?.text ?? rawText}</pre>
               </div>
 
-              <p className="bulk-import-extract-hint">
-                Review the extracted text above. If it looks correct, proceed to detect songs.
-              </p>
+              {extractPreview?.truncated && textStats && (
+                <div className="bulk-import-preview-note">
+                  Showing the first {extractPreview.lineCount.toLocaleString()} of {textStats.lines.toLocaleString()} lines to keep large document imports responsive.
+                </div>
+              )}
+
+              <div className="bulk-import-smart-note">
+                <Icon name="auto_awesome" size={16} />
+                <span>
+                  The next step extracts structure locally, then attempts AI review automatically first. Local review is only used as the fallback when AI is unavailable or the request fails.
+                </span>
+              </div>
             </>
           )}
 
-          {/* ── Step 3: Detect ───────────────────────────────────────────── */}
-          {step === "detect" && detection && (
-            <>
-              <div className="bulk-import-detect-result">
-                <div className="bulk-import-detect-row">
-                  <span className="bulk-import-detect-label">Method</span>
-                  <span className={`bulk-import-detect-badge bulk-import-detect-badge--${usedLayoutParser ? "layout" : detection.pattern}`}>
-                    {usedLayoutParser
-                      ? "Layout Parser"
-                      : detection.pattern === "ccc"
-                        ? "CCC Hymnal"
-                        : detection.pattern === "numbered"
-                          ? "Numbered Songs"
-                          : "Titled Songs"}
-                  </span>
-                </div>
-                <div className="bulk-import-detect-row">
-                  <span className="bulk-import-detect-label">Confidence</span>
-                  <div className="bulk-import-confidence-bar">
-                    <div
-                      className="bulk-import-confidence-fill"
-                      style={{
-                        width: `${detection.confidence}%`,
-                        background:
-                          detection.confidence >= 80
-                            ? "var(--primary)"
-                            : detection.confidence >= 60
-                              ? "#f59e0b"
-                              : "#ef4444",
-                      }}
-                    />
+          {step === "process" && (
+            <div className="bulk-import-smart-grid">
+              <div className="bulk-import-smart-panel">
+                <div className="bulk-import-smart-panel__head">
+                  <div>
+                    <h3>AI Review</h3>
+                    <p>AI review is attempted first to tighten song boundaries and section detection without rewriting lyrics.</p>
                   </div>
-                  <span className={`bulk-import-confidence-num ${confidenceClass(detection.confidence)}`}>
-                    {detection.confidence}% — {confidenceLabel(detection.confidence)}
+                  <span className={`bulk-import-online-pill bulk-import-online-pill--${aiStatus.mode}`}>
+                    {aiStatus.mode === "online" ? "Online" : "Offline"}
                   </span>
                 </div>
-                <div className="bulk-import-detect-row">
-                  <span className="bulk-import-detect-label">Songs found</span>
-                  <span className="bulk-import-detect-count">{detection.songs.length}</span>
-                </div>
-                {usedLayoutParser && layoutResult && (
-                  <>
-                    <div className="bulk-import-detect-row">
-                      <span className="bulk-import-detect-label">Columns</span>
-                      <span className="bulk-import-detect-count">{layoutResult.columnsDetected}</span>
+
+                {processing && aiStatus.mode === "online" ? (
+                  <div className="bulk-import-online-status">
+                    <Icon name="auto_awesome" size={16} />
+                    <span>Running AI review on extracted song batches…</span>
+                  </div>
+                ) : aiStatus.applied ? (
+                  <div className="bulk-import-online-status bulk-import-online-status--success">
+                    <Icon name="check_circle" size={16} />
+                    <span>AI review completed. Review the structured songs before importing.</span>
+                  </div>
+                ) : (
+                  <div className={`bulk-import-online-status${aiStatus.error ? " error" : ""}`}>
+                    <Icon name={aiStatus.error ? "warning" : "description"} size={16} />
+                    <span>{aiStatus.error || "Local review will be used for this import."}</span>
+                  </div>
+                )}
+
+                {isCccImport && (
+                  <div className="bulk-import-mode-section bulk-import-mode-section--compact">
+                    <p className="bulk-import-mode-label">CCC bilingual handling</p>
+                    <div className="bulk-import-mode-options">
+                      {LANGUAGE_MODES.map((mode) => (
+                        <label
+                          key={mode.value}
+                          className={`bulk-import-mode-option${languageMode === mode.value ? " active" : ""}`}
+                        >
+                          <input
+                            type="radio"
+                            name="language-mode"
+                            value={mode.value}
+                            checked={languageMode === mode.value}
+                            onChange={() => {
+                              setLanguageMode(mode.value);
+                              void runProcessing(mode.value);
+                            }}
+                          />
+                          <div>
+                            <span className="bulk-import-mode-title">{mode.label}</span>
+                            <span className="bulk-import-mode-desc">{mode.description}</span>
+                          </div>
+                        </label>
+                      ))}
                     </div>
-                    <div className="bulk-import-detect-row">
-                      <span className="bulk-import-detect-label">Text elements</span>
-                      <span className="bulk-import-detect-count">{layoutResult.totalElements.toLocaleString()}</span>
-                    </div>
-                  </>
+                  </div>
                 )}
               </div>
 
-              {layoutResult && layoutResult.warnings.length > 0 && (
-                <div className="bulk-import-detect-warn">
-                  <Icon name="info" size={16} />
-                  <span>{layoutResult.warnings.join(" ")}</span>
-                </div>
-              )}
-
-              {detection.songs.length < 2 && (
-                <div className="bulk-import-detect-warn">
-                  <Icon name="warning" size={16} />
-                  <span>Only {detection.songs.length} song{detection.songs.length !== 1 ? "s" : ""} detected. The results may be incomplete.</span>
-                </div>
-              )}
-
-              {detection.confidence < 40 && detection.songs.length >= 2 && (
-                <div className="bulk-import-detect-warn">
-                  <Icon name="info" size={16} />
-                  <span>Low confidence detection. Review the preview carefully.</span>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* ── Step 4: Preview ──────────────────────────────────────────── */}
-          {step === "preview" && (
-            <>
-              <div className="bulk-import-preview-header">
-                <span className="bulk-import-file-badge">
-                  <Icon name="description" size={14} />
-                  {fileName}
-                  <span className="bulk-import-file-type">{fileType}</span>
-                </span>
-                <span className="bulk-import-count">
-                  {songs.length} song{songs.length !== 1 ? "s" : ""} detected
-                </span>
-                <label className="bulk-import-select-all">
-                  <input
-                    type="checkbox"
-                    checked={selected.size === songs.length && songs.length > 0}
-                    onChange={toggleAll}
-                  />
-                  Select all
-                </label>
-              </div>
-
-              {selected.size > 0 && (
-                <div className="bulk-import-cleanup-toolbar">
-                  <span className="bulk-import-cleanup-label">Cleanup:</span>
-                  <button type="button" className="bulk-import-cleanup-btn" onClick={() => applyCleanup("clean")} title="Clean text (normalize spacing, trim)">Clean Text</button>
-                  <button type="button" className="bulk-import-cleanup-btn" onClick={() => applyCleanup("remove-empty")} title="Remove empty lines">Remove Empty Lines</button>
-                  <button type="button" className="bulk-import-cleanup-btn" onClick={() => applyCleanup("remove-verse-numbers")} title="Strip verse number prefixes">Remove Verse Numbers</button>
-                  <button type="button" className="bulk-import-cleanup-btn" onClick={() => applyCleanup("remove-metadata")} title="Remove author names and hymn references">Remove Metadata</button>
-                  <button type="button" className="bulk-import-cleanup-btn" onClick={() => applyCleanup("autosplit")} title="Group lyrics into slide-sized chunks">Auto Split</button>
-                  {cleanupHistoryRef.current.length > 0 && (
-                    <button type="button" className="bulk-import-cleanup-btn bulk-import-cleanup-btn--undo" onClick={handleCleanupUndo} title="Undo last cleanup">Undo</button>
-                  )}
-                </div>
-              )}
-
-              <div className="bulk-import-song-list">
-                {songs.map((song, idx) => (
-                  <div
-                    key={`${song.title}-${idx}`}
-                    className={`bulk-import-song-card${selected.has(idx) ? " selected" : ""}`}
-                  >
-                    <div className="bulk-import-song-card-left">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(idx)}
-                        onChange={() => toggleSong(idx)}
-                        className="bulk-import-song-card-check"
-                      />
-                    </div>
-                    <div className="bulk-import-song-card-body">
-                      <div className="bulk-import-song-card-title-row">
-                        <input
-                          type="text"
-                          className="bulk-import-song-card-title"
-                          value={song.title}
-                          onChange={(e) => editTitle(idx, e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        {song.language && (
-                          <span className={`bulk-import-lang-badge bulk-import-lang-badge--${song.language}`}>
-                            {song.language}
-                          </span>
-                        )}
-                        <span className="bulk-import-slide-count">
-                          ~{estimateSlideCount(song.lyrics)} slides
-                        </span>
-                      </div>
-                      <p className="bulk-import-song-card-preview">
-                        {firstNLines(song.lyrics, 4)}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="bulk-import-song-card-remove"
-                      title="Remove song"
-                      onClick={() => removeSong(idx)}
-                    >
-                      ×
-                    </button>
+              <div className="bulk-import-smart-panel">
+                <div className="bulk-import-smart-panel__head">
+                  <div>
+                    <h3>Local Parse</h3>
+                    <p>Local extraction and layout hints prepare the structured text that AI reviews, and also serve as the fallback when AI is unavailable.</p>
                   </div>
-                ))}
-              </div>
+                  {processing && <span className="bulk-import-processing-pill">Processing…</span>}
+                </div>
 
-              {/* CCC language mode */}
-              {isCCC && (
-                <div className="bulk-import-mode-section">
-                  <p className="bulk-import-mode-label">Language handling</p>
-                  <div className="bulk-import-mode-options">
-                    {LANGUAGE_MODES.map((mode) => (
-                      <label
-                        key={mode.value}
-                        className={`bulk-import-mode-option${languageMode === mode.value ? " active" : ""}`}
-                      >
-                        <input
-                          type="radio"
-                          name="language-mode"
-                          value={mode.value}
-                          checked={languageMode === mode.value}
-                          onChange={() => setLanguageMode(mode.value)}
-                        />
-                        <div>
-                          <span className="bulk-import-mode-title">{mode.label}</span>
-                          <span className="bulk-import-mode-desc">{mode.description}</span>
-                        </div>
-                      </label>
+                {analysis ? (
+                  <div className="bulk-import-smart-summary">
+                    <div className="bulk-import-smart-stat">
+                      <span>Songs detected</span>
+                      <strong>{analysis.counts.songs}</strong>
+                    </div>
+                    <div className="bulk-import-smart-stat">
+                      <span>Sections detected</span>
+                      <strong>{analysis.counts.sections}</strong>
+                    </div>
+                    <div className="bulk-import-smart-stat">
+                      <span>Local confidence</span>
+                      <strong>{analysis.confidence}%</strong>
+                    </div>
+                    <div className="bulk-import-smart-stat">
+                      <span>Method</span>
+                      <strong>{analysis.method}</strong>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bulk-import-online-status">Preparing local analysis…</div>
+                )}
+
+                {analysis?.warnings.length ? (
+                  <div className="bulk-import-smart-warnings">
+                    {analysis.warnings.map((warning) => (
+                      <div key={warning} className="bulk-import-detect-warn">
+                        <Icon name="info" size={16} />
+                        <span>{warning}</span>
+                      </div>
                     ))}
                   </div>
-                </div>
-              )}
-            </>
+                ) : null}
+              </div>
+            </div>
           )}
 
-          {/* ── Step 5: Importing ────────────────────────────────────────── */}
+          {step === "review" && (
+            <div className="bulk-import-review-shell">
+              <div className="bulk-import-review-sidebar">
+                <div className="bulk-import-preview-header">
+                  <span className="bulk-import-file-badge">
+                    <Icon name="description" size={14} />
+                    {fileName}
+                    <span className="bulk-import-file-type">{fileType}</span>
+                  </span>
+                </div>
+
+                <div className="bulk-import-review-toolbar">
+                  <label className="bulk-import-select-all">
+                    <input
+                      type="checkbox"
+                      checked={reviewSongs.length > 0 && selectedSongIds.size === reviewSongs.length}
+                      onChange={toggleAllSongs}
+                    />
+                    Select all
+                  </label>
+
+                  <div className="bulk-import-review-layout">
+                    <label>
+                      <span>Lines/slide</span>
+                      <select value={linesPerSlide} onChange={(event) => setLinesPerSlide(parseInt(event.target.value, 10))}>
+                        {SLIDE_LAYOUT_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="bulk-import-review-layout__toggle">
+                      <input
+                        type="checkbox"
+                        checked={autoSplit}
+                        onChange={(event) => setAutoSplit(event.target.checked)}
+                      />
+                      <span>Auto slide split</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="bulk-import-song-list bulk-import-song-list--review">
+                  {reviewSongs.map((song) => (
+                    <div
+                      key={song.id}
+                      className={`bulk-import-song-card bulk-import-song-card--review${activeSong?.id === song.id ? " active" : ""}${selectedSongIds.has(song.id) ? " selected" : ""}`}
+                      onClick={() => setActiveSongId(song.id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setActiveSongId(song.id);
+                        }
+                      }}
+                    >
+                      <div className="bulk-import-song-card-left">
+                        <input
+                          type="checkbox"
+                          checked={selectedSongIds.has(song.id)}
+                          onChange={(event) => {
+                            event.stopPropagation();
+                            toggleSongSelection(song.id);
+                          }}
+                          className="bulk-import-song-card-check"
+                        />
+                      </div>
+
+                      <div className="bulk-import-song-card-body">
+                        <div className="bulk-import-song-card-title-row">
+                          <span className="bulk-import-song-card-title-text">{song.title}</span>
+                          {song.hymnNumber && <span className="bulk-import-song-card-tag">Hymn {song.hymnNumber}</span>}
+                          {song.language && <span className={`bulk-import-lang-badge bulk-import-lang-badge--${song.language}`}>{song.language}</span>}
+                        </div>
+                        <p className="bulk-import-song-card-preview">
+                          {firstLines(formatDraftLyrics(song), 3)}
+                        </p>
+                        <div className="bulk-import-song-card-meta">
+                          <span>{song.sections.length} sections</span>
+                          <span>{estimateDraftSlideCount(song, { linesPerSlide, autoSplit })} slides</span>
+                          <span>{song.method === "ai-reviewed" ? "AI reviewed" : "Local fallback"}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="bulk-import-song-card-remove"
+                        title="Remove song"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeSong(song.id);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bulk-import-review-detail">
+                {activeSong ? (
+                  <>
+                    <div className="bulk-import-detail-head">
+                      <div className="bulk-import-detail-meta">
+                        <label>
+                          <span>Title</span>
+                          <input
+                            type="text"
+                            value={activeSong.title}
+                            onChange={(event) => updateSongField(activeSong.id, "title", event.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <span>Hymn Number</span>
+                          <input
+                            type="text"
+                            value={activeSong.hymnNumber ?? ""}
+                            onChange={(event) => updateSongField(activeSong.id, "hymnNumber", event.target.value)}
+                            placeholder="Optional"
+                          />
+                        </label>
+                        <label>
+                          <span>Artist / Source</span>
+                          <input
+                            type="text"
+                            value={activeSong.artist ?? ""}
+                            onChange={(event) => updateSongField(activeSong.id, "artist", event.target.value)}
+                            placeholder="Optional"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="bulk-import-detail-stats">
+                        <span>{activeSong.confidence}% confidence</span>
+                        <span>{activeSong.sections.length} sections</span>
+                        <span>{activeSongSlides.length} slides</span>
+                      </div>
+                    </div>
+
+                    {activeSong.warnings.length > 0 && (
+                      <div className="bulk-import-smart-warnings">
+                        {activeSong.warnings.map((warning) => (
+                          <div key={warning} className="bulk-import-detect-warn">
+                            <Icon name="warning" size={16} />
+                            <span>{warning}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {activeSong.reviewNotes.length > 0 && (
+                      <div className="bulk-import-smart-notes">
+                        {activeSong.reviewNotes.map((note) => (
+                          <div key={note} className="bulk-import-detect-warn">
+                            <Icon name="auto_awesome" size={16} />
+                            <span>{note}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="bulk-import-section-editor">
+                      <div className="bulk-import-section-editor__head">
+                        <h3>Sections Detected</h3>
+                        <button type="button" className="bulk-import-btn-secondary" onClick={() => addSection(activeSong.id)} title="Add section">
+                          Add Section
+                        </button>
+                      </div>
+
+                      <div className="bulk-import-section-list">
+                        {activeSong.sections.map((section, index) => (
+                          <div key={section.id} className="bulk-import-section-card">
+                            <div className="bulk-import-section-card__head">
+                              <div className="bulk-import-section-card__meta">
+                                <label>
+                                  <span>Type</span>
+                                  <select
+                                    value={section.type}
+                                    onChange={(event) => updateSection(activeSong.id, section.id, (current) => ({
+                                      ...current,
+                                      type: event.target.value as SmartImportSectionType,
+                                    }))}
+                                  >
+                                    {SECTION_TYPE_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>{option.label}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label>
+                                  <span>Label</span>
+                                  <input
+                                    type="text"
+                                    value={section.label}
+                                    onChange={(event) => updateSection(activeSong.id, section.id, (current) => ({
+                                      ...current,
+                                      label: event.target.value,
+                                    }))}
+                                  />
+                                </label>
+                                <label className="bulk-import-section-card__number">
+                                  <span>No.</span>
+                                  <input
+                                    type="text"
+                                    value={section.number ?? ""}
+                                    onChange={(event) => updateSection(activeSong.id, section.id, (current) => ({
+                                      ...current,
+                                      number: event.target.value,
+                                    }))}
+                                    placeholder="-"
+                                  />
+                                </label>
+                              </div>
+
+                              <div className="bulk-import-section-card__actions">
+                                <button type="button" onClick={() => moveSection(activeSong.id, section.id, -1)} disabled={index === 0} title="Move up">↑</button>
+                                <button type="button" onClick={() => moveSection(activeSong.id, section.id, 1)} disabled={index === activeSong.sections.length - 1} title="Move down">↓</button>
+                                <button type="button" onClick={() => splitSection(activeSong.id, section.id)} title="Split section">Split</button>
+                                <button type="button" onClick={() => mergeSectionDown(activeSong.id, section.id)} disabled={index === activeSong.sections.length - 1} title="Merge with next">Merge</button>
+                                <button type="button" onClick={() => deleteSection(activeSong.id, section.id)} title="Delete section">Delete</button>
+                              </div>
+                            </div>
+
+                            <textarea
+                              className="bulk-import-section-card__textarea"
+                              value={section.content}
+                              onChange={(event) => updateSection(activeSong.id, section.id, (current) => ({
+                                ...current,
+                                content: event.target.value,
+                              }))}
+                              rows={6}
+                            />
+
+                            {section.warnings.length > 0 && (
+                              <div className="bulk-import-section-card__warnings">
+                                {section.warnings.join(" ")}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="bulk-import-slide-preview">
+                      <div className="bulk-import-slide-preview__head">
+                        <h3>Slide Preview</h3>
+                        <span>{activeSongSlides.length} slide{activeSongSlides.length === 1 ? "" : "s"}</span>
+                      </div>
+                      <div className="bulk-import-slide-preview__grid">
+                        {activeSongSlides.map((slide) => (
+                          <div key={slide.id} className={`bulk-import-slide-card${slide.isContinuation ? " cont" : ""}`}>
+                            <div className="bulk-import-slide-card__head">{slide.label}</div>
+                            <pre>{slide.content}</pre>
+                          </div>
+                        ))}
+                        {activeSongSlides.length === 0 && (
+                          <div className="bulk-import-slide-preview__empty">
+                            <Icon name="slideshow" size={18} />
+                            <p>Add section content to generate slides.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="bulk-import-slide-preview__empty bulk-import-slide-preview__empty--full">
+                    <Icon name="library_music" size={20} />
+                    <p>No songs available to review.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {step === "importing" && (
             <div className="bulk-import-progress">
               <div className="bulk-import-progress-bar">
                 <div
                   className="bulk-import-progress-fill"
-                  style={{
-                    width: `${progress.total > 0 ? (progress.imported / progress.total) * 100 : 0}%`,
-                  }}
+                  style={{ width: `${progress.total > 0 ? (progress.imported / progress.total) * 100 : 0}%` }}
                 />
               </div>
               <p className="bulk-import-progress-text">
-                Importing {progress.imported} of {progress.total} songs…
+                Importing {progress.imported} of {progress.total} worship song{progress.total === 1 ? "" : "s"}…
               </p>
             </div>
           )}
 
-          {/* ── Step 6: Done ─────────────────────────────────────────────── */}
           {step === "done" && (
             <div className="bulk-import-done">
               <Icon name="check_circle" size={40} />
               <p className="bulk-import-done-title">Import complete</p>
               <p className="bulk-import-done-text">
-                {importedCountRef.current} song{importedCountRef.current !== 1 ? "s" : ""} added to your worship library.
+                {importedCountRef.current} song{importedCountRef.current === 1 ? "" : "s"} added to your worship library.
               </p>
             </div>
           )}
 
-          {/* Error */}
           {error && <div className="bulk-import-error">{error}</div>}
         </div>
 
-        {/* Footer */}
         <div className="bulk-import-footer">
           <button
             type="button"
             className="bulk-import-btn-secondary"
             onClick={
               step === "done"
-                ? () => { onImported(); onClose(); }
-                : step === "extract"
-                  ? () => setStep("pick")
-                  : step === "detect"
-                    ? () => setStep("extract")
-                    : step === "preview"
-                      ? () => setStep("detect")
-                      : onClose
+                ? onClose
+                : step === "pick"
+                  ? onClose
+                  : step === "extract"
+                    ? () => setStep("pick")
+                    : step === "process"
+                      ? () => setStep("extract")
+                      : step === "review"
+                        ? () => setStep("process")
+                        : onClose
             }
-            disabled={importing}
-            title="Close">
+            disabled={!canClose}
+            title={step === "pick" ? "Close" : "Back"}
+          >
             {step === "done" ? "Close" : step === "pick" ? "Close" : "Back"}
           </button>
 
           {step === "extract" && (
-            <button type="button" className="bulk-import-btn-primary" onClick={goToDetect} title="Detect Songs →">
-              Detect Songs →
-            </button>
-          )}
-
-          {step === "detect" && (
             <button
               type="button"
               className="bulk-import-btn-primary"
-              disabled={songs.length === 0}
-              onClick={goToPreview}
-              title="Review Song →">
-              Review {songs.length} Song{songs.length !== 1 ? "s" : ""} →
+              onClick={() => {
+                void runProcessing();
+              }}
+              title="Analyze import"
+            >
+              Analyze Import →
             </button>
           )}
 
-          {step === "preview" && (
+          {step === "process" && (
             <button
               type="button"
               className="bulk-import-btn-primary"
-              disabled={selected.size === 0}
-              onClick={handleImport}
-              title="Import">
-              Import {selected.size} Song{selected.size !== 1 ? "s" : ""}
+              disabled={processing || reviewSongs.length === 0}
+              onClick={() => setStep("review")}
+              title="Open review"
+            >
+              {aiStatus.applied ? "Review AI Results" : "Review Parsed Songs"} ({reviewSongs.length}) →
+            </button>
+          )}
+
+          {step === "review" && (
+            <button
+              type="button"
+              className="bulk-import-btn-primary"
+              disabled={selectedSongs.length === 0}
+              onClick={() => {
+                void handleImport();
+              }}
+              title="Import selected songs"
+            >
+              Import {selectedSongs.length} Song{selectedSongs.length === 1 ? "" : "s"}
             </button>
           )}
         </div>

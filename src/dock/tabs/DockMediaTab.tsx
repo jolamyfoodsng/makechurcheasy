@@ -30,6 +30,7 @@ import { isSupportedMediaFile } from "../../services/mediaValidation";
 import { getFeatureLimit } from "../../services/entitlementClient";
 import Icon from "../DockIcon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { isUserSelectableObsScene } from "../../services/dockSceneNames";
 import { useTranslation } from "react-i18next";
 
 interface Props {
@@ -370,6 +371,13 @@ function formatFitMode(value: DockMediaFitMode, t: (key: string) => string): str
   }
 }
 
+function buildSceneImageSourceName(entry: DockMediaEntry): string {
+  const baseName = entry.name.replace(/\.[^.]+$/, "");
+  const sanitizedBase = baseName.replace(/[^a-z0-9]+/gi, " ").trim().slice(0, 40) || "Image";
+  const suffix = entry.prefKey.replace(/[^a-z0-9]+/gi, "").slice(-10) || "media";
+  return `MCE Scene Image - ${sanitizedBase} - ${suffix}`;
+}
+
 function createLibraryEntry(item: MediaItem, overlayBaseUrl: string, originLabel: string): DockMediaEntry {
   const prefKey = `media:${item.filePath || item.diskFileName || item.id}`;
   return {
@@ -507,6 +515,12 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
   const [uploading, setUploading] = useState(false);
   const [openOptionsKey, setOpenOptionsKey] = useState<string | null>(null);
   const [previewEntry, setPreviewEntry] = useState<DockMediaEntry | null>(null);
+  const [sceneSendEntry, setSceneSendEntry] = useState<DockMediaEntry | null>(null);
+  const [sceneSendChoices, setSceneSendChoices] = useState<string[]>([]);
+  const [sceneSendSelection, setSceneSendSelection] = useState("");
+  const [sceneSendLoading, setSceneSendLoading] = useState(false);
+  const [sceneSendSubmitting, setSceneSendSubmitting] = useState(false);
+  const [sceneSendError, setSceneSendError] = useState<string | null>(null);
   const [activeTargets, setActiveTargets] = useState<ActiveMediaTargets>({
     active: null,
   });
@@ -816,6 +830,54 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
   // ── Play uploaded media via OBS — send to Preview or Go Live ──
 
+  const resolveUploadFilePath = useCallback(async (fileName: string): Promise<string> => {
+    let dir = uploadsDir;
+    if (!dir) {
+      const res = await fetch("/api/uploads-dir");
+      if (res.ok) {
+        const data = await res.json();
+        dir = data.path || null;
+        if (dir) setUploadsDir(dir);
+      }
+    }
+    if (!dir) {
+      throw new Error("Could not resolve uploads directory");
+    }
+
+    const sep = dir.includes("\\") ? "\\" : "/";
+    return `${dir}${sep}${fileName}`;
+  }, [uploadsDir]);
+
+  const resolveLibraryMediaFilePath = useCallback(async (item: MediaItem): Promise<string> => {
+    if (item.filePath) {
+      return item.filePath;
+    }
+
+    if (item.url.startsWith("data:")) {
+      const res = await fetch("/api/save-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: item.name, dataUrl: item.url }),
+      });
+      if (!res.ok) throw new Error(`save-media failed: ${res.status}`);
+      const data = await res.json();
+      if (!data.path) throw new Error("No path returned from save-media");
+      return data.path;
+    }
+
+    if (uploadsDir && !item.url.startsWith("http") && !item.url.startsWith("blob:")) {
+      return item.url;
+    }
+
+    if (uploadsDir) {
+      const fileName = item.url.split("/").pop() || item.name;
+      const sep = uploadsDir.includes("\\") ? "\\" : "/";
+      return `${uploadsDir}${sep}${decodeURIComponent(fileName)}`;
+    }
+
+    throw new Error("Cannot resolve media to a local file path");
+  }, [uploadsDir]);
+
   const playMedia = useCallback(
     async (fileName: string, options?: DockMediaSendOptions): Promise<boolean> => {
       try {
@@ -827,24 +889,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
       setSendingFile(`upload:${fileName}`);
       try {
-        let dir = uploadsDir;
-        if (!dir) {
-          try {
-            const res = await fetch("/api/uploads-dir");
-            if (res.ok) {
-              const data = await res.json();
-              dir = data.path || null;
-              if (dir) setUploadsDir(dir);
-            }
-          } catch { /* ignore */ }
-        }
-        if (!dir) {
-          console.warn("[DockMediaTab] Could not resolve uploads directory");
-          return false;
-        }
-
-        const sep = dir.includes("\\") ? "\\" : "/";
-        const filePath = `${dir}${sep}${fileName}`;
+        const filePath = await resolveUploadFilePath(fileName);
         await dockObsClient.pushMedia(filePath, fileName, options);
         setSendError(null);
         track("media_presented");
@@ -859,7 +904,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         setSendingFile(null);
       }
     },
-    [uploadsDir]
+    [resolveUploadFilePath, t]
   );
 
   // ── Play library media item via OBS ──
@@ -874,30 +919,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
       setSendingFile(`library:${item.id}`);
       try {
-        let filePath: string;
-
-        if (item.filePath) {
-          filePath = item.filePath;
-        } else if (item.url.startsWith("data:")) {
-          const res = await fetch("/api/save-media", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fileName: item.name, dataUrl: item.url }),
-          });
-          if (!res.ok) throw new Error(`save-media failed: ${res.status}`);
-          const data = await res.json();
-          if (!data.path) throw new Error("No path returned from save-media");
-          filePath = data.path;
-        } else if (uploadsDir && !item.url.startsWith("http") && !item.url.startsWith("blob:")) {
-          filePath = item.url;
-        } else if (uploadsDir) {
-          const fileName = item.url.split("/").pop() || item.name;
-          const sep = uploadsDir.includes("\\") ? "\\" : "/";
-          filePath = `${uploadsDir}${sep}${decodeURIComponent(fileName)}`;
-        } else {
-          throw new Error("Cannot resolve media to a local file path");
-        }
-
+        const filePath = await resolveLibraryMediaFilePath(item);
         await dockObsClient.pushMedia(filePath, item.name, options);
         setSendError(null);
         track("media_presented");
@@ -912,8 +934,102 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         setSendingFile(null);
       }
     },
-    [uploadsDir]
+    [resolveLibraryMediaFilePath, t]
   );
+
+  const openSceneSendDialog = useCallback(async (entry: DockMediaEntry) => {
+    setOpenOptionsKey(null);
+    setSceneSendEntry(entry);
+    setSceneSendChoices([]);
+    setSceneSendSelection("");
+    setSceneSendError(null);
+    setSceneSendLoading(true);
+
+    try {
+      await ensureObsConnected();
+      const [sceneListResp, currentSceneResp] = await Promise.all([
+        dockObsClient.call("GetSceneList") as Promise<{ scenes?: Array<{ sceneName?: string | null }> }>,
+        dockObsClient.call("GetCurrentProgramScene") as Promise<{ currentProgramSceneName?: string; sceneName?: string }>,
+      ]);
+
+      const currentSceneName = String(
+        currentSceneResp.currentProgramSceneName || currentSceneResp.sceneName || "",
+      ).trim();
+
+      const choices = (sceneListResp.scenes ?? [])
+        .map((scene) => String(scene.sceneName ?? "").trim())
+        .filter(isUserSelectableObsScene)
+        .sort((a, b) => {
+          if (a === currentSceneName) return -1;
+          if (b === currentSceneName) return 1;
+          return a.localeCompare(b);
+        });
+
+      setSceneSendChoices(choices);
+      setSceneSendSelection(choices.includes(currentSceneName) ? currentSceneName : (choices[0] ?? ""));
+      if (choices.length === 0) {
+        setSceneSendError("No available OBS scenes found.");
+      }
+    } catch (err) {
+      setSceneSendError(err instanceof Error ? err.message : "Unable to load OBS scenes.");
+    } finally {
+      setSceneSendLoading(false);
+    }
+  }, []);
+
+  const resetSceneSendDialog = useCallback(() => {
+    setSceneSendEntry(null);
+    setSceneSendChoices([]);
+    setSceneSendSelection("");
+    setSceneSendError(null);
+    setSceneSendLoading(false);
+  }, []);
+
+  const closeSceneSendDialog = useCallback(() => {
+    if (sceneSendSubmitting) return;
+    resetSceneSendDialog();
+  }, [resetSceneSendDialog, sceneSendSubmitting]);
+
+  const handleSendImageToSelectedScene = useCallback(async () => {
+    if (!sceneSendEntry || !sceneSendSelection) return;
+
+    setSceneSendSubmitting(true);
+    setSceneSendError(null);
+    try {
+      let filePath = "";
+      if (sceneSendEntry.uploadFile) {
+        filePath = await resolveUploadFilePath(sceneSendEntry.uploadFile);
+      } else if (sceneSendEntry.libraryItem) {
+        filePath = await resolveLibraryMediaFilePath(sceneSendEntry.libraryItem);
+      } else {
+        throw new Error("This image cannot be sent to a scene.");
+      }
+
+      const fitMode = mediaPrefs[sceneSendEntry.prefKey]?.fitMode ?? "cover";
+      await ensureObsConnected();
+      await dockObsClient.addImageSourceToScene({
+        sceneName: sceneSendSelection,
+        sourceName: buildSceneImageSourceName(sceneSendEntry),
+        filePath,
+        fitMode,
+      });
+
+      updateMediaPreference(sceneSendEntry.prefKey, { lastUsedAt: new Date().toISOString() });
+      resetSceneSendDialog();
+    } catch (err) {
+      setSceneSendError(err instanceof Error ? err.message : "Failed to send image to scene.");
+    } finally {
+      setSceneSendSubmitting(false);
+    }
+  }, [
+    mediaPrefs,
+    resetSceneSendDialog,
+    resolveLibraryMediaFilePath,
+    resolveUploadFilePath,
+    sceneSendEntry,
+    sceneSendSelection,
+    updateMediaPreference,
+  ]);
 
   const refreshMedia = useCallback(async () => {
     await Promise.all([fetchUploads(), loadLibraryMedia()]);
@@ -1015,12 +1131,12 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
   const lockedKeys = useMemo(() => {
     const locked = new Set<string>();
     let plan = "free";
-    try { plan = localStorage.getItem("ocs-dock-plan") || "free"; } catch { /* */ }
+    try { plan = localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free"; } catch { /* */ }
 
     // Try server-provided entitlements first, then FALLBACK_LIMITS
     let serverEntitlements: Record<string, number | boolean> | null = null;
     try {
-      const raw = localStorage.getItem("ocs-dock-entitlements");
+      const raw = localStorage.getItem(getUserScopedKey("ocs-dock-entitlements"));
       if (raw) serverEntitlements = JSON.parse(raw);
     } catch { /* */ }
 
@@ -1064,7 +1180,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
   // Free-plan gating: restrict visible uploads to the allowed count only
   const isFreePlan = useMemo(() => {
     try {
-      return (localStorage.getItem("ocs-dock-plan") || "free").toLowerCase() === "free";
+      return (localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free").toLowerCase() === "free";
     } catch {
       return true;
     }
@@ -1387,10 +1503,10 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     // ── Per-file-type quota enforcement ──
     // Resolve limits from server entitlements → localStorage → fallback
     let plan = "free";
-    try { plan = localStorage.getItem("ocs-dock-plan") || "free"; } catch { /* */ }
+    try { plan = localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free"; } catch { /* */ }
     let serverEntitlements: Record<string, number | boolean> | null = null;
     try {
-      const raw = localStorage.getItem("ocs-dock-entitlements");
+      const raw = localStorage.getItem(getUserScopedKey("ocs-dock-entitlements"));
       if (raw) serverEntitlements = JSON.parse(raw);
     } catch { /* */ }
     const getLimit = (feature: string): number => {
@@ -1764,11 +1880,14 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       const statusLabel = isActiveTarget ? (pausedTargets.active ? t('media.inPreview') : t('media.live')) : null;
       const statusVariant = isActiveTarget ? (pausedTargets.active ? "preview" : "live") : null;
 
-      const handleCardClick = () => {
-        if (isLocked) {
-          void requireEntitlement(entry.kind === "video" ? "videos" : "images", 0);
-          return;
-        }
+        const handleCardClick = () => {
+          if (isLocked) {
+            void requireEntitlement(
+              entry.kind === "video" ? "videos" : "images",
+              entry.kind === "video" ? videoEntries.length : imageEntries.length,
+            );
+            return;
+          }
         if (canSelect) toggleSelectKey(entry.key);
         else void handleSendEntry(entry);
       };
@@ -1857,6 +1976,16 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   <Icon name="open_in_full" size={13} />
                   {t('media.toPreview')}
                 </button>
+                {entry.kind === "image" && (
+                  <button
+                    type="button"
+                    className="dock-media-gallery-card__context-item"
+                    onClick={() => { void openSceneSendDialog(entry); }}
+                    title="Send to scene">
+                    <Icon name="image" size={13} />
+                    Send to scene
+                  </button>
+                )}
                 <button
                   type="button"
                   className="dock-media-gallery-card__context-item dock-media-gallery-card__context-item--danger"
@@ -1893,12 +2022,14 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       deleteEntry,
       getEntryPrefs,
       handleSendEntry,
+      imageEntries.length,
       lockedKeys,
       openOptionsKey,
       pausedTargets.active,
       selectionMode,
       selectedKeys,
       toggleSelectKey,
+      videoEntries.length,
     ]
   );
 
@@ -3470,6 +3601,78 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           </div>
         )
       }
+
+      {sceneSendEntry && (
+        <div className="dock-dialog-backdrop" role="presentation" onClick={closeSceneSendDialog}>
+          <div
+            className="dock-dialog dock-dialog--compact"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dock-media-send-scene-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="dock-dialog__header">
+              <h2 id="dock-media-send-scene-title" className="dock-dialog__title">Send image to scene</h2>
+              <button
+                type="button"
+                className="dock-dialog__close"
+                onClick={closeSceneSendDialog}
+                aria-label={t('common.close')}
+                title={t('common.close')}
+              >
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+            <div className="dock-dialog__body">
+              <div className="dock-dialog-field">
+                <label className="dock-dialog-field__label" htmlFor="dock-media-send-scene-select">Scene</label>
+                <select
+                  id="dock-media-send-scene-select"
+                  className="dock-input"
+                  value={sceneSendSelection}
+                  onChange={(event) => setSceneSendSelection(event.target.value)}
+                  disabled={sceneSendLoading || sceneSendSubmitting || sceneSendChoices.length === 0}
+                >
+                  {sceneSendChoices.length === 0 ? (
+                    <option value="">{sceneSendLoading ? "Loading scenes..." : "No scenes available"}</option>
+                  ) : (
+                    sceneSendChoices.map((sceneName) => (
+                      <option key={sceneName} value={sceneName}>{sceneName}</option>
+                    ))
+                  )}
+                </select>
+              </div>
+              {sceneSendEntry ? (
+                <p className="dock-media-clear-confirm__summary" style={{ marginTop: 12 }}>
+                  {sceneSendEntry.name}
+                </p>
+              ) : null}
+              {sceneSendError ? <p className="dock-dialog__error">{sceneSendError}</p> : null}
+            </div>
+            <div className="dock-dialog__footer">
+              <button
+                type="button"
+                className="dock-btn dock-btn--compact"
+                onClick={closeSceneSendDialog}
+                disabled={sceneSendSubmitting}
+                title={t('common.cancel')}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="dock-btn dock-btn--primary dock-btn--compact"
+                onClick={() => void handleSendImageToSelectedScene()}
+                disabled={sceneSendLoading || sceneSendSubmitting || !sceneSendSelection}
+                title="Send to scene"
+              >
+                <Icon name="send" size={12} />
+                {sceneSendSubmitting ? "Sending..." : "Send to scene"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Clear All Confirmation Dialog ── */}
       {showClearAllConfirm && (() => {

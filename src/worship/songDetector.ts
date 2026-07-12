@@ -196,65 +196,58 @@ function detectTitled(text: string): DetectionResult {
   const lines = text.split("\n");
   const songs: DetectedSong[] = [];
 
-  // Strategy: find short non-empty lines followed by a blank line,
-  // where the blank line is followed by longer content.
+  // Strategy: scan once for short non-empty lines followed by a blank line.
+  // This avoids the quadratic look-ahead path that can stall large hymn books.
+  const isTitleCandidate = (index: number): boolean => {
+    const line = lines[index]?.trim() ?? "";
+    if (!line || line.length >= 80 || isSectionLabel(line) || /^\d+[.\)]/.test(line)) {
+      return false;
+    }
+    const nextLine = index + 1 < lines.length ? lines[index + 1].trim() : "";
+    return nextLine === "" || index + 1 >= lines.length;
+  };
+
   let i = 0;
   while (i < lines.length) {
-    const line = lines[i].trim();
+    if (isTitleCandidate(i)) {
+      const title = lines[i].trim();
+      const lyricsStart = i + 2;
+      const lyricsLines: string[] = [];
+      let lyricCount = 0;
+      let leadingSkipped = false;
+      let j = lyricsStart;
 
-    // A potential title: short, non-empty, not a section label like "Verse 1:"
-    if (line && line.length < 80 && !isSectionLabel(line) && !/^\d+[.\)]/.test(line)) {
-      const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : "";
+      while (j < lines.length) {
+        if (isTitleCandidate(j) && lyricCount >= 2) {
+          break;
+        }
 
-      // Title must be followed by blank line (or end of file)
-      if (nextLine === "" || i + 1 >= lines.length) {
-        // Collect lyrics: from first non-empty line after the blank until next title candidate
-        const lyricsStart = i + 2;
-        const lyricsLines: string[] = [];
-        let j = lyricsStart;
-
-        // Find the next title candidate
-        let nextTitleIdx = lines.length;
-        for (let k = lyricsStart; k < lines.length; k++) {
-          const kLine = lines[k].trim();
-          if (kLine && kLine.length < 80 && !isSectionLabel(kLine) && !/^\d+[.\)]/.test(kLine)) {
-            const kNext = k + 1 < lines.length ? lines[k + 1].trim() : "";
-            if (kNext === "" || k + 1 >= lines.length) {
-              // Check if this looks like a title (short line followed by blank)
-              // Only split if we have enough lyrics before it
-              const lyricsSoFar = lyricsLines.filter((l) => l.trim()).length;
-              if (lyricsSoFar >= 2) {
-                nextTitleIdx = k;
-                break;
-              }
-            }
+        const currentLine = lines[j];
+        if (!leadingSkipped) {
+          if (!currentLine.trim()) {
+            j += 1;
+            continue;
           }
+          leadingSkipped = true;
         }
 
-        // Collect lyrics up to next title
-        j = lyricsStart;
-        let leadingSkipped = false;
-        while (j < nextTitleIdx) {
-          const lLine = lines[j];
-          if (!leadingSkipped) {
-            if (!lLine.trim()) { j++; continue; }
-            leadingSkipped = true;
-          }
-          lyricsLines.push(lLine);
-          j++;
+        lyricsLines.push(currentLine);
+        if (currentLine.trim()) {
+          lyricCount += 1;
         }
+        j += 1;
+      }
 
-        const lyrics = lyricsLines.join("\n").trim();
-        if (lyrics && lyricsLines.filter((l) => l.trim()).length >= 2) {
-          songs.push({
-            title: line,
-            lyrics,
-            lineCount: lyricsLines.filter((l) => l.trim()).length,
-            language: detectLanguage(lyrics),
-          });
-          i = nextTitleIdx;
-          continue;
-        }
+      const lyrics = lyricsLines.join("\n").trim();
+      if (lyrics && lyricCount >= 2) {
+        songs.push({
+          title,
+          lyrics,
+          lineCount: lyricCount,
+          language: detectLanguage(lyrics),
+        });
+        i = j;
+        continue;
       }
     }
     i++;

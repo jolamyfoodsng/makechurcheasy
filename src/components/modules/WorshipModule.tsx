@@ -29,6 +29,7 @@ import {
   OnlineLyricsImportModal,
   type OnlineLyricsImportDraft,
 } from "../../worship/OnlineLyricsImportModal";
+import { BulkImportModal } from "../../worship/BulkImportModal";
 import { lowerThirdObsService } from "../../lowerthirds/lowerThirdObsService";
 import { dockObsClient } from "../../dock/dockObsClient";
 import { ensureDockObsClientConnected } from "../../services/dockObsInterop";
@@ -210,10 +211,13 @@ export function WorshipModule({
   const { user: authUser } = useAuth();
   const effectivePlan = getEffectivePlan(authUser);
   const { limit: songLimit } = checkEntitlementSync("songs", effectivePlan);
+  const { allowed: canImport } = checkEntitlementSync("massImport", effectivePlan);
   const [songCount, setSongCount] = useState<number>(0);
   const isSongUnlimited = songLimit === -1;
   const hasReachedSongLimit = !isSongUnlimited && songCount >= songLimit;
   const [showSongLimitModal, setShowSongLimitModal] = useState(false);
+  const [songLimitModalType, setSongLimitModalType] = useState<"songs" | "import">("songs");
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
   const computeSongCount = useCallback(async () => {
     const slots = await getRemainingSongSlots(authUser);
@@ -435,7 +439,7 @@ export function WorshipModule({
   }, []);
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || bulkImportOpen) return;
 
     if (!obsConnected) {
       setLtScenes([]);
@@ -1117,6 +1121,7 @@ export function WorshipModule({
   const handleSaveImport = useCallback(async () => {
     if (!importMetadata.title.trim()) return;
     if (hasReachedSongLimit) {
+      setSongLimitModalType("songs");
       setShowSongLimitModal(true);
       return;
     }
@@ -1124,10 +1129,12 @@ export function WorshipModule({
       id: `song-${Date.now()}`,
       metadata: { ...importMetadata },
       lyrics: importLyrics,
-      slides: [],
+      slides: generateSlides(importLyrics, splitConfig.linesPerSlide, splitConfig.identifyChorus),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       importSourceType: "manual",
+      autoSplit: splitConfig.identifyChorus,
+      linesPerSlide: splitConfig.linesPerSlide,
     };
     await saveSong(newSong);
     await reloadSongs();
@@ -1161,6 +1168,7 @@ export function WorshipModule({
 
     if (hasReachedSongLimit) {
       setPendingOnlineImport(null);
+      setSongLimitModalType("songs");
       setShowSongLimitModal(true);
       return;
     }
@@ -1178,12 +1186,14 @@ export function WorshipModule({
         artist: draft.artist.trim(),
       },
       lyrics,
-      slides: [],
+      slides: generateSlides(lyrics, 2, true),
       createdAt: now,
       updatedAt: now,
       importSourceName: result.sourceName,
       importSourceType: "online",
       importSourceUrl: result.url,
+      autoSplit: true,
+      linesPerSlide: 2,
     };
 
     setImportingOnlineId(result.id);
@@ -1261,7 +1271,7 @@ export function WorshipModule({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isActive, view, layoutMode, handlePrevSlide, handleNextSlide, handleBlackout, handleClear, handleThemeChange, themes, sendSlideToObs, liveSlideIndex]);
+  }, [isActive, bulkImportOpen, view, layoutMode, handlePrevSlide, handleNextSlide, handleBlackout, handleClear, handleThemeChange, themes, sendSlideToObs, liveSlideIndex]);
 
   const themePreviewStyle = useMemo(() => (
     activeTheme.backgroundImage
@@ -1535,10 +1545,18 @@ export function WorshipModule({
                       <div className="worship-song-item-info">
                         <h3>{song.metadata.title}</h3>
                         <div className="worship-song-item-meta-row">
+                          {song.metadata.hymnNumber && (
+                            <span className="worship-imported-badge">Hymn {song.metadata.hymnNumber}</span>
+                          )}
                           <span className="worship-song-item-artist">{song.metadata.artist}</span>
                           {song.importSourceType === "online" && (
                             <span className="worship-imported-badge">
                               Imported{song.importSourceName ? ` from ${song.importSourceName}` : ""}
+                            </span>
+                          )}
+                          {song.importSourceType === "document" && (
+                            <span className="worship-imported-badge">
+                              Smart import{song.importSourceName ? ` · ${song.importSourceName}` : ""}
                             </span>
                           )}
                         </div>
@@ -1604,6 +1622,7 @@ export function WorshipModule({
                                 return;
                               }
                               if (hasReachedSongLimit) {
+                                setSongLimitModalType("songs");
                                 setShowSongLimitModal(true);
                                 return;
                               }
@@ -1623,10 +1642,26 @@ export function WorshipModule({
 
             <div className="worship-sidebar-footer">
               <button
+                className="worship-sidebar-action"
+                onClick={() => {
+                  if (!canImport) {
+                    setSongLimitModalType("import");
+                    setShowSongLimitModal(true);
+                    return;
+                  }
+                  setBulkImportOpen(true);
+                }}
+                title="Smart Import"
+              >
+                <Icon name="upload_file" size={20} />
+                Smart Import
+              </button>
+              <button
                 className={`worship-sidebar-action primary${hasReachedSongLimit ? " at-limit" : ""}`}
                 disabled={hasReachedSongLimit}
                 onClick={() => {
                   if (hasReachedSongLimit) {
+                    setSongLimitModalType("songs");
                     setShowSongLimitModal(true);
                     return;
                   }
@@ -2025,6 +2060,15 @@ export function WorshipModule({
         />
       )}
 
+      {bulkImportOpen && (
+        <BulkImportModal
+          onClose={() => setBulkImportOpen(false)}
+          onImported={() => {
+            void reloadSongs();
+          }}
+        />
+      )}
+
       {confirmDeleteSong && (
         <div className="end-confirm-backdrop" onClick={() => setConfirmDeleteSong(null)}>
           <div className="end-confirm-modal" onClick={(e) => e.stopPropagation()}>
@@ -2062,16 +2106,29 @@ export function WorshipModule({
               <Icon name="close" size={18} />
             </button>
             <div className="ssm-icon">
-              <Icon name="library_music" size={28} />
+              <Icon name={songLimitModalType === "import" ? "upload_file" : "library_music"} size={28} />
             </div>
-            <h2 className="ssm-title">Song Limit Reached</h2>
-            <p className="ssm-desc">
-              Your <strong>{effectivePlan}</strong> plan allows up to <strong>{songLimit} songs</strong>.
-              You currently have {songCount} song{songCount !== 1 ? "s" : ""}.
-            </p>
-            <p className="ssm-hint">
-              Upgrade your plan to add more songs to your library.
-            </p>
+            <h2 className="ssm-title">{songLimitModalType === "import" ? "Smart Import Restricted" : "Song Limit Reached"}</h2>
+            {songLimitModalType === "import" ? (
+              <>
+                <p className="ssm-desc">
+                  Smart worship import is available on <strong>Basic</strong> and above.
+                </p>
+                <p className="ssm-hint">
+                  Upgrade your plan to unlock document import, review, and AI-assisted worship parsing.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="ssm-desc">
+                  Your <strong>{effectivePlan}</strong> plan allows up to <strong>{songLimit} songs</strong>.
+                  You currently have {songCount} song{songCount !== 1 ? "s" : ""}.
+                </p>
+                <p className="ssm-hint">
+                  Upgrade your plan to add more songs to your library.
+                </p>
+              </>
+            )}
             <div className="ssm-actions">
               <button
                 className="ssm-btn-cancel"

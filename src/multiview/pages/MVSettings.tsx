@@ -92,7 +92,7 @@ const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
 
 type SettingsTab = "general" | "obs" | "mobile" | "appearance" | "branding" | "bible" | "usage" | "audio";
 
-const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "" };
+const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "", imageUrl: "" };
 
 /* ── Helpers ── */
 function resolveLogoPreviewSrc(path: string): string {
@@ -108,8 +108,9 @@ function sanitizeSpeakerProfiles(value: unknown): SpeakerProfileSetting[] {
     const raw = item as Partial<Record<string, unknown>>;
     const name = typeof raw.name === "string" ? raw.name.trim() : "";
     const role = typeof raw.role === "string" ? raw.role.trim() : "";
+    const imageUrl = typeof raw.imageUrl === "string" ? raw.imageUrl.trim() : "";
     if (!name) continue;
-    const profile: SpeakerProfileSetting = { name, role };
+    const profile: SpeakerProfileSetting = { name, role, imageUrl };
     if (typeof raw.isMain === "boolean") profile.isMain = raw.isMain;
     result.push(profile);
   }
@@ -1464,11 +1465,20 @@ export function MVSettings() {
                     <div className="form-group">
                       <label className="form-label">Pastors / Speakers</label>
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr auto", gap: 8, alignItems: "center", fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" as const }}>
-                          <span>Name</span><span>Position</span><span />
+                        <div style={{ display: "grid", gridTemplateColumns: "44px 1.1fr 1fr auto", gap: 8, alignItems: "center", fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" as const }}>
+                          <span>Photo</span><span>Name</span><span>Position</span><span />
                         </div>
                         {speakerProfiles.filter((p) => p.name.trim()).map((profile, index) => (
-                          <div key={`sp-${index}`} style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr auto", gap: 8, alignItems: "center" }}>
+                          <div key={`sp-${index}`} style={{ display: "grid", gridTemplateColumns: "44px 1.1fr 1fr auto", gap: 8, alignItems: "center" }}>
+                            {profile.imageUrl ? (
+                              <img
+                                src={resolveLogoPreviewSrc(profile.imageUrl)}
+                                alt={profile.name}
+                                style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", border: "1px solid var(--border-color)" }}
+                              />
+                            ) : (
+                              <div style={{ width: 36, height: 36, borderRadius: 8, background: "var(--bg-tertiary)", border: "1px solid var(--border-color)" }} />
+                            )}
                             <input className="custom-textbox" type="text" value={profile.name} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                             <input className="custom-textbox" type="text" value={profile.role} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                             {profile.isMain && (

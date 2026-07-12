@@ -14,7 +14,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { saveSong } from "./worshipDb";
+import { saveSongsBatch } from "./worshipDb";
 import type { Song, SongMetadata } from "./types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -389,10 +389,10 @@ export async function bulkImportHymns(
       updatedAt: now,
       importSourceType: "manual",
     };
-    await saveSong(song);
     imported.push(song);
-    onProgress?.(i + 1, songData.length);
   }
+
+  await saveSongsBatch(imported, { onProgress });
 
   return imported;
 }

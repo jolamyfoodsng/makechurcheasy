@@ -83,7 +83,7 @@ interface DockSong {
   artist: string;
   lyrics: string;
   importSourceName?: string;
-  importSourceType?: "manual" | "online";
+  importSourceType?: "manual" | "online" | "document";
   importSourceUrl?: string;
   autoSplit?: boolean;
   linesPerSlide?: number;
@@ -127,7 +127,7 @@ interface DockSongDraft {
 
 interface DockSongDefault extends DockSongDraft {
   importSourceName?: string;
-  importSourceType?: "manual" | "online";
+  importSourceType?: "manual" | "online" | "document";
   importSourceUrl?: string;
 }
 
@@ -353,7 +353,7 @@ function mapAppSongToDockSong(song: {
   metadata: { title: string; artist?: string };
   lyrics?: string;
   importSourceName?: string;
-  importSourceType?: "manual" | "online";
+  importSourceType?: "manual" | "online" | "document";
   importSourceUrl?: string;
   autoSplit?: boolean;
   linesPerSlide?: number;
@@ -688,7 +688,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
   // Initialize from localStorage so the limit is known immediately
   const [songLimit, setSongLimit] = useState<number>(() => {
     try {
-      const stored = localStorage.getItem("ocs-dock-song-limit");
+      const stored = localStorage.getItem(getUserScopedKey("ocs-dock-song-limit"));
       if (stored !== null) {
         const parsed = Number(stored);
         if (!isNaN(parsed) && parsed > 0 && parsed < 9999) return parsed;
@@ -703,9 +703,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
 
   // ── Plan-filtered songs: only songs within the user's plan limit ──
   const accessibleSongs = useMemo(() => {
-    const isUnlimited = !songLimit || songLimit <= 0 || songLimit >= 9999;
-    if (isUnlimited) return songs;
-    return songs.slice(0, songLimit);
+    return songs;
   }, [songs, songLimit]);
 
   // Skip auto-selecting a song from the persisted staged item on first mount.
@@ -1014,7 +1012,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
       metadata: { title: string; artist?: string };
       lyrics?: string;
       importSourceName?: string;
-      importSourceType?: "manual" | "online";
+      importSourceType?: "manual" | "online" | "document";
       importSourceUrl?: string;
     }>): DockSong[] => all.map(mapAppSongToDockSong),
     [],
@@ -1026,7 +1024,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     // Fallback: read from localStorage if ref is still unset
     if (!limit || limit <= 0 || limit >= 9999) {
       try {
-        const stored = localStorage.getItem("ocs-dock-song-limit");
+        const stored = localStorage.getItem(getUserScopedKey("ocs-dock-song-limit"));
         if (stored !== null) {
           const parsed = Number(stored);
           if (!isNaN(parsed) && parsed > 0 && parsed < 9999) {
@@ -1063,7 +1061,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
         // Read the plan limit from localStorage (set by main app) so we
         // can enforce it even when BroadcastChannel hasn't delivered yet.
         try {
-          const stored = localStorage.getItem("ocs-dock-song-limit");
+          const stored = localStorage.getItem(getUserScopedKey("ocs-dock-song-limit"));
           if (stored !== null) {
             const parsed = Number(stored);
             if (!isNaN(parsed)) {
@@ -1190,7 +1188,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     // Also check server-provided entitlements for consistency
     let effectiveLimit = songLimit;
     try {
-      const raw = localStorage.getItem("ocs-dock-entitlements");
+      const raw = localStorage.getItem(getUserScopedKey("ocs-dock-entitlements"));
       if (raw) {
         const ent = JSON.parse(raw);
         if (typeof ent.songs === "number" && (ent.songs === -1 || ent.songs >= 0)) {
@@ -2366,7 +2364,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
                             className="dock-song-card__main"
                             onClick={() => {
                               if (isLocked) {
-                                void requireEntitlement("songs", 0);
+                                void requireEntitlement("songs", songs.length);
                                 return;
                               }
                               handleSelectSong(song);

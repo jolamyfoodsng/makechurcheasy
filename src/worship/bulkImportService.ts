@@ -7,10 +7,11 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import mammoth from "mammoth";
-import { saveSong } from "./worshipDb";
+import { saveSongsBatch } from "./worshipDb";
 import type { Song } from "./types";
 import type { DetectedSong } from "./songDetector";
 import type { TextElement } from "./layoutParser";
+import { generateSlides } from "./slideEngine";
 import {
   extractPdfTextElementsWithPdfJs,
   extractPdfTextWithPdfJs,
@@ -239,15 +240,23 @@ export async function importDetectedSongs(
       lyrics: detected.lyrics.startsWith(detected.title)
         ? detected.lyrics
         : `${detected.title}\n${detected.lyrics}`,
-      slides: [],
+      slides: generateSlides(
+        detected.lyrics.startsWith(detected.title)
+          ? detected.lyrics
+          : `${detected.title}\n${detected.lyrics}`,
+        2,
+        true,
+      ),
       createdAt: now,
       updatedAt: now,
-      importSourceType: "manual",
+      importSourceType: "document",
+      autoSplit: true,
+      linesPerSlide: 2,
     };
-    await saveSong(song);
     imported.push(song);
-    onProgress?.(i + 1, songs.length);
   }
+
+  await saveSongsBatch(imported, { onProgress });
 
   return imported;
 }

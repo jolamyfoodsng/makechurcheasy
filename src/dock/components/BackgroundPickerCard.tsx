@@ -9,6 +9,7 @@ import {
   DEFAULT_COMPARE_THEME_SETTINGS,
   normalizeCompareThemeSettings,
   type CompareFontWeight,
+  type CompareMetadataAlign,
   type CompareMetadataPosition,
   type CompareTextAlign,
 } from "../compareThemeConfig";
@@ -140,6 +141,20 @@ export default function BackgroundPickerCard({
       setActiveTab("text");
     }
   }, [activeTab, displayMode]);
+
+  useEffect(() => {
+    const inferredType = inferBgTypeFromSettings(quickSettings);
+    setBgType((current) => (current === inferredType ? current : inferredType));
+  }, [
+    quickSettings.backgroundColor,
+    quickSettings.backgroundColorEnd,
+    quickSettings.backgroundImage,
+    quickSettings.backgroundPattern,
+    quickSettings.backgroundType,
+    quickSettings.backgroundVideo,
+    quickSettings.fullscreenShadeColor,
+    quickSettings.fullscreenShadeOpacity,
+  ]);
 
   const handleTypeChange = useCallback((type: BackgroundType) => {
     setBgType(type);
@@ -1813,6 +1828,12 @@ const COMPARE_META_POSITION_OPTIONS: Array<{ value: CompareMetadataPosition; lab
   { value: "hidden", label: "Hidden" },
 ];
 
+const COMPARE_META_ALIGN_OPTIONS: Array<{ value: CompareMetadataAlign; label: string }> = [
+  { value: "left", label: "Left" },
+  { value: "center", label: "Center" },
+  { value: "right", label: "Right" },
+];
+
 function clampNumberValue(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
@@ -1891,36 +1912,6 @@ function SelectField({
           <option key={option.value} value={option.value}>{option.label}</option>
         ))}
       </select>
-    </div>
-  );
-}
-
-function ToggleRow({
-  label,
-  hint,
-  checked,
-  onChange,
-}: {
-  label: string;
-  hint?: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <div className="dtb-colors__toggle-row dtb-compare-toggle-row">
-      <div className="dtb-compare-toggle-row__copy">
-        <div className="dtb-position-label">{label}</div>
-        {hint && <div className="dtb-compare-toggle-row__hint">{hint}</div>}
-      </div>
-      <button
-        type="button"
-        className={`dtb-toggle${checked ? " dtb-toggle--on" : ""}`}
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-      >
-        <span className="dtb-toggle__knob" />
-      </button>
     </div>
   );
 }
@@ -2083,15 +2074,6 @@ function CompareSettingsPanel({
           })}
         />
 
-        <SliderNumberField
-          label="Panel background"
-          value={Math.round(compare.comparePanelBgOpacityLeft * 100)}
-          min={0} max={100} step={1} unit="%"
-          onChange={(value) => applyPatch({
-            comparePanelBgOpacityLeft: value / 100,
-            comparePanelBgOpacityRight: value / 100,
-          })}
-        />
       </div>
 
       {/* Advanced */}
@@ -2150,43 +2132,6 @@ function CompareSettingsPanel({
               })}
             />
 
-            <div className="dtb-color-field">
-              <span className="dtb-color-field__label">Border colour</span>
-              <InlineColorPicker
-                value={compare.comparePanelBorderColorLeft}
-                onChange={(value) => applyPatch({
-                  comparePanelBorderColorLeft: value,
-                  comparePanelBorderColorRight: value,
-                })}
-              />
-            </div>
-
-            <SliderNumberField
-              label="Border width"
-              value={compare.comparePanelBorderWidthLeft}
-              min={0} max={12} step={1} unit="px"
-              onChange={(value) => applyPatch({
-                comparePanelBorderWidthLeft: value,
-                comparePanelBorderWidthRight: value,
-              })}
-            />
-
-            <SliderNumberField
-              label="Border radius"
-              value={compare.comparePanelRadiusLeft}
-              min={0} max={40} step={1} unit="px"
-              onChange={(value) => applyPatch({
-                comparePanelRadiusLeft: value,
-                comparePanelRadiusRight: value,
-              })}
-            />
-
-            <ToggleRow
-              label="Show divider"
-              checked={compare.compareDividerVisible}
-              onChange={(checked) => applyPatch({ compareDividerVisible: checked })}
-            />
-
             <SelectField
               label="Reference position"
               value={compare.compareReferencePositionLeft}
@@ -2195,6 +2140,16 @@ function CompareSettingsPanel({
                 compareReferencePositionRight: value,
               })}
               options={COMPARE_META_POSITION_OPTIONS}
+            />
+
+            <SelectField
+              label="Reference alignment"
+              value={compare.compareReferenceAlignmentLeft}
+              onChange={(value) => applyPatch({
+                compareReferenceAlignmentLeft: value,
+                compareReferenceAlignmentRight: value,
+              })}
+              options={COMPARE_META_ALIGN_OPTIONS}
             />
 
             <ReferenceBackgroundSection

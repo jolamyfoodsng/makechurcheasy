@@ -2227,12 +2227,254 @@ fn get_transcript_stats() -> Result<String, String> {
 const OPENCODE_BASE_URL: &str = "https://opencode.ai/zen/v1";
 const OPENCODE_MODEL: &str = "mimo-v2.5-free";
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportAiStatus {
+    ai_configured: bool,
+    model: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportReviewRequest {
+    songs: Vec<WorshipImportReviewSongInput>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportReviewSongInput {
+    id: String,
+    title: String,
+    hymn_number: Option<String>,
+    language: Option<String>,
+    confidence: f64,
+    raw_text: String,
+    warnings: Vec<String>,
+    section_hints: Vec<WorshipImportReviewSectionHint>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportReviewSectionHint {
+    label: String,
+    #[serde(rename = "type")]
+    section_type: String,
+    content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportReviewResponse {
+    songs: Vec<WorshipImportReviewSongOutput>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportReviewSongOutput {
+    id: String,
+    title: Option<String>,
+    hymn_number: Option<String>,
+    confidence: Option<f64>,
+    warnings: Option<Vec<String>>,
+    review_notes: Option<Vec<String>>,
+    sections: Option<Vec<WorshipImportReviewSectionOutput>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportReviewSectionOutput {
+    #[serde(rename = "type")]
+    section_type: Option<String>,
+    label: Option<String>,
+    number: Option<String>,
+    content: Option<String>,
+    warnings: Option<Vec<String>>,
+}
+
 fn get_opencode_api_key() -> Result<String, String> {
-    std::env::var("OPENCODE_API_KEY").map_err(|_| {
+    if let Ok(value) = std::env::var("OPENCODE_API_KEY") {
+        if !value.trim().is_empty() {
+            return Ok(value);
+        }
+    }
+
+    for candidate in opencode_dotenv_candidates() {
+        if let Some(value) = read_env_file_value(&candidate, "OPENCODE_API_KEY") {
+            return Ok(value);
+        }
+    }
+
+    Err(
         "OPENCODE_API_KEY environment variable not set. \
          Set it in your shell or .env before running the app."
-            .to_string()
-    })
+            .to_string(),
+    )
+}
+
+fn opencode_dotenv_candidates() -> Vec<std::path::PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        candidates.push(current_dir.join(".env"));
+        candidates.push(current_dir.join("../.env"));
+        candidates.push(current_dir.join("../../.env"));
+    }
+
+    candidates
+}
+
+fn read_env_file_value(path: &std::path::Path, key: &str) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        let (name, value) = trimmed.split_once('=')?;
+        if name.trim() != key {
+            continue;
+        }
+
+        let normalized = value
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .trim()
+            .to_string();
+
+        if !normalized.is_empty() {
+            return Some(normalized);
+        }
+    }
+
+    None
+}
+
+fn build_opencode_client(timeout_secs: u64) -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))
+}
+
+fn extract_json_payload(text: &str) -> &str {
+    let trimmed = text.trim();
+    if trimmed.starts_with('{') && trimmed.ends_with('}') {
+        return trimmed;
+    }
+
+    let start = trimmed.find('{');
+    let end = trimmed.rfind('}');
+    match (start, end) {
+        (Some(s), Some(e)) if s < e => &trimmed[s..=e],
+        _ => trimmed,
+    }
+}
+
+fn build_worship_import_review_prompt(request: &WorshipImportReviewRequest) -> Result<String, String> {
+    let payload = serde_json::to_string_pretty(request)
+        .map_err(|e| format!("Failed to serialize review request: {}", e))?;
+
+    Ok(format!(
+        "You are a worship document review assistant.\n\
+         Your job is to structure already-extracted worship songs for import.\n\
+         HARD RULES:\n\
+         - Do NOT write new lyrics.\n\
+         - Do NOT translate.\n\
+         - Do NOT summarize.\n\
+         - Do NOT paraphrase.\n\
+         - Do NOT normalize spelling.\n\
+         - Do NOT fix OCR errors by changing words. If you suspect OCR issues, keep the original text and mention them in warnings.\n\
+         - Use ONLY text that already exists in each song's rawText or sectionHints.\n\
+         - Keep section content verbatim except for grouping existing lines into the right section.\n\
+         - Never move lines from one song into another song.\n\
+         - If uncertain, preserve the local structure and lower confidence.\n\n\
+         TASK:\n\
+         For each input song, identify title, hymnNumber, and sections such as verse, chorus, refrain, bridge, pre-chorus, tag, intro, outro, or other.\n\
+         Detect broken stanza boundaries, repeated choruses, page continuations, and likely OCR mistakes.\n\
+         Return structured JSON only.\n\n\
+         RESPONSE SCHEMA:\n\
+         {{\n\
+           \"songs\": [\n\
+             {{\n\
+               \"id\": \"same as input\",\n\
+               \"title\": \"string\",\n\
+               \"hymnNumber\": \"string or omitted\",\n\
+               \"confidence\": 0.0,\n\
+               \"warnings\": [\"string\"],\n\
+               \"reviewNotes\": [\"string\"],\n\
+               \"sections\": [\n\
+                 {{\n\
+                   \"type\": \"verse|chorus|refrain|bridge|pre-chorus|tag|intro|outro|other\",\n\
+                   \"label\": \"display label\",\n\
+                   \"number\": \"optional section number\",\n\
+                   \"content\": \"exact lyric text from the input only\",\n\
+                   \"warnings\": [\"string\"]\n\
+                 }}\n\
+               ]\n\
+             }}\n\
+           ]\n\
+         }}\n\n\
+         INPUT SONGS:\n{payload}"
+    ))
+}
+
+#[tauri::command]
+fn get_worship_import_ai_status() -> WorshipImportAiStatus {
+    WorshipImportAiStatus {
+        ai_configured: get_opencode_api_key()
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false),
+        model: OPENCODE_MODEL.to_string(),
+    }
+}
+
+#[tauri::command]
+fn review_worship_import_batch(request: WorshipImportReviewRequest) -> Result<WorshipImportReviewResponse, String> {
+    let api_key = get_opencode_api_key()?;
+    let prompt = build_worship_import_review_prompt(&request)?;
+    let client = build_opencode_client(120)?;
+
+    let body = serde_json::json!({
+        "model": OPENCODE_MODEL,
+        "messages": [
+            { "role": "system", "content": "Return valid JSON only. Never generate or rewrite lyrics." },
+            { "role": "user", "content": prompt }
+        ],
+        "temperature": 0.0
+    });
+
+    let resp = client
+        .post(format!("{}/chat/completions", OPENCODE_BASE_URL))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .send()
+        .map_err(|e| format!("Worship import review request failed: {}", e))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().unwrap_or_default();
+        return Err(format!("Worship import review API returned {}: {}", status, text));
+    }
+
+    let data: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("Failed to parse worship review response: {}", e))?;
+
+    let content = data
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .ok_or("Worship import review returned empty content")?;
+
+    let payload = extract_json_payload(content);
+    serde_json::from_str::<WorshipImportReviewResponse>(payload)
+        .map_err(|e| format!("Failed to parse worship import review JSON: {}", e))
 }
 
 #[tauri::command]
@@ -2273,10 +2515,7 @@ fn translate_transcript(transcript_text: String, target_language: String) -> Res
          Transcript:\n{transcript_text}"
     );
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let client = build_opencode_client(120)?;
 
     let body = serde_json::json!({
         "model": OPENCODE_MODEL,
@@ -4032,6 +4271,8 @@ pub fn run() {
             save_transcript,
             delete_transcript,
             get_transcript_stats,
+            get_worship_import_ai_status,
+            review_worship_import_batch,
             translate_transcript,
             extract_text_from_pdf,
             extract_text_elements_from_pdf,

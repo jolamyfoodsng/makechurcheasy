@@ -266,7 +266,7 @@
       justify-content: flex-start;
       gap: var(--compare-paragraph-spacing, 12px);
       padding: var(--compare-panel-padding, 20px);
-      border: var(--compare-panel-border-width, 1px) solid var(--compare-panel-border-color, rgba(255, 255, 255, 0.14));
+      border: none;
       border-radius: var(--compare-panel-radius, 4px);
       background: var(--compare-panel-background, rgba(8, 12, 20, 0.28));
       box-shadow: var(--compare-panel-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.05));
@@ -586,6 +586,14 @@
     function safeSupText(value) {
       return escapeHtml(value).replace(/\[(\d+)\]\s*/g, '<sup>$1</sup> ');
     }
+
+    function formatCompareReference(reference, translation) {
+      const ref = String(reference || '').trim();
+      const version = String(translation || '').trim();
+      if (ref && version) return `${ref} (${version})`;
+      return ref || version;
+    }
+
     const COMPARE_REF_MIN = 11;
     const COMPARE_META_MIN = 10;
     const COMPARE_PADDING_MIN = 16;
@@ -694,16 +702,16 @@
       panelHeightMode: 'fill-available-height',
       panelBgLeft: '#081018',
       panelBgRight: '#081018',
-      panelBgOpacityLeft: 0.28,
-      panelBgOpacityRight: 0.28,
+      panelBgOpacityLeft: 0,
+      panelBgOpacityRight: 0,
       panelBorderColorLeft: '#334155',
       panelBorderColorRight: '#334155',
-      panelBorderWidthLeft: 1,
-      panelBorderWidthRight: 1,
-      panelRadiusLeft: 4,
-      panelRadiusRight: 4,
-      panelShadowLeft: true,
-      panelShadowRight: true,
+      panelBorderWidthLeft: 0,
+      panelBorderWidthRight: 0,
+      panelRadiusLeft: 0,
+      panelRadiusRight: 0,
+      panelShadowLeft: false,
+      panelShadowRight: false,
       dividerVisible: false,
       dividerColor: '#475569',
       dividerThickness: 1,
@@ -777,8 +785,8 @@
         panelBorderColorRight: String(s.comparePanelBorderColorRight ?? compareDefaults.panelBorderColorRight),
         panelBorderWidthLeft: clampNumber(s.comparePanelBorderWidthLeft ?? compareDefaults.panelBorderWidthLeft, 0, 12),
         panelBorderWidthRight: clampNumber(s.comparePanelBorderWidthRight ?? compareDefaults.panelBorderWidthRight, 0, 12),
-        panelRadiusLeft: clampNumber(s.comparePanelRadiusLeft ?? compareDefaults.panelRadiusLeft, 0, 40),
-        panelRadiusRight: clampNumber(s.comparePanelRadiusRight ?? compareDefaults.panelRadiusRight, 0, 40),
+        panelRadiusLeft: clampNumber(s.comparePanelRadiusLeft ?? compareDefaults.panelRadiusLeft, 0, 80),
+        panelRadiusRight: clampNumber(s.comparePanelRadiusRight ?? compareDefaults.panelRadiusRight, 0, 80),
         panelShadowLeft: Boolean(s.comparePanelShadowLeft ?? compareDefaults.panelShadowLeft),
         panelShadowRight: Boolean(s.comparePanelShadowRight ?? compareDefaults.panelShadowRight),
         dividerVisible: Boolean(s.compareDividerVisible ?? compareDefaults.dividerVisible),
@@ -807,6 +815,12 @@
         case 'extrabold': return '800';
         default: return '400';
       }
+    }
+
+    function metaAlignToFlex(align) {
+      if (align === 'center') return 'center';
+      if (align === 'right') return 'flex-end';
+      return 'flex-start';
     }
 
     function panelBackgroundColor(hex, opacity) {
@@ -1093,9 +1107,10 @@
 
         const placeMeta = (metaNode, position, topMeta, bottomMeta, sameRowWithOther) => {
           if (!metaNode || !topMeta || !bottomMeta) return;
-          metaNode.style.display = position === 'hidden' ? 'none' : 'block';
+          const hasContent = String(metaNode.textContent || '').trim().length > 0;
+          metaNode.style.display = position === 'hidden' || !hasContent ? 'none' : 'block';
           metaNode.style.order = position === 'same-row' ? '0' : metaNode === compareReferenceLeft || metaNode === compareReferenceRight ? '0' : '1';
-          if (position === 'hidden') return;
+          if (position === 'hidden' || !hasContent) return;
           if (position === 'below-verse') {
             bottomMeta.appendChild(metaNode);
             return;
@@ -1111,8 +1126,9 @@
           if (!entry.column || !entry.textWrap || !entry.topMeta || !entry.bottomMeta) return;
           entry.column.style.padding = compareSettings.innerPadding + 'px';
           entry.column.style.gap = compareSettings.paragraphSpacing + 'px';
-          entry.column.style.borderWidth = entry.panelBorderWidth + 'px';
-          entry.column.style.borderColor = entry.panelBorderColor;
+          entry.column.style.border = entry.panelBorderWidth > 0
+            ? `${entry.panelBorderWidth}px solid ${entry.panelBorderColor}`
+            : 'none';
           entry.column.style.borderRadius = entry.panelRadius + 'px';
           entry.column.style.background = panelBackgroundColor(entry.panelBg, entry.panelBgOpacity);
           entry.column.style.boxShadow = entry.panelShadow
@@ -1139,6 +1155,23 @@
           entry.reference.style.textAlign = entry.referenceAlign;
           entry.reference.style.fontWeight = fontWeightValue(entry.fontWeight);
           entry.reference.style.letterSpacing = entry.letterSpacing + 'px';
+          if (s.referenceBackgroundEnabled === true) {
+            entry.reference.style.padding = root.getPropertyValue('--ref-bg-padding').trim() || '0';
+            entry.reference.style.background = root.getPropertyValue('--ref-bg-color').trim() || 'transparent';
+            entry.reference.style.borderRadius = root.getPropertyValue('--ref-bg-radius').trim() || '0';
+            entry.reference.style.border = root.getPropertyValue('--ref-bg-border').trim() || 'none';
+            entry.reference.style.width = 'fit-content';
+            entry.reference.style.maxWidth = '100%';
+            entry.reference.style.alignSelf = metaAlignToFlex(entry.referenceAlign);
+          } else {
+            entry.reference.style.padding = '0';
+            entry.reference.style.background = 'transparent';
+            entry.reference.style.borderRadius = '0';
+            entry.reference.style.border = 'none';
+            entry.reference.style.width = '100%';
+            entry.reference.style.maxWidth = '100%';
+            entry.reference.style.alignSelf = 'stretch';
+          }
           entry.badge.style.textTransform = entry.badgeTransform;
           entry.badge.style.textAlign = entry.badgeAlign;
           entry.badge.style.letterSpacing = entry.letterSpacing + 'px';
@@ -1863,17 +1896,17 @@
           compareLayout.dataset.layoutMode = compareLayoutMode;
         }
 
+        compareReferenceLeft.textContent = formatCompareReference(left.reference, left.translation);
+        compareReferenceRight.textContent = formatCompareReference(right.reference, right.translation);
+        compareTranslationLeft.textContent = '';
+        compareTranslationRight.textContent = '';
         if (applyCompareThemeStyles && currentCompareSettings) {
           applyCompareThemeStyles(currentCompareSettings, compareLayoutMode);
         }
-
-        compareReferenceLeft.textContent = String(left.reference || '').trim();
-        compareReferenceRight.textContent = String(right.reference || '').trim();
-        compareTranslationLeft.textContent = String(left.translation || '').trim();
-        compareTranslationRight.textContent = String(right.translation || '').trim();
         compareTextLeft.innerHTML = normalizeCompareText(left.text);
         compareTextRight.innerHTML = normalizeCompareText(right.text);
         autoScaleCompareContent();
+        scheduleContentFit();
       } else {
         setSingleLayoutVisible(true);
         const displayText = safeSupText(slide.text);

@@ -16,6 +16,7 @@ import {
   saveSlot,
 } from "../../lowerthirds/contentSlots";
 import { buildOverlayUrl } from "../../lowerthirds/lowerThirdObsService";
+import { isLogoVariable, resolveOverlayAssetUrl } from "../../lowerthirds/runtimeBranding";
 import { isSpeakerTheme } from "../../lowerthirds/speakerThemeUtils";
 import type {
   LTAnimationIn,
@@ -29,6 +30,7 @@ import type {
 import {
   LT_DEFAULT_CUSTOM_STYLE,
 } from "../../lowerthirds/types";
+import type { SpeakerProfileSetting } from "../../multiview/mvStore";
 import { MV_SETTINGS_UPDATED_EVENT } from "../../multiview/mvStore";
 import { buildSpeakerRoleMap, ensureMinistryData, getMinistryData, refreshMinistry } from "../../services/ministryStore";
 import Icon from "../DockIcon";
@@ -144,7 +146,7 @@ export default function DockLowerThirdEditor({
     }));
   }, [imageVariable, setVariableValues]);
 
-  const [speakers, setSpeakers] = useState<Array<{ name: string; role: string; isMain?: boolean }>>([]);
+  const [speakers, setSpeakers] = useState<SpeakerProfileSetting[]>([]);
   const [selectedSpeakerIdx, setSelectedSpeakerIdx] = useState<number | null>(null);
   const [showSpeakerHint, setShowSpeakerHint] = useState(() => {
     if (!isCurrentThemeSpeaker) return false;
@@ -159,7 +161,12 @@ export default function DockLowerThirdEditor({
     }
     refreshMinistry();
     const ministry = getMinistryData();
-    const list = ministry.speakers.map((s) => ({ name: s.name.trim(), role: (s.role || "").trim(), isMain: s.isMain }));
+    const list = ministry.speakers.map((s) => ({
+      name: s.name.trim(),
+      role: (s.role || "").trim(),
+      imageUrl: (s.imageUrl || "").trim(),
+      isMain: s.isMain,
+    }));
     setSpeakers(list);
 
     // Auto-select main pastor
@@ -171,7 +178,12 @@ export default function DockLowerThirdEditor({
       ensureMinistryData().then((fetched) => {
         if (!fetched) return;
         const fresh = getMinistryData();
-        const freshList = fresh.speakers.map((s) => ({ name: s.name.trim(), role: (s.role || "").trim(), isMain: s.isMain }));
+        const freshList = fresh.speakers.map((s) => ({
+          name: s.name.trim(),
+          role: (s.role || "").trim(),
+          imageUrl: (s.imageUrl || "").trim(),
+          isMain: s.isMain,
+        }));
         setSpeakers(freshList);
         if (freshList.length > 0) {
           const mainIdx = freshList.findIndex((s) => s.isMain || s.name.trim().toLowerCase() === fresh.mainPastorName.toLowerCase());
@@ -187,7 +199,12 @@ export default function DockLowerThirdEditor({
     const handler = () => {
       refreshMinistry();
       const ministry = getMinistryData();
-      const list = ministry.speakers.map((s) => ({ name: s.name.trim(), role: (s.role || "").trim(), isMain: s.isMain }));
+      const list = ministry.speakers.map((s) => ({
+        name: s.name.trim(),
+        role: (s.role || "").trim(),
+        imageUrl: (s.imageUrl || "").trim(),
+        isMain: s.isMain,
+      }));
       setSpeakers(list);
     };
     window.addEventListener(MV_SETTINGS_UPDATED_EVENT, handler);
@@ -204,6 +221,7 @@ export default function DockLowerThirdEditor({
     const resolvedRole = sp.role || roleMap.get(sp.name.trim().toLowerCase()) || "";
     const ministry = getMinistryData();
     const churchName = ministry.churchName || "";
+    const resolvedSpeakerImage = sp.imageUrl ? resolveOverlayAssetUrl(sp.imageUrl) : "";
 
     setVariableValues((prev) => {
       const next = { ...prev };
@@ -211,21 +229,37 @@ export default function DockLowerThirdEditor({
         const key = v.key.toLowerCase();
         const label = (v.label || "").toLowerCase();
         const hint = `${key} ${label}`;
+        const logoField = isLogoVariable(v);
+
+        const isSpeakerImageField =
+          !logoField && (
+            String(v.type || "").toLowerCase() === "image"
+            || key === "image"
+            || hint.includes("photo")
+            || hint.includes("avatar")
+            || hint.includes("picture")
+          );
 
         // Name fields: exact key matches + label/hint heuristics
         const isNameField =
-          key === "name" || key === "fullname" || key === "firstname" || key === "lastname" ||
-          hint.includes("name") || hint.includes("speaker") || hint.includes("pastor");
+          !isSpeakerImageField && (
+            key === "name" || key === "fullname" || key === "firstname" || key === "lastname"
+            || hint.includes("name") || hint.includes("speaker") || hint.includes("pastor")
+          );
 
         // Title/role fields: exact key matches + label/hint heuristics
         const isTitleField =
-          key === "title" || key === "role" || key === "position" || key === "subtitle" ||
-          hint.includes("title") || hint.includes("role") || hint.includes("position");
+          !isSpeakerImageField && (
+            key === "title" || key === "role" || key === "position" || key === "subtitle"
+            || hint.includes("title") || hint.includes("role") || hint.includes("position")
+          );
 
         // Ministry/church fields
         const isChurchField =
-          key === "ministry" || key === "church" || key === "organization" ||
-          hint.includes("ministry") || hint.includes("church");
+          !isSpeakerImageField && (
+            key === "ministry" || key === "church" || key === "organization"
+            || hint.includes("ministry") || hint.includes("church")
+          );
 
         if (isNameField) {
           next[v.key] = sp.name;
@@ -234,6 +268,8 @@ export default function DockLowerThirdEditor({
           next[v.key] = combined || resolvedRole || v.defaultValue || "";
         } else if (isChurchField) {
           next[v.key] = churchName || v.defaultValue || "";
+        } else if (isSpeakerImageField) {
+          next[v.key] = resolvedSpeakerImage || v.defaultValue || "";
         }
       }
       return next;

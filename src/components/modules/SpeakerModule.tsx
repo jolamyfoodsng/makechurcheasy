@@ -70,6 +70,8 @@ function getConfiguredSpeakerProfiles(settings: ReturnType<typeof getSettings>):
       .map((profile) => ({
         name: String(profile?.name || "").trim(),
         role: String(profile?.role || "").trim(),
+        imageUrl: String(profile?.imageUrl || "").trim(),
+        isMain: profile?.isMain,
       }))
       .filter((profile) => profile.name.length > 0)
     : [];
