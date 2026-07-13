@@ -2103,6 +2103,7 @@ mod tests {
         assert!(!lyrics.contains("Facebook"));
         assert!(!lyrics.contains("Related"));
     }
+
 }
 
 // ─── Transcript Library Commands ─────────────────────────────────────────────

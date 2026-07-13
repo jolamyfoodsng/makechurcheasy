@@ -1,21 +1,10 @@
-import type { DetectionResult } from "./songDetector";
-import { detectLanguage } from "./songDetector";
-import {
-  hymnsToSongs,
-  parseBilingualHymns,
-  type LanguageMode,
-} from "./pdfImportService";
-import type { LayoutParseResult } from "./layoutParser";
 import {
   formatLyricsFromSections,
   generateSlides,
-  parseWorshipLyricSections,
 } from "./slideEngine";
 import type { Song } from "./types";
 import { saveSongsBatch } from "./worshipDb";
 import type {
-  SmartImportReviewBatchResponse,
-  SmartImportAnalysis,
   SmartImportSectionDraft,
   SmartImportSectionType,
   SmartImportSongDraft,
@@ -41,30 +30,6 @@ function yieldToMainThread(): Promise<void> {
     }
     setTimeout(resolve, 0);
   });
-}
-
-function normalizeImportedLyrics(title: string, lyrics: string): string {
-  const normalized = sanitizeLineBreaks(lyrics).trim();
-  if (!normalized) return "";
-
-  const lines = normalized.split("\n");
-  if (lines.length === 0) return normalized;
-
-  const firstLine = lines[0].trim();
-  if (firstLine.localeCompare(title.trim(), undefined, { sensitivity: "accent" }) === 0) {
-    return lines.slice(1).join("\n").trim();
-  }
-
-  return normalized;
-}
-
-function extractHymnNumber(...values: Array<string | undefined>): string | undefined {
-  for (const value of values) {
-    if (!value) continue;
-    const match = value.match(/\b(?:hymn|orin|song)\s*(\d{1,4})\b/i) ?? value.match(/^\s*(\d{1,4})\b/);
-    if (match?.[1]) return match[1];
-  }
-  return undefined;
 }
 
 function sectionTypeToLabel(type: SmartImportSectionType, number?: string): string {
@@ -114,29 +79,6 @@ function inferSectionType(label: string, fallback: SmartImportSectionType = "ver
   return fallback;
 }
 
-function buildSectionsFromLyrics(lyrics: string): SmartImportSectionDraft[] {
-  const parsed = parseWorshipLyricSections(lyrics, DEFAULT_IMPORT_LINES_PER_SLIDE);
-  if (parsed.length === 0) {
-    return [{
-      id: uid("import-section"),
-      type: "verse",
-      label: "Verse 1",
-      number: "1",
-      content: lyrics.trim(),
-      warnings: [],
-    }];
-  }
-
-  return parsed.map((section) => ({
-    id: uid("import-section"),
-    type: section.type,
-    label: section.label,
-    number: inferSectionNumber(section.label),
-    content: section.lines.join("\n").trim(),
-    warnings: [],
-  }));
-}
-
 function sanitizeSectionDraft(section: Partial<SmartImportSectionDraft>, fallbackIndex: number): SmartImportSectionDraft | null {
   const content = sanitizeLineBreaks(section.content ?? "").trim();
   if (!content) return null;
@@ -154,38 +96,6 @@ function sanitizeSectionDraft(section: Partial<SmartImportSectionDraft>, fallbac
     warnings: Array.isArray(section.warnings)
       ? section.warnings.map((warning) => String(warning).trim()).filter(Boolean)
       : [],
-  };
-}
-
-function createDraft(input: {
-  id?: string;
-  title: string;
-  lyrics: string;
-  confidence: number;
-  method: SmartImportSongDraft["method"];
-  artist?: string;
-  language?: string;
-  hymnNumber?: string;
-  warnings?: string[];
-  reviewNotes?: string[];
-  rawExcerpt?: string;
-}): SmartImportSongDraft {
-  const normalizedTitle = input.title.trim() || "Untitled Song";
-  const normalizedLyrics = normalizeImportedLyrics(normalizedTitle, input.lyrics);
-  const sections = buildSectionsFromLyrics(normalizedLyrics);
-
-  return {
-    id: input.id ?? uid("import-song"),
-    title: normalizedTitle,
-    hymnNumber: input.hymnNumber?.trim() || extractHymnNumber(input.hymnNumber, normalizedTitle, normalizedLyrics),
-    artist: input.artist?.trim() || "",
-    language: input.language?.trim() || detectLanguage(normalizedLyrics),
-    confidence: Math.max(0, Math.min(100, Math.round(input.confidence))),
-    method: input.method,
-    sections,
-    warnings: (input.warnings ?? []).map((warning) => warning.trim()).filter(Boolean),
-    reviewNotes: (input.reviewNotes ?? []).map((note) => note.trim()).filter(Boolean),
-    rawExcerpt: (input.rawExcerpt?.trim() || normalizedLyrics).slice(0, 2400),
   };
 }
 
@@ -215,127 +125,6 @@ export function estimateDraftSlideCount(
   ).length;
 }
 
-export function analyzeLocalWorshipImport(input: {
-  rawText: string;
-  detection: DetectionResult;
-  layoutResult: LayoutParseResult | null;
-  usedLayoutParser: boolean;
-  languageMode: LanguageMode;
-}): SmartImportAnalysis {
-  const warnings: string[] = [];
-  let songs: SmartImportSongDraft[] = [];
-  let method: SmartImportAnalysis["method"];
-  let confidence = input.detection.confidence;
-
-  if (input.usedLayoutParser && input.layoutResult && input.layoutResult.songs.length > 0) {
-    method = "layout";
-    confidence = Math.round(input.layoutResult.overallConfidence);
-    warnings.push(...input.layoutResult.warnings);
-    songs = input.layoutResult.songs.map((song) =>
-      createDraft({
-        title: song.title,
-        lyrics: song.lyrics,
-        confidence: song.confidence,
-        method,
-        artist: song.author,
-        hymnNumber: extractHymnNumber(song.hymnRef, song.title, song.lyrics),
-        warnings: song.warnings,
-        rawExcerpt: song.lyrics,
-      }),
-    );
-  } else if (input.detection.pattern === "ccc") {
-    method = "ccc";
-    const hymns = parseBilingualHymns(input.rawText);
-    songs = hymnsToSongs(hymns, input.languageMode).map((song) =>
-      createDraft({
-        title: song.title,
-        lyrics: song.lyrics,
-        confidence: input.detection.confidence,
-        method,
-        artist: song.artist,
-        language: song.language,
-        hymnNumber: extractHymnNumber(song.title, song.lyrics),
-        rawExcerpt: song.lyrics,
-      }),
-    );
-  } else {
-    method = input.detection.pattern;
-    songs = input.detection.songs.map((song) =>
-      createDraft({
-        title: song.title,
-        lyrics: song.lyrics,
-        confidence: input.detection.confidence,
-        method,
-        language: song.language,
-        hymnNumber: extractHymnNumber(song.title, song.lyrics),
-        rawExcerpt: song.lyrics,
-      }),
-    );
-  }
-
-  if (songs.length === 0 && input.rawText.trim()) {
-    warnings.push("No distinct songs were detected. Review the extracted text carefully.");
-  }
-
-  return {
-    songs,
-    warnings,
-    method,
-    confidence,
-    counts: {
-      songs: songs.length,
-      sections: songs.reduce((sum, song) => sum + song.sections.length, 0),
-      lines: songs.reduce(
-        (sum, song) => sum + song.sections.reduce((sectionSum, section) => sectionSum + section.content.split("\n").filter((line) => line.trim()).length, 0),
-        0,
-      ),
-    },
-  };
-}
-
-export function applyAiReviewToSongs(
-  baseSongs: SmartImportSongDraft[],
-  review: SmartImportReviewBatchResponse,
-): SmartImportSongDraft[] {
-  if (!Array.isArray(review.songs) || review.songs.length === 0) {
-    return baseSongs;
-  }
-
-  const byId = new Map<string, SmartImportReviewBatchResponse["songs"][number]>(
-    review.songs.map((song) => [song.id, song]),
-  );
-
-  return baseSongs.map((song) => {
-    const reviewed = byId.get(song.id);
-    if (!reviewed) return song;
-
-    const nextSections = (reviewed.sections ?? [])
-      .map((section, index) => sanitizeSectionDraft({
-        id: `${song.id}-ai-${index}`,
-        type: section.type,
-        label: section.label,
-        number: section.number,
-        content: section.content,
-        warnings: section.warnings,
-      }, index))
-      .filter((section): section is SmartImportSectionDraft => Boolean(section));
-
-    return {
-      ...song,
-      title: reviewed.title?.trim() || song.title,
-      hymnNumber: reviewed.hymnNumber?.trim() || song.hymnNumber,
-      confidence: Number.isFinite(reviewed.confidence) ? Math.max(0, Math.min(100, Math.round(reviewed.confidence as number))) : song.confidence,
-      method: nextSections.length > 0 ? "ai-reviewed" : song.method,
-      sections: nextSections.length > 0 ? nextSections : song.sections,
-      warnings: [
-        ...song.warnings,
-        ...((reviewed.warnings ?? []).map((warning) => String(warning).trim()).filter(Boolean)),
-      ],
-      reviewNotes: (reviewed.reviewNotes ?? []).map((note) => String(note).trim()).filter(Boolean),
-    };
-  });
-}
-
 export function createEmptyImportSection(type: SmartImportSectionType = "verse"): SmartImportSectionDraft {
   const number = type === "verse" ? "1" : undefined;
   return {
@@ -346,6 +135,26 @@ export function createEmptyImportSection(type: SmartImportSectionType = "verse")
     content: "",
     warnings: [],
   };
+}
+
+export function buildFallbackDraft(rawText: string, sourceName: string): SmartImportSongDraft[] {
+  const text = rawText.trim();
+  if (!text) return [];
+  return [{
+    id: uid("import-song"),
+    title: sourceName.replace(/\.[^.]+$/, "").trim() || "Imported Document",
+    sections: [{
+      ...createEmptyImportSection("verse"),
+      content: text,
+    }],
+    artist: "",
+    language: undefined,
+    hymnNumber: undefined,
+    warnings: [],
+    reviewNotes: ["Document text extracted. AI structuring was unavailable — review and organize sections before importing."],
+    method: "fallback",
+    rawExcerpt: text.slice(0, 2400),
+  }];
 }
 
 export async function importSmartSongs(

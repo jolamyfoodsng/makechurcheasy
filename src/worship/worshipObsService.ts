@@ -416,6 +416,11 @@ class WorshipObsService {
     try {
       const resp = await obsService.call("GetSceneItemList", { sceneName });
       const items = (resp as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> }).sceneItems ?? [];
+      // If the browser overlay source is already present in this scene,
+      // the overlay will render its own background via CSS. Avoid creating
+      // a separate BG input to prevent duplicate layers.
+      const overlayPresent = items.some((item) => item.sourceName === WORSHIP_SOURCE_NAME);
+      if (overlayPresent) return;
       const existing = items.find((item) => item.sourceName === WORSHIP_BG_SOURCE_NAME);
       if (existing) {
         this.bgSceneItemId = existing.sceneItemId;

@@ -173,10 +173,12 @@ export default function BackgroundPickerCard({
       updater = (prev) => ({
         ...prev,
         backgroundType: "off",
+        backgroundPattern: "",
         backgroundImage: "",
         backgroundImageFilePath: "",
         backgroundVideo: "",
         backgroundVideoFilePath: "",
+        backgroundColorEnd: "",
         fullscreenShadeOpacity: 0,
         backgroundOpacity: 0,
       });
@@ -195,6 +197,7 @@ export default function BackgroundPickerCard({
       updater = (prev) => ({
         ...prev,
         backgroundType: "image",
+        backgroundPattern: "",
         backgroundColor: "",
         backgroundColorEnd: "",
         bgGradientAngle: 180,
@@ -208,6 +211,7 @@ export default function BackgroundPickerCard({
       updater = (prev) => ({
         ...prev,
         backgroundType: "video",
+        backgroundPattern: "",
         backgroundColor: "",
         backgroundColorEnd: "",
         bgGradientAngle: 180,
@@ -236,11 +240,13 @@ export default function BackgroundPickerCard({
       updater = (prev) => ({
         ...prev,
         backgroundType: "color",
+        backgroundPattern: "",
         backgroundImage: "",
         backgroundImageFilePath: "",
         backgroundVideo: "",
         backgroundVideoFilePath: "",
         backgroundColor: prev.backgroundColor || "#0F172A",
+        backgroundColorEnd: "",
         backgroundOpacity: prev.backgroundOpacity === 0 ? 1 : prev.backgroundOpacity,
         fullscreenShadeOpacity: prev.fullscreenShadeOpacity === 0 ? 0.42 : prev.fullscreenShadeOpacity,
       });
@@ -352,24 +358,28 @@ export default function BackgroundPickerCard({
                 <ImageTab
                   quickSettings={quickSettings}
                   onQuickSettingsChange={onQuickSettingsChange}
+                  onBackgroundPresetChange={onBackgroundPresetChange}
                 />
               )}
               {bgType === "video" && (
                 <VideoTab
                   quickSettings={quickSettings}
                   onQuickSettingsChange={onQuickSettingsChange}
+                  onBackgroundPresetChange={onBackgroundPresetChange}
                 />
               )}
               {bgType === "pattern" && (
                 <PatternTab
                   quickSettings={quickSettings}
                   onQuickSettingsChange={onQuickSettingsChange}
+                  onBackgroundPresetChange={onBackgroundPresetChange}
                 />
               )}
               {bgType === "color" && (
                 <ColorSection
                   quickSettings={quickSettings}
                   onQuickSettingsChange={onQuickSettingsChange}
+                  onBackgroundPresetChange={onBackgroundPresetChange}
                 />
               )}
               {bgType === "theme" && (
@@ -400,10 +410,13 @@ export default function BackgroundPickerCard({
                     step={1}
                     value={Math.round(quickSettings.fullscreenShadeOpacity * 100)}
                     onChange={(e) =>
-                      onQuickSettingsChange((prev) => ({
-                        ...prev,
-                        fullscreenShadeOpacity: Number(e.target.value) / 100,
-                      }))
+                      {
+                        onBackgroundPresetChange?.("theme");
+                        onQuickSettingsChange((prev) => ({
+                          ...prev,
+                          fullscreenShadeOpacity: Number(e.target.value) / 100,
+                        }));
+                      }
                     }
                     aria-label={t('bgPicker.overlayDarkness')}
                   />
@@ -423,10 +436,13 @@ export default function BackgroundPickerCard({
                     step={1}
                     value={Math.round(quickSettings.backgroundOpacity * 100)}
                     onChange={(e) =>
-                      onQuickSettingsChange((prev) => ({
-                        ...prev,
-                        backgroundOpacity: Number(e.target.value) / 100,
-                      }))
+                      {
+                        onBackgroundPresetChange?.("theme");
+                        onQuickSettingsChange((prev) => ({
+                          ...prev,
+                          backgroundOpacity: Number(e.target.value) / 100,
+                        }));
+                      }
                     }
                     aria-label={t('bgPicker.backgroundOpacity')}
                   />
@@ -668,9 +684,11 @@ export default function BackgroundPickerCard({
 function ImageTab({
   quickSettings,
   onQuickSettingsChange,
+  onBackgroundPresetChange,
 }: {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
+  onBackgroundPresetChange?: (preset: DockBackgroundPreset) => void;
 }) {
   const { t } = useTranslation();
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -729,14 +747,16 @@ function ImageTab({
 
   const handleSelect = useCallback((item: MediaItem) => {
     const relUrl = toRelativeUrl(item.url);
+    onBackgroundPresetChange?.("theme");
     onQuickSettingsChange((prev) => ({
       ...prev,
       backgroundImage: prev.backgroundImage === relUrl ? "" : relUrl,
       backgroundImageFilePath: prev.backgroundImage === relUrl ? "" : (item.filePath || ""),
+      backgroundPattern: "",
       backgroundVideo: "",
       backgroundVideoFilePath: "",
     }));
-  }, [onQuickSettingsChange]);
+  }, [onBackgroundPresetChange, onQuickSettingsChange]);
 
   const handleUpload = useCallback(async (files: FileList | null) => {
     if (!files?.length) return;
@@ -748,10 +768,12 @@ function ImageTab({
         if (result.item) {
           setMedia((prev) => [result.item!, ...prev]);
           const relUrl = toRelativeUrl(result.item.url);
+          onBackgroundPresetChange?.("theme");
           onQuickSettingsChange((prev) => ({
             ...prev,
             backgroundImage: relUrl,
             backgroundImageFilePath: result.item.filePath || "",
+            backgroundPattern: "",
             backgroundVideo: "",
             backgroundVideoFilePath: "",
           }));
@@ -760,7 +782,7 @@ function ImageTab({
         console.warn("[BackgroundPicker] Upload failed:", err);
       }
     }
-  }, [onQuickSettingsChange]);
+  }, [onBackgroundPresetChange, onQuickSettingsChange]);
 
   return (
     <div className="dtb-bg-picker__tab-content">
@@ -850,9 +872,11 @@ function ImageTab({
 function VideoTab({
   quickSettings,
   onQuickSettingsChange,
+  onBackgroundPresetChange,
 }: {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
+  onBackgroundPresetChange?: (preset: DockBackgroundPreset) => void;
 }) {
   const { t } = useTranslation();
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -911,14 +935,16 @@ function VideoTab({
 
   const handleSelect = useCallback((item: MediaItem) => {
     const relUrl = toRelativeUrl(item.url);
+    onBackgroundPresetChange?.("theme");
     onQuickSettingsChange((prev) => ({
       ...prev,
       backgroundVideo: prev.backgroundVideo === relUrl ? "" : relUrl,
       backgroundVideoFilePath: prev.backgroundVideo === relUrl ? "" : (item.filePath || ""),
+      backgroundPattern: "",
       backgroundImage: "",
       backgroundImageFilePath: "",
     }));
-  }, [onQuickSettingsChange]);
+  }, [onBackgroundPresetChange, onQuickSettingsChange]);
 
   const handleUpload = useCallback(async (files: FileList | null) => {
     if (!files?.length) return;
@@ -930,10 +956,12 @@ function VideoTab({
         if (result.item) {
           setMedia((prev) => [result.item!, ...prev]);
           const relUrl = toRelativeUrl(result.item.url);
+          onBackgroundPresetChange?.("theme");
           onQuickSettingsChange((prev) => ({
             ...prev,
             backgroundVideo: relUrl,
             backgroundVideoFilePath: result.item.filePath || "",
+            backgroundPattern: "",
             backgroundImage: "",
             backgroundImageFilePath: "",
           }));
@@ -942,7 +970,7 @@ function VideoTab({
         console.warn("[BackgroundPicker] Upload failed:", err);
       }
     }
-  }, [onQuickSettingsChange]);
+  }, [onBackgroundPresetChange, onQuickSettingsChange]);
 
   return (
     <div className="dtb-bg-picker__tab-content">
@@ -1060,21 +1088,26 @@ export const PATTERN_OPTIONS: PatternOption[] = BACKGROUND_PATTERNS.map((p) => (
 function PatternTab({
   quickSettings,
   onQuickSettingsChange,
+  onBackgroundPresetChange,
 }: {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
+  onBackgroundPresetChange?: (preset: DockBackgroundPreset) => void;
 }) {
   const { t } = useTranslation();
   const currentPattern = quickSettings.backgroundPattern || "";
 
   const selectPattern = useCallback((src: string) => {
+    onBackgroundPresetChange?.("theme");
     onQuickSettingsChange((prev) => ({
       ...prev,
       backgroundPattern: src,
+      backgroundVideo: "",
+      backgroundVideoFilePath: "",
       backgroundImage: "",
       backgroundImageFilePath: "",
     }));
-  }, [onQuickSettingsChange]);
+  }, [onBackgroundPresetChange, onQuickSettingsChange]);
 
   return (
     <div className="dtb-pattern-tab">
@@ -1111,9 +1144,11 @@ function PatternTab({
 function ColorSection({
   quickSettings,
   onQuickSettingsChange,
+  onBackgroundPresetChange,
 }: {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
+  onBackgroundPresetChange?: (preset: DockBackgroundPreset) => void;
 }) {
   const { t } = useTranslation();
   const [presetsCollapsed, setPresetsCollapsed] = useState(false);
@@ -1124,9 +1159,21 @@ function ColorSection({
 
   const pushChange = useCallback(
     (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => {
-      onQuickSettingsChange(updater);
+      onBackgroundPresetChange?.("theme");
+      onQuickSettingsChange((prev) => {
+        const next = updater(prev);
+        return {
+          ...next,
+          backgroundType: "color",
+          backgroundPattern: "",
+          backgroundImage: "",
+          backgroundImageFilePath: "",
+          backgroundVideo: "",
+          backgroundVideoFilePath: "",
+        };
+      });
     },
-    [onQuickSettingsChange],
+    [onBackgroundPresetChange, onQuickSettingsChange],
   );
 
   return (

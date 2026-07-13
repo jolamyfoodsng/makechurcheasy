@@ -39,6 +39,7 @@
       background: transparent !important;
       color: #ffffff;
       --font-size: 48px;
+      --font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
       --font-color: #ffffff;
       --font-weight: 400;
       --font-style: normal;
@@ -49,6 +50,7 @@
       --outline-width: 0px;
       --outline-color: transparent;
       --ref-font-size: 24px;
+      --ref-font-family: var(--font-family);
       --ref-font-weight: 400;
       --ref-font-style: normal;
       --ref-font-color: #ffffff;
@@ -159,7 +161,7 @@
 
     #verse-text {
       font-size: var(--font-size);
-      font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      font-family: var(--font-family);
       color: var(--font-color, #ffffff);
       font-weight: var(--font-weight, 400);
       font-style: var(--font-style, normal);
@@ -175,6 +177,7 @@
 
     #reference {
       font-size: var(--ref-font-size);
+      font-family: var(--ref-font-family);
       font-weight: var(--ref-font-weight);
       font-style: var(--ref-font-style, normal);
       color: var(--ref-font-color);
@@ -267,13 +270,13 @@
 
     .compare-column__verse {
       font-size: var(--compare-font-size, 36px);
-      font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      font-family: var(--compare-font-family, var(--font-family));
       color: var(--font-color, #ffffff);
-      font-weight: var(--font-weight, 400);
+      font-weight: var(--compare-font-weight, var(--font-weight, 400));
       font-style: var(--font-style, normal);
       line-height: var(--compare-line-height, 1.4);
       letter-spacing: var(--letter-spacing, 0px);
-      text-align: var(--text-align);
+      text-align: var(--compare-text-align, var(--text-align));
       text-shadow: var(--text-shadow);
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
@@ -283,10 +286,11 @@
 
     .compare-column__reference {
       font-size: var(--compare-ref-font-size, 20px);
+      font-family: var(--compare-font-family, var(--ref-font-family));
       font-weight: var(--ref-font-weight);
       font-style: var(--ref-font-style, normal);
       color: var(--ref-font-color);
-      text-align: var(--ref-text-align, var(--text-align));
+      text-align: var(--ref-text-align, var(--compare-text-align, var(--text-align)));
       margin-top: 16px;
       width: var(--ref-width);
       padding: var(--ref-bg-padding);
@@ -372,6 +376,7 @@
 
     body[data-mode="lower-third"] #lt-bar #verse-text {
       font-size: var(--font-size);
+      font-family: var(--font-family);
       color: var(--font-color, #ffffff);
       font-weight: var(--font-weight, 400);
       font-style: var(--font-style, normal);
@@ -384,6 +389,7 @@
 
     body[data-mode="lower-third"] #lt-bar #reference {
       font-size: var(--ref-font-size);
+      font-family: var(--ref-font-family);
       font-weight: var(--ref-font-weight);
       font-style: var(--ref-font-style, normal);
       color: var(--ref-font-color);
@@ -702,6 +708,11 @@
         var m = { 'thin': '100', 'extralight': '200', 'light': '300', 'regular': '400', 'normal': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800', 'black': '900' };
         return m[w.toLowerCase()] || '400';
       }
+      function mapCompareFontWeight(w) {
+        if (!w) return '';
+        var m = { 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800' };
+        return m[w.toLowerCase()] || '';
+      }
 
       function mapTextTransform(t) {
         if (!t || t === 'none') return 'none';
@@ -910,62 +921,83 @@
       function applyThemeBase(s) {
         ensureCmgSansFont();
         const bs = Number(s.fontSize || 48); baseFontSize = bs; baseRefFontSize = Number(s.refFontSize) || Math.max(14, Math.round(bs * 0.5));
-        root.setProperty('--font-size', baseFontSize + 'px');
-        root.setProperty('--font-color', s.fontColor || '#ffffff');
-        root.setProperty('--font-weight', mapFontWeight(s.fontWeight));
-        root.setProperty('--font-style', s.fontStyle === 'italic' ? 'italic' : 'normal');
-        root.setProperty('--line-height', String(s.lineHeight || 1.6));
-        root.setProperty('--letter-spacing', (s.letterSpacing || 0) + 'px');
-        root.setProperty('--text-align', s.textAlign || 'center');
-        root.setProperty('--text-shadow', s.textShadow || 'none');
-        root.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
-        root.setProperty('--outline-color', s.textOutline ? (s.textOutlineColor || '#000') : 'transparent');
-        root.setProperty('--ref-font-size', baseRefFontSize + 'px');
-        root.setProperty('--ref-font-weight', mapFontWeight(s.refFontWeight));
-        root.setProperty('--ref-font-style', 'normal');
-        root.setProperty('--ref-font-color', s.refFontColor || '#fff');
-        root.setProperty('--ref-text-transform', mapTextTransform(s.refTextTransform));
-        root.setProperty('--ref-letter-spacing', (s.refLetterSpacing || 0) + 'px');
-        root.setProperty('--ref-opacity', String(s.refOpacity ?? 1));
-        root.setProperty('--ref-spacing', (s.refSpacing ?? 24) + 'px');
-        if (s.refTextAlign && s.refTextAlign !== 'match') root.setProperty('--ref-text-align', s.refTextAlign); else root.setProperty('--ref-text-align', s.textAlign || 'center');
+        root.style.setProperty('--font-size', baseFontSize + 'px');
+        root.style.setProperty('--font-family', s.fontFamily || '"CMG Sans", "Noto Sans", "Charis SIL", Arial, sans-serif');
+        root.style.setProperty('--font-color', s.fontColor || '#ffffff');
+        root.style.setProperty('--font-weight', mapFontWeight(s.fontWeight));
+        root.style.setProperty('--font-style', s.fontStyle === 'italic' ? 'italic' : 'normal');
+        root.style.setProperty('--line-height', String(s.lineHeight || 1.6));
+        root.style.setProperty('--letter-spacing', (s.letterSpacing || 0) + 'px');
+        root.style.setProperty('--text-align', s.textAlign || 'center');
+        root.style.setProperty('--text-shadow', s.textShadow || 'none');
+        root.style.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
+        root.style.setProperty('--outline-color', s.textOutline ? (s.textOutlineColor || '#000') : 'transparent');
+        root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
+        root.style.setProperty('--ref-font-family', s.fontFamily || '"CMG Sans", "Noto Sans", "Charis SIL", Arial, sans-serif');
+        root.style.setProperty('--ref-font-weight', mapFontWeight(s.refFontWeight));
+        root.style.setProperty('--ref-font-style', 'normal');
+        root.style.setProperty('--ref-font-color', s.refFontColor || '#fff');
+        root.style.setProperty('--ref-text-transform', mapTextTransform(s.refTextTransform));
+        root.style.setProperty('--ref-letter-spacing', (s.refLetterSpacing || 0) + 'px');
+        root.style.setProperty('--ref-opacity', String(s.refOpacity ?? 1));
+        root.style.setProperty('--ref-spacing', (s.refSpacing ?? 24) + 'px');
+        if (s.refTextAlign && s.refTextAlign !== 'match') root.style.setProperty('--ref-text-align', s.refTextAlign); else root.style.setProperty('--ref-text-align', s.textAlign || 'center');
 
         const rbe = s.referenceBackgroundEnabled === true, rbc = s.referenceBackgroundColor || '#F4D17B', rbs = s.referenceBackgroundStyle || 'solid', rbr = Number(s.referenceBackgroundRadius ?? 12);
         if (rbe) {
-          root.setProperty('--ref-width', 'fit-content');
-          if (rbs === 'solid') { root.setProperty('--ref-bg-color', rbc); root.setProperty('--ref-bg-padding', '6px 14px'); root.setProperty('--ref-bg-radius', rbr + 'px'); root.setProperty('--ref-bg-border', 'none'); root.setProperty('--ref-font-color', invertColorForBg(rbc)); }
-          else if (rbs === 'pill') { root.setProperty('--ref-bg-color', rbc); root.setProperty('--ref-bg-padding', '6px 20px'); root.setProperty('--ref-bg-radius', '999px'); root.setProperty('--ref-bg-border', 'none'); root.setProperty('--ref-font-color', invertColorForBg(rbc)); }
-          else if (rbs === 'outline') { root.setProperty('--ref-bg-color', 'transparent'); root.setProperty('--ref-bg-padding', '5px 13px'); root.setProperty('--ref-bg-radius', rbr + 'px'); root.setProperty('--ref-bg-border', '2px solid ' + rbc); root.setProperty('--ref-font-color', rbc); }
-        } else { root.setProperty('--ref-width', '100%'); root.setProperty('--ref-bg-color', 'transparent'); root.setProperty('--ref-bg-padding', '0'); root.setProperty('--ref-bg-radius', '0'); root.setProperty('--ref-bg-border', 'none'); }
+          root.style.setProperty('--ref-width', 'fit-content');
+          if (rbs === 'solid') { root.style.setProperty('--ref-bg-color', rbc); root.style.setProperty('--ref-bg-padding', '6px 14px'); root.style.setProperty('--ref-bg-radius', rbr + 'px'); root.style.setProperty('--ref-bg-border', 'none'); root.style.setProperty('--ref-font-color', invertColorForBg(rbc)); }
+          else if (rbs === 'pill') { root.style.setProperty('--ref-bg-color', rbc); root.style.setProperty('--ref-bg-padding', '6px 20px'); root.style.setProperty('--ref-bg-radius', '999px'); root.style.setProperty('--ref-bg-border', 'none'); root.style.setProperty('--ref-font-color', invertColorForBg(rbc)); }
+          else if (rbs === 'outline') { root.style.setProperty('--ref-bg-color', 'transparent'); root.style.setProperty('--ref-bg-padding', '5px 13px'); root.style.setProperty('--ref-bg-radius', rbr + 'px'); root.style.setProperty('--ref-bg-border', '2px solid ' + rbc); root.style.setProperty('--ref-font-color', rbc); }
+        } else { root.style.setProperty('--ref-width', '100%'); root.style.setProperty('--ref-bg-color', 'transparent'); root.style.setProperty('--ref-bg-padding', '0'); root.style.setProperty('--ref-bg-radius', '0'); root.style.setProperty('--ref-bg-border', 'none'); }
 
-        root.setProperty('--text-transform', mapTextTransform(s.textTransform));
+        root.style.setProperty('--text-transform', mapTextTransform(s.textTransform));
         const ead = Math.max(95, Math.min(170, Math.round((s.animationDuration || 400) * 0.38)));
-        root.setProperty('--anim-duration', ead + 'ms');
-        root.setProperty('--bg-enter-duration', Math.max(70, Math.round(ead * 0.42)) + 'ms');
-        root.setProperty('--text-enter-duration', Math.max(82, Math.round(ead * 0.54)) + 'ms');
-        root.setProperty('--text-enter-delay', Math.max(12, Math.round(ead * 0.08)) + 'ms');
-        root.setProperty('--bg-opacity', String(s.backgroundOpacity ?? 1));
+        root.style.setProperty('--anim-duration', ead + 'ms');
+        root.style.setProperty('--bg-enter-duration', Math.max(70, Math.round(ead * 0.42)) + 'ms');
+        root.style.setProperty('--text-enter-duration', Math.max(82, Math.round(ead * 0.54)) + 'ms');
+        root.style.setProperty('--text-enter-delay', Math.max(12, Math.round(ead * 0.08)) + 'ms');
+        root.style.setProperty('--bg-opacity', String(s.backgroundOpacity ?? 1));
 
-        if (s.logoUrl) { if (s.logoUrl === '__FROM_CSS__') { const cv = getComputedStyle(root).getPropertyValue('--logo-data-uri').trim(); if (cv && cv.startsWith('url(')) { logo.src = cv.slice(4, -1).replace(/^["']|["']$/g, ''); } } else { logo.src = s.logoUrl; } logo.className = 'visible ' + (s.logoPosition || 'bottom-right'); root.setProperty('--logo-size', (s.logoSize || (currentMode === 'lower-third' ? 60 : 80)) + 'px'); } else { logo.className = ''; }
+        if (s.logoUrl) { if (s.logoUrl === '__FROM_CSS__') { const cv = getComputedStyle(root).getPropertyValue('--logo-data-uri').trim(); if (cv && cv.startsWith('url(')) { logo.src = cv.slice(4, -1).replace(/^["']|["']$/g, ''); } } else { logo.src = s.logoUrl; } logo.className = 'visible ' + (s.logoPosition || 'bottom-right'); root.style.setProperty('--logo-size', (s.logoSize || (currentMode === 'lower-third' ? 60 : 80)) + 'px'); } else { logo.className = ''; }
       }
 
       /* ═══ THEME: Fullscreen ═══ */
       function applyThemeFullscreen(s) {
         applyThemeBase(s);
-        baseCompareFontSize = Math.max(24, Math.round(baseFontSize * 0.76));
-        baseCompareRefFontSize = Math.max(16, Math.round(baseRefFontSize * 0.95));
-        root.setProperty('--compare-font-size', baseCompareFontSize + 'px');
-        root.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
-        root.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
-        root.setProperty('--compare-line-height', String(Math.max(1.22, Number(s.lineHeight || 1.6) - 0.08)));
+        // Compare-specific font size — use the explicit setting if provided, otherwise derive from primary
+        const hasCompareSize = s.compareVerseFontSizeLeft != null && Number(s.compareVerseFontSizeLeft) > 0;
+        baseCompareFontSize = hasCompareSize ? Number(s.compareVerseFontSizeLeft) : Math.max(24, Math.round(baseFontSize * 0.76));
+        root.style.setProperty('--compare-font-size', baseCompareFontSize + 'px');
+        // Compare-specific reference font size
+        const hasCompareRefSize = s.compareReferenceFontSizeLeft != null && Number(s.compareReferenceFontSizeLeft) > 0;
+        baseCompareRefFontSize = hasCompareRefSize ? Number(s.compareReferenceFontSizeLeft) : Math.max(16, Math.round(baseRefFontSize * 0.95));
+        root.style.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
+        root.style.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
+        // Compare-specific line height
+        const hasCompareLineHeight = s.compareLineHeightLeft != null && Number(s.compareLineHeightLeft) > 0;
+        root.style.setProperty('--compare-line-height', hasCompareLineHeight ? String(Number(s.compareLineHeightLeft)) : String(Math.max(1.22, Number(s.lineHeight || 1.6) - 0.08)));
+        // Compare-specific font weight
+        const compareWeight = mapCompareFontWeight(s.compareFontWeightLeft);
+        if (compareWeight) root.style.setProperty('--compare-font-weight', compareWeight);
+        else root.style.setProperty('--compare-font-weight', '');
+        // Compare-specific text alignment
+        const compareAlign = s.compareTextAlignLeft || '';
+        if (compareAlign && compareAlign !== 'justify') root.style.setProperty('--compare-text-align', compareAlign);
+        else root.style.setProperty('--compare-text-align', '');
+        // Compare-specific font family
+        const compareFontFamily = s.compareFontFamilyLeft || '';
+        if (compareFontFamily) root.style.setProperty('--compare-font-family', compareFontFamily);
+        else root.style.setProperty('--compare-font-family', '');
+        // Legacy compare layout fields
         const cw = Math.max(30, Math.min(50, Number(s.compareTranslationWidth ?? 40)));
         const cg = Math.max(0, Math.min(200, Number(s.compareTranslationGap ?? 40)));
-        root.setProperty('--compare-panel-width', cw + '%'); root.setProperty('--compare-gap', cg + 'px');
+        root.style.setProperty('--compare-panel-width', cw + '%'); root.style.setProperty('--compare-gap', cg + 'px');
         if (compareLayout) { compareLayout.style.gridTemplateColumns = `minmax(0,${cw}fr) minmax(0,${cw}fr)`; compareLayout.style.gap = cg + 'px'; }
-        root.setProperty('--bg-shade-gradient', buildShadeGradient(s.fullscreenShadeColor || '#000', s.fullscreenShadeOpacity ?? 0.42));
-        root.setProperty('--bg-shade-display', s.fullscreenShadeEnabled === false ? 'none' : 'block');
-        basePadding = Number(s.padding || 60); root.setProperty('--padding', basePadding + 'px');
-        root.setProperty('--safe-area', (s.safeArea || 40) + 'px');
+        root.style.setProperty('--bg-shade-gradient', buildShadeGradient(s.fullscreenShadeColor || '#000', s.fullscreenShadeOpacity ?? 0.42));
+        root.style.setProperty('--bg-shade-display', s.fullscreenShadeEnabled === false ? 'none' : 'block');
+        basePadding = Number(s.padding || 60); root.style.setProperty('--padding', basePadding + 'px');
+        root.style.setProperty('--safe-area', (s.safeArea || 40) + 'px');
         if (s.refPosition === 'top') reference.classList.add('top'); else reference.classList.remove('top');
         root.dataset.refBgEnabled = s.referenceBackgroundEnabled === true ? 'true' : 'false';
 
@@ -991,7 +1023,7 @@
         if (!bgTransitionSuppressed && bgCrossfade) { bgCrossfade.style.transition = 'none'; const cs = getComputedStyle(background); bgCrossfade.style.backgroundImage = cs.backgroundImage; bgCrossfade.style.backgroundColor = cs.backgroundColor; bgCrossfade.style.background = cs.background; }
         if (!skipBg) {
           if (bgVideoUrl) {
-            root.setProperty('--bg-image', 'none'); root.setProperty('--bg-color', 'transparent'); backgroundVideoEl.style.display = 'block';
+            root.style.setProperty('--bg-image', 'none'); root.style.setProperty('--bg-color', 'transparent'); backgroundVideoEl.style.display = 'block';
             const srcCh = backgroundVideoEl.getAttribute('src') !== bgVideoUrl, ctrl = getSeamlessLoopController(backgroundVideoEl);
             if (srcCh) {
               stopSeamlessLoop(ctrl, { clearSrc: true, resetActiveToPrimary: true }); backgroundVideoEl.dataset.src = bgVideoUrl; backgroundVideoEl.src = bgVideoUrl; backgroundVideoEl.load(); ctrl.secondary.src = bgVideoUrl; ctrl.secondary.load(); ctrl.src = bgVideoUrl; backgroundVideoEl.loop = false; ctrl.enabled = true; startSeamlessLoopMonitor(ctrl); backgroundVideoEl.style.opacity = '0';
@@ -1003,10 +1035,10 @@
             else { const c = seamlessLoopControllers.get(backgroundVideoEl); if (c) stopSeamlessLoop(c, { clearSrc: true, resetActiveToPrimary: true }); if (backgroundVideoEl.getAttribute('src')) { backgroundVideoEl.pause(); backgroundVideoEl.removeAttribute('src'); backgroundVideoEl.load(); } backgroundVideoEl.style.display = 'none'; }
           }
           let pc = ''; if (!bgVideoUrl && s.backgroundPattern) { if (s.backgroundPattern.startsWith('data:')) pc = 'url(' + s.backgroundPattern + ')'; else if (s.backgroundPattern === '__FROM_CSS__') { const cv = getComputedStyle(root).getPropertyValue('--bg-pattern-data').trim(); if (cv) pc = cv; } else if (PATTERN_CSS[s.backgroundPattern]) pc = PATTERN_CSS[s.backgroundPattern]; }
-          if (pc) { root.setProperty('--bg-image', pc); root.setProperty('--bg-color', 'transparent'); }
-          else if (!bgVideoUrl && s.backgroundImage) { let bu = s.backgroundImage; if (bu === '__BG_SOURCE__') { root.setProperty('--bg-image', 'none'); root.setProperty('--bg-color', 'transparent'); root.setProperty('--bg-opacity', '1'); } else if (bu === '__FROM_CSS__') { const cv = getComputedStyle(root).getPropertyValue('--bg-image').trim(); root.setProperty('--bg-image', cv || 'none'); if (cv) { root.setProperty('--bg-color', 'transparent'); root.setProperty('--bg-opacity', bgOp); } } else if (bu === '__FROM_LOCALSTORAGE__') { const st = localStorage.getItem('bible-overlay-bg-image'); bu = st || ''; root.setProperty('--bg-image', bu ? `url(${bu})` : 'none'); } else { root.setProperty('--bg-image', `url(${bu})`); } }
-          else if (!bgVideoUrl) root.setProperty('--bg-image', 'none');
-          if (!pc) { if (hasG) { root.setProperty('--bg-color', 'transparent'); if (!bgVideoUrl && !s.backgroundImage) root.setProperty('--bg-image', bgc); } else root.setProperty('--bg-color', bgc); }
+          if (pc) { root.style.setProperty('--bg-image', pc); root.style.setProperty('--bg-color', 'transparent'); }
+          else if (!bgVideoUrl && s.backgroundImage) { let bu = s.backgroundImage; if (bu === '__BG_SOURCE__') { root.style.setProperty('--bg-image', 'none'); root.style.setProperty('--bg-color', 'transparent'); root.style.setProperty('--bg-opacity', '1'); } else if (bu === '__FROM_CSS__') { const cv = getComputedStyle(root).getPropertyValue('--bg-image').trim(); root.style.setProperty('--bg-image', cv || 'none'); if (cv) { root.style.setProperty('--bg-color', 'transparent'); root.style.setProperty('--bg-opacity', bgOp); } } else if (bu === '__FROM_LOCALSTORAGE__') { const st = localStorage.getItem('bible-overlay-bg-image'); bu = st || ''; root.style.setProperty('--bg-image', bu ? `url(${bu})` : 'none'); } else { root.style.setProperty('--bg-image', `url(${bu})`); } }
+          else if (!bgVideoUrl) root.style.setProperty('--bg-image', 'none');
+          if (!pc) { if (hasG) { root.style.setProperty('--bg-color', 'transparent'); if (!bgVideoUrl && !s.backgroundImage) root.style.setProperty('--bg-image', bgc); } else root.style.setProperty('--bg-color', bgc); }
           if (!bgTransitionSuppressed && bgCrossfade) { if (ittv) { bgCrossfade.style.transition = 'none'; bgCrossfade.style.opacity = bgOp; } else if (!bgVideoUrl) { bgCrossfade.style.transition = 'none'; bgCrossfade.style.opacity = bgOp; requestAnimationFrame(() => requestAnimationFrame(() => { bgCrossfade.style.transition = 'opacity 0.5s cubic-bezier(0.4,0,0.2,1)'; bgCrossfade.style.opacity = '0'; })); } } else if (bgTransitionSuppressed && bgCrossfade) { bgCrossfade.style.transition = 'none'; bgCrossfade.style.opacity = '0'; }
           lastBgType = nbt;
         }
@@ -1015,22 +1047,22 @@
       /* ═══ THEME: Lower-third ═══ */
       function applyThemeLowerThird(s) {
         applyThemeBase(s);
-        baseBarPadding = Number(s.padding || 18); root.setProperty('--safe-area', (s.safeArea || 40) + 'px');
+        baseBarPadding = Number(s.padding || 18); root.style.setProperty('--safe-area', (s.safeArea || 40) + 'px');
         const sp = s.lowerThirdSize || 'medium', preset = SIZE_PRESETS[sp] || SIZE_PRESETS['medium'];
-        if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.setProperty('--font-size', baseFontSize + 'px'); root.setProperty('--ref-font-size', baseRefFontSize + 'px'); }
-        root.setProperty('--line-height', String(s.lineHeight || preset.lineHeight));
-        root.setProperty('--ref-spacing', (s.refSpacing ?? 16) + 'px');
+        if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.style.setProperty('--font-size', baseFontSize + 'px'); root.style.setProperty('--ref-font-size', baseRefFontSize + 'px'); }
+        root.style.setProperty('--line-height', String(s.lineHeight || preset.lineHeight));
+        root.style.setProperty('--ref-spacing', (s.refSpacing ?? 16) + 'px');
         const wp2 = s.lowerThirdWidthPreset || 'md', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['md'];
-        root.setProperty('--lt-max-width', (s.lowerThirdMaxWidth || wpr.maxWidth) + 'px');
-        root.setProperty('--lt-h-margin', (s.lowerThirdHMargin ?? wpr.hMargin) + 'px');
+        root.style.setProperty('--lt-max-width', (s.lowerThirdMaxWidth || wpr.maxWidth) + 'px');
+        root.style.setProperty('--lt-h-margin', (s.lowerThirdHMargin ?? wpr.hMargin) + 'px');
         barMaxHeight = Math.max(120, Math.min(900, Number(s.lowerThirdBarMaxHeight) || 600));
-        root.setProperty('--lt-max-height', barMaxHeight + 'px');
-        root.setProperty('--lt-min-height', (s.lowerThirdBarMinHeight || 0) + 'px');
-        root.setProperty('--lt-card-padding', s.lowerThirdCardPadding || `${baseBarPadding}px`);
-        root.setProperty('--lt-card-radius', (s.lowerThirdCardRadius || 18) + 'px');
+        root.style.setProperty('--lt-max-height', barMaxHeight + 'px');
+        root.style.setProperty('--lt-min-height', (s.lowerThirdBarMinHeight || 0) + 'px');
+        root.style.setProperty('--lt-card-padding', s.lowerThirdCardPadding || `${baseBarPadding}px`);
+        root.style.setProperty('--lt-card-radius', (s.lowerThirdCardRadius || 18) + 'px');
         const bb = s.boxBackground || 'rgba(0,0,0,0.65)', bo = s.boxOpacity ?? 1; let fbb = bb;
         if (bo < 1 && bb.startsWith('rgba')) fbb = bb.replace(/[\d.]+\)$/, bo + ')'); else if (bo < 1 && bb.startsWith('rgb(')) fbb = bb.replace('rgb(', 'rgba(').replace(')', ',' + bo + ')');
-        root.setProperty('--box-background', fbb);
+        root.style.setProperty('--box-background', fbb);
         if (s.boxBorderEnabled) { ltBar.style.border = (s.boxBorderWidth || 1) + 'px ' + (s.boxBorderStyle || 'solid') + ' ' + (s.boxBorderColor || 'rgba(255,255,255,0.2)'); } else ltBar.style.border = 'none';
         if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
         const barBgV = String(s.backgroundVideo || '').trim();

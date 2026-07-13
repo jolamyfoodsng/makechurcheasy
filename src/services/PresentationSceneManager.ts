@@ -307,6 +307,13 @@ class PresentationSceneManager {
     try {
       const resp = await obsService.call("GetSceneItemList", { sceneName });
       const items = (resp as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> }).sceneItems ?? [];
+      // If the module's browser overlay is already present in this scene,
+      // it will render its own background via CSS. Skip creating a separate
+      // BG input to avoid duplicate layers.
+      try {
+        const moduleSource = this.getModuleName(_moduleKey as ModuleType);
+        if (moduleSource && items.some((item) => item.sourceName === moduleSource)) return;
+      } catch { /* ignore */ }
       const existing = items.find((item) => item.sourceName === bgSourceName);
       if (existing) {
         _state.bgSources.set(bgSourceName, {

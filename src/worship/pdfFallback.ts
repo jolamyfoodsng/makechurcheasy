@@ -1,5 +1,4 @@
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
-import type { TextElement } from "./layoutParser";
 
 let pdfWorkerInitialized = false;
 let pdfWorkerUrlPromise: Promise<string> | null = null;
@@ -156,38 +155,4 @@ export async function extractPdfTextWithPdfJs(file: File): Promise<string> {
   return parts.join("\n");
 }
 
-export async function extractPdfTextElementsWithPdfJs(file: File): Promise<TextElement[]> {
-  const originalBytes = new Uint8Array(await file.arrayBuffer());
-  const repairedBytes = repairPdfBytes(originalBytes) ?? stripLeadingByte(originalBytes);
-  const doc = await loadPdfDocument(repairedBytes);
 
-  const elements: TextElement[] = [];
-
-  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
-    const page = await doc.getPage(pageNumber);
-    const content = await page.getTextContent();
-
-    for (const item of content.items) {
-      if (!("str" in item) || !item.str.trim()) continue;
-
-      const [a, b, , d, e, f] = item.transform;
-      const fontSize = Math.max(Math.abs(d), Math.abs(b), item.height || 0) || 12;
-      const width = item.width || Math.abs(a) || 0;
-      const height = item.height || fontSize;
-      const fontName = "fontName" in item ? String(item.fontName ?? "") : "";
-
-      elements.push({
-        text: item.str,
-        x: e,
-        y: f,
-        width,
-        height,
-        fontSize,
-        isBold: /bold|black|heavy/i.test(fontName),
-        page: pageNumber,
-      });
-    }
-  }
-
-  return elements;
-}

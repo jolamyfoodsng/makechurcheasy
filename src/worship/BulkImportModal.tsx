@@ -7,32 +7,20 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import Icon from "../components/Icon";
-import {
-  extractTextElementsFromFile,
-  extractTextFromFile,
-  getFileTypeLabel,
-} from "./bulkImportService";
+import { processDocumentViaApi, processFileViaUpload } from "./bulkImportAiService";
+
 import {
   createEmptyImportSection,
   estimateDraftSlideCount,
   formatDraftLyrics,
   importSmartSongs,
 } from "./smartImportService";
-import {
-  analyzeSmartImportInBackground,
-  parseLayoutSongsInBackground,
-} from "./smartImportBackgroundService";
-import { getSmartImportRuntimeStatus, reviewSmartImportSongs } from "./smartImportAiService";
 import type {
-  SmartImportAiReviewStatus,
-  SmartImportAnalysis,
   SmartImportSectionDraft,
   SmartImportSectionType,
   SmartImportSongDraft,
 } from "./smartImportTypes";
-import type { LayoutParseResult } from "./layoutParser";
 import { generateSlides } from "./slideEngine";
-import type { LanguageMode } from "./pdfImportService";
 import "./bulkImportModal.css";
 
 interface BulkImportModalProps {
@@ -40,34 +28,15 @@ interface BulkImportModalProps {
   onImported: () => void;
 }
 
-type Step = "pick" | "extract" | "process" | "review" | "importing" | "done";
+type Step = "pick" | "extract" | "review" | "importing" | "done";
 
 const STEP_LABELS: Record<Step, string> = {
   pick: "Pick",
   extract: "Extract",
-  process: "Analyze",
   review: "Review",
   importing: "Import",
   done: "Done",
 };
-
-const LANGUAGE_MODES: Array<{ value: LanguageMode; label: string; description: string }> = [
-  {
-    value: "two-songs",
-    label: "Two songs per hymn",
-    description: "Split Yoruba and English hymns into separate songs before review.",
-  },
-  {
-    value: "single-both",
-    label: "Single song, both languages",
-    description: "Keep each hymn together and review it as one structured import.",
-  },
-  {
-    value: "side-by-side",
-    label: "Side-by-side slides",
-    description: "Pair bilingual lines inside one song before slide generation.",
-  },
-];
 
 const SECTION_TYPE_OPTIONS: Array<{ value: SmartImportSectionType; label: string }> = [
   { value: "verse", label: "Verse" },
@@ -106,23 +75,6 @@ function nextSongAfterRemoval(songs: SmartImportSongDraft[], currentId: string):
   if (currentIndex === -1) return songs[0].id;
   const next = songs[currentIndex + 1] ?? songs[currentIndex - 1] ?? songs[0];
   return next?.id ?? "";
-}
-
-function smartImportErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  if (/OPENCODE_API_KEY/i.test(message)) {
-    return "AI review is unavailable because no OpenCode API key is configured. Falling back to local review.";
-  }
-  if (/failed|network|timed out|dns|connection/i.test(message.toLowerCase())) {
-    return "AI review could not reach the network service. Falling back to local review.";
-  }
-  return message;
-}
-
-function pauseForPaint(): Promise<void> {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => resolve());
-  });
 }
 
 function buildExtractPreview(text: string): { text: string; truncated: boolean; lineCount: number; charCount: number } {
@@ -181,22 +133,12 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
   const [fileType, setFileType] = useState("");
   const [pasteMode, setPasteMode] = useState(false);
   const [pasteText, setPasteText] = useState("");
-  const [layoutResult, setLayoutResult] = useState<LayoutParseResult | null>(null);
-  const [usedLayoutParser, setUsedLayoutParser] = useState(false);
-  const [analysis, setAnalysis] = useState<SmartImportAnalysis | null>(null);
   const [reviewSongs, setReviewSongs] = useState<SmartImportSongDraft[]>([]);
   const [selectedSongIds, setSelectedSongIds] = useState<Set<string>>(new Set());
   const [activeSongId, setActiveSongId] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [languageMode, setLanguageMode] = useState<LanguageMode>("single-both");
   const [linesPerSlide, setLinesPerSlide] = useState(2);
   const [autoSplit, setAutoSplit] = useState(true);
-  const [aiStatus, setAiStatus] = useState<SmartImportAiReviewStatus>({
-    attempted: false,
-    applied: false,
-    error: "",
-    mode: "online",
-  });
   const [error, setError] = useState("");
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ imported: 0, total: 0 });
@@ -245,8 +187,6 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
     [rawText],
   );
 
-  const isCccImport = analysis?.method === "ccc";
-
   const handleKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
       if (event.key === "Escape" && !processing && !importing) {
@@ -258,16 +198,9 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
   );
 
   const resetProcessState = useCallback(() => {
-    setAnalysis(null);
     setReviewSongs([]);
     setSelectedSongIds(new Set());
     setActiveSongId("");
-    setAiStatus({
-      attempted: false,
-      applied: false,
-      error: "",
-      mode: "online",
-    });
   }, []);
 
   const goToExtract = useCallback((text: string, nextFileName: string, nextFileType: string) => {
@@ -281,39 +214,25 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
 
   const handleFile = useCallback(async (file: File) => {
     setError("");
+    setProcessing(true);
 
     try {
-      let nextLayoutResult: LayoutParseResult | null = null;
-      let nextUsedLayoutParser = false;
+      const result = await processFileViaUpload(file);
 
-      if (file.name.toLowerCase().endsWith(".pdf")) {
-        try {
-          const elements = await extractTextElementsFromFile(file);
-          if (elements.length > 0) {
-            const parsedLayout = await parseLayoutSongsInBackground(elements);
-            if (parsedLayout.songs.length > 0) {
-              nextLayoutResult = parsedLayout;
-              nextUsedLayoutParser = true;
-            }
-          }
-        } catch {
-          // Keep local extraction functional even when layout parsing fails.
-        }
+      setReviewSongs(result.songs);
+      setSelectedSongIds(new Set(result.songs.map((song) => song.id)));
+      setActiveSongId(result.songs[0]?.id ?? "");
+      setStep("review");
+
+      if (result.needsReview && result.warnings.length > 0) {
+        setError(result.warnings[0]);
       }
-
-      const text = await extractTextFromFile(file);
-      if (!text.trim()) {
-        setError("No text could be extracted from this file.");
-        return;
-      }
-
-      setLayoutResult(nextLayoutResult);
-      setUsedLayoutParser(nextUsedLayoutParser);
-      goToExtract(text, file.name, getFileTypeLabel(file.name));
     } catch (nextError) {
-      setError(`Extraction failed: ${nextError instanceof Error ? nextError.message : String(nextError)}`);
+      setError(`Import failed: ${nextError instanceof Error ? nextError.message : String(nextError)}`);
+    } finally {
+      setProcessing(false);
     }
-  }, [goToExtract]);
+  }, []);
 
   const handleFileInput = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -338,18 +257,15 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
       setError("Paste some worship content before continuing.");
       return;
     }
-
-    setLayoutResult(null);
-    setUsedLayoutParser(false);
     goToExtract(text, "Pasted text", "Text");
     setPasteText("");
     setPasteMode(false);
   }, [goToExtract, pasteText]);
 
-  const runProcessing = useCallback(async (nextLanguageMode: LanguageMode = languageMode) => {
+  const runProcessing = useCallback(async () => {
     const raw = rawText.trim();
     if (!raw) {
-      setError("No extracted text is available to analyze.");
+      setError("No extracted text is available to process.");
       return;
     }
 
@@ -358,103 +274,32 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
 
     setProcessing(true);
     setError("");
-    setStep("process");
-    setAiStatus({
-      attempted: false,
-      applied: false,
-      error: "",
-      mode: "online",
-    });
 
     try {
-      await pauseForPaint();
-
-      const localAnalysis = await analyzeSmartImportInBackground({
-        rawText,
-        layoutResult,
-        usedLayoutParser,
-        languageMode: nextLanguageMode,
-      });
+      const result = await processDocumentViaApi(rawText, fileName);
 
       if (processRequestRef.current !== requestId) {
         return;
       }
 
-      setAnalysis(localAnalysis);
-      setReviewSongs(localAnalysis.songs);
-      setSelectedSongIds(new Set(localAnalysis.songs.map((song) => song.id)));
-      setActiveSongId(localAnalysis.songs[0]?.id ?? "");
+      setReviewSongs(result.songs);
+      setSelectedSongIds(new Set(result.songs.map((song) => song.id)));
+      setActiveSongId(result.songs[0]?.id ?? "");
+      setStep("review");
 
-      const runtime = await getSmartImportRuntimeStatus();
-
-      if (processRequestRef.current !== requestId) {
-        return;
-      }
-
-      if (runtime.aiReady && localAnalysis.songs.length > 0) {
-        setAiStatus({
-          attempted: true,
-          applied: false,
-          error: "",
-          mode: "online",
-        });
-
-        try {
-          const reviewed = await reviewSmartImportSongs(localAnalysis.songs);
-          if (processRequestRef.current !== requestId) {
-            return;
-          }
-
-          setReviewSongs(reviewed);
-          setSelectedSongIds(new Set(reviewed.map((song) => song.id)));
-          setActiveSongId((current) => current || reviewed[0]?.id || "");
-          setAiStatus({
-            attempted: true,
-            applied: true,
-            error: "",
-            mode: "online",
-          });
-        } catch (reviewError) {
-          if (processRequestRef.current !== requestId) {
-            return;
-          }
-
-          setAiStatus({
-            attempted: true,
-            applied: false,
-            error: smartImportErrorMessage(reviewError),
-            mode: "online",
-          });
-        }
-      } else {
-        setAiStatus({
-          attempted: false,
-          applied: false,
-          error: !runtime.aiConfigured
-            ? "AI review is unavailable because the OpenCode API key is not configured. Using local review."
-            : localAnalysis.songs.length === 0
-              ? "No songs were detected for AI review. Using local review."
-              : "",
-          mode: runtime.aiConfigured ? "online" : "offline",
-        });
+      if (result.needsReview && result.warnings.length > 0) {
+        setError(result.warnings[0]);
       }
     } catch (statusError) {
       if (processRequestRef.current === requestId) {
-        setStep("extract");
-        setError(`Analysis failed: ${smartImportErrorMessage(statusError)}`);
-        setAiStatus({
-          attempted: false,
-          applied: false,
-          error: "",
-          mode: "online",
-        });
+        setError(`Processing failed: ${statusError instanceof Error ? statusError.message : String(statusError)}`);
       }
     } finally {
       if (processRequestRef.current === requestId) {
         setProcessing(false);
       }
     }
-  }, [languageMode, layoutResult, rawText, usedLayoutParser]);
+  }, [rawText, fileName]);
 
   const toggleSongSelection = useCallback((songId: string) => {
     setSelectedSongIds((previous) => {
@@ -608,7 +453,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
     }
   }, [autoSplit, fileName, linesPerSlide, onImported, selectedSongs]);
 
-  const stepOrder: Step[] = ["pick", "extract", "process", "review", "importing"];
+  const stepOrder: Step[] = ["pick", "extract", "review", "importing"];
   const stepIdx = stepOrder.indexOf(step);
 
   const canClose = !processing && !importing;
@@ -628,7 +473,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
           <div className="bulk-import-header-text">
             <p className="bulk-import-eyebrow">Smart Worship Import</p>
             <h2>Import Worship Documents</h2>
-            <p>Extract locally, attempt AI review automatically first when available, then review before importing.</p>
+            <p>Extract text from your document, then review and organize songs before importing.</p>
           </div>
           <button
             type="button"
@@ -764,119 +609,13 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                 </div>
               )}
 
-              <div className="bulk-import-smart-note">
-                <Icon name="auto_awesome" size={16} />
-                <span>
-                  The next step extracts structure locally, then attempts AI review automatically first. Local review is only used as the fallback when AI is unavailable or the request fails.
-                </span>
-              </div>
+              {processing && (
+                <div className="bulk-import-processing-inline">
+                  <Icon name="auto_awesome" size={16} />
+                  <span>Organizing document content…</span>
+                </div>
+              )}
             </>
-          )}
-
-          {step === "process" && (
-            <div className="bulk-import-smart-grid">
-              <div className="bulk-import-smart-panel">
-                <div className="bulk-import-smart-panel__head">
-                  <div>
-                    <h3>AI Review</h3>
-                    <p>AI review is attempted first to tighten song boundaries and section detection without rewriting lyrics.</p>
-                  </div>
-                  <span className={`bulk-import-online-pill bulk-import-online-pill--${aiStatus.mode}`}>
-                    {aiStatus.mode === "online" ? "Online" : "Offline"}
-                  </span>
-                </div>
-
-                {processing && aiStatus.mode === "online" ? (
-                  <div className="bulk-import-online-status">
-                    <Icon name="auto_awesome" size={16} />
-                    <span>Running AI review on extracted song batches…</span>
-                  </div>
-                ) : aiStatus.applied ? (
-                  <div className="bulk-import-online-status bulk-import-online-status--success">
-                    <Icon name="check_circle" size={16} />
-                    <span>AI review completed. Review the structured songs before importing.</span>
-                  </div>
-                ) : (
-                  <div className={`bulk-import-online-status${aiStatus.error ? " error" : ""}`}>
-                    <Icon name={aiStatus.error ? "warning" : "description"} size={16} />
-                    <span>{aiStatus.error || "Local review will be used for this import."}</span>
-                  </div>
-                )}
-
-                {isCccImport && (
-                  <div className="bulk-import-mode-section bulk-import-mode-section--compact">
-                    <p className="bulk-import-mode-label">CCC bilingual handling</p>
-                    <div className="bulk-import-mode-options">
-                      {LANGUAGE_MODES.map((mode) => (
-                        <label
-                          key={mode.value}
-                          className={`bulk-import-mode-option${languageMode === mode.value ? " active" : ""}`}
-                        >
-                          <input
-                            type="radio"
-                            name="language-mode"
-                            value={mode.value}
-                            checked={languageMode === mode.value}
-                            onChange={() => {
-                              setLanguageMode(mode.value);
-                              void runProcessing(mode.value);
-                            }}
-                          />
-                          <div>
-                            <span className="bulk-import-mode-title">{mode.label}</span>
-                            <span className="bulk-import-mode-desc">{mode.description}</span>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="bulk-import-smart-panel">
-                <div className="bulk-import-smart-panel__head">
-                  <div>
-                    <h3>Local Parse</h3>
-                    <p>Local extraction and layout hints prepare the structured text that AI reviews, and also serve as the fallback when AI is unavailable.</p>
-                  </div>
-                  {processing && <span className="bulk-import-processing-pill">Processing…</span>}
-                </div>
-
-                {analysis ? (
-                  <div className="bulk-import-smart-summary">
-                    <div className="bulk-import-smart-stat">
-                      <span>Songs detected</span>
-                      <strong>{analysis.counts.songs}</strong>
-                    </div>
-                    <div className="bulk-import-smart-stat">
-                      <span>Sections detected</span>
-                      <strong>{analysis.counts.sections}</strong>
-                    </div>
-                    <div className="bulk-import-smart-stat">
-                      <span>Local confidence</span>
-                      <strong>{analysis.confidence}%</strong>
-                    </div>
-                    <div className="bulk-import-smart-stat">
-                      <span>Method</span>
-                      <strong>{analysis.method}</strong>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bulk-import-online-status">Preparing local analysis…</div>
-                )}
-
-                {analysis?.warnings.length ? (
-                  <div className="bulk-import-smart-warnings">
-                    {analysis.warnings.map((warning) => (
-                      <div key={warning} className="bulk-import-detect-warn">
-                        <Icon name="info" size={16} />
-                        <span>{warning}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
           )}
 
           {step === "review" && (
@@ -959,7 +698,6 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                         <div className="bulk-import-song-card-meta">
                           <span>{song.sections.length} sections</span>
                           <span>{estimateDraftSlideCount(song, { linesPerSlide, autoSplit })} slides</span>
-                          <span>{song.method === "ai-reviewed" ? "AI reviewed" : "Local fallback"}</span>
                         </div>
                       </div>
 
@@ -1013,7 +751,6 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                       </div>
 
                       <div className="bulk-import-detail-stats">
-                        <span>{activeSong.confidence}% confidence</span>
                         <span>{activeSong.sections.length} sections</span>
                         <span>{activeSongSlides.length} slides</span>
                       </div>
@@ -1191,11 +928,9 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                   ? onClose
                   : step === "extract"
                     ? () => setStep("pick")
-                    : step === "process"
+                    : step === "review"
                       ? () => setStep("extract")
-                      : step === "review"
-                        ? () => setStep("process")
-                        : onClose
+                      : onClose
             }
             disabled={!canClose}
             title={step === "pick" ? "Close" : "Back"}
@@ -1203,28 +938,16 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
             {step === "done" ? "Close" : step === "pick" ? "Close" : "Back"}
           </button>
 
-          {step === "extract" && (
+          {step === "extract" && !processing && (
             <button
               type="button"
               className="bulk-import-btn-primary"
               onClick={() => {
                 void runProcessing();
               }}
-              title="Analyze import"
+              title="Process document"
             >
-              Analyze Import →
-            </button>
-          )}
-
-          {step === "process" && (
-            <button
-              type="button"
-              className="bulk-import-btn-primary"
-              disabled={processing || reviewSongs.length === 0}
-              onClick={() => setStep("review")}
-              title="Open review"
-            >
-              {aiStatus.applied ? "Review AI Results" : "Review Parsed Songs"} ({reviewSongs.length}) →
+              Structure Document →
             </button>
           )}
 

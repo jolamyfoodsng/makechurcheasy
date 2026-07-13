@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { parseBilingualHymns } from "./pdfImportService";
+import { parseBilingualHymns } from "../pdfImportService";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Single-column format (each header on its own line)

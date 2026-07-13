@@ -71,6 +71,7 @@ import ResourcesPage from "./pages/ResourcesPage";
 import ProductionHomePage from "./pages/ProductionHomePage";
 import MultiViewGalleryPage from "./pages/MultiViewGalleryPage";
 import CountdownsPage from "./pages/CountdownsPage";
+import PresentationSetupPage from "./pages/PresentationSetupPage";
 import ProductionThemeSettingsPage from "./pages/ProductionThemeSettingsPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import ServicePlannerPage from "./pages/ServicePlannerPage";
@@ -1208,6 +1209,7 @@ function App() {
                       <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
                       <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
                       <Route path="countdowns" element={<CountdownsPage />} />
+                      <Route path="presentation" element={<PresentationSetupPage />} />
                       <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
                       <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />
                       <Route path="library" element={<Navigate to="/resources" replace />} />

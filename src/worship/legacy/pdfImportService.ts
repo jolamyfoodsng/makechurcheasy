@@ -14,8 +14,8 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { saveSongsBatch } from "./worshipDb";
-import type { Song, SongMetadata } from "./types";
+import { saveSongsBatch } from "../worshipDb";
+import type { Song, SongMetadata } from "../types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

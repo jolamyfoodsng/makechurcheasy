@@ -17,6 +17,7 @@ interface Props {
   defaultQuickSettings?: DockFullscreenQuickThemeSettings;
   onQuickSettingsSave: (settings: DockFullscreenQuickThemeSettings) => void | Promise<void>;
   onQuickSettingsChange?: (settings: DockFullscreenQuickThemeSettings) => void;
+  resolveThemeQuickSettings?: (theme: BibleTheme) => DockFullscreenQuickThemeSettings;
   title: string;
   subtitle: string;
   /** When provided, modal is externally controlled */
@@ -59,7 +60,8 @@ export default function DockThemeSettingsModal({
   quickSettings,
   defaultQuickSettings,
   onQuickSettingsSave,
-  onQuickSettingsChange,
+  onQuickSettingsChange: _onQuickSettingsChange,
+  resolveThemeQuickSettings,
   title,
   subtitle,
   isOpen: externalIsOpen,
@@ -83,12 +85,14 @@ export default function DockThemeSettingsModal({
     setInternalView(v);
   }, [externalIsOpen, externalOnClose]);
   const [draftSettings, setDraftSettings] = useState(quickSettings);
+  const [draftSelectedThemeId, setDraftSelectedThemeId] = useState<string | null>(selectedThemeId);
+  const [draftSelectedTheme, setDraftSelectedTheme] = useState<BibleTheme | null>(null);
+  const pendingBackgroundPresetRef = useRef<DockBackgroundPreset | null>(null);
   const [saving, setSaving] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(view !== "closed");
   const originalSettingsRef = useRef(quickSettings);
-  const isUserChangeRef = useRef(false);
 
   useEffect(() => {
     const isOpen = view !== "closed";
@@ -97,24 +101,21 @@ export default function DockThemeSettingsModal({
     if (isOpen && !wasOpen) {
       originalSettingsRef.current = quickSettings;
       setDraftSettings(quickSettings);
+      setDraftSelectedThemeId(selectedThemeId);
+      setDraftSelectedTheme(null);
+      pendingBackgroundPresetRef.current = null;
     }
-  }, [view, quickSettings]);
-
-  // Notify parent of draft changes — only when user-initiated (via updateDraft),
-  // not when draftSettings is synced from quickSettings on modal open.
-  useEffect(() => {
-    if (isUserChangeRef.current) {
-      isUserChangeRef.current = false;
-      onQuickSettingsChange?.(draftSettings);
-    }
-  }, [draftSettings, onQuickSettingsChange]);
+  }, [view, quickSettings, selectedThemeId]);
 
   const updateDraft = useCallback(
     (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => {
-      isUserChangeRef.current = true;
-      setDraftSettings((prev) => updater(prev));
+      setDraftSettings((prev) => {
+        const next = updater(prev);
+        _onQuickSettingsChange?.(next);
+        return next;
+      });
     },
-    [],
+    [_onQuickSettingsChange],
   );
 
   const EFFECT_DEFS = useMemo(() => [
@@ -186,59 +187,44 @@ export default function DockThemeSettingsModal({
 
   const openSettings = useCallback(() => {
     setDraftSettings(quickSettings);
+    setDraftSelectedThemeId(selectedThemeId);
+    setDraftSelectedTheme(null);
+    pendingBackgroundPresetRef.current = null;
     setView("settings");
-  }, [quickSettings]);
+  }, [quickSettings, selectedThemeId]);
 
   const handleThemeSelect = useCallback((theme: BibleTheme) => {
-    onSelect(theme);
-    // Resolve variant settings based on active overlay mode
-    const variant = overlayMode === "lower-third"
-      ? theme.variants?.lowerThird
-      : theme.variants?.fullscreen;
-    const ts = variant?.settings ?? theme.settings;
-    updateDraft((prev) => ({
-      ...prev,
-      fontColor: ts.fontColor,
-      refFontColor: ts.refFontColor,
-      refFontSize: ts.refFontSize,
-      refFontWeight: ts.refFontWeight || "normal",
-      refPosition: ts.refPosition || "bottom",
-      refTextTransform: ts.refTextTransform || "none",
-      refLetterSpacing: ts.refLetterSpacing ?? 0,
-      refOpacity: ts.refOpacity ?? 1,
-      refTextAlign: ts.refTextAlign || "match",
-      refSpacing: ts.refSpacing ?? 24,
-      fontWeight: ts.fontWeight === "light" ? "normal" : ts.fontWeight,
-      fontStyle: ts.fontStyle ?? "normal",
-      textTransform: ts.textTransform,
-      textAlign: ts.textAlign,
-      lineHeight: ts.lineHeight,
-      textShadow: ts.textShadow,
-      fullscreenShadeColor: ts.fullscreenShadeColor,
-      fullscreenShadeOpacity: ts.fullscreenShadeOpacity,
-      backgroundImage: ts.backgroundImage,
-      backgroundVideo: ts.backgroundVideo,
-      backgroundOpacity: ts.backgroundOpacity,
-      backgroundColor: ts.backgroundColor,
-      backgroundColorEnd: ts.backgroundColorEnd,
-      bgGradientAngle: ts.bgGradientAngle,
-      referenceBackgroundEnabled: ts.referenceBackgroundEnabled,
-      referenceBackgroundColor: ts.referenceBackgroundColor,
-      referenceBackgroundStyle: ts.referenceBackgroundStyle,
-      referenceBackgroundRadius: ts.referenceBackgroundRadius,
-      lowerThirdPosition: ts.lowerThirdPosition,
-      lowerThirdSize: ts.lowerThirdSize,
-      lowerThirdWidthPreset: ts.lowerThirdWidthPreset,
-      lowerThirdOffsetX: ts.lowerThirdOffsetX,
-      lowerThirdCaptionPosition: ts.lowerThirdCaptionPosition || "bottom",
-    }));
-  }, [onSelect, updateDraft, overlayMode]);
+    setDraftSelectedTheme(theme);
+    setDraftSelectedThemeId(theme.id);
+    pendingBackgroundPresetRef.current = "theme";
+    onBackgroundPresetChange?.("theme");
+    const nextSettings = resolveThemeQuickSettings?.(theme);
+    if (nextSettings) {
+      setDraftSettings(nextSettings);
+      _onQuickSettingsChange?.(nextSettings);
+      return;
+    }
+    updateDraft((prev) => ({ ...prev, backgroundType: "theme" }));
+  }, [onBackgroundPresetChange, resolveThemeQuickSettings, updateDraft, _onQuickSettingsChange]);
 
   const handleSave = useCallback(() => {
     const nextSettings = { ...draftSettings };
+    const nextTheme = draftSelectedTheme;
+    const nextPreset = pendingBackgroundPresetRef.current;
     setSaving(true);
     flushSync(() => setView("closed"));
     const commit = () => {
+      try {
+        if (nextTheme) {
+          onSelect(nextTheme);
+        }
+        if (nextPreset) {
+          onBackgroundPresetChange?.(nextPreset);
+        }
+      } catch (error) {
+        console.warn("[DockThemeSettingsModal] pre-save apply failed:", error);
+      }
+
       void Promise.resolve(onQuickSettingsSave(nextSettings))
         .catch((error) => console.warn("[DockThemeSettingsModal] quick settings save failed:", error))
         .finally(() => setSaving(false));
@@ -248,7 +234,7 @@ export default function DockThemeSettingsModal({
       return;
     }
     window.setTimeout(commit, 0);
-  }, [draftSettings, onQuickSettingsSave]);
+  }, [draftSelectedTheme, draftSettings, onBackgroundPresetChange, onQuickSettingsSave, onSelect]);
 
   const handleReset = useCallback(() => {
     updateDraft(() => defaultQuickSettings ?? originalSettingsRef.current);
@@ -307,12 +293,15 @@ export default function DockThemeSettingsModal({
                   quickSettings={draftSettings}
                   onQuickSettingsChange={(updater) => updateDraft(updater)}
                   onQuickSettingsSave={(settings) => onQuickSettingsSave(settings)}
-                  selectedThemeId={selectedThemeId}
+                  selectedThemeId={draftSelectedThemeId}
                   onThemeSelect={handleThemeSelect}
                   allowedCategories={allowedCategories}
                   sampleText={sampleText}
                   sampleReference={sampleReference}
-                  onBackgroundPresetChange={onBackgroundPresetChange}
+                  onBackgroundPresetChange={(preset) => {
+                    pendingBackgroundPresetRef.current = preset;
+                    onBackgroundPresetChange?.(preset);
+                  }}
                   showReferences={showReferences}
                   overlayMode={overlayMode}
                   displayMode={displayMode}

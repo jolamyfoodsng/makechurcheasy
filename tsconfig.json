@@ -32,6 +32,9 @@
   "include": [
     "src"
   ],
+  "exclude": [
+    "src/worship/legacy"
+  ],
   "references": [
     {
       "path": "./tsconfig.node.json"

@@ -1,10 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import { applyAiReviewToSongs } from "./smartImportService";
+import { applyAiReviewToSongs } from "../smartImportService";
 import type {
   SmartImportReviewBatchResponse,
   SmartImportRuntimeStatus,
   SmartImportSongDraft,
-} from "./smartImportTypes";
+} from "../smartImportTypes";
 
 const MAX_BATCH_SONGS = 6;
 const MAX_BATCH_CHARS = 18_000;

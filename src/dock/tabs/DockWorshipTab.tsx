@@ -780,7 +780,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
   const suppressAutoProjectionRef = useRef(true);
   const suppressAutoProjectionTimerRef = useRef<number | null>(null);
   const songsPollBusyRef = useRef(false);
-  const showThemeSettingsRef = useRef(false);
 
   const selectedSongSections = useMemo(
     () => (selectedSong ? parseLyricSections(selectedSong.lyrics, linesPerSlide, selectedSong.autoSplit ?? false) : []),
@@ -899,10 +898,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
       window.clearTimeout(suppressAutoProjectionTimerRef.current);
     }
   }, []);
-
-  // Keep showThemeSettingsRef in sync with the modal open state so auto-push
-  // effects can bail out without needing the state value in their dep array.
-  useEffect(() => { showThemeSettingsRef.current = showThemeSettings; }, [showThemeSettings]);
 
   // Use primitive IDs as effect dependencies to avoid re-running when the backend
   // sends new object references for themes that haven't actually changed.
@@ -1220,6 +1215,26 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     () => extractQuickThemeSettings(effectiveSelectedFSTheme.settings),
     [effectiveSelectedFSTheme.settings],
   );
+  const activeLowerThirdQuickThemeSettings = useMemo(
+    () => extractQuickThemeSettings(effectiveSelectedLTTheme.settings),
+    [effectiveSelectedLTTheme.settings],
+  );
+  const handleSelectFSTheme = useCallback((theme: BibleTheme) => {
+    setSelectedFSTheme(theme);
+  }, []);
+  const handleSelectLTTheme = useCallback((theme: BibleTheme) => {
+    setSelectedLTTheme(theme);
+  }, []);
+  const activeThemePickerProps = overlayMode === "fullscreen"
+    ? { selectedThemeId: selectedFSTheme.id, onSelect: handleSelectFSTheme }
+    : { selectedThemeId: selectedLTTheme.id, onSelect: handleSelectLTTheme };
+  const resolveThemeQuickSettings = useCallback((theme: BibleTheme): DockFullscreenQuickThemeSettings => {
+    const variant = overlayMode === "lower-third"
+      ? theme.variants?.lowerThird
+      : theme.variants?.fullscreen;
+    const themeSettings = variant?.settings ?? theme.settings;
+    return extractQuickThemeSettings(themeSettings);
+  }, [overlayMode]);
 
   const buildSectionPayload = useCallback(
     (idx: number, options?: { backgroundOnly?: boolean }) => {
@@ -2015,7 +2030,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     prevOverlayMode.current = overlayMode;
     if (!changed) return;
     if (suppressAutoProjectionRef.current) return;
-    if (showThemeSettingsRef.current) return;
     if (!prefsReadyRef.current) return;
     if (openedAnnouncement && activeAnnouncementIndex !== null) {
       void restageAnnouncementCurrent();
@@ -2041,7 +2055,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     prevThemeSignature.current = nextSignature;
     if (!changed) return;
     if (suppressAutoProjectionRef.current) return;
-    if (showThemeSettingsRef.current) return;
     if (!prefsReadyRef.current) return;
     if (openedAnnouncement && activeAnnouncementIndex !== null) {
       void restageAnnouncementCurrent();
@@ -2070,7 +2083,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     prevFullscreenQuickSettingsSignature.current = nextSignature;
     if (!changed) return;
     if (suppressAutoProjectionRef.current) return;
-    if (showThemeSettingsRef.current) return;
     if (!prefsReadyRef.current) return;
     if (overlayMode === "fullscreen" && openedAnnouncement && activeAnnouncementIndex !== null) {
       void restageAnnouncementCurrent();
@@ -2101,7 +2113,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     if (!changed) return;
     if (overlayMode !== "lower-third") return;
     if (suppressAutoProjectionRef.current) return;
-    if (showThemeSettingsRef.current) return;
     if (!prefsReadyRef.current) return;
     if (openedAnnouncement && activeAnnouncementIndex !== null) {
       void restageAnnouncementCurrent();
@@ -3192,18 +3203,18 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
 
       {/* Theme Settings Modal */}
       <DockThemeSettingsModal
-        selectedThemeId={null}
-        onSelect={() => { }}
+        selectedThemeId={activeThemePickerProps.selectedThemeId}
+        onSelect={activeThemePickerProps.onSelect}
         allowedCategories={["worship", "general"]}
         quickSettings={
           overlayMode === "fullscreen"
             ? savedFullscreenQuickThemeSettings ?? extractQuickThemeSettings(effectiveSelectedFSTheme.settings)
-            : savedLowerThirdQuickThemeSettings ?? extractQuickThemeSettings(effectiveSelectedLTTheme.settings)
+            : savedLowerThirdQuickThemeSettings ?? activeLowerThirdQuickThemeSettings
         }
         defaultQuickSettings={
           overlayMode === "fullscreen"
             ? extractQuickThemeSettings(effectiveSelectedFSTheme.settings)
-            : extractQuickThemeSettings(effectiveSelectedLTTheme.settings)
+            : activeLowerThirdQuickThemeSettings
         }
         onQuickSettingsSave={(next) => {
           if (overlayMode === "fullscreen") {
@@ -3213,13 +3224,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
             setSavedLowerThirdQuickThemeSettings(next);
             setLowerThirdQuickThemeSettings(next);
           }
-          requestAnimationFrame(() => {
-            if (openedAnnouncement && activeAnnouncementIndex !== null) {
-              void restageAnnouncementCurrent();
-              return;
-            }
-            void restageCurrent();
-          });
         }}
         onQuickSettingsChange={(next) => {
           if (overlayMode === "fullscreen") {
@@ -3227,7 +3231,19 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
           } else {
             setLowerThirdQuickThemeSettings(next);
           }
+          // Live preview: restage current content so OBS receives updated CSS
+          // (best-effort, non-blocking).
+          try {
+            requestAnimationFrame(() => {
+              if (openedAnnouncement && activeAnnouncementIndex !== null) {
+                void restageAnnouncementCurrent();
+                return;
+              }
+              void restageCurrent();
+            });
+          } catch { /* ignore */ }
         }}
+        resolveThemeQuickSettings={resolveThemeQuickSettings}
         title={t('worship.quickEdits')}
         subtitle={t('worship.adjustDescription')}
         isOpen={showThemeSettings}

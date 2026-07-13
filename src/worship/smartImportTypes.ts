@@ -1,7 +1,6 @@
 import type { Slide } from "./types";
 
-export type SmartImportMethod = "layout" | "ccc" | "numbered" | "titled" | "ai-reviewed";
-export type SmartImportMode = "offline" | "online";
+export type SmartImportMethod = "ai" | "fallback";
 export type SmartImportSectionType =
   | Slide["type"]
   | "refrain";
@@ -21,7 +20,6 @@ export interface SmartImportSongDraft {
   hymnNumber?: string;
   artist?: string;
   language?: string;
-  confidence: number;
   method: SmartImportMethod;
   sections: SmartImportSectionDraft[];
   warnings: string[];
@@ -29,24 +27,7 @@ export interface SmartImportSongDraft {
   rawExcerpt: string;
 }
 
-export interface SmartImportAnalysis {
-  songs: SmartImportSongDraft[];
-  warnings: string[];
-  method: Exclude<SmartImportMethod, "ai-reviewed">;
-  confidence: number;
-  counts: {
-    songs: number;
-    sections: number;
-    lines: number;
-  };
-}
-
-export interface SmartImportAiReviewStatus {
-  attempted: boolean;
-  applied: boolean;
-  error: string;
-  mode: SmartImportMode;
-}
+// ── Legacy review types (still referenced by legacy/ files) ──
 
 export interface SmartImportRuntimeStatus {
   online: boolean;
@@ -87,4 +68,45 @@ export interface SmartImportReviewBatchResponse {
       warnings?: string[];
     }>;
   }>;
+}
+
+// ── AI-first processing types ──
+
+export interface BulkImportChunkRequest {
+  chunkIndex: number;
+  totalChunks: number;
+  text: string;
+}
+
+export interface TextChunk {
+  index: number;
+  total: number;
+  text: string;
+  startOffset: number;
+  endOffset: number;
+}
+
+export interface AiProcessResult {
+  songs: SmartImportSongDraft[];
+  warnings: string[];
+  aiUsed: boolean;
+  needsReview: boolean;
+  stats: {
+    totalChunks: number;
+    aiChunks: number;
+    fallbackChunks: number;
+    provider: string;
+    durationMs: number;
+  };
+}
+
+export interface ImportSession {
+  id: string;
+  fileName: string;
+  fileType: string;
+  extractedText: string;
+  completedChunks: number[];
+  pendingChunks: number[];
+  timestamp: number;
+  status: "in_progress" | "completed" | "abandoned";
 }

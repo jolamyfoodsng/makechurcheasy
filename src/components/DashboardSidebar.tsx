@@ -24,6 +24,7 @@ import {
   LogOut,
   FileText,
   LayoutGrid,
+  Tv,
 } from "lucide-react";
 import type { ConnectionStatus } from "../services/obsService";
 import { track } from "../services/analytics";
@@ -123,6 +124,7 @@ export default function DashboardSidebar({
           {navItem("/resources?tab=worship", Music, t("sidebar.worship"))}
           {navItem("/resources?tab=media", Images, t("sidebar.media"))}
           {navItem("/gallery", LayoutGrid, t("sidebar.multiView"))}
+          {navItem("/presentation", Tv, t("sidebar.presentation"))}
         </div>
       </div>
 
