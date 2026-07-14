@@ -4898,5 +4898,15 @@
   "countdowns.targetSceneDesc": "OBS scene to switch to when the countdown hits the trigger.",
   "countdowns.selectScene": "Select scene...",
   "countdowns.pushToScene": "Use a separate scene",
-  "countdowns.pushToSceneDesc": "When on, the overlay goes to a new scene instead of MCE Presentation."
+  "countdowns.pushToSceneDesc": "When on, the overlay goes to a new scene instead of MCE Presentation.",
+  "interfaceLanguagePrompt.title": "Choose your preferred language",
+  "interfaceLanguagePrompt.description": "Select the language MakeChurchEasy should use for menus, buttons, and setup screens.",
+  "interfaceLanguagePrompt.label": "Interface language",
+  "interfaceLanguagePrompt.helper": "You can change this later in Settings.",
+  "interfaceLanguagePrompt.continue": "Continue",
+  "sidebar.presentation": "Presentation",
+  "auth.checkEmail.title": "Check your email",
+  "auth.checkEmail.sentTo": "We sent a sign-in link to {{email}}.",
+  "auth.checkEmail.instruction": "Open the link in your inbox to continue signing in.",
+  "auth.checkEmail.backToSignIn": "Back to sign in"
 }

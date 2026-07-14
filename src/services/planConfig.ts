@@ -30,13 +30,38 @@ interface CacheEntry {
   fetchedAt: number;
 }
 
+function normalizePlanConfigShape(config: PlanConfig): PlanConfig {
+  const plans = Object.fromEntries(
+    Object.entries(DEFAULT_PLAN_CONFIG.plans).map(([planId, defaultPlan]) => {
+      const existingPlan = config.plans?.[planId as keyof typeof config.plans];
+      return [
+        planId,
+        {
+          ...defaultPlan,
+          ...(existingPlan || {}),
+          entitlements: {
+            ...defaultPlan.entitlements,
+            ...(existingPlan?.entitlements || {}),
+          },
+        },
+      ];
+    }),
+  ) as PlanConfig["plans"];
+
+  return {
+    ...DEFAULT_PLAN_CONFIG,
+    ...config,
+    plans,
+  };
+}
+
 function readCacheEntry(): CacheEntry | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const entry: CacheEntry = JSON.parse(raw);
     if (Date.now() - entry.fetchedAt > CACHE_TTL_MS * 10) return null; // expired after 50 min
-    return entry;
+    return { ...entry, config: normalizePlanConfigShape(entry.config) };
   } catch {
     return null;
   }
@@ -57,7 +82,7 @@ export function readPlanConfigCache(): PlanConfig | null {
 
 function writeCache(config: PlanConfig): void {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ config, fetchedAt: Date.now() }));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ config: normalizePlanConfigShape(config), fetchedAt: Date.now() }));
   } catch { /* quota exceeded — ignore */ }
 }
 
@@ -92,8 +117,9 @@ async function doFetch(): Promise<PlanConfig> {
     if (res.ok) {
       const data = await res.json();
       if (data && data.plans) {
-        writeCache(data);
-        return data;
+        const normalized = normalizePlanConfigShape(data);
+        writeCache(normalized);
+        return normalized;
       }
     }
   } catch { /* fall through to default */ }

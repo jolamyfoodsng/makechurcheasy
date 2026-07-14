@@ -12,6 +12,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "../i18n";
 import i18n from "../i18n";
+import { resolveInterfaceLocale } from "../i18n/localeCatalog";
 import DockPage from "./DockPage";
 import DockAuthGate from "./DockAuthGate";
 import { dockClient } from "../services/dockBridge";
@@ -29,8 +30,9 @@ dockClient.onState((msg) => {
   if (msg.type === "state:language-changed") {
     const payload = msg.payload as { code: string } | null;
     if (payload?.code) {
-      void i18n.changeLanguage(payload.code);
-      localStorage.setItem("mce_interface_language", payload.code);
+      const code = resolveInterfaceLocale(payload.code);
+      void i18n.changeLanguage(code);
+      localStorage.setItem("mce_interface_language", code);
     }
   }
 });

@@ -8,16 +8,16 @@ export interface Locale {
 }
 
 const REGION_DEFAULTS: Record<string, string> = {
-  NG: "en-NG",
-  GH: "en-GH",
+  NG: "en-US",
+  GH: "ak",
   US: "en-US",
-  GB: "en-GB",
-  FR: "fr-FR",
-  CA: "fr-CA",
-  ES: "es-ES",
-  MX: "es-MX",
-  PT: "pt-PT",
-  BR: "pt-BR",
+  GB: "en-US",
+  FR: "fr",
+  CA: "fr",
+  ES: "es",
+  MX: "es",
+  PT: "pt",
+  BR: "pt",
 };
 
 const COUNTRY_ALIASES: Record<string, string> = {
@@ -39,28 +39,25 @@ const COUNTRY_ALIASES: Record<string, string> = {
 
 const LANGUAGE_DEFAULTS: Record<string, string> = {
   en: "en-US",
-  fr: "fr-FR",
-  es: "es-ES",
-  pt: "pt-BR",
+  fr: "fr",
+  es: "es",
+  pt: "pt",
   yo: "yo",
   ig: "ig",
   ha: "ha",
+  ak: "ak",
+  tw: "ak",
 };
 
 export const INTERFACE_LOCALES: Locale[] = [
   { code: "en-US", name: "English (United States)", nativeName: "English (United States)", flag: "🇺🇸", region: "North America", popular: true },
-  { code: "en-NG", name: "English (Nigeria)", nativeName: "English (Nigeria)", flag: "🇳🇬", region: "Africa", popular: true },
-  { code: "en-GH", name: "English (Ghana)", nativeName: "English (Ghana)", flag: "🇬🇭", region: "Africa", popular: true },
-  { code: "en-GB", name: "English (United Kingdom)", nativeName: "English (United Kingdom)", flag: "🇬🇧", region: "Europe", popular: true },
-  { code: "fr-FR", name: "French (France)", nativeName: "Français (France)", flag: "🇫🇷", region: "Europe", popular: true },
-  { code: "fr-CA", name: "French (Canada)", nativeName: "Français (Canada)", flag: "🇨🇦", region: "North America", popular: true },
-  { code: "es-ES", name: "Spanish (Spain)", nativeName: "Español (España)", flag: "🇪🇸", region: "Europe", popular: true },
-  { code: "es-MX", name: "Spanish (Mexico)", nativeName: "Español (México)", flag: "🇲🇽", region: "North America", popular: true },
-  { code: "pt-PT", name: "Portuguese (Portugal)", nativeName: "Português (Portugal)", flag: "🇵🇹", region: "Europe", popular: true },
-  { code: "pt-BR", name: "Portuguese (Brazil)", nativeName: "Português (Brasil)", flag: "🇧🇷", region: "South America", popular: true },
+  { code: "fr", name: "French", nativeName: "Français", flag: "🇫🇷", region: "Europe", popular: true },
+  { code: "es", name: "Spanish", nativeName: "Español", flag: "🇪🇸", region: "Europe", popular: true },
+  { code: "pt", name: "Portuguese", nativeName: "Português", flag: "🇵🇹", region: "Europe", popular: true },
   { code: "yo", name: "Yoruba", nativeName: "Yorùbá", flag: "🇳🇬", region: "Africa" },
   { code: "ig", name: "Igbo", nativeName: "Igbo", flag: "🇳🇬", region: "Africa" },
   { code: "ha", name: "Hausa", nativeName: "Hausa", flag: "🇳🇬", region: "Africa" },
+  { code: "ak", name: "Akan (Twi)", nativeName: "Akan/Twi", flag: "🇬🇭", region: "Africa" },
 ];
 
 const SUPPORTED_LOCALE_MAP = new Map(INTERFACE_LOCALES.map((locale) => [locale.code.toLowerCase(), locale]));
@@ -72,11 +69,24 @@ const LANGUAGE_NAME_ALIASES: Record<string, string> = {
   yoruba: "yo",
   igbo: "ig",
   hausa: "ha",
+  akan: "ak",
+  twi: "ak",
 };
 const LEGACY_ALIAS_MAP: Record<string, string> = {
-  gh: "en-GH",
-  ghanaian: "en-GH",
-  twi: "en-GH",
+  "en-ng": "en-US",
+  "en-gh": "en-US",
+  "en-gb": "en-US",
+  "fr-fr": "fr",
+  "fr-ca": "fr",
+  "es-es": "es",
+  "es-mx": "es",
+  "pt-pt": "pt",
+  "pt-br": "pt",
+  gh: "ak",
+  ghanaian: "ak",
+  tw: "ak",
+  twi: "ak",
+  akan: "ak",
 };
 
 export const DEFAULT_INTERFACE_LOCALE = "en-US";

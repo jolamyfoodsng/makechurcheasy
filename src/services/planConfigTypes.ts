@@ -51,6 +51,7 @@ export interface PlanEntitlements {
   advancedAnalytics: boolean;
   customReports: boolean;
   mobileControl: boolean;
+  presentationMode: boolean;
   apiAccess: boolean;
   teamManagement: boolean;
   campusManagement: boolean;
@@ -120,7 +121,7 @@ export type FeatureKey =
   | "multiview" | "tickers" | "massImport" | "easyWorshipImport"
   | "proPresenterImport" | "translation" | "speechToScripture"
   | "sermonExport" | "aiFeatures" | "cloudSync" | "advancedAnalytics"
-  | "customReports" | "mobileControl" | "apiAccess"
+  | "customReports" | "mobileControl" | "presentationMode" | "apiAccess"
   | "teamManagement" | "campusManagement"
   | "slideshow"
   | "countdowns";
@@ -152,6 +153,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   advancedAnalytics: "Advanced Analytics",
   customReports: "Custom Reports",
   mobileControl: "Mobile Control",
+  presentationMode: "Presentation Mode",
   apiAccess: "API Access",
   teamManagement: "Team Management",
   campusManagement: "Multi-Campus",

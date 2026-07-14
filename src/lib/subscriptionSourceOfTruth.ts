@@ -15,6 +15,7 @@ export interface CanonicalPlanEntitlements {
   multiview: boolean;
   remoteControl: boolean;
   mobileSupport: boolean;
+  presentationMode: boolean;
   bulkImport: boolean;
   easyWorshipImport: boolean;
   propresenterImport: boolean;
@@ -75,6 +76,7 @@ export interface LegacyCompatibleEntitlements {
   advancedAnalytics: boolean;
   customReports: boolean;
   mobileControl: boolean;
+  presentationMode: boolean;
   apiAccess: boolean;
   teamManagement: boolean;
   campusManagement: boolean;
@@ -179,6 +181,7 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     multiview: false,
     remoteControl: false,
     mobileSupport: false,
+    presentationMode: false,
     bulkImport: false,
     easyWorshipImport: false,
     propresenterImport: false,
@@ -197,6 +200,7 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     multiview: true,
     remoteControl: false,
     mobileSupport: false,
+    presentationMode: false,
     bulkImport: false,
     easyWorshipImport: false,
     propresenterImport: false,
@@ -215,6 +219,7 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     multiview: true,
     remoteControl: true,
     mobileSupport: true,
+    presentationMode: true,
     bulkImport: true,
     easyWorshipImport: true,
     propresenterImport: true,
@@ -233,6 +238,7 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     multiview: true,
     remoteControl: true,
     mobileSupport: true,
+    presentationMode: true,
     bulkImport: true,
     easyWorshipImport: true,
     propresenterImport: true,
@@ -406,6 +412,7 @@ export function toLegacyCompatibleEntitlements(
     advancedAnalytics: isPro,
     customReports: isPro,
     mobileControl: entitlements.mobileSupport || entitlements.remoteControl,
+    presentationMode: entitlements.presentationMode,
     apiAccess: isPro,
     teamManagement: entitlements.maxTeams > 0,
     campusManagement: isPro,
@@ -539,7 +546,7 @@ export function buildLegacyCompatiblePlanConfig(options?: {
   });
 
   return {
-    version: 4,
+    version: 5,
     plans: {
       free: freeTier,
       trial: {

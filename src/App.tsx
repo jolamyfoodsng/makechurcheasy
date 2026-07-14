@@ -13,10 +13,13 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Navigate, useParams, useNavigate } from "react-router-dom";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { OBSConnectGate } from "./components/OBSConnectGate";
 import AuthGate from "./components/AuthGate";
 import LicenseGuard from "./components/LicenseGuard";
 import FeatureGuard from "./components/FeatureGuard";
+import PresentationPlanGate from "./components/PresentationPlanGate";
 import { useAuth } from "./contexts/AuthContext";
 import { initLicenseGuard, reverifyOnAuth } from "./services/licenseGuard";
 import { AppShell } from "./AppShell";
@@ -27,6 +30,7 @@ import { LowerThirdProvider } from "./lowerthirds/lowerThirdStore";
 import SplashScreen from "./components/SplashScreen";
 import UpdateNotification from "./components/UpdateNotification";
 import ForcedUpdateOverlay from "./components/ForcedUpdateOverlay";
+import { InterfaceLanguagePrompt } from "./components/InterfaceLanguagePrompt";
 import VersionFloorWarningBanner from "./components/VersionFloorWarningBanner";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
 import VerificationGate from "./components/VerificationGate";
@@ -78,6 +82,8 @@ import ServicePlannerPage from "./pages/ServicePlannerPage";
 import SpeechToScripturePage from "./pages/SpeechToScripturePage";
 import TranscriptLibraryPage from "./pages/TranscriptLibraryPage";
 import TranscriptDetailPage from "./pages/TranscriptDetailPage";
+import ServiceHubPage from "./pages/ServiceHubPage";
+import QuickMergePage from "./pages/QuickMergePage";
 import CreditsGuard from "./components/CreditsGuard";
 import {
   getServicePlannerSnapshot,
@@ -114,6 +120,7 @@ import "./App.css";
 import "./NewDashboard.css";
 import "./compat-mode.css";
 import { getRecommendedPollingInterval } from "./services/performanceManager";
+import { armConfirmedAppClose, clearConfirmedAppClose } from "./services/appCloseGuard";
 
 const UPDATE_POLL_INTERVAL_MS = 30_000;
 const FORCED_UPDATE_POLL_INTERVAL_MS = 5 * 60 * 1000;
@@ -763,6 +770,75 @@ function App() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);
 
+  // ── Native app close confirmation ──
+  useEffect(() => {
+    if (!(window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+      return;
+    }
+
+    clearConfirmedAppClose();
+
+    let unlisten: (() => void) | null = null;
+    let promptInFlight = false;
+
+    const setup = async () => {
+      try {
+        unlisten = await getCurrentWindow().onCloseRequested(async (event) => {
+          if (promptInFlight) {
+            event.preventDefault();
+            return;
+          }
+
+          promptInFlight = true;
+
+          try {
+            const lmStatus = lmDockService.getSnapshot().status;
+            const speechActive =
+              lmStatus === "listening" ||
+              lmStatus === "connecting" ||
+              lmStatus === "requesting-mic";
+
+            const confirmed = await confirmDialog(
+              speechActive
+                ? "Close MakeChurchEasy?\n\nSpeech-to-Scripture is still active. Closing now will stop the session and may discard transcript progress."
+                : "Close MakeChurchEasy?\n\nAny active live operation will stop when the app closes.",
+              {
+                title: "Close MakeChurchEasy",
+                kind: "warning",
+                okLabel: "Close App",
+                cancelLabel: "Stay",
+              },
+            );
+
+            if (!confirmed) {
+              clearConfirmedAppClose();
+              event.preventDefault();
+              return;
+            }
+
+            armConfirmedAppClose();
+          } catch (error) {
+            clearConfirmedAppClose();
+            event.preventDefault();
+            console.warn("[App] Failed to show close confirmation:", error);
+          } finally {
+            promptInFlight = false;
+          }
+        });
+      } catch (error) {
+        console.warn("[App] Failed to register native close confirmation:", error);
+      }
+    };
+
+    void setup();
+
+    return () => {
+      clearConfirmedAppClose();
+      unlisten?.();
+      unlisten = null;
+    };
+  }, []);
+
   // ── Track OBS connection status ──
   useEffect(() => {
     let prevConnected = false;
@@ -1042,6 +1118,8 @@ function App() {
         <SplashScreen ready={resourcesReady} onDone={handleSplashDone} />
       )}
 
+      {!splashVisible && <InterfaceLanguagePrompt />}
+
       {/* 2a. Version floor block — server-configured minimum, no self-update possible */}
       {!splashVisible && versionFloorBlocked?.blocked && (
         <div className="force-update-overlay">
@@ -1209,17 +1287,20 @@ function App() {
                       <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
                       <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
                       <Route path="countdowns" element={<CountdownsPage />} />
-                      <Route path="presentation" element={<PresentationSetupPage />} />
+                      <Route path="presentation" element={<PresentationPlanGate><PresentationSetupPage /></PresentationPlanGate>} />
+                      <Route path="presentation/setup" element={<PresentationPlanGate><PresentationSetupPage /></PresentationPlanGate>} />
+                      <Route path="presentation/console" element={<Navigate to="/hub?mode=live" replace />} />
                       <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
                       <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />
                       <Route path="library" element={<Navigate to="/resources" replace />} />
                       <Route path="templates" element={<Navigate to="/production/themes" replace />} />
                       <Route path="templates/*" element={<Navigate to="/production/themes" replace />} />
-                      <Route path="hub" element={<Navigate to="/" replace />} />
-                      <Route path="hub/*" element={<Navigate to="/" replace />} />
-                      <Route path="service-hub" element={<Navigate to="/" replace />} />
-                      <Route path="service-control-hub" element={<Navigate to="/" replace />} />
-                      <Route path="quick-merge" element={<Navigate to="/" replace />} />
+                      <Route path="hub" element={<PresentationPlanGate><ServiceHubPage /></PresentationPlanGate>} />
+                      <Route path="hub/quick-merge" element={<QuickMergePage />} />
+                      <Route path="hub/*" element={<Navigate to="/hub?mode=live" replace />} />
+                      <Route path="service-hub" element={<Navigate to="/hub?mode=live" replace />} />
+                      <Route path="service-control-hub" element={<Navigate to="/hub?mode=live" replace />} />
+                      <Route path="quick-merge" element={<Navigate to="/hub/quick-merge" replace />} />
                       <Route path="broadcast" element={<Navigate to="/" replace />} />
                       <Route path="bible" element={<Navigate to="/settings" replace />} />
                       <Route path="bible/*" element={<Navigate to="/settings" replace />} />

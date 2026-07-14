@@ -9,7 +9,7 @@
  *   - No detail pages, no back buttons, everything on one screen
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type ChangeEvent, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
@@ -115,6 +115,20 @@ function cssColorToObsInt(cssColor: string): number {
     b = parseInt(hex.slice(4, 6), 16);
   }
   return (0xFF << 24 | b << 16 | g << 8 | r) >>> 0;
+}
+
+function getBackgroundMediaLabel(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/");
+  const lastSegment = normalized.split("/").pop()?.trim();
+  return lastSegment || filePath;
+}
+
+function matchesBackgroundMediaType(file: File, type: "image" | "video"): boolean {
+  if (file.type) return file.type.startsWith(`${type}/`);
+  const lowerName = file.name.toLowerCase();
+  return type === "image"
+    ? /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|heif)$/i.test(lowerName)
+    : /\.(mp4|mov|m4v|webm|avi|mkv|mpeg|mpg)$/i.test(lowerName);
 }
 
 function getMvBg(mv: SavedMultiView): MVBackground {
@@ -323,6 +337,7 @@ function BackgroundPicker({
   const imgInputRef = useRef<HTMLInputElement>(null);
   const vidInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [draggingType, setDraggingType] = useState<"image" | "video" | null>(null);
 
   const handleFileUpload = useCallback(async (file: File, type: "image" | "video") => {
     setUploading(true);
@@ -338,6 +353,40 @@ function BackgroundPicker({
       setUploading(false);
     }
   }, [background, onChange]);
+
+  const triggerBrowse = useCallback((type: "image" | "video") => {
+    if (uploading) return;
+    (type === "image" ? imgInputRef : vidInputRef).current?.click();
+  }, [uploading]);
+
+  const handlePickerChange = useCallback((event: ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
+    const file = event.target.files?.[0];
+    if (file) {
+      void handleFileUpload(file, type);
+    }
+    event.target.value = "";
+  }, [handleFileUpload]);
+
+  const handleMediaDrop = useCallback((event: DragEvent<HTMLLabelElement>, type: "image" | "video") => {
+    event.preventDefault();
+    setDraggingType(null);
+    if (uploading) return;
+    const file = event.dataTransfer.files?.[0];
+    if (!file || !matchesBackgroundMediaType(file, type)) return;
+    void handleFileUpload(file, type);
+  }, [handleFileUpload, uploading]);
+
+  const isMediaType = background.type === "image" || background.type === "video";
+  const mediaType = background.type === "video" ? "video" : "image";
+  const selectedMediaName = background.filePath ? getBackgroundMediaLabel(background.filePath) : "";
+  const hasSelectedMedia = selectedMediaName.length > 0;
+  const mediaIcon = mediaType === "image" ? "image" : "movie";
+  const mediaTitle = mediaType === "image" ? "Choose background image" : "Choose background video";
+  const mediaHint = mediaType === "image"
+    ? "Drop an image here or click to browse. PNG, JPG, WEBP, SVG."
+    : "Drop a video here or click to browse. MP4, MOV, WEBM, M4V.";
+  const mediaSelectedTitle = mediaType === "image" ? "Background image selected" : "Background video selected";
+  const mediaInputRef = mediaType === "image" ? imgInputRef : vidInputRef;
 
   return (
     <div className="dock-mv-bg">
@@ -375,67 +424,81 @@ function BackgroundPicker({
         </div>
       )}
 
-      {background.type === "image" && (
-        <div className="dock-mv-bg__row">
-          <input
-            className="dock-mv-bg__path-input"
-            type="text"
-            value={background.filePath}
-            onChange={(e) => onChange({ ...background, filePath: e.target.value })}
-            placeholder={t('multiview.absolutePathPlaceholder')}
-          />
-          <button
-            type="button"
-            className="dock-mv-bg__browse-btn"
-            onClick={() => imgInputRef.current?.click()}
-            title={t('multiview.browseAndUpload')}
-            disabled={uploading}
-          >
-            {uploading ? <Icon name="hourglass_top" size={13} /> : <Icon name="folder_open" size={13} />}
-          </button>
-          <input
-            ref={imgInputRef}
-            type="file"
-            accept="image/*"
-            className="dock-mv-bg__file-hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) handleFileUpload(f, "image");
-              e.target.value = "";
+      {isMediaType && (
+        <div className="dock-mv-bg__media">
+          <label
+            className={[
+              "dock-mv-bg__media-card",
+              draggingType === mediaType ? "dock-mv-bg__media-card--dragging" : "",
+              hasSelectedMedia ? "dock-mv-bg__media-card--selected" : "",
+              uploading ? "dock-mv-bg__media-card--busy" : "",
+            ].filter(Boolean).join(" ")}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              if (!uploading) setDraggingType(mediaType);
             }}
-          />
-        </div>
-      )}
+            onDragLeave={() => setDraggingType((current) => current === mediaType ? null : current)}
+            onDrop={(event) => void handleMediaDrop(event, mediaType)}
+            aria-busy={uploading}
+          >
+            <div className="dock-mv-bg__media-icon-wrap">
+              <div className="dock-mv-bg__media-icon">
+                <Icon name={uploading ? "hourglass_top" : mediaIcon} size={18} />
+              </div>
+            </div>
 
-      {background.type === "video" && (
-        <div className="dock-mv-bg__row">
-          <input
-            className="dock-mv-bg__path-input"
-            type="text"
-            value={background.filePath}
-            onChange={(e) => onChange({ ...background, filePath: e.target.value })}
-            placeholder={t('multiview.absolutePathPlaceholder')}
-          />
-          <button
-            type="button"
-            className="dock-mv-bg__browse-btn"
-            onClick={() => vidInputRef.current?.click()}
-            title={t('multiview.browseAndUpload')}
-            disabled={uploading}
-          >
-            {uploading ? <Icon name="hourglass_top" size={13} /> : <Icon name="folder_open" size={13} />}
-          </button>
-          <input
-            ref={vidInputRef}
-            type="file"
-            accept="video/*"
-            className="dock-mv-bg__file-hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) handleFileUpload(f, "video");
-              e.target.value = "";
-            }}
-          />
+            <div className="dock-mv-bg__media-copy">
+              <div className="dock-mv-bg__media-topline">
+                <span className="dock-mv-bg__media-title">
+                  {uploading ? "Saving media..." : hasSelectedMedia ? mediaSelectedTitle : mediaTitle}
+                </span>
+                <span className="dock-mv-bg__media-badge">
+                  {t(mediaType === "image" ? "multiview.bgImage" : "multiview.bgVideo")}
+                </span>
+              </div>
+              <p className="dock-mv-bg__media-meta">
+                {hasSelectedMedia ? selectedMediaName : mediaHint}
+              </p>
+            </div>
+
+            <span className="dock-mv-bg__media-cta">
+              {uploading ? "Saving..." : t('common.upload')}
+            </span>
+
+            <input
+              ref={mediaInputRef}
+              type="file"
+              accept={mediaType === "image" ? "image/*" : "video/*"}
+              className="dock-mv-bg__file-hidden"
+              onChange={(event) => handlePickerChange(event, mediaType)}
+            />
+          </label>
+
+          {hasSelectedMedia && (
+            <div className="dock-mv-bg__media-actions">
+              <button
+                type="button"
+                className="dock-mv-bg__media-action"
+                onClick={() => triggerBrowse(mediaType)}
+                title={t('multiview.browseAndUpload')}
+                disabled={uploading}
+              >
+                <Icon name="folder_open" size={13} />
+                <span>{t('multiview.browseAndUpload')}</span>
+              </button>
+              <button
+                type="button"
+                className="dock-mv-bg__media-action dock-mv-bg__media-action--ghost"
+                onClick={() => onChange({ ...background, filePath: "" })}
+                title={t('common.clear')}
+                disabled={uploading}
+              >
+                <Icon name="close" size={13} />
+                <span>{t('common.clear')}</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 

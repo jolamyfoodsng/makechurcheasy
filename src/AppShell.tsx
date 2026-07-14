@@ -120,6 +120,9 @@ export function AppShell() {
     location.pathname.startsWith("/edit/") ||
     location.pathname.startsWith("/multiview") ||
     location.pathname.startsWith("/bible") ||
+    location.pathname.startsWith("/hub") ||
+    location.pathname.startsWith("/service-hub") ||
+    location.pathname.startsWith("/presentation/console") ||
     location.pathname === "/new";
 
   // ── Cancel confirmation modal ──

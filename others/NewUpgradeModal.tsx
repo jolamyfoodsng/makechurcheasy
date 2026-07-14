@@ -71,6 +71,7 @@ const CAPABILITY_DEFS: Array<{
     | "proPresenterImport"
     | "cloudSync"
     | "aiFeatures"
+    | "presentationMode"
     | "teamManagement"
   >;
   label: string;
@@ -79,6 +80,7 @@ const CAPABILITY_DEFS: Array<{
   { key: "tickers", label: "Tickers", icon: Radio },
   { key: "multiview", label: "Multiview", icon: LayoutTemplate },
   { key: "mobileControl", label: "Mobile Controller", icon: Smartphone },
+  { key: "presentationMode", label: "Presentation Mode", icon: Monitor },
   { key: "massImport", label: "Bulk Import", icon: FolderInput },
   { key: "easyWorshipImport", label: "EasyWorship Import", icon: WandSparkles },
   { key: "proPresenterImport", label: "ProPresenter Import", icon: Sparkles },

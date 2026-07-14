@@ -1,390 +1,746 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { WorshipModule } from "../components/modules/WorshipModule";
-import { BibleModule } from "../components/modules/BibleModule";
-import { GraphicsModule } from "../components/modules/GraphicsModule";
-import { TickerModule } from "../components/modules/TickerModule";
-import PreServicePanel from "../components/preservice/PreServicePanel";
-import { BibleProvider } from "../bible/bibleStore";
-import GlobalSearchModal, { type GlobalSearchTarget } from "../components/GlobalSearchModal";
-import Icon from "../components/Icon";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-type ServiceHubMode = "live" | "automation";
-type ServiceHubLiveTab = "worship" | "bible" | "graphics" | "media" | "ticker";
-type AutomationSection = "pre-service";
+import { BibleProvider } from "../bible/bibleStore";
+import { BibleModule } from "../components/modules/BibleModule";
+import GlobalSearchModal, { type GlobalSearchTarget } from "../components/GlobalSearchModal";
+import Icon from "../components/Icon";
+import { WorshipModule } from "../components/modules/WorshipModule";
+import { getCountdowns } from "../countdowns/countdownStore";
+import type { CountdownConfig } from "../countdowns/types";
+import { MEDIA_FILE_ACCEPT, saveLibraryMediaFile } from "../library/MediaTab";
+import { getAllMedia } from "../library/libraryDb";
+import type { MediaItem } from "../library/libraryTypes";
+import {
+  ensureMinistryData,
+  getMinistryData,
+  type MinistryData,
+} from "../services/ministryStore";
+import {
+  clearPresentationScreen,
+  publishBibleToPresentation,
+  publishCountdownToPresentation,
+  publishMediaToPresentation,
+  publishMinistryToPresentation,
+  publishWorshipToPresentation,
+} from "../services/presentationPublish";
+import {
+  getPresentationRemoteAccessInfo,
+  syncPresentationRemoteAccessInfo,
+  type PresentationRemoteAccessInfo,
+} from "../services/presentationRemote";
+import { getPresentationSettings } from "../services/presentationSettings";
+import { fetchPresentationViewerCount } from "../services/presentationState";
+import { launchPresentationScreen } from "../services/presentationWindow";
+import { resolveOverlayAssetUrl } from "../services/overlayUrl";
+
+import "./ServiceHubPage.css";
+
+type ServiceHubTab = "worship" | "bible" | "media" | "ministry" | "countdown";
+type MediaFilter = "all" | "image" | "video";
 
 type TabDef = {
-  id: ServiceHubLiveTab;
-  label: string;
+  id: ServiceHubTab;
   icon: string;
+  labelKey: string;
+  defaultLabel: string;
 };
 
-const LIVE_TABS: readonly TabDef[] = [
-  { id: "worship", label: "Worship", icon: "music_note" },
-  { id: "bible", label: "Bible", icon: "menu_book" },
-  { id: "graphics", label: "Graphics", icon: "palette" },
-  // { id: "media", label: "Media", icon: "movie" },
-  { id: "ticker", label: "Ticker", icon: "text_rotation_none" },
+const HUB_TABS: readonly TabDef[] = [
+  { id: "worship", icon: "music_note", labelKey: "serviceHub.tabs.worship", defaultLabel: "Worship" },
+  { id: "bible", icon: "menu_book", labelKey: "serviceHub.tabs.bible", defaultLabel: "Bible" },
+  { id: "media", icon: "perm_media", labelKey: "serviceHub.tabs.media", defaultLabel: "Media" },
+  { id: "ministry", icon: "church", labelKey: "serviceHub.tabs.ministry", defaultLabel: "Ministry" },
+  { id: "countdown", icon: "timer", labelKey: "serviceHub.tabs.countdown", defaultLabel: "Countdown" },
 ];
 
-const TAB_STORAGE_KEY = "service-hub.active-tab";
-const MODE_STORAGE_KEY = "service-hub.active-mode";
+const TAB_STORAGE_KEY = "presentation-hub.active-tab";
 
-function parseLiveTab(value: string | null): ServiceHubLiveTab | null {
+function parseHubTab(value: string | null): ServiceHubTab | null {
   if (!value) return null;
-  if (value === "worship" || value === "bible" || value === "graphics" || value === "media" || value === "ticker") {
+  if (value === "worship" || value === "bible" || value === "media" || value === "ministry" || value === "countdown") {
     return value;
   }
-  // Backward compat: redirect old tab names to the merged Graphics tab
-  if (value === "lower-thirds" || value === "speaker") {
-    return "graphics";
-  }
+  if (value === "graphics" || value === "speaker") return "ministry";
+  if (value === "ticker") return "countdown";
   return null;
 }
 
-function parseHubMode(value: string | null): ServiceHubMode | null {
-  if (!value) return null;
-  if (value === "live") return "live";
-  if (value === "automation" || value === "pre-service" || value === "queue") {
-    return "automation";
-  }
-  return null;
-}
-
-function isCanonicalLiveTab(value: string | null): value is ServiceHubLiveTab {
-  return parseLiveTab(value) === value;
-}
-
-function isCanonicalHubMode(value: string | null): value is ServiceHubMode {
-  return value === "live" || value === "automation";
-}
-
-function loadStoredLiveTab(): ServiceHubLiveTab | null {
+function loadStoredHubTab(): ServiceHubTab | null {
   try {
-    return parseLiveTab(localStorage.getItem(TAB_STORAGE_KEY));
+    return parseHubTab(localStorage.getItem(TAB_STORAGE_KEY));
   } catch {
     return null;
   }
 }
 
-function loadStoredHubMode(): ServiceHubMode | null {
-  try {
-    return parseHubMode(localStorage.getItem(MODE_STORAGE_KEY));
-  } catch {
-    return null;
+function normalizeSpeakerKey(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+
+function formatCountdownSubtitle(countdown: CountdownConfig): string {
+  if (countdown.timer.mode === "fixed-duration") {
+    const total = Math.max(0, Math.floor(countdown.timer.durationSeconds));
+    const minutes = Math.floor(total / 60);
+    const seconds = total % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
+  return countdown.timer.endAt || "Countdown";
 }
 
-function getInitialLiveTab(queryTab: string | null): ServiceHubLiveTab {
-  return parseLiveTab(queryTab) ?? loadStoredLiveTab() ?? "worship";
+function compareIsoDesc(left?: string, right?: string): number {
+  return new Date(right || 0).getTime() - new Date(left || 0).getTime();
 }
 
-function getInitialHubMode(queryMode: string | null, queryTab: string | null): ServiceHubMode {
-  const parsedMode = parseHubMode(queryMode);
-  if (parsedMode) return parsedMode;
-  if (parseLiveTab(queryTab)) return "live";
-  return loadStoredHubMode() ?? "live";
+function getMinistrySpeakers(data: MinistryData) {
+  if (data.speakers.length > 0) return data.speakers;
+  if (data.mainPastorName.trim()) {
+    return [{
+      name: data.mainPastorName.trim(),
+      role: data.mainPastorRole.trim(),
+      imageUrl: "",
+      isMain: true,
+    }];
+  }
+  return [];
 }
 
 export default function ServiceHubPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const queryTab = searchParams.get("tab");
-  const queryMode = searchParams.get("mode");
+  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
 
-  const initialTab = useMemo(() => getInitialLiveTab(queryTab), []);
-  const initialMode = useMemo(() => getInitialHubMode(queryMode, queryTab), []);
+  const initialTab = useMemo(
+    () => parseHubTab(query.get("tab")) ?? loadStoredHubTab() ?? "worship",
+    [],
+  );
 
-  const activeMode: ServiceHubMode = parseHubMode(queryMode) ?? initialMode;
-  const activeTab: ServiceHubLiveTab = parseLiveTab(queryTab) ?? initialTab;
-
-  const [automationSection, setAutomationSection] = useState<AutomationSection>("pre-service");
-
-  const [mountedLiveTabs, setMountedLiveTabs] = useState<Record<ServiceHubLiveTab, boolean>>(() => ({
+  const [activeTab, setActiveTab] = useState<ServiceHubTab>(initialTab);
+  const [mountedTabs, setMountedTabs] = useState<Record<ServiceHubTab, boolean>>(() => ({
     worship: initialTab === "worship",
     bible: initialTab === "bible",
-    graphics: initialTab === "graphics",
     media: initialTab === "media",
-    ticker: initialTab === "ticker",
+    ministry: initialTab === "ministry",
+    countdown: initialTab === "countdown",
   }));
-  const [automationMounted, setAutomationMounted] = useState(initialMode === "automation");
 
-  // ── Global Search ──
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [globalSearchInitial, setGlobalSearchInitial] = useState("");
-  // Deep-link targets: passed to child modules so they auto-select an item
-  const [pendingBibleTarget, setPendingBibleTarget] = useState<{ book: string; chapter: number; verse: number } | null>(null);
-  const [pendingSongId, setPendingSongId] = useState<string | null>(null);
-  const [pendingSpeakerId, setPendingSpeakerId] = useState<string | null>(null);
   const globalSearchOpenRef = useRef(false);
   globalSearchOpenRef.current = globalSearchOpen;
 
-  // Open global search on any letter/number key (when no input focused)
+  const [pendingBibleTarget, setPendingBibleTarget] = useState<{ book: string; chapter: number; verse: number } | null>(null);
+  const [pendingSongId, setPendingSongId] = useState<string | null>(null);
+  const [pendingSpeakerId, setPendingSpeakerId] = useState<string | null>(null);
+
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [countdowns, setCountdowns] = useState<CountdownConfig[]>([]);
+  const [ministryData, setMinistryData] = useState<MinistryData>(() => getMinistryData());
+  const [mediaFilter, setMediaFilter] = useState<MediaFilter>("all");
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
+  const [selectedMinistryId, setSelectedMinistryId] = useState<string | null>(null);
+  const [selectedCountdownId, setSelectedCountdownId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
+  const [liveLabel, setLiveLabel] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [viewerCount, setViewerCount] = useState(0);
+  const [sessionId, setSessionId] = useState(() => getPresentationSettings().sessionId);
+  const [presentationLink, setPresentationLink] = useState(() => getPresentationSettings().presentationLink);
+  const [remoteAccess, setRemoteAccess] = useState<PresentationRemoteAccessInfo | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+
+  const syncPresentationContext = useCallback(async () => {
+    const settings = getPresentationSettings();
+    const [nextViewerCount, nextRemoteAccess] = await Promise.all([
+      fetchPresentationViewerCount(settings.sessionId).catch(() => 0),
+      syncPresentationRemoteAccessInfo(settings.sessionId).catch(() =>
+        getPresentationRemoteAccessInfo(settings.sessionId),
+      ),
+    ]);
+
+    setSessionId(settings.sessionId);
+    setPresentationLink(nextRemoteAccess.link);
+    setViewerCount(nextViewerCount);
+    setRemoteAccess(nextRemoteAccess);
+  }, []);
+
+  const reloadMedia = useCallback(async () => {
+    const items = await getAllMedia();
+    setMediaItems(items.sort((left, right) => compareIsoDesc(left.createdAt, right.createdAt)));
+  }, []);
+
+  const reloadCountdowns = useCallback(async () => {
+    const items = await getCountdowns();
+    setCountdowns(items.sort((left, right) => compareIsoDesc(left.updatedAt, right.updatedAt)));
+  }, []);
+
+  const reloadMinistry = useCallback(async () => {
+    await ensureMinistryData().catch(() => false);
+    setMinistryData(getMinistryData());
+  }, []);
+
   useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      // Don't trigger when user is typing in an input/textarea/select
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
-      // Don't trigger with modifier keys
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      // Don't trigger if global search is already open
+    void reloadMedia().catch(() => setMediaItems([]));
+    void reloadCountdowns().catch(() => setCountdowns([]));
+    void reloadMinistry().catch(() => setMinistryData(getMinistryData()));
+  }, [reloadMedia, reloadCountdowns, reloadMinistry]);
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      void reloadMedia().catch(() => {});
+      void reloadCountdowns().catch(() => {});
+      void reloadMinistry().catch(() => {});
+      void syncPresentationContext().catch(() => {});
+    };
+
+    handleRefresh();
+    const interval = window.setInterval(handleRefresh, 5000);
+    window.addEventListener("focus", handleRefresh);
+    window.addEventListener("storage", handleRefresh);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleRefresh);
+      window.removeEventListener("storage", handleRefresh);
+    };
+  }, [reloadMedia, reloadCountdowns, reloadMinistry, syncPresentationContext]);
+
+  useEffect(() => {
+    const queryTab = parseHubTab(query.get("tab"));
+    if (queryTab && queryTab !== activeTab) {
+      setActiveTab(queryTab);
+    }
+  }, [activeTab, query]);
+
+  useEffect(() => {
+    setMountedTabs((prev) => (prev[activeTab] ? prev : { ...prev, [activeTab]: true }));
+
+    try {
+      localStorage.setItem(TAB_STORAGE_KEY, activeTab);
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    const warmTabsId = window.setTimeout(() => {
+      setMountedTabs((prev) => {
+        if (prev.worship && prev.bible && prev.media && prev.ministry && prev.countdown) {
+          return prev;
+        }
+        return {
+          worship: true,
+          bible: true,
+          media: true,
+          ministry: true,
+          countdown: true,
+        };
+      });
+    }, 160);
+
+    return () => window.clearTimeout(warmTabsId);
+  }, []);
+
+  useEffect(() => {
+    function handleKey(event: KeyboardEvent) {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (globalSearchOpenRef.current) return;
-      // Don't trigger if a module-level search/modal is open (e.g. Bible search dropdown)
       if (document.querySelector(".bible-search-dropdown, .bible-modal-overlay")) return;
-      // Only trigger for single printable letter/number keys
-      if (e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) {
-        e.preventDefault();
-        setGlobalSearchInitial(e.key);
+      if (event.key.length === 1 && /[a-zA-Z0-9]/.test(event.key)) {
+        event.preventDefault();
+        setGlobalSearchInitial(event.key);
         setGlobalSearchOpen(true);
       }
     }
+
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
-  const handleGlobalSearchNavigate = useCallback((target: GlobalSearchTarget) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("mode", "live");
+  const mediaList = useMemo(() => {
+    if (mediaFilter === "all") return mediaItems;
+    return mediaItems.filter((item) => item.type === mediaFilter);
+  }, [mediaFilter, mediaItems]);
 
+  const speakers = useMemo(() => getMinistrySpeakers(ministryData), [ministryData]);
+
+  useEffect(() => {
+    if (!pendingSpeakerId || activeTab !== "ministry") return;
+    const match = speakers.find((speaker) => normalizeSpeakerKey(speaker.name) === pendingSpeakerId);
+    if (match) {
+      setSelectedMinistryId(normalizeSpeakerKey(match.name));
+    }
+    setPendingSpeakerId(null);
+  }, [activeTab, pendingSpeakerId, speakers]);
+
+  const presentAction = useCallback(async (label: string, action: () => Promise<void>) => {
+    setActionError("");
+    try {
+      await action();
+      setLiveLabel(label);
+      void syncPresentationContext();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    }
+  }, [syncPresentationContext]);
+
+  const handlePresentBible = useCallback((payload: {
+    book: string;
+    chapter: number;
+    verse: number;
+    translation: string;
+    text: string;
+  }) => {
+    const label = `${payload.book} ${payload.chapter}:${payload.verse}`;
+    void presentAction(label, () => publishBibleToPresentation(payload));
+  }, [presentAction]);
+
+  const handlePresentWorship = useCallback((payload: {
+    song: { metadata: { title: string; artist: string }; slides: { label?: string; content: string }[] };
+    slide: { label?: string; content: string };
+    slideIndex: number;
+  }) => {
+    const title = payload.song.metadata.title || t("serviceHub.defaults.untitledSong", { defaultValue: "Untitled Song" });
+    void presentAction(title, () => publishWorshipToPresentation({
+      title,
+      artist: payload.song.metadata.artist || "",
+      label: payload.slide.label || "",
+      content: payload.slide.content,
+      slideIndex: payload.slideIndex,
+      slideCount: payload.song.slides.length,
+    }));
+  }, [presentAction, t]);
+
+  const handleClearScreen = useCallback(async () => {
+    setActionError("");
+    try {
+      await clearPresentationScreen();
+      setLiveLabel("");
+      void syncPresentationContext();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    }
+  }, [syncPresentationContext]);
+
+  const handleGlobalSearchNavigate = useCallback((target: GlobalSearchTarget) => {
     switch (target.type) {
       case "bible":
-        next.set("tab", "bible");
+        setActiveTab("bible");
         setPendingBibleTarget({ book: target.book, chapter: target.chapter, verse: target.verse });
         break;
       case "worship":
-        next.set("tab", "worship");
+        setActiveTab("worship");
         setPendingSongId(target.songId);
         break;
       case "speaker":
-        next.set("tab", "graphics");
+        setActiveTab("ministry");
         setPendingSpeakerId(target.presetId);
         break;
     }
 
-    setSearchParams(next, { replace: true });
     setGlobalSearchOpen(false);
-  }, [searchParams, setSearchParams]);
+  }, []);
 
-  useEffect(() => {
-    if (queryMode === "quick-merge") {
-      navigate("/hub/quick-merge", { replace: true });
-    }
-  }, [queryMode, navigate]);
+  const handleCopyLink = useCallback(() => {
+    if (!presentationLink) return;
+    navigator.clipboard.writeText(presentationLink).then(() => {
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 2000);
+    }).catch(() => {});
+  }, [presentationLink]);
 
-  useEffect(() => {
-    setMountedLiveTabs((prev) => {
-      if (prev[activeTab]) return prev;
-      return { ...prev, [activeTab]: true };
-    });
-  }, [activeTab]);
+  const handleLaunchScreen = useCallback(() => {
+    if (!presentationLink || !sessionId) return;
+    void launchPresentationScreen(sessionId, presentationLink);
+  }, [presentationLink, sessionId]);
 
-  useEffect(() => {
-    if (activeMode === "automation" && !automationMounted) {
-      setAutomationMounted(true);
-    }
-  }, [activeMode, automationMounted]);
+  const handleUploadMedia = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
 
-  useEffect(() => {
+    setUploadingMedia(true);
+    setActionError("");
+
     try {
-      localStorage.setItem(TAB_STORAGE_KEY, activeTab);
-      localStorage.setItem(MODE_STORAGE_KEY, activeMode);
-    } catch {
-      // Ignore storage failures (private mode, etc.)
+      await Promise.all(files.map((file) => saveLibraryMediaFile(file)));
+      await reloadMedia();
+      setActiveTab("media");
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setUploadingMedia(false);
+      if (event.target) {
+        event.target.value = "";
+      }
     }
+  }, [reloadMedia]);
 
-    const next = new URLSearchParams(searchParams);
-    let shouldReplace = false;
-
-    if (!isCanonicalLiveTab(queryTab)) {
-      next.set("tab", activeTab);
-      shouldReplace = true;
-    }
-
-    if (!isCanonicalHubMode(queryMode)) {
-      next.set("mode", activeMode);
-      shouldReplace = true;
-    }
-
-    if (shouldReplace) {
-      setSearchParams(next, { replace: true });
-    }
-  }, [activeMode, activeTab, queryMode, queryTab, searchParams, setSearchParams]);
-
-  const tabLabels = useMemo(() => new Map(LIVE_TABS.map((tab) => [tab.id, tab.label])), []);
-
-  const tabLabelMap: Record<ServiceHubLiveTab, string> = useMemo(() => ({
-    worship: t("serviceHub.tabs.worship"),
-    bible: t("serviceHub.tabs.bible"),
-    graphics: t("serviceHub.tabs.graphics"),
-    media: t("serviceHub.tabs.media"),
-    ticker: t("serviceHub.tabs.ticker"),
-  }), [t]);
-
-  const handleModeChange = (mode: ServiceHubMode) => {
-    if (mode === activeMode) return;
-    const next = new URLSearchParams(searchParams);
-    next.set("mode", mode);
-    if (mode === "live") {
-      next.set("tab", activeTab);
-    }
-    setSearchParams(next, { replace: true });
-  };
-
-  const handleLiveTabChange = (tab: ServiceHubLiveTab) => {
-    if (tab === activeTab && activeMode === "live") return;
-    const next = new URLSearchParams(searchParams);
-    next.set("mode", "live");
-    next.set("tab", tab);
-    setSearchParams(next, { replace: true });
-  };
+  const remoteStatusLabel = viewerCount > 0
+    ? t("serviceHub.presentation.connectedScreens", {
+      defaultValue: `${viewerCount} screen${viewerCount === 1 ? "" : "s"} connected`,
+    })
+    : remoteAccess?.running
+      ? t("serviceHub.presentation.waitingForScreen", {
+        defaultValue: "Waiting for the presentation screen to open the link",
+      })
+      : t("serviceHub.presentation.linkUnavailable", {
+        defaultValue: "Presentation link unavailable",
+      });
 
   return (
-    <div className="service-hub-page" data-mode={activeMode} data-tab={activeTab}>
-      <header className="service-hub-header">
-        {activeMode === "live" && (
-          <div className="service-hub-tabs" role="tablist" aria-label="Live content tabs">
-            {LIVE_TABS.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  className={`service-hub-tab${isActive ? " is-active" : ""}`}
-                  onClick={() => handleLiveTabChange(tab.id)}
-                >
-                  <Icon name={tab.icon} size={16} />
-                  {tabLabelMap[tab.id]}
-                </button>
-              );
+    <div className="presentation-hub-page">
+      <header className="ph-header">
+        <div className="ph-header-copy">
+          <p className="ph-eyebrow">
+            {t("serviceHub.presentation.mode", { defaultValue: "Presentation Mode" })}
+          </p>
+          <h1 className="ph-title">
+            {t("serviceHub.presentation.title", { defaultValue: "Presentation Hub" })}
+          </h1>
+          <p className="ph-subtitle">
+            {t("serviceHub.presentation.subtitle", {
+              defaultValue: "Use this laptop to control the content. The browser link is the presentation screen.",
             })}
-          </div>
-        )}
+          </p>
+        </div>
 
-        <div className="service-hub-header-right">
-          <div className="service-hub-mode-toggle" aria-label={t("serviceHub.aria.hubMode")}>
+        <div className="ph-screen-card">
+          <div className="ph-screen-card-top">
+            <div className={`ph-connection-pill${viewerCount > 0 ? " is-live" : ""}`}>
+              <Icon name="link" size={16} />
+              <span>{remoteStatusLabel}</span>
+            </div>
             <button
-              className={`service-hub-mode-toggle-btn${activeMode === "live" ? " is-active" : ""}`}
-              onClick={() => handleModeChange("live")}
-              title={t("serviceHub.mode.live").toUpperCase()}>
-              {t("serviceHub.mode.live").toUpperCase()}
-            </button>
-            <button
-              className={`service-hub-mode-toggle-btn${activeMode === "automation" ? " is-active" : ""}`}
-              onClick={() => handleModeChange("automation")}
-              title={t("serviceHub.mode.automation").toUpperCase()}>
-              {t("serviceHub.mode.automation").toUpperCase()}
+              type="button"
+              className="ph-icon-btn"
+              onClick={() => void syncPresentationContext()}
+              title={t("serviceHub.actions.refreshConnection", { defaultValue: "Refresh presentation connection" })}
+            >
+              <Icon name="refresh" size={18} />
             </button>
           </div>
-          <button
-            type="button"
-            className="service-hub-quickmerge-btn"
-            onClick={() => navigate("/hub/quick-merge")}
-            title={t("serviceHub.tooltip.quickMerge")}>
-            {t("serviceHub.actions.quickMerge").toUpperCase()}
-          </button>
+
+          <label className="ph-link-label">
+            {t("serviceHub.presentation.linkLabel", { defaultValue: "Presentation link" })}
+          </label>
+          <div className="ph-link-row">
+            <input className="ph-link-input" readOnly value={presentationLink} />
+            <button type="button" className="ph-icon-btn" onClick={handleCopyLink} title={t("serviceHub.actions.copyLink", { defaultValue: "Copy presentation link" })}>
+              <Icon name={linkCopied ? "check" : "content_copy"} size={18} />
+            </button>
+            <button type="button" className="ph-icon-btn" onClick={handleLaunchScreen} title={t("serviceHub.actions.launchScreen", { defaultValue: "Launch presentation screen" })}>
+              <Icon name="open_in_new" size={18} />
+            </button>
+          </div>
+
+          <div className="ph-action-row">
+            <button type="button" className="ph-primary-btn" onClick={handleLaunchScreen}>
+              <Icon name="tv" size={18} />
+              <span>{t("serviceHub.actions.launchScreen", { defaultValue: "Launch Screen" })}</span>
+            </button>
+            <button type="button" className="ph-secondary-btn" onClick={() => void handleClearScreen()}>
+              <Icon name="block" size={18} />
+              <span>{t("serviceHub.actions.clearScreen", { defaultValue: "Clear Screen" })}</span>
+            </button>
+            <button type="button" className="ph-secondary-btn" onClick={() => navigate("/presentation/setup")}>
+              <Icon name="settings" size={18} />
+              <span>{t("serviceHub.actions.screenSetup", { defaultValue: "Screen Setup" })}</span>
+            </button>
+            <button type="button" className="ph-secondary-btn" onClick={() => navigate("/")}>
+              <Icon name="close" size={18} />
+              <span>{t("serviceHub.actions.exitPresentationMode", { defaultValue: "Exit" })}</span>
+            </button>
+          </div>
+
+          {liveLabel ? (
+            <div className="ph-live-note">
+              <span>{t("serviceHub.presentation.liveNow", { defaultValue: "Live now" })}</span>
+              <strong>{liveLabel}</strong>
+            </div>
+          ) : (
+            <div className="ph-live-note ph-live-note--idle">
+              <span>{t("serviceHub.presentation.liveNow", { defaultValue: "Live now" })}</span>
+              <strong>{t("serviceHub.presentation.nothingLive", { defaultValue: "Nothing on screen yet" })}</strong>
+            </div>
+          )}
+
+          {actionError && <p className="ph-error">{actionError}</p>}
         </div>
       </header>
 
-      <div className="service-hub-main" aria-live="polite">
-        {mountedLiveTabs.worship && (
+      <div className="ph-tabs" role="tablist" aria-label={t("serviceHub.aria.presentationTabs", { defaultValue: "Presentation tabs" })}>
+        {HUB_TABS.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              className={`ph-tab${isActive ? " is-active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <Icon name={tab.icon} size={18} />
+              <span>{t(tab.labelKey, { defaultValue: tab.defaultLabel })}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <main className="ph-body" aria-live="polite">
+        {mountedTabs.worship && (
           <section
-            className="service-hub-panel"
-            hidden={activeMode !== "live" || activeTab !== "worship"}
-            aria-label={tabLabels.get("worship")}
+            className={`ph-panel ph-panel--embedded${activeTab === "worship" ? " is-active" : ""}`}
+            aria-hidden={activeTab !== "worship"}
           >
             <WorshipModule
-              isActive={activeMode === "live" && activeTab === "worship"}
+              isActive={activeTab === "worship"}
+              presentationMode
               initialSelectSongId={pendingSongId}
               onConsumeInitialSelect={() => setPendingSongId(null)}
+              onPresentToScreen={handlePresentWorship}
+              onClearScreen={() => void handleClearScreen()}
             />
           </section>
         )}
 
-        {mountedLiveTabs.bible && (
+        {mountedTabs.bible && (
           <section
-            className="service-hub-panel"
-            hidden={activeMode !== "live" || activeTab !== "bible"}
-            aria-label={tabLabels.get("bible")}
+            className={`ph-panel ph-panel--embedded${activeTab === "bible" ? " is-active" : ""}`}
+            aria-hidden={activeTab !== "bible"}
           >
             <BibleProvider>
               <BibleModule
-                isActive={activeMode === "live" && activeTab === "bible"}
+                isActive={activeTab === "bible"}
+                presentationMode
                 initialSelectBible={pendingBibleTarget}
                 onConsumeInitialSelect={() => setPendingBibleTarget(null)}
+                onPresentToScreen={handlePresentBible}
+                onClearScreen={() => void handleClearScreen()}
               />
             </BibleProvider>
           </section>
         )}
 
-        {mountedLiveTabs.graphics && (
+        {mountedTabs.media && (
           <section
-            className="service-hub-panel"
-            hidden={activeMode !== "live" || activeTab !== "graphics"}
-            aria-label={tabLabels.get("graphics")}
+            className={`ph-panel${activeTab === "media" ? " is-active" : ""}`}
+            aria-hidden={activeTab !== "media"}
           >
-            <GraphicsModule
-              isActive={activeMode === "live" && activeTab === "graphics"}
-              initialSelectPresetId={pendingSpeakerId}
-              onConsumeInitialSelect={() => setPendingSpeakerId(null)}
-            />
-          </section>
-        )}
+            <div className="ph-library-shell">
+              <div className="ph-library-toolbar">
+                <div className="ph-filter-group" role="tablist" aria-label={t("serviceHub.media.filterLabel", { defaultValue: "Media filter" })}>
+                  {(["all", "image", "video"] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      className={`ph-filter-btn${mediaFilter === filter ? " is-active" : ""}`}
+                      onClick={() => setMediaFilter(filter)}
+                    >
+                      {t(`serviceHub.media.filter.${filter}`, {
+                        defaultValue: filter === "all" ? "All" : filter === "image" ? "Images" : "Videos",
+                      })}
+                    </button>
+                  ))}
+                </div>
 
-        {mountedLiveTabs.media && (
-          <section
-            className="service-hub-panel"
-            hidden={activeMode !== "live" || activeTab !== "media"}
-            aria-label={tabLabels.get("media")}
-          >
-            {/* <LivePlaceholderPanel
-              icon="movie"
-              title="Media"
-              description="Media workspace placeholder. Connect your media picker and preview panel here in the next task."
-            /> */}
-          </section>
-        )}
+                <div className="ph-toolbar-actions">
+                  <button
+                    type="button"
+                    className="ph-primary-btn"
+                    onClick={() => uploadInputRef.current?.click()}
+                    disabled={uploadingMedia}
+                  >
+                    <Icon name={uploadingMedia ? "refresh" : "upload_file"} size={18} />
+                    <span>
+                      {uploadingMedia
+                        ? t("serviceHub.media.uploading", { defaultValue: "Uploading..." })
+                        : t("serviceHub.media.upload", { defaultValue: "Upload Media" })}
+                    </span>
+                  </button>
+                  <input
+                    ref={uploadInputRef}
+                    type="file"
+                    accept={MEDIA_FILE_ACCEPT}
+                    multiple
+                    hidden
+                    onChange={(event) => void handleUploadMedia(event)}
+                  />
+                </div>
+              </div>
 
-        {mountedLiveTabs.ticker && (
-          <section
-            className="service-hub-panel"
-            hidden={activeMode !== "live" || activeTab !== "ticker"}
-            aria-label={tabLabels.get("ticker")}
-          >
-            <TickerModule isActive={activeMode === "live" && activeTab === "ticker"} />
-          </section>
-        )}
-
-        {automationMounted && (
-          <section
-            className="service-hub-panel service-hub-panel--preservice"
-            hidden={activeMode !== "automation"}
-            aria-label={t("serviceHub.aria.automation")}
-          >
-            <div className="service-hub-automation-tabs" role="tablist" aria-label={t("serviceHub.aria.automationPages")}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={automationSection === "pre-service"}
-                className={`service-hub-automation-tab${automationSection === "pre-service" ? " is-active" : ""}`}
-                onClick={() => setAutomationSection("pre-service")}
-                title={t("serviceHub.tooltip.preServiceTab")}>
-                {t("serviceHub.automation.preServiceSequence")}
-              </button>
-              <button type="button" className="service-hub-automation-tab is-placeholder" disabled title={t("serviceHub.automation.postServiceSoon")}>
-                {t("serviceHub.automation.postServiceSoon")}
-              </button>
+              {mediaList.length === 0 ? (
+                <div className="ph-empty-state">
+                  <Icon name="perm_media" size={28} />
+                  <h3>{t("serviceHub.media.emptyTitle", { defaultValue: "No media here yet" })}</h3>
+                  <p>{t("serviceHub.media.emptyDescription", { defaultValue: "Upload images or videos, then click any item to put it on the presentation screen." })}</p>
+                </div>
+              ) : (
+                <div className="ph-media-grid">
+                  {mediaList.map((item) => {
+                    const isSelected = selectedMediaId === item.id;
+                    const previewUrl = resolveOverlayAssetUrl(item.thumbnailUrl || item.url);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`ph-media-card${isSelected ? " is-selected" : ""}`}
+                        onClick={() => {
+                          setSelectedMediaId(item.id);
+                          void presentAction(item.name, () => publishMediaToPresentation(item));
+                        }}
+                        onDoubleClick={() => {
+                          setSelectedMediaId(item.id);
+                          void presentAction(item.name, () => publishMediaToPresentation(item));
+                        }}
+                      >
+                        <div className="ph-media-card-preview">
+                          {item.type === "video" ? (
+                            <video src={previewUrl} muted playsInline />
+                          ) : (
+                            <img src={previewUrl} alt={item.name} />
+                          )}
+                          <span className="ph-media-badge">
+                            {item.type === "video"
+                              ? t("serviceHub.media.video", { defaultValue: "Video" })
+                              : t("serviceHub.media.image", { defaultValue: "Image" })}
+                          </span>
+                        </div>
+                        <div className="ph-media-card-copy">
+                          <strong>{item.name}</strong>
+                          <span>{item.type === "video" && item.durationSec ? `${item.durationSec}s` : t("serviceHub.media.ready", { defaultValue: "Ready to present" })}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-
-            {automationSection === "pre-service" && <PreServicePanel />}
           </section>
         )}
 
-      </div>
+        {mountedTabs.ministry && (
+          <section
+            className={`ph-panel${activeTab === "ministry" ? " is-active" : ""}`}
+            aria-hidden={activeTab !== "ministry"}
+          >
+            <div className="ph-library-shell">
+              {speakers.length === 0 ? (
+                <div className="ph-empty-state">
+                  <Icon name="church" size={28} />
+                  <h3>{t("serviceHub.ministry.emptyTitle", { defaultValue: "No ministry profiles yet" })}</h3>
+                  <p>{t("serviceHub.ministry.emptyDescription", { defaultValue: "Add speakers in settings, then click any profile here to present it." })}</p>
+                </div>
+              ) : (
+                <div className="ph-list-grid">
+                  {speakers.map((speaker) => {
+                    const speakerId = normalizeSpeakerKey(speaker.name);
+                    const isSelected = selectedMinistryId === speakerId;
+                    return (
+                      <button
+                        key={speakerId}
+                        type="button"
+                        className={`ph-list-card${isSelected ? " is-selected" : ""}`}
+                        onClick={() => {
+                          setSelectedMinistryId(speakerId);
+                          void presentAction(speaker.name, () => publishMinistryToPresentation({
+                            speakerName: speaker.name,
+                            speakerRole: speaker.role || ministryData.mainPastorRole,
+                            churchName: ministryData.churchName,
+                          }));
+                        }}
+                        onDoubleClick={() => {
+                          setSelectedMinistryId(speakerId);
+                          void presentAction(speaker.name, () => publishMinistryToPresentation({
+                            speakerName: speaker.name,
+                            speakerRole: speaker.role || ministryData.mainPastorRole,
+                            churchName: ministryData.churchName,
+                          }));
+                        }}
+                      >
+                        <div className="ph-list-card-head">
+                          <div className="ph-avatar">
+                            {speaker.imageUrl ? (
+                              <img src={resolveOverlayAssetUrl(speaker.imageUrl)} alt={speaker.name} />
+                            ) : (
+                              <Icon name="person" size={18} />
+                            )}
+                          </div>
+                          <div className="ph-list-card-copy">
+                            <strong>{speaker.name}</strong>
+                            <span>{speaker.role || t("serviceHub.ministry.speaker", { defaultValue: "Speaker" })}</span>
+                          </div>
+                        </div>
+                        <span className="ph-list-card-meta">
+                          {ministryData.churchName || t("serviceHub.ministry.churchFallback", { defaultValue: "Ministry profile" })}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
-      {/* ── Global Spotlight Search ── */}
+        {mountedTabs.countdown && (
+          <section
+            className={`ph-panel${activeTab === "countdown" ? " is-active" : ""}`}
+            aria-hidden={activeTab !== "countdown"}
+          >
+            <div className="ph-library-shell">
+              {countdowns.length === 0 ? (
+                <div className="ph-empty-state">
+                  <Icon name="timer" size={28} />
+                  <h3>{t("serviceHub.countdown.emptyTitle", { defaultValue: "No countdowns yet" })}</h3>
+                  <p>{t("serviceHub.countdown.emptyDescription", { defaultValue: "Create a countdown, then click it here to start it on the presentation screen." })}</p>
+                </div>
+              ) : (
+                <div className="ph-list-grid">
+                  {countdowns.map((countdown) => {
+                    const isSelected = selectedCountdownId === countdown.id;
+                    return (
+                      <button
+                        key={countdown.id}
+                        type="button"
+                        className={`ph-list-card ph-list-card--countdown${isSelected ? " is-selected" : ""}`}
+                        onClick={() => {
+                          setSelectedCountdownId(countdown.id);
+                          void presentAction(countdown.title || t("serviceHub.tabs.countdown", { defaultValue: "Countdown" }), () =>
+                            publishCountdownToPresentation(countdown),
+                          );
+                        }}
+                        onDoubleClick={() => {
+                          setSelectedCountdownId(countdown.id);
+                          void presentAction(countdown.title || t("serviceHub.tabs.countdown", { defaultValue: "Countdown" }), () =>
+                            publishCountdownToPresentation(countdown),
+                          );
+                        }}
+                      >
+                        <div className="ph-countdown-icon">
+                          <Icon name="timer" size={18} />
+                        </div>
+                        <div className="ph-list-card-copy">
+                          <strong>{countdown.title || t("serviceHub.tabs.countdown", { defaultValue: "Countdown" })}</strong>
+                          <span>{formatCountdownSubtitle(countdown)}</span>
+                        </div>
+                        <span className="ph-list-card-meta">
+                          {countdown.templateId}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+      </main>
+
       <GlobalSearchModal
         open={globalSearchOpen}
         onClose={() => setGlobalSearchOpen(false)}

@@ -31,6 +31,7 @@ import type { ServicePlannerSnapshot } from "../service-planner/types";
 import { installDockTextShortcuts } from "./dockTextShortcuts";
 import { useKeyboardShortcuts, type ShortcutDefinition, type ShortcutCategory, formatShortcut } from "./useKeyboardShortcuts";
 import BibleCommandPalette from "../components/BibleCommandPalette";
+import { InterfaceLanguagePrompt } from "../components/InterfaceLanguagePrompt";
 import { BibleProvider } from "../bible/bibleStore";
 import { useDockDragDrop } from "./useDockDragDrop";
 import { useDockUpload } from "./useDockUpload";
@@ -77,6 +78,8 @@ interface DockShellPreferences {
   activeTab?: DockTab | "live";
   disabledTabs?: DockTab[];
 }
+
+const PREWARMED_DOCK_TABS: DockTab[] = ["bible", "worship"];
 
 function resolveDockTab(tab?: DockTab | "live" | null): DockTab {
   if (tab === "planner" || tab === "bible" || tab === "worship" || tab === "media" || tab === "multiview" || tab === "ministry") {
@@ -171,6 +174,14 @@ export default function DockPage() {
   const { effective, setTheme } = useAppTheme();
   const [activeTab, setActiveTab] = useState<DockTab>(() => resolveDockTab(shellPreferences.activeTab));
   const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() => shellPreferences.disabledTabs ?? []);
+  const [mountedTabs, setMountedTabs] = useState<Record<DockTab, boolean>>(() => ({
+    planner: activeTab === "planner",
+    bible: PREWARMED_DOCK_TABS.includes("bible") || activeTab === "bible",
+    worship: PREWARMED_DOCK_TABS.includes("worship") || activeTab === "worship",
+    media: activeTab === "media",
+    multiview: activeTab === "multiview",
+    ministry: activeTab === "ministry",
+  }));
   const [dockHeight, setDockHeight] = useState(0);
   const verticalTabs = dockHeight > 0 && dockHeight < 550;
   const compactToolbar = dockHeight > 0 && dockHeight <= 550;
@@ -230,6 +241,14 @@ export default function DockPage() {
   // Refresh plan from overlay server on every tab switch
   useEffect(() => {
     void fetchPlanFromOverlayServer();
+  }, [activeTab]);
+
+  useEffect(() => {
+    setMountedTabs((current) => (
+      current[activeTab]
+        ? current
+        : { ...current, [activeTab]: true }
+    ));
   }, [activeTab]);
 
   // Refresh plan from overlay server on any click in the dock (debounced)
@@ -540,6 +559,7 @@ export default function DockPage() {
 
   return (
     <div className={`dock-root${verticalTabs ? " dock-root--vertical-tabs" : ""}`} ref={dockRootRef}>
+      <InterfaceLanguagePrompt />
       {/* ═══ VERTICAL NAV (left side when dock is short) ═══ */}
       {verticalTabs && (
         <nav className="dock-vertical-nav" aria-label={t('page.dockSections')}>
@@ -843,39 +863,27 @@ export default function DockPage() {
                     {/* Ticker Layer Priority */}
                     <div className="dock-sidebar__section-label" style={{ marginTop: 8 }}>{t('dock.tickerLayerPriority')}</div>
                     <div className="dock-sidebar__radio-group">
-                      {([
-                        { mode: "content-above" as const, icon: "flip_to_back", label: t('ministry.contentAboveTicker'), desc: t('ministry.mceContentPriority') },
-                        { mode: "ticker-above" as const, icon: "flip_to_front", label: t('ministry.tickerAboveContent'), desc: t('dock.tickerRemainsVisibleOnTop') },
-                      ]).map(({ mode, icon, label, desc }) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          className="dock-sidebar__radio"
-                          onClick={() => setProjectionSettings((s) => ({ ...s, tickerLayerPriority: mode }))}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            width: "100%",
-                            padding: "6px 8px",
-                            border: "none",
-                            borderRadius: 3,
-                            background: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                            color: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            fontSize: 11,
-                            transition: "background 0.15s",
-                          }}
-                          title={t('common.confirm')}>
-                          <Icon name={icon} size={14} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 600 }}>{label}</div>
-                            <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
-                          </div>
-                          {projectionSettings.tickerLayerPriority === mode && <Icon name="check" size={12} />}
-                        </button>
-                      ))}
+                      <div
+                        className="dock-sidebar__radio"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          width: "100%",
+                          padding: "6px 8px",
+                          borderRadius: 3,
+                          background: "var(--dock-accent-bg, rgba(99,102,241,0.12))",
+                          color: "var(--dock-accent, #3B82F6)",
+                          textAlign: "left",
+                          fontSize: 11,
+                        }}>
+                        <Icon name="flip_to_front" size={14} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600 }}>{t('ministry.tickerAboveContent')}</div>
+                          <div style={{ fontSize: 10, opacity: 0.6 }}>{t('dock.tickerRemainsVisibleOnTop')}</div>
+                        </div>
+                        <Icon name="check" size={12} />
+                      </div>
                     </div>
 
                     {/* Restore Original Scene */}
@@ -1090,47 +1098,61 @@ export default function DockPage() {
         <div className="dock-content">
 
           <div className="dock-content-main">
-            {activeTab === "planner" && (
-              <DockPlannerTab
-                staged={staged}
-                onStage={handleStage}
-                initialSnapshot={servicePlanner}
-              />
+            {mountedTabs.planner && (
+              <div hidden={activeTab !== "planner"}>
+                <DockPlannerTab
+                  staged={staged}
+                  onStage={handleStage}
+                  initialSnapshot={servicePlanner}
+                />
+              </div>
             )}
-            {activeTab === "bible" && (
-              <DockBibleTab
-                staged={staged}
-                onStage={handleStage}
-                productionDefaults={productionSettings.bible}
-                appConnected={appConnected}
-                showHistory={showHistory}
-                onHistoryClose={() => setShowHistory(false)}
-                compactToolbar={compactToolbar}
-              />
+            {mountedTabs.bible && (
+              <div hidden={activeTab !== "bible"}>
+                <DockBibleTab
+                  staged={staged}
+                  onStage={handleStage}
+                  productionDefaults={productionSettings.bible}
+                  appConnected={appConnected}
+                  isActive={activeTab === "bible"}
+                  showHistory={showHistory}
+                  onHistoryClose={() => setShowHistory(false)}
+                  compactToolbar={compactToolbar}
+                />
+              </div>
             )}
-            {activeTab === "worship" && (
-              <DockWorshipTab
-                staged={staged}
-                onStage={handleStage}
-                productionDefaults={productionSettings.worship}
-                compactToolbar={compactToolbar}
-              />
+            {mountedTabs.worship && (
+              <div hidden={activeTab !== "worship"}>
+                <DockWorshipTab
+                  staged={staged}
+                  onStage={handleStage}
+                  productionDefaults={productionSettings.worship}
+                  isActive={activeTab === "worship"}
+                  compactToolbar={compactToolbar}
+                />
+              </div>
             )}
-            {activeTab === "media" && (
-              <DockMediaTab
-                staged={staged}
-                onStage={handleStage}
-              />
+            {mountedTabs.media && (
+              <div hidden={activeTab !== "media"}>
+                <DockMediaTab
+                  staged={staged}
+                  onStage={handleStage}
+                />
+              </div>
             )}
-            {activeTab === "multiview" && (
-              <DockMultiviewTab />
+            {mountedTabs.multiview && (
+              <div hidden={activeTab !== "multiview"}>
+                <DockMultiviewTab />
+              </div>
             )}
-            {activeTab === "ministry" && (
-              <DockMinistryTab
-                staged={staged}
-                onStage={handleStage}
-                tickerOutputMode={tickerOutputMode}
-              />
+            {mountedTabs.ministry && (
+              <div hidden={activeTab !== "ministry"}>
+                <DockMinistryTab
+                  staged={staged}
+                  onStage={handleStage}
+                  tickerOutputMode={tickerOutputMode}
+                />
+              </div>
             )}
           </div>
         </div>
@@ -1289,8 +1311,7 @@ export default function DockPage() {
                 className="dock-btn dock-btn--primary"
                 onClick={() => {
                   const code = pendingLanguage!;
-                  void applyInterfaceLanguagePreference(code, { broadcast: true });
-                  setInterfaceLanguage(code);
+                  void applyInterfaceLanguagePreference(code, { broadcast: true }).then(setInterfaceLanguage);
                   setShowLanguageModal(false);
                   setPendingLanguage(null);
                 }}

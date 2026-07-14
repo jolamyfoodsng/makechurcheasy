@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
 import type { BibleThemeSettings } from "../../bible/types";
+import overlayHtml from "../../../public/mce-bible-overlay.html?raw";
+import backgroundOverlayHtml from "../../../public/bible-overlay-bg.html?raw";
 
 /* ── Helpers — mirrors the updater pattern each Text tab control uses ── */
 
@@ -102,6 +104,19 @@ function applyFullscreenQuickThemeSettings(
   quickSettings: DockFullscreenQuickThemeSettings | null,
 ): { settings: BibleThemeSettings } {
   if (!quickSettings) return theme;
+  const bgType = quickSettings.backgroundType
+    ?? (quickSettings.backgroundVideo
+      ? "video"
+      : quickSettings.backgroundImage
+        ? "image"
+        : quickSettings.backgroundPattern
+          ? "pattern"
+          : quickSettings.backgroundColor && quickSettings.backgroundColor !== "transparent"
+            ? "color"
+            : "theme");
+  const useThemeBg = bgType === "theme";
+  const useNoBg = bgType === "off";
+  const useColorBg = bgType === "color";
   return {
     ...theme,
     settings: {
@@ -127,6 +142,27 @@ function applyFullscreenQuickThemeSettings(
       textShadow: quickSettings.textShadow,
       animation: quickSettings.animation,
       animationDuration: quickSettings.animationDuration,
+      backgroundImage: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImage ?? "") : quickSettings.backgroundImage,
+      backgroundImageFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImageFilePath ?? "") : quickSettings.backgroundImageFilePath,
+      backgroundVideo: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideo ?? "") : quickSettings.backgroundVideo,
+      backgroundVideoFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideoFilePath ?? "") : quickSettings.backgroundVideoFilePath,
+      backgroundOpacity: useNoBg ? 0 : useThemeBg ? (theme.settings.backgroundOpacity ?? 1) : quickSettings.backgroundOpacity,
+      backgroundColor: useNoBg
+        ? "transparent"
+        : useThemeBg
+          ? (theme.settings.backgroundColor || "#0B1426")
+          : useColorBg
+            ? (quickSettings.backgroundColor || "#0B1426")
+            : (quickSettings.backgroundColor || "transparent"),
+      backgroundColorEnd: useNoBg
+        ? "transparent"
+        : useThemeBg
+          ? (theme.settings.backgroundColorEnd || "#162040")
+          : useColorBg
+            ? (quickSettings.backgroundColorEnd || "#162040")
+            : (quickSettings.backgroundColorEnd || ""),
+      bgGradientAngle: useThemeBg ? (theme.settings.bgGradientAngle ?? 180) : quickSettings.bgGradientAngle,
+      backgroundPattern: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundPattern ?? "") : quickSettings.backgroundPattern,
       fontStyle: quickSettings.fontStyle,
     },
   };
@@ -196,5 +232,104 @@ describe("Full pipeline: Text tab → BibleThemeSettings → extract back", () =
     expect(themed.settings.textTransform).toBe(tc);
     const extracted = extractFullscreenQuickThemeSettings(themed.settings);
     expect(extracted.textTransform).toBe(tc);
+  });
+
+  it("image background does not get overridden by fallback gradient colors", () => {
+    const quickSettings: DockFullscreenQuickThemeSettings = {
+      ...BASE,
+      backgroundType: "image",
+      backgroundImage: "/uploads/example.png",
+      backgroundColor: "",
+      backgroundColorEnd: "",
+    };
+    const themed = applyFullscreenQuickThemeSettings(baseTheme, quickSettings);
+    expect(themed.settings.backgroundImage).toBe("/uploads/example.png");
+    expect(themed.settings.backgroundColor).toBe("transparent");
+    expect(themed.settings.backgroundColorEnd).toBe("");
+  });
+
+  it("video background keeps the video source and does not inject gradient defaults", () => {
+    const quickSettings: DockFullscreenQuickThemeSettings = {
+      ...BASE,
+      backgroundType: "video",
+      backgroundVideo: "/uploads/example.mp4",
+      backgroundColor: "",
+      backgroundColorEnd: "",
+    };
+    const themed = applyFullscreenQuickThemeSettings(baseTheme, quickSettings);
+    expect(themed.settings.backgroundVideo).toBe("/uploads/example.mp4");
+    expect(themed.settings.backgroundColor).toBe("transparent");
+    expect(themed.settings.backgroundColorEnd).toBe("");
+  });
+});
+
+describe("Active OBS Bible overlay wiring", () => {
+  it("consumes compare layout fields emitted by BackgroundPickerCard", () => {
+    expect(overlayHtml).toContain("s.compareLeftWidth");
+    expect(overlayHtml).toContain("s.compareRightWidth");
+    expect(overlayHtml).toContain("s.compareOuterPaddingTop");
+    expect(overlayHtml).toContain("s.compareOuterPaddingRight");
+    expect(overlayHtml).toContain("s.compareOuterPaddingBottom");
+    expect(overlayHtml).toContain("s.compareOuterPaddingLeft");
+    expect(overlayHtml).toContain("s.comparePanelInnerPadding");
+    expect(overlayHtml).toContain("s.compareReferencePositionLeft");
+    expect(overlayHtml).toContain("s.compareReferencePositionRight");
+    expect(overlayHtml).toContain("s.compareReferenceAlignmentLeft");
+    expect(overlayHtml).toContain("s.compareReferenceAlignmentRight");
+  });
+
+  it("renders compare reference and bible version as one label", () => {
+    expect(overlayHtml).toContain("function formatCompareReference");
+    expect(overlayHtml).toContain("formatCompareReference(l.reference, l.translation)");
+    expect(overlayHtml).toContain("formatCompareReference(r.reference, r.translation)");
+    expect(overlayHtml).toContain("compareTranslationLeft.textContent = ''");
+    expect(overlayHtml).toContain("compareTranslationRight.textContent = ''");
+  });
+
+  it("keeps background picker color/image/pattern/video fields wired into the active overlay", () => {
+    expect(overlayHtml).toContain("theme.backgroundVideo");
+    expect(overlayHtml).toContain("theme.backgroundPattern");
+    expect(overlayHtml).toContain("theme.backgroundImage");
+    expect(overlayHtml).toContain("theme.backgroundColor");
+    expect(overlayHtml).toContain("theme.backgroundColorEnd");
+    expect(overlayHtml).toContain("theme.bgGradientAngle");
+    expect(overlayHtml).toContain("theme.backgroundOpacity");
+  });
+
+  it("keeps mce-bible-overlay background behavior aligned with bible-overlay-bg", () => {
+    [
+      "diagonal-lines",
+      "horizontal-lines",
+      "vertical-lines",
+      "chevrons",
+      "cross-hatch",
+      "subtle-noise",
+      "star-field",
+    ].forEach((patternName) => {
+      expect(backgroundOverlayHtml).toContain(patternName);
+      expect(overlayHtml).toContain(patternName);
+    });
+
+    expect(overlayHtml).toContain("function applyFullscreenBackground");
+    expect(overlayHtml).toContain("function readInjectedCssVar");
+    expect(overlayHtml).toContain("const bgVideoUrl = String(theme.backgroundVideo || '').trim()");
+    expect(overlayHtml).toContain("const patternCss = resolvePatternCss(theme.backgroundPattern)");
+    expect(overlayHtml).toContain("if (hasGradient)");
+    expect(overlayHtml).toContain("const rawBgImage = String(theme.backgroundImage || '').trim()");
+    expect(overlayHtml).toContain("value === '__FROM_CSS__'");
+    expect(overlayHtml).toContain("url(\"${value.replace(/\"/g, '\\\\\"')}\")");
+
+    expect(backgroundOverlayHtml).toContain("function readInjectedCssVar");
+    expect(backgroundOverlayHtml).toContain("value === '__FROM_CSS__'");
+    expect(backgroundOverlayHtml).toContain("backgroundVideoEl.load()");
+    expect(backgroundOverlayHtml).toContain("const patternCss = resolvePatternCss(theme.backgroundPattern)");
+
+    const videoIndex = overlayHtml.indexOf("const bgVideoUrl = String(theme.backgroundVideo || '').trim()");
+    const patternIndex = overlayHtml.indexOf("const patternCss = resolvePatternCss(theme.backgroundPattern)");
+    const gradientIndex = overlayHtml.indexOf("if (hasGradient)");
+    const imageIndex = overlayHtml.indexOf("const rawBgImage = String(theme.backgroundImage || '').trim()");
+    expect(videoIndex).toBeLessThan(patternIndex);
+    expect(patternIndex).toBeLessThan(gradientIndex);
+    expect(gradientIndex).toBeLessThan(imageIndex);
   });
 });

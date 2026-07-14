@@ -93,6 +93,7 @@ export default function DockThemeSettingsModal({
   const modalRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(view !== "closed");
   const originalSettingsRef = useRef(quickSettings);
+  const lastPreviewSettingsRef = useRef(quickSettings);
 
   useEffect(() => {
     const isOpen = view !== "closed";
@@ -100,6 +101,7 @@ export default function DockThemeSettingsModal({
     wasOpenRef.current = isOpen;
     if (isOpen && !wasOpen) {
       originalSettingsRef.current = quickSettings;
+      lastPreviewSettingsRef.current = quickSettings;
       setDraftSettings(quickSettings);
       setDraftSelectedThemeId(selectedThemeId);
       setDraftSelectedTheme(null);
@@ -109,14 +111,17 @@ export default function DockThemeSettingsModal({
 
   const updateDraft = useCallback(
     (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => {
-      setDraftSettings((prev) => {
-        const next = updater(prev);
-        _onQuickSettingsChange?.(next);
-        return next;
-      });
+      setDraftSettings((prev) => updater(prev));
     },
-    [_onQuickSettingsChange],
+    [],
   );
+
+  useEffect(() => {
+    if (view === "closed") return;
+    if (lastPreviewSettingsRef.current === draftSettings) return;
+    lastPreviewSettingsRef.current = draftSettings;
+    _onQuickSettingsChange?.(draftSettings);
+  }, [draftSettings, view, _onQuickSettingsChange]);
 
   const EFFECT_DEFS = useMemo(() => [
     {
@@ -197,15 +202,15 @@ export default function DockThemeSettingsModal({
     setDraftSelectedTheme(theme);
     setDraftSelectedThemeId(theme.id);
     pendingBackgroundPresetRef.current = "theme";
+    onSelect(theme);
     onBackgroundPresetChange?.("theme");
     const nextSettings = resolveThemeQuickSettings?.(theme);
     if (nextSettings) {
       setDraftSettings(nextSettings);
-      _onQuickSettingsChange?.(nextSettings);
       return;
     }
     updateDraft((prev) => ({ ...prev, backgroundType: "theme" }));
-  }, [onBackgroundPresetChange, resolveThemeQuickSettings, updateDraft, _onQuickSettingsChange]);
+  }, [onBackgroundPresetChange, onSelect, resolveThemeQuickSettings, updateDraft, _onQuickSettingsChange]);
 
   const handleSave = useCallback(() => {
     const nextSettings = { ...draftSettings };

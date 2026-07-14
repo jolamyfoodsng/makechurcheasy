@@ -1346,6 +1346,23 @@ describe("Runtime Validation: Trial Expiration End-to-End", () => {
       expect(canUseSpeechToScripture(user)).toBe(true);
     });
 
+    it("resolves effectivePlan to 'pro' even with active trial", () => {
+      const user = makeUser({
+        plan: "pro",
+        trial: {
+          active: true,
+          status: "active",
+          endsAt: futureDate(5),
+        },
+      });
+
+      expect(isInTrial(user)).toBe(true);
+      expect(getEffectivePlan(user)).toBe("pro");
+      expect(canUseMultiview(user)).toBe(true);
+      expect(canUseTranslation(user)).toBe(true);
+      expect(canUseSpeechToScripture(user)).toBe(true);
+    });
+
     it("resolves effectivePlan to 'pro' even with inactive trial status", () => {
       const user = makeUser({
         plan: "pro",

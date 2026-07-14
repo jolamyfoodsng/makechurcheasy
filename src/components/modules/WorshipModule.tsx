@@ -181,18 +181,25 @@ As long as life endures.`,
 export interface WorshipModuleProps {
   isActive?: boolean;
   homePath?: string;
+  presentationMode?: boolean;
   /** Deep-link: auto-select this song when set */
   initialSelectSongId?: string | null;
   /** Called after the deep-link selection has been consumed */
   onConsumeInitialSelect?: () => void;
+  onPresentToScreen?: (payload: { song: Song; slide: Slide; slideIndex: number }) => void;
+  onClearScreen?: () => void;
 }
 
 export function WorshipModule({
   isActive = true,
+  presentationMode = false,
   initialSelectSongId,
   onConsumeInitialSelect,
+  onPresentToScreen,
+  onClearScreen,
 }: WorshipModuleProps) {
   const [view, setView] = useState<"dashboard" | "import">("dashboard");
+  const presentationTabWasActiveRef = useRef(isActive);
 
   // ── Song library state ──
   const [songs, setSongs] = useState<Song[]>([]);
@@ -488,6 +495,22 @@ export function WorshipModule({
     () => (selectedSong ? generateSlides(selectedSong.lyrics, 2, false) : []),
     [selectedSong]
   );
+
+  useEffect(() => {
+    const becameActive = !presentationTabWasActiveRef.current && isActive;
+    presentationTabWasActiveRef.current = isActive;
+
+    if (becameActive) return;
+    if (!presentationMode || !isActive || !selectedSong) return;
+    const slide = songSlides[liveSlideIndex];
+    if (!slide) return;
+    onPresentToScreen?.({
+      song: selectedSong,
+      slide,
+      slideIndex: liveSlideIndex,
+    });
+  }, [presentationMode, isActive, selectedSong, songSlides, liveSlideIndex, onPresentToScreen]);
+
   const songLyricSections = useMemo(
     () => (selectedSong ? parseWorshipLyricSections(selectedSong.lyrics, 2) : []),
     [selectedSong]
@@ -681,7 +704,9 @@ export function WorshipModule({
 
     const line1 = lines[0] ?? (slideText || "Worship");
     const line2 = lines.slice(1).join(" ").trim();
-    const sectionLabel = normalizeWorshipObsLabel(songSlides[liveSlideIndex]?.label ?? "");
+    // Section labels stay in the operator UI, but should not be injected into
+    // lower-third or preview output.
+    const sectionLabel = "";
     const songInfo = sectionLabel || "";
     const quote = slideText || line1;
     const subtitle = line2 || "Worship";
@@ -881,6 +906,7 @@ export function WorshipModule({
 
   const pushToObs = useCallback(
     async (slideIdx: number, live: boolean, blanked: boolean) => {
+      if (presentationMode) return;
       if (!obsConnected) return;
       const slide = songSlides[slideIdx];
       if (!slide && live) return;
@@ -931,6 +957,7 @@ export function WorshipModule({
       getDefaultFullScenes,
       getDefaultLtScenes,
       pushWorshipLowerThirdToScene,
+      presentationMode,
     ]
   );
 
@@ -981,12 +1008,21 @@ export function WorshipModule({
 
   const handleBlackout = useCallback(async () => {
     setIsBlanked(true);
+    if (presentationMode) {
+      onClearScreen?.();
+      return;
+    }
     await pushToObs(liveSlideIndex, isLive, true);
-  }, [liveSlideIndex, isLive, pushToObs]);
+  }, [liveSlideIndex, isLive, pushToObs, presentationMode, onClearScreen]);
 
   const handleClear = useCallback(async () => {
     setIsLive(false);
     setIsBlanked(false);
+
+    if (presentationMode) {
+      onClearScreen?.();
+      return;
+    }
 
     if (layoutMode === "fullscreen") {
       const fullTargets = fullLiveScenes.length > 0 ? fullLiveScenes : getDefaultFullScenes();
@@ -1027,6 +1063,8 @@ export function WorshipModule({
     getDefaultFullScenes,
     getDefaultLtScenes,
     pushWorshipLowerThirdToScene,
+    presentationMode,
+    onClearScreen,
   ]);
 
   // ── Theme change ──
@@ -1464,7 +1502,7 @@ export function WorshipModule({
   // ═══════════════════════════════════════════════════════
   return (
     <>
-      <div className="worship-home">
+      <div className={`worship-home${presentationMode ? " worship-home--presentation" : ""}`}>
         {/* ── Header ── */}
 
 
@@ -1554,11 +1592,7 @@ export function WorshipModule({
                               Imported{song.importSourceName ? ` from ${song.importSourceName}` : ""}
                             </span>
                           )}
-                          {song.importSourceType === "document" && (
-                            <span className="worship-imported-badge">
-                              Smart import{song.importSourceName ? ` · ${song.importSourceName}` : ""}
-                            </span>
-                          )}
+
                         </div>
                       </div>
                       <div className="worship-song-item-actions">
@@ -1731,19 +1765,19 @@ export function WorshipModule({
                     const isSelected = index === liveSlideIndex;
                     return (
                       <div key={slide.id} className="worship-slide-row">
-                        <div className="worship-slide-row-label">
-                          {!slide.isContinuation && (
-                            <span className={`worship-slide-tag${isLiveSlide ? " live" : ""}`}>
-                              {slide.label}
-                            </span>
-                          )}
-                        </div>
                         <div
                           className={`worship-slide-block${isLiveSlide ? " live" : ""}${isSelected && !isLive ? " selected" : ""}`}
                           onClick={() => setLiveSlideIndex(index)}
                           onDoubleClick={() => sendSlideToObs(index)}
                           title="Double-click to send to OBS"
                         >
+                          {!slide.isContinuation && (
+                            <div className="worship-slide-row-label">
+                              <span className={`worship-slide-tag${isLiveSlide ? " live" : ""}`}>
+                                {slide.label}
+                              </span>
+                            </div>
+                          )}
                           {isLiveSlide && <div className="worship-slide-live-badge">LIVE</div>}
                           <button
                             className="worship-slide-send-btn"
@@ -1833,15 +1867,15 @@ export function WorshipModule({
               <button
                 className="worship-control-btn danger"
                 onClick={handleClear}
-                title="Remove from OBS (C)"
+                title={presentationMode ? "Clear presentation screen (C)" : "Remove from OBS (C)"}
               >
                 <Icon name="cancel_presentation" size={20} />
-                <span>Remove From OBS</span>
+                <span>{presentationMode ? "Clear Screen" : "Remove From OBS"}</span>
               </button>
             </div>
 
             {/* Layout & Motion */}
-            <div className="worship-right-section">
+            <div className="worship-right-section worship-right-section--layout">
               <div className="worship-layout-header">
                 <Icon name="view_quilt" size={20} />
                 <span className="worship-layout-header-label">Layout &amp; Motion</span>
@@ -1971,7 +2005,7 @@ export function WorshipModule({
               )}
             </div>
 
-            <div className="worship-right-section">
+            <div className="worship-right-section worship-right-section--obs">
               <ObsScenesPanel
                 title="OBS Scenes (Full & Lower)"
                 contentLabel={layoutMode === "fullscreen" ? "full worship overlay" : "worship lower-third"}
@@ -2108,14 +2142,14 @@ export function WorshipModule({
             <div className="ssm-icon">
               <Icon name={songLimitModalType === "import" ? "upload_file" : "library_music"} size={28} />
             </div>
-            <h2 className="ssm-title">{songLimitModalType === "import" ? "Smart Import Restricted" : "Song Limit Reached"}</h2>
+            <h2 className="ssm-title">{songLimitModalType === "import" ? "Smart Import Requires Growth" : "Song Limit Reached"}</h2>
             {songLimitModalType === "import" ? (
               <>
                 <p className="ssm-desc">
-                  Smart worship import is available on <strong>Basic</strong> and above.
+                  Smart worship import is available on <strong>Growth</strong> and above.
                 </p>
                 <p className="ssm-hint">
-                  Upgrade your plan to unlock document import, review, and AI-assisted worship parsing.
+                  Free trial users can use it during the trial. Upgrade to Growth to unlock document import, review, and AI-assisted worship parsing.
                 </p>
               </>
             ) : (

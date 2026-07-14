@@ -69,6 +69,7 @@ export interface PlanLimits {
   advancedAnalytics: boolean;
   customReports: boolean;
   apiAccess: boolean;
+  presentationMode: boolean;
   teamManagement: boolean;
   campusManagement: boolean;
   unlimitedDevices: boolean;
@@ -112,6 +113,7 @@ function entitlementsToPlanLimits(
     cloudSync: ent.cloudSync,
     advancedAnalytics: ent.advancedAnalytics,
     customReports: ent.customReports,
+    presentationMode: ent.presentationMode,
     apiAccess: ent.apiAccess,
     teamManagement: ent.teamManagement,
     campusManagement: ent.campusManagement,
@@ -139,7 +141,7 @@ function buildAllLimits(config: PlanConfig): Record<PlanTier, PlanLimits> {
         multiview: false, tickers: false, massImport: false, easyWorshipImport: false,
         proPresenterImport: false, translation: false, speechToScripture: false,
         sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
-        customReports: false, mobileControl: false, apiAccess: false,
+        customReports: false, mobileControl: false, presentationMode: false, apiAccess: false,
         teamManagement: false, campusManagement: false, slideshow: false,
         countdowns: false,
       });
@@ -293,8 +295,8 @@ export function getTrialDaysRemaining(user: AuthUser | null): number {
  */
 export function getEffectivePlan(user: AuthUser | null): PlanTier {
   if (!user) return "free";
-  if (isInTrial(user)) return "growth";
-  const plan = resolveCanonicalPlan({ ...user, plan: getUserPlan(user) });
+  const userPlan = getUserPlan(user);
+  const plan = userPlan !== "free" ? normalizePlanId(userPlan) : resolveCanonicalPlan({ ...user, plan: userPlan });
   console.debug(
     "[licenseService] getEffectivePlan=%s (user.plan=%s, trial.active=%s, trial.status=%s, trial.endsAt=%s)",
     plan, user.plan, user.trial?.active, user.trial?.status, user.trial?.endsAt,
@@ -349,6 +351,10 @@ export function canUseMultiview(user: AuthUser | null): boolean {
 
 export function canUseMobileControl(user: AuthUser | null): boolean {
   return getUserPlanLimits(user).mobileControl;
+}
+
+export function canUsePresentationMode(user: AuthUser | null): boolean {
+  return getUserPlanLimits(user).presentationMode;
 }
 
 export function canUseTickers(user: AuthUser | null): boolean {

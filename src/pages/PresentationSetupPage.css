@@ -166,6 +166,11 @@
   background: var(--bg-card, #111827);
 }
 
+.ps-config-card--hero {
+  border-radius: 12px;
+  padding: 24px;
+}
+
 .ps-config-card-header {
   display: flex;
   align-items: center;
@@ -174,6 +179,13 @@
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 16px;
+}
+
+.ps-config-copy {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 
 .ps-status-dot {
@@ -293,6 +305,13 @@
   padding: 0 8px;
 }
 
+.ps-btn--medium {
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
 .ps-btn--secondary {
   background: transparent;
   border-color: var(--border-color, #334155);
@@ -346,6 +365,20 @@
   margin-bottom: 12px;
 }
 
+.ps-launch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.ps-launch-note {
+  margin: 0 0 14px;
+  color: var(--text-muted, #94A3B8);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 /* ── Viewers ── */
 
 .ps-viewers {
@@ -354,6 +387,34 @@
   gap: 6px;
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+.ps-guide-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ps-guide-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 12px;
+  background: var(--bg-elevated, #1F2937);
+}
+
+.ps-guide-item strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ps-guide-item span {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 /* ── Presets ── */
@@ -501,5 +562,10 @@
 
   .ps-form-row {
     grid-template-columns: 1fr;
+  }
+
+  .ps-link-row,
+  .ps-launch-actions {
+    flex-direction: column;
   }
 }

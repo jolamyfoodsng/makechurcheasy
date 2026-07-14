@@ -753,14 +753,6 @@ export default function DockCountdownsTab() {
       });
 
       if (opts?.setTransform) {
-        const allItems = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sceneItemId: number }> };
-        const topIndex = Math.max(0, allItems.sceneItems.length - 1);
-        await dockObsClient.call("SetSceneItemIndex", {
-          sceneName,
-          sceneItemId: item.sceneItemId,
-          sceneItemIndex: topIndex,
-        });
-
         const vs = await dockObsClient.call("GetVideoSettings", {}) as any;
         await dockObsClient.call("SetSceneItemTransform", {
           sceneName,
@@ -773,6 +765,8 @@ export default function DockCountdownsTab() {
           },
         });
       }
+
+      await dockObsClient.ensureTickerAboveSource(sceneName, sourceName).catch(() => { });
     }
   }
 

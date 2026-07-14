@@ -15,13 +15,14 @@ export interface LanguageEntry {
  * Only languages that have a translation file in src/locales/ are shown.
  * Keep this in sync with `ls src/locales/app-*.json`.
  */
-const SUPPORTED_LOCALE_CODES = ["en", "es", "fr", "gh", "ha", "ig", "pt", "yo"];
+const SUPPORTED_LOCALE_CODES = ["en-US", "fr", "es", "pt", "yo", "ig", "ha", "ak"];
 
 const allLanguages: LanguageEntry[] = allLanguageData as LanguageEntry[];
 
 /** Fallback entries for codes missing from full_langugae_list.json */
 const FALLBACK_ENTRIES: Record<string, { name: string; nativeName: string; region: string }> = {
-  gh: { name: "Akan (Twi)", nativeName: "Twi", region: "Africa" },
+  "en-US": { name: "English (United States)", nativeName: "English (United States)", region: "North America" },
+  ak: { name: "Akan (Twi)", nativeName: "Akan/Twi", region: "Africa" },
 };
 
 const languages: LanguageEntry[] = SUPPORTED_LOCALE_CODES.map((code) => {

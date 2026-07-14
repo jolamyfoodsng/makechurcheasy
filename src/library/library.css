@@ -120,6 +120,7 @@
 .lib-toolbar-left {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   flex: 1;
   min-width: 0;
@@ -128,8 +129,101 @@
 .lib-toolbar-actions {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   flex-shrink: 0;
+  justify-content: flex-end;
+}
+
+.lib-song-toolbar-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lib-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.lib-toolbar-btn--secondary {
+  border-color: var(--border);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+
+.lib-toolbar-btn--secondary:hover {
+  border-color: rgba(var(--primary-rgb), 0.35);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.lib-toolbar-btn-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(var(--primary-rgb), 0.14);
+  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.lib-toolbar-select-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.lib-toolbar-select-chip span {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lib-filter-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.lib-filter-reset-btn:hover {
+  border-color: rgba(var(--primary-rgb), 0.35);
+  background: var(--surface-hover);
+  color: var(--text-primary);
 }
 
 .lib-archive-btn {
@@ -477,13 +571,54 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 64px 0;
+  padding: 52px 24px;
   color: var(--text-muted);
   font-size: 12px;
+  border: 1px dashed rgba(var(--primary-rgb), 0.18);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.04), rgba(15, 23, 42, 0.18));
 }
 
 .lib-empty .lib-add-btn {
   margin-top: 8px;
+}
+
+.lib-empty-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: rgba(var(--primary-rgb), 0.1);
+  color: var(--primary);
+}
+
+.lib-empty-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.lib-empty-copy {
+  max-width: 560px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.lib-empty-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.lib-empty--search,
+.lib-empty--rich {
+  min-height: 260px;
 }
 
 /* ==========================================================================
@@ -809,6 +944,37 @@
   padding: 2px 2px 0;
 }
 
+.lib-song-section-head--active {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.lib-song-section-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lib-song-section-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lib-song-section-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--primary-rgb), 0.18);
+  background: rgba(var(--primary-rgb), 0.08);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
 .lib-song-section-label {
   font-size: 11px;
   font-weight: 700;
@@ -986,7 +1152,8 @@
 }
 
 .lib-song-imported-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 10px;
@@ -995,7 +1162,11 @@
   color: var(--success);
   border: 1px solid var(--success-border);
   white-space: nowrap;
-  flex-shrink: 0;
+  min-width: 0;
+  max-width: min(100%, 240px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
 }
 
 .lib-song-lyric-line {

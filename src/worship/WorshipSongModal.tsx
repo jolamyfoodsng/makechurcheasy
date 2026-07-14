@@ -95,6 +95,7 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
     song?.themeId ?? FULLSCREEN_THEMES[0]?.id ?? "",
   );
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const titleRef = useRef<HTMLInputElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -170,6 +171,7 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
   const handleSave = useCallback(async () => {
     if (!title.trim()) return;
     setSaving(true);
+    setError("");
     try {
       const now = new Date().toISOString();
       const updated: Song = {
@@ -190,6 +192,7 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
       onSave();
     } catch (err) {
       console.error("[WorshipSongModal] Failed to save song:", err);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
@@ -349,6 +352,7 @@ export default function WorshipSongModal({ song, onClose, onSave }: WorshipSongM
 
         {/* ── Footer ── */}
         <footer className="ws-modal-footer">
+          {error && <p className="ws-save-error">{error}</p>}
           <button className="ws-btn-secondary" onClick={onClose} title="Cancel">
             Cancel
           </button>

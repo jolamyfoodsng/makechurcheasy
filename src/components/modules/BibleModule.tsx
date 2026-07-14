@@ -160,19 +160,31 @@ function buildBibleLTPreviewDoc(theme: LowerThirdTheme, reference: string, verse
 export interface BibleModuleProps {
   isActive?: boolean;
   homePath?: string;
+  presentationMode?: boolean;
   templatesPath?: string;
   /** Deep-link: auto-select this Bible verse when set */
   initialSelectBible?: { book: string; chapter: number; verse: number } | null;
   /** Called after the deep-link selection has been consumed */
   onConsumeInitialSelect?: () => void;
+  onPresentToScreen?: (payload: {
+    book: string;
+    chapter: number;
+    verse: number;
+    translation: string;
+    text: string;
+  }) => void;
+  onClearScreen?: () => void;
 }
 
 export function BibleModule({
   isActive = true,
   homePath = "/",
+  presentationMode = false,
   templatesPath = "/bible/templates",
   initialSelectBible,
   onConsumeInitialSelect,
+  onPresentToScreen,
+  onClearScreen,
 }: BibleModuleProps) {
   const {
     state, dispatch, addToQueue, toggleFavorite, recordHistory,
@@ -186,6 +198,7 @@ export function BibleModule({
   const [selectedChapter, setSelectedChapter] = useState<number>(1);
   const [selectedVerse, setSelectedVerse] = useState<number>(1);
   const [selectionLoaded, setSelectionLoaded] = useState(false);
+  const presentationTabWasActiveRef = useRef(isActive);
 
   // Restore last selection from IndexedDB on mount
   useEffect(() => {
@@ -684,6 +697,7 @@ export function BibleModule({
     verse: number,
     options?: { useLegacyObs?: boolean },
   ): Promise<boolean> => {
+    if (presentationMode) return false;
     if (!checkServiceActive("display Bible verses on OBS")) return false;
     const useLegacyObs = options?.useLegacyObs ?? true;
     let passage: BiblePassage;
@@ -742,7 +756,7 @@ export function BibleModule({
       serviceStore.trackBibleVerse();
     }
     return true;
-  }, [state.translation, state.slideConfig, dispatch, addToQueue, recordHistory, activeTheme, triggerFlash, checkServiceActive, layoutMode]);
+  }, [state.translation, state.slideConfig, dispatch, addToQueue, recordHistory, activeTheme, triggerFlash, checkServiceActive, layoutMode, presentationMode]);
 
   // Auto-select chapter 1, verse 1 when book is clicked
   const handleSelectBook = useCallback((book: string) => {
@@ -761,7 +775,7 @@ export function BibleModule({
 
   const handleSelectVerse = useCallback((verse: number) => {
     setSelectedVerse(verse);
-    if (!selectedBook || !selectedChapter) {
+    if (presentationMode || !selectedBook || !selectedChapter) {
       setHasSentToObs(false);
       return;
     }
@@ -777,23 +791,25 @@ export function BibleModule({
         setLtSending(false);
       })();
     }
-  }, [selectedBook, selectedChapter, sendVerseToObs, layoutMode, selectedLTTheme, ltLiveScenes, ltTargetScene]);
+  }, [selectedBook, selectedChapter, sendVerseToObs, layoutMode, selectedLTTheme, ltLiveScenes, ltTargetScene, presentationMode]);
 
   // Double-click book → navigate to chapter 1 and send verse 1 to OBS
   const handleDoubleClickBook = useCallback((book: string) => {
     setSelectedBook(book);
     setSelectedChapter(1);
     setSelectedVerse(1);
+    if (presentationMode) return;
     sendVerseToObs(book, 1, 1);
-  }, [sendVerseToObs]);
+  }, [sendVerseToObs, presentationMode]);
 
   // Double-click chapter → navigate to that chapter and send verse 1 to OBS
   const handleDoubleClickChapter = useCallback((book: string, chapter: number) => {
     setSelectedBook(book);
     setSelectedChapter(chapter);
     setSelectedVerse(1);
+    if (presentationMode) return;
     sendVerseToObs(book, chapter, 1);
-  }, [sendVerseToObs]);
+  }, [sendVerseToObs, presentationMode]);
 
   // Toggle favorite for a specific verse
   const handleToggleFavoriteVerse = useCallback(async (verse: number) => {
@@ -938,6 +954,11 @@ export function BibleModule({
   const handleClear = useCallback(async () => {
     setHasSentToObs(false);
 
+    if (presentationMode) {
+      onClearScreen?.();
+      return;
+    }
+
     await Promise.all([
       bibleObsService.clearOverlay(fullLiveScenes.length > 0 ? fullLiveScenes : undefined).catch((err) => {
         console.warn("[BibleModule] Fullscreen clear failed:", err);
@@ -975,7 +996,7 @@ export function BibleModule({
         setLtLiveScenes([]);
       })();
     }
-  }, [fullLiveScenes, ltLiveScenes]);
+  }, [fullLiveScenes, ltLiveScenes, presentationMode, onClearScreen]);
 
   // Chapter navigation (Shift+Arrow)
   const handleNextChapter = useCallback(() => {
@@ -1324,6 +1345,32 @@ export function BibleModule({
     return () => { cancelled = true; };
   }, [selectedBook, selectedChapter, selectedVerse, state.translation]);
 
+  useEffect(() => {
+    const becameActive = !presentationTabWasActiveRef.current && isActive;
+    presentationTabWasActiveRef.current = isActive;
+
+    if (becameActive) return;
+    if (!presentationMode || !isActive || !selectedBook || !selectedChapter || !selectedVerse) return;
+    const text = ltVerseText.trim();
+    if (!text) return;
+    onPresentToScreen?.({
+      book: selectedBook,
+      chapter: selectedChapter,
+      verse: selectedVerse,
+      translation: state.translation,
+      text,
+    });
+  }, [
+    presentationMode,
+    isActive,
+    selectedBook,
+    selectedChapter,
+    selectedVerse,
+    state.translation,
+    ltVerseText,
+    onPresentToScreen,
+  ]);
+
   const resolveDockSendLive = useCallback(async (
     sceneName: string,
     mode: "scene" | "preview" | "program",
@@ -1638,8 +1685,9 @@ export function BibleModule({
     if (effectiveColorMode === "light") parts.push("light-mode");
     if (state.reduceMotion) parts.push("reduce-motion");
     if (state.highContrast) parts.push("high-contrast");
+    if (presentationMode) parts.push("bible-home--presentation");
     return parts.join(" ");
-  }, [effectiveColorMode, state.reduceMotion, state.highContrast]);
+  }, [effectiveColorMode, state.reduceMotion, state.highContrast, presentationMode]);
 
   const activeModeLiveScenes = layoutMode === "fullscreen" ? fullLiveScenes : ltLiveScenes;
   const modeSendLabel = layoutMode === "fullscreen" ? "Push To OBS" : "Push To OBS";
@@ -1702,10 +1750,10 @@ export function BibleModule({
             <button
               className="bible-footer-btn clear"
               onClick={() => handleClear()}
-              title="Clear output (Esc)"
+              title={presentationMode ? "Clear presentation screen (Esc)" : "Clear output (Esc)"}
             >
               <Icon name="block" size={20} />
-              Clear
+              {presentationMode ? "Clear Screen" : "Clear"}
             </button>
           </div>
           {/* Toggle right sidebar */}

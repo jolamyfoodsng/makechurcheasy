@@ -28,7 +28,7 @@ import {
   Zap
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useBlocker, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { usePerformanceMonitor } from "../dock/usePerformanceMonitor";
 import SpeechToScriptureTutorial, {
@@ -43,7 +43,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { track } from "../services/analytics";
 import { getDeviceId, getDeviceSecret } from "../services/authService";
 import { calculateTranscriptionCredits, deductCreditsWithSync, getCreditsBalance, onCreditChange, syncCreditsWithBackend } from "../services/credits";
-import { checkEntitlement, checkEntitlementSync } from "../services/entitlementClient";
+import { checkEntitlementSync } from "../services/entitlementClient";
 import { getEffectivePlan } from "../services/licenseService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService } from "../services/obsService";
@@ -53,6 +53,7 @@ import type { VoiceBibleCandidate, DetectionSpeed } from "../services/voiceBible
 import { DETECTION_SPEED_CONFIG, MATCH_SOURCE_LABEL } from "../services/voiceBibleTypes";
 import { isWhisperReady, loadWhisperModel } from "../services/whisperService";
 import { createTranscript, saveTranscript } from "../transcripts/transcriptService";
+import { isConfirmedAppClose } from "../services/appCloseGuard";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
@@ -60,26 +61,19 @@ const API_BASE =
 
 // ── Connectivity hook ──
 function useOnlineStatus(): boolean {
-  const [isOnline, setIsOnline] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
 
   useEffect(() => {
-    let cancelled = false;
-    const check = async () => {
-      try {
-        const res = await fetch("https://www.gstatic.com/generate_204", {
-          method: "HEAD",
-          mode: "no-cors",
-          cache: "no-store",
-          signal: AbortSignal.timeout(4000),
-        });
-        if (!cancelled) setIsOnline(res.ok || res.type === "opaque");
-      } catch {
-        if (!cancelled) setIsOnline(false);
-      }
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
-    check();
-    const id = setInterval(check, 10000);
-    return () => { cancelled = true; clearInterval(id); };
   }, []);
 
   return isOnline;
@@ -372,10 +366,7 @@ export default function SpeechToScripturePage() {
     setShowStopConfirm(true);
   }, []);
 
-  const confirmStop = useCallback(async () => {
-    const { allowed } = await checkEntitlement("speechToScripture", effectivePlan);
-    if (!allowed) return;
-
+  const confirmStop = useCallback(() => {
     track("sts_listening_stopped", { durationSec: elapsedRef.current });
     trackVoiceSessionCompleted(Math.round(elapsedRef.current));
 
@@ -463,7 +454,7 @@ export default function SpeechToScripturePage() {
 
     lmDockService.stopListening();
     setShowStopConfirm(false);
-  }, [effectivePlan, snapshot.entries, snapshot.queue, snapshot.suggestions]);
+  }, [snapshot.entries, snapshot.queue, snapshot.status, snapshot.suggestions, t, user?.id]);
 
   const isListening = snapshot.status === "listening";
   const isConnecting = snapshot.status === "requesting-mic" || snapshot.status === "connecting";
@@ -479,20 +470,26 @@ export default function SpeechToScripturePage() {
 
   // ── Guard: warn before closing app while transcribing ──
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const blocker = useBlocker(isTranscribing);
 
   useEffect(() => {
     if (!isTranscribing) return;
     const handler = (e: BeforeUnloadEvent) => {
+      if (isConfirmedAppClose()) {
+        return;
+      }
       e.preventDefault();
+      e.returnValue = "";
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [isTranscribing]);
 
-  const confirmLeave = useCallback(async () => {
-    const { allowed } = await checkEntitlement("speechToScripture", effectivePlan);
-    if (!allowed) return;
+  useEffect(() => {
+    setShowLeaveConfirm(blocker.state === "blocked");
+  }, [blocker.state]);
 
+  const confirmLeave = useCallback(async () => {
     const serviceFailed = snapshot.status === "error";
 
     // ── Persist transcript before navigating away ──
@@ -565,12 +562,18 @@ export default function SpeechToScripturePage() {
 
     lmDockService.stopListening();
     setShowLeaveConfirm(false);
-    navigate("/");
-  }, [effectivePlan, navigate, snapshot.entries, snapshot.queue, snapshot.suggestions]);
+    if (blocker.state === "blocked") {
+      blocker.proceed();
+    }
+  }, [blocker, snapshot.entries, snapshot.queue, snapshot.status, snapshot.suggestions, t, user?.id]);
 
   const cancelLeave = useCallback(() => {
+    if (blocker.state === "blocked") {
+      blocker.reset();
+      return;
+    }
     setShowLeaveConfirm(false);
-  }, []);
+  }, [blocker]);
 
   // ── Timer ──
   const [elapsed, setElapsed] = useState(0);
@@ -680,7 +683,10 @@ export default function SpeechToScripturePage() {
   useEffect(() => {
     if (isListening) {
       setWasListening(true);
+      return;
     }
+    setWasListening(false);
+    setConnectionLostBanner(false);
   }, [isListening]);
 
   useEffect(() => {
@@ -689,7 +695,6 @@ export default function SpeechToScripturePage() {
     }
     if (isOnline) {
       setConnectionLostBanner(false);
-      setWasListening(false);
     }
   }, [isOffline, isListening, isOnline, wasListening]);
 

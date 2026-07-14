@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { extractTextFromFile, reorderTwoColumnText } from "./bulkImportService";
+import {
+  assessExtractedTextQuality,
+  extractTextFromFile,
+  normalizeExtractedLyricsText,
+  reorderTwoColumnText,
+} from "./bulkImportService";
 import { processDocumentWithAi } from "./bulkImportAiService";
 import type { DocumentStructureProvider } from "./bulkImportAiService";
 import type { BulkImportChunkRequest } from "./smartImportTypes";
@@ -188,6 +193,145 @@ describe("Phase 2: Two-Column PDF", () => {
   it("passes short text through unchanged", () => {
     const short = "Line 1\nLine 2\nLine 3";
     expect(reorderTwoColumnText(short)).toBe(short);
+  });
+
+  it("reorders pdftotext layout columns before lyric reflow", () => {
+    const layoutText = [
+      "1                                     2. I see the signs are all",
+      "1. A charge to keep I have,           around",
+      "A God to glorify,                     My ear has heard a certain",
+      "A never-dying soul to save,           sound",
+      "And fit it for the sky                A greater rain is coming very",
+      "                                      soon",
+      "2. To serve the present age,          For Zion has travailed and",
+      "My calling to fulfil:                 shall bring forth",
+      "O may it all my powers engage         The sons of God with a word",
+      "To do my Master’s will!               in their mouth",
+      "                                      A greater rain is coming very",
+      "3. Arm me with jealous care,          soon",
+      "As in Thy sight to live;              PH. 35",
+    ].join("\n");
+
+    const normalized = normalizeExtractedLyricsText(reorderTwoColumnText(layoutText));
+
+    expect(normalized).toContain("A charge to keep I have,");
+    expect(normalized).toContain("And fit it for the sky");
+    expect(normalized).toContain("2. I see the signs are all around");
+    expect(normalized).toContain("A greater rain is coming very soon");
+    expect(normalized).toContain("The sons of God with a word in their mouth");
+    expect(normalized).not.toContain("And fit it for the sky soon");
+  });
+
+  it("keeps right-column song numbers out of left-column lyrics and preserves next-page continuations", () => {
+    const layoutText = [
+      "2                                     4",
+      "1. A greater rain is coming           Abide under his anointing,",
+      "A greater rain is coming              Abide under his control,",
+      "A greater rain is coming very         Abide under his anointing,",
+      "soon                                  His presence upon your soul;",
+      "The early and the latter rain         Just stay in the arms of Jesus",
+      "shall fall together at the time       And thou shall be fully",
+      "A greater rain is coming very         whole;",
+      "soon",
+      "                                  1",
+      "\fAbide under his anointing,           4. I fear no foe, with thee at",
+      "Abide under his control,              hand to bless;",
+      "PH 64                                 Ills have no weight, and tears",
+      "5                                     no bitterness.",
+      "1. Abide with me, fast falls          Where is death's sting?",
+      "the eventide;                         Where, grave, thy victory?",
+      "The darkness deepens; Lord,           I triumph still, if thou abide",
+      "with me abide,                        with me.",
+    ].join("\n");
+
+    const normalized = normalizeExtractedLyricsText(reorderTwoColumnText(layoutText));
+
+    expect(normalized).toContain("A greater rain is coming\nA greater rain is coming");
+    expect(normalized).toContain("A greater rain is coming very soon");
+    expect(normalized).not.toContain("A greater rain is coming 4");
+    expect(normalized).toContain("4\nAbide under his anointing,");
+    expect(normalized).toContain("And thou shall be fully whole;");
+    expect(normalized).toContain("Abide under his anointing,\nAbide under his control,\nPH 64");
+    expect(normalized).not.toContain("whole;\n\n1\n\nAbide");
+  });
+});
+
+// ── Phase 2b: PDF lyric reflow ──
+
+describe("Phase 2b: PDF lyric reflow", () => {
+  it("joins soft-wrapped lyric lines from exported PDFs", () => {
+    const raw = [
+      "2. I see the signs are all",
+      "around",
+      "My ear has heard a certain",
+      "sound",
+      "A greater rain is coming very",
+      "soon",
+      "For Zion has travailed and",
+      "shall bring forth",
+      "The sons of God with a word",
+      "in their mouth",
+      "",
+      "PH. 35",
+    ].join("\n");
+
+    const normalized = normalizeExtractedLyricsText(raw);
+
+    expect(normalized).toContain("2. I see the signs are all around");
+    expect(normalized).toContain("My ear has heard a certain sound");
+    expect(normalized).toContain("A greater rain is coming very soon");
+    expect(normalized).toContain("For Zion has travailed and shall bring forth");
+    expect(normalized).toContain("The sons of God with a word in their mouth");
+    expect(normalized).toContain("\n\nPH. 35");
+  });
+
+  it("preserves hymn markers and section labels while reflowing wrapped lines", () => {
+    const raw = [
+      "Hymn 5",
+      "",
+      "Verse 1",
+      "Where shall we await Jesus that we",
+      "might all see Him,",
+      "In the Holy Church shall we see Jesus.",
+      "",
+      "Chorus",
+      "I once was lost",
+      "but now am found",
+    ].join("\n");
+
+    const normalized = normalizeExtractedLyricsText(raw);
+
+    expect(normalized).toContain("Hymn 5\n\nVerse 1");
+    expect(normalized).toContain("Where shall we await Jesus that we might all see Him,");
+    expect(normalized).toContain("In the Holy Church shall we see Jesus.");
+    expect(normalized).toContain("\n\nChorus\nI once was lost but now am found");
+  });
+
+  it("does not join clear separate hymn lines after soft punctuation", () => {
+    const raw = [
+      "A charge to keep I have,",
+      "A God to glorify,",
+      "A never-dying soul to save,",
+      "And fit it for the sky",
+    ].join("\n");
+
+    const normalized = normalizeExtractedLyricsText(raw);
+
+    expect(normalized).toContain("A charge to keep I have,\nA God to glorify,");
+    expect(normalized).toContain("A never-dying soul to save,\nAnd fit it for the sky");
+  });
+
+  it("scores readable extraction as usable and noisy extraction as unusable", () => {
+    const readable = assessExtractedTextQuality([
+      "Amazing grace how sweet the sound",
+      "That saved a wretch like me",
+      "I once was lost but now am found",
+      "Was blind but now I see",
+    ].join("\n"));
+    const noisy = assessExtractedTextQuality("a | b | c | d | [] [] []");
+
+    expect(readable.usable).toBe(true);
+    expect(noisy.usable).toBe(false);
   });
 });
 

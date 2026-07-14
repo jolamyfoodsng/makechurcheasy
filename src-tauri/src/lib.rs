@@ -22,6 +22,7 @@ mod assemblyai_stream;
 #[cfg(target_os = "macos")]
 mod local_llm;
 mod mobile_companion;
+mod presentation_remote;
 #[cfg(not(target_os = "macos"))]
 mod local_llm_stub;
 #[cfg(not(target_os = "macos"))]
@@ -38,7 +39,7 @@ use std::fs;
 use std::path::{Component, Path};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
 /// The port the overlay server is running on (set at startup).
@@ -158,6 +159,10 @@ mod app_nap {
 
 static LM_STATE: OnceLock<Mutex<String>> = OnceLock::new();
 static LM_COMMAND_QUEUE: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+pub(crate) static PRESENTATION_STATE: OnceLock<Mutex<BTreeMap<String, PresentationStateEnvelope>>> =
+    OnceLock::new();
+pub(crate) static PRESENTATION_VIEWERS: OnceLock<Mutex<BTreeMap<String, BTreeMap<String, u64>>>> =
+    OnceLock::new();
 const ONLINE_LYRICS_RESULT_LIMIT: usize = 18;
 const ONLINE_LYRICS_USER_AGENT: &str =
     "MakeChurchEasy/1.0 (+https://localhost; worship-online-lyrics)";
@@ -166,6 +171,51 @@ const TEMPLATE_VIDEO_URL_TTL_SECONDS: u32 = 900;
 const TEMPLATE_VIDEO_LIST_TTL_SECONDS: u32 = 300;
 
 type HmacSha256 = Hmac<Sha256>;
+
+const PRESENTATION_VIEWER_TTL_MS: u64 = 15_000;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PresentationStateEnvelope {
+    pub(crate) session_id: String,
+    pub(crate) fullscreen: Option<serde_json::Value>,
+    pub(crate) lower_third: Option<serde_json::Value>,
+    pub(crate) updated_at: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PresentationViewerHeartbeat {
+    pub(crate) session_id: String,
+    pub(crate) viewer_id: String,
+}
+
+pub(crate) fn now_unix_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+pub(crate) fn presentation_viewer_count(session_id: &str) -> usize {
+    let registry = PRESENTATION_VIEWERS.get_or_init(|| Mutex::new(BTreeMap::new()));
+    let now = now_unix_millis();
+    let mut guard = match registry.lock() {
+        Ok(guard) => guard,
+        Err(_) => return 0,
+    };
+
+    if let Some(viewers) = guard.get_mut(session_id) {
+        viewers.retain(|_, seen_at| now.saturating_sub(*seen_at) <= PRESENTATION_VIEWER_TTL_MS);
+        let count = viewers.len();
+        if count == 0 {
+            guard.remove(session_id);
+        }
+        return count;
+    }
+
+    0
+}
 
 /// True if the directory contains the overlay HTML entrypoint(s).
 fn has_overlay_assets(dir: &std::path::Path) -> bool {
@@ -3659,6 +3709,266 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 continue;
             }
 
+            // API: Presentation state relay — GET returns current session state,
+            // POST updates it. Used by Presentation Console + presentation.html.
+            if clean == "api/presentation-state" {
+                let header = tiny_http::Header::from_bytes(
+                    "Content-Type",
+                    "application/json; charset=utf-8",
+                )
+                .unwrap();
+                let cors =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
+
+                if request.method() == &tiny_http::Method::Options {
+                    let resp = tiny_http::Response::from_string("")
+                        .with_header(tiny_http::Header::from_bytes(
+                            "Access-Control-Allow-Methods",
+                            "GET, POST, OPTIONS",
+                        )
+                        .unwrap())
+                        .with_header(tiny_http::Header::from_bytes(
+                            "Access-Control-Allow-Headers",
+                            "Content-Type",
+                        )
+                        .unwrap())
+                        .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                if request.method() == &tiny_http::Method::Post {
+                    let mut body = String::new();
+                    if request.as_reader().read_to_string(&mut body).is_err() {
+                        let resp =
+                            tiny_http::Response::from_string("Bad Request").with_status_code(400);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+
+                    match serde_json::from_str::<PresentationStateEnvelope>(&body) {
+                        Ok(mut payload) => {
+                            if payload.session_id.trim().is_empty() {
+                                let resp = tiny_http::Response::from_string(
+                                    r#"{"error":"sessionId is required"}"#,
+                                )
+                                .with_status_code(400)
+                                .with_header(header)
+                                .with_header(cors);
+                                let _ = request.respond(resp);
+                                continue;
+                            }
+
+                            if payload.updated_at == 0 {
+                                payload.updated_at = now_unix_millis();
+                            }
+                            let session_id = payload.session_id.clone();
+
+                            let state_store =
+                                PRESENTATION_STATE.get_or_init(|| Mutex::new(BTreeMap::new()));
+                            if let Ok(mut state) = state_store.lock() {
+                                state.insert(session_id.clone(), payload.clone());
+                            }
+                            presentation_remote::broadcast_presentation_state(&payload);
+
+                            let viewer_count = presentation_viewer_count(&session_id);
+                            let resp = tiny_http::Response::from_string(
+                                serde_json::json!({
+                                    "ok": true,
+                                    "viewerCount": viewer_count,
+                                })
+                                .to_string(),
+                            )
+                            .with_header(header)
+                            .with_header(cors);
+                            let _ = request.respond(resp);
+                        }
+                        Err(err) => {
+                            let resp = tiny_http::Response::from_string(
+                                serde_json::json!({
+                                    "error": format!("Invalid presentation state: {}", err),
+                                })
+                                .to_string(),
+                            )
+                            .with_status_code(400)
+                            .with_header(header)
+                            .with_header(cors);
+                            let _ = request.respond(resp);
+                        }
+                    }
+                    continue;
+                }
+
+                let session_id = if let Some(qpos) = url_path.find('?') {
+                    let qs = &url_path[qpos + 1..];
+                    qs.split('&')
+                        .find_map(|pair| {
+                            let (key, value) = pair.split_once('=')?;
+                            if key == "sessionId" {
+                                Some(urlencoding::decode(value).unwrap_or_default().into_owned())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_default()
+                } else {
+                    String::new()
+                };
+
+                if session_id.trim().is_empty() {
+                    let resp = tiny_http::Response::from_string(
+                        r#"{"error":"sessionId is required"}"#,
+                    )
+                    .with_status_code(400)
+                    .with_header(header)
+                    .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                let state_store = PRESENTATION_STATE.get_or_init(|| Mutex::new(BTreeMap::new()));
+                let state = state_store
+                    .lock()
+                    .ok()
+                    .and_then(|store| store.get(&session_id).cloned());
+                let viewer_count = presentation_viewer_count(&session_id);
+                let resp = tiny_http::Response::from_string(
+                    serde_json::json!({
+                        "state": state,
+                        "viewerCount": viewer_count,
+                    })
+                    .to_string(),
+                )
+                .with_header(header)
+                .with_header(cors);
+                let _ = request.respond(resp);
+                continue;
+            }
+
+            // API: Presentation viewer heartbeat — POST updates last-seen,
+            // GET returns current viewer count for a session.
+            if clean == "api/presentation-viewer" {
+                let header = tiny_http::Header::from_bytes(
+                    "Content-Type",
+                    "application/json; charset=utf-8",
+                )
+                .unwrap();
+                let cors =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
+
+                if request.method() == &tiny_http::Method::Options {
+                    let resp = tiny_http::Response::from_string("")
+                        .with_header(tiny_http::Header::from_bytes(
+                            "Access-Control-Allow-Methods",
+                            "GET, POST, OPTIONS",
+                        )
+                        .unwrap())
+                        .with_header(tiny_http::Header::from_bytes(
+                            "Access-Control-Allow-Headers",
+                            "Content-Type",
+                        )
+                        .unwrap())
+                        .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                if request.method() == &tiny_http::Method::Post {
+                    let mut body = String::new();
+                    if request.as_reader().read_to_string(&mut body).is_err() {
+                        let resp =
+                            tiny_http::Response::from_string("Bad Request").with_status_code(400);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+
+                    match serde_json::from_str::<PresentationViewerHeartbeat>(&body) {
+                        Ok(payload) => {
+                            if payload.session_id.trim().is_empty() || payload.viewer_id.trim().is_empty() {
+                                let resp = tiny_http::Response::from_string(
+                                    r#"{"error":"sessionId and viewerId are required"}"#,
+                                )
+                                .with_status_code(400)
+                                .with_header(header)
+                                .with_header(cors);
+                                let _ = request.respond(resp);
+                                continue;
+                            }
+
+                            let registry =
+                                PRESENTATION_VIEWERS.get_or_init(|| Mutex::new(BTreeMap::new()));
+                            if let Ok(mut viewers) = registry.lock() {
+                                let session = viewers
+                                    .entry(payload.session_id.clone())
+                                    .or_insert_with(BTreeMap::new);
+                                session.insert(payload.viewer_id, now_unix_millis());
+                            }
+
+                            let viewer_count = presentation_viewer_count(&payload.session_id);
+                            let resp = tiny_http::Response::from_string(
+                                serde_json::json!({
+                                    "ok": true,
+                                    "viewerCount": viewer_count,
+                                })
+                                .to_string(),
+                            )
+                            .with_header(header)
+                            .with_header(cors);
+                            let _ = request.respond(resp);
+                        }
+                        Err(err) => {
+                            let resp = tiny_http::Response::from_string(
+                                serde_json::json!({
+                                    "error": format!("Invalid viewer heartbeat: {}", err),
+                                })
+                                .to_string(),
+                            )
+                            .with_status_code(400)
+                            .with_header(header)
+                            .with_header(cors);
+                            let _ = request.respond(resp);
+                        }
+                    }
+                    continue;
+                }
+
+                let session_id = if let Some(qpos) = url_path.find('?') {
+                    let qs = &url_path[qpos + 1..];
+                    qs.split('&')
+                        .find_map(|pair| {
+                            let (key, value) = pair.split_once('=')?;
+                            if key == "sessionId" {
+                                Some(urlencoding::decode(value).unwrap_or_default().into_owned())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_default()
+                } else {
+                    String::new()
+                };
+
+                if session_id.trim().is_empty() {
+                    let resp = tiny_http::Response::from_string(
+                        r#"{"error":"sessionId is required"}"#,
+                    )
+                    .with_status_code(400)
+                    .with_header(header)
+                    .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                let viewer_count = presentation_viewer_count(&session_id);
+                let resp = tiny_http::Response::from_string(
+                    serde_json::json!({ "viewerCount": viewer_count }).to_string(),
+                )
+                .with_header(header)
+                .with_header(cors);
+                let _ = request.respond(resp);
+                continue;
+            }
+
             // API: Open URL in system default browser
             // POST /api/open-url  { "url": "https://..." }
             // Used by the OBS dock (CEF) to open links in the real browser.
@@ -4158,6 +4468,41 @@ async fn get_mobile_server_status() -> Result<serde_json::Value, String> {
     }))
 }
 
+/// Get the LAN-accessible presentation viewer URL and transport details.
+#[tauri::command]
+async fn get_presentation_remote_info(session_id: String) -> Result<serde_json::Value, String> {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return Err("sessionId is required".to_string());
+    }
+
+    let http_port = presentation_remote::http_port();
+    let ws_port = presentation_remote::ws_port();
+    if http_port == 0 {
+        return Err("Presentation viewer server is not running".to_string());
+    }
+
+    let encoded_session = urlencoding::encode(session_id);
+    let local_ip = get_local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
+    let local_link = format!(
+        "http://127.0.0.1:{}/presentation.html?sessionId={}&wsPort={}",
+        http_port, encoded_session, ws_port
+    );
+    let link = format!(
+        "http://{}:{}/presentation.html?sessionId={}&wsPort={}",
+        local_ip, http_port, encoded_session, ws_port
+    );
+
+    Ok(serde_json::json!({
+        "running": http_port > 0 && ws_port > 0,
+        "ip": local_ip,
+        "httpPort": http_port,
+        "wsPort": ws_port,
+        "link": link,
+        "localLink": local_link,
+    }))
+}
+
 /// Get local IP addresses (first non-loopback IPv4).
 fn get_local_ip() -> Option<String> {
     use std::net::UdpSocket;
@@ -4233,6 +4578,14 @@ pub fn run() {
             let port = start_overlay_server(serve_dir);
             println!("[Tauri] Overlay server started on port {}", port);
 
+            let presentation_uploads_dir = app_dir().ok().map(|dir| dir.join("uploads"));
+            let presentation_http_port =
+                presentation_remote::start_presentation_http_server(presentation_uploads_dir);
+            println!(
+                "[Tauri] Presentation viewer server started on port {}",
+                presentation_http_port
+            );
+
             app.manage(audio_capture::AudioCaptureState::default());
             app.manage(assemblyai_stream::AssemblyAiStreamState::default());
 
@@ -4249,6 +4602,13 @@ pub fn run() {
                 }
             });
             println!("[Tauri] Mobile companion server starting on port {}", mobile_port);
+
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = presentation_remote::start_presentation_ws_server(Some(8766)).await {
+                    eprintln!("[PresentationRemote] WebSocket server failed: {}", error);
+                }
+            });
+            println!("[Tauri] Presentation WebSocket server starting on port 8766");
 
             Ok(())
         })
@@ -4289,6 +4649,7 @@ pub fn run() {
             get_mobile_pairing_info,
             save_obs_connection_for_mobile,
             get_mobile_server_status,
+            get_presentation_remote_info,
             #[cfg(target_os = "macos")]
             app_icon::set_app_icon
         ])

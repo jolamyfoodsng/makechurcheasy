@@ -40,14 +40,20 @@ import Icon from "../DockIcon";
 import DockBottomToolbar from "../components/DockBottomToolbar";
 import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
 import { requireEntitlement } from "../dockEntitlement";
+import {
+  areQuickThemeSettingsEquivalent,
+  buildLinkedLowerThirdQuickThemeSettings,
+} from "../lowerThirdQuickSettings";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
 import { ALL_THEMES, type ThemeLike } from "../../lowerthirds/themes";
+import { normalizeCompareThemeSettings } from "../compareThemeConfig";
 
 interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
   productionDefaults: DockProductionModuleSettings;
+  isActive?: boolean;
   compactToolbar?: boolean;
 }
 
@@ -432,6 +438,7 @@ function sanitizeColor(value: unknown, fallback: string): string {
 }
 
 function extractQuickThemeSettings(settings: BibleThemeSettings): DockFullscreenQuickThemeSettings {
+  const compareSettings = normalizeCompareThemeSettings(settings as unknown as Record<string, unknown>);
   return {
     fontSize: clampNumber(settings.fontSize, 28, 200),
     fontFamily: settings.fontFamily || DEFAULT_THEME_SETTINGS.fontFamily || "",
@@ -474,8 +481,18 @@ function extractQuickThemeSettings(settings: BibleThemeSettings): DockFullscreen
     lowerThirdOffsetX: clampNumber(settings.lowerThirdOffsetX ?? 0, -50, 50),
     backgroundPattern: settings.backgroundPattern ?? "",
     lowerThirdCaptionPosition: settings.lowerThirdCaptionPosition || "bottom",
-    compareTranslationWidth: clampNumber(settings.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth, 30, 50),
-    compareTranslationGap: clampNumber(settings.compareTranslationGap ?? DEFAULT_THEME_SETTINGS.compareTranslationGap, 0, 200),
+    compareTranslationWidth: compareSettings.compareLeftWidth,
+    ...compareSettings,
+  };
+}
+
+function buildDefaultLowerThirdQuickThemeSettings(
+  settings: BibleThemeSettings,
+  backgroundType?: DockFullscreenQuickThemeSettings["backgroundType"],
+): DockFullscreenQuickThemeSettings {
+  return {
+    ...extractQuickThemeSettings(settings),
+    backgroundType: backgroundType ?? "theme",
   };
 }
 
@@ -508,6 +525,7 @@ function sanitizeQuickThemeSettings(
   const animation = validAnimations.includes(source.animation as typeof validAnimations[number])
     ? source.animation as typeof validAnimations[number]
     : DEFAULT_THEME_SETTINGS.animation;
+  const compareSettings = normalizeCompareThemeSettings(source as Record<string, unknown>);
 
   return {
     fontSize: clampNumber(Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize), 28, 200),
@@ -601,16 +619,9 @@ function sanitizeQuickThemeSettings(
       source.lowerThirdCaptionPosition === "top" || source.lowerThirdCaptionPosition === "bottom"
         ? source.lowerThirdCaptionPosition
         : "bottom",
-    compareTranslationWidth: clampNumber(
-      Number(source.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth),
-      30,
-      50,
-    ),
-    compareTranslationGap: clampNumber(
-      Number(source.compareTranslationGap ?? DEFAULT_THEME_SETTINGS.compareTranslationGap),
-      0,
-      200,
-    ),
+    compareTranslationWidth: compareSettings.compareLeftWidth,
+    backgroundType: source.backgroundType,
+    ...compareSettings,
   };
 }
 
@@ -619,6 +630,25 @@ function applyQuickThemeSettings(
   quickSettings: DockFullscreenQuickThemeSettings | null,
 ): BibleTheme {
   if (!quickSettings) return theme;
+  const bgType = quickSettings.backgroundType
+    ?? (quickSettings.backgroundVideo
+      ? "video"
+      : quickSettings.backgroundImage
+        ? "image"
+        : quickSettings.backgroundPattern
+          ? "pattern"
+          : quickSettings.backgroundColor && quickSettings.backgroundColor !== "transparent"
+            ? "color"
+            : "theme");
+  const useThemeBg = bgType === "theme";
+  const useNoBg = bgType === "off";
+  const useColorBg = bgType === "color";
+  const useCustomBg = bgType !== "theme" && bgType !== "off";
+  const effectiveShadeOpacity =
+    useCustomBg && quickSettings.fullscreenShadeOpacity >= 1
+      ? 0.42
+      : quickSettings.fullscreenShadeOpacity;
+  const compareSettings = normalizeCompareThemeSettings(quickSettings as Record<string, unknown>);
   return {
     ...theme,
     settings: {
@@ -628,25 +658,37 @@ function applyQuickThemeSettings(
       fontColor: quickSettings.fontColor,
       refFontColor: quickSettings.refFontColor,
       fullscreenShadeColor: quickSettings.fullscreenShadeColor,
-      fullscreenShadeOpacity: quickSettings.fullscreenShadeOpacity,
-      fullscreenShadeEnabled: quickSettings.fullscreenShadeOpacity > 0,
+      fullscreenShadeOpacity: effectiveShadeOpacity,
+      fullscreenShadeEnabled: effectiveShadeOpacity > 0,
       textAlign: quickSettings.textAlign,
       lineHeight: quickSettings.lineHeight,
       fontWeight: quickSettings.fontWeight,
-      refFontWeight: quickSettings.fontWeight,
+      refFontWeight: quickSettings.refFontWeight,
       textTransform: quickSettings.textTransform,
       textShadow: quickSettings.textShadow,
       animation: quickSettings.animation,
       animationDuration: quickSettings.animationDuration,
-      backgroundPattern: quickSettings.backgroundPattern,
-      backgroundImage: quickSettings.backgroundImage,
-      backgroundImageFilePath: quickSettings.backgroundImageFilePath,
-      backgroundVideo: quickSettings.backgroundVideo,
-      backgroundVideoFilePath: quickSettings.backgroundVideoFilePath,
-      backgroundOpacity: quickSettings.backgroundOpacity,
-      backgroundColor: quickSettings.backgroundColor,
-      backgroundColorEnd: quickSettings.backgroundColorEnd,
-      bgGradientAngle: quickSettings.bgGradientAngle,
+      backgroundPattern: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundPattern ?? "") : quickSettings.backgroundPattern,
+      backgroundImage: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImage ?? "") : quickSettings.backgroundImage,
+      backgroundImageFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImageFilePath ?? "") : quickSettings.backgroundImageFilePath,
+      backgroundVideo: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideo ?? "") : quickSettings.backgroundVideo,
+      backgroundVideoFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideoFilePath ?? "") : quickSettings.backgroundVideoFilePath,
+      backgroundOpacity: useNoBg ? 0 : useThemeBg ? (theme.settings.backgroundOpacity ?? 1) : quickSettings.backgroundOpacity,
+      backgroundColor: useNoBg
+        ? "transparent"
+        : useThemeBg
+          ? (theme.settings.backgroundColor || "#0B1426")
+          : useColorBg
+            ? (quickSettings.backgroundColor || "#0B1426")
+            : (quickSettings.backgroundColor || "transparent"),
+      backgroundColorEnd: useNoBg
+        ? "transparent"
+        : useThemeBg
+          ? (theme.settings.backgroundColorEnd || "#162040")
+          : useColorBg
+            ? (quickSettings.backgroundColorEnd || "#162040")
+            : (quickSettings.backgroundColorEnd || ""),
+      bgGradientAngle: useThemeBg ? (theme.settings.bgGradientAngle ?? 180) : quickSettings.bgGradientAngle,
       referenceBackgroundEnabled: quickSettings.referenceBackgroundEnabled,
       referenceBackgroundColor: quickSettings.referenceBackgroundColor,
       referenceBackgroundStyle: quickSettings.referenceBackgroundStyle,
@@ -655,6 +697,7 @@ function applyQuickThemeSettings(
       lowerThirdSize: quickSettings.lowerThirdSize,
       lowerThirdWidthPreset: quickSettings.lowerThirdWidthPreset,
       lowerThirdOffsetX: quickSettings.lowerThirdOffsetX,
+      ...compareSettings,
     },
   };
 }
@@ -681,7 +724,7 @@ function fuzzyMatch(query: string, target: string): boolean {
   return qi === q.length;
 }
 
-export default function DockWorshipTab({ staged, onStage, productionDefaults, compactToolbar }: Props) {
+export default function DockWorshipTab({ staged, onStage, productionDefaults, isActive = true, compactToolbar }: Props) {
   const { t } = useTranslation();
   const [songs, setSongs] = useState<DockSong[]>([]);
   const rawSongsRef = useRef<DockSong[]>([]);
@@ -774,12 +817,15 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
   const [savingSong, setSavingSong] = useState(false);
   const [toasts, setToasts] = useState<DockToast[]>([]);
   const toastTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const selectedFSThemeRef = useRef<BibleTheme>(productionDefaults.fullscreenTheme ?? BUILTIN_THEMES[0]);
+  const selectedLTThemeRef = useRef<BibleTheme>(productionDefaults.lowerThirdTheme ?? BUILTIN_THEMES[0]);
   const searchRef = useRef<HTMLDivElement>(null);
   const lineCountPopoverRef = useRef<HTMLDivElement>(null);
   const prefsReadyRef = useRef(false);
   const suppressAutoProjectionRef = useRef(true);
   const suppressAutoProjectionTimerRef = useRef<number | null>(null);
   const songsPollBusyRef = useRef(false);
+  const liveSectionRequestIdRef = useRef(0);
 
   const selectedSongSections = useMemo(
     () => (selectedSong ? parseLyricSections(selectedSong.lyrics, linesPerSlide, selectedSong.autoSplit ?? false) : []),
@@ -917,19 +963,21 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
       const storedFullscreenQuickSettings = sanitizeQuickThemeSettings(
         prefs.fullscreenQuickThemeSettings,
       );
-      const storedLowerThirdQuickSettings = sanitizeQuickThemeSettings(
+      const rawStoredLowerThirdQuickSettings = sanitizeQuickThemeSettings(
         prefs.lowerThirdQuickThemeSettings,
       );
+      const storedLowerThirdQuickSettings =
+        areQuickThemeSettingsEquivalent(storedFullscreenQuickSettings, rawStoredLowerThirdQuickSettings)
+          ? null
+          : rawStoredLowerThirdQuickSettings;
       const storedLowerThirdLinked =
         typeof prefs.lowerThirdQuickThemeSettingsLinkedToFullscreen === "boolean"
           ? prefs.lowerThirdQuickThemeSettingsLinkedToFullscreen
           : storedLowerThirdQuickSettings == null;
       setSavedFullscreenQuickThemeSettings(storedFullscreenQuickSettings);
       setFullscreenQuickThemeSettings(storedFullscreenQuickSettings);
-      setSavedLowerThirdQuickThemeSettings(storedLowerThirdQuickSettings);
-      setLowerThirdQuickThemeSettings(
-        storedLowerThirdLinked ? (storedFullscreenQuickSettings ?? storedLowerThirdQuickSettings) : storedLowerThirdQuickSettings,
-      );
+      setSavedLowerThirdQuickThemeSettings(storedLowerThirdLinked ? null : storedLowerThirdQuickSettings);
+      setLowerThirdQuickThemeSettings(storedLowerThirdLinked ? null : storedLowerThirdQuickSettings);
       setLowerThirdQuickThemeSettingsLinkedToFullscreen(storedLowerThirdLinked);
 
       const allFavorites = await loadDockFavoriteBibleThemes();
@@ -1040,7 +1088,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     if (!allowJsonFallback) return;
 
     // Wait briefly for BroadcastChannel response before falling back to JSON
-    await new Promise((r) => setTimeout(r, 800));
+    await new Promise((r) => setTimeout(r, 250));
 
     // If BroadcastChannel already delivered songs, skip the JSON fallback
     // to avoid overwriting the plan-limited list with the full unfiltered set
@@ -1106,13 +1154,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
 
   // Fallback polling: refresh songs every 30s in case event-based sync fails
   useEffect(() => {
+    if (!isActive) return;
     const interval = setInterval(() => {
       if (songsPollBusyRef.current) return;
       songsPollBusyRef.current = true;
       void loadSongs(false).finally(() => { songsPollBusyRef.current = false; });
     }, 30_000);
     return () => clearInterval(interval);
-  }, [loadSongs]);
+  }, [isActive, loadSongs]);
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
@@ -1202,28 +1251,76 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     return locked;
   }, [songs, songLimit]);
 
+  const baseFullscreenTheme = useMemo(() => {
+    const variant = selectedFSTheme.variants?.fullscreen;
+    return variant
+      ? { ...selectedFSTheme, settings: variant.settings, rawTemplate: variant.rawTemplate }
+      : selectedFSTheme;
+  }, [selectedFSTheme]);
+  const baseLowerThirdTheme = useMemo(() => {
+    const variant = selectedLTTheme.variants?.lowerThird;
+    return variant
+      ? { ...selectedLTTheme, settings: variant.settings, rawTemplate: variant.rawTemplate }
+      : selectedLTTheme;
+  }, [selectedLTTheme]);
+
   const effectiveSelectedFSTheme = useMemo(
-    () => applyQuickThemeSettings(selectedFSTheme, fullscreenQuickThemeSettings),
-    [fullscreenQuickThemeSettings, selectedFSTheme],
+    () => applyQuickThemeSettings(baseFullscreenTheme, fullscreenQuickThemeSettings),
+    [baseFullscreenTheme, fullscreenQuickThemeSettings],
   );
-  // Lower-third theme — uses fullscreen settings as base, LT overrides on top.
+  const defaultLowerThirdQuickThemeSettings = useMemo(
+    () => buildDefaultLowerThirdQuickThemeSettings(baseLowerThirdTheme.settings, "theme"),
+    [baseLowerThirdTheme.settings],
+  );
+  const effectiveLowerThirdQuickThemeSettings = useMemo(() => {
+    if (lowerThirdQuickThemeSettingsLinkedToFullscreen) {
+      return buildLinkedLowerThirdQuickThemeSettings(
+        defaultLowerThirdQuickThemeSettings,
+        fullscreenQuickThemeSettings,
+      );
+    }
+
+    return lowerThirdQuickThemeSettings ?? defaultLowerThirdQuickThemeSettings;
+  }, [
+    defaultLowerThirdQuickThemeSettings,
+    fullscreenQuickThemeSettings,
+    lowerThirdQuickThemeSettings,
+    lowerThirdQuickThemeSettingsLinkedToFullscreen,
+  ]);
   const effectiveSelectedLTTheme = useMemo(() => {
-    const mergedQuickSettings = { ...fullscreenQuickThemeSettings, ...lowerThirdQuickThemeSettings } as DockFullscreenQuickThemeSettings;
-    return applyQuickThemeSettings(selectedLTTheme, mergedQuickSettings);
-  }, [fullscreenQuickThemeSettings, lowerThirdQuickThemeSettings, selectedLTTheme]);
+    return applyQuickThemeSettings(baseLowerThirdTheme, effectiveLowerThirdQuickThemeSettings);
+  }, [baseLowerThirdTheme, effectiveLowerThirdQuickThemeSettings]);
   const activeFullscreenQuickThemeSettings = useMemo(
-    () => extractQuickThemeSettings(effectiveSelectedFSTheme.settings),
-    [effectiveSelectedFSTheme.settings],
+    () => ({
+      ...extractQuickThemeSettings(effectiveSelectedFSTheme.settings),
+      backgroundType: fullscreenQuickThemeSettings?.backgroundType ?? "theme",
+    }),
+    [effectiveSelectedFSTheme.settings, fullscreenQuickThemeSettings?.backgroundType],
+  );
+  const defaultFullscreenQuickThemeSettings = useMemo(
+    () => ({
+      ...extractQuickThemeSettings(baseFullscreenTheme.settings),
+      backgroundType: "theme" as const,
+    }),
+    [baseFullscreenTheme.settings],
   );
   const activeLowerThirdQuickThemeSettings = useMemo(
-    () => extractQuickThemeSettings(effectiveSelectedLTTheme.settings),
-    [effectiveSelectedLTTheme.settings],
+    () => ({
+      ...extractQuickThemeSettings(effectiveSelectedLTTheme.settings),
+      backgroundType: effectiveLowerThirdQuickThemeSettings.backgroundType ?? "theme",
+    }),
+    [
+      effectiveLowerThirdQuickThemeSettings.backgroundType,
+      effectiveSelectedLTTheme.settings,
+    ],
   );
   const handleSelectFSTheme = useCallback((theme: BibleTheme) => {
     setSelectedFSTheme(theme);
+    selectedFSThemeRef.current = theme;
   }, []);
   const handleSelectLTTheme = useCallback((theme: BibleTheme) => {
     setSelectedLTTheme(theme);
+    selectedLTThemeRef.current = theme;
   }, []);
   const activeThemePickerProps = overlayMode === "fullscreen"
     ? { selectedThemeId: selectedFSTheme.id, onSelect: handleSelectFSTheme }
@@ -1233,8 +1330,21 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
       ? theme.variants?.lowerThird
       : theme.variants?.fullscreen;
     const themeSettings = variant?.settings ?? theme.settings;
-    return extractQuickThemeSettings(themeSettings);
+    return overlayMode === "lower-third"
+      ? buildDefaultLowerThirdQuickThemeSettings(themeSettings, "theme")
+      : {
+        ...extractQuickThemeSettings(themeSettings),
+        backgroundType: "theme",
+      };
   }, [overlayMode]);
+
+  useEffect(() => {
+    selectedFSThemeRef.current = selectedFSTheme;
+  }, [selectedFSTheme]);
+
+  useEffect(() => {
+    selectedLTThemeRef.current = selectedLTTheme;
+  }, [selectedLTTheme]);
 
   const buildSectionPayload = useCallback(
     (idx: number, options?: { backgroundOnly?: boolean }) => {
@@ -1309,6 +1419,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     async (idx: number, options?: { backgroundOnly?: boolean }) => {
       const payload = buildSectionPayload(idx, options);
       if (!payload) return;
+      const requestId = ++liveSectionRequestIdRef.current;
 
       setActionError("");
       setSelectedIdx(idx);
@@ -1321,12 +1432,19 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
       } catch {
         return;
       }
+      if (requestId !== liveSectionRequestIdRef.current) return;
 
       try {
-        await dockObsClient.pushWorshipLyrics(payload.obsData);
+        if (payload.obsData.overlayMode === "lower-third") {
+          await dockObsClient.pushWorshipOverlayFast(payload.obsData);
+        } else {
+          await dockObsClient.pushWorshipLyrics(payload.obsData);
+        }
+        if (requestId !== liveSectionRequestIdRef.current) return;
         track("song_presented");
         trackWorshipSongPresented();
       } catch (err) {
+        if (requestId !== liveSectionRequestIdRef.current) return;
         const message = err instanceof Error ? err.message : String(err);
         const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
         if (!isTransient) {
@@ -1569,7 +1687,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
 
   const handleSaveSongEditor = useCallback(async () => {
     if (!songEditor) return;
-    if (!(await requireEntitlement("songs", rawSongsRef.current.length))) return;
     setSavingSong(true);
     setActionError("");
     try {
@@ -1798,6 +1915,164 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
     if (visibleIdx !== null && visibleSectionIndexes.includes(visibleIdx)) return visibleIdx;
     return visibleSectionIndexes[0] ?? null;
   }, [visibleIdx, selectedIdx, selectedSong, visibleSectionIndexes]);
+
+  const pushActiveContentWithThemeSettings = useCallback(async (
+    nextFullscreenQuickThemeSettings: DockFullscreenQuickThemeSettings | null | undefined,
+    nextLowerThirdQuickThemeSettings: DockFullscreenQuickThemeSettings | null | undefined,
+    nextLowerThirdQuickThemeSettingsLinkedToFullscreen = lowerThirdQuickThemeSettingsLinkedToFullscreen,
+  ) => {
+    const fullscreenTheme = selectedFSThemeRef.current;
+    const lowerThirdTheme = selectedLTThemeRef.current;
+    const fullscreenVariant = fullscreenTheme.variants?.fullscreen;
+    const lowerThirdVariant = lowerThirdTheme.variants?.lowerThird;
+    const fullscreenBaseTheme = fullscreenVariant
+      ? { ...fullscreenTheme, settings: fullscreenVariant.settings, rawTemplate: fullscreenVariant.rawTemplate }
+      : fullscreenTheme;
+    const lowerThirdBaseTheme = lowerThirdVariant
+      ? { ...lowerThirdTheme, settings: lowerThirdVariant.settings, rawTemplate: lowerThirdVariant.rawTemplate }
+      : lowerThirdTheme;
+    const effectiveFullscreenTheme = applyQuickThemeSettings(fullscreenBaseTheme, nextFullscreenQuickThemeSettings ?? null);
+    const defaultLowerThirdSettings = buildDefaultLowerThirdQuickThemeSettings(lowerThirdBaseTheme.settings, "theme");
+    const effectiveLowerThirdTheme = applyQuickThemeSettings(
+      lowerThirdBaseTheme,
+      nextLowerThirdQuickThemeSettingsLinkedToFullscreen
+        ? buildLinkedLowerThirdQuickThemeSettings(defaultLowerThirdSettings, nextFullscreenQuickThemeSettings)
+        : (nextLowerThirdQuickThemeSettings ?? defaultLowerThirdSettings),
+    );
+
+    if (openedAnnouncement && activeAnnouncementIndex !== null) {
+      const section = announcementSections[activeAnnouncementIndex];
+      if (!section || !openedAnnouncement) return;
+
+      const theme = overlayMode === "fullscreen" ? effectiveFullscreenTheme : effectiveLowerThirdTheme;
+      const sectionLabel = section.label || openedAnnouncement.title;
+
+      if (openedAnnouncement.obsThemeId && overlayMode === "lower-third") {
+        const customTheme = ALL_THEMES.find((entry) => entry.id === openedAnnouncement.obsThemeId);
+        if (customTheme?.html && customTheme?.css) {
+          await ensureObsConnected();
+          await dockObsClient.pushAnnouncement({
+            sectionText: section.text,
+            sectionLabel,
+            songTitle: openedAnnouncement.title,
+            overlayMode: "lower-third",
+            ltTheme: { id: customTheme.id, html: customTheme.html, css: customTheme.css },
+            values: buildAnnouncementValues(openedAnnouncement),
+            bibleThemeSettings: null,
+            liveOverrides: null,
+            backgroundOnly: false,
+          });
+          return;
+        }
+      }
+
+      await ensureObsConnected();
+      await dockObsClient.pushAnnouncement({
+        sectionText: section.text,
+        sectionLabel,
+        songTitle: openedAnnouncement.title,
+        overlayMode,
+        bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
+        liveOverrides: null,
+        backgroundOnly: false,
+      });
+      return;
+    }
+
+    if (!selectedSong || activeSectionIndex === null) return;
+    const section = selectedSongSections[activeSectionIndex];
+    if (!section) return;
+
+    const theme = overlayMode === "fullscreen" ? effectiveFullscreenTheme : effectiveLowerThirdTheme;
+    await ensureObsConnected();
+    const obsData = {
+      sectionText: section.text,
+      sectionLabel: cleanWorshipSectionLabel(section.label),
+      songTitle: selectedSong.title,
+      artist: selectedSong.artist,
+      overlayMode,
+      bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
+      liveOverrides: null,
+      backgroundOnly: showWorshipBackgroundOnly,
+    };
+    if (overlayMode === "lower-third") {
+      await dockObsClient.pushWorshipOverlayFast(obsData);
+      return;
+    }
+    await dockObsClient.pushWorshipLyrics(obsData);
+  }, [
+    activeAnnouncementIndex,
+    activeSectionIndex,
+    announcementSections,
+    lowerThirdQuickThemeSettingsLinkedToFullscreen,
+    openedAnnouncement,
+    overlayMode,
+    selectedSong,
+    selectedSongSections,
+    showWorshipBackgroundOnly,
+  ]);
+
+  const handleSaveFullscreenQuickThemeSettings = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
+    const nextSavedSettings = { ...nextSettings };
+    setSavedFullscreenQuickThemeSettings(nextSavedSettings);
+    setFullscreenQuickThemeSettings(nextSavedSettings);
+    if (lowerThirdQuickThemeSettingsLinkedToFullscreen) {
+      setSavedLowerThirdQuickThemeSettings(null);
+      setLowerThirdQuickThemeSettings(null);
+    }
+    void pushActiveContentWithThemeSettings(
+      nextSavedSettings,
+      lowerThirdQuickThemeSettingsLinkedToFullscreen
+        ? null
+        : lowerThirdQuickThemeSettings,
+      lowerThirdQuickThemeSettingsLinkedToFullscreen,
+    ).catch((err) => {
+      console.warn("[DockWorshipTab] Save fullscreen quick settings push failed:", err);
+    });
+  }, [lowerThirdQuickThemeSettings, lowerThirdQuickThemeSettingsLinkedToFullscreen, pushActiveContentWithThemeSettings]);
+
+  const handlePreviewFullscreenQuickThemeSettings = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
+    const nextPreviewSettings = { ...nextSettings };
+    setFullscreenQuickThemeSettings(nextPreviewSettings);
+    if (lowerThirdQuickThemeSettingsLinkedToFullscreen) {
+      setLowerThirdQuickThemeSettings(null);
+    }
+    void pushActiveContentWithThemeSettings(
+      nextPreviewSettings,
+      lowerThirdQuickThemeSettingsLinkedToFullscreen
+        ? null
+        : lowerThirdQuickThemeSettings,
+      lowerThirdQuickThemeSettingsLinkedToFullscreen,
+    ).catch((err) => {
+      console.warn("[DockWorshipTab] Preview fullscreen quick settings push failed:", err);
+    });
+  }, [lowerThirdQuickThemeSettings, lowerThirdQuickThemeSettingsLinkedToFullscreen, pushActiveContentWithThemeSettings]);
+
+  const handleSaveLowerThirdQuickThemeSettings = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
+    const nextSavedSettings = { ...nextSettings };
+    setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
+    setSavedLowerThirdQuickThemeSettings(nextSavedSettings);
+    setLowerThirdQuickThemeSettings(nextSavedSettings);
+    void pushActiveContentWithThemeSettings(
+      fullscreenQuickThemeSettings,
+      nextSavedSettings,
+      false,
+    ).catch((err) => {
+      console.warn("[DockWorshipTab] Save lower-third quick settings push failed:", err);
+    });
+  }, [fullscreenQuickThemeSettings, pushActiveContentWithThemeSettings]);
+
+  const handlePreviewLowerThirdQuickThemeSettings = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
+    setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
+    setLowerThirdQuickThemeSettings({ ...nextSettings });
+    void pushActiveContentWithThemeSettings(
+      fullscreenQuickThemeSettings,
+      nextSettings,
+      false,
+    ).catch((err) => {
+      console.warn("[DockWorshipTab] Preview lower-third quick settings push failed:", err);
+    });
+  }, [fullscreenQuickThemeSettings, pushActiveContentWithThemeSettings]);
 
 
   const handleSelectSong = useCallback((song: DockSong) => {
@@ -2134,7 +2409,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
       backgroundOnly: showWorshipBackgroundOnly,
     };
     ensureObsConnected()
-      .then(() => dockObsClient.pushWorshipLyrics(obsData))
+      .then(() => dockObsClient.pushWorshipOverlayFast(obsData))
       .catch((err) => {
         console.warn("[DockWorshipTab] Lower-third auto-push on quick settings change failed:", err);
       });
@@ -3208,40 +3483,27 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, co
         allowedCategories={["worship", "general"]}
         quickSettings={
           overlayMode === "fullscreen"
-            ? savedFullscreenQuickThemeSettings ?? extractQuickThemeSettings(effectiveSelectedFSTheme.settings)
-            : savedLowerThirdQuickThemeSettings ?? activeLowerThirdQuickThemeSettings
+            ? activeFullscreenQuickThemeSettings
+            : activeLowerThirdQuickThemeSettings
         }
         defaultQuickSettings={
           overlayMode === "fullscreen"
-            ? extractQuickThemeSettings(effectiveSelectedFSTheme.settings)
-            : activeLowerThirdQuickThemeSettings
+            ? defaultFullscreenQuickThemeSettings
+            : defaultLowerThirdQuickThemeSettings
         }
         onQuickSettingsSave={(next) => {
           if (overlayMode === "fullscreen") {
-            setSavedFullscreenQuickThemeSettings(next);
-            setFullscreenQuickThemeSettings(next);
+            handleSaveFullscreenQuickThemeSettings(next);
           } else {
-            setSavedLowerThirdQuickThemeSettings(next);
-            setLowerThirdQuickThemeSettings(next);
+            handleSaveLowerThirdQuickThemeSettings(next);
           }
         }}
         onQuickSettingsChange={(next) => {
           if (overlayMode === "fullscreen") {
-            setFullscreenQuickThemeSettings(next);
+            handlePreviewFullscreenQuickThemeSettings(next);
           } else {
-            setLowerThirdQuickThemeSettings(next);
+            handlePreviewLowerThirdQuickThemeSettings(next);
           }
-          // Live preview: restage current content so OBS receives updated CSS
-          // (best-effort, non-blocking).
-          try {
-            requestAnimationFrame(() => {
-              if (openedAnnouncement && activeAnnouncementIndex !== null) {
-                void restageAnnouncementCurrent();
-                return;
-              }
-              void restageCurrent();
-            });
-          } catch { /* ignore */ }
         }}
         resolveThemeQuickSettings={resolveThemeQuickSettings}
         title={t('worship.quickEdits')}

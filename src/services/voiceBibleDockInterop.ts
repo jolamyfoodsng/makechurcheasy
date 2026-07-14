@@ -87,6 +87,24 @@ export async function loadVoiceBibleDockState(
   baseUrl = getOverlayBaseUrlSync(),
 ): Promise<VoiceBibleDockStateEnvelope | null> {
   try {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const raw = await invoke<string>("load_dock_data", {
+        name: VOICE_BIBLE_DOCK_STATE_NAME,
+      });
+      if (raw?.trim()) {
+        const parsed = parseJson<VoiceBibleDockStateEnvelope>(raw);
+        if (parsed) {
+          voiceBibleStateMissingUntil = 0;
+          return parsed;
+        }
+      }
+      // No local state stored yet — avoid noisy network 404s in the desktop dock.
+      return null;
+    } catch {
+      // OBS browser dock / non-Tauri context — fall through to overlay-server fetch.
+    }
+
     if (Date.now() < voiceBibleStateMissingUntil) return null;
     const response = await fetch(
       `${baseUrl}/uploads/${VOICE_BIBLE_DOCK_STATE_NAME}.json?_=${Date.now()}`,

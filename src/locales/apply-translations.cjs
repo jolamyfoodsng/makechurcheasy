@@ -6,8 +6,8 @@
  *   node apply-translations.cjs <scope> <locale> <translations-json-file>
  *
  * Examples:
- *   node apply-translations.cjs es-ES /tmp/es-translations.json
- *   node apply-translations.cjs dock fr-FR /tmp/fr-dock-translations.json
+ *   node apply-translations.cjs es /tmp/es-translations.json
+ *   node apply-translations.cjs dock fr /tmp/fr-dock-translations.json
  * 
  * The translations JSON should be an object like: { "mvSettings.page.title": "Título", ... }
  * Keys not present in the translations file will be left unchanged (English fallback).

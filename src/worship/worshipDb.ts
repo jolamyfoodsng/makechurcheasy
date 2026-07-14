@@ -51,6 +51,50 @@ export interface SaveSongsBatchOptions extends SaveSongOptions {
   onProgress?: (saved: number, total: number) => void;
 }
 
+async function assertCanCreateSongs(additionalCount: number): Promise<void> {
+  if (additionalCount <= 0) return;
+
+  const [{ getCurrentUser }, { getEffectivePlan }, { checkEntitlementSync }] = await Promise.all([
+    import("../services/authService"),
+    import("../services/licenseService"),
+    import("../services/entitlementClient"),
+  ]);
+
+  const user = getCurrentUser();
+  if (!user) return;
+
+  const plan = getEffectivePlan(user);
+  const currentCount = (await getAllSongs()).length;
+  const result = checkEntitlementSync("songs", plan, currentCount);
+  const limit = result.limit;
+
+  if (limit === -1 || limit === Infinity) return;
+  if (currentCount + additionalCount <= limit) return;
+
+  throw new Error(
+    `Song limit reached. Your ${plan} plan allows up to ${limit} songs. Upgrade to add more.`,
+  );
+}
+
+async function assertCanBulkImportSongs(): Promise<void> {
+  const [{ getCurrentUser }, { getEffectivePlan }, { checkEntitlementSync }] = await Promise.all([
+    import("../services/authService"),
+    import("../services/licenseService"),
+    import("../services/entitlementClient"),
+  ]);
+
+  const user = getCurrentUser();
+  if (!user) return;
+
+  const plan = getEffectivePlan(user);
+  const result = checkEntitlementSync("massImport", plan);
+  if (result.allowed) return;
+
+  throw new Error(
+    result.reason || "Bulk import requires Growth plan or an active free trial.",
+  );
+}
+
 function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
@@ -145,6 +189,11 @@ export async function getSong(id: string): Promise<Song | undefined> {
 /** Create or update a song — auto-injects userId for the current user */
 export async function saveSong(song: Song, options: SaveSongOptions = {}): Promise<void> {
   const db = await getDb();
+  const existing = await db.get("songs", song.id) as Song | undefined;
+  if (!existing && !isSongArchived(song)) {
+    await assertCanCreateSongs(1);
+  }
+
   const uid = getCurrentUserId();
   const tagged = uid ? { ...song, userId: uid } : song;
   await db.put("songs", tagged);
@@ -156,6 +205,9 @@ export async function saveSong(song: Song, options: SaveSongOptions = {}): Promi
 /** Create or update many songs in one transaction, then notify once. */
 export async function saveSongsBatch(songs: Song[], options: SaveSongsBatchOptions = {}): Promise<void> {
   if (songs.length === 0) return;
+
+  await assertCanBulkImportSongs();
+  await assertCanCreateSongs(songs.filter((song) => !isSongArchived(song)).length);
 
   const db = await getDb();
   const uid = getCurrentUserId();

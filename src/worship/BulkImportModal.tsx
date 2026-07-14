@@ -7,6 +7,10 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import Icon from "../components/Icon";
+import { UpgradeModal } from "../components/UpgradeModal";
+import { useAuth } from "../contexts/AuthContext";
+import { checkEntitlementSync } from "../services/entitlementClient";
+import { getEffectivePlan } from "../services/licenseService";
 import { processDocumentViaApi, processFileViaUpload } from "./bulkImportAiService";
 
 import {
@@ -15,6 +19,7 @@ import {
   formatDraftLyrics,
   importSmartSongs,
 } from "./smartImportService";
+import { assessExtractedTextQuality, extractTextFromFile, getFileTypeLabel } from "./bulkImportService";
 import type {
   SmartImportSectionDraft,
   SmartImportSectionType,
@@ -127,6 +132,9 @@ function splitSectionDraft(section: SmartImportSectionDraft): SmartImportSection
 }
 
 export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
+  const { user } = useAuth();
+  const effectivePlan = getEffectivePlan(user);
+  const importAccess = checkEntitlementSync("massImport", effectivePlan);
   const [step, setStep] = useState<Step>("pick");
   const [rawText, setRawText] = useState("");
   const [fileName, setFileName] = useState("");
@@ -142,6 +150,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
   const [error, setError] = useState("");
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ imported: 0, total: 0 });
+  const [processingLabel, setProcessingLabel] = useState("");
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -172,6 +181,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
     () => reviewSongs.filter((song) => selectedSongIds.has(song.id)),
     [reviewSongs, selectedSongIds],
   );
+  const selectedSongCount = selectedSongIds.size;
 
   const textStats = useMemo(() => {
     if (!rawText.trim()) return null;
@@ -185,6 +195,10 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
   const extractPreview = useMemo(
     () => (rawText.trim() ? buildExtractPreview(rawText) : null),
     [rawText],
+  );
+  const activeSongWordCount = useMemo(
+    () => (activeSong ? wordCount(formatDraftLyrics(activeSong)) : 0),
+    [activeSong],
   );
 
   const handleKeyDown = useCallback(
@@ -215,13 +229,33 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
   const handleFile = useCallback(async (file: File) => {
     setError("");
     setProcessing(true);
+    setProcessingLabel("Extracting text locally…");
+
+    const nextFileType = getFileTypeLabel(file.name);
 
     try {
-      const result = await processFileViaUpload(file);
+      const extractedText = await extractTextFromFile(file).catch(() => "");
+      const extractionQuality = assessExtractedTextQuality(extractedText);
+
+      if (extractionQuality.usable) {
+        goToExtract(extractedText, file.name, nextFileType);
+        return;
+      }
+
+      setFileName(file.name);
+      setFileType(nextFileType);
+      setProcessingLabel("Local extraction looked incomplete. Running OCR and AI…");
+
+      const result = await processFileViaUpload(file, (_progress, label) => {
+        const nextLabel = label?.trim() || "Running OCR and AI on the full document…";
+        setProcessingLabel(nextLabel);
+      });
 
       setReviewSongs(result.songs);
       setSelectedSongIds(new Set(result.songs.map((song) => song.id)));
       setActiveSongId(result.songs[0]?.id ?? "");
+      setFileName(file.name);
+      setFileType(nextFileType);
       setStep("review");
 
       if (result.needsReview && result.warnings.length > 0) {
@@ -230,9 +264,10 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
     } catch (nextError) {
       setError(`Import failed: ${nextError instanceof Error ? nextError.message : String(nextError)}`);
     } finally {
+      setProcessingLabel("");
       setProcessing(false);
     }
-  }, []);
+  }, [goToExtract]);
 
   const handleFileInput = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -458,6 +493,19 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
 
   const canClose = !processing && !importing;
 
+  if (!importAccess.allowed) {
+    return (
+      <UpgradeModal
+        open
+        onClose={onClose}
+        feature="massImport"
+        requiredPlan="growth"
+        currentPlan={effectivePlan}
+        message="Bulk import is available on Growth and Pro. Free trial users can use it during the trial. Upgrade to Growth to import documents and save multiple worship songs at once."
+      />
+    );
+  }
+
   return (
     <div className="bulk-import-backdrop" onMouseDown={canClose ? onClose : undefined}>
       <div
@@ -483,7 +531,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
             disabled={!canClose}
             title="Close"
           >
-            x
+            <Icon name="close" size={18} />
           </button>
         </div>
 
@@ -504,6 +552,42 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
         <div className="bulk-import-body">
           {step === "pick" && (
             <>
+              <div className="bulk-import-source-grid">
+                <button
+                  type="button"
+                  className={`bulk-import-source-card${!pasteMode ? " active" : ""}`}
+                  onClick={() => {
+                    setPasteMode(false);
+                    setError("");
+                  }}
+                >
+                  <span className="bulk-import-source-card__icon">
+                    <Icon name="upload_file" size={18} />
+                  </span>
+                  <span className="bulk-import-source-card__body">
+                    <strong>Upload document</strong>
+                    <span>Use a PDF, DOCX, or TXT file and let the importer extract the worship songs.</span>
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`bulk-import-source-card${pasteMode ? " active" : ""}`}
+                  onClick={() => {
+                    setPasteMode(true);
+                    setError("");
+                  }}
+                >
+                  <span className="bulk-import-source-card__icon">
+                    <Icon name="content_paste" size={18} />
+                  </span>
+                  <span className="bulk-import-source-card__body">
+                    <strong>Paste text</strong>
+                    <span>Use this when the lyrics are already copied from another document or message.</span>
+                  </span>
+                </button>
+              </div>
+
               <div
                 className="bulk-import-dropzone"
                 onDrop={handleDrop}
@@ -518,32 +602,34 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                   type="file"
                   accept=".pdf,.txt,.docx"
                   className="bulk-import-file-input"
+                  disabled={processing}
                   onChange={handleFileInput}
                 />
                 <Icon name="upload_file" size={32} />
                 <p className="bulk-import-dropzone-title">
-                  {pasteMode ? "Switch back to file upload" : "Drop a PDF, DOCX, or TXT file here"}
+                  {pasteMode ? "File upload is still available" : "Drop a PDF, DOCX, or TXT file here"}
                 </p>
                 <p className="bulk-import-dropzone-hint">
                   {pasteMode
-                    ? "Click to return to file upload"
+                    ? "Switch to upload above, then pick a file or drag one into this area."
                     : "Hymn books, worship sheets, choir lyrics, and order-of-service documents are supported."}
                 </p>
+                <div className="bulk-import-format-chips" aria-hidden="true">
+                  <span>PDF</span>
+                  <span>DOCX</span>
+                  <span>TXT</span>
+                </div>
               </div>
 
-              <div className="bulk-import-paste-toggle">
-                <button
-                  type="button"
-                  className="bulk-import-paste-toggle-btn"
-                  onClick={() => {
-                    setPasteMode((current) => !current);
-                    setError("");
-                  }}
-                  title="Paste text"
-                >
-                  <Icon name={pasteMode ? "description" : "content_paste"} size={14} />
-                  {pasteMode ? "Use file upload instead" : "Or paste extracted text"}
-                </button>
+              <div className="bulk-import-pick-tips">
+                <div className="bulk-import-pick-tip">
+                  <Icon name="auto_awesome" size={16} />
+                  <span>Best results come from clean headings, hymn numbers, and readable section breaks.</span>
+                </div>
+                <div className="bulk-import-pick-tip">
+                  <Icon name="library_music" size={16} />
+                  <span>The review step lets you fix titles, sections, numbering, and slide grouping before import.</span>
+                </div>
               </div>
 
               {pasteMode && (
@@ -567,6 +653,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                       }}
                       title="Cancel"
                     >
+                      <Icon name="close" size={14} />
                       Cancel
                     </button>
                     <button
@@ -576,9 +663,17 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                       onClick={handlePasteSubmit}
                       title="Use pasted text"
                     >
+                      <Icon name="arrow_forward" size={14} />
                       Use Pasted Text
                     </button>
                   </div>
+                </div>
+              )}
+
+              {processing && (
+                <div className="bulk-import-processing-inline">
+                  <Icon name="auto_awesome" size={16} />
+                  <span>{processingLabel || "Preparing document…"}</span>
                 </div>
               )}
             </>
@@ -599,20 +694,54 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                 )}
               </div>
 
+              {textStats && (
+                <div className="bulk-import-stat-grid">
+                  <div className="bulk-import-stat-card">
+                    <span className="bulk-import-stat-card__icon">
+                      <Icon name="notes" size={16} />
+                    </span>
+                    <span className="bulk-import-stat-card__label">Lines</span>
+                    <strong>{textStats.lines.toLocaleString()}</strong>
+                  </div>
+                  <div className="bulk-import-stat-card">
+                    <span className="bulk-import-stat-card__icon">
+                      <Icon name="title" size={16} />
+                    </span>
+                    <span className="bulk-import-stat-card__label">Words</span>
+                    <strong>{textStats.words.toLocaleString()}</strong>
+                  </div>
+                  <div className="bulk-import-stat-card">
+                    <span className="bulk-import-stat-card__icon">
+                      <Icon name="text_fields" size={16} />
+                    </span>
+                    <span className="bulk-import-stat-card__label">Characters</span>
+                    <strong>{textStats.chars.toLocaleString()}</strong>
+                  </div>
+                </div>
+              )}
+
               <div className="bulk-import-text-preview">
                 <pre>{extractPreview?.text ?? rawText}</pre>
               </div>
 
+              <div className="bulk-import-pick-tip bulk-import-pick-tip--wide">
+                <Icon name="psychology" size={16} />
+                <span>Run structuring next to split the document into songs and detected sections for review.</span>
+              </div>
+
               {extractPreview?.truncated && textStats && (
                 <div className="bulk-import-preview-note">
+                  <Icon name="info" size={14} />
+                  <span>
                   Showing the first {extractPreview.lineCount.toLocaleString()} of {textStats.lines.toLocaleString()} lines to keep large document imports responsive.
+                  </span>
                 </div>
               )}
 
               {processing && (
                 <div className="bulk-import-processing-inline">
                   <Icon name="auto_awesome" size={16} />
-                  <span>Organizing document content…</span>
+                  <span>{processingLabel || "Organizing document content…"}</span>
                 </div>
               )}
             </>
@@ -630,18 +759,38 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                 </div>
 
                 <div className="bulk-import-review-toolbar">
+                  <div className="bulk-import-review-summary">
+                    <div className="bulk-import-review-summary__stat">
+                      <Icon name="library_music" size={16} />
+                      <div>
+                        <strong>{reviewSongs.length}</strong>
+                        <span>songs detected</span>
+                      </div>
+                    </div>
+                    <div className="bulk-import-review-summary__stat">
+                      <Icon name="check_circle" size={16} />
+                      <div>
+                        <strong>{selectedSongCount}</strong>
+                        <span>selected to import</span>
+                      </div>
+                    </div>
+                  </div>
+
                   <label className="bulk-import-select-all">
                     <input
                       type="checkbox"
-                      checked={reviewSongs.length > 0 && selectedSongIds.size === reviewSongs.length}
+                      checked={reviewSongs.length > 0 && selectedSongCount === reviewSongs.length}
                       onChange={toggleAllSongs}
                     />
-                    Select all
+                    Select all detected songs
                   </label>
 
                   <div className="bulk-import-review-layout">
                     <label>
-                      <span>Lines/slide</span>
+                      <span>
+                        <Icon name="view_agenda" size={14} />
+                        Lines/slide
+                      </span>
                       <select value={linesPerSlide} onChange={(event) => setLinesPerSlide(parseInt(event.target.value, 10))}>
                         {SLIDE_LAYOUT_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
@@ -654,7 +803,10 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                         checked={autoSplit}
                         onChange={(event) => setAutoSplit(event.target.checked)}
                       />
-                      <span>Auto slide split</span>
+                      <span>
+                        <Icon name="call_split" size={14} />
+                        Auto slide split
+                      </span>
                     </label>
                   </div>
                 </div>
@@ -710,7 +862,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                           removeSong(song.id);
                         }}
                       >
-                        ×
+                        <Icon name="close" size={14} />
                       </button>
                     </div>
                   ))}
@@ -751,8 +903,27 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                       </div>
 
                       <div className="bulk-import-detail-stats">
-                        <span>{activeSong.sections.length} sections</span>
-                        <span>{activeSongSlides.length} slides</span>
+                        <div className="bulk-import-detail-stat">
+                          <Icon name="segment" size={16} />
+                          <div>
+                            <strong>{activeSong.sections.length}</strong>
+                            <span>sections</span>
+                          </div>
+                        </div>
+                        <div className="bulk-import-detail-stat">
+                          <Icon name="slideshow" size={16} />
+                          <div>
+                            <strong>{activeSongSlides.length}</strong>
+                            <span>slides</span>
+                          </div>
+                        </div>
+                        <div className="bulk-import-detail-stat">
+                          <Icon name="text_fields" size={16} />
+                          <div>
+                            <strong>{activeSongWordCount}</strong>
+                            <span>words</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -782,6 +953,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                       <div className="bulk-import-section-editor__head">
                         <h3>Sections Detected</h3>
                         <button type="button" className="bulk-import-btn-secondary" onClick={() => addSection(activeSong.id)} title="Add section">
+                          <Icon name="add" size={14} />
                           Add Section
                         </button>
                       </div>
@@ -831,11 +1003,21 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
                               </div>
 
                               <div className="bulk-import-section-card__actions">
-                                <button type="button" onClick={() => moveSection(activeSong.id, section.id, -1)} disabled={index === 0} title="Move up">↑</button>
-                                <button type="button" onClick={() => moveSection(activeSong.id, section.id, 1)} disabled={index === activeSong.sections.length - 1} title="Move down">↓</button>
-                                <button type="button" onClick={() => splitSection(activeSong.id, section.id)} title="Split section">Split</button>
-                                <button type="button" onClick={() => mergeSectionDown(activeSong.id, section.id)} disabled={index === activeSong.sections.length - 1} title="Merge with next">Merge</button>
-                                <button type="button" onClick={() => deleteSection(activeSong.id, section.id)} title="Delete section">Delete</button>
+                                <button type="button" onClick={() => moveSection(activeSong.id, section.id, -1)} disabled={index === 0} title="Move up" aria-label="Move section up">
+                                  <Icon name="arrow_upward" size={14} />
+                                </button>
+                                <button type="button" onClick={() => moveSection(activeSong.id, section.id, 1)} disabled={index === activeSong.sections.length - 1} title="Move down" aria-label="Move section down">
+                                  <Icon name="arrow_downward" size={14} />
+                                </button>
+                                <button type="button" onClick={() => splitSection(activeSong.id, section.id)} title="Split section" aria-label="Split section">
+                                  <Icon name="call_split" size={14} />
+                                </button>
+                                <button type="button" onClick={() => mergeSectionDown(activeSong.id, section.id)} disabled={index === activeSong.sections.length - 1} title="Merge with next" aria-label="Merge section with next">
+                                  <Icon name="merge" size={14} />
+                                </button>
+                                <button type="button" onClick={() => deleteSection(activeSong.id, section.id)} title="Delete section" aria-label="Delete section">
+                                  <Icon name="delete" size={14} />
+                                </button>
                               </div>
                             </div>
 
@@ -935,6 +1117,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
             disabled={!canClose}
             title={step === "pick" ? "Close" : "Back"}
           >
+            {step === "done" || step === "pick" ? <Icon name="close" size={14} /> : <Icon name="arrow_back" size={14} />}
             {step === "done" ? "Close" : step === "pick" ? "Close" : "Back"}
           </button>
 
@@ -947,7 +1130,8 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
               }}
               title="Process document"
             >
-              Structure Document →
+              <Icon name="auto_awesome" size={14} />
+              Structure Document
             </button>
           )}
 
@@ -961,6 +1145,7 @@ export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
               }}
               title="Import selected songs"
             >
+              <Icon name="download_done" size={14} />
               Import {selectedSongs.length} Song{selectedSongs.length === 1 ? "" : "s"}
             </button>
           )}

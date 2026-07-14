@@ -24,7 +24,7 @@ import {
   fetchTemplateVideos,
   type TemplateVideoAsset,
 } from "../../services/templateVideos";
-import { uploadFileToDock } from "../dockUploadService";
+import { registerDockMediaItem, uploadFileToDock } from "../dockUploadService";
 import { requireEntitlement, showUpgradeModal } from "../dockEntitlement";
 import { isSupportedMediaFile } from "../../services/mediaValidation";
 import { getFeatureLimit } from "../../services/entitlementClient";
@@ -371,11 +371,17 @@ function formatFitMode(value: DockMediaFitMode, t: (key: string) => string): str
   }
 }
 
-function buildSceneImageSourceName(entry: DockMediaEntry): string {
+function buildSceneMediaSourceName(entry: DockMediaEntry): string {
   const baseName = entry.name.replace(/\.[^.]+$/, "");
-  const sanitizedBase = baseName.replace(/[^a-z0-9]+/gi, " ").trim().slice(0, 40) || "Image";
+  const defaultLabel = entry.kind === "video" ? "Video" : "Image";
+  const sanitizedBase = baseName.replace(/[^a-z0-9]+/gi, " ").trim().slice(0, 40) || defaultLabel;
   const suffix = entry.prefKey.replace(/[^a-z0-9]+/gi, "").slice(-10) || "media";
-  return `MCE Scene Image - ${sanitizedBase} - ${suffix}`;
+  const sourceType = entry.kind === "video" ? "Video" : "Image";
+  return `MCE Scene ${sourceType} - ${sanitizedBase} - ${suffix}`;
+}
+
+function canSendEntryToScene(entry: DockMediaEntry): boolean {
+  return Boolean(entry.uploadFile || entry.libraryItem);
 }
 
 function createLibraryEntry(item: MediaItem, overlayBaseUrl: string, originLabel: string): DockMediaEntry {
@@ -937,9 +943,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     [resolveLibraryMediaFilePath, t]
   );
 
-  const openSceneSendDialog = useCallback(async (entry: DockMediaEntry) => {
-    setOpenOptionsKey(null);
-    setSceneSendEntry(entry);
+  const loadSceneSendChoices = useCallback(async () => {
     setSceneSendChoices([]);
     setSceneSendSelection("");
     setSceneSendError(null);
@@ -968,14 +972,20 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       setSceneSendChoices(choices);
       setSceneSendSelection(choices.includes(currentSceneName) ? currentSceneName : (choices[0] ?? ""));
       if (choices.length === 0) {
-        setSceneSendError("No available OBS scenes found.");
+        setSceneSendError(t('media.noObsScenesAvailable'));
       }
     } catch (err) {
-      setSceneSendError(err instanceof Error ? err.message : "Unable to load OBS scenes.");
+      setSceneSendError(err instanceof Error ? err.message : t('media.unableToLoadScenes'));
     } finally {
       setSceneSendLoading(false);
     }
-  }, []);
+  }, [t]);
+
+  const openSceneSendDialog = useCallback(async (entry: DockMediaEntry) => {
+    setOpenOptionsKey(null);
+    setSceneSendEntry(entry);
+    await loadSceneSendChoices();
+  }, [loadSceneSendChoices]);
 
   const resetSceneSendDialog = useCallback(() => {
     setSceneSendEntry(null);
@@ -990,46 +1000,88 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     resetSceneSendDialog();
   }, [resetSceneSendDialog, sceneSendSubmitting]);
 
-  const handleSendImageToSelectedScene = useCallback(async () => {
-    if (!sceneSendEntry || !sceneSendSelection) return;
+  const getEntryPrefs = useCallback(
+    (entry: DockMediaEntry): DockMediaPreference => mediaPrefs[entry.prefKey] ?? {},
+    [mediaPrefs],
+  );
+
+  const getEntrySendOptions = useCallback(
+    (entry: DockMediaEntry): DockMediaSendOptions => {
+      const prefs = getEntryPrefs(entry);
+      if (entry.kind === "video") {
+        return {
+          muted: prefs.videoMuted ?? true,
+          looping: prefs.loop ?? true,
+          fitMode: prefs.fitMode ?? "cover",
+        };
+      }
+      return {
+        imageAudioInputName: prefs.imageAudioInputName || null,
+        fitMode: prefs.fitMode ?? "cover",
+      };
+    },
+    [getEntryPrefs],
+  );
+
+  const sendEntryToSelectedScene = useCallback(async (entry: DockMediaEntry): Promise<boolean> => {
+    if (!sceneSendSelection) return false;
 
     setSceneSendSubmitting(true);
     setSceneSendError(null);
     try {
       let filePath = "";
-      if (sceneSendEntry.uploadFile) {
-        filePath = await resolveUploadFilePath(sceneSendEntry.uploadFile);
-      } else if (sceneSendEntry.libraryItem) {
-        filePath = await resolveLibraryMediaFilePath(sceneSendEntry.libraryItem);
+      if (entry.uploadFile) {
+        filePath = await resolveUploadFilePath(entry.uploadFile);
+      } else if (entry.libraryItem) {
+        filePath = await resolveLibraryMediaFilePath(entry.libraryItem);
       } else {
-        throw new Error("This image cannot be sent to a scene.");
+        throw new Error(t('media.thisMediaCannotBeSentToScene'));
       }
 
-      const fitMode = mediaPrefs[sceneSendEntry.prefKey]?.fitMode ?? "cover";
+      const entryPrefs = mediaPrefs[entry.prefKey] ?? {};
       await ensureObsConnected();
-      await dockObsClient.addImageSourceToScene({
-        sceneName: sceneSendSelection,
-        sourceName: buildSceneImageSourceName(sceneSendEntry),
-        filePath,
-        fitMode,
-      });
+      if (entry.kind === "video") {
+        await dockObsClient.addVideoSourceToScene({
+          sceneName: sceneSendSelection,
+          sourceName: buildSceneMediaSourceName(entry),
+          filePath,
+          fitMode: entryPrefs.fitMode ?? "cover",
+          muted: entryPrefs.videoMuted ?? true,
+          looping: entryPrefs.loop ?? true,
+        });
+      } else {
+        await dockObsClient.addImageSourceToScene({
+          sceneName: sceneSendSelection,
+          sourceName: buildSceneMediaSourceName(entry),
+          filePath,
+          fitMode: entryPrefs.fitMode ?? "cover",
+        });
+      }
 
-      updateMediaPreference(sceneSendEntry.prefKey, { lastUsedAt: new Date().toISOString() });
-      resetSceneSendDialog();
+      updateMediaPreference(entry.prefKey, { lastUsedAt: new Date().toISOString() });
+      return true;
     } catch (err) {
-      setSceneSendError(err instanceof Error ? err.message : "Failed to send image to scene.");
+      setSceneSendError(err instanceof Error ? err.message : t('media.failedToSendToScene'));
+      return false;
     } finally {
       setSceneSendSubmitting(false);
     }
   }, [
     mediaPrefs,
-    resetSceneSendDialog,
     resolveLibraryMediaFilePath,
     resolveUploadFilePath,
-    sceneSendEntry,
     sceneSendSelection,
+    t,
     updateMediaPreference,
   ]);
+
+  const handleSendMediaToSelectedScene = useCallback(async () => {
+    if (!sceneSendEntry) return;
+    const success = await sendEntryToSelectedScene(sceneSendEntry);
+    if (success) {
+      resetSceneSendDialog();
+    }
+  }, [resetSceneSendDialog, sceneSendEntry, sendEntryToSelectedScene]);
 
   const refreshMedia = useCallback(async () => {
     await Promise.all([fetchUploads(), loadLibraryMedia()]);
@@ -1223,6 +1275,16 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     () => managedEntries.find((entry) => entry.key === openOptionsKey) ?? null,
     [managedEntries, openOptionsKey],
   );
+  useEffect(() => {
+    if (!activeOptionsEntry || !canSendEntryToScene(activeOptionsEntry)) {
+      setSceneSendChoices([]);
+      setSceneSendSelection("");
+      setSceneSendError(null);
+      setSceneSendLoading(false);
+      return;
+    }
+    void loadSceneSendChoices();
+  }, [activeOptionsEntry, loadSceneSendChoices]);
   const previewBaseEntry = activeTargets.active;
 
   // ── Selection helpers ──
@@ -1379,29 +1441,6 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     }
   }, [activeKind, imageEntries.length, mediaEntries.length, videoEntries.length]);
 
-  const getEntryPrefs = useCallback(
-    (entry: DockMediaEntry): DockMediaPreference => mediaPrefs[entry.prefKey] ?? {},
-    [mediaPrefs],
-  );
-
-  const getEntrySendOptions = useCallback(
-    (entry: DockMediaEntry): DockMediaSendOptions => {
-      const prefs = getEntryPrefs(entry);
-      if (entry.kind === "video") {
-        return {
-          muted: prefs.videoMuted ?? true,
-          looping: prefs.loop ?? true,
-          fitMode: prefs.fitMode ?? "cover",
-        };
-      }
-      return {
-        imageAudioInputName: prefs.imageAudioInputName || null,
-        fitMode: prefs.fitMode ?? "cover",
-      };
-    },
-    [getEntryPrefs],
-  );
-
   const toggleVideoMute = useCallback(
     async (entry: DockMediaEntry) => {
       const currentMuted = getEntryPrefs(entry).videoMuted ?? true;
@@ -1456,16 +1495,6 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
   const closeEntryOptions = useCallback(() => {
     setOpenOptionsKey(null);
-  }, []);
-
-  const saveMediaToAppLibrary = useCallback((item: MediaItem) => {
-    dockClient.sendCommand({
-      type: "media:save",
-      payload: item,
-      timestamp: Date.now(),
-      commandId: `dock-media-save-${item.id}`,
-    });
-    dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
   }, []);
 
   const removeMediaFromAppLibrary = useCallback((id: string) => {
@@ -1579,8 +1608,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         }
         console.log("[UPLOAD] ✓ Upload OK:", file.name, { id: item.id, filePath: item.filePath, uploadMs });
         nextItems.push(item);
-        console.log("[UPLOAD] Saving to app library:", item.id);
-        saveMediaToAppLibrary(item);
+        console.log("[UPLOAD] Registering shared dock media item:", item.id);
+        await registerDockMediaItem(item);
       }
       if (nextItems.length > 0) {
         // Mark excess items with old createdAt so lockedKeys puts them at the bottom
@@ -1622,7 +1651,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       setUploading(false);
       if (uploadInputRef.current) uploadInputRef.current.value = "";
     }
-  }, [libraryMedia, persistLocalLibrary, refreshMedia, saveMediaToAppLibrary]);
+  }, [libraryMedia, persistLocalLibrary, refreshMedia]);
 
   const deleteEntry = useCallback(
     async (entry: DockMediaEntry) => {
@@ -1880,14 +1909,14 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       const statusLabel = isActiveTarget ? (pausedTargets.active ? t('media.inPreview') : t('media.live')) : null;
       const statusVariant = isActiveTarget ? (pausedTargets.active ? "preview" : "live") : null;
 
-        const handleCardClick = () => {
-          if (isLocked) {
-            void requireEntitlement(
-              entry.kind === "video" ? "videos" : "images",
-              entry.kind === "video" ? videoEntries.length : imageEntries.length,
-            );
-            return;
-          }
+      const handleCardClick = () => {
+        if (isLocked) {
+          void requireEntitlement(
+            entry.kind === "video" ? "videos" : "images",
+            entry.kind === "video" ? videoEntries.length : imageEntries.length,
+          );
+          return;
+        }
         if (canSelect) toggleSelectKey(entry.key);
         else void handleSendEntry(entry);
       };
@@ -1972,18 +2001,18 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   type="button"
                   className="dock-media-gallery-card__context-item"
                   onClick={() => { setPreviewEntry(entry); setOpenOptionsKey(null); }}
-                  title={t('media.toPreview')}>
+                  title={t('common.preview')}>
                   <Icon name="open_in_full" size={13} />
-                  {t('media.toPreview')}
+                  {t('common.preview')}
                 </button>
-                {entry.kind === "image" && (
+                {canSendEntryToScene(entry) && (
                   <button
                     type="button"
                     className="dock-media-gallery-card__context-item"
                     onClick={() => { void openSceneSendDialog(entry); }}
-                    title="Send to scene">
-                    <Icon name="image" size={13} />
-                    Send to scene
+                    title={t('media.sendToScene')}>
+                    <Icon name="send" size={13} />
+                    {t('media.sendToScene')}
                   </button>
                 )}
                 <button
@@ -3178,10 +3207,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                               ) : (
                                 <TemplateVideoPreview src={asset.videoUrl} label={asset.fileName} />
                               )}
-                              <div className="dock-media-card__badges">
-                                <span className="dock-media-card__badge">{t('media.badgeTemplate')}</span>
-                                <span className="dock-media-card__badge">{downloadedItem ? t('media.badgeSaved') : t('media.badgeRemote')}</span>
-                              </div>
+
                             </div>
                             <div className="dock-media-card__body">
                               <div className="dock-media-card__title" title={asset.fileName}>{asset.fileName}</div>
@@ -3352,15 +3378,38 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
               {/* ── Actions ── */}
               <div className="dock-media-inspector__actions">
-                <button
-                  type="button"
-                  className="dock-media-inspector__action-btn dock-media-inspector__action-btn--primary"
-                  onClick={() => { void handleSendEntry(entry); closeEntryOptions(); }}
-                  title={t('media.sendToPreview')}>
-                  <Icon name="play_arrow" size={14} />
-                  {t('media.sendToPreview')}
-                </button>
-
+                <div className="dock-media-inspector__send-row">
+                  <select
+                    className="dock-input dock-media-inspector__scene-select"
+                    value={sceneSendSelection}
+                    onChange={(event) => setSceneSendSelection(event.target.value)}
+                    disabled={sceneSendLoading || sceneSendSubmitting || sceneSendChoices.length === 0}
+                    aria-label={t('media.scene')}
+                  >
+                    {sceneSendChoices.length === 0 ? (
+                      <option value="">{sceneSendLoading ? t('media.loadingScenes') : t('media.noScenesAvailable')}</option>
+                    ) : (
+                      sceneSendChoices.map((sceneName) => (
+                        <option key={sceneName} value={sceneName}>{sceneName}</option>
+                      ))
+                    )}
+                  </select>
+                  <button
+                    type="button"
+                    className="dock-media-inspector__action-btn dock-media-inspector__action-btn--primary"
+                    onClick={() => {
+                      void (async () => {
+                        const success = await sendEntryToSelectedScene(entry);
+                        if (success) closeEntryOptions();
+                      })();
+                    }}
+                    disabled={sceneSendLoading || sceneSendSubmitting || !sceneSendSelection}
+                    title={t('media.sendToScene')}>
+                    <Icon name="send" size={14} />
+                    {sceneSendSubmitting ? t('media.sending') : t('media.sendToScene')}
+                  </button>
+                </div>
+                {sceneSendError ? <p className="dock-dialog__error">{sceneSendError}</p> : null}
               </div>
 
               {/* ── Display ── */}
@@ -3612,7 +3661,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
             onClick={(event) => event.stopPropagation()}
           >
             <div className="dock-dialog__header">
-              <h2 id="dock-media-send-scene-title" className="dock-dialog__title">Send image to scene</h2>
+              <h2 id="dock-media-send-scene-title" className="dock-dialog__title">{t('media.sendToScene')}</h2>
               <button
                 type="button"
                 className="dock-dialog__close"
@@ -3625,7 +3674,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
             </div>
             <div className="dock-dialog__body">
               <div className="dock-dialog-field">
-                <label className="dock-dialog-field__label" htmlFor="dock-media-send-scene-select">Scene</label>
+                <label className="dock-dialog-field__label" htmlFor="dock-media-send-scene-select">{t('media.scene')}</label>
                 <select
                   id="dock-media-send-scene-select"
                   className="dock-input"
@@ -3634,7 +3683,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   disabled={sceneSendLoading || sceneSendSubmitting || sceneSendChoices.length === 0}
                 >
                   {sceneSendChoices.length === 0 ? (
-                    <option value="">{sceneSendLoading ? "Loading scenes..." : "No scenes available"}</option>
+                    <option value="">{sceneSendLoading ? t('media.loadingScenes') : t('media.noScenesAvailable')}</option>
                   ) : (
                     sceneSendChoices.map((sceneName) => (
                       <option key={sceneName} value={sceneName}>{sceneName}</option>
@@ -3662,12 +3711,12 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
               <button
                 type="button"
                 className="dock-btn dock-btn--primary dock-btn--compact"
-                onClick={() => void handleSendImageToSelectedScene()}
+                onClick={() => void handleSendMediaToSelectedScene()}
                 disabled={sceneSendLoading || sceneSendSubmitting || !sceneSendSelection}
-                title="Send to scene"
+                title={t('media.sendToScene')}
               >
                 <Icon name="send" size={12} />
-                {sceneSendSubmitting ? "Sending..." : "Send to scene"}
+                {sceneSendSubmitting ? t('media.sending') : t('media.sendToScene')}
               </button>
             </div>
           </div>

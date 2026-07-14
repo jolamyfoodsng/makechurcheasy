@@ -97,6 +97,77 @@
       'star-field': "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.3) 1px, transparent 1px), radial-gradient(circle at 80% 70%, rgba(255,255,255,0.2) 1px, transparent 1px), radial-gradient(circle at 50% 10%, rgba(255,255,255,0.25) 0.5px, transparent 0.5px) 0 0 / 20px 20px, 30px 30px, 15px 15px",
     };
 
+    function readObsCssOverrideText() {
+      const direct = document.getElementById('obs-cssoverride');
+      if (direct && typeof direct.textContent === 'string' && direct.textContent.includes('--')) {
+        return direct.textContent;
+      }
+      const styles = document.querySelectorAll('style');
+      for (const styleEl of styles) {
+        const cssText = typeof styleEl.textContent === 'string' ? styleEl.textContent : '';
+        if (cssText && (cssText.includes('--overlay-data') || cssText.includes('--bg-pattern-data') || cssText.includes('--bg-image'))) {
+          return cssText;
+        }
+      }
+      return '';
+    }
+
+    function extractCssCustomPropertyValue(cssText, name) {
+      if (!cssText || !name) return '';
+      const propertyIndex = cssText.indexOf(name);
+      if (propertyIndex === -1) return '';
+      const colonIndex = cssText.indexOf(':', propertyIndex + name.length);
+      if (colonIndex === -1) return '';
+      let i = colonIndex + 1;
+      let quote = '';
+      let parenDepth = 0;
+      for (; i < cssText.length; i += 1) {
+        const ch = cssText[i];
+        const prev = i > 0 ? cssText[i - 1] : '';
+        if (quote) {
+          if (ch === quote && prev !== '\\') quote = '';
+          continue;
+        }
+        if (ch === '"' || ch === "'") {
+          quote = ch;
+          continue;
+        }
+        if (ch === '(') {
+          parenDepth += 1;
+          continue;
+        }
+        if (ch === ')') {
+          parenDepth = Math.max(0, parenDepth - 1);
+          continue;
+        }
+        if (ch === ';' && parenDepth === 0) break;
+      }
+      return cssText.slice(colonIndex + 1, i).trim();
+    }
+
+    function readComputedCssVar(name) {
+      const root = document.documentElement;
+      const inlineValue = root.style.getPropertyValue(name);
+      root.style.removeProperty(name);
+      const cssValue = getComputedStyle(root).getPropertyValue(name).trim();
+      if (!cssValue && inlineValue) root.style.setProperty(name, inlineValue);
+      return cssValue;
+    }
+
+    function readInjectedCssVar(name) {
+      const cssOverrideValue = extractCssCustomPropertyValue(readObsCssOverrideText(), name);
+      if (cssOverrideValue) return cssOverrideValue;
+      return readComputedCssVar(name);
+    }
+
+    function resolvePatternCss(pattern) {
+      const value = String(pattern || '').trim();
+      if (!value) return '';
+      if (value.startsWith('data:')) return `url("${value.replace(/"/g, '\\"')}")`;
+      if (value === '__FROM_CSS__') return readInjectedCssVar('--bg-pattern-data');
+      return PATTERN_CSS[value] || '';
+    }
+
     function applyBackground(data) {
       if (!data) return;
       if (data.timestamp && data.timestamp <= lastTimestamp) return;
@@ -128,8 +199,12 @@
         root.setProperty('--bg-image', 'none');
         root.setProperty('--bg-color', 'transparent');
         backgroundVideoEl.style.display = 'block';
+        backgroundVideoEl.style.opacity = bgOpacity;
+        backgroundVideoEl.loop = true;
+        backgroundVideoEl.muted = true;
         if (backgroundVideoEl.getAttribute('src') !== bgVideoUrl) {
           backgroundVideoEl.src = bgVideoUrl;
+          try { backgroundVideoEl.load(); } catch { }
         }
         const playPromise = backgroundVideoEl.play();
         if (playPromise && typeof playPromise.catch === 'function') {
@@ -147,12 +222,7 @@
 
       // Pattern: SVG data URIs (from BACKGROUND_PATTERNS) or legacy CSS patterns
       if (theme.backgroundPattern) {
-        let patternCss = '';
-        if (theme.backgroundPattern.startsWith('data:')) {
-          patternCss = 'url(' + theme.backgroundPattern + ')';
-        } else if (PATTERN_CSS[theme.backgroundPattern]) {
-          patternCss = PATTERN_CSS[theme.backgroundPattern];
-        }
+        const patternCss = resolvePatternCss(theme.backgroundPattern);
         if (patternCss) {
           root.setProperty('--bg-image', patternCss);
           root.setProperty('--bg-color', 'transparent');

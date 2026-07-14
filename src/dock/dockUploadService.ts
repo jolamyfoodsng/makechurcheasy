@@ -220,6 +220,19 @@ export function syncMediaToApp(item: MediaItem): void {
   dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
 }
 
+export async function registerDockMediaItem(item: MediaItem): Promise<void> {
+  try {
+    const { saveMedia } = await import("../library/libraryDb");
+    await saveMedia(item);
+  } catch (err) {
+    console.warn("[UPLOAD] registerDockMediaItem: IndexedDB save failed, falling back to local sync", err);
+    syncMediaToApp(item);
+  }
+
+  const current = loadLocalLibrary();
+  saveLocalLibrary(dedupeMediaItems([item, ...current]));
+}
+
 /* ── Full upload pipeline ────────────────────────────────────────────────── */
 
 export interface UploadResult {

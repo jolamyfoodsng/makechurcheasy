@@ -12,7 +12,7 @@ export const DOCK_PROJECTION_SETTINGS_UPDATED_EVENT = "dock:projection-settings-
 
 export const DEFAULT_PROJECTION_SETTINGS: ProjectionSettings = {
   sceneMode: "auto-duplicate",
-  tickerLayerPriority: "content-above",
+  tickerLayerPriority: "ticker-above",
   restoreOriginalScene: false,
   presentationOnly: true,
 };
@@ -21,17 +21,13 @@ export function normalizeProjectionSettings(
   value: Partial<ProjectionSettings> | null | undefined,
 ): ProjectionSettings {
   const sceneMode = value?.sceneMode;
-  const tickerLayerPriority = value?.tickerLayerPriority;
 
   return {
     sceneMode:
       sceneMode === "reference" || sceneMode === "no-clone" || sceneMode === "auto-duplicate"
         ? sceneMode
         : DEFAULT_PROJECTION_SETTINGS.sceneMode,
-    tickerLayerPriority:
-      tickerLayerPriority === "ticker-above" || tickerLayerPriority === "content-above"
-        ? tickerLayerPriority
-        : DEFAULT_PROJECTION_SETTINGS.tickerLayerPriority,
+    tickerLayerPriority: DEFAULT_PROJECTION_SETTINGS.tickerLayerPriority,
     restoreOriginalScene: value?.restoreOriginalScene === true,
     // Lower thirds are always routed through the presentation scene.
     presentationOnly: true,

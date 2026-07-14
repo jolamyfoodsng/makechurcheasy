@@ -148,7 +148,6 @@ export default function DockBottomToolbar({
                 title={t("dock.bottomToolbar.fullscreenTooltip")}
               >
                 {t("dock.bottomToolbar.fullLabel")}
-                <span className="dock-btm-display-mode-arrow">▼</span>
               </button>
               {showDisplayModeMenu && onDisplayModeChange && (
                 <div className="dock-btm-display-mode-menu" role="menu">
@@ -233,7 +232,7 @@ export default function DockBottomToolbar({
               title={t("dock.bottomToolbar.fullscreenTooltip")}
             >
               {t("dock.bottomToolbar.fullLabel")}
-              <span className="dock-btm-display-mode-arrow">▼</span>
+
             </button>
             {showDisplayModeMenu && onDisplayModeChange && (
               <div className="dock-btm-display-mode-menu" role="menu">

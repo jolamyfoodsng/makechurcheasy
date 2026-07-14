@@ -38,6 +38,9 @@
       font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
       background: transparent !important;
       color: #ffffff;
+    }
+
+    :root {
       --font-size: 48px;
       --font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
       --font-color: #ffffff;
@@ -77,6 +80,17 @@
       --text-enter-delay: 12ms;
       --text-transform: none;
       --logo-size: 80px;
+      --compare-left-width: 40fr;
+      --compare-right-width: 40fr;
+      --compare-gap: 40px;
+      --compare-outer-padding-top: var(--padding);
+      --compare-outer-padding-right: var(--padding);
+      --compare-outer-padding-bottom: var(--padding);
+      --compare-outer-padding-left: var(--padding);
+      --compare-panel-inner-padding: 38px;
+      --compare-reference-verse-spacing: 16px;
+      --compare-reference-align: var(--ref-text-align, center);
+      --compare-reference-transform: var(--ref-text-transform, none);
     }
 
     html {
@@ -239,11 +253,11 @@
     /* Compare layout (fullscreen only) */
     #compare-layout {
       display: none;
-      grid-template-columns: minmax(0, 40fr) minmax(0, 40fr);
-      gap: 40px;
+      grid-template-columns: minmax(0, var(--compare-left-width, 40fr)) minmax(0, var(--compare-right-width, 40fr));
+      gap: var(--compare-gap, 40px);
       width: 100%;
       height: 100%;
-      padding: var(--padding);
+      padding: var(--compare-outer-padding-top, var(--padding)) var(--compare-outer-padding-right, var(--padding)) var(--compare-outer-padding-bottom, var(--padding)) var(--compare-outer-padding-left, var(--padding));
       position: relative;
       z-index: 3;
     }
@@ -256,7 +270,7 @@
       display: flex;
       flex-direction: column;
       justify-content: center;
-      padding: 38px;
+      padding: var(--compare-panel-inner-padding, 38px);
     }
 
     .compare-column__text-wrap {
@@ -290,19 +304,31 @@
       font-weight: var(--ref-font-weight);
       font-style: var(--ref-font-style, normal);
       color: var(--ref-font-color);
-      text-align: var(--ref-text-align, var(--compare-text-align, var(--text-align)));
-      margin-top: 16px;
+      text-align: var(--compare-reference-align, var(--ref-text-align, var(--compare-text-align, var(--text-align))));
+      margin-top: var(--compare-reference-verse-spacing, 16px);
       width: var(--ref-width);
       padding: var(--ref-bg-padding);
       background: var(--ref-bg-color);
       border-radius: var(--ref-bg-radius);
       border: var(--ref-bg-border);
       opacity: var(--ref-opacity);
-      text-transform: var(--ref-text-transform);
+      text-transform: var(--compare-reference-transform, var(--ref-text-transform));
       letter-spacing: var(--ref-letter-spacing);
     }
 
+    .compare-column__reference.is-above {
+      order: -1;
+      margin-top: 0;
+      margin-bottom: var(--compare-reference-verse-spacing, 16px);
+    }
+
+    .compare-column__reference.is-hidden,
+    .compare-column__reference:empty {
+      display: none;
+    }
+
     .compare-column__translation {
+      display: none;
       font-size: var(--compare-ref-meta-size, 12px);
       color: rgba(255, 255, 255, 0.5);
       text-align: var(--text-align);
@@ -356,6 +382,51 @@
       overflow: hidden;
       z-index: 1;
       isolation: isolate;
+    }
+
+    #overlay,
+    #compare-layout,
+    #background-shade,
+    #lt-bar {
+      will-change: opacity, transform, filter;
+      transform-origin: center center;
+    }
+
+    body.mode-switch-out[data-mode="fullscreen"] #overlay,
+    body.mode-switch-out[data-mode="fullscreen"] #compare-layout.is-visible,
+    body.mode-switch-out[data-mode="fullscreen"] #background-shade {
+      opacity: 0;
+      transform: translateY(18px) scale(0.985);
+      filter: blur(6px);
+      transition:
+        opacity 150ms ease,
+        transform 190ms cubic-bezier(0.22, 1, 0.36, 1),
+        filter 150ms ease;
+    }
+
+    body.mode-switch-out[data-mode="lower-third"] #overlay,
+    body.mode-switch-out[data-mode="lower-third"] #lt-bar {
+      opacity: 0;
+      transform: translateY(26px) scale(0.985);
+      filter: blur(6px);
+      transition:
+        opacity 150ms ease,
+        transform 190ms cubic-bezier(0.22, 1, 0.36, 1),
+        filter 150ms ease;
+    }
+
+    body.mode-switch-in[data-mode="fullscreen"] #overlay,
+    body.mode-switch-in[data-mode="fullscreen"] #compare-layout.is-visible {
+      animation: modeFullscreenIn 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    body.mode-switch-in[data-mode="fullscreen"] #background-shade {
+      animation: modeShadeIn 220ms ease both;
+    }
+
+    body.mode-switch-in[data-mode="lower-third"] #overlay,
+    body.mode-switch-in[data-mode="lower-third"] #lt-bar {
+      animation: modeLowerThirdIn 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
     }
 
     body[data-mode="lower-third"] #lt-bar::before {
@@ -522,6 +593,44 @@
       }
     }
 
+    @keyframes modeFullscreenIn {
+      from {
+        opacity: 0;
+        transform: translateY(22px) scale(0.986);
+        filter: blur(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+      }
+    }
+
+    @keyframes modeShadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes modeLowerThirdIn {
+      from {
+        opacity: 0;
+        transform: translateY(28px) scale(0.982);
+        filter: blur(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+      }
+    }
+
     .anim-fade-enter {
       animation: fadeIn var(--anim-duration) ease both;
     }
@@ -649,6 +758,15 @@
         'diamonds': 'url("data:image/svg+xml,%3Csvg width=\'24\' height=\'24\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M12 0l12 12-12 12L0 12z\' fill=\'none\' stroke=\'rgba(255,255,255,0.06)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
         'circles': 'url("data:image/svg+xml,%3Csvg width=\'30\' height=\'30\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Ccircle cx=\'15\' cy=\'15\' r=\'12\' fill=\'none\' stroke=\'rgba(255,255,255,0.06)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
         'triangle': 'url("data:image/svg+xml,%3Csvg width=\'24\' height=\'24\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M12 2l10 18H2z\' fill=\'none\' stroke=\'rgba(255,255,255,0.07)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        'diagonal-lines': 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.15) 4px, rgba(255,255,255,0.15) 5px)',
+        'horizontal-lines': 'repeating-linear-gradient(0deg, transparent, transparent 6px, rgba(255,255,255,0.12) 6px, rgba(255,255,255,0.12) 7px)',
+        'vertical-lines': 'repeating-linear-gradient(90deg, transparent, transparent 6px, rgba(255,255,255,0.12) 6px, rgba(255,255,255,0.12) 7px)',
+        'chevrons': 'linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%), linear-gradient(225deg, rgba(255,255,255,0.15) 25%, transparent 25%) 0 0 / 12px 12px',
+        'cross-hatch': 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 5px), repeating-linear-gradient(-45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 5px)',
+        'diagonal-checker': 'linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%), linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%) 0 0 / 16px 16px',
+        'zigzag': 'linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%) -6px 0, linear-gradient(225deg, rgba(255,255,255,0.15) 25%, transparent 25%) -6px 0, linear-gradient(315deg, rgba(255,255,255,0.15) 25%, transparent 25%), linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%) 0 0 / 12px 12px',
+        'subtle-noise': "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E\")",
+        'star-field': "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.3) 1px, transparent 1px), radial-gradient(circle at 80% 70%, rgba(255,255,255,0.2) 1px, transparent 1px), radial-gradient(circle at 50% 10%, rgba(255,255,255,0.25) 0.5px, transparent 0.5px) 0 0 / 20px 20px, 30px 30px, 15px 15px",
       };
 
       const root = document.documentElement;
@@ -692,8 +810,15 @@
       let baseCompareFontSize = 36;
       let baseCompareRefFontSize = 20;
       let basePadding = 60;
+      let baseComparePanelInnerPadding = 38;
+      let baseCompareLayoutPadding = { top: 60, right: 60, bottom: 60, left: 60 };
       let baseBarPadding = 28;
       let barMaxHeight = 600;
+      let modeTransitionTimer = 0;
+      let modeTransitionToken = 0;
+      let modeTransitionActive = false;
+      const MODE_SWITCH_OUT_MS = 150;
+      const MODE_SWITCH_IN_MS = 260;
 
       function toCssFontWeight(w, fb) {
         const n = Number(w); if (!n || isNaN(n)) return fb || '400';
@@ -746,6 +871,224 @@
         return `linear-gradient(180deg,rgba(${rgb.r},${rgb.g},${rgb.b},${opacity}),rgba(${rgb.r},${rgb.g},${rgb.b},${opacity}))`;
       }
 
+      function clampSetting(value, fallback, min, max) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.min(max, Math.max(min, n));
+      }
+
+      function compareMetaPosition(value) {
+        return value === 'above-verse' || value === 'same-row' || value === 'below-verse' || value === 'hidden'
+          ? value
+          : 'above-verse';
+      }
+
+      function compareMetaAlign(value, fallback) {
+        return value === 'left' || value === 'center' || value === 'right' ? value : fallback;
+      }
+
+      function applyCompareReferencePlacement(node, position, alignment) {
+        if (!node) return;
+        node.classList.toggle('is-above', position === 'above-verse' || position === 'same-row');
+        node.classList.toggle('is-hidden', position === 'hidden');
+        node.style.textAlign = alignment;
+      }
+
+      function formatCompareReference(referenceValue, translationValue) {
+        const ref = String(referenceValue || '').trim();
+        const version = String(translationValue || '').trim();
+        if (ref && version) return `${ref} (${version})`;
+        return ref || version;
+      }
+
+      function isTransparentBackgroundColor(color) {
+        const value = String(color || '').trim().toLowerCase();
+        return !value ||
+          value === 'transparent' ||
+          value === '#0000' ||
+          value === '#00000000' ||
+          value === 'rgba(0,0,0,0)' ||
+          value === 'rgba(0, 0, 0, 0)';
+      }
+
+      function readObsCssOverrideText() {
+        const direct = document.getElementById('obs-cssoverride');
+        if (direct && typeof direct.textContent === 'string' && direct.textContent.includes('--')) {
+          return direct.textContent;
+        }
+        const styles = document.querySelectorAll('style');
+        for (const styleEl of styles) {
+          const cssText = typeof styleEl.textContent === 'string' ? styleEl.textContent : '';
+          if (cssText && cssText.includes('--overlay-data')) return cssText;
+        }
+        return '';
+      }
+
+      function extractCssCustomPropertyValue(cssText, name) {
+        if (!cssText || !name) return '';
+        const propertyIndex = cssText.indexOf(name);
+        if (propertyIndex === -1) return '';
+        const colonIndex = cssText.indexOf(':', propertyIndex + name.length);
+        if (colonIndex === -1) return '';
+        let i = colonIndex + 1;
+        let quote = '';
+        let parenDepth = 0;
+        for (; i < cssText.length; i += 1) {
+          const ch = cssText[i];
+          const prev = i > 0 ? cssText[i - 1] : '';
+          if (quote) {
+            if (ch === quote && prev !== '\\') quote = '';
+            continue;
+          }
+          if (ch === '"' || ch === "'") {
+            quote = ch;
+            continue;
+          }
+          if (ch === '(') {
+            parenDepth += 1;
+            continue;
+          }
+          if (ch === ')') {
+            parenDepth = Math.max(0, parenDepth - 1);
+            continue;
+          }
+          if (ch === ';' && parenDepth === 0) break;
+        }
+        return cssText.slice(colonIndex + 1, i).trim();
+      }
+
+      function readComputedCssVar(name) {
+        const inlineValue = root.style.getPropertyValue(name);
+        root.style.removeProperty(name);
+        const cssValue = getComputedStyle(root).getPropertyValue(name).trim();
+        if (!cssValue && inlineValue) root.style.setProperty(name, inlineValue);
+        return cssValue;
+      }
+
+      function readInjectedCssVar(name) {
+        const cssOverrideValue = extractCssCustomPropertyValue(readObsCssOverrideText(), name);
+        if (cssOverrideValue) return cssOverrideValue;
+        return readComputedCssVar(name);
+      }
+
+      function resolvePatternCss(pattern) {
+        const value = String(pattern || '').trim();
+        if (!value) return '';
+        if (value.startsWith('data:')) return `url("${value.replace(/"/g, '\\"')}")`;
+        if (value === '__FROM_CSS__') return readInjectedCssVar('--bg-pattern-data');
+        return PATTERN_CSS[value] || '';
+      }
+
+      function clearVideoElement(videoEl) {
+        if (!videoEl) return;
+        try { videoEl.pause(); } catch { }
+        if (videoEl.getAttribute('src')) {
+          videoEl.removeAttribute('src');
+          try { videoEl.load(); } catch { }
+        }
+        videoEl.style.display = 'none';
+        videoEl.style.opacity = '';
+        videoEl.style.transition = '';
+      }
+
+      function clearFullscreenBackgroundVideo() {
+        const controller = seamlessLoopControllers.get(backgroundVideoEl);
+        if (controller) {
+          stopSeamlessLoop(controller, { clearSrc: true, resetActiveToPrimary: true });
+          clearVideoElement(controller.secondary);
+        }
+        clearVideoElement(backgroundVideoEl);
+      }
+
+      function hideBackgroundCrossfade() {
+        if (!bgCrossfade) return;
+        bgCrossfade.style.transition = 'none';
+        bgCrossfade.style.opacity = '0';
+        bgCrossfade.style.background = 'transparent';
+        bgCrossfade.style.backgroundImage = 'none';
+        bgCrossfade.style.backgroundColor = 'transparent';
+      }
+
+      function applyFullscreenBackground(theme) {
+        const bgOpacity = String(theme.backgroundOpacity ?? 1);
+        const bgColor = String(theme.backgroundColor || 'transparent');
+        const bgColorEnd = String(theme.backgroundColorEnd || '').trim();
+        const bgGradientAngle = theme.bgGradientAngle ?? 135;
+        const hasGradient = !isTransparentBackgroundColor(bgColor) && Boolean(bgColorEnd) && bgColorEnd !== bgColor;
+        const bgColorFinal = hasGradient
+          ? `linear-gradient(${bgGradientAngle}deg, ${bgColor}, ${bgColorEnd})`
+          : bgColor;
+
+        root.style.setProperty('--bg-opacity', bgOpacity);
+        hideBackgroundCrossfade();
+
+        const bgVideoUrl = String(theme.backgroundVideo || '').trim();
+        if (bgVideoUrl) {
+          const controller = seamlessLoopControllers.get(backgroundVideoEl);
+          if (controller) {
+            stopSeamlessLoop(controller, { clearSrc: true, resetActiveToPrimary: true });
+            clearVideoElement(controller.secondary);
+          }
+          root.style.setProperty('--bg-image', 'none');
+          root.style.setProperty('--bg-color', 'transparent');
+          backgroundVideoEl.style.display = 'block';
+          backgroundVideoEl.style.opacity = bgOpacity;
+          backgroundVideoEl.loop = true;
+          if (backgroundVideoEl.getAttribute('src') !== bgVideoUrl) {
+            backgroundVideoEl.src = bgVideoUrl;
+            try { backgroundVideoEl.load(); } catch { }
+          }
+          const playPromise = backgroundVideoEl.play();
+          if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => { });
+          }
+          return;
+        }
+
+        clearFullscreenBackgroundVideo();
+
+        const patternCss = resolvePatternCss(theme.backgroundPattern);
+        if (patternCss) {
+          root.style.setProperty('--bg-image', patternCss);
+          root.style.setProperty('--bg-color', 'transparent');
+          return;
+        }
+
+        if (hasGradient) {
+          root.style.setProperty('--bg-color', 'transparent');
+          root.style.setProperty('--bg-image', bgColorFinal);
+          return;
+        }
+
+        const rawBgImage = String(theme.backgroundImage || '').trim();
+        if (rawBgImage) {
+          let bgUrl = rawBgImage;
+          if (bgUrl === '__BG_SOURCE__') {
+            root.style.setProperty('--bg-image', 'none');
+            root.style.setProperty('--bg-color', 'transparent');
+            root.style.setProperty('--bg-opacity', '1');
+            return;
+          }
+          if (bgUrl === '__FROM_CSS__') {
+            const cssValue = readInjectedCssVar('--bg-image');
+            const hasCssImage = Boolean(cssValue && cssValue !== 'none');
+            root.style.setProperty('--bg-image', cssValue || 'none');
+            root.style.setProperty('--bg-color', hasCssImage ? 'transparent' : bgColor);
+            if (hasCssImage) root.style.setProperty('--bg-opacity', bgOpacity);
+            return;
+          }
+          if (bgUrl === '__FROM_LOCALSTORAGE__') {
+            bgUrl = localStorage.getItem('bible-overlay-bg-image') || '';
+          }
+          root.style.setProperty('--bg-image', bgUrl ? `url(${bgUrl})` : 'none');
+          root.style.setProperty('--bg-color', bgUrl ? 'transparent' : bgColor);
+          return;
+        }
+
+        root.style.setProperty('--bg-image', 'none');
+        root.style.setProperty('--bg-color', bgColor);
+      }
+
       function resolveSafeArea() {
         return Number(getComputedStyle(root).getPropertyValue('--safe-area').trim().replace('px', '')) || 40;
       }
@@ -794,8 +1137,13 @@
       }
 
       /* ═══ MODE SWITCHING ═══ */
-      function setMode(newMode) {
-        if (newMode === currentMode) return;
+      function renderCurrentOverlayForMode() {
+        if (!currentOverlayData) return;
+        if (currentMode === 'lower-third') processSlideLowerThird(currentOverlayData);
+        else processSlideFullscreen(currentOverlayData);
+      }
+
+      function applyModeDom(newMode) {
         currentMode = newMode;
         body.dataset.mode = newMode;
         if (newMode === 'lower-third') {
@@ -814,7 +1162,33 @@
           backgroundShade.style.display = '';
           ltBar.style.display = 'none';
         }
-        if (currentOverlayData) processOverlayUpdate(currentOverlayData);
+      }
+
+      function finishModeTransition(token, newMode) {
+        if (token !== modeTransitionToken) return;
+        body.classList.remove('mode-switch-out');
+        applyModeDom(newMode);
+        renderCurrentOverlayForMode();
+        requestAnimationFrame(() => {
+          if (token !== modeTransitionToken) return;
+          body.classList.add('mode-switch-in');
+          clearTimeout(modeTransitionTimer);
+          modeTransitionTimer = setTimeout(() => {
+            if (token !== modeTransitionToken) return;
+            body.classList.remove('mode-switch-in');
+            modeTransitionActive = false;
+          }, MODE_SWITCH_IN_MS + 30);
+        });
+      }
+
+      function setMode(newMode) {
+        if (newMode === currentMode && !body.classList.contains('mode-switch-out')) return;
+        clearTimeout(modeTransitionTimer);
+        modeTransitionToken += 1;
+        body.classList.remove('mode-switch-out', 'mode-switch-in');
+        modeTransitionActive = false;
+        applyModeDom(newMode);
+        renderCurrentOverlayForMode();
       }
 
       /* ═══ FULLSCREEN: Auto-scaling ═══ */
@@ -868,21 +1242,65 @@
         const wr = Array.from(compareLayout.querySelectorAll('.compare-column__text-wrap'));
         const bT = Math.max(22, Math.round(baseCompareFontSize)), bR = Math.max(14, Math.round(baseCompareRefFontSize));
         const bM = Math.max(12, Math.round(bR * 0.62));
-        let ts = bT, rs2 = bR, ms = bM, cp = 38, lp = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(basePadding));
+        let ts = bT, rs2 = bR, ms = bM;
+        let cp = Math.max(COMPARE_PADDING_MIN, Math.round(baseComparePanelInnerPadding));
+        let lpTop = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.top));
+        let lpRight = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.right));
+        let lpBottom = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.bottom));
+        let lpLeft = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.left));
         let lh = Math.max(1.08, Number(getComputedStyle(root).getPropertyValue('--compare-line-height')) || 1.4);
         const sa = resolveSafeArea(), vw = document.body?.clientWidth || 1920, vh = document.body?.clientHeight || 1080;
         const tw = Math.max(600, vw - sa * 2), th = Math.max(320, vh - sa * 2);
         const cols = Array.from(compareLayout.querySelectorAll('.compare-column'));
-        const apply = () => { compareLayout.style.padding = lp + 'px'; cols.forEach(c => c.style.padding = cp + 'px'); tn.forEach(n => { n.style.fontSize = ts + 'px'; n.style.lineHeight = String(lh) }); rn.forEach(n => n.style.fontSize = rs2 + 'px'); trn.forEach(n => n.style.fontSize = ms + 'px'); };
+        const hasLayoutPaddingRoom = () => lpTop > COMPARE_LAYOUT_PADDING_MIN || lpRight > COMPARE_LAYOUT_PADDING_MIN || lpBottom > COMPARE_LAYOUT_PADDING_MIN || lpLeft > COMPARE_LAYOUT_PADDING_MIN;
+        const shrinkLayoutPadding = () => {
+          lpTop = Math.max(COMPARE_LAYOUT_PADDING_MIN, lpTop - 2);
+          lpRight = Math.max(COMPARE_LAYOUT_PADDING_MIN, lpRight - 2);
+          lpBottom = Math.max(COMPARE_LAYOUT_PADDING_MIN, lpBottom - 2);
+          lpLeft = Math.max(COMPARE_LAYOUT_PADDING_MIN, lpLeft - 2);
+        };
+        const apply = () => {
+          compareLayout.style.padding = `${lpTop}px ${lpRight}px ${lpBottom}px ${lpLeft}px`;
+          cols.forEach(c => c.style.padding = cp + 'px');
+          tn.forEach(n => { n.style.fontSize = ts + 'px'; n.style.lineHeight = String(lh) });
+          rn.forEach(n => n.style.fontSize = rs2 + 'px');
+          trn.forEach(n => n.style.fontSize = ms + 'px');
+        };
         const ov = () => { if (isOverflowing(compareLayout, tw, th)) return true; return cols.some((c, i) => { const w = wr[i]; return isOverflowing(c, c.clientWidth || tw, c.clientHeight || th) || (w && isOverflowing(w, w.clientWidth || tw, w.clientHeight || th)) || isOverflowing(tn[i], tn[i].clientWidth || tw, th); }); };
         apply(); let g = 0;
-        while (ov() && (ts > COMPARE_TEXT_MIN || rs2 > COMPARE_REF_MIN || ms > COMPARE_META_MIN || cp > COMPARE_PADDING_MIN || lp > COMPARE_LAYOUT_PADDING_MIN || lh > 1.08) && g < 240) {
+        while (ov() && (ts > COMPARE_TEXT_MIN || rs2 > COMPARE_REF_MIN || ms > COMPARE_META_MIN || cp > COMPARE_PADDING_MIN || hasLayoutPaddingRoom() || lh > 1.08) && g < 240) {
           if (ts > COMPARE_TEXT_MIN) ts--; if (rs2 > COMPARE_REF_MIN) rs2 = Math.max(COMPARE_REF_MIN, rs2 - 1); if (ms > COMPARE_META_MIN) ms = Math.max(COMPARE_META_MIN, ms - 1);
           if (ov() && cp > COMPARE_PADDING_MIN) cp = Math.max(COMPARE_PADDING_MIN, cp - 1);
-          if (ov() && lp > COMPARE_LAYOUT_PADDING_MIN) lp = Math.max(COMPARE_LAYOUT_PADDING_MIN, lp - 2);
+          if (ov() && hasLayoutPaddingRoom()) shrinkLayoutPadding();
           if (ov() && lh > 1.08) lh = Math.max(1.08, +((lh - 0.02).toFixed(2)));
           apply(); g++;
         }
+      }
+
+      function resetFullscreenInlineLayoutStyles() {
+        verseText.style.fontSize = '';
+        verseText.style.lineHeight = '';
+        reference.style.fontSize = '';
+        reference.style.marginTop = '';
+        reference.style.marginBottom = '';
+        verseContainer.style.padding = '';
+        if (compareLayout) {
+          compareLayout.style.gridTemplateColumns = '';
+          compareLayout.style.gap = '';
+          compareLayout.style.padding = '';
+          compareLayout.querySelectorAll('.compare-column').forEach((column) => {
+            column.style.padding = '';
+          });
+        }
+        [compareTextLeft, compareTextRight].forEach((node) => {
+          if (!node) return;
+          node.style.fontSize = '';
+          node.style.lineHeight = '';
+        });
+        [compareReferenceLeft, compareReferenceRight, compareTranslationLeft, compareTranslationRight].forEach((node) => {
+          if (!node) return;
+          node.style.fontSize = '';
+        });
       }
 
       function scheduleContentFit() {
@@ -965,6 +1383,8 @@
       /* ═══ THEME: Fullscreen ═══ */
       function applyThemeFullscreen(s) {
         applyThemeBase(s);
+        basePadding = Number(s.padding || 60);
+        root.style.setProperty('--padding', basePadding + 'px');
         // Compare-specific font size — use the explicit setting if provided, otherwise derive from primary
         const hasCompareSize = s.compareVerseFontSizeLeft != null && Number(s.compareVerseFontSizeLeft) > 0;
         baseCompareFontSize = hasCompareSize ? Number(s.compareVerseFontSizeLeft) : Math.max(24, Math.round(baseFontSize * 0.76));
@@ -989,63 +1409,52 @@
         const compareFontFamily = s.compareFontFamilyLeft || '';
         if (compareFontFamily) root.style.setProperty('--compare-font-family', compareFontFamily);
         else root.style.setProperty('--compare-font-family', '');
-        // Legacy compare layout fields
-        const cw = Math.max(30, Math.min(50, Number(s.compareTranslationWidth ?? 40)));
-        const cg = Math.max(0, Math.min(200, Number(s.compareTranslationGap ?? 40)));
-        root.style.setProperty('--compare-panel-width', cw + '%'); root.style.setProperty('--compare-gap', cg + 'px');
-        if (compareLayout) { compareLayout.style.gridTemplateColumns = `minmax(0,${cw}fr) minmax(0,${cw}fr)`; compareLayout.style.gap = cg + 'px'; }
+        // Compare layout fields from BackgroundPickerCard.
+        const legacyWidth = clampSetting(s.compareTranslationWidth, 40, 25, 75);
+        const leftWidth = clampSetting(s.compareLeftWidth, legacyWidth, 25, 75);
+        const rightWidth = clampSetting(s.compareRightWidth, legacyWidth, 25, 75);
+        const cg = clampSetting(s.compareTranslationGap ?? s.gap, 40, 0, 200);
+        const outerTop = clampSetting(s.compareOuterPaddingTop, basePadding, 0, 200);
+        const outerRight = clampSetting(s.compareOuterPaddingRight, basePadding, 0, 200);
+        const outerBottom = clampSetting(s.compareOuterPaddingBottom, basePadding, 0, 200);
+        const outerLeft = clampSetting(s.compareOuterPaddingLeft, basePadding, 0, 200);
+        baseComparePanelInnerPadding = clampSetting(s.comparePanelInnerPadding, 38, 0, 120);
+        baseCompareLayoutPadding = { top: outerTop, right: outerRight, bottom: outerBottom, left: outerLeft };
+        root.style.setProperty('--compare-left-width', leftWidth + 'fr');
+        root.style.setProperty('--compare-right-width', rightWidth + 'fr');
+        root.style.setProperty('--compare-panel-width', legacyWidth + '%');
+        root.style.setProperty('--compare-gap', cg + 'px');
+        root.style.setProperty('--compare-outer-padding-top', outerTop + 'px');
+        root.style.setProperty('--compare-outer-padding-right', outerRight + 'px');
+        root.style.setProperty('--compare-outer-padding-bottom', outerBottom + 'px');
+        root.style.setProperty('--compare-outer-padding-left', outerLeft + 'px');
+        root.style.setProperty('--compare-panel-inner-padding', baseComparePanelInnerPadding + 'px');
+        root.style.setProperty('--compare-reference-verse-spacing', clampSetting(s.compareReferenceVerseSpacing, 16, 0, 80) + 'px');
+        root.style.setProperty('--compare-reference-transform', mapTextTransform(s.compareReferenceTextTransformLeft || s.refTextTransform));
+        const fallbackRefAlign = s.refTextAlign && s.refTextAlign !== 'match' ? s.refTextAlign : (s.textAlign || 'center');
+        root.style.setProperty('--compare-reference-align', compareMetaAlign(s.compareReferenceAlignmentLeft, fallbackRefAlign));
+        applyCompareReferencePlacement(compareReferenceLeft, compareMetaPosition(s.compareReferencePositionLeft), compareMetaAlign(s.compareReferenceAlignmentLeft, fallbackRefAlign));
+        applyCompareReferencePlacement(compareReferenceRight, compareMetaPosition(s.compareReferencePositionRight), compareMetaAlign(s.compareReferenceAlignmentRight, fallbackRefAlign));
+        if (compareLayout) {
+          compareLayout.style.gridTemplateColumns = `minmax(0,${leftWidth}fr) minmax(0,${rightWidth}fr)`;
+          compareLayout.style.gap = cg + 'px';
+          compareLayout.style.padding = `${outerTop}px ${outerRight}px ${outerBottom}px ${outerLeft}px`;
+          compareLayout.querySelectorAll('.compare-column').forEach((column) => {
+            column.style.padding = baseComparePanelInnerPadding + 'px';
+          });
+        }
         root.style.setProperty('--bg-shade-gradient', buildShadeGradient(s.fullscreenShadeColor || '#000', s.fullscreenShadeOpacity ?? 0.42));
         root.style.setProperty('--bg-shade-display', s.fullscreenShadeEnabled === false ? 'none' : 'block');
-        basePadding = Number(s.padding || 60); root.style.setProperty('--padding', basePadding + 'px');
         root.style.setProperty('--safe-area', (s.safeArea || 40) + 'px');
         if (s.refPosition === 'top') reference.classList.add('top'); else reference.classList.remove('top');
         root.dataset.refBgEnabled = s.referenceBackgroundEnabled === true ? 'true' : 'false';
 
-        console.log('[BibleOverlay] fullscreen css vars', {
-          fontColor: root.style.getPropertyValue('--font-color'),
-          fontWeight: root.style.getPropertyValue('--font-weight'),
-          fontStyle: root.style.getPropertyValue('--font-style'),
-          refColor: root.style.getPropertyValue('--ref-font-color'),
-          refWeight: root.style.getPropertyValue('--ref-font-weight'),
-        });
-
-        // Background with crossfade
-        const bgVideoUrl = String(s.backgroundVideo || '').trim(), bgOp = String(s.backgroundOpacity ?? 1);
-        const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor;
-        const bcs = s.backgroundColor || 'transparent', bgc = hasG ? `linear-gradient(${ga}deg,${bcs},${ge})` : bcs;
-        let nbt = 'none';
-        if (bgVideoUrl) nbt = 'video'; else if (s.backgroundPattern && (s.backgroundPattern === '__FROM_CSS__' || s.backgroundPattern.startsWith('data:') || PATTERN_CSS[s.backgroundPattern])) nbt = 'pattern';
-        else if (s.backgroundImage && s.backgroundImage !== '__BG_SOURCE__') nbt = 'image'; else if (hasG) nbt = 'gradient'; else if (s.backgroundColor && s.backgroundColor !== 'transparent') nbt = 'color';
-        const fp = [bgVideoUrl, bgc, s.backgroundImage || '', s.backgroundPattern || '', bgOp].join('||');
-        if (fp === lastBgFingerprint) bgTransitionSuppressed = true; else { bgTransitionSuppressed = false; lastBgFingerprint = fp; }
-        const btc = nbt !== lastBgType, ittv = btc && nbt === 'video' && lastBgType !== 'none' && lastBgType !== 'video', itfv = btc && lastBgType === 'video' && nbt !== 'video';
-        const skipBg = bgTransitionSuppressed && !btc;
-        if (!bgTransitionSuppressed && bgCrossfade) { bgCrossfade.style.transition = 'none'; const cs = getComputedStyle(background); bgCrossfade.style.backgroundImage = cs.backgroundImage; bgCrossfade.style.backgroundColor = cs.backgroundColor; bgCrossfade.style.background = cs.background; }
-        if (!skipBg) {
-          if (bgVideoUrl) {
-            root.style.setProperty('--bg-image', 'none'); root.style.setProperty('--bg-color', 'transparent'); backgroundVideoEl.style.display = 'block';
-            const srcCh = backgroundVideoEl.getAttribute('src') !== bgVideoUrl, ctrl = getSeamlessLoopController(backgroundVideoEl);
-            if (srcCh) {
-              stopSeamlessLoop(ctrl, { clearSrc: true, resetActiveToPrimary: true }); backgroundVideoEl.dataset.src = bgVideoUrl; backgroundVideoEl.src = bgVideoUrl; backgroundVideoEl.load(); ctrl.secondary.src = bgVideoUrl; ctrl.secondary.load(); ctrl.src = bgVideoUrl; backgroundVideoEl.loop = false; ctrl.enabled = true; startSeamlessLoopMonitor(ctrl); backgroundVideoEl.style.opacity = '0';
-              const onCP = () => { backgroundVideoEl.removeEventListener('canplay', onCP); backgroundVideoEl.style.transition = 'opacity 0.4s cubic-bezier(0.4,0,0.2,1)'; backgroundVideoEl.style.opacity = bgOp; if (bgCrossfade && bgCrossfade.style.opacity !== '0') requestAnimationFrame(() => requestAnimationFrame(() => { bgCrossfade.style.transition = 'opacity 0.5s cubic-bezier(0.4,0,0.2,1)'; bgCrossfade.style.opacity = '0'; })); const pp = backgroundVideoEl.play(); if (pp && typeof pp.catch === 'function') pp.catch(() => { }); };
-              backgroundVideoEl.addEventListener('canplay', onCP, { once: true }); setTimeout(() => { if (bgCrossfade && bgCrossfade.style.opacity !== '0') { bgCrossfade.style.transition = 'opacity 0.5s cubic-bezier(0.4,0,0.2,1)'; bgCrossfade.style.opacity = '0'; } }, 3000);
-            }
-          } else {
-            if (itfv && backgroundVideoEl.style.display !== 'none') { backgroundVideoEl.style.transition = 'opacity 0.5s cubic-bezier(0.4,0,0.2,1)'; backgroundVideoEl.style.opacity = '0'; const c = seamlessLoopControllers.get(backgroundVideoEl); if (c) { if (c.active) { c.active.style.transition = 'opacity 0.5s cubic-bezier(0.4,0,0.2,1)'; c.active.style.opacity = '0'; } if (c.inactive) hideVideoEl(c.inactive, false); } setTimeout(() => { backgroundVideoEl.style.transition = ''; const c2 = seamlessLoopControllers.get(backgroundVideoEl); if (c2) stopSeamlessLoop(c2, { clearSrc: true, resetActiveToPrimary: true }); if (backgroundVideoEl.getAttribute('src')) { backgroundVideoEl.pause(); backgroundVideoEl.removeAttribute('src'); backgroundVideoEl.load(); } backgroundVideoEl.style.display = 'none'; }, 550); }
-            else { const c = seamlessLoopControllers.get(backgroundVideoEl); if (c) stopSeamlessLoop(c, { clearSrc: true, resetActiveToPrimary: true }); if (backgroundVideoEl.getAttribute('src')) { backgroundVideoEl.pause(); backgroundVideoEl.removeAttribute('src'); backgroundVideoEl.load(); } backgroundVideoEl.style.display = 'none'; }
-          }
-          let pc = ''; if (!bgVideoUrl && s.backgroundPattern) { if (s.backgroundPattern.startsWith('data:')) pc = 'url(' + s.backgroundPattern + ')'; else if (s.backgroundPattern === '__FROM_CSS__') { const cv = getComputedStyle(root).getPropertyValue('--bg-pattern-data').trim(); if (cv) pc = cv; } else if (PATTERN_CSS[s.backgroundPattern]) pc = PATTERN_CSS[s.backgroundPattern]; }
-          if (pc) { root.style.setProperty('--bg-image', pc); root.style.setProperty('--bg-color', 'transparent'); }
-          else if (!bgVideoUrl && s.backgroundImage) { let bu = s.backgroundImage; if (bu === '__BG_SOURCE__') { root.style.setProperty('--bg-image', 'none'); root.style.setProperty('--bg-color', 'transparent'); root.style.setProperty('--bg-opacity', '1'); } else if (bu === '__FROM_CSS__') { const cv = getComputedStyle(root).getPropertyValue('--bg-image').trim(); root.style.setProperty('--bg-image', cv || 'none'); if (cv) { root.style.setProperty('--bg-color', 'transparent'); root.style.setProperty('--bg-opacity', bgOp); } } else if (bu === '__FROM_LOCALSTORAGE__') { const st = localStorage.getItem('bible-overlay-bg-image'); bu = st || ''; root.style.setProperty('--bg-image', bu ? `url(${bu})` : 'none'); } else { root.style.setProperty('--bg-image', `url(${bu})`); } }
-          else if (!bgVideoUrl) root.style.setProperty('--bg-image', 'none');
-          if (!pc) { if (hasG) { root.style.setProperty('--bg-color', 'transparent'); if (!bgVideoUrl && !s.backgroundImage) root.style.setProperty('--bg-image', bgc); } else root.style.setProperty('--bg-color', bgc); }
-          if (!bgTransitionSuppressed && bgCrossfade) { if (ittv) { bgCrossfade.style.transition = 'none'; bgCrossfade.style.opacity = bgOp; } else if (!bgVideoUrl) { bgCrossfade.style.transition = 'none'; bgCrossfade.style.opacity = bgOp; requestAnimationFrame(() => requestAnimationFrame(() => { bgCrossfade.style.transition = 'opacity 0.5s cubic-bezier(0.4,0,0.2,1)'; bgCrossfade.style.opacity = '0'; })); } } else if (bgTransitionSuppressed && bgCrossfade) { bgCrossfade.style.transition = 'none'; bgCrossfade.style.opacity = '0'; }
-          lastBgType = nbt;
-        }
+        applyFullscreenBackground(s);
       }
 
       /* ═══ THEME: Lower-third ═══ */
       function applyThemeLowerThird(s) {
+        resetFullscreenInlineLayoutStyles();
         applyThemeBase(s);
         baseBarPadding = Number(s.padding || 18); root.style.setProperty('--safe-area', (s.safeArea || 40) + 'px');
         const sp = s.lowerThirdSize || 'medium', preset = SIZE_PRESETS[sp] || SIZE_PRESETS['medium'];
@@ -1088,8 +1497,13 @@
         if (incomingTs && incomingTs <= lastTimestamp && !(incomingHasSlide && !currentHasSlide)) return;
         lastTimestamp = Math.max(lastTimestamp, incomingTs);
         currentOverlayData = data;
-        if (data.mode && data.mode !== currentMode) setMode(data.mode);
+        if (data.mode && data.mode !== currentMode) {
+          setMode(data.mode);
+          writeRenderAck(data);
+          return;
+        }
         if (currentMode === 'lower-third') processSlideLowerThird(data); else processSlideFullscreen(data);
+        writeRenderAck(data);
       }
 
       function processSlideFullscreen(data) {
@@ -1102,10 +1516,10 @@
           verseContainer.style.display = 'none';
           compareLayout.classList.add('is-visible');
           const [l, r] = cc;
-          compareReferenceLeft.textContent = String(l.reference || '').trim();
-          compareReferenceRight.textContent = String(r.reference || '').trim();
-          compareTranslationLeft.textContent = String(l.translation || '').trim();
-          compareTranslationRight.textContent = String(r.translation || '').trim();
+          compareReferenceLeft.textContent = formatCompareReference(l.reference, l.translation);
+          compareReferenceRight.textContent = formatCompareReference(r.reference, r.translation);
+          compareTranslationLeft.textContent = '';
+          compareTranslationRight.textContent = '';
           compareTextLeft.innerHTML = safeSupText(l.text);
           compareTextRight.innerHTML = safeSupText(r.text);
         }
@@ -1121,6 +1535,7 @@
         if (isCL) autoScaleCompareContent();
         else { autoScaleContent(); scheduleContentFit(); }
         const anim = data.theme?.animation || 'fade'; lastAnimation = anim;
+        if (modeTransitionActive) return;
         if (isNew) { if (!hasShownOnce) { hasShownOnce = true; runEntranceAnimation(anim); } }
         else if (isSame && anim !== 'none' && hasShownOnce) { clearEntranceAnimationClasses(); void verseContainer.offsetWidth; const ed = Math.max(95, Math.min(170, Math.round((data.theme?.animationDuration || 400) * 0.38))); const el = Date.now() % ed, d = -el; if (anim === 'fade') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-fade-enter'); } else if (anim === 'slide-up') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-slide-up-enter'); } else if (anim === 'slide-left') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-slide-left-enter'); } else if (anim === 'scale-in') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-scale-in-enter'); } setTimeout(() => { verseContainer.style.animationDelay = ''; }, ed + 50); }
       }
@@ -1134,38 +1549,77 @@
         verseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; reference.style.display = rt ? 'block' : 'none';
         try { applyTheme(data.theme || {}); } catch (error) { console.error('mce-bible-overlay lower-third theme error', error); }
         const anim = data.theme?.animation || 'slide-up'; lastAnimation = anim;
+        if (modeTransitionActive) return;
         if (isNew && !hasShownOnce) { hasShownOnce = true; runEntranceAnimation(anim); }
       }
 
       /* ═══ EVENT-DRIVEN UPDATE PIPELINE ═══ */
-      function readFromCssVar() { try { const raw = getComputedStyle(root).getPropertyValue('--overlay-data').trim(); if (!raw || raw === lastCssOverlayData) return false; lastCssOverlayData = raw; const n = raw.replace(/^['"]|['"]$/g, ''); if (!n) return false; processOverlayUpdate(JSON.parse(decodeURIComponent(n))); return true; } catch { } return false; }
+      function readFromCssVar() {
+        try {
+          const raw = readInjectedCssVar('--overlay-data') || readComputedCssVar('--overlay-data');
+          if (!raw || raw === lastCssOverlayData) return false;
+          lastCssOverlayData = raw;
+          const normalized = raw.replace(/^['"]|['"]$/g, '');
+          if (!normalized) return false;
+          processOverlayUpdate(JSON.parse(decodeURIComponent(normalized)));
+          return true;
+        } catch { }
+        return false;
+      }
       function readModeFromCssVar() { try { const raw = getComputedStyle(root).getPropertyValue('--display-mode').trim().replace(/^['"]|['"]$/g, ''); if (raw === 'lower-third' || raw === 'fullscreen') { if (raw !== currentMode) setMode(raw); } } catch { } }
       function readFromUrlHash() { try { const h = window.location.hash; if (h && h.startsWith('#data=')) { processOverlayUpdate(JSON.parse(decodeURIComponent(h.slice(6)))); return true; } } catch { } return false; }
       function readFromUrlSearch() { try { const raw = new URLSearchParams(window.location.search).get('overlayData'); if (raw) { processOverlayUpdate(JSON.parse(decodeURIComponent(raw))); return true; } } catch { } return false; }
       function readFromLocalStorage() { try { const raw = localStorage.getItem(_storageKey); if (raw) { processOverlayUpdate(JSON.parse(raw)); return true; } } catch { } return false; }
+      function syncOverlayState() {
+        if (readFromCssVar()) return true;
+        if (readFromUrlHash()) return true;
+        if (readFromUrlSearch()) return true;
+        if (readFromLocalStorage()) return true;
+        readModeFromCssVar();
+        return false;
+      }
+      function syncCssOverlayState() {
+        if (readFromCssVar()) return true;
+        readModeFromCssVar();
+        return false;
+      }
 
       const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
       const _storageKey = _tabParam === 'worship' ? 'worship-overlay-data' : 'bible-overlay-data';
+      const _ackStorageKey = _tabParam === 'worship' ? 'worship-overlay-render-ack' : 'bible-overlay-render-ack';
       const _channelName = _tabParam === 'worship' ? 'obs-church-studio-worship-overlay' : 'obs-church-studio-bible-overlay';
+
+      function writeRenderAck(data) {
+        if (!data) return;
+        try {
+          localStorage.setItem(_ackStorageKey, JSON.stringify({
+            timestamp: Number(data.timestamp) || Date.now(),
+            mode: currentMode,
+            slideId: data.slide?.id || '',
+          }));
+        } catch { }
+      }
 
       try { const bc = new BroadcastChannel(_channelName); bc.onmessage = (e) => { processOverlayUpdate(e.data); }; } catch { }
       window.addEventListener('message', (e) => { if (e.data?.action === 'animate-out') processOverlayUpdate(e.data); });
       window.addEventListener('hashchange', () => { readFromUrlHash(); });
 
-      const _observer = new MutationObserver(() => { readModeFromCssVar(); readFromCssVar(); });
+      const _observer = new MutationObserver(() => { syncCssOverlayState(); });
       _observer.observe(root, { attributes: true, attributeFilter: ['style'] });
+      const _cssObserverTarget = document.head || document.documentElement;
+      if (_cssObserverTarget) {
+        const _cssObserver = new MutationObserver(() => { syncCssOverlayState(); });
+        _cssObserver.observe(_cssObserverTarget, { childList: true, subtree: true, characterData: true });
+      }
 
       if (window.ResizeObserver) { const ro = new ResizeObserver(() => { scheduleContentFit(); }); ro.observe(document.body); ro.observe(verseContainer); ro.observe(compareLayout); }
 
       /* ═══ INITIAL ═══ */
       ltBar.style.display = 'none';
-      readFromUrlHash();
-      readFromUrlSearch();
-      readFromLocalStorage();
-      readModeFromCssVar();
+      syncOverlayState();
       // CSS --overlay-data may not be injected by OBS yet — retry with backoff
       (function retryReadFromCssVar(attempts, delay) {
-        if (!readFromCssVar() && attempts > 0) {
+        if (!syncCssOverlayState() && attempts > 0) {
           setTimeout(function () { retryReadFromCssVar(attempts - 1, Math.round(delay * 1.5)); }, delay);
         }
       })(5, 50);
@@ -1175,7 +1629,7 @@
          style attribute on <html>. The MutationObserver above only fires for
          style attribute changes, so CSS-only SetInputSettings calls are
          invisible to it. A lightweight poll bridges that gap. */
-      setInterval(() => { readFromUrlHash(); readFromUrlSearch(); readFromLocalStorage(); readModeFromCssVar(); readFromCssVar(); }, 150);
+      setInterval(() => { syncOverlayState(); }, 75);
     })();
   </script>
 </body>

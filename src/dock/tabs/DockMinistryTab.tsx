@@ -32,6 +32,7 @@ import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitl
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
 import { localizeLowerThirdThemeAssets, normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
+import { loadProjectionSettings, saveProjectionSettings } from "../dockProjectionSettings";
 
 const ALL_LT_THEMES: LowerThirdTheme[] = [
   ...LT_ALL_THEMES,
@@ -441,6 +442,16 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           cropBottom: 0,
         },
       });
+      await dockObsClient.ensureTickerAboveSource(targetScene, sourceName).catch(() => { });
+      await dockObsClient.syncLowerThirdTickerClearance(targetScene).catch(() => { });
+
+      const projectionSettings = loadProjectionSettings();
+      if (projectionSettings.tickerLayerPriority !== "ticker-above") {
+        saveProjectionSettings({
+          ...projectionSettings,
+          tickerLayerPriority: "ticker-above",
+        });
+      }
 
       await dockObsClient.applyProjectionSettings().catch(() => { });
 
@@ -513,6 +524,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           });
         }
       }
+      await dockObsClient.syncLowerThirdTickerClearance("MCE Presentation").catch(() => { });
 
       // Restore original scene in preview if we had switched away
       if (tickerOutputMode === "scene") {
