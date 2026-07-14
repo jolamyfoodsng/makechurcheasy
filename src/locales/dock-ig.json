@@ -1613,5 +1613,6 @@
   "auth.checkEmail.title": "Lelee email gị",
   "auth.checkEmail.sentTo": "Anyị ezigala njikọ nbanye na {{email}}.",
   "auth.checkEmail.instruction": "Mepee njikọ ahụ n'ime email gị ka ị gaa n'ihu.",
-  "auth.checkEmail.backToSignIn": "Laghachi na nbanye"
+  "auth.checkEmail.backToSignIn": "Laghachi na nbanye",
+  "common.upgradePlansStartToday": "Atụmatụ na-amalite site na naanị ₦{{amount}} taa."
 }

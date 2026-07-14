@@ -28,8 +28,8 @@ import {
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { PremiumContentGate } from "../components/PremiumContentGate";
 import { UpgradeModal } from "../components/UpgradeModal";
+import SongImportFullprocess from "../../others/SongImportFullprocess";
 import { BulkImportModal } from "../worship/BulkImportModal";
-import { OnlineLyricsImportModal, type OnlineLyricsImportDraft } from "../worship/OnlineLyricsImportModal";
 import {
   formatOnlineLyricsSearchError,
   isSpotifyTrackLyricsQuery,
@@ -37,10 +37,10 @@ import {
   type OnlineLyricsSearchResult,
 } from "../worship/onlineLyricsService";
 import { unicodeSearchNormalize, unicodeStripDiacritics } from "../worship/unicodeUtils";
-import { generateSlides } from "../worship/slideEngine";
 import type { Song } from "../worship/types";
-import { archiveSong, getAllSongs, getArchivedSongs, restoreSong, saveSong } from "../worship/worshipDb";
+import { archiveSong, getAllSongs, getArchivedSongs, restoreSong } from "../worship/worshipDb";
 import WorshipSongModal from "../worship/WorshipSongModal";
+import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 
 /* ---------- helpers ---------- */
 
@@ -98,7 +98,6 @@ export function SongsTab() {
   const [onlineSearchResults, setOnlineSearchResults] = useState<OnlineLyricsSearchResult[]>([]);
   const [onlineSearchState, setOnlineSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [onlineSearchMessage, setOnlineSearchMessage] = useState("");
-  const [importingOnlineId, setImportingOnlineId] = useState<string | null>(null);
   const [pendingOnlineImport, setPendingOnlineImport] = useState<OnlineLyricsSearchResult | null>(null);
   const [showOnlineSearchModal, setShowOnlineSearchModal] = useState(false);
   const [onlineSearchQuery, setOnlineSearchQuery] = useState("");
@@ -122,7 +121,6 @@ export function SongsTab() {
   const [songCount, setSongCount] = useState<number>(0);
   const isSongUnlimited = songLimit === -1;
   const hasReachedSongLimit = !isSongUnlimited && songCount >= songLimit;
-  const showSongUsage = !isSongUnlimited; // Show usage counter for free/basic
 
   const computeSongLimits = useCallback(async () => {
     try {
@@ -227,14 +225,6 @@ export function SongsTab() {
     }
     return scored.map((item) => item.song);
   }, [search, accessibleSongs, languageFilter]);
-
-  const availableLanguages = useMemo(() => {
-    const langs = new Set<string>();
-    for (const song of accessibleSongs) {
-      if (song.metadata.language) langs.add(song.metadata.language);
-    }
-    return Array.from(langs).sort();
-  }, [accessibleSongs]);
 
   const hasActiveFilters = search.trim().length > 0 || languageFilter !== "all";
   const languageFilterLabel = languageFilter === "all"
@@ -365,57 +355,6 @@ export function SongsTab() {
     setShowOnlineSearchModal(true);
   }, [search]);
 
-  const handleConfirmOnlineImport = useCallback(
-    async (result: OnlineLyricsSearchResult, draft: OnlineLyricsImportDraft) => {
-      const existingSong = findImportedSong(result);
-      if (existingSong) {
-        setEditSong(existingSong);
-        setPendingOnlineImport(null);
-        return;
-      }
-
-      if (hasReachedSongLimit) {
-        setPendingOnlineImport(null);
-        setSongLimitModalType("songs");
-        setShowSongLimitModal(true);
-        return;
-      }
-
-      const lyrics = draft.lyrics.trim();
-      if (!lyrics) {
-        return;
-      }
-
-      const now = new Date().toISOString();
-      const newSong: Song = {
-        id: `song-online-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        metadata: {
-          title: draft.title.trim() || onlineSearchQuery.trim() || "Imported Song",
-          artist: draft.artist.trim(),
-        },
-        lyrics,
-        slides: generateSlides(lyrics, 2, true),
-        createdAt: now,
-        updatedAt: now,
-        importSourceName: result.sourceName,
-        importSourceType: "online",
-        importSourceUrl: result.url,
-      };
-
-      setImportingOnlineId(result.id);
-      try {
-        await saveSong(newSong);
-        await reload();
-        setPendingOnlineImport(null);
-        setShowOnlineSearchModal(false);
-        setSearch(newSong.metadata.title);
-      } finally {
-        setImportingOnlineId(null);
-      }
-    },
-    [findImportedSong, hasReachedSongLimit, onlineSearchQuery, reload],
-  );
-
   useEffect(() => {
     const trimmedSearch = onlineSearchQuery.trim();
     const firstResult = onlineSearchResults[0];
@@ -466,47 +405,7 @@ export function SongsTab() {
               </button>
             )}
           </div>
-          <div className="lib-song-toolbar-meta">
-            {showSongUsage && (
-              <span className="lib-song-usage-badge">
-                <Icon name="queue_music" size={14} />
-                Songs {songCount} / {songLimit}
-              </span>
-            )}
-            {availableLanguages.length > 0 && (
-              <label className="lib-toolbar-select-chip">
-                <Icon name="translate" size={14} />
-                <span>Language</span>
-                <select
-                  className="lib-lang-filter"
-                  value={languageFilter}
-                  onChange={(e) => setLanguageFilter(e.target.value)}
-                  aria-label="Filter songs by language"
-                >
-                  <option value="all">All languages</option>
-                  {availableLanguages.map((lang) => (
-                    <option key={lang} value={lang}>
-                      {lang.charAt(0).toUpperCase() + lang.slice(1)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {hasActiveFilters && (
-              <button
-                type="button"
-                className="lib-filter-reset-btn"
-                onClick={() => {
-                  setSearch("");
-                  setLanguageFilter("all");
-                }}
-                title="Clear filters"
-              >
-                <Icon name="filter_alt_off" size={14} />
-                Clear
-              </button>
-            )}
-          </div>
+
         </div>
         <div className="lib-toolbar-actions">
           <button
@@ -679,11 +578,6 @@ export function SongsTab() {
                                 Imported{s.importSourceName ? ` from ${s.importSourceName}` : ""}
                               </span>
                             )}
-                            {s.importSourceType === "document" && (
-                              <span className="lib-song-imported-badge">
-                                Smart import{s.importSourceName ? ` · ${s.importSourceName}` : ""}
-                              </span>
-                            )}
                           </div>
                           {lines[0] && <p className="lib-song-lyric-line">{lines[0]}</p>}
                           {lines[1] && <p className="lib-song-lyric-line lib-song-lyric-line--faded">{lines[1]}</p>}
@@ -829,7 +723,6 @@ export function SongsTab() {
                 {onlineSearchResults.map((result) => {
                   const importedSong = findImportedSong(result);
                   const actionLabel = importedSong ? "Open" : "Import";
-                  const isImporting = importingOnlineId === result.id;
 
                   return (
                     <div key={result.id} className="lib-online-result-row">
@@ -852,10 +745,9 @@ export function SongsTab() {
                       <button
                         type="button"
                         className="lib-online-action"
-                        disabled={isImporting}
                         onClick={() => handleOpenOnlineImport(result)}
-                        title="Saving…">
-                        {isImporting ? "Saving…" : actionLabel}
+                        title={actionLabel}>
+                        {actionLabel}
                       </button>
                     </div>
                   );
@@ -959,11 +851,21 @@ export function SongsTab() {
       )}
 
       {pendingOnlineImport && (
-        <OnlineLyricsImportModal
+        <SongImportFullprocess
+          mode="onlineReview"
           result={pendingOnlineImport}
-          saving={importingOnlineId === pendingOnlineImport.id}
           onClose={() => setPendingOnlineImport(null)}
-          onImport={(draft) => handleConfirmOnlineImport(pendingOnlineImport, draft)}
+          onImported={() => {
+            void reload();
+            setShowOnlineSearchModal(false);
+            setSearch(pendingOnlineImport.title);
+            setPendingOnlineImport(null);
+          }}
+          onOpenExistingSong={(song) => {
+            setShowOnlineSearchModal(false);
+            setPendingOnlineImport(null);
+            setEditSong(song);
+          }}
         />
       )}
 
@@ -1016,7 +918,7 @@ export function SongsTab() {
                         ? " You've reached your limit."
                         : ""}
                     <br />
-                    Upgrade to <strong>Growth</strong> for unlimited songs and mass import.
+                    Upgrade to <strong>Growth</strong> for unlimited songs and mass import. {UPGRADE_PROMO_FALLBACK}
                   </>
                 )}
               </p>

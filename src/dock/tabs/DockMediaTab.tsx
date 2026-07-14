@@ -36,6 +36,7 @@ import { useTranslation } from "react-i18next";
 interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
+  isActive?: boolean;
 }
 
 type DockMediaKind = "video" | "image";
@@ -499,7 +500,7 @@ function TemplateVideoPreview({ src, label }: { src: string; label: string }) {
   );
 }
 
-export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Props) {
+export default function DockMediaTab({ staged: _staged, onStage: _onStage, isActive = true }: Props) {
   const { t } = useTranslation();
   const overlayBaseUrl = getOverlayBaseUrlSync();
   const tabsRef = useRef<HTMLDivElement | null>(null);
@@ -738,13 +739,15 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
   // Fallback polling: refresh media every 30s in case event-based sync fails
   useEffect(() => {
+    if (!isActive) return;
+
     const interval = setInterval(() => {
       if (mediaPollBusyRef.current) return;
       mediaPollBusyRef.current = true;
       void loadLibraryMedia().finally(() => { mediaPollBusyRef.current = false; });
     }, 30_000);
     return () => clearInterval(interval);
-  }, [loadLibraryMedia]);
+  }, [isActive, loadLibraryMedia]);
 
   // ── Fetch uploaded files from overlay server ──
 

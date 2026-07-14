@@ -59,6 +59,7 @@ import { getPlanConfig, getPlanLabel } from "../services/planConfig";
 import { getCachedSubscription } from "../services/subscriptionCache";
 import { getAllSongs } from "../worship/worshipDb";
 import { OnboardingResumeBanner } from "./OnboardingPage";
+import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -371,11 +372,16 @@ function DashboardSummaryCards() {
 // ── Plan Upgrade Banner ────────────────────────────────────────────────────
 
 function PlanUpgradeBanner() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { getFormattedPlanPrice, loading } = useCountryPricing();
   const trialActive = isInTrial(user);
   const plan = getUserPlan(user);
   const isFree = plan === "free";
+  const promoText = t("common.upgradePlansStartToday", {
+    amount: "3,500",
+    defaultValue: UPGRADE_PROMO_FALLBACK,
+  });
 
   if (!trialActive && !isFree) return null;
 
@@ -389,7 +395,10 @@ function PlanUpgradeBanner() {
       <div className="plan-upgrade-banner plan-upgrade-banner--trial">
         <div className="plan-upgrade-banner-content">
           <Crown size={16} className="plan-upgrade-banner-icon" />
-          <span>Free trial — {days} day{days !== 1 ? "s" : ""} remaining</span>
+          <div className="plan-upgrade-banner-copy">
+            <span>Free trial — {days} day{days !== 1 ? "s" : ""} remaining</span>
+            <span className="plan-upgrade-banner-promo">{promoText}</span>
+          </div>
         </div>
         <button className="plan-upgrade-banner-btn" onClick={handleUpgrade}>
           Upgrade <ArrowRight size={14} />
@@ -404,7 +413,10 @@ function PlanUpgradeBanner() {
     <div className="plan-upgrade-banner">
       <div className="plan-upgrade-banner-content">
         <Crown size={16} className="plan-upgrade-banner-icon" />
-        <span>Upgrade to Basic — from {monthly}/month</span>
+        <div className="plan-upgrade-banner-copy">
+          <span>Upgrade to Basic — from {monthly}/month</span>
+          <span className="plan-upgrade-banner-promo">{promoText}</span>
+        </div>
       </div>
       <button className="plan-upgrade-banner-btn" onClick={handleUpgrade}>
         Subscribe <ArrowRight size={14} />

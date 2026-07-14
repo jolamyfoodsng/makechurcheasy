@@ -33,6 +33,7 @@ import Icon from "../../components/Icon";
 import { useAuth } from "../../contexts/AuthContext";
 import { getEffectivePlan } from "../../services/licenseService";
 import { checkEntitlementSync } from "../../services/entitlementClient";
+import { UPGRADE_PROMO_FALLBACK } from "../../lib/upgradePromo";
 
 /** Auto-download bible abbreviations that cannot be deleted */
 const PROTECTED_ABBRS = new Set(AUTO_DOWNLOAD_BIBLES.map(b => b.abbr));
@@ -888,7 +889,7 @@ export default function BibleLibrary({
               Your {effectivePlan} plan allows {bibleVersionLimit} Bible versions.
               You currently have {installed.length} installed.
             </p>
-            <p>Upgrade your plan to install more translations.</p>
+            <p>Upgrade your plan to install more translations. {UPGRADE_PROMO_FALLBACK}</p>
             <div className="lib-confirm-actions">
               <button className="lib-confirm-cancel" onClick={() => setShowBibleLimitModal(false)} title="Close">Close</button>
               <a href="https://makechurcheasy.creatorstudioslabs.stream/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>

@@ -48,6 +48,7 @@ import { translateTranscript } from '../services/translationService';
 import { addTranslationToTranscript, loadTranscripts, saveTranscript } from '../transcripts/transcriptService';
 import type { Transcript, TranscriptScripture } from '../transcripts/transcriptTypes';
 import './TranscriptDetailPage.css';
+import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from '../lib/upgradePromo';
 
 /* ── Helpers ── */
 
@@ -973,6 +974,10 @@ interface TranscriptDetailProps {
 export default function TranscriptDetailPage({ transcriptId, onBack }: TranscriptDetailProps) {
   const { user } = useAuth();
   const { t } = useTranslation();
+  const upgradePromoText = t("common.upgradePlansStartToday", {
+    amount: UPGRADE_ENTRY_PRICE_NGN.toLocaleString("en-US"),
+    defaultValue: UPGRADE_PROMO_FALLBACK,
+  });
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<'idle' | 'pdf' | 'docx' | 'done_pdf' | 'done_docx'>('idle');
@@ -1475,6 +1480,9 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                   <p style={{ fontWeight: 600, marginBottom: 4 }}>Available on Growth Plan</p>
                   <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 16 }}>
                     Translate transcripts into multiple languages with a Growth plan or higher.
+                  </p>
+                  <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 16 }}>
+                    {upgradePromoText}
                   </p>
                   <button
                     className="btn btn-primary btn-small"

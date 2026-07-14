@@ -19,16 +19,13 @@ import { formatLyricsFromSections, generateSlides, parseWorshipLyricSections } f
 import { unicodeSearchNormalize } from "../../worship/unicodeUtils";
 import { archiveSong, getAllSongs, saveSong, syncSongsToDock } from "../../worship/worshipDb";
 import { worshipObsService } from "../../worship/worshipObsService";
+import SongImportFullprocess from "../../../others/SongImportFullprocess";
 import {
   formatOnlineLyricsSearchError,
   isSpotifyTrackLyricsQuery,
   searchOnlineSongLyrics,
   type OnlineLyricsSearchResult,
 } from "../../worship/onlineLyricsService";
-import {
-  OnlineLyricsImportModal,
-  type OnlineLyricsImportDraft,
-} from "../../worship/OnlineLyricsImportModal";
 import { BulkImportModal } from "../../worship/BulkImportModal";
 import { lowerThirdObsService } from "../../lowerthirds/lowerThirdObsService";
 import { dockObsClient } from "../../dock/dockObsClient";
@@ -65,6 +62,7 @@ import type { Song, SongMetadata, SplitConfig, Slide } from "../../worship/types
 import "../../worship/worship.css";
 import Icon from "../Icon";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
+import { UPGRADE_PROMO_FALLBACK } from "../../lib/upgradePromo";
 
 const WORSHIP_THEME_KEYWORDS = ["worship", "prayer", "lyric", "lyrics", "song", "hymn", "choir"];
 
@@ -211,8 +209,8 @@ export function WorshipModule({
   const [onlineSearchResults, setOnlineSearchResults] = useState<OnlineLyricsSearchResult[]>([]);
   const [onlineSearchState, setOnlineSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [onlineSearchMessage, setOnlineSearchMessage] = useState("");
-  const [importingOnlineId, setImportingOnlineId] = useState<string | null>(null);
   const [pendingOnlineImport, setPendingOnlineImport] = useState<OnlineLyricsSearchResult | null>(null);
+  const [manualImportOpen, setManualImportOpen] = useState(false);
 
   // ── Plan enforcement ──
   const { user: authUser } = useAuth();
@@ -1193,60 +1191,6 @@ export function WorshipModule({
     setPendingOnlineImport(result);
   }, [findImportedSong, selectSongById]);
 
-  const handleConfirmOnlineImport = useCallback(async (
-    result: OnlineLyricsSearchResult,
-    draft: OnlineLyricsImportDraft,
-  ) => {
-    const existingSong = findImportedSong(result);
-    if (existingSong) {
-      selectSongById(existingSong.id);
-      setPendingOnlineImport(null);
-      return;
-    }
-
-    if (hasReachedSongLimit) {
-      setPendingOnlineImport(null);
-      setSongLimitModalType("songs");
-      setShowSongLimitModal(true);
-      return;
-    }
-
-    const lyrics = draft.lyrics.trim();
-    if (!lyrics) {
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const newSong: Song = {
-      id: `song-online-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      metadata: {
-        title: draft.title.trim() || songSearch.trim() || "Imported Song",
-        artist: draft.artist.trim(),
-      },
-      lyrics,
-      slides: generateSlides(lyrics, 2, true),
-      createdAt: now,
-      updatedAt: now,
-      importSourceName: result.sourceName,
-      importSourceType: "online",
-      importSourceUrl: result.url,
-      autoSplit: true,
-      linesPerSlide: 2,
-    };
-
-    setImportingOnlineId(result.id);
-    try {
-      await saveSong(newSong);
-      await reloadSongs();
-      selectSongById(newSong.id);
-      setPendingOnlineImport(null);
-      track("song_created", { autoSplit: false });
-      track("song_imported", { source: "online" });
-    } finally {
-      setImportingOnlineId(null);
-    }
-  }, [findImportedSong, hasReachedSongLimit, reloadSongs, selectSongById, songSearch]);
-
   useEffect(() => {
     const trimmedSearch = songSearch.trim();
     const firstResult = onlineSearchResults[0];
@@ -1635,7 +1579,6 @@ export function WorshipModule({
                   {onlineSearchResults.map((result) => {
                     const importedSong = findImportedSong(result);
                     const actionLabel = importedSong ? "Open" : "Import";
-                    const isImporting = importingOnlineId === result.id;
                     return (
                       <div key={result.id} className="worship-online-item">
                         <div className="worship-online-item-head">
@@ -1649,7 +1592,7 @@ export function WorshipModule({
                           </div>
                           <button
                             className={`worship-online-action${hasReachedSongLimit && !importedSong ? " at-limit" : ""}`}
-                            disabled={isImporting || (hasReachedSongLimit && !importedSong)}
+                            disabled={hasReachedSongLimit && !importedSong}
                             onClick={() => {
                               if (importedSong) {
                                 selectSongById(importedSong.id);
@@ -1663,7 +1606,7 @@ export function WorshipModule({
                               handleOpenOnlineImport(result);
                             }}
                             title="Limit Reached">
-                            {isImporting ? "Saving…" : (hasReachedSongLimit && !importedSong ? "Limit Reached" : actionLabel)}
+                            {hasReachedSongLimit && !importedSong ? "Limit Reached" : actionLabel}
                           </button>
                         </div>
                         <p className="worship-online-preview">{result.preview}</p>
@@ -1699,9 +1642,7 @@ export function WorshipModule({
                     setShowSongLimitModal(true);
                     return;
                   }
-                  setImportLyrics("");
-                  setImportMetadata({ title: "", artist: "" });
-                  setView("import");
+                  setManualImportOpen(true);
                 }}
                 title="Add">
                 {hasReachedSongLimit ? <Icon name="lock" size={20} /> : <Icon name="add" size={20} />}
@@ -2085,12 +2026,31 @@ export function WorshipModule({
         )}
       </div>
 
+      {manualImportOpen && (
+        <SongImportFullprocess
+          mode="manual"
+          onClose={() => setManualImportOpen(false)}
+          onImported={() => {
+            void reloadSongs();
+            setManualImportOpen(false);
+          }}
+        />
+      )}
+
       {pendingOnlineImport && (
-        <OnlineLyricsImportModal
+        <SongImportFullprocess
+          mode="onlineReview"
           result={pendingOnlineImport}
-          saving={importingOnlineId === pendingOnlineImport.id}
           onClose={() => setPendingOnlineImport(null)}
-          onImport={(draft) => handleConfirmOnlineImport(pendingOnlineImport, draft)}
+          onImported={() => {
+            void reloadSongs();
+            setSongSearch(pendingOnlineImport.title);
+            setPendingOnlineImport(null);
+          }}
+          onOpenExistingSong={(song) => {
+            setPendingOnlineImport(null);
+            selectSongById(song.id);
+          }}
         />
       )}
 
@@ -2149,7 +2109,7 @@ export function WorshipModule({
                   Smart worship import is available on <strong>Growth</strong> and above.
                 </p>
                 <p className="ssm-hint">
-                  Free trial users can use it during the trial. Upgrade to Growth to unlock document import, review, and AI-assisted worship parsing.
+                  Free trial users can use it during the trial. Upgrade to Growth to unlock document import, review, and AI-assisted worship parsing. {UPGRADE_PROMO_FALLBACK}
                 </p>
               </>
             ) : (
@@ -2159,7 +2119,7 @@ export function WorshipModule({
                   You currently have {songCount} song{songCount !== 1 ? "s" : ""}.
                 </p>
                 <p className="ssm-hint">
-                  Upgrade your plan to add more songs to your library.
+                  Upgrade your plan to add more songs to your library. {UPGRADE_PROMO_FALLBACK}
                 </p>
               </>
             )}

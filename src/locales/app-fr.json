@@ -4908,5 +4908,6 @@
   "auth.checkEmail.title": "Vérifiez votre e-mail",
   "auth.checkEmail.sentTo": "Nous avons envoyé un lien de connexion à {{email}}.",
   "auth.checkEmail.instruction": "Ouvrez le lien dans votre boîte de réception pour continuer la connexion.",
-  "auth.checkEmail.backToSignIn": "Retour à la connexion"
+  "auth.checkEmail.backToSignIn": "Retour à la connexion",
+  "common.upgradePlansStartToday": "Les forfaits commencent à seulement ₦{{amount}} aujourd'hui."
 }

@@ -4908,5 +4908,6 @@
   "auth.checkEmail.title": "Check your email",
   "auth.checkEmail.sentTo": "We sent a sign-in link to {{email}}.",
   "auth.checkEmail.instruction": "Open the link in your inbox to continue signing in.",
-  "auth.checkEmail.backToSignIn": "Back to sign in"
+  "auth.checkEmail.backToSignIn": "Back to sign in",
+  "common.upgradePlansStartToday": "Plans start from just ₦{{amount}} today."
 }

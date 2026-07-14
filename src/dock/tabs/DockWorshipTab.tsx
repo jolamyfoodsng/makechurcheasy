@@ -2426,6 +2426,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   ]);
 
   useEffect(() => {
+    if (!isActive) return;
+
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
       const targetElement = target instanceof Element ? target : null;
@@ -2485,6 +2487,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     activeSectionIndex,
     handleClearLyrics,
     handleShowCurrent,
+    isActive,
     isNewSongModalOpen,
     navigateSection,
     onlineSearchOpen,

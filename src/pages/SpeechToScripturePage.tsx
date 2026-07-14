@@ -1565,15 +1565,19 @@ export default function SpeechToScripturePage() {
             {(accessDenied.reason === "subscription_expired" || accessDenied.reason === "trial_expired") && (
               <>
                 <Zap size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">{t("verseAi.upgradeRequired")}</h2>
+                <h2 className="sts3-lock-title">
+                  {t(accessDenied.reason === "trial_expired" ? "verseAi.freeTrialEnded" : "verseAi.subscriptionRequired")}
+                </h2>
                 <p className="sts3-lock-desc">
-                  {t("verseAi.upgradeRequiredDesc")}
+                  {t(accessDenied.reason === "trial_expired" ? "verseAi.freeTrialEndedDesc" : "verseAi.subscriptionRequiredDesc")}
+                  {" "}
+                  {t("common.upgradePlansStartToday", { amount: "3,500" })}
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
                   onClick={() => navigate("/pricing")}
-                  title={t("verseAi.choosePlan")}>
-                  {t("verseAi.choosePlan")}
+                  title={t(accessDenied.reason === "trial_expired" ? "verseAi.chooseAPlan" : "verseAi.manageSubscription")}>
+                  {t(accessDenied.reason === "trial_expired" ? "verseAi.chooseAPlan" : "verseAi.manageSubscription")}
                 </button>
               </>
             )}

@@ -71,6 +71,7 @@ import {
   Zap,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { refreshAccountBootstrapFromServer } from "../../services/authService";
 
 import "./MVSettings.css";
 
@@ -190,7 +191,7 @@ export function MVSettings() {
   const [proUnlocked] = useState(() => isProUnlocked());
 
   // ── Credits state (fetched from backend) ──
-  const { user: authUser } = useAuth();
+  const { user: authUser, refreshUser } = useAuth();
   const effectivePlan = getEffectivePlan(authUser);
   const hasMobileAccess = canUseMobileControl(authUser);
   const [showMobileUpgrade, setShowMobileUpgrade] = useState(false);
@@ -252,14 +253,44 @@ export function MVSettings() {
   // Re-fetch credits and transactions every time the Usage tab is opened
   useEffect(() => {
     if (activeTab !== "usage" || !authUser?.id) return;
-    fetchCreditDetails().then((details) => {
-      if (details) {
-        setCreditBalance(details.credits);
-        setCreditsUsedThisMonth(details.totalConsumed);
+    let cancelled = false;
+
+    const loadUsageState = async () => {
+      try {
+        await refreshAccountBootstrapFromServer();
+        if (!cancelled) {
+          refreshUser();
+        }
+      } catch {
+        // Keep the settings screen usable even if bootstrap refresh fails.
       }
-    }).catch(() => { });
-    fetchCreditTransactions(10).then(setRecentTransactions);
-  }, [activeTab, authUser?.id]);
+
+      try {
+        const details = await fetchCreditDetails();
+        if (!cancelled && details) {
+          setCreditBalance(details.credits);
+          setCreditsUsedThisMonth(details.totalConsumed);
+        }
+      } catch {
+        // noop
+      }
+
+      try {
+        const transactions = await fetchCreditTransactions(10);
+        if (!cancelled) {
+          setRecentTransactions(transactions);
+        }
+      } catch {
+        // noop
+      }
+    };
+
+    void loadUsageState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, authUser?.id, refreshUser]);
 
   // ── Appearance customization state ──
   const [theme, setTheme] = useState<"light" | "dark" | "system">(
@@ -1602,7 +1633,7 @@ export function MVSettings() {
                             Growth Trial — {trialDaysLeft} Day{trialDaysLeft !== 1 ? "s" : ""} Remaining
                           </div>
                           <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                            Ends {trialEndDate} · All premium features are active
+                            Ends {trialEndDate} · All premium features are active · {t("common.upgradePlansStartToday", { amount: "3,500" })}
                           </div>
                         </div>
                       </div>

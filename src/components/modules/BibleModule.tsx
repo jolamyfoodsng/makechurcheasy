@@ -1345,6 +1345,38 @@ export function BibleModule({
     return () => { cancelled = true; };
   }, [selectedBook, selectedChapter, selectedVerse, state.translation]);
 
+  const selectedPreviewSlide = useMemo(() => {
+    const verseText = ltVerseText.trim();
+    if (!selectedBook || !selectedChapter || !selectedVerse || !verseText) {
+      return null;
+    }
+
+    const previewPassage: BiblePassage = {
+      reference: `${selectedBook} ${selectedChapter}:${selectedVerse}`,
+      book: selectedBook,
+      chapter: selectedChapter,
+      startVerse: selectedVerse,
+      endVerse: selectedVerse,
+      verses: [{
+        book: selectedBook,
+        chapter: selectedChapter,
+        verse: selectedVerse,
+        text: verseText,
+        abbrev: "",
+      }],
+      translation: state.translation,
+    };
+
+    return generateSlides(previewPassage, state.slideConfig)[0] ?? null;
+  }, [
+    ltVerseText,
+    selectedBook,
+    selectedChapter,
+    selectedVerse,
+    state.slideConfig,
+    state.translation,
+  ]);
+
   useEffect(() => {
     const becameActive = !presentationTabWasActiveRef.current && isActive;
     presentationTabWasActiveRef.current = isActive;
@@ -2055,7 +2087,11 @@ export function BibleModule({
         >
           {/* ── Preview ── */}
           <div className="bible-right-section bible-right-preview-section">
-            <SlidePreview onClose={() => setShowPreview(false)} />
+            <SlidePreview
+              onClose={() => setShowPreview(false)}
+              slide={selectedPreviewSlide}
+              subtitle={selectedPreviewSlide ? "Selected verse" : undefined}
+            />
           </div>
 
           {/* ── Layout & Motion ── */}

@@ -1613,5 +1613,6 @@
   "auth.checkEmail.title": "Ṣàyẹ̀wò imeeli rẹ",
   "auth.checkEmail.sentTo": "A ti fi ọna asopọ ìwọlé ranṣẹ sí {{email}}.",
   "auth.checkEmail.instruction": "Ṣí ọna asopọ náà nínú imeeli rẹ láti tẹ̀síwájú.",
-  "auth.checkEmail.backToSignIn": "Pada sí ìwọlé"
+  "auth.checkEmail.backToSignIn": "Pada sí ìwọlé",
+  "common.upgradePlansStartToday": "Awọn ero bẹrẹ lati ₦{{amount}} nikan loni."
 }

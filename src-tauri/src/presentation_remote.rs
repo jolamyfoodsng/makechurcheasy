@@ -1,10 +1,11 @@
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::OnceLock;
-use tiny_http::{Header, Method, Response, Server};
+use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
@@ -118,6 +119,145 @@ fn cors_header() -> Header {
     Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap()
 }
 
+fn accept_ranges_header() -> Header {
+    Header::from_bytes("Accept-Ranges", "bytes").unwrap()
+}
+
+fn content_type_header(content_type: &str) -> Header {
+    Header::from_bytes("Content-Type", content_type).unwrap()
+}
+
+fn header_value(request: &Request, name: &'static str) -> Option<String> {
+    request
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv(name))
+        .map(|header| header.value.as_str().to_string())
+}
+
+fn parse_byte_range(range_header: &str, file_size: u64) -> Result<(u64, u64), ()> {
+    if file_size == 0 {
+        return Err(());
+    }
+
+    let range_value = range_header.trim().strip_prefix("bytes=").ok_or(())?;
+    if range_value.contains(',') {
+        return Err(());
+    }
+
+    let (start_raw, end_raw) = range_value.split_once('-').ok_or(())?;
+
+    if start_raw.is_empty() {
+        let suffix_len = end_raw.parse::<u64>().map_err(|_| ())?;
+        if suffix_len == 0 {
+            return Err(());
+        }
+
+        let length = suffix_len.min(file_size);
+        return Ok((file_size - length, file_size - 1));
+    }
+
+    let start = start_raw.parse::<u64>().map_err(|_| ())?;
+    if start >= file_size {
+        return Err(());
+    }
+
+    let end = if end_raw.is_empty() {
+        file_size - 1
+    } else {
+        end_raw.parse::<u64>().map_err(|_| ())?.min(file_size - 1)
+    };
+
+    if end < start {
+        return Err(());
+    }
+
+    Ok((start, end))
+}
+
+fn respond_file_request(request: Request, file_path: &Path, content_type: &str) {
+    let range_header = header_value(&request, "Range");
+
+    let file = match File::open(file_path) {
+        Ok(file) => file,
+        Err(_) => {
+            let _ = request
+                .respond(Response::from_string("Internal Server Error").with_status_code(500));
+            return;
+        }
+    };
+
+    let file_size = match file.metadata() {
+        Ok(metadata) => metadata.len(),
+        Err(_) => {
+            let _ = request
+                .respond(Response::from_string("Internal Server Error").with_status_code(500));
+            return;
+        }
+    };
+
+    if let Some(range_header) = range_header {
+        match parse_byte_range(&range_header, file_size) {
+            Ok((start, end)) => {
+                let mut file = file;
+                let content_length = end - start + 1;
+                let Some(content_length_usize) = usize::try_from(content_length).ok() else {
+                    let _ = request.respond(
+                        Response::from_string("Internal Server Error").with_status_code(500),
+                    );
+                    return;
+                };
+
+                if file.seek(SeekFrom::Start(start)).is_err() {
+                    let _ = request.respond(
+                        Response::from_string("Internal Server Error").with_status_code(500),
+                    );
+                    return;
+                }
+
+                let response = Response::new(
+                    StatusCode(206),
+                    Vec::new(),
+                    file.take(content_length),
+                    Some(content_length_usize),
+                    None,
+                )
+                .with_header(content_type_header(content_type))
+                .with_header(
+                    Header::from_bytes(
+                        "Content-Range",
+                        format!("bytes {}-{}/{}", start, end, file_size),
+                    )
+                    .unwrap(),
+                )
+                .with_header(
+                    Header::from_bytes("Content-Length", content_length.to_string()).unwrap(),
+                )
+                .with_header(accept_ranges_header())
+                .with_header(cors_header());
+                let _ = request.respond(response);
+            }
+            Err(_) => {
+                let response = Response::empty(416)
+                    .with_header(
+                        Header::from_bytes("Content-Range", format!("bytes */{}", file_size))
+                            .unwrap(),
+                    )
+                    .with_header(accept_ranges_header())
+                    .with_header(cors_header());
+                let _ = request.respond(response);
+            }
+        }
+        return;
+    }
+
+    let response = Response::from_file(file)
+        .with_header(content_type_header(content_type))
+        .with_header(accept_ranges_header())
+        .with_header(cors_header());
+    let _ = request.respond(response);
+}
+
 fn parse_query_value(url_path: &str, key: &str) -> String {
     let Some(qpos) = url_path.find('?') else {
         return String::new();
@@ -185,7 +325,10 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
     {
         Ok(server) => server,
         Err(error) => {
-            eprintln!("[PresentationRemote] Failed to start HTTP server: {}", error);
+            eprintln!(
+                "[PresentationRemote] Failed to start HTTP server: {}",
+                error
+            );
             return 0;
         }
     };
@@ -207,8 +350,16 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
     std::thread::spawn(move || {
         for mut request in server.incoming_requests() {
             let url_path = request.url().to_string();
-            let clean = url_path.split('?').next().unwrap_or(&url_path).trim_start_matches('/');
-            let clean = if clean.is_empty() { "presentation.html" } else { clean };
+            let clean = url_path
+                .split('?')
+                .next()
+                .unwrap_or(&url_path)
+                .trim_start_matches('/');
+            let clean = if clean.is_empty() {
+                "presentation.html"
+            } else {
+                clean
+            };
 
             if clean.contains("..") {
                 let _ = request.respond(Response::from_string("Forbidden").with_status_code(403));
@@ -217,8 +368,13 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
 
             if request.method() == &Method::Options {
                 let response = Response::from_string("")
-                    .with_header(Header::from_bytes("Access-Control-Allow-Methods", "GET, POST, OPTIONS").unwrap())
-                    .with_header(Header::from_bytes("Access-Control-Allow-Headers", "Content-Type").unwrap())
+                    .with_header(
+                        Header::from_bytes("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                            .unwrap(),
+                    )
+                    .with_header(
+                        Header::from_bytes("Access-Control-Allow-Headers", "Content-Type").unwrap(),
+                    )
                     .with_header(cors_header());
                 let _ = request.respond(response);
                 continue;
@@ -226,7 +382,9 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
 
             if clean == "presentation.html" {
                 let response = Response::from_string(PRESENTATION_HTML)
-                    .with_header(Header::from_bytes("Content-Type", "text/html; charset=utf-8").unwrap())
+                    .with_header(
+                        Header::from_bytes("Content-Type", "text/html; charset=utf-8").unwrap(),
+                    )
                     .with_header(cors_header());
                 let _ = request.respond(response);
                 continue;
@@ -262,7 +420,8 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
                 if request.method() == &Method::Post {
                     let mut body = String::new();
                     if request.as_reader().read_to_string(&mut body).is_err() {
-                        let _ = request.respond(Response::from_string("Bad Request").with_status_code(400));
+                        let _ = request
+                            .respond(Response::from_string("Bad Request").with_status_code(400));
                         continue;
                     }
 
@@ -319,35 +478,25 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
 
             if clean.starts_with("uploads/") {
                 match safe_upload_path(&uploads_dir, clean) {
-                    Some(file_path) if file_path.is_file() => match fs::read(&file_path) {
-                        Ok(data) => {
-                            let extension = file_path
-                                .extension()
-                                .and_then(|value| value.to_str())
-                                .unwrap_or_default()
-                                .to_ascii_lowercase();
-                            let response = Response::from_data(data)
-                                .with_header(
-                                    Header::from_bytes(
-                                        "Content-Type",
-                                        content_type_for_extension(&extension),
-                                    )
-                                    .unwrap(),
-                                )
-                                .with_header(cors_header());
-                            let _ = request.respond(response);
-                        }
-                        Err(_) => {
-                            let _ = request.respond(
-                                Response::from_string("Internal Server Error").with_status_code(500),
-                            );
-                        }
-                    },
+                    Some(file_path) if file_path.is_file() => {
+                        let extension = file_path
+                            .extension()
+                            .and_then(|value| value.to_str())
+                            .unwrap_or_default()
+                            .to_ascii_lowercase();
+                        respond_file_request(
+                            request,
+                            &file_path,
+                            content_type_for_extension(&extension),
+                        );
+                    }
                     Some(_) => {
-                        let _ = request.respond(Response::from_string("Not Found").with_status_code(404));
+                        let _ = request
+                            .respond(Response::from_string("Not Found").with_status_code(404));
                     }
                     None => {
-                        let _ = request.respond(Response::from_string("Forbidden").with_status_code(403));
+                        let _ = request
+                            .respond(Response::from_string("Forbidden").with_status_code(403));
                     }
                 }
                 continue;

@@ -3044,6 +3044,13 @@
   color: var(--b-text-1);
 }
 
+.live-preview-header-info p {
+  margin: 4px 0 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--b-text-3);
+}
+
 .live-preview-not-live {
   font-size: 10px;
   color: var(--b-text-3);

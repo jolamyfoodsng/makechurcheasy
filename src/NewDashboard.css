@@ -2450,6 +2450,18 @@
   color: var(--text-primary, #e8e8e8);
 }
 
+.plan-upgrade-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plan-upgrade-banner-promo {
+  font-size: 11px;
+  color: var(--text-secondary, #a7b0c0);
+  font-weight: 600;
+}
+
 .plan-upgrade-banner-icon {
   flex-shrink: 0;
   opacity: 0.7;

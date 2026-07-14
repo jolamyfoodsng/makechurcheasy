@@ -1,8 +1,10 @@
 import { Lock } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { useAuth } from "../contexts/AuthContext";
+import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { getEffectivePlan } from "../services/licenseService";
 import { UpgradeModal } from "./UpgradeModal";
@@ -13,6 +15,7 @@ interface PresentationPlanGateProps {
 
 export default function PresentationPlanGate({ children }: PresentationPlanGateProps) {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [upgradeOpen, setUpgradeOpen] = useState(true);
 
   if (!user) return <>{children}</>;
@@ -24,6 +27,10 @@ export default function PresentationPlanGate({ children }: PresentationPlanGateP
 
   const message =
     "Presentation Mode is available on Growth and Pro. Free trial users can use it during the trial. Upgrade to Growth to open the presentation hub and use the local screen link.";
+  const promoText = t("common.upgradePlansStartToday", {
+    amount: UPGRADE_ENTRY_PRICE_NGN.toLocaleString("en-US"),
+    defaultValue: UPGRADE_PROMO_FALLBACK,
+  });
 
   return (
     <div style={styles.root}>
@@ -33,6 +40,7 @@ export default function PresentationPlanGate({ children }: PresentationPlanGateP
         </div>
         <h2 style={styles.title}>Presentation Mode requires Growth</h2>
         <p style={styles.desc}>{message}</p>
+        <p style={styles.promo}>{promoText}</p>
         <button
           type="button"
           style={styles.button}
@@ -89,6 +97,13 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 13,
     lineHeight: 1.6,
     color: "var(--text-muted, #94a3b8)",
+    margin: 0,
+  },
+  promo: {
+    fontSize: 12,
+    lineHeight: 1.5,
+    color: "var(--text, #e2e8f0)",
+    fontWeight: 600,
     margin: 0,
   },
   button: {

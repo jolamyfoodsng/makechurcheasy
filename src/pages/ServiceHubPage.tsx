@@ -150,6 +150,7 @@ export default function ServiceHubPage() {
   const [sessionId, setSessionId] = useState(() => getPresentationSettings().sessionId);
   const [presentationLink, setPresentationLink] = useState(() => getPresentationSettings().presentationLink);
   const [remoteAccess, setRemoteAccess] = useState<PresentationRemoteAccessInfo | null>(null);
+  const [showHeaderPanel, setShowHeaderPanel] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const syncPresentationContext = useCallback(async () => {
@@ -190,10 +191,10 @@ export default function ServiceHubPage() {
 
   useEffect(() => {
     const handleRefresh = () => {
-      void reloadMedia().catch(() => {});
-      void reloadCountdowns().catch(() => {});
-      void reloadMinistry().catch(() => {});
-      void syncPresentationContext().catch(() => {});
+      void reloadMedia().catch(() => { });
+      void reloadCountdowns().catch(() => { });
+      void reloadMinistry().catch(() => { });
+      void syncPresentationContext().catch(() => { });
     };
 
     handleRefresh();
@@ -246,6 +247,11 @@ export default function ServiceHubPage() {
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape" && showHeaderPanel) {
+        event.preventDefault();
+        setShowHeaderPanel(false);
+        return;
+      }
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (globalSearchOpenRef.current) return;
@@ -259,7 +265,7 @@ export default function ServiceHubPage() {
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, []);
+  }, [showHeaderPanel]);
 
   const mediaList = useMemo(() => {
     if (mediaFilter === "all") return mediaItems;
@@ -350,7 +356,7 @@ export default function ServiceHubPage() {
     navigator.clipboard.writeText(presentationLink).then(() => {
       setLinkCopied(true);
       window.setTimeout(() => setLinkCopied(false), 2000);
-    }).catch(() => {});
+    }).catch(() => { });
   }, [presentationLink]);
 
   const handleLaunchScreen = useCallback(() => {
@@ -393,84 +399,107 @@ export default function ServiceHubPage() {
 
   return (
     <div className="presentation-hub-page">
-      <header className="ph-header">
-        <div className="ph-header-copy">
-          <p className="ph-eyebrow">
-            {t("serviceHub.presentation.mode", { defaultValue: "Presentation Mode" })}
-          </p>
-          <h1 className="ph-title">
-            {t("serviceHub.presentation.title", { defaultValue: "Presentation Hub" })}
-          </h1>
-          <p className="ph-subtitle">
-            {t("serviceHub.presentation.subtitle", {
-              defaultValue: "Use this laptop to control the content. The browser link is the presentation screen.",
-            })}
-          </p>
-        </div>
 
-        <div className="ph-screen-card">
-          <div className="ph-screen-card-top">
-            <div className={`ph-connection-pill${viewerCount > 0 ? " is-live" : ""}`}>
-              <Icon name="link" size={16} />
-              <span>{remoteStatusLabel}</span>
+
+      {showHeaderPanel && (
+        <>
+          <button
+            type="button"
+            className="ph-header-backdrop"
+            aria-label={t("common.close", { defaultValue: "Close" })}
+            onClick={() => setShowHeaderPanel(false)}
+          />
+
+          <div className="ph-header" role="dialog" aria-modal="false" aria-label={t("serviceHub.actions.screenSetup", { defaultValue: "Presentation controls" })}>
+            <div className="ph-shell-bar">
+              <button
+                type="button"
+                className={`ph-icon-btn ph-shell-settings${showHeaderPanel ? " is-active" : ""}`}
+                onClick={() => setShowHeaderPanel((current) => !current)}
+                title={t("serviceHub.actions.screenSetup", { defaultValue: "Presentation controls" })}
+                aria-label={t("serviceHub.actions.screenSetup", { defaultValue: "Presentation controls" })}
+                aria-expanded={showHeaderPanel}
+              >
+                <Icon name="settings" size={18} />
+              </button>
             </div>
-            <button
-              type="button"
-              className="ph-icon-btn"
-              onClick={() => void syncPresentationContext()}
-              title={t("serviceHub.actions.refreshConnection", { defaultValue: "Refresh presentation connection" })}
-            >
-              <Icon name="refresh" size={18} />
-            </button>
-          </div>
+            <div className="ph-screen-card">
+              <div className="ph-screen-card-top">
+                <div className={`ph-connection-pill${viewerCount > 0 ? " is-live" : ""}`}>
+                  <Icon name="link" size={16} />
+                  <span>{remoteStatusLabel}</span>
+                </div>
+                <div className="ph-card-tools">
+                  <button
+                    type="button"
+                    className="ph-icon-btn"
+                    onClick={() => void syncPresentationContext()}
+                    title={t("serviceHub.actions.refreshConnection", { defaultValue: "Refresh presentation connection" })}
+                    aria-label={t("serviceHub.actions.refreshConnection", { defaultValue: "Refresh presentation connection" })}
+                  >
+                    <Icon name="refresh" size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    className="ph-icon-btn"
+                    onClick={() => setShowHeaderPanel(false)}
+                    title={t("common.close", { defaultValue: "Close" })}
+                    aria-label={t("common.close", { defaultValue: "Close" })}
+                  >
+                    <Icon name="close" size={18} />
+                  </button>
+                </div>
+              </div>
 
-          <label className="ph-link-label">
-            {t("serviceHub.presentation.linkLabel", { defaultValue: "Presentation link" })}
-          </label>
-          <div className="ph-link-row">
-            <input className="ph-link-input" readOnly value={presentationLink} />
-            <button type="button" className="ph-icon-btn" onClick={handleCopyLink} title={t("serviceHub.actions.copyLink", { defaultValue: "Copy presentation link" })}>
-              <Icon name={linkCopied ? "check" : "content_copy"} size={18} />
-            </button>
-            <button type="button" className="ph-icon-btn" onClick={handleLaunchScreen} title={t("serviceHub.actions.launchScreen", { defaultValue: "Launch presentation screen" })}>
-              <Icon name="open_in_new" size={18} />
-            </button>
-          </div>
+              <label className="ph-link-label">
+                {t("serviceHub.presentation.linkLabel", { defaultValue: "Presentation link" })}
+              </label>
+              <div className="ph-link-row">
+                <input className="ph-link-input" readOnly value={presentationLink} />
+                <button type="button" className="ph-icon-btn" onClick={handleCopyLink} title={t("serviceHub.actions.copyLink", { defaultValue: "Copy presentation link" })}>
+                  <Icon name={linkCopied ? "check" : "content_copy"} size={18} />
+                </button>
+                <button type="button" className="ph-icon-btn" onClick={handleLaunchScreen} title={t("serviceHub.actions.launchScreen", { defaultValue: "Launch presentation screen" })}>
+                  <Icon name="open_in_new" size={18} />
+                </button>
+              </div>
 
-          <div className="ph-action-row">
-            <button type="button" className="ph-primary-btn" onClick={handleLaunchScreen}>
-              <Icon name="tv" size={18} />
-              <span>{t("serviceHub.actions.launchScreen", { defaultValue: "Launch Screen" })}</span>
-            </button>
-            <button type="button" className="ph-secondary-btn" onClick={() => void handleClearScreen()}>
-              <Icon name="block" size={18} />
-              <span>{t("serviceHub.actions.clearScreen", { defaultValue: "Clear Screen" })}</span>
-            </button>
-            <button type="button" className="ph-secondary-btn" onClick={() => navigate("/presentation/setup")}>
-              <Icon name="settings" size={18} />
-              <span>{t("serviceHub.actions.screenSetup", { defaultValue: "Screen Setup" })}</span>
-            </button>
-            <button type="button" className="ph-secondary-btn" onClick={() => navigate("/")}>
-              <Icon name="close" size={18} />
-              <span>{t("serviceHub.actions.exitPresentationMode", { defaultValue: "Exit" })}</span>
-            </button>
-          </div>
+              <div className="ph-action-row">
+                <button type="button" className="ph-primary-btn" onClick={handleLaunchScreen}>
+                  <Icon name="tv" size={18} />
+                  <span>{t("serviceHub.actions.launchScreen", { defaultValue: "Launch Screen" })}</span>
+                </button>
+                <button type="button" className="ph-secondary-btn" onClick={() => void handleClearScreen()}>
+                  <Icon name="block" size={18} />
+                  <span>{t("serviceHub.actions.clearScreen", { defaultValue: "Clear Screen" })}</span>
+                </button>
+                <button type="button" className="ph-secondary-btn" onClick={() => navigate("/presentation/setup")}>
+                  <Icon name="settings" size={18} />
+                  <span>{t("serviceHub.actions.screenSetup", { defaultValue: "Screen Setup" })}</span>
+                </button>
+                <button type="button" className="ph-secondary-btn" onClick={() => navigate("/")}>
+                  <Icon name="close" size={18} />
+                  <span>{t("serviceHub.actions.exitPresentationMode", { defaultValue: "Exit" })}</span>
+                </button>
+              </div>
 
-          {liveLabel ? (
-            <div className="ph-live-note">
-              <span>{t("serviceHub.presentation.liveNow", { defaultValue: "Live now" })}</span>
-              <strong>{liveLabel}</strong>
+              {liveLabel ? (
+                <div className="ph-live-note">
+                  <span>{t("serviceHub.presentation.liveNow", { defaultValue: "Live now" })}</span>
+                  <strong>{liveLabel}</strong>
+                </div>
+              ) : (
+                <div className="ph-live-note ph-live-note--idle">
+                  <span>{t("serviceHub.presentation.liveNow", { defaultValue: "Live now" })}</span>
+                  <strong>{t("serviceHub.presentation.nothingLive", { defaultValue: "Nothing on screen yet" })}</strong>
+                </div>
+              )}
+
+              {actionError && <p className="ph-error">{actionError}</p>}
             </div>
-          ) : (
-            <div className="ph-live-note ph-live-note--idle">
-              <span>{t("serviceHub.presentation.liveNow", { defaultValue: "Live now" })}</span>
-              <strong>{t("serviceHub.presentation.nothingLive", { defaultValue: "Nothing on screen yet" })}</strong>
-            </div>
-          )}
-
-          {actionError && <p className="ph-error">{actionError}</p>}
-        </div>
-      </header>
+          </div>
+        </>
+      )}
 
       <div className="ph-tabs" role="tablist" aria-label={t("serviceHub.aria.presentationTabs", { defaultValue: "Presentation tabs" })}>
         {HUB_TABS.map((tab) => {

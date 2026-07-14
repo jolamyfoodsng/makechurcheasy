@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { HashRouter } from "react-router-dom";
+import { createHashRouter, RouterProvider } from "react-router-dom";
 import "./fonts.css";
 import "./i18n";
 import App from "./App";
@@ -33,6 +33,19 @@ window.addEventListener("unhandledrejection", (event) => {
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 void initOverlayUrl();
+
+const appRouter = createHashRouter([
+  {
+    path: "*",
+    element: (
+      <AuthProvider>
+        <LayoutStoreProvider>
+          <App />
+        </LayoutStoreProvider>
+      </AuthProvider>
+    ),
+  },
+]);
 
 // Await auth store so the session is in memory before any component reads it
 void initAuthStore().then(async () => {
@@ -108,13 +121,7 @@ void initAuthStore().then(async () => {
   } else {
     root.render(
       <React.StrictMode>
-        <HashRouter>
-          <AuthProvider>
-            <LayoutStoreProvider>
-              <App />
-            </LayoutStoreProvider>
-          </AuthProvider>
-        </HashRouter>
+        <RouterProvider router={appRouter} />
       </React.StrictMode>
     );
   }

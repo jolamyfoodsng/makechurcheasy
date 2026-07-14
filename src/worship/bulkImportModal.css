@@ -85,6 +85,13 @@
   padding: 10px 0;
 }
 
+.bulk-import-step-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
 .bulk-import-step {
   display: flex;
   align-items: center;

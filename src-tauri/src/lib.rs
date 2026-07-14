@@ -16,15 +16,15 @@
 // https://tauri.localhost) is NOT reachable by OBS/CEF, so we need a real
 // localhost server.
 
+mod assemblyai_stream;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod audio_capture;
-mod assemblyai_stream;
 #[cfg(target_os = "macos")]
 mod local_llm;
-mod mobile_companion;
-mod presentation_remote;
 #[cfg(not(target_os = "macos"))]
 mod local_llm_stub;
+mod mobile_companion;
+mod presentation_remote;
 #[cfg(not(target_os = "macos"))]
 use local_llm_stub as local_llm;
 
@@ -35,7 +35,8 @@ use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use std::fs;
+use std::fs::{self, File};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Component, Path};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -60,8 +61,7 @@ mod app_nap {
 
     // IOKit power management constants — names match Apple's API
     #[allow(non_upper_case_globals)]
-    const kIOPMAssertionTypePreventUserIdleSystemSleep: &str =
-        "PreventUserIdleSystemSleep";
+    const kIOPMAssertionTypePreventUserIdleSystemSleep: &str = "PreventUserIdleSystemSleep";
 
     #[link(name = "IOKit", kind = "framework")]
     extern "C" {
@@ -116,7 +116,9 @@ mod app_nap {
     pub fn allow_app_nap() {
         let id = ASSERTION_ID.swap(0, Ordering::Relaxed);
         if id != 0 {
-            unsafe { IOPMAssertionRelease(id); }
+            unsafe {
+                IOPMAssertionRelease(id);
+            }
             println!("[AppNap] Power assertion released (id={id}) — App Nap re-enabled");
         }
     }
@@ -141,13 +143,7 @@ mod app_nap {
 
     fn cf_string_from_str(s: &str) -> CFStringRef {
         let cstr = std::ffi::CString::new(s).unwrap();
-        unsafe {
-            CFStringCreateWithCString(
-                std::ptr::null(),
-                cstr.as_ptr(),
-                kCFStringEncodingUTF8,
-            )
-        }
+        unsafe { CFStringCreateWithCString(std::ptr::null(), cstr.as_ptr(), kCFStringEncodingUTF8) }
     }
 
     unsafe fn cf_release(cf: CFTypeRef) {
@@ -467,7 +463,10 @@ fn build_r2_presigned_get_url(
     for (key, value) in extra_query {
         query.insert(key.clone(), value.clone());
     }
-    query.insert("X-Amz-Algorithm".to_string(), "AWS4-HMAC-SHA256".to_string());
+    query.insert(
+        "X-Amz-Algorithm".to_string(),
+        "AWS4-HMAC-SHA256".to_string(),
+    );
     query.insert(
         "X-Amz-Credential".to_string(),
         format!("{}/{}", config.access_key_id, credential_scope),
@@ -545,8 +544,8 @@ fn list_template_video_assets_internal() -> Result<Vec<TemplateVideoAsset>, Stri
     let xml = response
         .text()
         .map_err(|e| format!("Failed to read template video listing: {}", e))?;
-    let parsed: R2ListBucketResult =
-        from_xml_str(&xml).map_err(|e| format!("Failed to parse template video listing XML: {}", e))?;
+    let parsed: R2ListBucketResult = from_xml_str(&xml)
+        .map_err(|e| format!("Failed to parse template video listing XML: {}", e))?;
 
     let mut assets = Vec::new();
     for object in parsed.contents {
@@ -583,7 +582,11 @@ fn list_template_video_assets_internal() -> Result<Vec<TemplateVideoAsset>, Stri
         });
     }
 
-    assets.sort_by(|left, right| left.file_name.to_lowercase().cmp(&right.file_name.to_lowercase()));
+    assets.sort_by(|left, right| {
+        left.file_name
+            .to_lowercase()
+            .cmp(&right.file_name.to_lowercase())
+    });
     Ok(assets)
 }
 
@@ -595,6 +598,189 @@ fn is_safe_relative_path(path: &Path) -> bool {
             Component::ParentDir | Component::RootDir | Component::Prefix(_)
         )
     })
+}
+
+fn overlay_content_type_for_extension(extension: Option<&str>) -> &'static str {
+    match extension {
+        Some("html") => "text/html; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") => "application/javascript; charset=utf-8",
+        Some("json") => "application/json; charset=utf-8",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("svg") => "image/svg+xml",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("mp4") => "video/mp4",
+        Some("webm") => "video/webm",
+        Some("mov") => "video/quicktime",
+        Some("mp3") => "audio/mpeg",
+        Some("wav") => "audio/wav",
+        Some("ogg") => "audio/ogg",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        Some("ttf") => "font/ttf",
+        Some("otf") => "font/otf",
+        _ => "application/octet-stream",
+    }
+}
+
+fn overlay_header_value(request: &tiny_http::Request, name: &'static str) -> Option<String> {
+    request
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv(name))
+        .map(|header| header.value.as_str().to_string())
+}
+
+fn parse_byte_range(range_header: &str, file_size: u64) -> Result<(u64, u64), ()> {
+    if file_size == 0 {
+        return Err(());
+    }
+
+    let range_value = range_header.trim().strip_prefix("bytes=").ok_or(())?;
+    if range_value.contains(',') {
+        return Err(());
+    }
+
+    let (start_raw, end_raw) = range_value.split_once('-').ok_or(())?;
+
+    if start_raw.is_empty() {
+        let suffix_len = end_raw.parse::<u64>().map_err(|_| ())?;
+        if suffix_len == 0 {
+            return Err(());
+        }
+
+        let length = suffix_len.min(file_size);
+        return Ok((file_size - length, file_size - 1));
+    }
+
+    let start = start_raw.parse::<u64>().map_err(|_| ())?;
+    if start >= file_size {
+        return Err(());
+    }
+
+    let end = if end_raw.is_empty() {
+        file_size - 1
+    } else {
+        end_raw.parse::<u64>().map_err(|_| ())?.min(file_size - 1)
+    };
+
+    if end < start {
+        return Err(());
+    }
+
+    Ok((start, end))
+}
+
+fn respond_overlay_file_request(request: tiny_http::Request, file_path: &Path, content_type: &str) {
+    let range_header = overlay_header_value(&request, "Range");
+    let file = match File::open(file_path) {
+        Ok(file) => file,
+        Err(_) => {
+            let _ = request.respond(
+                tiny_http::Response::from_string("Internal Server Error")
+                    .with_status_code(500)
+                    .with_header(
+                        tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap(),
+                    ),
+            );
+            return;
+        }
+    };
+
+    let file_size = match file.metadata() {
+        Ok(metadata) => metadata.len(),
+        Err(_) => {
+            let _ = request.respond(
+                tiny_http::Response::from_string("Internal Server Error")
+                    .with_status_code(500)
+                    .with_header(
+                        tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap(),
+                    ),
+            );
+            return;
+        }
+    };
+
+    if let Some(range_header) = range_header {
+        match parse_byte_range(&range_header, file_size) {
+            Ok((start, end)) => {
+                let mut file = file;
+                let content_length = end - start + 1;
+                let Some(content_length_usize) = usize::try_from(content_length).ok() else {
+                    let _ = request.respond(
+                        tiny_http::Response::from_string("Internal Server Error")
+                            .with_status_code(500)
+                            .with_header(
+                                tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                    .unwrap(),
+                            ),
+                    );
+                    return;
+                };
+
+                if file.seek(SeekFrom::Start(start)).is_err() {
+                    let _ = request.respond(
+                        tiny_http::Response::from_string("Internal Server Error")
+                            .with_status_code(500)
+                            .with_header(
+                                tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                    .unwrap(),
+                            ),
+                    );
+                    return;
+                }
+
+                let response = tiny_http::Response::new(
+                    tiny_http::StatusCode(206),
+                    Vec::new(),
+                    file.take(content_length),
+                    Some(content_length_usize),
+                    None,
+                )
+                .with_header(tiny_http::Header::from_bytes("Content-Type", content_type).unwrap())
+                .with_header(
+                    tiny_http::Header::from_bytes(
+                        "Content-Range",
+                        format!("bytes {}-{}/{}", start, end, file_size),
+                    )
+                    .unwrap(),
+                )
+                .with_header(
+                    tiny_http::Header::from_bytes("Content-Length", content_length.to_string())
+                        .unwrap(),
+                )
+                .with_header(tiny_http::Header::from_bytes("Accept-Ranges", "bytes").unwrap())
+                .with_header(
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap(),
+                );
+                let _ = request.respond(response);
+            }
+            Err(_) => {
+                let response = tiny_http::Response::empty(416)
+                    .with_header(
+                        tiny_http::Header::from_bytes(
+                            "Content-Range",
+                            format!("bytes */{}", file_size),
+                        )
+                        .unwrap(),
+                    )
+                    .with_header(tiny_http::Header::from_bytes("Accept-Ranges", "bytes").unwrap())
+                    .with_header(
+                        tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap(),
+                    );
+                let _ = request.respond(response);
+            }
+        }
+        return;
+    }
+
+    let response = tiny_http::Response::from_file(file)
+        .with_header(tiny_http::Header::from_bytes("Content-Type", content_type).unwrap())
+        .with_header(tiny_http::Header::from_bytes("Accept-Ranges", "bytes").unwrap())
+        .with_header(tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap());
+    let _ = request.respond(response);
 }
 
 /// Save a background image to ~/Documents/MakeChurchEasy/backgrounds/
@@ -757,20 +943,30 @@ fn save_background_video_file(
     file_name: String,
     file_data: Vec<u8>,
 ) -> Result<SavedBackgroundVideoFile, String> {
-    let videos_dir = app_dir()?.join("uploads").join("backgrounds").join("videos");
+    let videos_dir = app_dir()?
+        .join("uploads")
+        .join("backgrounds")
+        .join("videos");
     fs::create_dir_all(&videos_dir)
         .map_err(|e| format!("Failed to create background videos directory: {}", e))?;
 
     let safe_file_name = sanitize_filename_for_storage(&file_name)?;
     let file_path = videos_dir.join(&safe_file_name);
-    fs::write(&file_path, &file_data)
-        .map_err(|e| format!("Failed to write background video '{}': {}", safe_file_name, e))?;
+    fs::write(&file_path, &file_data).map_err(|e| {
+        format!(
+            "Failed to write background video '{}': {}",
+            safe_file_name, e
+        )
+    })?;
 
     let abs_path = file_path
         .to_str()
         .ok_or("Background video path contains invalid UTF-8")?
         .to_string();
-    let relative_url = format!("/uploads/backgrounds/videos/{}", encode_path_segments(&safe_file_name));
+    let relative_url = format!(
+        "/uploads/backgrounds/videos/{}",
+        encode_path_segments(&safe_file_name)
+    );
 
     println!(
         "[Tauri] Saved background video: {} ({} bytes)",
@@ -842,7 +1038,9 @@ fn get_system_hardware_info() -> Result<serde_json::Value, String> {
     sys.refresh_all();
 
     // CPU
-    let cpu_model = sys.cpus().first()
+    let cpu_model = sys
+        .cpus()
+        .first()
         .map(|c| c.brand().to_string())
         .unwrap_or_else(|| "Unknown CPU".to_string());
     let cpu_cores = sys.cpus().len() as u32;
@@ -1348,13 +1546,7 @@ fn should_break_lyrics(line: &str) -> bool {
     let lower = line.to_ascii_lowercase();
     matches!(
         lower.as_str(),
-        "the video"
-            | "video"
-            | "watch the video"
-            | "watch video"
-            | "related"
-            | "more"
-            | "print"
+        "the video" | "video" | "watch the video" | "watch video" | "related" | "more" | "print"
     ) || lower.contains("thanks for visiting")
         || lower.contains("have a blessed week")
         || lower.contains("property and copyright")
@@ -2153,7 +2345,6 @@ mod tests {
         assert!(!lyrics.contains("Facebook"));
         assert!(!lyrics.contains("Related"));
     }
-
 }
 
 // ─── Transcript Library Commands ─────────────────────────────────────────────
@@ -2162,7 +2353,8 @@ mod tests {
 
 fn transcripts_dir() -> Result<std::path::PathBuf, String> {
     let dir = app_dir()?.join("transcripts");
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create transcripts directory: {}", e))?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create transcripts directory: {}", e))?;
     Ok(dir)
 }
 
@@ -2192,19 +2384,28 @@ fn load_transcripts() -> Result<String, String> {
         b_date.cmp(a_date)
     });
 
-    serde_json::to_string(&transcripts).map_err(|e| format!("Failed to serialize transcripts: {}", e))
+    serde_json::to_string(&transcripts)
+        .map_err(|e| format!("Failed to serialize transcripts: {}", e))
 }
 
 #[tauri::command]
 fn save_transcript(transcript: serde_json::Value) -> Result<(), String> {
     let dir = transcripts_dir()?;
-    let id = transcript.get("id")
+    let id = transcript
+        .get("id")
         .and_then(|v| v.as_str())
         .ok_or("Transcript missing id")?;
 
-    let safe_name = id.chars().map(|ch| {
-        if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' { ch } else { '_' }
-    }).collect::<String>();
+    let safe_name = id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
 
     let path = dir.join(format!("{}.json", safe_name));
     let json = serde_json::to_string_pretty(&transcript)
@@ -2219,9 +2420,16 @@ fn save_transcript(transcript: serde_json::Value) -> Result<(), String> {
 #[tauri::command]
 fn delete_transcript(id: String) -> Result<(), String> {
     let dir = transcripts_dir()?;
-    let safe_name = id.chars().map(|ch| {
-        if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' { ch } else { '_' }
-    }).collect::<String>();
+    let safe_name = id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
 
     let path = dir.join(format!("{}.json", safe_name));
     if path.exists() {
@@ -2246,10 +2454,15 @@ fn get_transcript_stats() -> Result<String, String> {
                     if let Ok(contents) = fs::read_to_string(&path) {
                         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&contents) {
                             total_sessions += 1;
-                            total_duration += val.get("durationSeconds")
-                                .and_then(|v| v.as_u64()).unwrap_or(0);
-                            total_scriptures += val.get("scriptures")
-                                .and_then(|v| v.as_array()).map(|a| a.len() as u64).unwrap_or(0);
+                            total_duration += val
+                                .get("durationSeconds")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(0);
+                            total_scriptures += val
+                                .get("scriptures")
+                                .and_then(|v| v.as_array())
+                                .map(|a| a.len() as u64)
+                                .unwrap_or(0);
                         }
                     }
                 }
@@ -2355,11 +2568,9 @@ fn get_opencode_api_key() -> Result<String, String> {
         }
     }
 
-    Err(
-        "OPENCODE_API_KEY environment variable not set. \
+    Err("OPENCODE_API_KEY environment variable not set. \
          Set it in your shell or .env before running the app."
-            .to_string(),
-    )
+        .to_string())
 }
 
 fn opencode_dotenv_candidates() -> Vec<std::path::PathBuf> {
@@ -2424,7 +2635,9 @@ fn extract_json_payload(text: &str) -> &str {
     }
 }
 
-fn build_worship_import_review_prompt(request: &WorshipImportReviewRequest) -> Result<String, String> {
+fn build_worship_import_review_prompt(
+    request: &WorshipImportReviewRequest,
+) -> Result<String, String> {
     let payload = serde_json::to_string_pretty(request)
         .map_err(|e| format!("Failed to serialize review request: {}", e))?;
 
@@ -2483,7 +2696,9 @@ fn get_worship_import_ai_status() -> WorshipImportAiStatus {
 }
 
 #[tauri::command]
-fn review_worship_import_batch(request: WorshipImportReviewRequest) -> Result<WorshipImportReviewResponse, String> {
+fn review_worship_import_batch(
+    request: WorshipImportReviewRequest,
+) -> Result<WorshipImportReviewResponse, String> {
     let api_key = get_opencode_api_key()?;
     let prompt = build_worship_import_review_prompt(&request)?;
     let client = build_opencode_client(120)?;
@@ -2508,7 +2723,10 @@ fn review_worship_import_batch(request: WorshipImportReviewRequest) -> Result<Wo
     let status = resp.status();
     if !status.is_success() {
         let text = resp.text().unwrap_or_default();
-        return Err(format!("Worship import review API returned {}: {}", status, text));
+        return Err(format!(
+            "Worship import review API returned {}: {}",
+            status, text
+        ));
     }
 
     let data: serde_json::Value = resp
@@ -2529,7 +2747,10 @@ fn review_worship_import_batch(request: WorshipImportReviewRequest) -> Result<Wo
 }
 
 #[tauri::command]
-fn translate_transcript(transcript_text: String, target_language: String) -> Result<String, String> {
+fn translate_transcript(
+    transcript_text: String,
+    target_language: String,
+) -> Result<String, String> {
     let api_key = get_opencode_api_key()?;
 
     let prompt = format!(
@@ -2655,8 +2876,8 @@ fn fix_winansi_twi(text: String) -> String {
 #[tauri::command]
 fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
     use std::io::Write;
-    let mut tmp = tempfile::NamedTempFile::new()
-        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    let mut tmp =
+        tempfile::NamedTempFile::new().map_err(|e| format!("Failed to create temp file: {}", e))?;
     tmp.write_all(&file_data)
         .map_err(|e| format!("Failed to write temp file: {}", e))?;
     let path = tmp.into_temp_path();
@@ -2668,12 +2889,12 @@ fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
     // Tauri-packaged apps have a minimal PATH, so we probe known install
     // locations on macOS and Linux before relying on bare PATH lookup.
     let pdftotext_candidates: &[&str] = &[
-        "pdftotext",                                       // PATH lookup (dev mode)
-        "/opt/homebrew/bin/pdftotext",                     // Homebrew — Apple Silicon
-        "/usr/local/bin/pdftotext",                        // Homebrew — Intel Mac
-        "/usr/bin/pdftotext",                              // system / apt install
-        "/usr/bin/pdftotext",                              // Linux package manager
-        "/snap/bin/pdftotext",                             // Linux snap
+        "pdftotext",                   // PATH lookup (dev mode)
+        "/opt/homebrew/bin/pdftotext", // Homebrew — Apple Silicon
+        "/usr/local/bin/pdftotext",    // Homebrew — Intel Mac
+        "/usr/bin/pdftotext",          // system / apt install
+        "/usr/bin/pdftotext",          // Linux package manager
+        "/snap/bin/pdftotext",         // Linux snap
     ];
 
     let mut last_error = String::new();
@@ -2682,7 +2903,9 @@ fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
         for candidate in pdftotext_candidates {
             eprintln!("[pdf-extract] trying: {} on file {}", candidate, path_str);
             match std::process::Command::new(candidate)
-                .arg("-layout").arg("-enc").arg("UTF-8")
+                .arg("-layout")
+                .arg("-enc")
+                .arg("UTF-8")
                 .arg(path_str)
                 .arg("-")
                 .output()
@@ -2691,14 +2914,23 @@ fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
                     if output.status.success() {
                         let text = String::from_utf8_lossy(&output.stdout).to_string();
                         if !text.trim().is_empty() {
-                            eprintln!("[pdf-extract] SUCCESS with {} — {} bytes", candidate, text.len());
+                            eprintln!(
+                                "[pdf-extract] SUCCESS with {} — {} bytes",
+                                candidate,
+                                text.len()
+                            );
                             return Ok(fix_winansi_twi(text));
                         }
                         last_error = format!("{} produced empty output", candidate);
                         eprintln!("[pdf-extract] {} produced empty output", candidate);
                     } else {
                         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-                        last_error = format!("{} failed (exit {:?}): {}", candidate, output.status.code(), stderr);
+                        last_error = format!(
+                            "{} failed (exit {:?}): {}",
+                            candidate,
+                            output.status.code(),
+                            stderr
+                        );
                         eprintln!("[pdf-extract] {} failed: {}", candidate, stderr);
                     }
                 }
@@ -2710,7 +2942,10 @@ fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
         }
     }
 
-    eprintln!("[pdf-extract] all pdftotext candidates failed ({}), falling back to pdf-extract crate", last_error);
+    eprintln!(
+        "[pdf-extract] all pdftotext candidates failed ({}), falling back to pdf-extract crate",
+        last_error
+    );
 
     // pdf-extract fallback — known to corrupt non-Latin Unicode characters
     // when PDF fonts use non-standard glyph names. Last resort only.
@@ -2735,16 +2970,22 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
         let b = bytes[i];
         match b {
             // Skip whitespace
-            b' ' | b'\t' | b'\r' | b'\n' | b'\x0C' => { i += 1; }
+            b' ' | b'\t' | b'\r' | b'\n' | b'\x0C' => {
+                i += 1;
+            }
             // Skip comments (% to end of line)
             b'%' => {
-                while i < len && bytes[i] != b'\n' { i += 1; }
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
             }
             // Integer or real number
             b'0'..=b'9' | b'-' | b'+' | b'.' => {
                 let start = i;
                 i += 1;
-                while i < len && matches!(bytes[i], b'0'..=b'9' | b'.' | b'-' | b'+') { i += 1; }
+                while i < len && matches!(bytes[i], b'0'..=b'9' | b'.' | b'-' | b'+') {
+                    i += 1;
+                }
                 let s = std::str::from_utf8(&bytes[start..i]).unwrap_or("0");
                 if s.contains('.') {
                     if let Ok(v) = s.parse::<f64>() {
@@ -2760,8 +3001,11 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                 let start = i;
                 while i < len {
                     match bytes[i] {
-                        b' ' | b'\t' | b'\r' | b'\n' | b'/' | b'(' | b')' | b'<' | b'>' | b'[' | b']' | b'{' | b'}' => break,
-                        _ => { i += 1; }
+                        b' ' | b'\t' | b'\r' | b'\n' | b'/' | b'(' | b')' | b'<' | b'>' | b'['
+                        | b']' | b'{' | b'}' => break,
+                        _ => {
+                            i += 1;
+                        }
                     }
                 }
                 let name = bytes[start..i].to_vec();
@@ -2774,10 +3018,20 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                 let mut depth = 0i32;
                 while i < len {
                     match bytes[i] {
-                        b'(' => { depth += 1; s.push(b'('); i += 1; }
+                        b'(' => {
+                            depth += 1;
+                            s.push(b'(');
+                            i += 1;
+                        }
                         b')' => {
-                            if depth > 0 { depth -= 1; s.push(b')'); i += 1; }
-                            else { i += 1; break; }
+                            if depth > 0 {
+                                depth -= 1;
+                                s.push(b')');
+                                i += 1;
+                            } else {
+                                i += 1;
+                                break;
+                            }
                         }
                         b'\\' => {
                             i += 1;
@@ -2796,7 +3050,9 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                                             if i < len && matches!(bytes[i], b'0'..=b'7') {
                                                 oct = oct * 8 + (bytes[i] - b'0') as u32;
                                                 i += 1;
-                                            } else { break; }
+                                            } else {
+                                                break;
+                                            }
                                         }
                                         s.push(oct as u8);
                                         continue; // already advanced i
@@ -2806,7 +3062,10 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                                 i += 1;
                             }
                         }
-                        _ => { s.push(bytes[i]); i += 1; }
+                        _ => {
+                            s.push(bytes[i]);
+                            i += 1;
+                        }
                     }
                 }
                 operands.push(lopdf::Object::String(s, lopdf::StringFormat::Literal));
@@ -2815,10 +3074,17 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
             b'<' => {
                 i += 1;
                 let mut hex = Vec::new();
-                while i < len && bytes[i] != b'>' { hex.push(bytes[i]); i += 1; }
-                if i < len { i += 1; } // skip >
-                // Pad to even length
-                if hex.len() % 2 != 0 { hex.push(b'0'); }
+                while i < len && bytes[i] != b'>' {
+                    hex.push(bytes[i]);
+                    i += 1;
+                }
+                if i < len {
+                    i += 1;
+                } // skip >
+                  // Pad to even length
+                if hex.len() % 2 != 0 {
+                    hex.push(b'0');
+                }
                 let mut bytes_out = Vec::new();
                 for chunk in hex.chunks(2) {
                     if let Ok(h) = std::str::from_utf8(chunk) {
@@ -2827,7 +3093,10 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                         }
                     }
                 }
-                operands.push(lopdf::Object::String(bytes_out, lopdf::StringFormat::Hexadecimal));
+                operands.push(lopdf::Object::String(
+                    bytes_out,
+                    lopdf::StringFormat::Hexadecimal,
+                ));
             }
             // Array [...]
             b'[' => {
@@ -2836,7 +3105,9 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                 // Parse array elements recursively (simplified — only strings and numbers)
                 while i < len && bytes[i] != b']' {
                     match bytes[i] {
-                        b' ' | b'\t' | b'\r' | b'\n' => { i += 1; }
+                        b' ' | b'\t' | b'\r' | b'\n' => {
+                            i += 1;
+                        }
                         b'(' => {
                             // literal string inside array
                             i += 1;
@@ -2857,13 +3128,17 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                                 }
                                 i += 1;
                             }
-                            if i < len { i += 1; }
+                            if i < len {
+                                i += 1;
+                            }
                             arr.push(lopdf::Object::String(s, lopdf::StringFormat::Literal));
                         }
                         b'0'..=b'9' | b'-' | b'+' | b'.' => {
                             let start = i;
                             i += 1;
-                            while i < len && matches!(bytes[i], b'0'..=b'9' | b'.' | b'-' | b'+') { i += 1; }
+                            while i < len && matches!(bytes[i], b'0'..=b'9' | b'.' | b'-' | b'+') {
+                                i += 1;
+                            }
                             let s = std::str::from_utf8(&bytes[start..i]).unwrap_or("0");
                             if s.contains('.') {
                                 if let Ok(v) = s.parse::<f64>() {
@@ -2873,25 +3148,32 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                                 arr.push(lopdf::Object::Integer(v));
                             }
                         }
-                        _ => { i += 1; } // skip unknown in arrays
+                        _ => {
+                            i += 1;
+                        } // skip unknown in arrays
                     }
                 }
-                if i < len { i += 1; } // skip ]
+                if i < len {
+                    i += 1;
+                } // skip ]
                 operands.push(lopdf::Object::Array(arr));
             }
             // Boolean true / false
-            b't' if i + 3 < len && &bytes[i..i+4] == b"true" => {
+            b't' if i + 3 < len && &bytes[i..i + 4] == b"true" => {
                 operands.push(lopdf::Object::Boolean(true));
                 i += 4;
             }
-            b'f' if i + 4 < len && &bytes[i..i+5] == b"false" => {
+            b'f' if i + 4 < len && &bytes[i..i + 5] == b"false" => {
                 operands.push(lopdf::Object::Boolean(false));
                 i += 5;
             }
             // Operator (keyword)
             b'A'..=b'Z' | b'a'..=b'z' => {
                 let start = i;
-                while i < len && matches!(bytes[i], b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'*') { i += 1; }
+                while i < len && matches!(bytes[i], b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'*')
+                {
+                    i += 1;
+                }
                 let op = std::str::from_utf8(&bytes[start..i]).unwrap_or("");
                 ops.push(lopdf::content::Operation {
                     operator: op.to_string(),
@@ -2899,7 +3181,9 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                 });
             }
             // Object reference (obj gen R) — skip
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
     ops
@@ -2937,12 +3221,24 @@ fn build_page_font_map(
     page_id: lopdf::ObjectId,
 ) -> std::collections::HashMap<String, bool> {
     let mut font_map = std::collections::HashMap::new();
-    let Ok(page) = doc.get_object(page_id) else { return font_map };
-    let Ok(page_dict) = page.as_dict() else { return font_map };
-    let Ok(resources) = page_dict.get(b"Resources") else { return font_map };
-    let Ok(resources_dict) = resources.as_dict() else { return font_map };
-    let Ok(fonts) = resources_dict.get(b"Font") else { return font_map };
-    let Ok(font_dict) = fonts.as_dict() else { return font_map };
+    let Ok(page) = doc.get_object(page_id) else {
+        return font_map;
+    };
+    let Ok(page_dict) = page.as_dict() else {
+        return font_map;
+    };
+    let Ok(resources) = page_dict.get(b"Resources") else {
+        return font_map;
+    };
+    let Ok(resources_dict) = resources.as_dict() else {
+        return font_map;
+    };
+    let Ok(fonts) = resources_dict.get(b"Font") else {
+        return font_map;
+    };
+    let Ok(font_dict) = fonts.as_dict() else {
+        return font_map;
+    };
 
     for (name, font_ref) in font_dict.iter() {
         let name_str = String::from_utf8_lossy(name).to_string();
@@ -2984,8 +3280,14 @@ fn extract_page_text_elements(
     let mut line_x = 0.0f64;
     let mut line_y = 0.0f64;
 
-    let flush = |buf: &mut String, elements: &mut Vec<PdfTextElement>,
-                 line_x: f64, line_y: f64, font_size: f64, is_bold: bool, page_num: u32, page_height: f64| {
+    let flush = |buf: &mut String,
+                 elements: &mut Vec<PdfTextElement>,
+                 line_x: f64,
+                 line_y: f64,
+                 font_size: f64,
+                 is_bold: bool,
+                 page_num: u32,
+                 page_height: f64| {
         if !buf.is_empty() {
             let text = fix_winansi_twi(buf.clone());
             let char_count = text.chars().count() as f64;
@@ -3007,13 +3309,31 @@ fn extract_page_text_elements(
         match op.operator.as_str() {
             "BT" => {
                 // Begin text — flush any pending text
-                flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                flush(
+                    &mut buf,
+                    &mut elements,
+                    line_x,
+                    line_y,
+                    font_size,
+                    is_bold,
+                    page_num,
+                    page_height,
+                );
                 tm = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
                 line_x = 0.0;
                 line_y = 0.0;
             }
             "ET" => {
-                flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                flush(
+                    &mut buf,
+                    &mut elements,
+                    line_x,
+                    line_y,
+                    font_size,
+                    is_bold,
+                    page_num,
+                    page_height,
+                );
             }
             "Tf" => {
                 // Set font: [name, size]
@@ -3043,7 +3363,16 @@ fn extract_page_text_elements(
                             };
                         }
                     }
-                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                    flush(
+                        &mut buf,
+                        &mut elements,
+                        line_x,
+                        line_y,
+                        font_size,
+                        is_bold,
+                        page_num,
+                        page_height,
+                    );
                     line_x = tm[4];
                     line_y = tm[5];
                 }
@@ -3064,7 +3393,16 @@ fn extract_page_text_elements(
                     // For non-rotated text (b=c=0, a=d=1), Td adds directly
                     line_x += tx * tm[0] + ty * tm[2];
                     line_y += tx * tm[1] + ty * tm[3];
-                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                    flush(
+                        &mut buf,
+                        &mut elements,
+                        line_x,
+                        line_y,
+                        font_size,
+                        is_bold,
+                        page_num,
+                        page_height,
+                    );
                 }
             }
             "Tj" => {
@@ -3096,12 +3434,30 @@ fn extract_page_text_elements(
                             lopdf::Object::Integer(offset) => {
                                 // Large negative offset → kerning gap, flush segment
                                 if *offset < -100 && !buf.is_empty() {
-                                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                                    flush(
+                                        &mut buf,
+                                        &mut elements,
+                                        line_x,
+                                        line_y,
+                                        font_size,
+                                        is_bold,
+                                        page_num,
+                                        page_height,
+                                    );
                                 }
                             }
                             lopdf::Object::Real(offset) => {
                                 if (*offset as f64) < -100.0 && !buf.is_empty() {
-                                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                                    flush(
+                                        &mut buf,
+                                        &mut elements,
+                                        line_x,
+                                        line_y,
+                                        font_size,
+                                        is_bold,
+                                        page_num,
+                                        page_height,
+                                    );
                                 }
                             }
                             _ => {}
@@ -3112,7 +3468,16 @@ fn extract_page_text_elements(
             "T*" => {
                 // Move to next line (vertical tab) — default leading = font_size
                 if !buf.is_empty() {
-                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                    flush(
+                        &mut buf,
+                        &mut elements,
+                        line_x,
+                        line_y,
+                        font_size,
+                        is_bold,
+                        page_num,
+                        page_height,
+                    );
                 }
                 line_y -= font_size;
             }
@@ -3121,7 +3486,16 @@ fn extract_page_text_elements(
     }
 
     // Flush any remaining text
-    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+    flush(
+        &mut buf,
+        &mut elements,
+        line_x,
+        line_y,
+        font_size,
+        is_bold,
+        page_num,
+        page_height,
+    );
     elements
 }
 
@@ -3298,9 +3672,12 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
             if clean == "api/file-exists" {
                 let file_path = url_path
                     .find('?')
-                    .and_then(|i| url_path[i + 1..].split('&')
-                        .find(|p| p.starts_with("path="))
-                        .map(|p| &p[5..]))
+                    .and_then(|i| {
+                        url_path[i + 1..]
+                            .split('&')
+                            .find(|p| p.starts_with("path="))
+                            .map(|p| &p[5..])
+                    })
                     .map(|v| urlencoding::decode(v).unwrap_or_default().into_owned())
                     .unwrap_or_default();
                 let exists = !file_path.is_empty() && std::path::Path::new(&file_path).is_file();
@@ -3330,11 +3707,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                             "application/json; charset=utf-8",
                         )
                         .unwrap();
-                        let cors = tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Origin",
-                            "*",
-                        )
-                        .unwrap();
+                        let cors =
+                            tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                .unwrap();
                         let resp = tiny_http::Response::from_string(json)
                             .with_header(header)
                             .with_header(cors);
@@ -3347,11 +3722,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                             "application/json; charset=utf-8",
                         )
                         .unwrap();
-                        let cors = tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Origin",
-                            "*",
-                        )
-                        .unwrap();
+                        let cors =
+                            tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                .unwrap();
                         let resp = tiny_http::Response::from_string(json)
                             .with_status_code(500)
                             .with_header(header)
@@ -3600,16 +3973,20 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Methods",
-                            "GET, POST, OPTIONS",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Headers",
-                            "Content-Type",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
                         .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
@@ -3659,16 +4036,20 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Methods",
-                            "GET, POST, OPTIONS",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Headers",
-                            "Content-Type",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
                         .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
@@ -3722,16 +4103,20 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Methods",
-                            "GET, POST, OPTIONS",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Headers",
-                            "Content-Type",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
                         .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
@@ -3816,12 +4201,11 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 };
 
                 if session_id.trim().is_empty() {
-                    let resp = tiny_http::Response::from_string(
-                        r#"{"error":"sessionId is required"}"#,
-                    )
-                    .with_status_code(400)
-                    .with_header(header)
-                    .with_header(cors);
+                    let resp =
+                        tiny_http::Response::from_string(r#"{"error":"sessionId is required"}"#)
+                            .with_status_code(400)
+                            .with_header(header)
+                            .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
                 }
@@ -3858,16 +4242,20 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Methods",
-                            "GET, POST, OPTIONS",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Headers",
-                            "Content-Type",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
                         .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
@@ -3884,7 +4272,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                     match serde_json::from_str::<PresentationViewerHeartbeat>(&body) {
                         Ok(payload) => {
-                            if payload.session_id.trim().is_empty() || payload.viewer_id.trim().is_empty() {
+                            if payload.session_id.trim().is_empty()
+                                || payload.viewer_id.trim().is_empty()
+                            {
                                 let resp = tiny_http::Response::from_string(
                                     r#"{"error":"sessionId and viewerId are required"}"#,
                                 )
@@ -3949,12 +4339,11 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 };
 
                 if session_id.trim().is_empty() {
-                    let resp = tiny_http::Response::from_string(
-                        r#"{"error":"sessionId is required"}"#,
-                    )
-                    .with_status_code(400)
-                    .with_header(header)
-                    .with_header(cors);
+                    let resp =
+                        tiny_http::Response::from_string(r#"{"error":"sessionId is required"}"#)
+                            .with_status_code(400)
+                            .with_header(header)
+                            .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
                 }
@@ -3983,11 +4372,13 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Methods",
-                            "POST, OPTIONS",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "POST, OPTIONS",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
                         .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
@@ -4008,11 +4399,23 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                     let ok = if url.starts_with("http://") || url.starts_with("https://") {
                         #[cfg(target_os = "macos")]
-                        { std::process::Command::new("open").arg(&url).spawn().is_ok() }
+                        {
+                            std::process::Command::new("open").arg(&url).spawn().is_ok()
+                        }
                         #[cfg(target_os = "windows")]
-                        { std::process::Command::new("cmd").args(["/c", "start", &url]).spawn().is_ok() }
+                        {
+                            std::process::Command::new("cmd")
+                                .args(["/c", "start", &url])
+                                .spawn()
+                                .is_ok()
+                        }
                         #[cfg(target_os = "linux")]
-                        { std::process::Command::new("xdg-open").arg(&url).spawn().is_ok() }
+                        {
+                            std::process::Command::new("xdg-open")
+                                .arg(&url)
+                                .spawn()
+                                .is_ok()
+                        }
                     } else {
                         false
                     };
@@ -4047,11 +4450,13 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Methods",
-                            "GET, OPTIONS",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, OPTIONS",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
                         .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
@@ -4085,21 +4490,25 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 // Fetch the remote URL server-side (no CORS) and stream back
                 match reqwest::blocking::get(&url) {
                     Ok(resp) => {
-                        let ct = resp.headers().get("content-type")
+                        let ct = resp
+                            .headers()
+                            .get("content-type")
                             .and_then(|v| v.to_str().ok())
                             .unwrap_or("application/octet-stream")
                             .to_string();
                         let bytes = resp.bytes().unwrap_or_default();
-                        let ct_header = tiny_http::Header::from_bytes("Content-Type", ct.as_str()).unwrap();
+                        let ct_header =
+                            tiny_http::Header::from_bytes("Content-Type", ct.as_str()).unwrap();
                         let resp = tiny_http::Response::from_data(bytes.to_vec())
                             .with_header(ct_header)
                             .with_header(cors);
                         let _ = request.respond(resp);
                     }
                     Err(_) => {
-                        let resp = tiny_http::Response::from_string(r#"{"error":"Proxy fetch failed"}"#)
-                            .with_status_code(502)
-                            .with_header(cors);
+                        let resp =
+                            tiny_http::Response::from_string(r#"{"error":"Proxy fetch failed"}"#)
+                                .with_status_code(502)
+                                .with_header(cors);
                         let _ = request.respond(resp);
                     }
                 }
@@ -4149,23 +4558,28 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Methods",
-                            "POST, OPTIONS",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "POST, OPTIONS",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Headers",
-                            "Content-Type",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
                         .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
                 }
 
                 let mut body = String::new();
-                let has_body = request.as_reader().read_to_string(&mut body).is_ok() && !body.trim().is_empty();
+                let has_body = request.as_reader().read_to_string(&mut body).is_ok()
+                    && !body.trim().is_empty();
                 let is_clear = body.contains(r#""clear""#);
 
                 let mem_store = AUTH_SESSION.get_or_init(|| Mutex::new(None));
@@ -4193,8 +4607,12 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     let rel = clean.strip_prefix("uploads/").unwrap_or(clean);
                     let rel_path = Path::new(rel);
                     if !is_safe_relative_path(rel_path) {
-                        let resp =
-                            tiny_http::Response::from_string("Forbidden").with_status_code(403);
+                        let resp = tiny_http::Response::from_string("Forbidden")
+                            .with_status_code(403)
+                            .with_header(
+                                tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                    .unwrap(),
+                            );
                         let _ = request.respond(resp);
                         continue;
                     }
@@ -4250,46 +4668,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
             }
 
             if file_path.exists() && file_path.is_file() {
-                match fs::read(&file_path) {
-                    Ok(data) => {
-                        let content_type = match file_path.extension().and_then(|e| e.to_str()) {
-                            Some("html") => "text/html; charset=utf-8",
-                            Some("css") => "text/css; charset=utf-8",
-                            Some("js") => "application/javascript; charset=utf-8",
-                            Some("json") => "application/json; charset=utf-8",
-                            Some("png") => "image/png",
-                            Some("jpg") | Some("jpeg") => "image/jpeg",
-                            Some("svg") => "image/svg+xml",
-                            Some("gif") => "image/gif",
-                            Some("webp") => "image/webp",
-                            Some("mp4") => "video/mp4",
-                            Some("webm") => "video/webm",
-                            Some("mov") => "video/quicktime",
-                            Some("mp3") => "audio/mpeg",
-                            Some("wav") => "audio/wav",
-                            Some("ogg") => "audio/ogg",
-                            Some("woff") => "font/woff",
-                            Some("woff2") => "font/woff2",
-                            Some("ttf") => "font/ttf",
-                            Some("otf") => "font/otf",
-                            _ => "application/octet-stream",
-                        };
-                        let header =
-                            tiny_http::Header::from_bytes("Content-Type", content_type).unwrap();
-                        let cors =
-                            tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
-                                .unwrap();
-                        let resp = tiny_http::Response::from_data(data)
-                            .with_header(header)
-                            .with_header(cors);
-                        let _ = request.respond(resp);
-                    }
-                    Err(_) => {
-                        let resp = tiny_http::Response::from_string("Internal Server Error")
-                            .with_status_code(500);
-                        let _ = request.respond(resp);
-                    }
-                }
+                let content_type = overlay_content_type_for_extension(
+                    file_path.extension().and_then(|e| e.to_str()),
+                );
+                respond_overlay_file_request(request, &file_path, content_type);
             } else {
                 // SPA fallback: for client-side routes, serve index.html
                 // so React Router can handle them. Note: dedicated HTML files
@@ -4314,12 +4696,21 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                         }
                         Err(_) => {
                             let resp = tiny_http::Response::from_string("Internal Server Error")
-                                .with_status_code(500);
+                                .with_status_code(500)
+                                .with_header(
+                                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                        .unwrap(),
+                                );
                             let _ = request.respond(resp);
                         }
                     }
                 } else {
-                    let resp = tiny_http::Response::from_string("Not Found").with_status_code(404);
+                    let resp = tiny_http::Response::from_string("Not Found")
+                        .with_status_code(404)
+                        .with_header(
+                            tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                .unwrap(),
+                        );
                     let _ = request.respond(resp);
                 }
             }
@@ -4358,7 +4749,11 @@ mod app_icon {
         // Bundled production path
         if let Ok(resource_dir) = app.path().resource_dir() {
             let path = resource_dir.join("app_icons").join(filename);
-            println!("[AppIcon] Checking bundled path: {:?} exists={}", path, path.exists());
+            println!(
+                "[AppIcon] Checking bundled path: {:?} exists={}",
+                path,
+                path.exists()
+            );
             if path.exists() {
                 return Some(path);
             }
@@ -4370,10 +4765,15 @@ mod app_icon {
                 .parent() // target/{debug|release}
                 .and_then(|p| p.parent()) // target
                 .and_then(|p| p.parent()) // src-tauri
-                .and_then(|p| p.parent()) // project root
+                .and_then(|p| p.parent())
+            // project root
             {
                 let path = project_root.join("public").join("app_icons").join(filename);
-                println!("[AppIcon] Checking dev fallback: {:?} exists={}", path, path.exists());
+                println!(
+                    "[AppIcon] Checking dev fallback: {:?} exists={}",
+                    path,
+                    path.exists()
+                );
                 if path.exists() {
                     return Some(path);
                 }
@@ -4391,7 +4791,10 @@ mod app_icon {
     /// or `Err(...)` if the native API call failed.
     #[tauri::command]
     pub async fn set_app_icon(app: tauri::AppHandle, icon_name: String) -> Result<bool, String> {
-        println!("[AppIcon] set_app_icon called with icon_name: {}", icon_name);
+        println!(
+            "[AppIcon] set_app_icon called with icon_name: {}",
+            icon_name
+        );
 
         let path = resolve_icon_path(&app, &icon_name)
             .ok_or_else(|| format!("Icon file not found: {}", icon_name))?;
@@ -4412,7 +4815,10 @@ mod app_icon {
             println!("[AppIcon] Icon set successfully: {}", icon_name);
             Ok(true)
         } else {
-            println!("[AppIcon] mce_set_app_icon returned false for: {}", icon_name);
+            println!(
+                "[AppIcon] mce_set_app_icon returned false for: {}",
+                icon_name
+            );
             Ok(false)
         }
     }
@@ -4447,7 +4853,8 @@ async fn get_mobile_pairing_info() -> Result<serde_json::Value, String> {
 /// so the mobile companion server can also connect to OBS.
 #[tauri::command]
 async fn save_obs_connection_for_mobile(url: String, password: String) -> Result<(), String> {
-    mobile_companion::set_obs_connection(mobile_companion::ObsConnectionInfo { url, password }).await;
+    mobile_companion::set_obs_connection(mobile_companion::ObsConnectionInfo { url, password })
+        .await;
     Ok(())
 }
 
@@ -4601,10 +5008,15 @@ pub fn run() {
                     eprintln!("[MobileCompanion] Server failed: {}", e);
                 }
             });
-            println!("[Tauri] Mobile companion server starting on port {}", mobile_port);
+            println!(
+                "[Tauri] Mobile companion server starting on port {}",
+                mobile_port
+            );
 
             tauri::async_runtime::spawn(async move {
-                if let Err(error) = presentation_remote::start_presentation_ws_server(Some(8766)).await {
+                if let Err(error) =
+                    presentation_remote::start_presentation_ws_server(Some(8766)).await
+                {
                     eprintln!("[PresentationRemote] WebSocket server failed: {}", error);
                 }
             });

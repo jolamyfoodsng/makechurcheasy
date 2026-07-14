@@ -4908,5 +4908,6 @@
   "auth.checkEmail.title": "Hwɛ wo e-mail",
   "auth.checkEmail.sentTo": "Yɛsomaa sign-in link kɔ {{email}}.",
   "auth.checkEmail.instruction": "Bue link a ɛwɔ wo inbox no mu na kɔ so hyɛ mu.",
-  "auth.checkEmail.backToSignIn": "San kɔ hyɛ mu"
+  "auth.checkEmail.backToSignIn": "San kɔ hyɛ mu",
+  "common.upgradePlansStartToday": "Nhyehyɛe no fi ase fi ₦{{amount}} nkutoo nnɛ."
 }

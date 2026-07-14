@@ -79,6 +79,16 @@ interface DeviceBootstrapResponse {
   error?: string;
 }
 
+function resolveBootstrappedTrial(
+  remote: NonNullable<DeviceBootstrapResponse["account"]>["user"],
+  current: AuthUser,
+): AuthUser["trial"] {
+  if (Object.prototype.hasOwnProperty.call(remote, "trial")) {
+    return remote.trial ?? undefined;
+  }
+  return current.trial;
+}
+
 export type RefreshPlanResult =
   | { status: "ok" }
   | { status: "unauthenticated" }
@@ -362,7 +372,7 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
       plan: normalizePlanId(remote.plan || current.plan || normalizedPlan) as PlanTier,
       effectivePlan: normalizedPlan,
       entitlements: remote.entitlements || current.entitlements,
-      trial: remote.trial || current.trial,
+      trial: resolveBootstrappedTrial(remote, current),
     };
 
     const sessionChanged = JSON.stringify(updatedUser) !== JSON.stringify(current);

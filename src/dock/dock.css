@@ -5508,13 +5508,13 @@
 
 @media (max-width: 290px) {
   .dock-bible-reader {
-    flex: 0 0 87% !important;
+    flex: 1 1 auto !important;
   }
 }
 
 @media (max-width: 200px) {
   .dock-bible-reader {
-    flex: 0 0 81% !important;
+    flex: 1 1 auto !important;
   }
 }
 
@@ -6120,7 +6120,7 @@
 }
 
 .dock-bible-reader {
-  flex: 0 0 89%;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--dock-border) 60%, transparent);
@@ -6130,7 +6130,7 @@
 
 /* Toolbar collapsed → reader expands to 92% */
 [data-toolbar-collapsed] .dock-bible-reader {
-  flex: 0 0 90% !important;
+  flex: 1 1 auto !important;
 }
 
 .dock-bible-reader__ref-header {
@@ -11904,7 +11904,7 @@
 /* Micro (<250px): Translation select wraps to next line */
 @media (max-width: 250px) {
   .dock-bible-reader {
-    flex: 0 0 87%;
+    flex: 1 1 auto;
 
   }
 
@@ -25607,6 +25607,15 @@ button.dock-btm-toolbar__clear--inline,
   max-width: 240px;
 }
 
+.dock-upgrade__promo {
+  font-size: 11px;
+  color: var(--dock-text);
+  margin: 2px 0 0;
+  line-height: 1.45;
+  font-weight: 600;
+  max-width: 240px;
+}
+
 .dock-upgrade__actions {
   display: flex;
   gap: 8px;
@@ -25713,7 +25722,7 @@ button.dock-btm-toolbar__clear--inline,
   }
 
   .dock-bible-reader {
-    flex: 0 0 82% !important;
+    flex: 1 1 auto !important;
   }
 
   .dock-btm-toolbar__icon-btn {
@@ -26805,4 +26814,30 @@ button.dock-btm-toolbar__clear--inline,
 .dock-bible-compare-selectors__dropdown option {
   background: var(--dock-surface-alt, #1F2937);
   color: var(--dock-text, #F8FAFC);
+}
+
+/* Bottom toolbar owns its visibility. Older global compact rules above hide
+   these controls with !important and make the Bible/Worship toolbar disappear. */
+.dock-console-panel .dock-btm-toolbar {
+  display: flex !important;
+}
+
+.dock-console-panel .dock-btm-toolbar__row {
+  display: flex !important;
+}
+
+.dock-console-panel .dock-btm-toolbar--compact .dock-btm-toolbar__clear--inline {
+  display: inline-flex !important;
+}
+
+.dock-console-panel .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-toolbar__clear--inline {
+  display: none !important;
+}
+
+.dock-console-panel .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-toolbar__clear--full {
+  display: flex !important;
+}
+
+.dock-console-panel .dock-btm-toolbar--collapsed .dock-btm-toolbar__clear--bible {
+  display: flex !important;
 }

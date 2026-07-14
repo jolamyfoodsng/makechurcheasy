@@ -39,9 +39,9 @@ export default function LicenseGuard({ children }: LicenseGuardProps) {
   const handleManageSubscription = async () => {
     try {
       const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(`${API_BASE}/dashboard/billing`);
+      await openUrl(`${API_BASE}/billing`);
     } catch {
-      window.open(`${API_BASE}/dashboard/billing`, "_blank");
+      window.open(`${API_BASE}/billing`, "_blank");
     }
   };
 
@@ -122,9 +122,9 @@ function LicenseLockScreen({
   const handleManageSubscription = async () => {
     try {
       const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(`${API_BASE}/dashboard/billing`);
+      await openUrl(`${API_BASE}/billing`);
     } catch {
-      window.open(`${API_BASE}/dashboard/billing`, "_blank");
+      window.open(`${API_BASE}/billing`, "_blank");
     }
   };
 

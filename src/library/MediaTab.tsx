@@ -20,6 +20,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan } from "../services/licenseService";
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { isSupportedMediaFile } from "../services/mediaValidation";
+import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 
 type FilterType = "all" | "image" | "video";
 
@@ -802,7 +803,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
               {hasReachedImageLimit && ` You've reached the image limit (${imageCount}/${imageLimit}).`}
               {hasReachedVideoLimit && ` You've reached the video limit (${videoCount}/${videoLimit}).`}
             </p>
-            <p>Upgrade your plan to upload more media.</p>
+            <p>Upgrade your plan to upload more media. {UPGRADE_PROMO_FALLBACK}</p>
             <div className="lib-confirm-actions">
               <button className="lib-confirm-cancel" onClick={() => setShowMediaLimitModal(false)} title="Close">Close</button>
               <a href="https://makechurcheasy.creatorstudioslabs.stream/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>

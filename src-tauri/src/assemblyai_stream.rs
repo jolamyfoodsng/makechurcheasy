@@ -16,7 +16,6 @@
  *   "assemblyai-status"      { status: "connected" | "error" | "stopped" }
  *   "assemblyai-audio-level" { level: f32 }  (for the input meter)
  */
-
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, StreamConfig};
 use futures_util::{SinkExt, StreamExt};
@@ -181,8 +180,7 @@ pub async fn start_assemblyai_stream(
         SampleFormat::I16 => device.build_input_stream(
             &stream_config,
             move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                let float_data: Vec<f32> =
-                    data.iter().map(|&s| s as f32 / 32768.0).collect();
+                let float_data: Vec<f32> = data.iter().map(|&s| s as f32 / 32768.0).collect();
                 process_and_send_f32(
                     &float_data,
                     channels,
@@ -199,8 +197,10 @@ pub async fn start_assemblyai_stream(
         SampleFormat::U16 => device.build_input_stream(
             &stream_config,
             move |data: &[u16], _: &cpal::InputCallbackInfo| {
-                let float_data: Vec<f32> =
-                    data.iter().map(|&s| (s as f32 - 32768.0) / 32768.0).collect();
+                let float_data: Vec<f32> = data
+                    .iter()
+                    .map(|&s| (s as f32 - 32768.0) / 32768.0)
+                    .collect();
                 process_and_send_f32(
                     &float_data,
                     channels,
@@ -275,7 +275,11 @@ pub async fn start_assemblyai_stream(
         let send_task = tokio::spawn(async move {
             let mut audio_rx = audio_rx;
             while let Some(pcm_bytes) = audio_rx.recv().await {
-                if ws_sender.send(Message::Binary(pcm_bytes.into())).await.is_err() {
+                if ws_sender
+                    .send(Message::Binary(pcm_bytes.into()))
+                    .await
+                    .is_err()
+                {
                     break;
                 }
             }
@@ -294,8 +298,10 @@ pub async fn start_assemblyai_stream(
                             let msg_type = json.get("type").and_then(|v| v.as_str()).unwrap_or("");
                             match msg_type {
                                 "Turn" => {
-                                    let transcript =
-                                        json.get("transcript").and_then(|v| v.as_str()).unwrap_or("");
+                                    let transcript = json
+                                        .get("transcript")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
                                     if !transcript.is_empty() {
                                         let end_of_turn = json
                                             .get("end_of_turn")
@@ -378,9 +384,7 @@ pub async fn start_assemblyai_stream(
 }
 
 #[tauri::command]
-pub async fn stop_assemblyai_stream(
-    state: State<'_, AssemblyAiStreamState>,
-) -> Result<(), String> {
+pub async fn stop_assemblyai_stream(state: State<'_, AssemblyAiStreamState>) -> Result<(), String> {
     // Drop the mic stream — stops cpal callbacks immediately.
     {
         let mut s = state.stream.lock().map_err(|e| e.to_string())?;
@@ -520,7 +524,10 @@ fn process_and_send_f32(
 
         // Apply effective gain (AGC × user) + gate
         let processed: Vec<f32> = if st.gate_open {
-            filtered.iter().map(|s| (s * effective_gain).max(-1.0).min(1.0)).collect()
+            filtered
+                .iter()
+                .map(|s| (s * effective_gain).max(-1.0).min(1.0))
+                .collect()
         } else {
             vec![0.0; filtered.len()]
         };
@@ -617,5 +624,6 @@ fn sinc(x: f32) -> f32 {
 fn blackman_window(n: i32, half_len: i32) -> f32 {
     let n_f = n as f32;
     let n_f = (n_f + half_len as f32) / (2.0 * half_len as f32); // normalize to [0, 1]
-    0.42 - 0.5 * (2.0 * std::f32::consts::PI * n_f).cos() + 0.08 * (4.0 * std::f32::consts::PI * n_f).cos()
+    0.42 - 0.5 * (2.0 * std::f32::consts::PI * n_f).cos()
+        + 0.08 * (4.0 * std::f32::consts::PI * n_f).cos()
 }

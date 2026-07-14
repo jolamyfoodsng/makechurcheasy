@@ -1613,5 +1613,6 @@
   "auth.checkEmail.title": "Verifique seu e-mail",
   "auth.checkEmail.sentTo": "Enviámos um link de acesso para {{email}}.",
   "auth.checkEmail.instruction": "Abra o link na sua caixa de entrada para continuar a entrar.",
-  "auth.checkEmail.backToSignIn": "Voltar para entrar"
+  "auth.checkEmail.backToSignIn": "Voltar para entrar",
+  "common.upgradePlansStartToday": "Os planos começam a partir de apenas ₦{{amount}} hoje."
 }

@@ -7,9 +7,11 @@
  */
 
 import { Lock, ExternalLink } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { checkEntitlementSync, type FeatureKey } from "../services/entitlementClient";
 import { getEffectivePlan } from "../services/licenseService";
 import { useAuth } from "../contexts/AuthContext";
+import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 
 const PRICING_URL =
   "https://makechurcheasy.creatorstudioslabs.stream/pricing";
@@ -38,6 +40,7 @@ interface FeatureGuardProps {
 
 export default function FeatureGuard({ feature, children }: FeatureGuardProps) {
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   // No user yet — let children render (AuthGate handles auth)
   if (!user) return <>{children}</>;
@@ -55,6 +58,10 @@ export default function FeatureGuard({ feature, children }: FeatureGuardProps) {
   const upgradeLabel =
     PLAN_LABELS[nextPlanKey] ||
     nextPlanKey.charAt(0).toUpperCase() + nextPlanKey.slice(1);
+  const promoText = t("common.upgradePlansStartToday", {
+    amount: UPGRADE_ENTRY_PRICE_NGN.toLocaleString("en-US"),
+    defaultValue: UPGRADE_PROMO_FALLBACK,
+  });
 
   // Feature is locked — show inline upgrade prompt
   return (
@@ -70,6 +77,7 @@ export default function FeatureGuard({ feature, children }: FeatureGuardProps) {
         <p style={styles.currentPlan}>
           Your plan: <strong>{PLAN_LABELS[currentPlan] || currentPlan}</strong>
         </p>
+        <p style={styles.promo}>{promoText}</p>
         <a
           href={PRICING_URL}
           target="_blank"
@@ -127,6 +135,13 @@ const styles: Record<string, React.CSSProperties> = {
   currentPlan: {
     fontSize: 12,
     color: "var(--text-muted, #94a3b8)",
+    margin: 0,
+  },
+  promo: {
+    fontSize: 12,
+    lineHeight: 1.5,
+    color: "var(--text, #e2e8f0)",
+    fontWeight: 600,
     margin: 0,
   },
   cta: {

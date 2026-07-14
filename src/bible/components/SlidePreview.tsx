@@ -6,16 +6,26 @@
 
 import { useMemo } from "react";
 import { useBible } from "../bibleStore";
+import type { BibleSlide } from "../types";
 import Icon from "../../components/Icon";
 
 interface SlidePreviewProps {
   onClose?: () => void;
+  slide?: BibleSlide | null;
+  subtitle?: string;
+  emptyLabel?: string;
 }
 
-export default function SlidePreview({ onClose }: SlidePreviewProps) {
+export default function SlidePreview({
+  onClose,
+  slide = null,
+  subtitle,
+  emptyLabel = "Select a verse to preview",
+}: SlidePreviewProps) {
   const { currentSlide, activeTheme } = useBible();
   const settings = activeTheme?.settings;
   const displayMode = activeTheme?.templateType ?? "fullscreen";
+  const previewSlide = slide ?? currentSlide;
 
   const previewScale = 0.28;
 
@@ -52,8 +62,9 @@ export default function SlidePreview({ onClose }: SlidePreviewProps) {
     };
   }, [settings]);
 
-  const displayText = currentSlide ? currentSlide.text.replace(/\[(\d+)\]\s*/g, "$1 ") : null;
+  const displayText = previewSlide ? previewSlide.text.replace(/\[(\d+)\]\s*/g, "$1 ") : null;
   const modeLabel = displayMode === "lower-third" ? "lower-third" : "full";
+  const previewSubtitle = subtitle ?? (previewSlide ? "Live output" : emptyLabel);
 
   return (
     <div className="live-preview-col">
@@ -61,6 +72,7 @@ export default function SlidePreview({ onClose }: SlidePreviewProps) {
       <div className="live-preview-header">
         <div className="live-preview-header-info">
           <h3>PREVIEW</h3>
+          <p>{previewSubtitle}</p>
         </div>
         {onClose && (
           <button className="live-preview-close" onClick={onClose} title="Close preview">
@@ -74,7 +86,7 @@ export default function SlidePreview({ onClose }: SlidePreviewProps) {
         <div className="preview-frame">
           <div className="preview-frame-bg" style={bgStyle} />
 
-          {currentSlide ? (
+          {previewSlide ? (
             <div className={`preview-frame-text-wrap ${modeLabel}`}>
               <div className={`preview-frame-textbox ${modeLabel}`}>
                 <div className="preview-frame-verse" style={previewStyle}>
@@ -82,7 +94,7 @@ export default function SlidePreview({ onClose }: SlidePreviewProps) {
                 </div>
                 <div className="preview-frame-ref-row">
                   <span className="preview-frame-reference" style={refStyle}>
-                    {currentSlide.reference}
+                    {previewSlide.reference}
                   </span>
                 </div>
               </div>
@@ -90,15 +102,15 @@ export default function SlidePreview({ onClose }: SlidePreviewProps) {
           ) : (
             <div className="preview-frame-empty">
               <Icon name="tv_off" size={20} />
-              <span>No verse selected</span>
+              <span>{emptyLabel}</span>
             </div>
           )}
         </div>
 
         {/* Slide counter */}
-        {currentSlide && (
+        {previewSlide && (
           <div className="preview-slide-counter">
-            Slide {currentSlide.index + 1} / {currentSlide.total}
+            Slide {previewSlide.index + 1} / {previewSlide.total}
           </div>
         )}
       </div>

@@ -126,6 +126,8 @@ const UPDATE_POLL_INTERVAL_MS = 30_000;
 const FORCED_UPDATE_POLL_INTERVAL_MS = 5 * 60 * 1000;
 const WORSHIP_DOCK_SAVE_POLL_INTERVAL_MS = 500;
 const DOCK_WORSHIP_PREFS_APP_KEY = "dock-worship-preferences";
+const SUBSCRIPTION_PLANS_URL =
+  "https://makechurcheasy.creatorstudioslabs.stream/subscription/plans";
 
 async function saveWorshipSongFromDockPayload(payload: WorshipDockSongSavePayload): Promise<{
   song: Song;
@@ -190,6 +192,37 @@ function TranscriptDetailPageWrapper() {
       onBack={() => navigate("/transcripts")}
     />
   );
+}
+
+function SubscriptionPlansRedirect() {
+  const navigate = useNavigate();
+  const openedRef = useRef(false);
+
+  useEffect(() => {
+    if (openedRef.current) return;
+    openedRef.current = true;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { openUrl } = await import("@tauri-apps/plugin-opener");
+        await openUrl(SUBSCRIPTION_PLANS_URL);
+      } catch {
+        window.open(SUBSCRIPTION_PLANS_URL, "_blank", "noopener,noreferrer");
+      } finally {
+        if (!cancelled) {
+          navigate("/", { replace: true });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
+
+  return null;
 }
 
 function App() {
@@ -1284,6 +1317,9 @@ function App() {
                       <Route path="bible/translations" element={<Navigate to="/resources?tab=bible" replace />} />
                       <Route path="production/themes" element={<ProductionThemeSettingsPage />} />
                       <Route path="settings" element={<BibleProvider><MVSettings /></BibleProvider>} />
+                      <Route path="pricing" element={<Navigate to="/subscription/plans" replace />} />
+                      <Route path="subscription/plans" element={<SubscriptionPlansRedirect />} />
+                      <Route path="subscriptions/plans" element={<Navigate to="/subscription/plans" replace />} />
                       <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
                       <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
                       <Route path="countdowns" element={<CountdownsPage />} />

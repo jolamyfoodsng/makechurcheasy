@@ -1,6 +1,7 @@
 import "./NewUpgradeModal.css";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ArrowRight,
   BookOpen,
@@ -36,6 +37,7 @@ import {
   type PlanTier,
 } from "../src/services/planConfigTypes";
 import { normalizePlanId } from "../src/lib/subscriptionSourceOfTruth";
+import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from "../src/lib/upgradePromo";
 
 const PRICING_URL = "https://makechurcheasy.creatorstudioslabs.stream/pricing";
 const PLAN_ORDER: Array<"free" | "basic" | "growth" | "pro"> = ["free", "basic", "growth", "pro"];
@@ -132,6 +134,7 @@ export default function NewUpgradeModal({
 }: NewUpgradeModalProps) {
   const [planConfig, setPlanConfig] = useState<PlanConfig>(() => readPlanConfigCache() || DEFAULT_PLAN_CONFIG);
   const { pricing, formatPrice, getPlanPrice, getIntroPrice } = useCountryPricing();
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (!open) return undefined;
@@ -227,6 +230,10 @@ export default function NewUpgradeModal({
   const subtitle =
     message
     || `${featureLabel} is gated by your effective plan. Upgrade to ${requiredLabel} to raise your limits and unlock the matching premium tools.`;
+  const promoText = t("common.upgradePlansStartToday", {
+    amount: UPGRADE_ENTRY_PRICE_NGN.toLocaleString("en-US"),
+    defaultValue: UPGRADE_PROMO_FALLBACK,
+  });
 
   if (!open) return null;
 
@@ -255,6 +262,10 @@ export default function NewUpgradeModal({
           </div>
           <h1 className="upgrade-modal-title" id="upgrade-modal-title">{title}</h1>
           <p className="upgrade-modal-subtitle">{subtitle}</p>
+          <div className="upgrade-modal-promo">
+            <Crown size={14} />
+            <span>{promoText}</span>
+          </div>
         </div>
 
         <div className="upgrade-modal-panels">

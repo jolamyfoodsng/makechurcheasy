@@ -1,6 +1,6 @@
+use serde::Serialize;
 use std::env;
 use std::fs;
-use serde::Serialize;
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -64,12 +64,24 @@ fn build_page_font_map(
     page_id: lopdf::ObjectId,
 ) -> std::collections::HashMap<String, bool> {
     let mut font_map = std::collections::HashMap::new();
-    let Ok(page) = doc.get_object(page_id) else { return font_map };
-    let Ok(page_dict) = page.as_dict() else { return font_map };
-    let Ok(resources) = page_dict.get(b"Resources") else { return font_map };
-    let Ok(resources_dict) = resources.as_dict() else { return font_map };
-    let Ok(fonts) = resources_dict.get(b"Font") else { return font_map };
-    let Ok(font_dict) = fonts.as_dict() else { return font_map };
+    let Ok(page) = doc.get_object(page_id) else {
+        return font_map;
+    };
+    let Ok(page_dict) = page.as_dict() else {
+        return font_map;
+    };
+    let Ok(resources) = page_dict.get(b"Resources") else {
+        return font_map;
+    };
+    let Ok(resources_dict) = resources.as_dict() else {
+        return font_map;
+    };
+    let Ok(fonts) = resources_dict.get(b"Font") else {
+        return font_map;
+    };
+    let Ok(font_dict) = fonts.as_dict() else {
+        return font_map;
+    };
     for (name, font_ref) in font_dict.iter() {
         let name_str = String::from_utf8_lossy(name).to_string();
         let font_obj_result = match font_ref {
@@ -102,14 +114,20 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
     while i < len {
         let b = bytes[i];
         match b {
-            b' ' | b'\t' | b'\r' | b'\n' | b'\x0C' => { i += 1; }
+            b' ' | b'\t' | b'\r' | b'\n' | b'\x0C' => {
+                i += 1;
+            }
             b'%' => {
-                while i < len && bytes[i] != b'\n' { i += 1; }
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
             }
             b'0'..=b'9' | b'-' | b'+' | b'.' => {
                 let start = i;
                 i += 1;
-                while i < len && matches!(bytes[i], b'0'..=b'9' | b'.' | b'-' | b'+') { i += 1; }
+                while i < len && matches!(bytes[i], b'0'..=b'9' | b'.' | b'-' | b'+') {
+                    i += 1;
+                }
                 let s = std::str::from_utf8(&bytes[start..i]).unwrap_or("0");
                 if s.contains('.') {
                     if let Ok(v) = s.parse::<f64>() {
@@ -124,8 +142,11 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                 let start = i;
                 while i < len {
                     match bytes[i] {
-                        b' ' | b'\t' | b'\r' | b'\n' | b'/' | b'(' | b')' | b'<' | b'>' | b'[' | b']' | b'{' | b'}' => break,
-                        _ => { i += 1; }
+                        b' ' | b'\t' | b'\r' | b'\n' | b'/' | b'(' | b')' | b'<' | b'>' | b'['
+                        | b']' | b'{' | b'}' => break,
+                        _ => {
+                            i += 1;
+                        }
                     }
                 }
                 let name = bytes[start..i].to_vec();
@@ -137,10 +158,20 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                 let mut depth = 0i32;
                 while i < len {
                     match bytes[i] {
-                        b'(' => { depth += 1; s.push(b'('); i += 1; }
+                        b'(' => {
+                            depth += 1;
+                            s.push(b'(');
+                            i += 1;
+                        }
                         b')' => {
-                            if depth > 0 { depth -= 1; s.push(b')'); i += 1; }
-                            else { i += 1; break; }
+                            if depth > 0 {
+                                depth -= 1;
+                                s.push(b')');
+                                i += 1;
+                            } else {
+                                i += 1;
+                                break;
+                            }
                         }
                         b'\\' => {
                             i += 1;
@@ -157,12 +188,18 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                                 i += 1;
                             }
                         }
-                        other => { s.push(other); i += 1; }
+                        other => {
+                            s.push(other);
+                            i += 1;
+                        }
                     }
                 }
                 let s_out = fix_winansi_twi(String::from_utf8_lossy(&s).to_string());
                 let bytes_out = s_out.into_bytes();
-                operands.push(lopdf::Object::String(bytes_out, lopdf::StringFormat::Literal));
+                operands.push(lopdf::Object::String(
+                    bytes_out,
+                    lopdf::StringFormat::Literal,
+                ));
             }
             b'<' => {
                 i += 1;
@@ -173,8 +210,10 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                     }
                     i += 1;
                 }
-                if i < len { i += 1; } // skip '>'
-                // Convert hex pairs to bytes
+                if i < len {
+                    i += 1;
+                } // skip '>'
+                  // Convert hex pairs to bytes
                 let mut bytes_out = Vec::new();
                 let mut j = 0;
                 while j + 1 < hex.len() {
@@ -193,14 +232,19 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                 }
                 let s_out = fix_winansi_twi(String::from_utf8_lossy(&bytes_out).to_string());
                 let bytes_final = s_out.into_bytes();
-                operands.push(lopdf::Object::String(bytes_final, lopdf::StringFormat::Hexadecimal));
+                operands.push(lopdf::Object::String(
+                    bytes_final,
+                    lopdf::StringFormat::Hexadecimal,
+                ));
             }
             b'[' => {
                 i += 1;
                 let mut arr: Vec<lopdf::Object> = Vec::new();
                 while i < len && bytes[i] != b']' {
                     match bytes[i] {
-                        b' ' | b'\t' | b'\r' | b'\n' => { i += 1; }
+                        b' ' | b'\t' | b'\r' | b'\n' => {
+                            i += 1;
+                        }
                         b'(' => {
                             i += 1;
                             let mut s = Vec::new();
@@ -224,14 +268,21 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                                     i += 1;
                                 }
                             }
-                            if i < len { i += 1; }
+                            if i < len {
+                                i += 1;
+                            }
                             let s_out = fix_winansi_twi(String::from_utf8_lossy(&s).to_string());
-                            arr.push(lopdf::Object::String(s_out.into_bytes(), lopdf::StringFormat::Literal));
+                            arr.push(lopdf::Object::String(
+                                s_out.into_bytes(),
+                                lopdf::StringFormat::Literal,
+                            ));
                         }
                         b'0'..=b'9' | b'-' | b'+' | b'.' => {
                             let start = i;
                             i += 1;
-                            while i < len && matches!(bytes[i], b'0'..=b'9' | b'.' | b'-' | b'+') { i += 1; }
+                            while i < len && matches!(bytes[i], b'0'..=b'9' | b'.' | b'-' | b'+') {
+                                i += 1;
+                            }
                             let s = std::str::from_utf8(&bytes[start..i]).unwrap_or("0");
                             if s.contains('.') {
                                 if let Ok(v) = s.parse::<f64>() {
@@ -241,30 +292,39 @@ fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
                                 arr.push(lopdf::Object::Integer(v));
                             }
                         }
-                        _ => { i += 1; }
+                        _ => {
+                            i += 1;
+                        }
                     }
                 }
-                if i < len { i += 1; }
+                if i < len {
+                    i += 1;
+                }
                 operands.push(lopdf::Object::Array(arr));
             }
-            b't' if i + 3 < len && &bytes[i..i+4] == b"true" => {
+            b't' if i + 3 < len && &bytes[i..i + 4] == b"true" => {
                 operands.push(lopdf::Object::Boolean(true));
                 i += 4;
             }
-            b'f' if i + 4 < len && &bytes[i..i+5] == b"false" => {
+            b'f' if i + 4 < len && &bytes[i..i + 5] == b"false" => {
                 operands.push(lopdf::Object::Boolean(false));
                 i += 5;
             }
             b'A'..=b'Z' | b'a'..=b'z' => {
                 let start = i;
-                while i < len && matches!(bytes[i], b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'*') { i += 1; }
+                while i < len && matches!(bytes[i], b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'*')
+                {
+                    i += 1;
+                }
                 let op = std::str::from_utf8(&bytes[start..i]).unwrap_or("");
                 ops.push(lopdf::content::Operation {
                     operator: op.to_string(),
                     operands: operands.drain(..).collect(),
                 });
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
     ops
@@ -284,8 +344,14 @@ fn extract_page_text_elements(
     let mut line_x = 0.0f64;
     let mut line_y = 0.0f64;
 
-    let flush = |buf: &mut String, elements: &mut Vec<PdfTextElement>,
-                 line_x: f64, line_y: f64, font_size: f64, is_bold: bool, page_num: u32, page_height: f64| {
+    let flush = |buf: &mut String,
+                 elements: &mut Vec<PdfTextElement>,
+                 line_x: f64,
+                 line_y: f64,
+                 font_size: f64,
+                 is_bold: bool,
+                 page_num: u32,
+                 page_height: f64| {
         if !buf.is_empty() {
             let text = fix_winansi_twi(buf.clone());
             let char_count = text.chars().count() as f64;
@@ -306,13 +372,31 @@ fn extract_page_text_elements(
     for op in operations {
         match op.operator.as_str() {
             "BT" => {
-                flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                flush(
+                    &mut buf,
+                    &mut elements,
+                    line_x,
+                    line_y,
+                    font_size,
+                    is_bold,
+                    page_num,
+                    page_height,
+                );
                 tm = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
                 line_x = 0.0;
                 line_y = 0.0;
             }
             "ET" => {
-                flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                flush(
+                    &mut buf,
+                    &mut elements,
+                    line_x,
+                    line_y,
+                    font_size,
+                    is_bold,
+                    page_num,
+                    page_height,
+                );
             }
             "Tf" => {
                 if let Some(lopdf::Object::Name(name)) = op.operands.first() {
@@ -340,7 +424,16 @@ fn extract_page_text_elements(
                             };
                         }
                     }
-                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                    flush(
+                        &mut buf,
+                        &mut elements,
+                        line_x,
+                        line_y,
+                        font_size,
+                        is_bold,
+                        page_num,
+                        page_height,
+                    );
                     line_x = tm[4];
                     line_y = tm[5];
                 }
@@ -359,7 +452,16 @@ fn extract_page_text_elements(
                     };
                     line_x += tx * tm[0] + ty * tm[2];
                     line_y += tx * tm[1] + ty * tm[3];
-                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                    flush(
+                        &mut buf,
+                        &mut elements,
+                        line_x,
+                        line_y,
+                        font_size,
+                        is_bold,
+                        page_num,
+                        page_height,
+                    );
                 }
             }
             "Tj" => {
@@ -388,12 +490,30 @@ fn extract_page_text_elements(
                             }
                             lopdf::Object::Integer(offset) => {
                                 if *offset < -100 && !buf.is_empty() {
-                                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                                    flush(
+                                        &mut buf,
+                                        &mut elements,
+                                        line_x,
+                                        line_y,
+                                        font_size,
+                                        is_bold,
+                                        page_num,
+                                        page_height,
+                                    );
                                 }
                             }
                             lopdf::Object::Real(offset) => {
                                 if (*offset as f64) < -100.0 && !buf.is_empty() {
-                                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                                    flush(
+                                        &mut buf,
+                                        &mut elements,
+                                        line_x,
+                                        line_y,
+                                        font_size,
+                                        is_bold,
+                                        page_num,
+                                        page_height,
+                                    );
                                 }
                             }
                             _ => {}
@@ -403,14 +523,32 @@ fn extract_page_text_elements(
             }
             "T*" => {
                 if !buf.is_empty() {
-                    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+                    flush(
+                        &mut buf,
+                        &mut elements,
+                        line_x,
+                        line_y,
+                        font_size,
+                        is_bold,
+                        page_num,
+                        page_height,
+                    );
                 }
                 line_y -= font_size;
             }
             _ => {}
         }
     }
-    flush(&mut buf, &mut elements, line_x, line_y, font_size, is_bold, page_num, page_height);
+    flush(
+        &mut buf,
+        &mut elements,
+        line_x,
+        line_y,
+        font_size,
+        is_bold,
+        page_num,
+        page_height,
+    );
     elements
 }
 
@@ -422,8 +560,7 @@ fn main() {
     }
     let path = &args[1];
     let file_data = fs::read(path).expect("Failed to read PDF file");
-    let doc = lopdf::Document::load_mem(&file_data)
-        .expect("Failed to parse PDF with lopdf");
+    let doc = lopdf::Document::load_mem(&file_data).expect("Failed to parse PDF with lopdf");
     let pages = doc.get_pages();
     let mut all_elements = Vec::new();
 
@@ -460,5 +597,9 @@ fn main() {
     // Output as JSON
     let json = serde_json::to_string(&all_elements).expect("Failed to serialize elements");
     println!("{}", json);
-    eprintln!("Extracted {} text elements from {} pages", all_elements.len(), pages.len());
+    eprintln!(
+        "Extracted {} text elements from {} pages",
+        all_elements.len(),
+        pages.len()
+    );
 }

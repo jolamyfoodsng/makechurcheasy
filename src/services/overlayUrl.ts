@@ -15,6 +15,8 @@ import { invoke } from "@tauri-apps/api/core";
 let _cachedBaseUrl: string | null = null;
 let _lastInvokeAttempt = 0;
 const RETRY_COOLDOWN_MS = 2000;
+const DEFAULT_TAURI_OVERLAY_BASE_URL = "http://127.0.0.1:45678";
+const DEV_VITE_PORT = "1420";
 
 function isLocalOverlayHost(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
@@ -87,7 +89,7 @@ export async function getOverlayBaseUrl(): Promise<string> {
   // Cooldown: don't hammer invoke on repeated failures
   const now = Date.now();
   if (now - _lastInvokeAttempt < RETRY_COOLDOWN_MS) {
-    return _cachedBaseUrl || window.location.origin;
+    return getOverlayBaseUrlSync();
   }
   _lastInvokeAttempt = now;
 
@@ -101,11 +103,31 @@ export async function getOverlayBaseUrl(): Promise<string> {
     console.warn("[OverlayURL] Failed to get overlay port from Tauri:", err);
   }
 
-  // Return fallback but do NOT cache it — retry on next call.
-  // In production Tauri, window.location.origin is "tauri://localhost" which
-  // is NOT the same as http://127.0.0.1:{port}, so caching it permanently
-  // would break all relay POSTs.
-  return window.location.origin;
+  try {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 750);
+    try {
+      const response = await fetch(`${DEFAULT_TAURI_OVERLAY_BASE_URL}/mce-bible-overlay.html`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (response.ok) {
+        _cachedBaseUrl = DEFAULT_TAURI_OVERLAY_BASE_URL;
+        return _cachedBaseUrl;
+      }
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  } catch {
+    // Fall through to origin fallback for pure browser development.
+  }
+
+  // Last-resort fallback:
+  // - Vite dev page should keep using its own origin.
+  // - Desktop/Tauri should never emit a bare localhost origin into OBS
+  //   because that produces broken browser-source URLs such as
+  //   http://localhost/mce-bible-overlay.html with no port.
+  return getOverlayBaseUrlSync();
 }
 
 /**
@@ -116,9 +138,21 @@ export async function getOverlayBaseUrl(): Promise<string> {
 export function getOverlayBaseUrlSync(): string {
   if (_cachedBaseUrl) return _cachedBaseUrl;
   if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin;
+    const { protocol, hostname, port } = window.location;
+    const isHttpLocalOrigin =
+      (protocol === "http:" || protocol === "https:")
+      && (hostname === "localhost" || hostname === "127.0.0.1");
+    if (isHttpLocalOrigin) {
+      if (port === DEV_VITE_PORT) {
+        return window.location.origin;
+      }
+      return DEFAULT_TAURI_OVERLAY_BASE_URL;
+    }
+    if (protocol === "tauri:") {
+      return DEFAULT_TAURI_OVERLAY_BASE_URL;
+    }
   }
-  return "http://localhost";
+  return DEFAULT_TAURI_OVERLAY_BASE_URL;
 }
 
 /**

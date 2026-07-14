@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Check, Copy, ExternalLink, Globe, RotateCcw, Users } from "lucide-react";
+import { ArrowRight, Check, Copy, ExternalLink, Globe, Info, RotateCcw, Users } from "lucide-react";
 import {
   type PresentationSettings,
   getPresentationSettings,
@@ -89,7 +89,7 @@ function PresentationLinkCard({ settings, onUpdate }: PresentationLinkCardProps)
     <div className="ps-config-card ps-config-card--hero">
       <div className="ps-config-card-header">
         <Globe size={16} />
-        <span>Presentation Screen Link</span>
+        <span>Presentation link</span>
       </div>
 
       <p className="ps-config-copy">
@@ -126,6 +126,53 @@ function PresentationLinkCard({ settings, onUpdate }: PresentationLinkCardProps)
         <div className="ps-viewers">
           <Users size={14} />
           <span>Connected screens: {settings.connectedViewers}</span>
+      </div>
+    </div>
+  );
+}
+
+const PRESENTATION_USAGE_STEPS = [
+  {
+    title: "Use it on another laptop",
+    description:
+      "Copy the link, open it in a browser there, then keep that screen fullscreen on the projector or extended display.",
+  },
+  {
+    title: "Use it inside OBS",
+    description:
+      "Paste the same link into an OBS Browser Source on the presentation laptop if that machine is driving the output.",
+  },
+  {
+    title: "Use it on this computer",
+    description:
+      "Launch Screen opens a dedicated presentation window. If an external display is connected, it moves there automatically.",
+  },
+];
+
+function PresentationUsageCard() {
+  return (
+    <div className="ps-config-card ps-config-card--guide">
+      <div className="ps-config-card-header">
+        <Info size={16} />
+        <span>How to use it</span>
+      </div>
+
+      <p className="ps-config-copy ps-config-copy--compact">
+        One link powers the presentation screen. Choose the output method that matches the setup for that service.
+      </p>
+
+      <div className="ps-guide-list">
+        {PRESENTATION_USAGE_STEPS.map((step, index) => (
+          <div key={step.title} className="ps-guide-item">
+            <div className="ps-guide-step">
+              <span className="ps-guide-step-number">{index + 1}</span>
+              <div className="ps-guide-step-body">
+                <strong>{step.title}</strong>
+                <span>{step.description}</span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -201,27 +248,10 @@ export default function PresentationSetupPage() {
         </div>
 
         <div className="ps-section">
-          <SectionHeader number={1} title="Presentation link" />
-          <PresentationLinkCard settings={settings} onUpdate={handleUpdate} />
-        </div>
-
-        <div className="ps-section">
-          <SectionHeader number={2} title="How to use it" />
-          <div className="ps-config-card">
-            <div className="ps-guide-list">
-              <div className="ps-guide-item">
-                <strong>Browser on another laptop</strong>
-                <span>Copy the link, open it there, and keep that page fullscreen on the projector or extended display.</span>
-              </div>
-              <div className="ps-guide-item">
-                <strong>OBS on another laptop</strong>
-                <span>Paste the same link into an OBS Browser Source if you want that laptop to manage the presentation from OBS.</span>
-              </div>
-              <div className="ps-guide-item">
-                <strong>Holyrics-style screen</strong>
-                <span>Yes. Launch Screen opens a dedicated presentation window, and if an external display is connected it opens there automatically.</span>
-              </div>
-            </div>
+          <SectionHeader number={1} title="Presentation setup" />
+          <div className="ps-overview-grid">
+            <PresentationLinkCard settings={settings} onUpdate={handleUpdate} />
+            <PresentationUsageCard />
           </div>
         </div>
 

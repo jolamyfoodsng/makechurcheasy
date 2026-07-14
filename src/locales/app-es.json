@@ -4908,5 +4908,6 @@
   "auth.checkEmail.title": "Revisa tu correo",
   "auth.checkEmail.sentTo": "Hemos enviado un enlace de acceso a {{email}}.",
   "auth.checkEmail.instruction": "Abre el enlace en tu bandeja de entrada para continuar iniciando sesión.",
-  "auth.checkEmail.backToSignIn": "Volver a iniciar sesión"
+  "auth.checkEmail.backToSignIn": "Volver a iniciar sesión",
+  "common.upgradePlansStartToday": "Los planes empiezan desde solo ₦{{amount}} hoy."
 }

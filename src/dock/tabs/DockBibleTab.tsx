@@ -3404,6 +3404,8 @@ export default function DockBibleTab({
   }, [chapterPassages, selectedVerse]);
 
   useEffect(() => {
+    if (!isActive) return;
+
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
       const targetElement = target instanceof Element ? target : null;
@@ -3443,7 +3445,7 @@ export default function DockBibleTab({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [handleClearVerse, navigateVerse, selectedBook, selectedChapter, selectedVerse, sendSelectedVerseToShow]);
+  }, [handleClearVerse, isActive, navigateVerse, selectedBook, selectedChapter, selectedVerse, sendSelectedVerseToShow]);
 
   const currentChapterLabel =
     selectedBook && selectedChapter ? `${selectedBook} ${selectedChapter}` : t("bible.defaultTitle");

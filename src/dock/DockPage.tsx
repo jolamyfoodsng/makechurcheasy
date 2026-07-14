@@ -79,7 +79,7 @@ interface DockShellPreferences {
   disabledTabs?: DockTab[];
 }
 
-const PREWARMED_DOCK_TABS: DockTab[] = ["bible", "worship"];
+const PREWARMED_DOCK_TABS: DockTab[] = [];
 
 function resolveDockTab(tab?: DockTab | "live" | null): DockTab {
   if (tab === "planner" || tab === "bible" || tab === "worship" || tab === "media" || tab === "multiview" || tab === "ministry") {
@@ -359,7 +359,6 @@ export default function DockPage() {
         if (autoReconnectTimer) { clearInterval(autoReconnectTimer); autoReconnectTimer = null; }
 
         void dockObsClient.applyProjectionSettings().catch(() => { });
-
         dockObsClient.recoverLiveState().then((recovered) => {
           setStaged((current) => {
             if (current) return current;
@@ -506,28 +505,6 @@ export default function DockPage() {
   const handleCommandPaletteSelectTemplate = useCallback((_templateKind: "bible" | "lower-third", _themeId: string) => {
     setShowCommandPalette(false);
   }, []);
-
-  // ── Global input handler to open command palette on text input ──
-  useEffect(() => {
-    const handleInput = (e: Event) => {
-      const target = e.target as HTMLElement;
-      // Only trigger on text inputs and textareas — skip file, checkbox, etc.
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement
-      ) {
-        if (target instanceof HTMLInputElement && target.type !== "text" && target.type !== "search") return;
-        const value = target.value?.trim() || "";
-        // Open palette if user types a meaningful query (3+ chars)
-        if (value.length >= 3 && /[a-zA-Z0-9]/.test(value)) {
-          openCommandPalette(value);
-        }
-      }
-    };
-
-    document.addEventListener("input", handleInput);
-    return () => document.removeEventListener("input", handleInput);
-  }, [openCommandPalette]);
 
   const shortcuts: ShortcutDefinition[] = [
     { key: "2", handler: () => setActiveTab("bible"), label: t('page.shortcutTabBible'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
@@ -1107,8 +1084,8 @@ export default function DockPage() {
                 />
               </div>
             )}
-            {mountedTabs.bible && (
-              <div hidden={activeTab !== "bible"}>
+            {activeTab === "bible" && (
+              <div>
                 <DockBibleTab
                   staged={staged}
                   onStage={handleStage}
@@ -1121,8 +1098,8 @@ export default function DockPage() {
                 />
               </div>
             )}
-            {mountedTabs.worship && (
-              <div hidden={activeTab !== "worship"}>
+            {activeTab === "worship" && (
+              <div>
                 <DockWorshipTab
                   staged={staged}
                   onStage={handleStage}
@@ -1137,6 +1114,7 @@ export default function DockPage() {
                 <DockMediaTab
                   staged={staged}
                   onStage={handleStage}
+                  isActive={activeTab === "media"}
                 />
               </div>
             )}

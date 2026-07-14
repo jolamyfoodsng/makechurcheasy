@@ -4908,5 +4908,6 @@
   "auth.checkEmail.title": "Duba imel ɗinka",
   "auth.checkEmail.sentTo": "Mun aika da hanyar shiga zuwa {{email}}.",
   "auth.checkEmail.instruction": "Buɗe hanyar da ke cikin imel ɗinka don ci gaba da shiga.",
-  "auth.checkEmail.backToSignIn": "Komawa ga shiga"
+  "auth.checkEmail.backToSignIn": "Komawa ga shiga",
+  "common.upgradePlansStartToday": "Tsare-tsare suna farawa daga ₦{{amount}} kacal yau."
 }

@@ -25,12 +25,8 @@ const LOCAL_LLM_MODEL_URLS: &[&str] = &[
 ];
 const LOCAL_LLM_CONTEXT_SIZE: u32 = 2_048;
 const LOCAL_LLM_MAX_TOKENS: u32 = 160;
-const LOCAL_LLM_DEFAULT_STOP_SEQUENCES: &[&str] = &[
-    "<|im_end|>",
-    "<|end|>",
-    "<|endoftext|>",
-    "<|eot_id|>",
-];
+const LOCAL_LLM_DEFAULT_STOP_SEQUENCES: &[&str] =
+    &["<|im_end|>", "<|end|>", "<|endoftext|>", "<|eot_id|>"];
 
 static LOCAL_LLM_WORKER: OnceLock<LocalLlmWorkerHandle> = OnceLock::new();
 static LOCAL_LLM_LOADED: AtomicBool = AtomicBool::new(false);
@@ -160,9 +156,7 @@ fn push_model_candidates_for_root(candidates: &mut Vec<PathBuf>, root: &Path) {
             .join("models")
             .join("llm")
             .join(LOCAL_LLM_MODEL_FILE),
-        root.join("models")
-            .join("llm")
-            .join(LOCAL_LLM_MODEL_FILE),
+        root.join("models").join("llm").join(LOCAL_LLM_MODEL_FILE),
         root.join("_up_")
             .join("resources")
             .join("models")
@@ -210,7 +204,9 @@ fn resolve_bundled_local_llm_model_path(resource_dir: Option<&Path>) -> Option<P
         push_unique_path(&mut candidates, dev_path);
     }
 
-    candidates.into_iter().find(|path| is_valid_model_file(path))
+    candidates
+        .into_iter()
+        .find(|path| is_valid_model_file(path))
 }
 
 fn detect_install_source_path(resource_dir: Option<&Path>) -> Option<PathBuf> {
@@ -419,7 +415,10 @@ fn local_llm_worker_loop(receiver: mpsc::Receiver<WorkerMessage>) {
 
     while let Ok(message) = receiver.recv() {
         match message {
-            WorkerMessage::Run { request, respond_to } => {
+            WorkerMessage::Run {
+                request,
+                respond_to,
+            } => {
                 let result = run_local_llm_request(&mut state, request);
                 let _ = respond_to.send(result);
             }
@@ -520,7 +519,10 @@ fn generate_with_session(
     session: &mut LocalLlmSession,
     request: LocalLlmGenerationRequest,
 ) -> Result<String, String> {
-    let max_tokens = request.max_tokens.unwrap_or(64).clamp(1, LOCAL_LLM_MAX_TOKENS);
+    let max_tokens = request
+        .max_tokens
+        .unwrap_or(64)
+        .clamp(1, LOCAL_LLM_MAX_TOKENS);
     let mut messages = Vec::new();
 
     if !request.system_prompt.trim().is_empty() {
@@ -552,7 +554,9 @@ fn generate_with_session(
 
     let total_requested_tokens = prompt_tokens.len() + max_tokens as usize;
     if total_requested_tokens >= session.context.n_ctx() as usize {
-        return Err("Local prompt is too large for the configured llama.cpp context window.".to_string());
+        return Err(
+            "Local prompt is too large for the configured llama.cpp context window.".to_string(),
+        );
     }
 
     let mut batch = LlamaBatch::new(prompt_tokens.len() + 1, 1);
@@ -570,10 +574,7 @@ fn generate_with_session(
         .map_err(|e| format!("llama.cpp prompt decode failed: {}", e))?;
 
     let mut decoder = UTF_8.new_decoder();
-    let mut sampler = LlamaSampler::chain_simple([
-        LlamaSampler::temp(0.0),
-        LlamaSampler::greedy(),
-    ]);
+    let mut sampler = LlamaSampler::chain_simple([LlamaSampler::temp(0.0), LlamaSampler::greedy()]);
     sampler.reset();
 
     let mut generated = String::new();
