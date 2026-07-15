@@ -28,7 +28,6 @@ import {
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { PremiumContentGate } from "../components/PremiumContentGate";
 import { UpgradeModal } from "../components/UpgradeModal";
-import SongImportFullprocess from "../../others/SongImportFullprocess";
 import { BulkImportModal } from "../worship/BulkImportModal";
 import {
   formatOnlineLyricsSearchError,
@@ -36,9 +35,20 @@ import {
   searchOnlineSongLyrics,
   type OnlineLyricsSearchResult,
 } from "../worship/onlineLyricsService";
+import { generateSlides } from "../worship/slideEngine";
+import {
+  OnlineLyricsImportModal,
+  type OnlineLyricsImportDraft,
+} from "../worship/OnlineLyricsImportModal";
 import { unicodeSearchNormalize, unicodeStripDiacritics } from "../worship/unicodeUtils";
 import type { Song } from "../worship/types";
-import { archiveSong, getAllSongs, getArchivedSongs, restoreSong } from "../worship/worshipDb";
+import {
+  archiveSong,
+  getAllSongs,
+  getArchivedSongs,
+  restoreSong,
+  saveSong,
+} from "../worship/worshipDb";
 import WorshipSongModal from "../worship/WorshipSongModal";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 
@@ -87,6 +97,10 @@ function buildSongLookupKeys(title: string, artist: string): string[] {
     : [normalizedTitle];
 }
 
+function createSongId(prefix = "song"): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 /* ========================================================================= */
 /* SongsTab                                                                  */
 /* ========================================================================= */
@@ -110,6 +124,7 @@ export function SongsTab() {
   const [showSongLimitModal, setShowSongLimitModal] = useState(false);
   const [songLimitModalType, setSongLimitModalType] = useState<"songs" | "import">("songs");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [savingOnlineImport, setSavingOnlineImport] = useState(false);
   const onlineSearchRequestRef = useRef(0);
   const spotifyAutoImportRef = useRef<string | null>(null);
 
@@ -354,6 +369,46 @@ export function SongsTab() {
     setOnlineSearchQuery((current) => current || search.trim());
     setShowOnlineSearchModal(true);
   }, [search]);
+
+  const handleImportOnlineSong = useCallback(async (draft: OnlineLyricsImportDraft) => {
+    if (!pendingOnlineImport) {
+      return;
+    }
+
+    setSavingOnlineImport(true);
+
+    try {
+      const now = new Date().toISOString();
+      const lyrics = draft.lyrics.trim();
+      const newSong: Song = {
+        id: createSongId("song-online"),
+        metadata: {
+          title: draft.title.trim(),
+          artist: draft.artist.trim(),
+        },
+        lyrics,
+        slides: generateSlides(lyrics, 2, true),
+        createdAt: now,
+        updatedAt: now,
+        importSourceType: "online",
+        importSourceName: pendingOnlineImport.sourceName,
+        importSourceUrl: pendingOnlineImport.url,
+        autoSplit: true,
+        linesPerSlide: 2,
+      };
+
+      await saveSong(newSong);
+      await reload();
+      setShowOnlineSearchModal(false);
+      setSearch(newSong.metadata.title);
+      setPendingOnlineImport(null);
+    } catch (error) {
+      console.error("[SongsTab] Failed to import online lyrics:", error);
+      setOnlineSearchMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingOnlineImport(false);
+    }
+  }, [pendingOnlineImport, reload]);
 
   useEffect(() => {
     const trimmedSearch = onlineSearchQuery.trim();
@@ -851,21 +906,11 @@ export function SongsTab() {
       )}
 
       {pendingOnlineImport && (
-        <SongImportFullprocess
-          mode="onlineReview"
+        <OnlineLyricsImportModal
           result={pendingOnlineImport}
+          saving={savingOnlineImport}
           onClose={() => setPendingOnlineImport(null)}
-          onImported={() => {
-            void reload();
-            setShowOnlineSearchModal(false);
-            setSearch(pendingOnlineImport.title);
-            setPendingOnlineImport(null);
-          }}
-          onOpenExistingSong={(song) => {
-            setShowOnlineSearchModal(false);
-            setPendingOnlineImport(null);
-            setEditSong(song);
-          }}
+          onImport={(draft) => void handleImportOnlineSong(draft)}
         />
       )}
 

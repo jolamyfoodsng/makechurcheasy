@@ -5,7 +5,8 @@
  * Center: Verse matching engine (top match + candidate table)
  * Right: Detected references
  *
- * Captures mic audio, streams to AssemblyAI, matches Bible verses,
+ * Captures mic audio, transcribes completed turns with AssemblyAI Sync STT,
+ * matches Bible verses,
  * and sends results to OBS via BroadcastChannel.
  */
 
@@ -295,7 +296,7 @@ export default function SpeechToScripturePage() {
         fps: perf.fps,
         avgFrameMs: perf.avgFrameMs,
         obsWebSockets: obsConnected ? 1 : 0,
-        speechWebSockets: diag.status !== "idle" ? 1 : 0,
+        speechHttpSync: diag.status !== "idle" ? 1 : 0,
         audioContexts: 0,
         recognitionSessions: diag.status !== "idle" ? 1 : 0,
         activeTimers: diag.activeTimers,
@@ -877,7 +878,7 @@ export default function SpeechToScripturePage() {
   const isBroadcastConnected = obsConnected;
   const perf = performanceMonitor.current;
   const diagnostics = lmDiagnostics;
-  const websocketCount = (obsConnected ? 1 : 0) + (snapshot.status !== "idle" ? 1 : 0);
+  const websocketCount = obsConnected ? 1 : 0;
 
   return (
     <div className="sts3-root">
@@ -1047,10 +1048,10 @@ export default function SpeechToScripturePage() {
             </div>
 
             <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
-              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>WebSocket Count</div>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Open Socket Count</div>
               <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>{websocketCount}</div>
               <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                OBS {obsConnected ? "connected" : "disconnected"} · Speech {snapshot.status !== "idle" ? "active" : "idle"}
+                OBS {obsConnected ? "connected" : "disconnected"} · Speech Sync {snapshot.status !== "idle" ? "active" : "idle"}
               </div>
             </div>
 

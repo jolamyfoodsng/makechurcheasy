@@ -1,23 +1,15 @@
-/**
- * PresentationSetupPage.tsx — Presentation screen setup
- *
- * This page is intentionally URL-first:
- * - copy one presentation link
- * - open it on another laptop in a browser
- * - or use the same link in an OBS Browser Source on that laptop
- */
-
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Check, Copy, ExternalLink, Globe, Info, RotateCcw, Users } from "lucide-react";
+
 import {
   type PresentationSettings,
   getPresentationSettings,
-  savePresentationSettings,
   regenerateSession,
+  savePresentationSettings,
 } from "../services/presentationSettings";
-import { fetchPresentationViewerCount } from "../services/presentationState";
 import { syncPresentationRemoteAccessInfo } from "../services/presentationRemote";
+import { fetchPresentationViewerCount } from "../services/presentationState";
 import { launchPresentationScreen } from "../services/presentationWindow";
 
 import "./PresentationSetupPage.css";
@@ -31,23 +23,6 @@ function SectionHeader({ number, title }: { number: number; title: string }) {
   );
 }
 
-function normalizeLinkOnlySettings(settings: PresentationSettings): PresentationSettings {
-  return {
-    ...settings,
-    outputMode: "remote-presentation",
-    localObsEnabled: false,
-    remotePresentationEnabled: true,
-    routes: {
-      bibleFullscreen: "remote-presentation",
-      bibleLowerThird: "remote-presentation",
-      worshipFullscreen: "remote-presentation",
-      worshipLowerThird: "remote-presentation",
-      ministry: "remote-presentation",
-      countdown: "remote-presentation",
-    },
-  };
-}
-
 interface PresentationLinkCardProps {
   settings: PresentationSettings;
   onUpdate: (patch: Partial<PresentationSettings>) => void;
@@ -59,8 +34,8 @@ function PresentationLinkCard({ settings, onUpdate }: PresentationLinkCardProps)
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(settings.presentationLink).then(() => {
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {});
+      window.setTimeout(() => setCopied(false), 1800);
+    }).catch(() => { });
   }, [settings.presentationLink]);
 
   const handleOpen = useCallback(() => {
@@ -69,20 +44,16 @@ function PresentationLinkCard({ settings, onUpdate }: PresentationLinkCardProps)
 
   const handleRegenerate = useCallback(() => {
     const updated = regenerateSession();
-    onUpdate({
-      sessionId: updated.sessionId,
-      presentationLink: updated.presentationLink,
-      connectedViewers: 0,
-    });
+    onUpdate(updated);
     void syncPresentationRemoteAccessInfo(updated.sessionId)
       .then((remoteInfo) => {
         onUpdate({
-          sessionId: updated.sessionId,
+          ...updated,
           presentationLink: remoteInfo.link,
           connectedViewers: 0,
         });
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [onUpdate]);
 
   return (
@@ -93,7 +64,7 @@ function PresentationLinkCard({ settings, onUpdate }: PresentationLinkCardProps)
       </div>
 
       <p className="ps-config-copy">
-        Share this one link with the presentation laptop. On this computer, Launch Screen opens a dedicated presentation window and sends it to the external display automatically when one is connected.
+        This link is generated and hosted locally by MakeChurchEasy on this machine. Open it on the projector computer, another laptop on the same network, or launch it directly on an extended display from here.
       </p>
 
       <label className="ps-label">Presentation URL</label>
@@ -102,7 +73,7 @@ function PresentationLinkCard({ settings, onUpdate }: PresentationLinkCardProps)
         <button className="ps-btn ps-btn--small" onClick={handleCopy} title="Copy link">
           {copied ? <Check size={14} /> : <Copy size={14} />}
         </button>
-        <button className="ps-btn ps-btn--small" onClick={handleOpen} title="Launch screen">
+        <button className="ps-btn ps-btn--small" onClick={handleOpen} title="Open screen">
           <ExternalLink size={14} />
         </button>
         <button className="ps-btn ps-btn--small" onClick={handleRegenerate} title="Regenerate link">
@@ -110,22 +81,24 @@ function PresentationLinkCard({ settings, onUpdate }: PresentationLinkCardProps)
         </button>
       </div>
 
-        <div className="ps-launch-actions">
-          <button className="ps-btn ps-btn--primary ps-btn--medium" onClick={handleCopy} title="Copy presentation link">
-            {copied ? <Check size={14} /> : <Copy size={14} />}
-            {copied ? "Copied" : "Copy Link"}
-          </button>
-          <button className="ps-btn ps-btn--secondary ps-btn--medium" onClick={handleOpen} title="Open presentation screen">
-            <ExternalLink size={14} />
-            Launch Screen
-          </button>
-        </div>
-        <p className="ps-launch-note">
-          If a second display is connected, Launch Screen opens there. The same link still works on another laptop or inside an OBS Browser Source.
-        </p>
-        <div className="ps-viewers">
-          <Users size={14} />
-          <span>Connected screens: {settings.connectedViewers}</span>
+      <div className="ps-launch-actions">
+        <button className="ps-btn ps-btn--primary ps-btn--medium" onClick={handleCopy}>
+          {copied ? <Check size={14} /> : <Copy size={14} />}
+          {copied ? "Copied" : "Copy Link"}
+        </button>
+        <button className="ps-btn ps-btn--secondary ps-btn--medium" onClick={handleOpen}>
+          <ExternalLink size={14} />
+          Open Screen
+        </button>
+      </div>
+
+      <p className="ps-launch-note">
+        Regenerating the link rotates the local token and disconnects the old screen URL without changing the rest of the presentation console.
+      </p>
+
+      <div className="ps-viewers">
+        <Users size={14} />
+        <span>Connected screens: {settings.connectedViewers}</span>
       </div>
     </div>
   );
@@ -133,19 +106,16 @@ function PresentationLinkCard({ settings, onUpdate }: PresentationLinkCardProps)
 
 const PRESENTATION_USAGE_STEPS = [
   {
-    title: "Use it on another laptop",
-    description:
-      "Copy the link, open it in a browser there, then keep that screen fullscreen on the projector or extended display.",
+    title: "Copy the local link",
+    description: "Open it on the projector machine or another laptop on the same network.",
   },
   {
-    title: "Use it inside OBS",
-    description:
-      "Paste the same link into an OBS Browser Source on the presentation laptop if that machine is driving the output.",
+    title: "Open the screen here",
+    description: "Launch Screen opens a clean presentation window and pushes it to the external display when one is connected.",
   },
   {
-    title: "Use it on this computer",
-    description:
-      "Launch Screen opens a dedicated presentation window. If an external display is connected, it moves there automatically.",
+    title: "Control from the console",
+    description: "Select Ministry or Bible content, preview it locally, then click Present.",
   },
 ];
 
@@ -154,11 +124,11 @@ function PresentationUsageCard() {
     <div className="ps-config-card ps-config-card--guide">
       <div className="ps-config-card-header">
         <Info size={16} />
-        <span>How to use it</span>
+        <span>How it works</span>
       </div>
 
       <p className="ps-config-copy ps-config-copy--compact">
-        One link powers the presentation screen. Choose the output method that matches the setup for that service.
+        The presentation feature now runs through one locally hosted screen link. There is no OBS setup inside this flow.
       </p>
 
       <div className="ps-guide-list">
@@ -180,61 +150,52 @@ function PresentationUsageCard() {
 
 export default function PresentationSetupPage() {
   const navigate = useNavigate();
-  const [settings, setSettings] = useState<PresentationSettings>(() =>
-    normalizeLinkOnlySettings(getPresentationSettings()),
-  );
+  const [settings, setSettings] = useState<PresentationSettings>(() => getPresentationSettings());
 
   useEffect(() => {
     let cancelled = false;
 
     const syncRemoteStatus = async () => {
-      const nextSettings = normalizeLinkOnlySettings(getPresentationSettings());
-      const [remoteInfo, nextViewerCount] = await Promise.all([
-        syncPresentationRemoteAccessInfo(nextSettings.sessionId),
-        fetchPresentationViewerCount(nextSettings.sessionId).catch(() => 0),
+      const current = getPresentationSettings();
+      const [remoteInfo, viewerCount] = await Promise.all([
+        syncPresentationRemoteAccessInfo(current.sessionId),
+        fetchPresentationViewerCount(current.sessionId).catch(() => 0),
       ]);
 
       if (cancelled) return;
 
-      setSettings({
-        ...nextSettings,
+      const nextSettings = {
+        ...current,
         presentationLink: remoteInfo.link,
-        connectedViewers: nextViewerCount,
-      });
+        connectedViewers: viewerCount,
+      };
+
+      setSettings(nextSettings);
+      savePresentationSettings(nextSettings);
     };
 
     void syncRemoteStatus();
-
     const interval = window.setInterval(() => {
       void syncRemoteStatus();
     }, 5000);
 
-    const handleRefresh = () => {
-      void syncRemoteStatus();
-    };
-
-    window.addEventListener("focus", handleRefresh);
-    window.addEventListener("storage", handleRefresh);
-
     return () => {
       cancelled = true;
       window.clearInterval(interval);
-      window.removeEventListener("focus", handleRefresh);
-      window.removeEventListener("storage", handleRefresh);
     };
   }, []);
 
   const handleUpdate = useCallback((patch: Partial<PresentationSettings>) => {
-    setSettings((prev) => {
-      const updated = normalizeLinkOnlySettings({ ...prev, ...patch });
-      savePresentationSettings(updated);
-      return updated;
+    setSettings((previous) => {
+      const next = { ...previous, ...patch, updatedAt: new Date().toISOString() };
+      savePresentationSettings(next);
+      return next;
     });
   }, []);
 
   const handleContinue = useCallback(() => {
-    savePresentationSettings(normalizeLinkOnlySettings(settings));
-    navigate("/hub?mode=live");
+    savePresentationSettings(settings);
+    navigate("/presentation/console");
   }, [navigate, settings]);
 
   return (
@@ -242,9 +203,7 @@ export default function PresentationSetupPage() {
       <div className="ps-container">
         <div className="ps-header">
           <h1 className="ps-title">Presentation Screen Setup</h1>
-          <p className="ps-subtitle">
-            Keep it simple: launch a dedicated presentation screen on this computer, or copy the same link to another laptop.
-          </p>
+
         </div>
 
         <div className="ps-section">
@@ -256,8 +215,8 @@ export default function PresentationSetupPage() {
         </div>
 
         <div className="ps-footer">
-          <button className="ps-btn ps-btn--primary ps-btn--large" onClick={handleContinue} title="Open presentation hub">
-            Open Presentation Hub
+          <button className="ps-btn ps-btn--primary ps-btn--large" onClick={handleContinue}>
+            Open Presentation Console
             <ArrowRight size={16} />
           </button>
         </div>

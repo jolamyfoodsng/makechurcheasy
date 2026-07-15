@@ -42,6 +42,9 @@ interface TutorialStep {
 }
 
 const STORAGE_KEY = "mce.resources.tutorial.completed";
+const RT_OVERLAY_Z_INDEX = 100100;
+const RT_TARGET_ANCESTOR_Z_INDEX = RT_OVERLAY_Z_INDEX + 5;
+const RT_TARGET_Z_INDEX = RT_OVERLAY_Z_INDEX + 6;
 
 // ── Target Elevation ───────────────────────────────────────────────────────
 
@@ -61,7 +64,7 @@ function elevateTarget(el: HTMLElement, interactive: boolean): () => void {
   while (parent && parent !== document.documentElement) {
     if (getComputedStyle(parent).position !== "static") {
       ancestors.push([parent, parent.style.zIndex]);
-      parent.style.zIndex = "10005";
+      parent.style.zIndex = String(RT_TARGET_ANCESTOR_Z_INDEX);
     }
     parent = parent.parentElement;
   }
@@ -71,7 +74,7 @@ function elevateTarget(el: HTMLElement, interactive: boolean): () => void {
     el.style.position = "relative";
   }
   const origZ = el.style.zIndex;
-  el.style.zIndex = "10006";
+  el.style.zIndex = String(RT_TARGET_Z_INDEX);
 
   // ── visual effects ───────────────────────────────────────────────────
   const glow = interactive

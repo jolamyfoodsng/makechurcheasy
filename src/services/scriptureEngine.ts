@@ -16,6 +16,7 @@
 import {
   parseScriptureReferenceAll,
   parseScriptureIntent,
+  parseNumberWord,
   resolveScriptureSpeech,
   resolveWithContext,
   createScriptureContext,
@@ -110,6 +111,7 @@ const MIN_DISPLAY_SCORE = 0.30;
 
 /** Score decay factor per update cycle for unreinforced candidates */
 const CANDIDATE_DECAY_FACTOR = 0.98;
+const BARE_VERSE_RE = /^(?:verse\s+)?([a-z0-9 -]+)$/i;
 
 const QUOTE_STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "but", "by", "do", "does",
@@ -175,6 +177,20 @@ function getQuoteSearchThresholds(profile: QuoteQueryProfile): QuoteSearchThresh
     allowSemanticSearch: contentCount >= 3 || profile.strongAnchors > 0,
     allowFuzzySearch: contentCount >= 3 || profile.strongAnchors >= 2,
   };
+}
+
+function parseBareVerseNumber(text: string): number | null {
+  const normalized = text
+    .toLowerCase()
+    .replace(/[.,!?;:]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const match = normalized.match(BARE_VERSE_RE);
+  if (!match) return null;
+
+  const verse = parseNumberWord(match[1]);
+  return verse !== null && verse > 0 ? verse : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +465,39 @@ export class ScriptureDetectionEngine {
         };
       }
       return { matches: [], context: this.context };
+    }
+
+    // ── Bare verse continuation: "19" after "Genesis 4 ... next verse" ──
+    // Keep this engine-local so standalone numbers are ignored unless the
+    // session already has a concrete book/chapter context.
+    if (isFinal) {
+      const bareVerse = parseBareVerseNumber(trimmed);
+      const current = bareVerse !== null ? this.getCurrentVerseRef() : null;
+      if (bareVerse !== null && current) {
+        const maxVerse = await getVerseCount(current.book, current.chapter, this.translation);
+        if (maxVerse > 0 && bareVerse <= maxVerse) {
+          const candidate = await this.buildCandidate(current.book, current.chapter, bareVerse);
+          if (candidate) {
+            this.pushVerseHistory({
+              book: current.book,
+              chapter: current.chapter,
+              verse: bareVerse,
+              label: candidate.label,
+              snippet: candidate.snippet,
+              timestamp: now,
+            });
+            this.context = pushScriptureContext(this.context, current.book, current.chapter, bareVerse, true);
+            return {
+              matches: [{
+                candidate,
+                source: "context",
+                confidence: candidate.confidence,
+              }],
+              context: this.context,
+            };
+          }
+        }
+      }
     }
 
     // ── Speech-state resolver: book/chapter continuations and corrections ──

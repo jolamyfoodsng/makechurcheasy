@@ -86,6 +86,17 @@ export function resolveOverlayAssetUrl(value: string | undefined): string {
 export async function getOverlayBaseUrl(): Promise<string> {
   if (_cachedBaseUrl) return _cachedBaseUrl;
 
+  if (typeof window !== "undefined" && window.location?.origin) {
+    const { protocol, hostname, port, origin } = window.location;
+    const isHttpLocalOrigin =
+      (protocol === "http:" || protocol === "https:")
+      && (hostname === "localhost" || hostname === "127.0.0.1");
+    if (isHttpLocalOrigin && port === DEV_VITE_PORT) {
+      _cachedBaseUrl = origin;
+      return _cachedBaseUrl;
+    }
+  }
+
   // Cooldown: don't hammer invoke on repeated failures
   const now = Date.now();
   if (now - _lastInvokeAttempt < RETRY_COOLDOWN_MS) {

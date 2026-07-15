@@ -15,6 +15,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Navigate, useParams, useNavigate } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
+import { exit } from "@tauri-apps/plugin-process";
 import { OBSConnectGate } from "./components/OBSConnectGate";
 import AuthGate from "./components/AuthGate";
 import LicenseGuard from "./components/LicenseGuard";
@@ -30,6 +31,7 @@ import { LowerThirdProvider } from "./lowerthirds/lowerThirdStore";
 import SplashScreen from "./components/SplashScreen";
 import UpdateNotification from "./components/UpdateNotification";
 import ForcedUpdateOverlay from "./components/ForcedUpdateOverlay";
+import { AnnouncementModalHost } from "./components/AnnouncementModalHost";
 import { InterfaceLanguagePrompt } from "./components/InterfaceLanguagePrompt";
 import VersionFloorWarningBanner from "./components/VersionFloorWarningBanner";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
@@ -76,6 +78,7 @@ import ProductionHomePage from "./pages/ProductionHomePage";
 import MultiViewGalleryPage from "./pages/MultiViewGalleryPage";
 import CountdownsPage from "./pages/CountdownsPage";
 import PresentationSetupPage from "./pages/PresentationSetupPage";
+import PresentationConsolePage from "./pages/PresentationConsolePage";
 import ProductionThemeSettingsPage from "./pages/ProductionThemeSettingsPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import ServicePlannerPage from "./pages/ServicePlannerPage";
@@ -120,7 +123,7 @@ import "./App.css";
 import "./NewDashboard.css";
 import "./compat-mode.css";
 import { getRecommendedPollingInterval } from "./services/performanceManager";
-import { armConfirmedAppClose, clearConfirmedAppClose } from "./services/appCloseGuard";
+import { armConfirmedAppClose, clearConfirmedAppClose, isConfirmedAppClose } from "./services/appCloseGuard";
 
 const UPDATE_POLL_INTERVAL_MS = 30_000;
 const FORCED_UPDATE_POLL_INTERVAL_MS = 5 * 60 * 1000;
@@ -816,9 +819,16 @@ function App() {
 
     const setup = async () => {
       try {
-        unlisten = await getCurrentWindow().onCloseRequested(async (event) => {
+        const currentWindow = getCurrentWindow();
+
+        unlisten = await currentWindow.onCloseRequested(async (event) => {
+          if (isConfirmedAppClose()) {
+            return;
+          }
+
+          event.preventDefault();
+
           if (promptInFlight) {
-            event.preventDefault();
             return;
           }
 
@@ -845,14 +855,13 @@ function App() {
 
             if (!confirmed) {
               clearConfirmedAppClose();
-              event.preventDefault();
               return;
             }
 
             armConfirmedAppClose();
+            await exit(0);
           } catch (error) {
             clearConfirmedAppClose();
-            event.preventDefault();
             console.warn("[App] Failed to show close confirmation:", error);
           } finally {
             promptInFlight = false;
@@ -1325,7 +1334,7 @@ function App() {
                       <Route path="countdowns" element={<CountdownsPage />} />
                       <Route path="presentation" element={<PresentationPlanGate><PresentationSetupPage /></PresentationPlanGate>} />
                       <Route path="presentation/setup" element={<PresentationPlanGate><PresentationSetupPage /></PresentationPlanGate>} />
-                      <Route path="presentation/console" element={<Navigate to="/hub?mode=live" replace />} />
+                      <Route path="presentation/console" element={<PresentationPlanGate><PresentationConsolePage /></PresentationPlanGate>} />
                       <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
                       <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />
                       <Route path="library" element={<Navigate to="/resources" replace />} />
@@ -1333,9 +1342,9 @@ function App() {
                       <Route path="templates/*" element={<Navigate to="/production/themes" replace />} />
                       <Route path="hub" element={<PresentationPlanGate><ServiceHubPage /></PresentationPlanGate>} />
                       <Route path="hub/quick-merge" element={<QuickMergePage />} />
-                      <Route path="hub/*" element={<Navigate to="/hub?mode=live" replace />} />
-                      <Route path="service-hub" element={<Navigate to="/hub?mode=live" replace />} />
-                      <Route path="service-control-hub" element={<Navigate to="/hub?mode=live" replace />} />
+                      <Route path="hub/*" element={<Navigate to="/presentation/console" replace />} />
+                      <Route path="service-hub" element={<Navigate to="/presentation/console" replace />} />
+                      <Route path="service-control-hub" element={<Navigate to="/presentation/console" replace />} />
                       <Route path="quick-merge" element={<Navigate to="/hub/quick-merge" replace />} />
                       <Route path="broadcast" element={<Navigate to="/" replace />} />
                       <Route path="bible" element={<Navigate to="/settings" replace />} />
@@ -1372,6 +1381,9 @@ function App() {
 
       {/* Global upgrade modal — triggered by useFeatureGate.checkFeature() */}
       <UpgradeModalBridge />
+      {!splashVisible && user && !versionFloorBlocked?.blocked && !forcedUpdateState.blocked && (
+        <AnnouncementModalHost />
+      )}
 
       {globalMediaDragging && !splashVisible && (
         <div className="app-global-media-drop-overlay" aria-hidden="true">

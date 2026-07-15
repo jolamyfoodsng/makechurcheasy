@@ -139,11 +139,28 @@ interface DockSongDefault extends DockSongDraft {
 
 type DockSongDefaults = Record<string, DockSongDefault>;
 type DockToastTone = "info" | "success" | "error";
+type LyricsEditorTarget = "song" | "new-song";
+type LyricsFormatAction =
+  | "autosplit"
+  | "clean"
+  | "remove-empty"
+  | "remove-verse-numbers"
+  | "uppercase"
+  | "lowercase"
+  | "capitalize";
 
 interface DockToast {
   id: string;
   message: string;
   tone: DockToastTone;
+}
+
+interface DeletedWorshipSection {
+  id: string;
+  label: string;
+  text: string;
+  index: number;
+  deletedAt: number;
 }
 
 function clampLinesPerSlide(value?: number): number {
@@ -390,12 +407,25 @@ function loadDockWorshipPreferences(): DockWorshipPreferences {
   }
 }
 
+function readDockWorshipOverlayMode(): OverlayMode | null {
+  const mode = loadDockWorshipPreferences().overlayMode;
+  return mode === "fullscreen" || mode === "lower-third" ? mode : null;
+}
+
 function saveDockWorshipPreferences(next: DockWorshipPreferences): void {
   try {
     localStorage.setItem(getUserScopedKey(DOCK_WORSHIP_PREFS_KEY), JSON.stringify(next));
   } catch {
     // ignore OBS CEF storage failures
   }
+}
+
+function saveDockWorshipOverlayMode(mode: OverlayMode): void {
+  saveDockWorshipPreferences({
+    ...loadDockWorshipPreferences(),
+    overlayMode: mode,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 function saveDockWorshipUiPreferences(next: DockWorshipUiPreferences): void {
@@ -424,6 +454,114 @@ function parseLyricSections(lyrics: string, linesPerSlide: number, autoSplit = f
     label: slide.isContinuation ? "" : slide.label,
     text: slide.content,
   }));
+}
+
+function serializeLyricSections(sections: Array<Pick<DockWorshipSection, "text">>): string {
+  return sections
+    .map((section) => section.text.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function capitalizeLyricsText(text: string): string {
+  return text
+    .split("\n")
+    .map((line) =>
+      line.replace(/\b([A-Za-z])([A-Za-z'’-]*)/g, (_, first: string, rest: string) =>
+        `${first.toUpperCase()}${rest.toLowerCase()}`,
+      ),
+    )
+    .join("\n");
+}
+
+function applyLyricsFormat(text: string, action: LyricsFormatAction, autosplitLines?: number): string {
+  let result = text;
+
+  switch (action) {
+    case "clean": {
+      result = result
+        .split("\n")
+        .map((line) => {
+          let l = line;
+          l = l.replace(/\t/g, " ");
+          l = l.replace(/\s{2,}/g, " ");
+          l = l.replace(/ ,/g, ",");
+          l = l.replace(/ \./g, ".");
+          l = l.replace(/ :/g, ":");
+          l = l.replace(/([,:;.])([A-Za-z])/g, "$1 $2");
+          l = l.replace(/\s+$/g, "");
+          l = l.trimStart();
+          return l;
+        })
+        .join("\n");
+      break;
+    }
+    case "remove-empty": {
+      const lines = result.split("\n");
+      const collapsed: string[] = [];
+      let blankCount = 0;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        const isBlank = trimmed === "" || /^[^\w]+$/.test(trimmed);
+        if (isBlank) {
+          blankCount++;
+          if (blankCount <= 1) collapsed.push("");
+        } else {
+          blankCount = 0;
+          collapsed.push(line);
+        }
+      }
+      result = collapsed.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
+      break;
+    }
+    case "remove-verse-numbers": {
+      result = result
+        .replace(/^\d+[.)]\s*/gm, "")
+        .replace(/^\[[\d]+\]\s*/gm, "")
+        .replace(/^\([\d]+\)\s*/gm, "")
+        .replace(/^Verse\s+\d+\s*:?\s*/gim, "");
+      break;
+    }
+    case "autosplit": {
+      const linesPerChunk = Math.max(1, Math.min(6, autosplitLines ?? 3));
+      const lines = result.split("\n");
+      const sections: string[][] = [];
+      let current: string[] = [];
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed === "") {
+          if (current.length > 0) {
+            sections.push(current);
+            current = [];
+          }
+        } else {
+          current.push(trimmed);
+        }
+      }
+      if (current.length > 0) sections.push(current);
+      const output: string[] = [];
+      for (const sec of sections) {
+        for (let i = 0; i < sec.length; i += linesPerChunk) {
+          const chunk = sec.slice(i, i + linesPerChunk);
+          if (output.length > 0) output.push("");
+          output.push(...chunk);
+        }
+      }
+      result = output.join("\n");
+      break;
+    }
+    case "uppercase":
+      result = result.toLocaleUpperCase();
+      break;
+    case "lowercase":
+      result = result.toLocaleLowerCase();
+      break;
+    case "capitalize":
+      result = capitalizeLyricsText(result);
+      break;
+  }
+
+  return result;
 }
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -788,7 +926,9 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const [selectedLTTheme, setSelectedLTTheme] = useState<BibleTheme>(
     productionDefaults.lowerThirdTheme ?? BUILTIN_THEMES[0],
   );
-  const [overlayMode, setOverlayMode] = useState<OverlayMode>(productionDefaults.defaultMode);
+  const [overlayMode, setOverlayMode] = useState<OverlayMode>(
+    () => readDockWorshipOverlayMode() ?? productionDefaults.defaultMode,
+  );
   const [linesPerSlide, setLinesPerSlide] = useState<number>(2);
   const [savedFullscreenQuickThemeSettings, setSavedFullscreenQuickThemeSettings] =
     useState<DockFullscreenQuickThemeSettings | null>(null);
@@ -807,6 +947,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const [newSongSource, setNewSongSource] = useState<Pick<DockSong, "importSourceName" | "importSourceType" | "importSourceUrl"> | null>(null);
   const [isNewSongModalOpen, setIsNewSongModalOpen] = useState(false);
   const [slideEditor, setSlideEditor] = useState<{ index: number; label: string; text: string } | null>(null);
+  const [deletedSections, setDeletedSections] = useState<DeletedWorshipSection[]>([]);
+  const [showDeletedSectionsPopover, setShowDeletedSectionsPopover] = useState(false);
   const [onlineSearchOpen, setOnlineSearchOpen] = useState(false);
   const [onlineSearchQuery, setOnlineSearchQuery] = useState("");
   const [onlineResults, setOnlineResults] = useState<OnlineLyricsSearchResult[]>([]);
@@ -821,6 +963,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const selectedLTThemeRef = useRef<BibleTheme>(productionDefaults.lowerThirdTheme ?? BUILTIN_THEMES[0]);
   const searchRef = useRef<HTMLDivElement>(null);
   const lineCountPopoverRef = useRef<HTMLDivElement>(null);
+  const deletedSectionsPopoverRef = useRef<HTMLDivElement>(null);
   const prefsReadyRef = useRef(false);
   const suppressAutoProjectionRef = useRef(true);
   const suppressAutoProjectionTimerRef = useRef<number | null>(null);
@@ -958,7 +1101,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       scheduleAutoProjectionResume();
       setSelectedFSTheme(productionDefaults.fullscreenTheme ?? BUILTIN_THEMES[0]);
       setSelectedLTTheme(productionDefaults.lowerThirdTheme ?? BUILTIN_THEMES[0]);
-      setOverlayMode(prefs.overlayMode ?? productionDefaults.defaultMode);
+      setOverlayMode(readDockWorshipOverlayMode() ?? prefs.overlayMode ?? productionDefaults.defaultMode);
       setLinesPerSlide(typeof prefs.linesPerSlide === "number" ? clampLinesPerSlide(prefs.linesPerSlide) : DEFAULT_LINES_PER_SLIDE);
       const storedFullscreenQuickSettings = sanitizeQuickThemeSettings(
         prefs.fullscreenQuickThemeSettings,
@@ -1171,8 +1314,11 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       if (lineCountPopoverRef.current && !lineCountPopoverRef.current.contains(event.target as Node)) {
         setShowLineCountPopover(false);
       }
+      if (deletedSectionsPopoverRef.current && !deletedSectionsPopoverRef.current.contains(event.target as Node)) {
+        setShowDeletedSectionsPopover(false);
+      }
       if (autoSplitPopoverRef.current && !autoSplitPopoverRef.current.contains(event.target as Node)) {
-        setShowAutoSplitPopover(false);
+        setAutoSplitPopoverTarget(null);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -1322,6 +1468,12 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     setSelectedLTTheme(theme);
     selectedLTThemeRef.current = theme;
   }, []);
+  const handleOverlayModeChange = useCallback((nextMode: OverlayMode) => {
+    setOverlayMode(nextMode);
+    // Persist synchronously so a send that starts during startup uses the
+    // operator's latest choice rather than the previous render's mode.
+    saveDockWorshipOverlayMode(nextMode);
+  }, []);
   const activeThemePickerProps = overlayMode === "fullscreen"
     ? { selectedThemeId: selectedFSTheme.id, onSelect: handleSelectFSTheme }
     : { selectedThemeId: selectedLTTheme.id, onSelect: handleSelectLTTheme };
@@ -1352,8 +1504,9 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       const section = selectedSongSections[idx];
       if (!section) return null;
 
+      const liveOverlayMode = readDockWorshipOverlayMode() ?? overlayMode;
       const displayLabel = cleanWorshipSectionLabel(section.label);
-      const theme = overlayMode === "fullscreen" ? effectiveSelectedFSTheme : effectiveSelectedLTTheme;
+      const theme = liveOverlayMode === "fullscreen" ? effectiveSelectedFSTheme : effectiveSelectedLTTheme;
       const backgroundOnly = options?.backgroundOnly ?? showWorshipBackgroundOnly;
 
       const stageData = {
@@ -1362,7 +1515,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
         artist: selectedSong.artist,
         sectionLabel: displayLabel,
         sectionText: section.text,
-        overlayMode,
+        overlayMode: liveOverlayMode,
         linesPerSlide,
         theme: theme.id,
         bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
@@ -1383,7 +1536,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
           sectionLabel: displayLabel,
           songTitle: selectedSong.title,
           artist: selectedSong.artist,
-          overlayMode,
+          overlayMode: liveOverlayMode,
           bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
           liveOverrides: null,
           backgroundOnly: Boolean(backgroundOnly),
@@ -1426,15 +1579,15 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       setVisibleIdx(idx);
 
       onStage(payload.stageItem);
+      const bringWorshipForward = dockObsClient
+        .bringWorshipOverlayForward(payload.obsData.overlayMode ?? "fullscreen")
+        .catch(() => { });
+      void bringWorshipForward
+        .then(() => dockObsClient.primeWorshipOverlay(payload.obsData))
+        .catch(() => { });
 
       try {
-        await ensureObsConnected();
-      } catch {
-        return;
-      }
-      if (requestId !== liveSectionRequestIdRef.current) return;
-
-      try {
+        await bringWorshipForward;
         if (payload.obsData.overlayMode === "lower-third") {
           await dockObsClient.pushWorshipOverlayFast(payload.obsData);
         } else {
@@ -1464,7 +1617,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       const section = announcementSections[idx];
       if (!section) return null;
 
-      const theme = overlayMode === "fullscreen" ? effectiveSelectedFSTheme : effectiveSelectedLTTheme;
+      const liveOverlayMode = readDockWorshipOverlayMode() ?? overlayMode;
+      const theme = liveOverlayMode === "fullscreen" ? effectiveSelectedFSTheme : effectiveSelectedLTTheme;
       const sectionLabel = section.label || openedAnnouncement.title;
       const stageItem = {
         type: "worship" as const,
@@ -1475,7 +1629,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
           sectionIdx: idx,
           sectionText: section.text,
           sectionLabel: section.label,
-          overlayMode,
+          overlayMode: liveOverlayMode,
           theme: theme.id,
           bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
           liveOverrides: null,
@@ -1483,7 +1637,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
         },
       };
 
-      if (openedAnnouncement.obsThemeId && overlayMode === "lower-third") {
+      if (openedAnnouncement.obsThemeId && liveOverlayMode === "lower-third") {
         const customTheme = ALL_THEMES.find((entry) => entry.id === openedAnnouncement.obsThemeId);
         if (customTheme?.html && customTheme?.css) {
           return {
@@ -1509,7 +1663,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
           sectionText: section.text,
           sectionLabel,
           songTitle: openedAnnouncement.title,
-          overlayMode,
+          overlayMode: liveOverlayMode,
           bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
           liveOverrides: null,
           backgroundOnly: false,
@@ -1718,109 +1872,127 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     showToast(t('worship.defaultRestored'));
   }, [showToast, songEditor]);
 
-  const formatLyricsUndoRef = useRef<string>("");
-  const [showAutoSplitPopover, setShowAutoSplitPopover] = useState(false);
+  const formatLyricsUndoRef = useRef<Record<LyricsEditorTarget, string>>({
+    song: "",
+    "new-song": "",
+  });
+  const [autoSplitPopoverTarget, setAutoSplitPopoverTarget] = useState<LyricsEditorTarget | null>(null);
   const autoSplitPopoverRef = useRef<HTMLDivElement>(null);
 
-  const formatLyrics = useCallback((action: "autosplit" | "clean" | "remove-empty" | "remove-verse-numbers", autosplitLines?: number) => {
-    setSongDraft((draft) => {
-      formatLyricsUndoRef.current = draft.lyrics;
-      let result = draft.lyrics;
-
-      switch (action) {
-        case "clean": {
-          // Process each line independently so that punctuation fixes
-          // never merge paragraphs across \n boundaries.
-          result = result
-            .split("\n")
-            .map((line) => {
-              let l = line;
-              l = l.replace(/\t/g, " ");                // tabs → spaces
-              l = l.replace(/\s{2,}/g, " ");            // collapse duplicate spaces
-              l = l.replace(/ ,/g, ",");                // space before comma
-              l = l.replace(/ \./g, ".");               // space before period
-              l = l.replace(/ :/g, ":");                // space before colon
-              l = l.replace(/([,:;.])([A-Za-z])/g, "$1 $2"); // ensure space after punctuation
-              l = l.replace(/\s+$/g, "");               // trailing whitespace
-              l = l.trimStart();                         // leading whitespace
-              return l;
-            })
-            .join("\n");
-          break;
-        }
-        case "remove-empty": {
-          const lines = result.split("\n");
-          const collapsed: string[] = [];
-          let blankCount = 0;
-          for (const line of lines) {
-            const trimmed = line.trim();
-            // Treat blank lines AND lines containing only non-word
-            // characters (quotes "", '', punctuation ...) as empty.
-            const isBlank = trimmed === "" || /^[^\w]+$/.test(trimmed);
-            if (isBlank) {
-              blankCount++;
-              if (blankCount <= 1) collapsed.push("");
-            } else {
-              blankCount = 0;
-              collapsed.push(line);
-            }
-          }
-          result = collapsed.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
-          break;
-        }
-        case "remove-verse-numbers": {
-          result = result
-            .replace(/^\d+[.)]\s*/gm, "")
-            .replace(/^\[[\d]+\]\s*/gm, "")
-            .replace(/^\([\d]+\)\s*/gm, "")
-            .replace(/^Verse\s+\d+\s*:?\s*/gim, "");
-          break;
-        }
-        case "autosplit": {
-          const linesPerChunk = Math.max(1, Math.min(6, autosplitLines ?? 3));
-          const lines = result.split("\n");
-          // Split into sections separated by blank lines
-          const sections: string[][] = [];
-          let current: string[] = [];
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed === "") {
-              if (current.length > 0) {
-                sections.push(current);
-                current = [];
-              }
-            } else {
-              current.push(trimmed);
-            }
-          }
-          if (current.length > 0) sections.push(current);
-          // Chunk each section into groups of N lines, separated by blank lines
-          const output: string[] = [];
-          for (let s = 0; s < sections.length; s++) {
-            const sec = sections[s];
-            for (let i = 0; i < sec.length; i += linesPerChunk) {
-              const chunk = sec.slice(i, i + linesPerChunk);
-              if (output.length > 0) output.push("");
-              output.push(...chunk);
-            }
-          }
-          result = output.join("\n");
-          break;
-        }
-      }
-
-      return { ...draft, lyrics: result };
+  const formatLyrics = useCallback((target: LyricsEditorTarget, action: LyricsFormatAction, autosplitLines?: number) => {
+    const updateDraft = target === "song" ? setSongDraft : setNewSongDraft;
+    updateDraft((draft) => {
+      formatLyricsUndoRef.current[target] = draft.lyrics;
+      const nextLyrics = applyLyricsFormat(draft.lyrics, action, autosplitLines);
+      return { ...draft, lyrics: nextLyrics };
     });
   }, []);
 
-  const handleUndoFormatting = useCallback(() => {
-    if (!formatLyricsUndoRef.current) return;
-    setSongDraft((draft) => ({
+  const handleUndoFormatting = useCallback((target: LyricsEditorTarget) => {
+    const previous = formatLyricsUndoRef.current[target];
+    if (!previous) return;
+    const updateDraft = target === "song" ? setSongDraft : setNewSongDraft;
+    updateDraft((draft) => ({
       ...draft,
-      lyrics: formatLyricsUndoRef.current,
+      lyrics: previous,
     }));
-    formatLyricsUndoRef.current = "";
+    formatLyricsUndoRef.current[target] = "";
   }, []);
+
+  useEffect(() => {
+    if (!songEditor && !isNewSongModalOpen) {
+      setAutoSplitPopoverTarget(null);
+    }
+  }, [isNewSongModalOpen, songEditor]);
+
+  const renderLyricsToolbar = useCallback((target: LyricsEditorTarget) => {
+    const isAutoSplitOpen = autoSplitPopoverTarget === target;
+    const canUndo = Boolean(formatLyricsUndoRef.current[target]);
+    return (
+      <div className="dock-lyrics-toolbar">
+        <div className="dock-lyrics-autosplit" ref={autoSplitPopoverRef}>
+          <button
+            type="button"
+            className={`dock-lyrics-toolbar__btn${isAutoSplitOpen ? " dock-lyrics-toolbar__btn--active" : ""}`}
+            onClick={() => setAutoSplitPopoverTarget((current) => current === target ? null : target)}
+            title="Auto Split"
+          >
+            <Icon name="format_align_left" size={12} />
+            <span>Auto Split</span>
+            <span className="dock-lyrics-toolbar__caret">▾</span>
+          </button>
+          {isAutoSplitOpen && (
+            <div className="dock-lyrics-autosplit__menu">
+              {[2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className="dock-lyrics-autosplit__option"
+                  onClick={() => {
+                    formatLyrics(target, "autosplit", n);
+                    setAutoSplitPopoverTarget(null);
+                  }}
+                >
+                  {n} lines
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics(target, "clean")} title="Clean Text">
+          <Icon name="auto_fix_high" size={12} />
+          <span>Clean Text</span>
+        </button>
+        <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics(target, "remove-empty")} title="Remove Empty">
+          <Icon name="remove" size={12} />
+          <span>Remove Empty</span>
+        </button>
+        <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics(target, "remove-verse-numbers")} title="Verse Numbers">
+          <Icon name="tag" size={12} />
+          <span>Verse Numbers</span>
+        </button>
+        <div className="dock-lyrics-toolbar__group" aria-label="Text case controls">
+          <button
+            type="button"
+            className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
+            onClick={() => formatLyrics(target, "uppercase")}
+            title={t("bible.uppercase")}
+            aria-label={t("bible.uppercase")}
+          >
+            <span>TT</span>
+          </button>
+          <button
+            type="button"
+            className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
+            onClick={() => formatLyrics(target, "lowercase")}
+            title="Lowercase"
+            aria-label="Lowercase"
+          >
+            <span>tt</span>
+          </button>
+          <button
+            type="button"
+            className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
+            onClick={() => formatLyrics(target, "capitalize")}
+            title={t("common.capitalize")}
+            aria-label={t("common.capitalize")}
+          >
+            <span>Tt</span>
+          </button>
+        </div>
+        <button
+          type="button"
+          className="dock-lyrics-toolbar__btn"
+          onClick={() => handleUndoFormatting(target)}
+          title="Undo"
+          disabled={!canUndo}
+        >
+          <Icon name="undo" size={12} />
+          <span>Undo</span>
+        </button>
+      </div>
+    );
+  }, [autoSplitPopoverTarget, formatLyrics, handleUndoFormatting, t]);
 
   const openNewSongModal = useCallback(async (draft?: Partial<DockSongDraft>) => {
     if (!(await requireEntitlement("songs", rawSongsRef.current.length))) return;
@@ -1944,10 +2116,11 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       const section = announcementSections[activeAnnouncementIndex];
       if (!section || !openedAnnouncement) return;
 
-      const theme = overlayMode === "fullscreen" ? effectiveFullscreenTheme : effectiveLowerThirdTheme;
+      const liveOverlayMode = readDockWorshipOverlayMode() ?? overlayMode;
+      const theme = liveOverlayMode === "fullscreen" ? effectiveFullscreenTheme : effectiveLowerThirdTheme;
       const sectionLabel = section.label || openedAnnouncement.title;
 
-      if (openedAnnouncement.obsThemeId && overlayMode === "lower-third") {
+      if (openedAnnouncement.obsThemeId && liveOverlayMode === "lower-third") {
         const customTheme = ALL_THEMES.find((entry) => entry.id === openedAnnouncement.obsThemeId);
         if (customTheme?.html && customTheme?.css) {
           await ensureObsConnected();
@@ -1971,7 +2144,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
         sectionText: section.text,
         sectionLabel,
         songTitle: openedAnnouncement.title,
-        overlayMode,
+        overlayMode: liveOverlayMode,
         bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
         liveOverrides: null,
         backgroundOnly: false,
@@ -1983,19 +2156,20 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     const section = selectedSongSections[activeSectionIndex];
     if (!section) return;
 
-    const theme = overlayMode === "fullscreen" ? effectiveFullscreenTheme : effectiveLowerThirdTheme;
+    const liveOverlayMode = readDockWorshipOverlayMode() ?? overlayMode;
+    const theme = liveOverlayMode === "fullscreen" ? effectiveFullscreenTheme : effectiveLowerThirdTheme;
     await ensureObsConnected();
     const obsData = {
       sectionText: section.text,
       sectionLabel: cleanWorshipSectionLabel(section.label),
       songTitle: selectedSong.title,
       artist: selectedSong.artist,
-      overlayMode,
+      overlayMode: liveOverlayMode,
       bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
       liveOverrides: null,
       backgroundOnly: showWorshipBackgroundOnly,
     };
-    if (overlayMode === "lower-third") {
+    if (liveOverlayMode === "lower-third") {
       await dockObsClient.pushWorshipOverlayFast(obsData);
       return;
     }
@@ -2107,9 +2281,16 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     setSelectedSong(null);
     setSelectedIdx(null);
     setVisibleIdx(null);
+    setDeletedSections([]);
+    setShowDeletedSectionsPopover(false);
     setLyricsSearchQuery("");
     setActionError("");
   }, []);
+
+  useEffect(() => {
+    setDeletedSections([]);
+    setShowDeletedSectionsPopover(false);
+  }, [selectedSong?.id]);
 
   const handleSectionClick = useCallback(
     (idx: number) => {
@@ -2136,10 +2317,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     const nextSections = selectedSongSections.map((section, index) =>
       index === slideEditor.index ? { ...section, text: slideEditor.text.trim() } : section,
     );
-    const nextLyrics = nextSections
-      .map((section) => section.text.trim())
-      .filter(Boolean)
-      .join("\n\n");
+    const nextLyrics = serializeLyricSections(nextSections);
 
     if (!nextLyrics.trim()) return;
 
@@ -2168,6 +2346,136 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       setSavingSong(false);
     }
   }, [persistSong, selectedSong, selectedSongSections, showToast, slideEditor]);
+
+  const handleDeleteSection = useCallback(async (idx: number) => {
+    if (!selectedSong || savingSong || selectedSongSections.length <= 1) return;
+    const deletedSection = selectedSongSections[idx];
+    if (!deletedSection) return;
+
+    const nextSections = selectedSongSections.filter((_, index) => index !== idx);
+    const nextLyrics = serializeLyricSections(nextSections);
+    if (!nextLyrics.trim()) return;
+
+    setSavingSong(true);
+    setActionError("");
+    try {
+      const updatedSong = await persistSong(
+        selectedSong.id,
+        {
+          title: selectedSong.title,
+          artist: selectedSong.artist,
+          lyrics: nextLyrics,
+        },
+        selectedSong,
+      );
+
+      if (updatedSong) {
+        scheduleAutoProjectionResume();
+        const nextIndex = nextSections.length > 0 ? Math.min(idx, nextSections.length - 1) : null;
+        setSelectedSong(updatedSong);
+        setSelectedIdx((current) => {
+          if (nextIndex === null) return null;
+          if (current === null) return nextIndex;
+          if (current === idx) return nextIndex;
+          return current > idx ? current - 1 : current;
+        });
+        setVisibleIdx((current) => {
+          if (current === null) return null;
+          if (current === idx) return null;
+          return current > idx ? current - 1 : current;
+        });
+      }
+
+      const deletedLabel =
+        cleanWorshipSectionLabel(deletedSection.label)
+        || t("worship.slideNumber", { number: idx + 1 });
+      setDeletedSections((current) => [
+        {
+          id: `${deletedSection.id}-${Date.now()}`,
+          label: deletedLabel,
+          text: deletedSection.text,
+          index: idx,
+          deletedAt: Date.now(),
+        },
+        ...current,
+      ].slice(0, 12));
+      setShowDeletedSectionsPopover(true);
+      showToast(t("worship.slideDeleted", { defaultValue: "Slide removed" }), "success");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
+      if (!isTransient) {
+        console.warn("[DockWorshipTab] delete slide failed:", err);
+        setActionError(message);
+      }
+    } finally {
+      setSavingSong(false);
+    }
+  }, [
+    persistSong,
+    savingSong,
+    scheduleAutoProjectionResume,
+    selectedSong,
+    selectedSongSections,
+    showToast,
+    t,
+  ]);
+
+  const handleRestoreDeletedSection = useCallback(async (item: DeletedWorshipSection) => {
+    if (!selectedSong || savingSong) return;
+    const insertIndex = Math.max(0, Math.min(item.index, selectedSongSections.length));
+    const nextSections = [...selectedSongSections];
+    nextSections.splice(insertIndex, 0, {
+      id: item.id,
+      label: item.label,
+      text: item.text,
+    });
+    const nextLyrics = serializeLyricSections(nextSections);
+    if (!nextLyrics.trim()) return;
+
+    setSavingSong(true);
+    setActionError("");
+    try {
+      const updatedSong = await persistSong(
+        selectedSong.id,
+        {
+          title: selectedSong.title,
+          artist: selectedSong.artist,
+          lyrics: nextLyrics,
+        },
+        selectedSong,
+      );
+
+      if (updatedSong) {
+        scheduleAutoProjectionResume();
+        setSelectedSong(updatedSong);
+        setSelectedIdx(insertIndex);
+        setVisibleIdx((current) => (current === null ? null : current >= insertIndex ? current + 1 : current));
+      }
+
+      setDeletedSections((current) => current.filter((entry) => entry.id !== item.id));
+      setShowDeletedSectionsPopover((current) => current && deletedSections.length > 1);
+      showToast(t("worship.slideRestored", { defaultValue: "Slide restored" }), "success");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
+      if (!isTransient) {
+        console.warn("[DockWorshipTab] restore slide failed:", err);
+        setActionError(message);
+      }
+    } finally {
+      setSavingSong(false);
+    }
+  }, [
+    deletedSections.length,
+    persistSong,
+    savingSong,
+    scheduleAutoProjectionResume,
+    selectedSong,
+    selectedSongSections,
+    showToast,
+    t,
+  ]);
 
   const handleLinesPerSlideChange = useCallback((nextLinesPerSlide: number) => {
     setLinesPerSlide(clampLinesPerSlide(nextLinesPerSlide));
@@ -2721,6 +3029,60 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                     </div>
                   </div>
                   <div className="dock-worship-summary__actions">
+                    <div
+                      className={`dock-worship-history${showDeletedSectionsPopover ? " is-open" : ""}`}
+                      ref={deletedSectionsPopoverRef}
+                    >
+                      <button
+                        type="button"
+                        className={`dock-shell-icon-btn${showDeletedSectionsPopover ? " dock-shell-icon-btn--active" : ""}`}
+                        onClick={() => setShowDeletedSectionsPopover((current) => !current)}
+                        title={t("worship.deletedSlides", { defaultValue: "Deleted slides" })}
+                        aria-label={t("worship.deletedSlides", { defaultValue: "Deleted slides" })}
+                        aria-expanded={showDeletedSectionsPopover}
+                      >
+                        <Icon name="history" size={14} />
+                        {deletedSections.length > 0 && (
+                          <span className="dock-worship-history__count">{Math.min(deletedSections.length, 9)}</span>
+                        )}
+                      </button>
+                      {showDeletedSectionsPopover && (
+                        <div
+                          className="dock-worship-history__menu"
+                          role="dialog"
+                          aria-label={t("worship.deletedSlides", { defaultValue: "Deleted slides" })}
+                        >
+                          <div className="dock-worship-history__menu-title">
+                            {t("worship.deletedSlides", { defaultValue: "Deleted slides" })}
+                          </div>
+                          {deletedSections.length === 0 ? (
+                            <div className="dock-worship-history__empty">
+                              {t("worship.deletedSlidesEmpty", { defaultValue: "Deleted slides show up here until you switch songs." })}
+                            </div>
+                          ) : (
+                            <div className="dock-worship-history__list">
+                              {deletedSections.map((item) => (
+                                <div key={item.id} className="dock-worship-history__item">
+                                  <div className="dock-worship-history__copy">
+                                    <div className="dock-worship-history__item-title">{item.label}</div>
+                                    <div className="dock-worship-history__item-text">{item.text}</div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="dock-worship-history__restore"
+                                    onClick={() => void handleRestoreDeletedSection(item)}
+                                    title={t("sermon.restoreBtn")}
+                                    disabled={savingSong}
+                                  >
+                                    <Icon name="undo" size={12} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <button
                       type="button"
                       className="dock-shell-icon-btn"
@@ -2817,12 +3179,26 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                             <button
                               type="button"
                               className="dock-worship-slide-card__action"
-                              onClick={() => openSlideEditor(idx)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openSlideEditor(idx);
+                              }}
                               title={t('worship.editSong')}
                             >
                               <Icon name="edit" size={12} />
                             </button>
-
+                            <button
+                              type="button"
+                              className="dock-worship-slide-card__action dock-worship-slide-card__action--danger"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleDeleteSection(idx);
+                              }}
+                              title={t("common.delete")}
+                              disabled={savingSong || selectedSongSections.length <= 1}
+                            >
+                              <Icon name="delete_outline" size={12} />
+                            </button>
                           </div>
                         </div>
                       );
@@ -2851,7 +3227,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                   <div className="dock-worship-toolbar">
                     <DockBottomToolbar
                       overlayMode={overlayMode}
-                      onModeChange={setOverlayMode}
+                      onModeChange={handleOverlayModeChange}
                       clearLabel={t('common.clear')}
                       onClear={handleClearLyrics}
                       collapsed={toolbarCollapsed}
@@ -2967,47 +3343,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                   </div>
                   <label className="dock-dialog-field dock-dialog-field--lyrics">
                     <span>{t('worship.songLyrics')}</span>
-                    <div className="dock-lyrics-toolbar">
-                      <div className="dock-lyrics-autosplit" ref={autoSplitPopoverRef}>
-                        <button
-                          type="button"
-                          className={`dock-lyrics-toolbar__btn${showAutoSplitPopover ? " dock-lyrics-toolbar__btn--active" : ""}`}
-                          onClick={() => setShowAutoSplitPopover((v) => !v)}
-                          title="Auto Split"
-                        >
-                          <Icon name="format_align_left" size={12} /> Auto Split ▾
-                        </button>
-                        {showAutoSplitPopover && (
-                          <div className="dock-lyrics-autosplit__menu">
-                            {[2, 3, 4].map((n) => (
-                              <button
-                                key={n}
-                                type="button"
-                                className="dock-lyrics-autosplit__option"
-                                onClick={() => {
-                                  formatLyrics("autosplit", n);
-                                  setShowAutoSplitPopover(false);
-                                }}
-                              >
-                                {n} lines
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics("clean")} title="Clean Text">
-                        <Icon name="auto_fix_high" size={12} /> Clean Text
-                      </button>
-                      <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics("remove-empty")} title="Remove Empty">
-                        <Icon name="remove" size={12} /> Remove Empty
-                      </button>
-                      <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics("remove-verse-numbers")} title="Verse Numbers">
-                        <Icon name="tag" size={12} /> Verse Numbers
-                      </button>
-                      <button type="button" className="dock-lyrics-toolbar__btn" onClick={handleUndoFormatting} title="Undo">
-                        <Icon name="undo" size={12} /> Undo
-                      </button>
-                    </div>
+                    {renderLyricsToolbar("song")}
                     <textarea
                       className="dock-input dock-dialog-textarea"
                       value={songDraft.lyrics}
@@ -3125,6 +3461,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                   </div>
                   <label className="dock-dialog-field dock-dialog-field--lyrics">
                     <span>{t('worship.songLyrics')}</span>
+                    {renderLyricsToolbar("new-song")}
                     <textarea
                       className="dock-input dock-dialog-textarea"
                       value={newSongDraft.lyrics}
@@ -3448,7 +3785,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                   <div className="dock-worship-toolbar">
                     <DockBottomToolbar
                       overlayMode={overlayMode}
-                      onModeChange={setOverlayMode}
+                      onModeChange={handleOverlayModeChange}
                       clearLabel="Clear"
                       onClear={() => {
                         setVisibleAnnouncementSlideIdx(null);

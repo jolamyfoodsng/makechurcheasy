@@ -7,7 +7,7 @@
  * Replaces the old SongFormModal in SongsTab.tsx.
  */
 
-import { Music, Save, X } from "lucide-react";
+import { ListX, Music, Save, Type, Undo, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
 import { DEFAULT_THEME_SETTINGS, type BibleTheme, type BibleThemeSettings } from "../bible/types";
@@ -77,6 +77,60 @@ function reformatLyrics(text: string, linesPerSlide: number): string {
   return formatted || text;
 }
 
+function capitalizeLyricsText(text: string): string {
+  return text
+    .split("\n")
+    .map((line) =>
+      line.replace(/\b([A-Za-z])([A-Za-z'’-]*)/g, (_, first: string, rest: string) =>
+        `${first.toUpperCase()}${rest.toLowerCase()}`,
+      ),
+    )
+    .join("\n");
+}
+
+function cleanLyricsText(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => {
+      let next = line;
+      next = next.replace(/\t/g, " ");
+      next = next.replace(/\s{2,}/g, " ");
+      next = next.replace(/ ,/g, ",");
+      next = next.replace(/ \./g, ".");
+      next = next.replace(/ :/g, ":");
+      next = next.replace(/([,:;.])([A-Za-z])/g, "$1 $2");
+      next = next.replace(/\s+$/g, "");
+      return next.trimStart();
+    })
+    .join("\n");
+}
+
+function removeEmptyLyricsLines(text: string): string {
+  const lines = text.split("\n");
+  const collapsed: string[] = [];
+  let blankCount = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const isBlank = trimmed === "" || /^[^\w]+$/.test(trimmed);
+    if (isBlank) {
+      blankCount++;
+      if (blankCount <= 1) collapsed.push("");
+      continue;
+    }
+    blankCount = 0;
+    collapsed.push(line);
+  }
+  return collapsed.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
+}
+
+function removeVerseNumbers(text: string): string {
+  return text
+    .replace(/^\d+[.)]\s*/gm, "")
+    .replace(/^\[[\d]+\]\s*/gm, "")
+    .replace(/^\([\d]+\)\s*/gm, "")
+    .replace(/^Verse\s+\d+\s*:?\s*/gim, "");
+}
+
 /* ── Component ───────────────────────────────────────────────────────────── */
 
 interface WorshipSongEditorProps {
@@ -100,6 +154,9 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
   const titleRef = useRef<HTMLInputElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const lyricsRef = useRef(lyrics);
+  const lyricsTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const formatUndoRef = useRef<string>("");
+  const [selectionRange, setSelectionRange] = useState({ start: 0, end: 0 });
   lyricsRef.current = lyrics;
 
   useEffect(() => {
@@ -162,10 +219,79 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
     [],
   );
 
+  const syncSelectionRange = useCallback(() => {
+    const textarea = lyricsTextareaRef.current;
+    if (!textarea) return;
+    setSelectionRange({
+      start: textarea.selectionStart ?? 0,
+      end: textarea.selectionEnd ?? 0,
+    });
+  }, []);
+
+  const applyLyricsTransformation = useCallback((
+    transform: (text: string) => string,
+    mode: "selection-or-all" | "all" = "selection-or-all",
+  ) => {
+    const textarea = lyricsTextareaRef.current;
+    const current = lyricsRef.current;
+    const start = textarea?.selectionStart ?? selectionRange.start;
+    const end = textarea?.selectionEnd ?? selectionRange.end;
+    const hasSelection = end > start;
+
+    formatUndoRef.current = current;
+
+    let nextLyrics = current;
+    let nextStart = start;
+    let nextEnd = end;
+
+    if (mode === "selection-or-all" && hasSelection) {
+      const selectedText = current.slice(start, end);
+      const transformed = transform(selectedText);
+      nextLyrics = `${current.slice(0, start)}${transformed}${current.slice(end)}`;
+      nextEnd = start + transformed.length;
+    } else {
+      nextLyrics = transform(current);
+      if (hasSelection) {
+        nextStart = Math.min(start, nextLyrics.length);
+        nextEnd = Math.min(end, nextLyrics.length);
+      } else {
+        nextStart = 0;
+        nextEnd = 0;
+      }
+    }
+
+    setLyrics(nextLyrics);
+    requestAnimationFrame(() => {
+      const node = lyricsTextareaRef.current;
+      if (!node) return;
+      node.focus();
+      node.setSelectionRange(nextStart, nextEnd);
+      setSelectionRange({ start: nextStart, end: nextEnd });
+    });
+  }, [selectionRange.end, selectionRange.start]);
+
+  const handleUndoFormatting = useCallback(() => {
+    if (!formatUndoRef.current) return;
+    const previous = formatUndoRef.current;
+    setLyrics(previous);
+    requestAnimationFrame(() => {
+      const node = lyricsTextareaRef.current;
+      if (!node) return;
+      node.focus();
+      const end = Math.min(previous.length, selectionRange.end);
+      const start = Math.min(previous.length, selectionRange.start);
+      node.setSelectionRange(start, end);
+      setSelectionRange({ start, end });
+    });
+    formatUndoRef.current = "";
+  }, [selectionRange.end, selectionRange.start]);
+
   /* ── Line / slide counts ── */
   const lineCount = useMemo(() => {
     return lyrics.split("\n").filter((l) => l.trim().length > 0).length;
   }, [lyrics]);
+
+  const selectionLength = Math.max(0, selectionRange.end - selectionRange.start);
 
   /* ── Save handler ── */
   const handleSave = useCallback(async () => {
@@ -276,12 +402,91 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
             </div>
 
             <div className="ws-lyrics-wrap">
+              <div className="ws-lyrics-toolbar">
+                <div className="ws-lyrics-toolbar__meta">
+                  <span className="ws-lyrics-toolbar__meta-icon">
+                    <Type size={12} />
+                  </span>
+                  <span>{selectionLength > 0 ? `${selectionLength} selected` : "Lyrics tools"}</span>
+                </div>
+                <div className="ws-lyrics-toolbar__group" aria-label="Text case controls">
+                  <button
+                    type="button"
+                    className="ws-lyrics-toolbar__btn ws-lyrics-toolbar__btn--case"
+                    onClick={() => applyLyricsTransformation((text) => text.toLocaleUpperCase())}
+                    title="Uppercase"
+                    aria-label="Uppercase"
+                  >
+                    TT
+                  </button>
+                  <button
+                    type="button"
+                    className="ws-lyrics-toolbar__btn ws-lyrics-toolbar__btn--case"
+                    onClick={() => applyLyricsTransformation((text) => text.toLocaleLowerCase())}
+                    title="Lowercase"
+                    aria-label="Lowercase"
+                  >
+                    tt
+                  </button>
+                  <button
+                    type="button"
+                    className="ws-lyrics-toolbar__btn ws-lyrics-toolbar__btn--case"
+                    onClick={() => applyLyricsTransformation(capitalizeLyricsText)}
+                    title="Capitalize"
+                    aria-label="Capitalize"
+                  >
+                    Tt
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="ws-lyrics-toolbar__btn"
+                  onClick={() => applyLyricsTransformation(cleanLyricsText, "all")}
+                  title="Clean text"
+                >
+                  <Wand2 size={12} />
+                  <span>Clean</span>
+                </button>
+                <button
+                  type="button"
+                  className="ws-lyrics-toolbar__btn"
+                  onClick={() => applyLyricsTransformation(removeEmptyLyricsLines, "all")}
+                  title="Remove empty lines"
+                >
+                  <ListX size={12} />
+                  <span>Trim Gaps</span>
+                </button>
+                <button
+                  type="button"
+                  className="ws-lyrics-toolbar__btn"
+                  onClick={() => applyLyricsTransformation(removeVerseNumbers, "all")}
+                  title="Remove verse numbers"
+                >
+                  <span>#</span>
+                  <span>Strip Numbers</span>
+                </button>
+                <button
+                  type="button"
+                  className="ws-lyrics-toolbar__btn"
+                  onClick={handleUndoFormatting}
+                  title="Undo formatting"
+                  disabled={!formatUndoRef.current}
+                >
+                  <Undo size={12} />
+                  <span>Undo</span>
+                </button>
+              </div>
               <textarea
+                ref={lyricsTextareaRef}
                 className="ws-lyrics-textarea"
                 style={{ fontFamily: '"Charis SIL", "SF Mono", "Noto Sans Mono", "Fira Code", "Consolas", monospace' }}
                 placeholder={"Verse 1:\nLine 1\nLine 2\n\nChorus:\nChorus line 1\nChorus line 2"}
                 value={lyrics}
                 onChange={(e) => setLyrics(e.target.value)}
+                onSelect={syncSelectionRange}
+                onKeyUp={syncSelectionRange}
+                onMouseUp={syncSelectionRange}
+                onFocus={syncSelectionRange}
               />
             </div>
 

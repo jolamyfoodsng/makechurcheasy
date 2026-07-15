@@ -19,8 +19,8 @@ import { bibleObsService } from "../../bible/bibleObsService";
 import { getChapter, getChapterCount, getVerseCount, searchBible } from "../../bible/bibleData";
 import type { SearchResult } from "../../bible/bibleData";
 import { parseBibleSearch } from "../../dock/bibleSearchParser";
-import { clearHistory, getBibleSettings, saveBibleSettings, getInstalledTranslations } from "../../bible/bibleDb";
-import type { BiblePassage, BibleTemplateType, BibleTranslation } from "../../bible/types";
+import { clearHistory, getBibleSettings, saveBibleSettings, getInstalledTranslations, saveCustomTheme } from "../../bible/bibleDb";
+import type { BiblePassage, BibleTemplateType, BibleTheme, BibleThemeSettings, BibleTranslation } from "../../bible/types";
 import { BIBLE_BOOKS } from "../../bible/types";
 import { generateSlides } from "../../bible/slideEngine";
 import BookChapterPanel from "../../bible/components/BookChapterPanel";
@@ -35,12 +35,11 @@ import { ensureDockObsClientConnected } from "../../services/dockObsInterop";
 import { isUserSelectableObsScene, normalizeDockStageBaseScene } from "../../services/dockSceneNames";
 import { getInputBySlot, getSceneBySlot } from "../../services/obsRegistry";
 import { useServiceGate } from "../../hooks/useServiceGate";
-import { ObsScenesPanel } from "../shared/ObsScenesPanel";
 import { LT_ALL_THEMES, LT_BIBLE_THEMES } from "../../lowerthirds/themes";
-import { buildOverlayUrl, lowerThirdObsService } from "../../lowerthirds/lowerThirdObsService";
+import { buildOverlayUrl } from "../../lowerthirds/lowerThirdObsService";
 import type { LowerThirdTheme } from "../../lowerthirds/types";
 import type { LTSize } from "../../lowerthirds/types";
-import { OCS_LT_PATTERN, VC_LT_PATTERN, MV_LT_PATTERN, OCS_BIBLE_LT_PATTERN, VC_BIBLE_LT_PATTERN } from "../../lowerthirds/types";
+import { OCS_BIBLE_LT_PATTERN, VC_BIBLE_LT_PATTERN } from "../../lowerthirds/types";
 import { dockObsClient } from "../../dock/dockObsClient";
 import Icon from "../Icon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
@@ -53,7 +52,6 @@ const RIGHT_PANEL_DEFAULT_WIDTH = 280;
 const RIGHT_PANEL_MIN_WIDTH = 220;
 const RIGHT_PANEL_MAX_WIDTH = 520;
 const SIDEBAR_COLLAPSE_THRESHOLD = 90;
-const LT_PREVIEW_FALLBACK_TEXT = "For God so loved the world that He gave His only begotten Son.";
 const BIBLE_OVERLAY_SCENE_SLOT = "bible-overlay";
 const BIBLE_OVERLAY_SCENE_FALLBACK_NAME = "MCE Bible Overlay";
 const BIBLE_MAIN_INPUT_SLOT = "bible-browser-source";
@@ -61,6 +59,9 @@ const BIBLE_BG_INPUT_SLOT = "bible-bg-source";
 const BIBLE_MAIN_INPUT_FALLBACK_NAME = "MakeChurchEasy — Bible";
 const BIBLE_BG_INPUT_FALLBACK_NAME = "MakeChurchEasy — Bible BG";
 const SHARED_WORSHIP_BIBLE_THEME_TAG = "shared-worship-bible";
+const BIBLE_PREVIEW_SWATCHES = ["#FFFFFF", "#F8FAFC", "#CBD5E1", "#FDE68A", "#B9CCFF", "#60A5FA", "#22C55E", "#0F172A", "#111827", "#000000"] as const;
+
+type BiblePreviewPanelTab = "text" | "background";
 
 const BIBLE_LOWER_THIRD_THEMES: LowerThirdTheme[] = (() => {
   const sharedThemes = LT_ALL_THEMES.filter((theme) =>
@@ -74,87 +75,277 @@ const BIBLE_LOWER_THIRD_THEMES: LowerThirdTheme[] = (() => {
   return Array.from(byId.values());
 })();
 
-function substituteThemeVariables(html: string, values: Record<string, string>): string {
-  return html.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-    return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match;
-  });
-}
+function BiblePreviewControls({
+  settings,
+  activeTab,
+  onTabChange,
+  onUpdate,
+}: {
+  settings: BibleThemeSettings;
+  activeTab: BiblePreviewPanelTab;
+  onTabChange: (tab: BiblePreviewPanelTab) => void;
+  onUpdate: (patch: Partial<BibleThemeSettings>) => void;
+}) {
+  return (
+    <div className="bible-preview-controls">
+      <div className="bible-preview-tabs" role="tablist" aria-label="Preview controls">
+        <button
+          type="button"
+          className={`bible-preview-tab${activeTab === "text" ? " active" : ""}`}
+          onClick={() => onTabChange("text")}
+          role="tab"
+          aria-selected={activeTab === "text"}
+        >
+          <Icon name="text_fields" size={14} />
+          <span>Text</span>
+        </button>
+        <button
+          type="button"
+          className={`bible-preview-tab${activeTab === "background" ? " active" : ""}`}
+          onClick={() => onTabChange("background")}
+          role="tab"
+          aria-selected={activeTab === "background"}
+        >
+          <Icon name="image" size={14} />
+          <span>Background</span>
+        </button>
+      </div>
 
-function escapeStyle(styleText: string): string {
-  return styleText.replace(/<\/style/gi, "<\\/style");
-}
+      <div className="bible-preview-panel">
+        {activeTab === "text" ? (
+          <>
+            <div className="bible-preview-grid">
+              <label className="bible-preview-field">
+                <span>Text</span>
+                <input
+                  type="color"
+                  value={settings.fontColor}
+                  onChange={(e) => onUpdate({ fontColor: e.target.value })}
+                />
+              </label>
+              <label className="bible-preview-field">
+                <span>Reference</span>
+                <input
+                  type="color"
+                  value={settings.refFontColor}
+                  onChange={(e) => onUpdate({ refFontColor: e.target.value })}
+                />
+              </label>
+            </div>
 
-function buildBibleLTPreviewValues(theme: LowerThirdTheme, reference: string, verseText: string): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const variable of theme.variables) {
-    const key = variable.key.toLowerCase();
-    const label = variable.label.toLowerCase();
-    const hint = `${key} ${label}`;
+            <label className="bible-preview-range">
+              <span>
+                <span>Size</span>
+                <strong>{settings.fontSize}px</strong>
+              </span>
+              <input
+                type="range"
+                min={28}
+                max={180}
+                step={1}
+                value={settings.fontSize}
+                onChange={(e) => onUpdate({ fontSize: Number(e.target.value) })}
+              />
+            </label>
 
-    if (hint.includes("verse") || hint.includes("scripture") || hint.includes("quote") || key === "text") {
-      values[variable.key] = verseText || variable.defaultValue || LT_PREVIEW_FALLBACK_TEXT;
-      continue;
-    }
+            <label className="bible-preview-range">
+              <span>
+                <span>Line Height</span>
+                <strong>{settings.lineHeight.toFixed(2)}x</strong>
+              </span>
+              <input
+                type="range"
+                min={1.1}
+                max={1.9}
+                step={0.01}
+                value={settings.lineHeight}
+                onChange={(e) => onUpdate({ lineHeight: Number(e.target.value) })}
+              />
+            </label>
 
-    if (hint.includes("reference")) {
-      values[variable.key] = reference || variable.defaultValue || "John 3:16";
-      continue;
-    }
+            <div className="bible-preview-option-group">
+              <span className="bible-preview-group-label">Align</span>
+              <div className="bible-preview-option-row">
+                {(["left", "center", "right"] as const).map((align) => (
+                  <button
+                    key={align}
+                    type="button"
+                    className={`bible-preview-option${settings.textAlign === align ? " active" : ""}`}
+                    onClick={() => onUpdate({ textAlign: align, refTextAlign: "match" })}
+                  >
+                    {align === "left" ? "Left" : align === "center" ? "Center" : "Right"}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-    if (hint.includes("label") || hint.includes("kicker") || hint.includes("badge")) {
-      values[variable.key] = variable.defaultValue || "Scripture";
-      continue;
-    }
+            <div className="bible-preview-option-group">
+              <span className="bible-preview-group-label">Case</span>
+              <div className="bible-preview-option-row">
+                {([
+                  { value: "uppercase", label: "TT" },
+                  { value: "lowercase", label: "tt" },
+                  { value: "capitalize", label: "Tt" },
+                  { value: "none", label: "Aa" },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`bible-preview-option${settings.textTransform === option.value ? " active" : ""}`}
+                    onClick={() => onUpdate({ textTransform: option.value })}
+                    title={option.value}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-    if (variable.type === "toggle") {
-      values[variable.key] = variable.defaultValue === "false" ? "false" : "true";
-      continue;
-    }
+            <div className="bible-preview-grid">
+              <div className="bible-preview-option-group">
+                <span className="bible-preview-group-label">Reference</span>
+                <div className="bible-preview-option-row">
+                  {(["top", "bottom"] as const).map((position) => (
+                    <button
+                      key={position}
+                      type="button"
+                      className={`bible-preview-option${settings.refPosition === position ? " active" : ""}`}
+                      onClick={() => onUpdate({ refPosition: position })}
+                    >
+                      {position === "top" ? "Top" : "Bottom"}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-    if (variable.type === "select") {
-      values[variable.key] = variable.defaultValue || variable.options?.[0]?.value || "";
-      continue;
-    }
+              <label className="bible-preview-toggle">
+                <span>Ref BG</span>
+                <input
+                  type="checkbox"
+                  checked={settings.referenceBackgroundEnabled}
+                  onChange={(e) => onUpdate({ referenceBackgroundEnabled: e.target.checked })}
+                />
+              </label>
+            </div>
 
-    values[variable.key] = variable.defaultValue || "";
-  }
-  return values;
-}
+            <div className="bible-preview-option-group">
+              <span className="bible-preview-group-label">Ref Background</span>
+              <div className="bible-preview-swatch-row">
+                {BIBLE_PREVIEW_SWATCHES.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`bible-preview-swatch${settings.referenceBackgroundColor === color ? " active" : ""}`}
+                    style={{ background: color }}
+                    onClick={() => onUpdate({ referenceBackgroundColor: color, referenceBackgroundEnabled: true })}
+                    aria-label={`Reference background ${color}`}
+                  />
+                ))}
+                <input
+                  type="color"
+                  className="bible-preview-swatch bible-preview-swatch-input"
+                  value={settings.referenceBackgroundColor}
+                  onChange={(e) => onUpdate({ referenceBackgroundColor: e.target.value, referenceBackgroundEnabled: true })}
+                  aria-label="Custom reference background color"
+                />
+              </div>
+              <div className="bible-preview-option-row">
+                {([
+                  { value: "solid", label: "Fill" },
+                  { value: "pill", label: "Pill" },
+                  { value: "outline", label: "Line" },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`bible-preview-option${settings.referenceBackgroundStyle === option.value ? " active" : ""}`}
+                    onClick={() => onUpdate({ referenceBackgroundStyle: option.value, referenceBackgroundEnabled: true })}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="bible-preview-option-group">
+              <span className="bible-preview-group-label">Color</span>
+              <div className="bible-preview-swatch-row">
+                {BIBLE_PREVIEW_SWATCHES.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`bible-preview-swatch${settings.backgroundColor === color && !settings.backgroundImage ? " active" : ""}`}
+                    style={{ background: color }}
+                    onClick={() => onUpdate({
+                      backgroundColor: color,
+                      backgroundColorEnd: undefined,
+                      backgroundImage: "",
+                      backgroundImageFilePath: "",
+                      backgroundPattern: "",
+                      backgroundVideo: "",
+                      backgroundVideoFilePath: "",
+                    })}
+                    aria-label={`Background ${color}`}
+                  />
+                ))}
+                <input
+                  type="color"
+                  className="bible-preview-swatch bible-preview-swatch-input"
+                  value={settings.backgroundColor}
+                  onChange={(e) => onUpdate({
+                    backgroundColor: e.target.value,
+                    backgroundColorEnd: undefined,
+                    backgroundImage: "",
+                    backgroundImageFilePath: "",
+                    backgroundPattern: "",
+                    backgroundVideo: "",
+                    backgroundVideoFilePath: "",
+                  })}
+                  aria-label="Custom background color"
+                />
+              </div>
+            </div>
 
-function buildBibleLTPreviewDoc(theme: LowerThirdTheme, reference: string, verseText: string): string {
-  const values = buildBibleLTPreviewValues(theme, reference, verseText);
-  let html = substituteThemeVariables(theme.html, values);
-  html = html.split("{{state}}").join("in");
-  const imports = Array.isArray(theme.fontImports)
-    ? theme.fontImports.map((url) => `@import url("${url}");`).join("\n")
-    : "";
+            <div className="bible-preview-grid">
+              <label className="bible-preview-field">
+                <span>Shade</span>
+                <input
+                  type="color"
+                  value={settings.fullscreenShadeColor}
+                  onChange={(e) => onUpdate({ fullscreenShadeColor: e.target.value, fullscreenShadeEnabled: true })}
+                />
+              </label>
+              <label className="bible-preview-toggle">
+                <span>Overlay</span>
+                <input
+                  type="checkbox"
+                  checked={settings.fullscreenShadeEnabled}
+                  onChange={(e) => onUpdate({ fullscreenShadeEnabled: e.target.checked })}
+                />
+              </label>
+            </div>
 
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <style>
-      html, body {
-        margin: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background: transparent;
-      }
-      body {
-        width: 1920px;
-        height: 1080px;
-        transform: scale(0.3);
-        transform-origin: top left;
-      }
-      ${imports}
-      ${escapeStyle(theme.css)}
-    </style>
-  </head>
-  <body>
-    ${html}
-  </body>
-</html>`;
+            <label className="bible-preview-range">
+              <span>
+                <span>Shade Opacity</span>
+                <strong>{Math.round(settings.fullscreenShadeOpacity * 100)}%</strong>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={0.85}
+                step={0.01}
+                value={settings.fullscreenShadeOpacity}
+                onChange={(e) => onUpdate({ fullscreenShadeOpacity: Number(e.target.value), fullscreenShadeEnabled: true })}
+              />
+            </label>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export interface BibleModuleProps {
@@ -166,14 +357,18 @@ export interface BibleModuleProps {
   initialSelectBible?: { book: string; chapter: number; verse: number } | null;
   /** Called after the deep-link selection has been consumed */
   onConsumeInitialSelect?: () => void;
-  onPresentToScreen?: (payload: {
-    book: string;
-    chapter: number;
-    verse: number;
-    translation: string;
-    text: string;
-  }) => void;
+  onPresentToScreen?: (payload: BiblePresentationSelectionPayload) => void;
   onClearScreen?: () => void;
+}
+
+export interface BiblePresentationSelectionPayload {
+  book: string;
+  chapter: number;
+  verse: number;
+  translation: string;
+  text: string;
+  themeId?: string;
+  verseCount?: number;
 }
 
 export function BibleModule({
@@ -287,10 +482,7 @@ export function BibleModule({
   const [selectedLTTheme, setSelectedLTTheme] = useState<LowerThirdTheme | null>(null);
   const [ltScenes, setLtScenes] = useState<string[]>([]);
   const [ltTargetScene, setLtTargetScene] = useState<string>("");
-  const [ltProgramScene, setLtProgramScene] = useState<string>("");
-  const [ltSize, setLtSize] = useState<LTSize>("xl");
-  const [ltSending, setLtSending] = useState(false);
-  const [ltScenesRefreshing, setLtScenesRefreshing] = useState(false);
+  const ltSize: LTSize = "xl";
   // Scenes that have an active LT bible source — used for real-time updates
   const [ltLiveScenes, setLtLiveScenes] = useState<string[]>([]);
   // Scenes that have an active fullscreen Bible source
@@ -311,6 +503,7 @@ export function BibleModule({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   // Installed translations for the switcher dropdown
   const [installedTranslations, setInstalledTranslations] = useState<{ abbr: string; name: string }[]>([]);
+  const [previewPanelTab, setPreviewPanelTab] = useState<BiblePreviewPanelTab>("text");
 
   // Service gate (no-op — service gate concept removed)
   const { checkServiceActive } = useServiceGate();
@@ -339,6 +532,11 @@ export function BibleModule({
 
   // Layout mode
   const [layoutMode, setLayoutMode] = useState<BibleTemplateType>("fullscreen");
+
+  useEffect(() => {
+    if (!presentationMode || layoutMode === "fullscreen") return;
+    setLayoutMode("fullscreen");
+  }, [layoutMode, presentationMode]);
 
   // Layout confirmation modal
   const [showLayoutModal, setShowLayoutModal] = useState(false);
@@ -382,10 +580,6 @@ export function BibleModule({
       setFullLiveScenes((prev) => prev.filter((sceneName) => names.includes(sceneName)));
       const program = await obsService.getCurrentProgramScene();
       const normalizedProgram = normalizeDockStageBaseScene(program);
-      const displayProgram = names.includes(program)
-        ? program
-        : (names.includes(normalizedProgram) ? normalizedProgram : "");
-      setLtProgramScene(displayProgram);
       if (normalizedProgram && !isBibleFullscreenSceneName(program, bibleOverlaySceneName)) {
         lastNonBibleProgramSceneRef.current = normalizedProgram;
       }
@@ -424,7 +618,6 @@ export function BibleModule({
       }
       try {
         await obsService.setCurrentProgramScene(restoreTarget);
-        setLtProgramScene(restoreTarget);
         return restoreTarget;
       } catch (err) {
         console.warn("[BibleModule] Failed to restore program scene before lower-third send:", err);
@@ -518,15 +711,6 @@ export function BibleModule({
     }
   }, [disableFullscreenBibleSourcesInScene, obsConnected, restoreFromBibleFullscreenIfNeeded]);
 
-  const handleRefreshLtScenes = useCallback(async () => {
-    setLtScenesRefreshing(true);
-    try {
-      await loadLtScenes();
-    } finally {
-      setLtScenesRefreshing(false);
-    }
-  }, [loadLtScenes]);
-
   const beginSidebarResize = useCallback((side: "left" | "right", e: React.MouseEvent) => {
     e.preventDefault();
     resizeStateRef.current = {
@@ -581,24 +765,6 @@ export function BibleModule({
     };
   }, []);
 
-  const handleLayoutClick = useCallback((mode: BibleTemplateType) => {
-    if (mode === layoutMode) return;
-    if (skipLayoutConfirm) {
-      setLayoutMode(mode);
-      if (mode === "lower-third") {
-        loadLtScenes();
-        // Auto-select the first LT theme if none is selected
-        if (!selectedLTTheme && BIBLE_LOWER_THIRD_THEMES.length > 0) {
-          setSelectedLTTheme(BIBLE_LOWER_THIRD_THEMES[0]);
-        }
-        void prepareForLowerThirdMode();
-      }
-      return;
-    }
-    setPendingLayoutMode(mode);
-    setShowLayoutModal(true);
-  }, [layoutMode, skipLayoutConfirm, loadLtScenes, prepareForLowerThirdMode, selectedLTTheme]);
-
   const confirmLayoutChange = useCallback(() => {
     if (pendingLayoutMode) {
       setLayoutMode(pendingLayoutMode);
@@ -632,7 +798,6 @@ export function BibleModule({
 
     if (!obsConnected) {
       setLtScenes([]);
-      setLtProgramScene("");
       setLtTargetScene("");
       setLtLiveScenes([]);
       setFullLiveScenes([]);
@@ -781,17 +946,7 @@ export function BibleModule({
     }
     // Single click now sends verse to OBS immediately
     sendVerseToObs(selectedBook, selectedChapter, verse);
-
-    // In LT mode, also push to the LT target scene on first use;
-    // the reactive effect handles subsequent updates automatically
-    if (layoutMode === "lower-third" && selectedLTTheme && ltLiveScenes.length === 0 && ltTargetScene) {
-      (async () => {
-        setLtSending(true);
-        try { await pushLtToSceneRef.current(ltTargetScene); } catch { /* logged */ }
-        setLtSending(false);
-      })();
-    }
-  }, [selectedBook, selectedChapter, sendVerseToObs, layoutMode, selectedLTTheme, ltLiveScenes, ltTargetScene, presentationMode]);
+  }, [selectedBook, selectedChapter, sendVerseToObs, presentationMode]);
 
   // Double-click book → navigate to chapter 1 and send verse 1 to OBS
   const handleDoubleClickBook = useCallback((book: string) => {
@@ -1290,40 +1445,30 @@ export function BibleModule({
     return visibleFullThemes[0] ?? null;
   }, [activeTheme, state.activeThemeId, visibleFullThemes]);
 
+  const previewTheme = useMemo<BibleTheme | null>(() => activeTheme ?? activeFullTheme, [activeFullTheme, activeTheme]);
+
+  const applyPreviewThemePatch = useCallback((patch: Partial<BibleThemeSettings>) => {
+    if (!previewTheme) return;
+    const nextTheme: BibleTheme = {
+      ...previewTheme,
+      settings: {
+        ...previewTheme.settings,
+        ...patch,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    dispatch({ type: "UPDATE_THEME", theme: nextTheme });
+    if (previewTheme.source === "custom") {
+      void saveCustomTheme(nextTheme).catch(console.error);
+    }
+  }, [dispatch, previewTheme]);
+
   useEffect(() => {
     if (layoutMode !== "fullscreen") return;
     if (visibleFullThemes.length === 0) return;
     if (visibleFullThemes.some((theme) => theme.id === state.activeThemeId)) return;
     setTheme(visibleFullThemes[0].id);
   }, [layoutMode, visibleFullThemes, state.activeThemeId, setTheme]);
-
-  const fullThemePreviewStyle = useMemo(
-    () => ({
-      backgroundImage: activeFullTheme?.settings.backgroundImage
-        ? `url(${activeFullTheme.settings.backgroundImage})`
-        : undefined,
-      backgroundColor: activeFullTheme?.settings.backgroundImage
-        ? undefined
-        : (activeFullTheme?.settings.backgroundColor ?? "#0F172A"),
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-    }),
-    [activeFullTheme],
-  );
-
-  // Auto-fill LT variable values from the current Bible selection
-  const ltAutoValues = useMemo(() => {
-    if (!selectedLTTheme) return {};
-    const verseRef = `${selectedBook} ${selectedChapter}:${selectedVerse}`;
-    const vals: Record<string, string> = {};
-    for (const v of selectedLTTheme.variables) {
-      if (v.key === "reference") vals.reference = `${verseRef} (${state.translation})`;
-      else if (v.key === "verseText") vals.verseText = ""; // filled dynamically below
-      else if (v.key === "label") vals.label = v.defaultValue || "Scripture";
-      else vals[v.key] = v.defaultValue || "";
-    }
-    return vals;
-  }, [selectedLTTheme, selectedBook, selectedChapter, selectedVerse, state.translation]);
 
   // Fill verseText from chapter data
   const [ltVerseText, setLtVerseText] = useState("");
@@ -1391,6 +1536,8 @@ export function BibleModule({
       verse: selectedVerse,
       translation: state.translation,
       text,
+      themeId: state.activeThemeId,
+      verseCount: currentVerseCount,
     });
   }, [
     presentationMode,
@@ -1403,72 +1550,6 @@ export function BibleModule({
     onPresentToScreen,
   ]);
 
-  const resolveDockSendLive = useCallback(async (
-    sceneName: string,
-    mode: "scene" | "preview" | "program",
-  ): Promise<boolean | null> => {
-    if (mode === "program") return true;
-    if (mode === "preview") return false;
-
-    const programScene = await obsService.getCurrentProgramScene().catch(() => ltProgramScene);
-    const normalizedProgramScene = normalizeDockStageBaseScene(programScene);
-
-    if (sceneName && (sceneName === programScene || sceneName === normalizedProgramScene)) return true;
-    return null;
-  }, [ltProgramScene]);
-
-  const pushSelectedBibleViaDock = useCallback(async (): Promise<boolean> => {
-    if (!selectedBook || !selectedChapter || !selectedVerse) return false;
-
-    const staged = await sendVerseToObs(selectedBook, selectedChapter, selectedVerse, {
-      useLegacyObs: false,
-    });
-    if (!staged) return false;
-
-    const overlayMode = layoutMode === "lower-third" ? "lower-third" : "fullscreen";
-
-    await ensureDockObsClientConnected();
-    await dockObsClient.pushBible({
-      book: selectedBook,
-      chapter: selectedChapter,
-      verse: selectedVerse,
-      translation: state.translation,
-      verseText: ltVerseText || `${selectedBook} ${selectedChapter}:${selectedVerse}`,
-      overlayMode,
-      ltTheme: overlayMode === "lower-third" && selectedLTTheme
-        ? { id: selectedLTTheme.id, html: selectedLTTheme.html, css: selectedLTTheme.css }
-        : undefined,
-      bibleThemeSettings: overlayMode === "fullscreen"
-        ? (activeTheme?.settings as unknown as Record<string, unknown> | null | undefined)
-        : undefined,
-    });
-
-    return true;
-  }, [
-    selectedBook,
-    selectedChapter,
-    selectedVerse,
-    sendVerseToObs,
-    state.translation,
-    ltVerseText,
-    layoutMode,
-    selectedLTTheme,
-    activeTheme,
-  ]);
-
-  const lowerThemePreviewReference = useMemo(
-    () => `${selectedBook} ${selectedChapter}:${selectedVerse} (${state.translation})`,
-    [selectedBook, selectedChapter, selectedVerse, state.translation],
-  );
-  const lowerThemePreviewText = useMemo(
-    () => (ltVerseText || "").trim() || LT_PREVIEW_FALLBACK_TEXT,
-    [ltVerseText],
-  );
-  const selectedLowerThemePreviewDoc = useMemo(() => {
-    if (!selectedLTTheme) return "";
-    return buildBibleLTPreviewDoc(selectedLTTheme, lowerThemePreviewReference, lowerThemePreviewText);
-  }, [selectedLTTheme, lowerThemePreviewReference, lowerThemePreviewText]);
-
   // Handle selecting a LT Bible theme
   const handleSelectLTTheme = useCallback((ltTheme: LowerThirdTheme) => {
     setSelectedLTTheme(ltTheme);
@@ -1476,201 +1557,6 @@ export function BibleModule({
     loadLtScenes();
     setShowThemeModal(false);
   }, [loadLtScenes]);
-
-  // Helper: push LT overlay to a specific scene
-  const pushLtToScene = useCallback(async (sceneName: string) => {
-    if (!selectedLTTheme) return;
-    const values = { ...ltAutoValues, verseText: ltVerseText };
-    const sourceName = `MCE_BibleLT_${sceneName}`;
-
-    try {
-      // Check if source already exists in OBS
-      const inputs = await obsService.getInputList();
-      const existing = inputs.find(i => i.inputName === sourceName);
-      if (!existing) {
-        // Create a new browser source in the target scene
-        const url = buildOverlayUrl(selectedLTTheme, values, true, false, ltSize);
-        const sceneItemId = await obsService.createInput(sceneName, sourceName, "browser_source", {
-          url,
-          width: 1920,
-          height: 1080,
-          css: "",
-        });
-        // Move it to the top (highest z-index)
-        const items = await obsService.getSceneItemList(sceneName);
-        await obsService.setSceneItemIndex(sceneName, sceneItemId, items.length - 1);
-      } else {
-        // Source exists — check if it's in this scene already
-        const sceneItems = await obsService.getSceneItemList(sceneName);
-        const inScene = sceneItems.find(si => si.sourceName === sourceName);
-        if (!inScene) {
-          // Add existing source to this scene
-          const sceneItemId = await obsService.createSceneItem(sceneName, sourceName);
-          const items = await obsService.getSceneItemList(sceneName);
-          await obsService.setSceneItemIndex(sceneName, sceneItemId, items.length - 1);
-        }
-        // Update the URL
-        const url = buildOverlayUrl(selectedLTTheme, values, true, false, ltSize);
-        await obsService.call("SetInputSettings", {
-          inputName: sourceName,
-          inputSettings: { url, width: 1920, height: 1080 },
-        });
-      }
-
-      // ── Hide competing LT sources & enable ours ──
-      // Get all scene items and hide any other MCE_LT_, MCE_BibleLT_, or MV_*_LT: sources
-      const sceneItems = await obsService.getSceneItemList(sceneName);
-      for (const item of sceneItems) {
-        if (item.sourceName === sourceName) {
-          // Enable our source
-          await obsService.call("SetSceneItemEnabled", {
-            sceneName,
-            sceneItemId: item.sceneItemId,
-            sceneItemEnabled: true,
-          });
-        } else if (
-          OCS_LT_PATTERN.test(item.sourceName) ||
-          VC_LT_PATTERN.test(item.sourceName) ||
-          MV_LT_PATTERN.test(item.sourceName) ||
-          OCS_BIBLE_LT_PATTERN.test(item.sourceName) ||
-          VC_BIBLE_LT_PATTERN.test(item.sourceName)
-        ) {
-          // Hide other LT sources
-          try {
-            await obsService.call("SetSceneItemEnabled", {
-              sceneName,
-              sceneItemId: item.sceneItemId,
-              sceneItemEnabled: false,
-            });
-          } catch { /* best effort */ }
-        }
-      }
-    } catch (err) {
-      console.error(`[BibleModule] Failed to push LT to "${sceneName}":`, err);
-      throw err;
-    }
-    try {
-      await lowerThirdObsService.syncTickerClearanceForScene(sceneName);
-    } catch {
-      // Best-effort.
-    }
-    // Track this scene as having an active LT source
-    setLtLiveScenes(prev => prev.includes(sceneName) ? prev : [...prev, sceneName]);
-  }, [selectedLTTheme, ltAutoValues, ltVerseText, ltSize]);
-
-  // Stable ref for pushLtToScene so handlers defined earlier can use it
-  const pushLtToSceneRef = useRef(pushLtToScene);
-  pushLtToSceneRef.current = pushLtToScene;
-
-  const handleLtSendToScene = useCallback(async (
-    sceneName: string,
-    mode: "scene" | "preview" | "program" = "scene",
-  ) => {
-    if (!selectedLTTheme || !selectedBook || !selectedChapter || !selectedVerse) return;
-    if (!checkServiceActive("send bible lower-third to OBS")) return;
-
-    const dockLive = await resolveDockSendLive(sceneName, mode);
-    if (dockLive !== null) {
-      setLtTargetScene(sceneName);
-      setLtSending(true);
-      try {
-        const sent = await pushSelectedBibleViaDock();
-        if (!sent) return;
-        setLtLiveScenes((prev) => (prev.includes(sceneName) ? prev : [...prev, sceneName]));
-        triggerFlash();
-        setHasSentToObs(true);
-      } catch (err) {
-        console.warn(`[BibleModule] Dock lower-third send failed for "${sceneName}":`, err);
-      } finally {
-        setLtSending(false);
-      }
-      return;
-    }
-
-    const resolvedSceneName = await restoreFromBibleFullscreenIfNeeded(mode, sceneName);
-    setLtTargetScene(resolvedSceneName);
-
-    setLtSending(true);
-    try {
-      await disableFullscreenBibleSourcesInScene(resolvedSceneName);
-      await pushLtToScene(resolvedSceneName);
-      triggerFlash();
-      setHasSentToObs(true);
-    } catch { /* logged in pushLtToScene */ }
-    setLtSending(false);
-  }, [
-    selectedLTTheme,
-    selectedBook,
-    selectedChapter,
-    selectedVerse,
-    checkServiceActive,
-    resolveDockSendLive,
-    pushSelectedBibleViaDock,
-    restoreFromBibleFullscreenIfNeeded,
-    disableFullscreenBibleSourcesInScene,
-    pushLtToScene,
-    triggerFlash,
-  ]);
-
-  const handleFullSendToScene = useCallback(async (
-    sceneName: string,
-    mode: "scene" | "preview" | "program" = "scene",
-  ) => {
-    if (!obsConnected || !selectedBook || !selectedChapter || !selectedVerse) return;
-    if (!checkServiceActive("send bible full overlay to OBS")) return;
-
-    const dockLive = await resolveDockSendLive(sceneName, mode);
-    if (dockLive !== null) {
-      setLtSending(true);
-      try {
-        const sent = await pushSelectedBibleViaDock();
-        if (!sent) return;
-        setFullLiveScenes((prev) => (prev.includes(sceneName) ? prev : [...prev, sceneName]));
-        triggerFlash();
-      } catch (err) {
-        console.warn(`[BibleModule] Dock fullscreen send failed for "${sceneName}":`, err);
-      } finally {
-        setLtSending(false);
-      }
-      return;
-    }
-
-    setLtSending(true);
-    try {
-      if (mode === "program") {
-        const currentProgram = await obsService.getCurrentProgramScene().catch(() => "");
-        if (currentProgram) {
-          lastNonBibleProgramSceneRef.current = currentProgram;
-        }
-      } else if (mode === "preview") {
-        const currentPreview = await obsService.getCurrentPreviewScene().catch(() => "");
-        if (currentPreview) {
-          lastNonBiblePreviewSceneRef.current = currentPreview;
-        }
-      }
-      await bibleObsService.ensureBrowserSource(sceneName, "fullscreen");
-      const sent = await sendVerseToObs(selectedBook, selectedChapter, selectedVerse);
-      if (!sent) return;
-      await bibleObsService.show();
-      setFullLiveScenes((prev) => (prev.includes(sceneName) ? prev : [...prev, sceneName]));
-      triggerFlash();
-    } catch (err) {
-      console.warn(`[BibleModule] Failed to send fullscreen Bible overlay to "${sceneName}":`, err);
-    } finally {
-      setLtSending(false);
-    }
-  }, [
-    obsConnected,
-    selectedBook,
-    selectedChapter,
-    selectedVerse,
-    checkServiceActive,
-    resolveDockSendLive,
-    pushSelectedBibleViaDock,
-    sendVerseToObs,
-    triggerFlash,
-  ]);
-
   // ── Real-time LT update: when verse changes and LT is live, auto-push ──
   const ltLiveScenesRef = useRef(ltLiveScenes);
   ltLiveScenesRef.current = ltLiveScenes;
@@ -1721,10 +1607,6 @@ export function BibleModule({
     return parts.join(" ");
   }, [effectiveColorMode, state.reduceMotion, state.highContrast, presentationMode]);
 
-  const activeModeLiveScenes = layoutMode === "fullscreen" ? fullLiveScenes : ltLiveScenes;
-  const modeSendLabel = layoutMode === "fullscreen" ? "Push To OBS" : "Push To OBS";
-  const canSendSelectedVerse = Boolean(selectedBook && selectedChapter && selectedVerse);
-
   return (
     <div
       id="bible-module-root"
@@ -1736,7 +1618,7 @@ export function BibleModule({
         <div className="bible-header-left">
           <button className="bible-nav-btn" onClick={() => navigate(homePath)} title="Back to Layouts">
             <Icon name="arrow_back" size={20} />
-            Layouts
+            {presentationMode ? "Presentation" : "Layouts"}
           </button>
           <span className="bible-header-divider" />
           <span className="bible-header-title">
@@ -1935,7 +1817,9 @@ export function BibleModule({
               <div className="bible-utility-list">
                 {state.history.length === 0 ? (
                   <div className="bible-utility-empty">
-                    No history yet — verses you send to OBS will appear here
+                    {presentationMode
+                      ? "No history yet — verses you queue here will appear here"
+                      : "No history yet — verses you send to OBS will appear here"}
                   </div>
                 ) : (
                   state.history.slice(0, 5).map((entry, idx) => (
@@ -2026,7 +1910,9 @@ export function BibleModule({
                 <>
                   <div className="bible-search-result-count">
                     {searchResults.length >= 200 ? "200+ results" : `${searchResults.length} result${searchResults.length !== 1 ? "s" : ""}`}
-                    <span className="bible-search-result-hint"> — click to push to OBS</span>
+                    <span className="bible-search-result-hint">
+                      {presentationMode ? " — click to queue for presentation" : " — click to push to OBS"}
+                    </span>
                   </div>
                   <div className="bible-search-results">
                     {searchResults.map((r, idx) => (
@@ -2091,129 +1977,22 @@ export function BibleModule({
               onClose={() => setShowPreview(false)}
               slide={selectedPreviewSlide}
               subtitle={selectedPreviewSlide ? "Selected verse" : undefined}
+              themeSettings={previewTheme?.settings}
+              templateType={previewTheme?.templateType}
             />
+            {previewTheme?.settings && (
+              <BiblePreviewControls
+                settings={previewTheme.settings}
+                activeTab={previewPanelTab}
+                onTabChange={setPreviewPanelTab}
+                onUpdate={applyPreviewThemePatch}
+              />
+            )}
+
           </div>
 
           {/* ── Layout & Motion ── */}
-          <div className="bible-right-section bible-layout-section">
-            <div className="bible-layout-header">
-              <Icon name="view_quilt" size={20} />
-              <span className="bible-layout-header-label">Layout & Motion</span>
-            </div>
-            <div className="bible-layout-modes">
-              <button
-                className={`bible-layout-mode-btn${layoutMode === "fullscreen" ? " active" : ""}`}
-                onClick={() => handleLayoutClick("fullscreen")}
-                title="Fullscreen">
-                <Icon name="fullscreen" size={20} />
-                Full
-              </button>
-              <button
-                className={`bible-layout-mode-btn${layoutMode === "lower-third" ? " active" : ""}`}
-                onClick={() => handleLayoutClick("lower-third")}
-                title="Subtitles">
-                <Icon name="subtitles" size={20} />
-                Lower
-              </button>
-            </div>
 
-            {layoutMode === "fullscreen" && (
-              <>
-                <label className="bible-right-label">Full Theme (1-4 keys)</label>
-                <div
-                  className="bible-theme-selector"
-                  onClick={() => setShowThemeModal(true)}
-                >
-                  <div className="bible-theme-preview-thumb" style={fullThemePreviewStyle} />
-                  <span className="bible-theme-name">{activeFullTheme?.name ?? "Theme"}</span>
-                  <Icon name="expand_more" size={20} />
-                </div>
-              </>
-            )}
-
-            {layoutMode === "lower-third" && (
-              <>
-                <label className="bible-right-label">Lower Theme</label>
-                <div
-                  className="bible-theme-selector"
-                  onClick={() => setShowThemeModal(true)}
-                >
-                  <div className="bible-theme-preview-thumb bible-theme-preview-thumb--lt">
-                    {selectedLowerThemePreviewDoc ? (
-                      <iframe
-                        className="bible-theme-preview-frame"
-                        srcDoc={selectedLowerThemePreviewDoc}
-                        title={`${selectedLTTheme?.name ?? "Lower theme"} preview`}
-                        sandbox="allow-same-origin"
-                      />
-                    ) : (
-                      <Icon name="subtitles" size={20} />
-                    )}
-                  </div>
-                  <span className="bible-theme-name">{selectedLTTheme?.name ?? "Theme"}</span>
-                  <Icon name="expand_more" size={20} />
-                </div>
-                <span className="bible-inline-hint">
-                  Lower mode uses Bible lower-third themes when sending to OBS scenes.
-                </span>
-              </>
-            )}
-
-            <div className="bible-lt-sidebar">
-              {layoutMode === "lower-third" && selectedLTTheme && (
-                <div className="bible-lt-sidebar-field">
-                  <label>Size</label>
-                  <select
-                    className="bible-lt-sidebar-select"
-                    value={ltSize}
-                    onChange={(e) => setLtSize(e.target.value as LTSize)}
-                  >
-                    <option value="sm">Small</option>
-                    <option value="md">Medium</option>
-                    <option value="lg">Large</option>
-                    <option value="xl">XL</option>
-                    <option value="2xl">2XL</option>
-                    <option value="3xl">3XL</option>
-                  </select>
-                </div>
-              )}
-              {layoutMode === "lower-third" && !selectedLTTheme && (
-                <p className="bible-lt-sidebar-scene-empty">
-                  Choose a lower-third theme to send Bible overlays to OBS scenes.
-                </p>
-              )}
-
-              <ObsScenesPanel
-                title="OBS Scenes (Full & Lower)"
-                contentLabel={layoutMode === "fullscreen" ? "full Bible overlay" : "Bible lower-third"}
-                description={`These are your current scenes in OBS. Click ${modeSendLabel} on any scene to send output.`}
-                connected={obsConnected}
-                scenes={ltScenes.map((sceneName, sceneIndex) => ({ sceneName, sceneIndex }))}
-                mainScene={serviceStore.sceneMapping.mainScene}
-                activeScene={ltProgramScene}
-                activeScenes={activeModeLiveScenes}
-                refreshing={ltScenesRefreshing}
-                disabled={ltSending || !canSendSelectedVerse || (layoutMode === "lower-third" && !selectedLTTheme)}
-                sendLabel={modeSendLabel}
-                onRefresh={handleRefreshLtScenes}
-                onSendToScene={async (sceneName, mode) => {
-                  if (layoutMode === "fullscreen") {
-                    await handleFullSendToScene(sceneName, mode);
-                  } else {
-                    await handleLtSendToScene(sceneName, mode);
-                  }
-                  triggerFlash();
-                }}
-              />
-
-              {activeModeLiveScenes.length > 0 && (
-                <div className="bible-lt-sidebar-live-indicator">
-                  <span className="bible-lt-sidebar-live-dot" />
-                  <span>Live on {activeModeLiveScenes.length} scene{activeModeLiveScenes.length !== 1 ? "s" : ""} — updates in real-time</span>
-                </div>
-              )}
-            </div>
-          </div>
 
           {/* ── Pro Tools ── */}
           {/* <div className="bible-right-section bible-right-pro">
@@ -2254,10 +2033,10 @@ export function BibleModule({
             <span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
             <span><kbd>Shift+←</kbd><kbd>↓</kbd> Prev Ch.</span>
             <span><kbd>Shift+→</kbd><kbd>↑</kbd> Next Ch.</span>
-            <span><kbd>Click</kbd> Push To OBS</span>
+            <span><kbd>Click</kbd> {presentationMode ? "Queue Verse" : "Push To OBS"}</span>
             <span><kbd>⌘/Ctrl+1-9</kbd> Theme</span>
             <span><kbd>Ctrl+D</kbd> Favorite</span>
-            <span><kbd>Esc</kbd> Remove From OBS</span>
+            <span><kbd>Esc</kbd> {presentationMode ? "Clear Screen" : "Remove From OBS"}</span>
           </div>
         </div>
       </div>

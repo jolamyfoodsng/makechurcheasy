@@ -58,6 +58,7 @@ export async function syncPresentationRemoteAccessInfo(
   savePresentationSettings({
     ...current,
     presentationLink: info.link,
+    updatedAt: new Date().toISOString(),
   });
 
   return info;

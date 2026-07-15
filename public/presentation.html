@@ -8,13 +8,12 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #050816;
-      --bg-soft: #0d1328;
+      --bg: #000000;
       --fg: #f8fafc;
-      --muted: rgba(226, 232, 240, 0.76);
-      --accent: #60a5fa;
-      --panel: rgba(9, 14, 30, 0.72);
-      --border: rgba(148, 163, 184, 0.18);
+      --muted: rgba(226, 232, 240, 0.78);
+      --panel: rgba(15, 23, 42, 0.86);
+      --border: rgba(148, 163, 184, 0.24);
+      --accent: #38bdf8;
     }
 
     * {
@@ -23,13 +22,11 @@
 
     html,
     body {
+      width: 100vw;
+      height: 100vh;
       margin: 0;
-      width: 100%;
-      height: 100%;
       overflow: hidden;
-      background:
-        radial-gradient(circle at top, rgba(96, 165, 250, 0.18), transparent 32%),
-        linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);
+      background: #000;
       color: var(--fg);
       font-family: "Inter", "Segoe UI", sans-serif;
     }
@@ -38,263 +35,287 @@
       position: relative;
     }
 
-    .screen {
-      position: relative;
-      width: 100%;
-      height: 100%;
+    .remote-screen {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+      overflow: hidden;
     }
 
-    .fullscreen-layer {
+    .remote-stage {
       position: absolute;
       inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: clamp(32px, 5vw, 72px);
+      background: transparent;
+      overflow: hidden;
     }
 
-    .fullscreen-shell {
-      width: min(1200px, 100%);
-      display: flex;
-      flex-direction: column;
-      gap: 22px;
-      text-align: center;
-      align-items: center;
-    }
-
-    .fullscreen-kicker {
-      font-size: clamp(18px, 1.35vw, 28px);
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--accent);
-    }
-
-    .fullscreen-title {
-      font-size: clamp(28px, 2vw, 40px);
-      font-weight: 600;
-      color: var(--muted);
-    }
-
-    .fullscreen-body {
-      font-size: clamp(42px, 4.1vw, 78px);
-      line-height: 1.12;
-      font-weight: 700;
-      white-space: pre-wrap;
-    }
-
-    .fullscreen-subtitle {
-      display: none;
-      font-size: clamp(22px, 1.75vw, 34px);
-      line-height: 1.35;
-      color: var(--muted);
-      white-space: pre-wrap;
-    }
-
-    .fullscreen-image,
-    .fullscreen-video {
+    .stage-bg,
+    .stage-bg img,
+    .stage-bg video {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
+    }
+
+    .stage-bg img,
+    .stage-bg video {
       object-fit: cover;
       background: #000;
     }
 
-    .fullscreen-media-mask {
+    .stage-overlay {
       position: absolute;
       inset: 0;
-      background: linear-gradient(180deg, rgba(2, 6, 23, 0.08), rgba(2, 6, 23, 0.5));
     }
 
-    .lower-third-layer {
+    .stage-content {
       position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      padding: clamp(18px, 3vw, 36px);
+      inset: 0;
       display: flex;
+      align-items: center;
       justify-content: center;
-      pointer-events: none;
+      padding: clamp(28px, 4vw, 72px);
     }
 
-    .lower-third-card {
-      min-width: min(720px, 100%);
-      max-width: min(1400px, 100%);
-      border: 1px solid var(--border);
-      border-radius: 28px;
-      background: linear-gradient(135deg, rgba(8, 12, 26, 0.88), rgba(17, 24, 39, 0.88));
-      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
-      padding: 24px 28px;
-      backdrop-filter: blur(18px);
-    }
-
-    .lt-title {
-      font-size: clamp(28px, 2.4vw, 52px);
-      font-weight: 800;
-      line-height: 1.05;
-    }
-
-    .lt-subtitle,
-    .lt-body {
-      margin-top: 8px;
-      font-size: clamp(18px, 1.25vw, 30px);
-      line-height: 1.35;
-      color: var(--muted);
+    .stage-box {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      max-width: min(1440px, 100%);
+      width: 100%;
+      text-align: center;
       white-space: pre-wrap;
     }
 
-    .countdown-wrap {
+    .stage-box.align-left {
+      text-align: left;
+      align-items: flex-start;
+    }
+
+    .stage-box.align-center {
+      text-align: center;
+      align-items: center;
+    }
+
+    .stage-box.align-right {
+      text-align: right;
+      align-items: flex-end;
+    }
+
+    .stage-reference {
+      font-size: clamp(16px, 1.4vw, 26px);
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .stage-title {
+      font-size: clamp(28px, 2.6vw, 56px);
+      font-weight: 700;
+      line-height: 1.08;
+    }
+
+    .stage-subtitle {
+      font-size: clamp(18px, 1.5vw, 30px);
+      color: var(--muted);
+    }
+
+    .stage-body {
+      font-size: clamp(34px, 4vw, 86px);
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .media-layer,
+    .media-layer img,
+    .media-layer video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+    }
+
+    .media-layer img,
+    .media-layer video {
+      object-position: center center;
+    }
+
+    .countdown-shell {
       display: flex;
       flex-direction: column;
-      gap: 14px;
       align-items: center;
+      gap: 18px;
+      text-align: center;
     }
 
     .countdown-clock {
-      font-size: clamp(72px, 9vw, 168px);
+      font-variant-numeric: tabular-nums;
+      font-size: clamp(84px, 10vw, 210px);
       line-height: 1;
       font-weight: 800;
-      letter-spacing: 0.05em;
-      font-variant-numeric: tabular-nums;
     }
 
     .countdown-message {
-      font-size: clamp(22px, 1.8vw, 34px);
+      font-size: clamp(20px, 1.8vw, 34px);
       color: var(--muted);
-      text-align: center;
-      white-space: pre-wrap;
     }
 
-    .waiting {
+    .ticker-layer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      z-index: 4;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .ticker-layer.ticker-top {
+      top: 0;
+    }
+
+    .ticker-layer.ticker-bottom {
+      bottom: 0;
+    }
+
+    .ticker-bar {
+      width: 100%;
+      padding: 14px 0;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .ticker-track {
+      display: inline-block;
+      padding-inline: 4vw;
+      will-change: transform;
+    }
+
+    .ticker-track.ticker-rtl {
+      animation-name: ticker-rtl;
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+    }
+
+    .ticker-track.ticker-ltr {
+      animation-name: ticker-ltr;
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+    }
+
+    .ticker-track.ticker-static {
+      display: block;
+      text-align: center;
+    }
+
+    .ticker-paused {
+      animation-play-state: paused !important;
+    }
+
+    .waiting-state,
+    .invalid-state {
       position: absolute;
       inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      padding: 32px;
+      background: #000;
     }
 
-    .waiting-card {
+    .state-card {
+      max-width: min(620px, 100%);
       border: 1px solid var(--border);
       background: var(--panel);
-      border-radius: 24px;
-      padding: 28px 32px;
+      border-radius: 18px;
+      padding: 30px 34px;
       text-align: center;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
       backdrop-filter: blur(18px);
-      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
     }
 
-    .waiting-title {
-      font-size: 24px;
+    .state-title {
+      font-size: 28px;
       font-weight: 700;
     }
 
-    .waiting-subtitle {
+    .state-copy {
       margin-top: 10px;
       font-size: 16px;
       color: var(--muted);
+      line-height: 1.55;
+      white-space: pre-wrap;
     }
 
     .hidden {
       display: none !important;
     }
+
+    @keyframes ticker-rtl {
+      from {
+        transform: translateX(100%);
+      }
+
+      to {
+        transform: translateX(-100%);
+      }
+    }
+
+    @keyframes ticker-ltr {
+      from {
+        transform: translateX(-100%);
+      }
+
+      to {
+        transform: translateX(100%);
+      }
+    }
   </style>
 </head>
 
 <body>
-  <div class="screen">
-    <div id="fullscreenLayer" class="fullscreen-layer hidden"></div>
-    <div id="lowerThirdLayer" class="lower-third-layer hidden"></div>
-    <div id="waiting" class="waiting">
-      <div class="waiting-card">
-        <div class="waiting-title">Presentation Ready</div>
-        <div class="waiting-subtitle">Waiting for content from Presentation Console.</div>
+  <div class="remote-screen">
+    <div id="waitingState" class="waiting-state hidden">
+      <div class="state-card">
+        <div class="state-title">MakeChurchEasy Presentation</div>
+        <div class="state-copy">Waiting for presentation content…</div>
       </div>
     </div>
+    <div id="invalidState" class="invalid-state hidden">
+      <div class="state-card">
+        <div class="state-title">Presentation link is invalid</div>
+        <div class="state-copy">Open the locally generated presentation link from MakeChurchEasy again.</div>
+      </div>
+    </div>
+    <div id="stage" class="remote-stage"></div>
   </div>
 
   <script>
     (function () {
-      const params = new URLSearchParams(window.location.search);
-      const sessionId = params.get("sessionId") || "";
-      const wsPort = Number(params.get("wsPort") || "0");
-      const viewerIdKey = `mce-presentation-viewer:${sessionId}`;
-      const storageKey = `mce-presentation-state:${sessionId}`;
-      const channelName = `mce-presentation:${sessionId}`;
-      const fullscreenLayer = document.getElementById("fullscreenLayer");
-      const lowerThirdLayer = document.getElementById("lowerThirdLayer");
-      const waiting = document.getElementById("waiting");
+      const remoteScreen = document.querySelector(".remote-screen");
+      const waitingState = document.getElementById("waitingState");
+      const invalidState = document.getElementById("invalidState");
+      const stage = document.getElementById("stage");
 
-      let state = null;
-      let countdownTick = null;
+      let sessionId = "";
+      let wsPort = 0;
+      let viewerId = "";
       let socket = null;
-      let heartbeatTick = null;
-      let fallbackPollTick = null;
       let reconnectTimer = null;
       let reconnectAttempt = 0;
+      let heartbeatTimer = null;
+      let pollTimer = null;
+      let countdownTimer = null;
+      let lastResolvedState = undefined;
+
       const reconnectDelays = [1000, 3000, 5000, 10000];
 
-      function getViewerId() {
-        if (!sessionId) return "";
-        try {
-          const existing = sessionStorage.getItem(viewerIdKey);
-          if (existing) return existing;
-          const next = (self.crypto && crypto.randomUUID)
-            ? crypto.randomUUID()
-            : `viewer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-          sessionStorage.setItem(viewerIdKey, next);
-          return next;
-        } catch {
-          return `viewer-${Date.now()}`;
-        }
-      }
-
-      const viewerId = getViewerId();
-
-      function persistState(nextState) {
-        if (!nextState || !nextState.sessionId) return;
-        try {
-          localStorage.setItem(storageKey, JSON.stringify(nextState));
-        } catch {
-          // Ignore storage failures.
-        }
-      }
-
-      function formatDuration(totalSeconds, showHours, showMinutes, showSeconds) {
-        const safeSeconds = Math.max(0, Math.floor(totalSeconds));
-        const hours = Math.floor(safeSeconds / 3600);
-        const minutes = Math.floor((safeSeconds % 3600) / 60);
-        const seconds = safeSeconds % 60;
-        const parts = [];
-
-        if (showHours || hours > 0) {
-          parts.push(String(hours).padStart(2, "0"));
-        }
-        if (showMinutes || parts.length > 0) {
-          parts.push(String(minutes).padStart(2, "0"));
-        }
-        if (showSeconds || parts.length === 0) {
-          parts.push(String(seconds).padStart(2, "0"));
-        }
-        return parts.join(":");
-      }
-
-      function getCountdownRemaining(payload) {
-        if (!payload || !payload.config || !payload.config.timer) return 0;
-        const timer = payload.config.timer;
-        if (timer.mode === "end-at-time" && timer.endAt) {
-          return Math.max(0, Math.floor((new Date(timer.endAt).getTime() - Date.now()) / 1000));
-        }
-        const startedAt = Number(payload.startedAt || Date.now());
-        return Math.max(0, Number(timer.durationSeconds || 0) - Math.floor((Date.now() - startedAt) / 1000));
-      }
-
-      function clearCountdownTick() {
-        if (countdownTick !== null) {
-          window.clearInterval(countdownTick);
-          countdownTick = null;
-        }
+      function parseTokenFromPath() {
+        const match = window.location.pathname.match(/\/p\/([^/?#]+)/i);
+        return match ? decodeURIComponent(match[1]) : "";
       }
 
       function escapeHtml(value) {
@@ -306,118 +327,350 @@
           .replaceAll("'", "&#39;");
       }
 
-      function renderCountdown(target, item, compact) {
-        const config = item.countdown && item.countdown.config;
-        if (!config) {
-          target.innerHTML = "";
-          return;
+      function getSessionId() {
+        const params = new URLSearchParams(window.location.search);
+        return parseTokenFromPath() || params.get("sessionId") || "";
+      }
+
+      function getViewerId() {
+        if (!sessionId) return "";
+        const key = `mce-presentation-viewer:${sessionId}`;
+        try {
+          const existing = sessionStorage.getItem(key);
+          if (existing) return existing;
+          const next = self.crypto && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `viewer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          sessionStorage.setItem(key, next);
+          return next;
+        } catch {
+          return `viewer-${Date.now()}`;
         }
+      }
 
-        const title = compact
-          ? `<div class="lt-title">${escapeHtml(item.title || config.title || "Countdown")}</div>`
-          : `<div class="fullscreen-title">${escapeHtml(item.title || config.title || "Countdown")}</div>`;
-        const subtitle = item.subtitle || config.text && config.text.subtitle || "";
-        const message = config.message && config.message.text ? config.message.text : "";
+      function clearCountdownTimer() {
+        if (countdownTimer !== null) {
+          window.clearInterval(countdownTimer);
+          countdownTimer = null;
+        }
+      }
 
-        target.innerHTML = `
-            <div class="${compact ? "lower-third-card" : "fullscreen-shell"}">
-              <div class="countdown-wrap">
-                ${title}
-                <div class="countdown-clock" id="${compact ? "ltCountdownClock" : "fsCountdownClock"}"></div>
-                ${message ? `<div class="countdown-message">${escapeHtml(message)}</div>` : ""}
+      function showInvalid() {
+        if (remoteScreen) {
+          remoteScreen.style.background = "#000";
+        }
+        stage.style.background = "transparent";
+        invalidState.classList.remove("hidden");
+        waitingState.classList.add("hidden");
+        stage.innerHTML = "";
+      }
+
+      function showWaiting() {
+        if (remoteScreen) {
+          remoteScreen.style.background = "#000";
+        }
+        stage.style.background = "transparent";
+        invalidState.classList.add("hidden");
+        waitingState.classList.remove("hidden");
+        stage.innerHTML = "";
+      }
+
+      function showBlank() {
+        invalidState.classList.add("hidden");
+        waitingState.classList.add("hidden");
+        stage.innerHTML = "";
+        if (remoteScreen) {
+          remoteScreen.style.background = "#000";
+        }
+        stage.style.background = "transparent";
+      }
+
+      function getContentUrl(value) {
+        const trimmed = String(value || "").trim();
+        if (!trimmed) return "";
+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
+          return trimmed;
+        }
+        if (trimmed.startsWith("/")) {
+          return trimmed;
+        }
+        return `/${trimmed.replace(/^\/+/, "")}`;
+      }
+
+      function getStyle(item) {
+        return item && item.style ? item.style : {};
+      }
+
+      function renderTextLayer(item) {
+        const style = getStyle(item);
+        const alignClass = `align-${style.textAlign || "center"}`;
+        const bodySize = style.fontSize ? `${Math.max(18, Number(style.fontSize))}px` : "";
+        const bodyColor = style.textColor || "#ffffff";
+        const boxBackground = style.overlayColor && Number(style.overlayOpacity || 0) > 0
+          ? style.overlayColor
+          : "transparent";
+        const boxOpacity = Number(style.overlayOpacity || 0);
+        const overlayShade = style.backgroundColor || "#000000";
+
+        const bgImage = getContentUrl(style.backgroundImage);
+        const bgVideo = getContentUrl(style.backgroundVideo);
+        const hasText = item.title || item.body || item.reference || item.subtitle;
+
+        return `
+          <div class="stage-bg">
+            ${bgImage ? `<img src="${escapeHtml(bgImage)}" alt="" style="object-fit:cover;opacity:${Math.max(0, Math.min(1, Number(style.backgroundOpacity || 1)))};" />` : ""}
+            ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" autoplay muted loop playsinline style="object-fit:cover;opacity:${Math.max(0, Math.min(1, Number(style.backgroundOpacity || 1)))};"></video>` : ""}
+          </div>
+          <div class="stage-overlay" style="background:${escapeHtml(overlayShade)};opacity:${Math.max(0, Math.min(1, Number(style.backgroundOpacity == null ? 1 : style.backgroundOpacity)))};"></div>
+          ${hasText ? `
+            <div class="stage-content" style="padding:${Math.max(0, Number(style.safeArea || style.padding || 48))}px;">
+              <div class="stage-box ${alignClass}" style="
+                color:${escapeHtml(bodyColor)};
+                font-family:${escapeHtml(style.fontFamily || '"Inter", "Segoe UI", sans-serif')};
+                font-weight:${escapeHtml(String(style.fontWeight || 700))};
+                line-height:${Math.max(1, Number(style.lineHeight || 1.2))};
+                text-shadow:${escapeHtml(style.textShadow || "0 12px 40px rgba(0,0,0,0.45)")};
+                background:${escapeHtml(boxBackground)};
+                border-radius:${Math.max(0, Number(style.padding || 0) * 0.25)}px;
+                padding:${boxOpacity > 0 ? `${Math.max(12, Number(style.padding || 24))}px` : "0"};
+                opacity:1;
+              ">
+                ${item.reference ? `<div class="stage-reference">${escapeHtml(item.reference)}</div>` : ""}
+                ${item.title ? `<div class="stage-title">${escapeHtml(item.title)}</div>` : ""}
+                ${item.subtitle ? `<div class="stage-subtitle">${escapeHtml(item.subtitle)}</div>` : ""}
+                ${item.body ? `<div class="stage-body" style="font-size:${bodySize || "clamp(34px, 4vw, 86px)"};">${escapeHtml(item.body)}</div>` : ""}
               </div>
             </div>
-          `;
-
-        const clock = target.querySelector(".countdown-clock");
-        const updateClock = function () {
-          if (!clock) return;
-          const remaining = getCountdownRemaining(item.countdown);
-          const timer = item.countdown.config.timer;
-          clock.textContent = formatDuration(
-            remaining,
-            Boolean(timer.showHours),
-            Boolean(timer.showMinutes),
-            Boolean(timer.showSeconds),
-          );
-        };
-
-        updateClock();
-        clearCountdownTick();
-        countdownTick = window.setInterval(updateClock, 1000);
+          ` : ""}
+        `;
       }
 
-      function renderFullscreen(item) {
-        if (!item) {
-          fullscreenLayer.classList.add("hidden");
-          return;
+      function getMediaFit(value) {
+        switch (value) {
+          case "fit":
+          case "contain":
+            return "contain";
+          case "stretch":
+            return "fill";
+          case "fill":
+          default:
+            return "cover";
+        }
+      }
+
+      function syncVideoPlayback(video, playback) {
+        if (!video || !playback) return;
+        video.muted = Boolean(playback.muted);
+        video.loop = Boolean(playback.loop);
+        video.volume = Math.max(0, Math.min(1, Number(playback.volume == null ? 1 : playback.volume)));
+
+        const desiredPosition = Number(playback.positionSeconds || 0);
+        if (Number.isFinite(desiredPosition) && Math.abs(video.currentTime - desiredPosition) > 1.2) {
+          try {
+            video.currentTime = desiredPosition;
+          } catch {
+            // Ignore seek failures until metadata is ready.
+          }
         }
 
-        fullscreenLayer.classList.remove("hidden");
-
-        if (item.countdown) {
-          renderCountdown(fullscreenLayer, item, false);
-          return;
+        if (playback.playing === false) {
+          video.pause();
+        } else {
+          video.play().catch(function () { });
         }
+      }
 
-        if (item.videoUrl) {
-          fullscreenLayer.innerHTML = `
-              <video class="fullscreen-video" src="${escapeHtml(item.videoUrl)}" autoplay muted loop playsinline></video>
-              <div class="fullscreen-media-mask"></div>
-            `;
-          return;
+      function renderMediaLayer(item) {
+        const media = item.media || {};
+        const fit = getMediaFit(media.fit);
+        const background = media.backgroundColor || "#000000";
+        const src = getContentUrl(media.url || item.imageUrl || item.videoUrl);
+        const isVideo = media.kind === "video" || Boolean(item.videoUrl);
+
+        return `
+          <div class="media-layer" style="background:${escapeHtml(background)};">
+            ${isVideo
+              ? `<video id="stageVideo" src="${escapeHtml(src)}" autoplay muted loop playsinline style="object-fit:${fit};"></video>`
+              : `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title || "Presentation media")}" style="object-fit:${fit};" />`}
+          </div>
+        `;
+      }
+
+      function calculateRemainingSeconds(payload) {
+        if (!payload) return 0;
+        if (payload.status === "completed") return 0;
+        if (payload.status === "paused") {
+          return Math.max(0, Math.floor(Number(payload.pausedRemainingSeconds || 0)));
         }
-
-        if (item.imageUrl) {
-          fullscreenLayer.innerHTML = `
-              <img class="fullscreen-image" src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.title || "Presentation media")}" />
-              <div class="fullscreen-media-mask"></div>
-            `;
-          return;
+        if (payload.mode === "time" && payload.endsAt) {
+          return Math.max(0, Math.floor((new Date(payload.endsAt).getTime() - Date.now()) / 1000));
         }
+        if (payload.status === "running" && payload.startedAt) {
+          const startedAt = new Date(payload.startedAt).getTime();
+          const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+          return Math.max(0, Math.floor(Number(payload.durationSeconds || 0)) - elapsedSeconds);
+        }
+        if (payload.pausedRemainingSeconds != null) {
+          return Math.max(0, Math.floor(Number(payload.pausedRemainingSeconds)));
+        }
+        return Math.max(0, Math.floor(Number(payload.durationSeconds || 0)));
+      }
 
-        fullscreenLayer.innerHTML = `
-            <div class="fullscreen-shell">
-              ${item.reference ? `<div class="fullscreen-kicker">${escapeHtml(item.reference)}</div>` : ""}
-              ${item.title ? `<div class="fullscreen-title">${escapeHtml(item.title)}</div>` : ""}
-              ${item.body ? `<div class="fullscreen-body">${escapeHtml(item.body)}</div>` : ""}
+      function formatClock(seconds, payload) {
+        const safeSeconds = Math.max(0, Math.floor(seconds));
+        const hours = Math.floor(safeSeconds / 3600);
+        const minutes = Math.floor((safeSeconds % 3600) / 60);
+        const secs = safeSeconds % 60;
+        const showHours = Boolean(payload.showHours || hours > 0);
+        const showMinutes = payload.showMinutes !== false || showHours;
+        const showSeconds = payload.showSeconds !== false || !showMinutes;
+        const parts = [];
+
+        if (showHours) {
+          parts.push(String(hours).padStart(2, "0"));
+        }
+        if (showMinutes) {
+          parts.push(String(minutes).padStart(2, "0"));
+        }
+        if (showSeconds) {
+          parts.push(String(secs).padStart(2, "0"));
+        }
+        return parts.join(":");
+      }
+
+      function renderCountdownLayer(item) {
+        const payload = item.countdown || {};
+        const style = getStyle(item);
+        const bgImage = getContentUrl(style.backgroundImage);
+        const bgVideo = getContentUrl(style.backgroundVideo);
+        const textColor = style.textColor || "#ffffff";
+        const title = payload.showTitle === false ? "" : (payload.title || item.title || "Countdown");
+        const message = payload.completionMessage || item.subtitle || "";
+
+        return `
+          <div class="stage-bg">
+            ${bgImage ? `<img src="${escapeHtml(bgImage)}" alt="" style="object-fit:cover;" />` : ""}
+            ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" autoplay muted loop playsinline style="object-fit:cover;"></video>` : ""}
+          </div>
+          <div class="stage-overlay" style="background:${escapeHtml(style.backgroundColor || "#000000")};opacity:${Math.max(0, Math.min(1, Number(style.backgroundOpacity == null ? 1 : style.backgroundOpacity)))};"></div>
+          <div class="stage-content">
+            <div class="countdown-shell" style="
+              color:${escapeHtml(textColor)};
+              font-family:${escapeHtml(style.fontFamily || '"Inter", "Segoe UI", sans-serif')};
+              text-shadow:${escapeHtml(style.textShadow || "0 12px 40px rgba(0,0,0,0.45)")};
+            ">
+              ${title ? `<div class="stage-title">${escapeHtml(title)}</div>` : ""}
+              <div id="countdownClock" class="countdown-clock"></div>
+              ${message ? `<div class="countdown-message">${escapeHtml(message)}</div>` : ""}
             </div>
-          `;
+          </div>
+        `;
       }
 
-      function renderLowerThird(item) {
-        if (!item) {
-          lowerThirdLayer.classList.add("hidden");
-          return;
-        }
+      function renderTickerLayer(item) {
+        const ticker = item.ticker || {};
+        if (!ticker.text || ticker.hidden) return "";
+        const direction = ticker.direction || "rtl";
+        const durationSeconds = Math.max(6, 42 / Math.max(0.25, Number(ticker.speed || 1)));
+        const pausedClass = ticker.paused ? "ticker-paused" : "";
+        const directionClass = direction === "ltr"
+          ? "ticker-ltr"
+          : direction === "static"
+            ? "ticker-static"
+            : "ticker-rtl";
+        const positionClass = ticker.position === "top" ? "ticker-top" : "ticker-bottom";
 
-        lowerThirdLayer.classList.remove("hidden");
-
-        if (item.countdown) {
-          renderCountdown(lowerThirdLayer, item, true);
-          return;
-        }
-
-        lowerThirdLayer.innerHTML = `
-            <div class="lower-third-card">
-              <div class="lt-title">${escapeHtml(item.title || item.reference || "")}</div>
-              ${item.subtitle ? `<div class="lt-subtitle">${escapeHtml(item.subtitle)}</div>` : ""}
-              ${item.body ? `<div class="lt-body">${escapeHtml(item.body)}</div>` : ""}
+        return `
+          <div class="ticker-layer ${positionClass}">
+            <div class="ticker-bar" style="
+              background:${escapeHtml(ticker.backgroundColor || "#000000")};
+              color:${escapeHtml(ticker.textColor || "#ffffff")};
+              font-size:${Math.max(16, Number(ticker.fontSize || 32))}px;
+              font-weight:700;
+            ">
+              <div class="ticker-track ${directionClass} ${pausedClass}" style="animation-duration:${durationSeconds}s;">
+                ${escapeHtml(ticker.text)}
+              </div>
             </div>
-          `;
+          </div>
+        `;
       }
 
-      function render(nextState) {
-        state = nextState;
-        persistState(nextState);
-        const hasFullscreen = Boolean(state && state.fullscreen);
-        const hasLowerThird = Boolean(state && state.lowerThird);
-        waiting.classList.toggle("hidden", hasFullscreen || hasLowerThird);
-        renderFullscreen(state ? state.fullscreen : null);
-        renderLowerThird(state ? state.lowerThird : null);
-        if (!hasFullscreen && !hasLowerThird) {
-          clearCountdownTick();
+      function renderItem(item) {
+        clearCountdownTimer();
+        waitingState.classList.add("hidden");
+        invalidState.classList.add("hidden");
+
+        if (!item) {
+          showBlank();
+          return;
         }
+
+        const isCountdown = Boolean(item.countdown);
+        const isMedia = Boolean(item.media) || Boolean(item.imageUrl) || Boolean(item.videoUrl);
+        const tickerMarkup = item.ticker ? renderTickerLayer(item) : "";
+        const stageMarkup = isCountdown
+          ? renderCountdownLayer(item)
+            : isMedia
+              ? renderMediaLayer(item)
+              : renderTextLayer(item);
+
+        if (remoteScreen) {
+          remoteScreen.style.background = getStyle(item).backgroundColor || "#000000";
+        }
+        stage.style.background = "transparent";
+        stage.innerHTML = `${stageMarkup}${tickerMarkup}`;
+
+        if (isCountdown) {
+          const payload = item.countdown || {};
+          const clock = document.getElementById("countdownClock");
+          const updateClock = function () {
+            if (!clock) return;
+            const remaining = calculateRemainingSeconds(payload);
+            clock.textContent = formatClock(remaining, payload);
+          };
+          updateClock();
+          countdownTimer = window.setInterval(updateClock, 250);
+          return;
+        }
+
+        const video = document.getElementById("stageVideo");
+        if (video && item.media && item.media.playback) {
+          const applyPlayback = function () {
+            syncVideoPlayback(video, item.media.playback);
+          };
+          video.addEventListener("loadedmetadata", applyPlayback, { once: true });
+          applyPlayback();
+        }
+      }
+
+      function applyRemoteState(nextState) {
+        lastResolvedState = nextState;
+        if (nextState === undefined) {
+          showWaiting();
+          return;
+        }
+        if (nextState === null) {
+          showWaiting();
+          return;
+        }
+
+        const item = nextState.fullscreen || nextState.lowerThird || null;
+        if (!item) {
+          showBlank();
+          return;
+        }
+        renderItem(item);
+      }
+
+      async function fetchMeta() {
+        const response = await fetch(`/api/presentation-meta?sessionId=${encodeURIComponent(sessionId)}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error("meta");
+        }
+        return response.json();
       }
 
       async function fetchState() {
@@ -428,13 +681,13 @@
           });
           if (!response.ok) return;
           const payload = await response.json();
-          if (payload && payload.state) {
-            render(payload.state);
-          } else if (payload && payload.sessionId) {
-            render(payload);
+          if (payload && Object.prototype.hasOwnProperty.call(payload, "state")) {
+            applyRemoteState(payload.state || null);
+            return;
           }
+          applyRemoteState(payload || null);
         } catch {
-          // Ignore network errors during polling.
+          // Ignore fetch errors. Polling will retry.
         }
       }
 
@@ -455,8 +708,36 @@
             body: JSON.stringify({ sessionId, viewerId }),
           });
         } catch {
-          // Ignore heartbeat failures and retry on next interval.
+          // Ignore heartbeat failures.
         }
+      }
+
+      function stopHeartbeat() {
+        if (heartbeatTimer !== null) {
+          window.clearInterval(heartbeatTimer);
+          heartbeatTimer = null;
+        }
+      }
+
+      function startHeartbeat() {
+        stopHeartbeat();
+        heartbeatTimer = window.setInterval(sendHeartbeat, 10000);
+      }
+
+      function stopPolling() {
+        if (pollTimer !== null) {
+          window.clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }
+
+      function startPolling() {
+        if (pollTimer !== null) return;
+        pollTimer = window.setInterval(function () {
+          if (document.visibilityState === "hidden") return;
+          void fetchState();
+          void sendHeartbeat();
+        }, 12000);
       }
 
       function clearReconnectTimer() {
@@ -466,37 +747,9 @@
         }
       }
 
-      function stopHeartbeat() {
-        if (heartbeatTick !== null) {
-          window.clearInterval(heartbeatTick);
-          heartbeatTick = null;
-        }
-      }
-
-      function startHeartbeat() {
-        stopHeartbeat();
-        heartbeatTick = window.setInterval(sendHeartbeat, 10000);
-      }
-
-      function stopFallbackPolling() {
-        if (fallbackPollTick !== null) {
-          window.clearInterval(fallbackPollTick);
-          fallbackPollTick = null;
-        }
-      }
-
-      function startFallbackPolling() {
-        if (fallbackPollTick !== null) return;
-        fallbackPollTick = window.setInterval(function () {
-          if (document.visibilityState === "hidden") return;
-          void fetchState();
-          void sendHeartbeat();
-        }, 15000);
-      }
-
       function scheduleReconnect() {
         if (!sessionId || wsPort <= 0) {
-          startFallbackPolling();
+          startPolling();
           return;
         }
 
@@ -505,13 +758,13 @@
         reconnectTimer = window.setTimeout(function () {
           reconnectTimer = null;
           reconnectAttempt += 1;
-          connectWebSocket();
+          connectSocket();
         }, delay);
       }
 
-      function connectWebSocket() {
+      function connectSocket() {
         if (!sessionId || wsPort <= 0) {
-          startFallbackPolling();
+          startPolling();
           return;
         }
 
@@ -519,101 +772,101 @@
           return;
         }
 
-        const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const wsUrl = `${wsProtocol}//${window.location.hostname}:${wsPort}`;
-
         try {
-          socket = new WebSocket(wsUrl);
+          const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+          const host = window.location.hostname || "127.0.0.1";
+          socket = new WebSocket(`${protocol}//${host}:${wsPort}`);
         } catch {
-          startFallbackPolling();
+          socket = null;
           scheduleReconnect();
           return;
         }
 
         socket.addEventListener("open", function () {
           reconnectAttempt = 0;
-          clearReconnectTimer();
-          stopFallbackPolling();
-          startHeartbeat();
+          stopPolling();
           socket.send(JSON.stringify({
             type: "viewer_hello",
             sessionId,
             viewerId,
           }));
-          void fetchState();
+          void sendHeartbeat();
         });
 
         socket.addEventListener("message", function (event) {
           try {
             const payload = JSON.parse(event.data);
-            if (
-              payload
-              && payload.type === "presentation_state"
-              && payload.sessionId === sessionId
-              && payload.state
-            ) {
-              render(payload.state);
+            if (payload && payload.type === "presentation_state" && payload.sessionId === sessionId) {
+              applyRemoteState(payload.state || null);
             }
           } catch {
-            // Ignore invalid messages.
+            // Ignore malformed socket messages.
           }
         });
 
         socket.addEventListener("close", function () {
           socket = null;
-          stopHeartbeat();
-          startFallbackPolling();
           scheduleReconnect();
         });
 
         socket.addEventListener("error", function () {
-          socket = null;
-          stopHeartbeat();
-          startFallbackPolling();
-          scheduleReconnect();
+          if (socket) {
+            socket.close();
+          }
         });
       }
 
-      if (!sessionId) {
-        waiting.querySelector(".waiting-title").textContent = "Presentation Link Invalid";
-        waiting.querySelector(".waiting-subtitle").textContent = "Missing sessionId in the URL.";
-        return;
-      }
-
-      try {
-        const stored = localStorage.getItem(storageKey);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed && parsed.sessionId === sessionId) {
-            render(parsed);
-          }
+      async function bootstrap() {
+        sessionId = getSessionId();
+        if (!sessionId) {
+          showInvalid();
+          return;
         }
-      } catch {
-        // Ignore invalid local cache.
-      }
 
-      try {
-        const channel = new BroadcastChannel(channelName);
-        channel.onmessage = function (event) {
-          if (event.data && event.data.sessionId === sessionId) {
-            render(event.data);
+        viewerId = getViewerId();
+        showWaiting();
+
+        try {
+          const params = new URLSearchParams(window.location.search);
+          wsPort = Number(params.get("wsPort") || "0");
+          if (wsPort <= 0) {
+            const meta = await fetchMeta();
+            wsPort = Number(meta && meta.wsPort ? meta.wsPort : 0);
           }
-        };
-      } catch {
-        // BroadcastChannel is optional.
-      }
+        } catch {
+          wsPort = 0;
+        }
 
-      void fetchState();
-      void sendHeartbeat();
-      connectWebSocket();
-      startFallbackPolling();
+        await fetchState();
+        connectSocket();
+        startHeartbeat();
+        startPolling();
+        void sendHeartbeat();
+      }
 
       document.addEventListener("visibilitychange", function () {
         if (document.visibilityState === "visible") {
           void fetchState();
           void sendHeartbeat();
-          connectWebSocket();
         }
+      });
+
+      window.addEventListener("beforeunload", function () {
+        stopHeartbeat();
+        stopPolling();
+        clearReconnectTimer();
+        clearCountdownTimer();
+        try {
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.close();
+          }
+        } catch {
+          // Ignore close failures.
+        }
+      });
+
+      bootstrap().catch(function () {
+        showInvalid();
       });
     })();
   </script>

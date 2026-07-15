@@ -110,6 +110,8 @@ const USER_SCOPED_KEY_PREFIXES = [
   "mv-settings",
   "mv-recovery-layout",
   "mv-onboarding-complete",
+  "mce-presentation-text-slides",
+  "mce-presentation-tickers",
 
   // Theme
   "obs-church-studio.theme-preference",

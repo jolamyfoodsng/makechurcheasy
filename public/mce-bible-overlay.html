@@ -792,7 +792,31 @@
       const ltRefText = document.getElementById('ref-text');
       const logo = document.getElementById('logo');
 
-      let currentMode = 'fullscreen';
+      const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
+      const _storageKey = _tabParam === 'worship' ? 'worship-overlay-data' : 'bible-overlay-data';
+      const _ackStorageKey = _tabParam === 'worship' ? 'worship-overlay-render-ack' : 'bible-overlay-render-ack';
+      const _channelName = _tabParam === 'worship' ? 'obs-church-studio-worship-overlay' : 'obs-church-studio-bible-overlay';
+
+      function readInitialMode() {
+        try {
+          const raw = localStorage.getItem(_storageKey);
+          const parsed = raw ? JSON.parse(raw) : null;
+          if (parsed?.mode === 'fullscreen' || parsed?.mode === 'lower-third') return parsed.mode;
+        } catch { }
+        try {
+          const hash = window.location.hash;
+          if (hash.startsWith('#data=')) {
+            const parsed = JSON.parse(decodeURIComponent(hash.slice(6)));
+            if (parsed?.mode === 'fullscreen' || parsed?.mode === 'lower-third') return parsed.mode;
+          }
+        } catch { }
+        return 'fullscreen';
+      }
+
+      const initialMode = readInitialMode();
+      body.dataset.mode = initialMode;
+      let currentMode = initialMode;
+      let initialStorageSyncPending = true;
       let currentOverlayData = null;
       let lastTimestamp = 0;
       let currentSlideId = null;
@@ -800,6 +824,7 @@
       let lastAnimation = 'fade';
       let bgClearToken = 0;
       let lastCssOverlayData = '';
+      let lastAppliedThemeKey = '';
       let fitRafId = 0;
       let lastBgFingerprint = '';
       let lastBgType = 'none';
@@ -1484,6 +1509,19 @@
         if (currentMode === 'lower-third') applyThemeLowerThird(theme); else applyThemeFullscreen(theme);
       }
 
+      function applyThemeIfChanged(theme, force = false) {
+        const safeTheme = theme || {};
+        let themeKey = '';
+        try {
+          themeKey = currentMode + '|' + JSON.stringify(safeTheme);
+        } catch {
+          themeKey = currentMode + '|unserializable';
+        }
+        if (!force && themeKey === lastAppliedThemeKey) return;
+        applyTheme(safeTheme);
+        lastAppliedThemeKey = themeKey;
+      }
+
       /* ═══ SINGLE RENDERER ═══ */
       function hasRenderableSlide(data) {
         return Boolean(data && data.slide && data.blanked !== true);
@@ -1531,13 +1569,13 @@
           reference.textContent = rt;
           reference.style.display = rt ? 'block' : 'none';
         }
-        try { applyTheme(data.theme || {}); } catch (error) { console.error('mce-bible-overlay fullscreen theme error', error); }
+        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-bible-overlay fullscreen theme error', error); }
         if (isCL) autoScaleCompareContent();
         else { autoScaleContent(); scheduleContentFit(); }
         const anim = data.theme?.animation || 'fade'; lastAnimation = anim;
         if (modeTransitionActive) return;
-        if (isNew) { if (!hasShownOnce) { hasShownOnce = true; runEntranceAnimation(anim); } }
-        else if (isSame && anim !== 'none' && hasShownOnce) { clearEntranceAnimationClasses(); void verseContainer.offsetWidth; const ed = Math.max(95, Math.min(170, Math.round((data.theme?.animationDuration || 400) * 0.38))); const el = Date.now() % ed, d = -el; if (anim === 'fade') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-fade-enter'); } else if (anim === 'slide-up') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-slide-up-enter'); } else if (anim === 'slide-left') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-slide-left-enter'); } else if (anim === 'scale-in') { verseContainer.style.animationDelay = d + 'ms'; verseContainer.classList.add('anim-scale-in-enter'); } setTimeout(() => { verseContainer.style.animationDelay = ''; }, ed + 50); }
+        if (!hasShownOnce) hasShownOnce = true;
+        clearEntranceAnimationClasses();
       }
 
       function processSlideLowerThird(data) {
@@ -1547,10 +1585,11 @@
         if (data.blanked) { overlay.classList.add('blank'); return; } else overlay.classList.remove('blank');
         overlay.classList.remove('hidden');
         verseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; reference.style.display = rt ? 'block' : 'none';
-        try { applyTheme(data.theme || {}); } catch (error) { console.error('mce-bible-overlay lower-third theme error', error); }
+        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-bible-overlay lower-third theme error', error); }
         const anim = data.theme?.animation || 'slide-up'; lastAnimation = anim;
         if (modeTransitionActive) return;
-        if (isNew && !hasShownOnce) { hasShownOnce = true; runEntranceAnimation(anim); }
+        if (!hasShownOnce) hasShownOnce = true;
+        clearEntranceAnimationClasses();
       }
 
       /* ═══ EVENT-DRIVEN UPDATE PIPELINE ═══ */
@@ -1570,7 +1609,37 @@
       function readFromUrlHash() { try { const h = window.location.hash; if (h && h.startsWith('#data=')) { processOverlayUpdate(JSON.parse(decodeURIComponent(h.slice(6)))); return true; } } catch { } return false; }
       function readFromUrlSearch() { try { const raw = new URLSearchParams(window.location.search).get('overlayData'); if (raw) { processOverlayUpdate(JSON.parse(decodeURIComponent(raw))); return true; } } catch { } return false; }
       function readFromLocalStorage() { try { const raw = localStorage.getItem(_storageKey); if (raw) { processOverlayUpdate(JSON.parse(raw)); return true; } } catch { } return false; }
+      function applyObsBrowserEventCss(cssText) {
+        if (typeof cssText !== 'string') return;
+        let styleEl = document.getElementById('obs-cssoverride');
+        if (!styleEl) {
+          styleEl = document.createElement('style');
+          styleEl.id = 'obs-cssoverride';
+          document.head.appendChild(styleEl);
+        }
+        styleEl.textContent = cssText;
+        lastCssOverlayData = '';
+      }
+      function readFromObsBrowserEvent(event) {
+        try {
+          const detail = event && typeof event.detail === 'object' ? event.detail : null;
+          const data = detail && typeof detail.event_data === 'object' ? detail.event_data : detail;
+          if (!data || typeof data !== 'object') return false;
+          if (data.tab && data.tab !== _tabParam) return false;
+          const packet = data.packet || data.overlayData || data.data;
+          if (!packet || typeof packet !== 'object') return false;
+          applyObsBrowserEventCss(data.css || data.overlayCss || '');
+          processOverlayUpdate(packet);
+          return true;
+        } catch { }
+        return false;
+      }
       function syncOverlayState() {
+        // Seed from the dock packet before trusting stale CSS on a reloaded OBS source.
+        if (initialStorageSyncPending) {
+          initialStorageSyncPending = false;
+          if (readFromLocalStorage()) return true;
+        }
         if (readFromCssVar()) return true;
         if (readFromUrlHash()) return true;
         if (readFromUrlSearch()) return true;
@@ -1584,11 +1653,6 @@
         return false;
       }
 
-      const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
-      const _storageKey = _tabParam === 'worship' ? 'worship-overlay-data' : 'bible-overlay-data';
-      const _ackStorageKey = _tabParam === 'worship' ? 'worship-overlay-render-ack' : 'bible-overlay-render-ack';
-      const _channelName = _tabParam === 'worship' ? 'obs-church-studio-worship-overlay' : 'obs-church-studio-bible-overlay';
-
       function writeRenderAck(data) {
         if (!data) return;
         try {
@@ -1601,6 +1665,7 @@
       }
 
       try { const bc = new BroadcastChannel(_channelName); bc.onmessage = (e) => { processOverlayUpdate(e.data); }; } catch { }
+      window.addEventListener('mce-overlay-packet', readFromObsBrowserEvent);
       window.addEventListener('message', (e) => { if (e.data?.action === 'animate-out') processOverlayUpdate(e.data); });
       window.addEventListener('hashchange', () => { readFromUrlHash(); });
 
@@ -1615,7 +1680,7 @@
       if (window.ResizeObserver) { const ro = new ResizeObserver(() => { scheduleContentFit(); }); ro.observe(document.body); ro.observe(verseContainer); ro.observe(compareLayout); }
 
       /* ═══ INITIAL ═══ */
-      ltBar.style.display = 'none';
+      applyModeDom(initialMode);
       syncOverlayState();
       // CSS --overlay-data may not be injected by OBS yet — retry with backoff
       (function retryReadFromCssVar(attempts, delay) {

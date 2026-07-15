@@ -694,6 +694,7 @@
 
 /* Right sidebar section */
 .bible-right-section {
+  display: block;
   padding: 12px;
   border-bottom: 2px solid var(--b-border);
 }
@@ -747,11 +748,205 @@
 
 /* ── Preview section inside right sidebar ── */
 .bible-right-preview-section {
+  display: block;
   padding: 0;
   flex: 1;
   min-height: 200px;
+  /* display: flex; */
+  flex-direction: column;
+}
+
+.bible-preview-controls {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--b-border);
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.bible-preview-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.bible-preview-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid var(--b-border);
+  border-radius: 8px;
+  background: var(--b-tile);
+  color: var(--b-text-3);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.bible-preview-tab.active {
+  border-color: rgba(0, 230, 118, 0.38);
+  background: rgba(0, 230, 118, 0.1);
+  color: var(--b-green, #00e676);
+}
+
+.bible-preview-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bible-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.bible-preview-field,
+.bible-preview-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--b-border);
+  border-radius: 8px;
+  background: var(--b-tile);
+  color: var(--b-text-2);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+bible-preview-toggle>span {
+  display: block;
+}
+
+.bible-preview-field input[type="color"] {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.bible-preview-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--b-green, #00e676);
+}
+
+.bible-preview-range {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--b-border);
+  border-radius: 8px;
+  background: var(--b-tile);
+}
+
+.bible-preview-range>span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--b-text-3);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bible-preview-range strong {
+  color: var(--b-text-1);
+  font-size: 11px;
+}
+
+.bible-preview-range input[type="range"] {
+  width: 100%;
+  accent-color: var(--b-green, #00e676);
+}
+
+.bible-preview-option-group {
+  display: flex;
+  min-width: 200px;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bible-preview-group-label {
+  color: var(--b-text-3);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bible-preview-option-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.bible-preview-option {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--b-border);
+  border-radius: 8px;
+  background: var(--b-tile);
+  color: var(--b-text-3);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.bible-preview-option.active {
+  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(96, 165, 250, 0.12);
+  color: #bfdbfe;
+}
+
+.bible-preview-swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bible-preview-swatch {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.bible-preview-swatch.active {
+  border-color: #ffffff;
+  transform: scale(1.08);
+}
+
+.bible-preview-swatch-input {
+  overflow: hidden;
+  background: transparent;
+}
+
+.bible-preview-swatch-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.bible-preview-swatch-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 999px;
 }
 
 .bible-right-preview-section .live-preview-col {
@@ -3063,6 +3258,20 @@
   gap: 8px;
 }
 
+.live-preview-content--clickable {
+  cursor: zoom-in;
+  outline: none;
+}
+
+.live-preview-content--clickable:focus-visible .preview-frame {
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+}
+
+.live-preview-content--clickable:hover .preview-frame {
+  border-color: rgba(125, 211, 252, 0.42);
+}
+
 /* Preview Frame */
 .preview-frame {
   position: relative;
@@ -3074,7 +3283,16 @@
   border: 2px solid var(--b-border);
 }
 
+.preview-frame--expanded {
+  width: min(100%, 1200px);
+}
+
 .preview-frame-bg {
+  position: absolute;
+  inset: 0;
+}
+
+.preview-frame-shade {
   position: absolute;
   inset: 0;
 }
@@ -3139,6 +3357,37 @@
   display: none;
   font-weight: 600;
   color: var(--b-text-3);
+}
+
+.bible-preview-modal {
+  width: min(96vw, 1200px);
+  max-width: min(96vw, 1200px);
+  max-height: 92vh;
+  overflow: hidden;
+}
+
+.bible-preview-modal-header {
+  gap: 10px;
+}
+
+.bible-preview-modal-header h3 {
+  flex: 1;
+}
+
+.bible-preview-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px 20px;
+  overflow: auto;
+}
+
+.bible-preview-modal-body .preview-frame {
+  max-width: 100%;
+}
+
+.bible-preview-modal-body .preview-slide-counter {
+  display: block;
 }
 
 /* Preview close button */
@@ -3313,8 +3562,8 @@
   background: var(--b-surface);
   border: 2px solid var(--b-border);
   border-radius: var(--b-radius);
-  width: 520px;
-  max-width: 90vw;
+  width: 1920px;
+  max-width: 1080px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;

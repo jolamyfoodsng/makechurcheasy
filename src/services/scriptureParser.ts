@@ -423,7 +423,7 @@ const NUMBER_WORDS: Record<string, number> = {
 const CORRECTION_PREFIX_RE = /^(?:sorry(?:\s+sorry)?|rather|i\s+mean|correction|let\s+me\s+correct\s+that|make\s+that|change\s+that\s+to|not)\b\s*/i;
 const CORRECTION_WINDOW_MS = 8_000;
 
-function parseNumberWord(text: string): number | null {
+export function parseNumberWord(text: string): number | null {
   const key = text.toLowerCase().trim();
   if (NUMBER_WORDS[key] !== undefined) return NUMBER_WORDS[key];
   // Try plain number

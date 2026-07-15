@@ -31,6 +31,7 @@ import { getTranslationData } from "./bibleDb";
 const translationCache = new Map<string, RawBibleData>();
 const corpusCache = new Map<string, BibleCorpusEntry[]>();
 const searchVocabularyCache = new Map<string, Map<string, number>>();
+const normalizedSearchVocabularyCache = new Map<string, Map<string, number>>();
 
 export interface BibleCorpusEntry {
   book: string;
@@ -40,6 +41,11 @@ export interface BibleCorpusEntry {
   translation: string;
   reference: string;
   text: string;
+  normalizedText?: string;
+  searchTokens?: string[];
+  normalizedSearchTokens?: string[];
+  searchTokenSet?: Set<string>;
+  searchContentTokens?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -287,6 +293,7 @@ export interface SearchResult {
   book: string;
   chapter: number;
   verse: number;
+  endVerse?: number;
   text: string;
   /** Highlighted snippet around the match */
   snippet: string;
@@ -352,6 +359,31 @@ const COMMON_SEARCH_TOKEN_ALIASES = new Map<string, string>([
   ["ion", "zion"],
   ["vally", "valley"],
   ["rejoyce", "rejoice"],
+  ["must", "should"],
+]);
+
+const SEARCH_TOKEN_NORMALIZATIONS = new Map<string, string>([
+  ["hath", "has"],
+  ["hast", "has"],
+  ["hadst", "had"],
+  ["doth", "does"],
+  ["doeth", "does"],
+  ["didst", "did"],
+  ["saith", "says"],
+  ["sayest", "says"],
+  ["spake", "spoke"],
+  ["shew", "show"],
+  ["shewed", "show"],
+  ["sheweth", "show"],
+  ["ye", "you"],
+  ["thee", "you"],
+  ["thou", "you"],
+  ["thy", "your"],
+  ["thine", "your"],
+  ["unto", "to"],
+  ["wherefore", "why"],
+  ["whosoever", "whoever"],
+  ["whatsoever", "whatever"],
 ]);
 
 function normalizeSearchText(value: string): string {
@@ -377,13 +409,18 @@ function tokenizeSearch(value: string): string[] {
 }
 
 function normalizeSearchToken(token: string): string {
+  const direct = SEARCH_TOKEN_NORMALIZATIONS.get(token);
+  if (direct) return direct;
+
   if (token.length <= 4) return token;
 
   if (token.endsWith("eth") && token.length > 5) {
-    return token.slice(0, -3);
+    const normalized = token.slice(0, -3);
+    return SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? normalized;
   }
   if (token.endsWith("est") && token.length > 5) {
-    return token.slice(0, -3);
+    const normalized = token.slice(0, -3);
+    return SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? normalized;
   }
   if (token.endsWith("ing") && token.length > 6) {
     return token.slice(0, -3);
@@ -404,8 +441,24 @@ function normalizeSearchToken(token: string): string {
   return token;
 }
 
-function tokensEquivalent(a: string, b: string): boolean {
-  return normalizeSearchToken(a) === normalizeSearchToken(b);
+function buildNormalizedSearchVocabulary(
+  translation: BibleTranslation,
+  data: RawBibleData,
+): Map<string, number> {
+  const key = translation.toUpperCase();
+  const cached = normalizedSearchVocabularyCache.get(key);
+  if (cached) return cached;
+
+  const vocabulary = buildSearchVocabulary(translation, data);
+  const normalized = new Map<string, number>();
+
+  for (const [token, count] of vocabulary) {
+    const keyToken = normalizeSearchToken(token);
+    normalized.set(keyToken, (normalized.get(keyToken) ?? 0) + count);
+  }
+
+  normalizedSearchVocabularyCache.set(key, normalized);
+  return normalized;
 }
 
 function buildSearchVocabulary(
@@ -534,22 +587,52 @@ function repairSearchQuery(
     .trim();
 }
 
-function orderedTokenCoverage(queryTokens: string[], textTokens: string[]): number {
-  if (queryTokens.length === 0 || textTokens.length === 0) return 0;
+function getSearchTokenWeight(
+  token: string,
+  normalizedVocabulary: Map<string, number>,
+): number {
+  const frequency = normalizedVocabulary.get(normalizeSearchToken(token)) ?? 1;
+  return Math.min(3, Math.max(0.35, 6 / Math.sqrt(frequency + 1)));
+}
 
-  let matches = 0;
+function weightedTokenCoverage(
+  queryTokens: string[],
+  textTokenSet: Set<string>,
+  queryTokenWeights: number[],
+): number {
+  const totalWeight = queryTokenWeights.reduce((sum, weight) => sum + weight, 0);
+  if (totalWeight <= 0) return 0;
+
+  const matchedWeight = queryTokens.reduce((sum, token, index) => {
+    const matched = textTokenSet.has(token);
+    return matched ? sum + queryTokenWeights[index] : sum;
+  }, 0);
+
+  return matchedWeight / totalWeight;
+}
+
+function weightedOrderedTokenCoverage(
+  queryTokens: string[],
+  textTokens: string[],
+  queryTokenWeights: number[],
+): number {
+  const totalWeight = queryTokenWeights.reduce((sum, weight) => sum + weight, 0);
+  if (totalWeight <= 0 || textTokens.length === 0) return 0;
+
+  let matchedWeight = 0;
   let startIndex = 0;
 
-  for (const queryToken of queryTokens) {
+  for (let index = 0; index < queryTokens.length; index += 1) {
+    const queryToken = queryTokens[index];
     const foundIndex = textTokens.findIndex(
-      (textToken, index) => index >= startIndex && tokensEquivalent(queryToken, textToken),
+      (textToken, textIndex) => textIndex >= startIndex && queryToken === textToken,
     );
     if (foundIndex === -1) continue;
-    matches += 1;
+    matchedWeight += queryTokenWeights[index];
     startIndex = foundIndex + 1;
   }
 
-  return matches / queryTokens.length;
+  return matchedWeight / totalWeight;
 }
 
 function nearbyPairCoverage(queryTokens: string[], textTokens: string[]): number {
@@ -560,16 +643,82 @@ function nearbyPairCoverage(queryTokens: string[], textTokens: string[]): number
   for (let index = 0; index < queryTokens.length - 1; index += 1) {
     const first = queryTokens[index];
     const second = queryTokens[index + 1];
-    const firstIndex = textTokens.findIndex((textToken) => tokensEquivalent(first, textToken));
+    const firstIndex = textTokens.findIndex((textToken) => first === textToken);
     if (firstIndex === -1) continue;
 
     const window = textTokens.slice(firstIndex + 1, firstIndex + 4);
-    if (window.some((textToken) => tokensEquivalent(second, textToken))) {
+    if (window.some((textToken) => second === textToken)) {
       matchedPairs += 1;
     }
   }
 
   return matchedPairs / (queryTokens.length - 1);
+}
+
+function contentTokens(tokens: string[]): string[] {
+  return tokens
+    .map((token) => normalizeSearchToken(token))
+    .filter((token) => token.length > 1 && !SEARCH_STOP_WORDS.has(token));
+}
+
+function contentPhraseCoverage(queryContent: string[], textContent: string[]): number {
+  if (queryContent.length < 2) return 0;
+  if (textContent.length === 0) return 0;
+
+  const queryPhrase = queryContent.join(" ");
+  const textPhrase = textContent.join(" ");
+  if (textPhrase.includes(queryPhrase)) return 1;
+
+  let bestRun = 0;
+
+  for (let start = 0; start < queryContent.length; start += 1) {
+    let run = 0;
+    let textIndex = 0;
+
+    for (let queryIndex = start; queryIndex < queryContent.length; queryIndex += 1) {
+      const token = queryContent[queryIndex];
+      const foundIndex = textContent.findIndex(
+        (textToken, index) => index >= textIndex && token === textToken,
+      );
+      if (foundIndex === -1) break;
+
+      if (run > 0 && foundIndex - textIndex > 3) break;
+
+      run += 1;
+      textIndex = foundIndex + 1;
+    }
+
+    bestRun = Math.max(bestRun, run);
+  }
+
+  return bestRun / queryContent.length;
+}
+
+function firstStrongTokenBonus(queryContent: string[], textContent: string[]): number {
+  const firstStrongToken = queryContent.find((token) => token.length >= 5);
+  if (!firstStrongToken) return 0;
+
+  const index = textContent.findIndex((token) => firstStrongToken === token);
+  if (index === -1) return 0;
+
+  return Math.max(0, 0.06 - index * 0.01);
+}
+
+function prepareCorpusSearchText(text: string): Pick<
+  BibleCorpusEntry,
+  "normalizedText" | "searchTokens" | "normalizedSearchTokens" | "searchTokenSet" | "searchContentTokens"
+> {
+  const normalizedText = normalizeSearchText(text);
+  const searchTokens = normalizedText.split(" ").filter(Boolean);
+  const normalizedSearchTokens = searchTokens.map((token) => normalizeSearchToken(token));
+
+  return {
+    normalizedText,
+    searchTokens,
+    normalizedSearchTokens,
+    searchTokenSet: new Set(normalizedSearchTokens),
+    searchContentTokens: contentTokens(searchTokens),
+  };
 }
 
 function buildSearchSnippet(text: string, _queryTokens: string[]): string {
@@ -578,36 +727,48 @@ function buildSearchSnippet(text: string, _queryTokens: string[]): string {
 }
 
 function scoreVerseMatch(
-  text: string,
+  entry: BibleCorpusEntry,
   normalizedQuery: string,
   queryTokens: string[],
+  normalizedQueryTokens: string[],
+  queryTokenWeights: number[],
+  queryContent: string[],
 ): number {
   if (!normalizedQuery) return 0;
 
-  const normalizedText = normalizeSearchText(text);
+  const normalizedText = entry.normalizedText ?? normalizeSearchText(entry.text);
   if (!normalizedText) return 0;
 
   if (normalizedText.includes(normalizedQuery)) {
     return 1;
   }
 
-  const textTokens = normalizedText.split(" ").filter(Boolean);
+  const textTokens =
+    entry.normalizedSearchTokens ??
+    normalizedText.split(" ").filter(Boolean).map((token) => normalizeSearchToken(token));
   if (textTokens.length === 0 || queryTokens.length === 0) return 0;
 
-  const tokenMatches = queryTokens.filter((token) =>
-    textTokens.some((textToken) => tokensEquivalent(token, textToken)),
-  ).length;
+  const textTokenSet = entry.searchTokenSet ?? new Set(textTokens);
+  const tokenMatches = normalizedQueryTokens.filter((token) => textTokenSet.has(token)).length;
   if (tokenMatches === 0) return 0;
 
-  const tokenCoverage = tokenMatches / queryTokens.length;
-  const orderedCoverage = orderedTokenCoverage(queryTokens, textTokens);
-  const pairCoverage = nearbyPairCoverage(queryTokens, textTokens);
+  const tokenCoverage = weightedTokenCoverage(normalizedQueryTokens, textTokenSet, queryTokenWeights);
+  const orderedCoverage = weightedOrderedTokenCoverage(normalizedQueryTokens, textTokens, queryTokenWeights);
+  const pairCoverage = nearbyPairCoverage(normalizedQueryTokens, textTokens);
+  const textContent = entry.searchContentTokens ?? contentTokens(textTokens);
+  const contentCoverage = contentPhraseCoverage(queryContent, textContent);
   const prefixBonus =
     queryTokens.length > 0 && normalizedText.startsWith(queryTokens[0]) ? 0.06 : 0;
+  const strongStartBonus = firstStrongTokenBonus(queryContent, textContent);
 
   return Math.min(
     1,
-    tokenCoverage * 0.55 + orderedCoverage * 0.25 + pairCoverage * 0.14 + prefixBonus,
+    tokenCoverage * 0.42 +
+    orderedCoverage * 0.22 +
+    pairCoverage * 0.12 +
+    contentCoverage * 0.20 +
+    prefixBonus +
+    strongStartBonus,
   );
 }
 
@@ -617,45 +778,56 @@ async function searchBibleInTranslation(
   limit: number,
 ): Promise<RankedSearchResult[]> {
   const data = await loadTranslation(translation);
+  const corpus = await getBibleCorpus(translation, 3);
   const results: RankedSearchResult[] = [];
   const repairedQuery = repairSearchQuery(query, translation, data);
+  const normalizedVocabulary = buildNormalizedSearchVocabulary(translation, data);
   const queryVariants = Array.from(
     new Set([normalizeSearchText(query), normalizeSearchText(repairedQuery)].filter(Boolean)),
   ).map((variant) => ({
     normalizedQuery: variant,
     queryTokens: tokenizeSearch(variant),
+  })).map((variant) => ({
+    ...variant,
+    normalizedQueryTokens: variant.queryTokens.map((token) => normalizeSearchToken(token)),
+    queryContent: contentTokens(variant.queryTokens),
+    queryTokenWeights: variant.queryTokens.map((token) =>
+      getSearchTokenWeight(token, normalizedVocabulary),
+    ),
   }));
 
-  for (const book of BIBLE_BOOKS) {
-    const bookData = data[book];
-    if (!bookData) continue;
+  for (const entry of corpus) {
+    let bestScore = 0;
+    let bestTokens: string[] = [];
 
-    for (const [chStr, chData] of Object.entries(bookData)) {
-      for (const [vStr, text] of Object.entries(chData)) {
-        let bestScore = 0;
-        let bestTokens: string[] = [];
-
-        for (const variant of queryVariants) {
-          const score = scoreVerseMatch(text, variant.normalizedQuery, variant.queryTokens);
-          if (score > bestScore) {
-            bestScore = score;
-            bestTokens = variant.queryTokens;
-          }
-        }
-
-        const score = bestScore;
-        if (score < 0.42) continue;
-
-        results.push({
-          book,
-          chapter: parseInt(chStr, 10),
-          verse: parseInt(vStr, 10),
-          text,
-          snippet: buildSearchSnippet(text, bestTokens),
-          score,
-        });
+    for (const variant of queryVariants) {
+      const score = scoreVerseMatch(
+        entry,
+        variant.normalizedQuery,
+        variant.queryTokens,
+        variant.normalizedQueryTokens,
+        variant.queryTokenWeights,
+        variant.queryContent,
+      );
+      if (score > bestScore) {
+        bestScore = score;
+        bestTokens = variant.queryTokens;
       }
     }
+
+    const windowSize = Math.max(1, entry.endVerse - entry.verse + 1);
+    const score = Math.max(0, bestScore - (windowSize - 1) * 0.02);
+    if (score < 0.42) continue;
+
+    results.push({
+      book: entry.book,
+      chapter: entry.chapter,
+      verse: entry.verse,
+      endVerse: entry.endVerse > entry.verse ? entry.endVerse : undefined,
+      text: entry.text,
+      snippet: buildSearchSnippet(entry.text, bestTokens),
+      score,
+    });
   }
 
   results.sort((a, b) => b.score - a.score);
@@ -775,6 +947,7 @@ export async function getBibleCorpus(
 
           const startVerse = verses[index].verse;
           const endVerse = item.verse;
+          const searchText = prepareCorpusSearchText(combinedText);
           entries.push({
             book,
             chapter,
@@ -786,6 +959,7 @@ export async function getBibleCorpus(
                 ? `${book} ${chapter}:${startVerse}`
                 : `${book} ${chapter}:${startVerse}-${endVerse}`,
             text: combinedText,
+            ...searchText,
           });
         }
       }

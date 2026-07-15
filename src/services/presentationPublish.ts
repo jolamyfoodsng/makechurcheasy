@@ -5,9 +5,9 @@ import { getPresentationSettings } from "./presentationSettings";
 import {
   clearPresentationState,
   publishPresentationState,
-  type PresentationRemoteItem,
   type PresentationRemoteState,
 } from "./presentationState";
+import type { PresentationRemoteItem } from "../presentation/types";
 
 function buildState(item: PresentationRemoteItem | null): PresentationRemoteState {
   const { sessionId } = getPresentationSettings();
@@ -89,7 +89,7 @@ export async function publishMinistryToPresentation(payload: {
 }): Promise<void> {
   await publishItem({
     id: `ministry-${payload.speakerName.trim().toLowerCase().replace(/\s+/g, "-")}`,
-    source: "ministry",
+    source: "text",
     title: payload.speakerName,
     reference: payload.churchName || "Ministry",
     body: payload.speakerRole || "",

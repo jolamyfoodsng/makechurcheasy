@@ -17,6 +17,11 @@ import { validateMediaFile, backgroundFileAccept } from "../../countdowns/mediaV
 import { saveCountdownAsset, deleteCountdownAsset } from "../../countdowns/countdownStore";
 import { BUILTIN_CATEGORIES, getBuiltinsByCategory } from "../../countdowns/builtinBackgrounds";
 import type { MediaItem } from "../../library/libraryTypes";
+import {
+  DOCK_COUNTDOWN_BG_SOURCE_NAME,
+  DOCK_COUNTDOWN_SOURCE_NAME,
+  resolveCountdownTargetScene,
+} from "./dockCountdownScene";
 
 // ── Hardcoded countdowns ───────────────────────────────────────────────────
 
@@ -159,8 +164,6 @@ function useCountdownTimer(cd: CountdownConfig | null) {
 
   return { remaining, isRunning, isComplete, formatted, start, pause, reset, adjustTime, setRemainingDirect };
 }
-
-const PRESENTATION_SCENE = "MCE Presentation";
 
 // ── Simplified Countdown Card ──────────────────────────────────────────────
 
@@ -357,17 +360,8 @@ function CountdownCard({
       </div>
 
       {/* Push to separate scene toggle */}
-      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: isLive ? "not-allowed" : "pointer", opacity: isLive ? 0.5 : 1 }} onClick={(e) => e.stopPropagation()}>
-        <input
-          type="checkbox"
-          checked={!!cd.obs.sceneName}
-          disabled={isLive}
-          onChange={(e) => onUpdateObs({ sceneName: e.target.checked ? "MCE Countdown" : "" })}
-          style={{ accentColor: "var(--dock-accent, #3b82f6)", width: 12, height: 12 }}
-        />
-        <span style={{ fontSize: 9, color: "var(--dock-text)" }}>{t("countdowns.pushToScene", "Use a separate scene")}</span>
-      </label>
-      <span style={{ fontSize: 7, color: "var(--dock-text-dim)", lineHeight: 1.2, marginTop: -2 }}>{t("countdowns.pushToSceneDesc", "When on, the overlay goes to a new scene instead of MCE Presentation.")}</span>
+
+
 
       {/* Push & Start / Pause / Stop + Message */}
       <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
@@ -566,6 +560,7 @@ export default function DockCountdownsTab() {
   const livePersistRef = useRef<LivePersistState | null>(readLivePersistState());
   const restoredRef = useRef(false);
   const autoSwitchTriggeredRef = useRef(false);
+  const obsControlArmedRef = useRef(false);
 
   // Edit modal state
   const [editingCd, setEditingCd] = useState<CountdownConfig | null>(null);
@@ -616,13 +611,10 @@ export default function DockCountdownsTab() {
 
     timer.setRemainingDirect(remaining);
 
+    setPlaybackState(persist.running && remaining > 0 ? "running" : "paused");
+
     if (persist.running && remaining > 0) {
       timer.start();
-      const sync: OverlaySyncState = { paused: false, remaining: Math.floor(remaining) };
-      pushToObs(activeCd, sync);
-    } else {
-      const sync: OverlaySyncState = { paused: true, remaining: Math.floor(remaining) };
-      pushToObs(activeCd, sync);
     }
   }, [activeCd]);
 
@@ -667,6 +659,7 @@ export default function DockCountdownsTab() {
     const triggerTime = activeCd.obs.autoSwitchAtSeconds ?? 0;
     const targetScene = activeCd.obs.autoSwitchScene;
     if (
+      obsControlArmedRef.current &&
       autoEnabled &&
       targetScene &&
       !autoSwitchTriggeredRef.current &&
@@ -690,8 +683,8 @@ export default function DockCountdownsTab() {
 
   // ── OBS ─────────────────────────────────────────────────────────────────
 
-  const COUNTDOWN_SOURCE = "MCE Countdown";
-  const BG_SOURCE = "MCE Countdown BG";
+  const COUNTDOWN_SOURCE = DOCK_COUNTDOWN_SOURCE_NAME;
+  const BG_SOURCE = DOCK_COUNTDOWN_BG_SOURCE_NAME;
 
   async function loadObsScenes(): Promise<string[]> {
     try {
@@ -741,7 +734,11 @@ export default function DockCountdownsTab() {
     let item = sceneItems.sceneItems.find((i) => i.sourceName === sourceName);
 
     if (!item && existing) {
-      const addResult = await dockObsClient.call("AddSceneItem", { sceneName, sourceName }) as { sceneItemId: number };
+      const addResult = await dockObsClient.call("CreateSceneItem", {
+        sceneName,
+        sourceName,
+        sceneItemEnabled: true,
+      }) as { sceneItemId: number };
       item = { sceneItemId: addResult.sceneItemId, sourceName };
     }
 
@@ -771,7 +768,7 @@ export default function DockCountdownsTab() {
   }
 
   async function hideObsSource(sourceName: string, sceneName?: string): Promise<void> {
-    const target = sceneName || PRESENTATION_SCENE;
+    const target = resolveCountdownTargetScene(sceneName);
     const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName: target }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
     const item = sceneItems.sceneItems.find((i) => i.sourceName === sourceName);
     if (item) {
@@ -791,7 +788,7 @@ export default function DockCountdownsTab() {
       const baseUrl = getOverlayBaseUrlSync();
       const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
       const url = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
-      const targetScene = cd.obs.sceneName || PRESENTATION_SCENE;
+      const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
 
       await ensureObsSource(COUNTDOWN_SOURCE, url, targetScene);
     } catch (err) {
@@ -808,7 +805,7 @@ export default function DockCountdownsTab() {
     try {
       // 1. Push BG first, then countdown overlay ONCE with running state
       const baseUrl = getOverlayBaseUrlSync();
-      const targetScene = cd.obs.sceneName || PRESENTATION_SCENE;
+      const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
 
       const bgPayload = { config: cd, baseUrl, timestamp: Date.now() };
       const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
@@ -816,6 +813,7 @@ export default function DockCountdownsTab() {
 
       setActiveId(cd.id);
       setPlaybackState("running");
+      obsControlArmedRef.current = true;
       autoSwitchTriggeredRef.current = false;
 
       // Use config's durationSeconds (reflects any inline edits via handleSetTime)
@@ -838,6 +836,7 @@ export default function DockCountdownsTab() {
     const currentRemaining = timer.pause();
     const remaining = Math.floor(currentRemaining);
     setPlaybackState("paused");
+    obsControlArmedRef.current = true;
     writeLivePersistState({ id: cd.id, remaining: currentRemaining, running: false, savedAt: Date.now() });
     const sync: OverlaySyncState = { paused: true, remaining };
     await pushToObs(cd, sync);
@@ -848,6 +847,7 @@ export default function DockCountdownsTab() {
     if (persist && persist.id === cd.id) {
       timer.setRemainingDirect(persist.remaining);
     }
+    obsControlArmedRef.current = true;
     autoSwitchTriggeredRef.current = false;
     timer.start();
     setPlaybackState("running");
@@ -860,9 +860,10 @@ export default function DockCountdownsTab() {
   const handleStopAndRemove = useCallback(async (cd: CountdownConfig) => {
     timer.reset();
     autoSwitchTriggeredRef.current = false;
+    obsControlArmedRef.current = true;
     setActiveId(null);
     setPlaybackState("running");
-    const targetScene = cd.obs.sceneName || PRESENTATION_SCENE;
+    const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
     try {
       await ensureObsConnected();
       if (dockObsClient.isConnected) {
@@ -957,6 +958,7 @@ export default function DockCountdownsTab() {
                   if (liveCountdownId === cd.id) {
                     timer.reset();
                     autoSwitchTriggeredRef.current = false;
+                    obsControlArmedRef.current = true;
                     const sync: OverlaySyncState = { paused: true, remaining: cd.timer.durationSeconds };
                     pushToObs(cd, sync);
                     writeLivePersistState(null);

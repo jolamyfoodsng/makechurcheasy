@@ -1,32 +1,10 @@
 import { getOverlayBaseUrl } from "./overlayUrl";
-import type { CountdownConfig } from "../countdowns/types";
+import { getPresentationRemoteAccessInfo } from "./presentationRemote";
+import type { PresentationRemoteItem } from "../presentation/types";
 
-export type PresentationRemoteSource =
-  | "bible"
-  | "worship"
-  | "media"
-  | "text"
-  | "ministry"
-  | "countdown";
+export type PresentationRemoteSource = PresentationRemoteItem["source"];
 
 export type PresentationRemoteLayer = "fullscreen" | "lower-third";
-
-export interface PresentationRemoteCountdownPayload {
-  config: CountdownConfig;
-  startedAt: number;
-}
-
-export interface PresentationRemoteItem {
-  id: string;
-  source: PresentationRemoteSource;
-  title: string;
-  subtitle?: string;
-  body?: string;
-  reference?: string;
-  imageUrl?: string;
-  videoUrl?: string;
-  countdown?: PresentationRemoteCountdownPayload;
-}
 
 export interface PresentationRemoteState {
   sessionId: string;
@@ -42,6 +20,8 @@ export const EMPTY_PRESENTATION_REMOTE_STATE = (sessionId: string): Presentation
   updatedAt: Date.now(),
 });
 
+const localApiOriginCache = new Map<string, string>();
+
 function getStorageKey(sessionId: string): string {
   return `mce-presentation-state:${sessionId}`;
 }
@@ -50,8 +30,26 @@ function getChannelName(sessionId: string): string {
   return `mce-presentation:${sessionId}`;
 }
 
-async function buildApiUrl(path: string): Promise<string> {
-  return `${await getOverlayBaseUrl()}${path}`;
+async function getPresentationApiOrigin(sessionId: string): Promise<string> {
+  const cached = localApiOriginCache.get(sessionId);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const info = await getPresentationRemoteAccessInfo(sessionId);
+    const origin = new URL(info.localLink || info.link).origin;
+    localApiOriginCache.set(sessionId, origin);
+    return origin;
+  } catch {
+    const fallback = await getOverlayBaseUrl();
+    localApiOriginCache.set(sessionId, fallback);
+    return fallback;
+  }
+}
+
+async function buildApiUrl(sessionId: string, path: string): Promise<string> {
+  return `${await getPresentationApiOrigin(sessionId)}${path}`;
 }
 
 function writeLocalState(state: PresentationRemoteState): void {
@@ -88,12 +86,15 @@ export async function publishPresentationState(state: PresentationRemoteState): 
   writeLocalState(state);
   broadcastLocalState(state);
 
-  const url = await buildApiUrl("/api/presentation-state");
-  await fetch(url, {
+  const url = await buildApiUrl(state.sessionId, "/api/presentation-state");
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(state),
   });
+  if (!response.ok) {
+    throw new Error(`Failed to publish presentation state (${response.status})`);
+  }
 }
 
 export async function clearPresentationState(sessionId: string): Promise<void> {
@@ -101,17 +102,16 @@ export async function clearPresentationState(sessionId: string): Promise<void> {
 }
 
 export async function fetchPresentationState(sessionId: string): Promise<PresentationRemoteState | null> {
-  const url = await buildApiUrl(`/api/presentation-state?sessionId=${encodeURIComponent(sessionId)}`);
+  const url = await buildApiUrl(
+    sessionId,
+    `/api/presentation-state?sessionId=${encodeURIComponent(sessionId)}`,
+  );
   const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) return null;
   const payload = (await response.json()) as
     | PresentationRemoteState
     | { state?: PresentationRemoteState | null };
-  if (
-    typeof payload === "object" &&
-    payload !== null &&
-    "state" in payload
-  ) {
+  if (typeof payload === "object" && payload !== null && "state" in payload) {
     return payload.state ?? null;
   }
   if (
@@ -126,7 +126,7 @@ export async function fetchPresentationState(sessionId: string): Promise<Present
 }
 
 export async function heartbeatPresentationViewer(sessionId: string, viewerId: string): Promise<number> {
-  const url = await buildApiUrl("/api/presentation-viewer");
+  const url = await buildApiUrl(sessionId, "/api/presentation-viewer");
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -138,7 +138,10 @@ export async function heartbeatPresentationViewer(sessionId: string, viewerId: s
 }
 
 export async function fetchPresentationViewerCount(sessionId: string): Promise<number> {
-  const url = await buildApiUrl(`/api/presentation-viewer?sessionId=${encodeURIComponent(sessionId)}`);
+  const url = await buildApiUrl(
+    sessionId,
+    `/api/presentation-viewer?sessionId=${encodeURIComponent(sessionId)}`,
+  );
   const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) return 0;
   const payload = (await response.json()) as { viewerCount?: number };

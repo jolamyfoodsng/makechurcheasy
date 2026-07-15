@@ -12,8 +12,8 @@ import { useEffect, useState } from "react";
 import { Zap, ExternalLink } from "lucide-react";
 import { fetchCreditsFromBackend, isProUnlocked } from "../services/credits";
 
-const PRICING_URL =
-  "https://makechurcheasy.creatorstudioslabs.stream/pricing";
+const CREDITS_URL =
+  "https://makechurcheasy.creatorstudioslabs.stream/credits";
 
 interface CreditsGuardProps {
   children: React.ReactNode;
@@ -93,7 +93,7 @@ export default function CreditsGuard({ children }: CreditsGuardProps) {
           using speech-to-scripture, transcript library, and translation features.
         </p>
         <a
-          href={PRICING_URL}
+          href={CREDITS_URL}
           target="_blank"
           rel="noopener noreferrer"
           style={styles.cta}

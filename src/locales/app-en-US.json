@@ -4315,6 +4315,7 @@
   "stt.step6.desc": "Other possible verse matches appear here. Select any candidate to push it to OBS instead of the top match.",
   "stt.step6.action": "Browse candidate matches",
   "stt.common.done": "Completed!",
+  "stt.common.completed": "Completed",
   "stt.common.skip": "Skip Tutorial",
   "stt.common.next": "Next",
   "stt.final.title": "You're Ready!",

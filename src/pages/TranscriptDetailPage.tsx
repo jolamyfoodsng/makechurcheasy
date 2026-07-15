@@ -52,6 +52,17 @@ import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from '../lib/upgradeP
 
 /* ── Helpers ── */
 
+const CREDITS_URL = 'https://makechurcheasy.creatorstudioslabs.stream/credits';
+
+async function openCreditsPage(): Promise<void> {
+  try {
+    const { openUrl } = await import('@tauri-apps/plugin-opener');
+    await openUrl(CREDITS_URL);
+  } catch {
+    window.open(CREDITS_URL, '_blank', 'noopener,noreferrer');
+  }
+}
+
 interface ParsedLine {
   time: string;
   text: string;
@@ -454,7 +465,7 @@ interface TranslationModalProps {
   onClose: () => void;
   onStart: (language: string) => void;
   onBeforeStart?: () => Promise<boolean>;
-  onNavigateToSettings?: () => void;
+  onBuyCredits?: () => void;
   savedTranslations: { language: string; createdAt: string }[];
   transcriptTitle: string;
   transcriptText: string;
@@ -465,7 +476,7 @@ const languageLookup = new Map(
   (languageData as { code: string; name: string }[]).map(l => [l.code, l.name]),
 );
 
-function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onNavigateToSettings, savedTranslations, transcriptTitle, transcriptText, userId }: TranslationModalProps) {
+function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredits, savedTranslations, transcriptTitle, transcriptText, userId }: TranslationModalProps) {
   const [targetLanguage, setTargetLanguage] = useState('yo');
   const [transOption, setTransOption] = useState<'full' | 'detected'>('full');
   const [estimatedCredits, setEstimatedCredits] = useState(0);
@@ -616,8 +627,8 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onNavigateT
             <button
               className="btn btn-outline btn-block"
               style={{ marginTop: 8 }}
-              onClick={() => onNavigateToSettings?.()}
-              title="Activate">
+              onClick={onBuyCredits}
+              title="Buy credits">
               <Zap size={16} /> Buy Credits
             </button>
           )}
@@ -1506,7 +1517,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                       <AlertCircle size={16} style={{ color: '#ef4444', flexShrink: 0 }} />
                       <span style={{ flex: 1 }}>Low credits — <button
                         style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}
-                        onClick={() => navigate('/settings')}
+                        onClick={() => void openCreditsPage()}
                       >Buy Credits</button></span>
                     </div>
                   )}
@@ -1636,7 +1647,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                         <p style={{ fontSize: 12, color: '#ef4444', marginTop: 8 }}>
                           No credits remaining. <button
                             style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}
-                            onClick={() => navigate('/settings')}
+                            onClick={() => void openCreditsPage()}
                           >Buy Credits</button>
                         </p>
                       )}
@@ -1700,7 +1711,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
 
           return true;
         }}
-        onNavigateToSettings={() => navigate('/settings')}
+        onBuyCredits={() => void openCreditsPage()}
         savedTranslations={transcript?.translations ?? []}
         transcriptTitle={transcript?.title ?? ''}
         transcriptText={transcript?.transcriptText ?? ''}

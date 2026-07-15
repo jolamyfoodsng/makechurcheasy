@@ -5171,6 +5171,19 @@
   background: transparent;
 }
 
+.dock-content-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dock-content-pane[hidden] {
+  display: none !important;
+}
+
 .dock-module {
   display: flex;
   flex-direction: column;
@@ -7737,10 +7750,46 @@
   border-color: rgba(255, 255, 255, 0.15);
 }
 
+.dock-lyrics-toolbar__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .dock-lyrics-toolbar__btn--active {
   background: rgba(255, 255, 255, 0.12);
   color: var(--dock-primary, #f1f5f9);
   border-color: rgba(255, 255, 255, 0.18);
+}
+
+.dock-lyrics-toolbar__caret {
+  opacity: 0.7;
+  font-size: 10px;
+}
+
+.dock-lyrics-toolbar__group {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.dock-lyrics-toolbar__group .dock-lyrics-toolbar__btn {
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+}
+
+.dock-lyrics-toolbar__group .dock-lyrics-toolbar__btn:last-child {
+  border-right: 0;
+}
+
+.dock-lyrics-toolbar__btn--case {
+  min-width: 34px;
+  justify-content: center;
+  padding: 3px 7px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .dock-lyrics-autosplit {
@@ -14176,6 +14225,123 @@
   flex-shrink: 0;
 }
 
+.dock-worship-history {
+  position: relative;
+}
+
+.dock-worship-history__count {
+  position: absolute;
+  top: 4px;
+  right: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--dock-red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dock-worship-history__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 240;
+  width: min(320px, 70vw);
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 94%, transparent);
+  border-radius: 4px;
+  background: var(--dock-surface);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.dock-worship-history__menu-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dock-text);
+  margin-bottom: 8px;
+}
+
+.dock-worship-history__empty {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--dock-text-dim);
+}
+
+.dock-worship-history__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.dock-worship-history__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 88%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dock-surface-alt) 88%, transparent);
+}
+
+.dock-worship-history__copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.dock-worship-history__item-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dock-text);
+}
+
+.dock-worship-history__item-text {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dock-text-dim);
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dock-worship-history__restore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
+  border-radius: 4px;
+  background: var(--dock-surface);
+  color: var(--dock-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.dock-worship-history__restore:hover {
+  border-color: var(--dock-accent);
+  background: color-mix(in srgb, var(--dock-accent-soft) 72%, var(--dock-surface));
+  color: var(--dock-accent);
+}
+
+.dock-worship-history__restore:disabled,
+.dock-worship-slide-card__action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .dock-worship-summary__left {
   display: flex;
   align-items: center;
@@ -14416,6 +14582,12 @@
   border-color: color-mix(in srgb, var(--dock-accent) 34%, var(--dock-border));
   background: color-mix(in srgb, var(--dock-accent-soft) 72%, var(--dock-surface));
   color: var(--dock-text);
+}
+
+.dock-worship-slide-card__action--danger:hover {
+  border-color: color-mix(in srgb, var(--dock-red) 55%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-red) 16%, var(--dock-surface));
+  color: var(--dock-red);
 }
 
 .dock-worship-slide-card__footer {

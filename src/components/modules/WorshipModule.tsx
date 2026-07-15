@@ -19,14 +19,18 @@ import { formatLyricsFromSections, generateSlides, parseWorshipLyricSections } f
 import { unicodeSearchNormalize } from "../../worship/unicodeUtils";
 import { archiveSong, getAllSongs, saveSong, syncSongsToDock } from "../../worship/worshipDb";
 import { worshipObsService } from "../../worship/worshipObsService";
-import SongImportFullprocess from "../../../others/SongImportFullprocess";
 import {
   formatOnlineLyricsSearchError,
   isSpotifyTrackLyricsQuery,
   searchOnlineSongLyrics,
   type OnlineLyricsSearchResult,
 } from "../../worship/onlineLyricsService";
+import {
+  OnlineLyricsImportModal,
+  type OnlineLyricsImportDraft,
+} from "../../worship/OnlineLyricsImportModal";
 import { BulkImportModal } from "../../worship/BulkImportModal";
+import WorshipSongModal from "../../worship/WorshipSongModal";
 import { lowerThirdObsService } from "../../lowerthirds/lowerThirdObsService";
 import { dockObsClient } from "../../dock/dockObsClient";
 import { ensureDockObsClientConnected } from "../../services/dockObsInterop";
@@ -96,6 +100,10 @@ const WORSHIP_FULLSCREEN_THEME_FALLBACKS: BibleTheme[] = BUILTIN_THEMES.filter(
 );
 const MIN_ONLINE_LYRICS_QUERY_LENGTH = 3;
 const ONLINE_LYRICS_SEARCH_DELAY_MS = 40;
+
+function createSongId(prefix = "song"): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 // ── Worship layout persistence ──
 const WORSHIP_LAYOUT_PREFS_KEY = "ocs-worship-layout-prefs";
@@ -211,6 +219,7 @@ export function WorshipModule({
   const [onlineSearchMessage, setOnlineSearchMessage] = useState("");
   const [pendingOnlineImport, setPendingOnlineImport] = useState<OnlineLyricsSearchResult | null>(null);
   const [manualImportOpen, setManualImportOpen] = useState(false);
+  const [savingOnlineImport, setSavingOnlineImport] = useState(false);
 
   // ── Plan enforcement ──
   const { user: authUser } = useAuth();
@@ -1191,6 +1200,48 @@ export function WorshipModule({
     setPendingOnlineImport(result);
   }, [findImportedSong, selectSongById]);
 
+  const handleImportOnlineSong = useCallback(async (draft: OnlineLyricsImportDraft) => {
+    if (!pendingOnlineImport) {
+      return;
+    }
+
+    setSavingOnlineImport(true);
+
+    try {
+      const now = new Date().toISOString();
+      const lyrics = draft.lyrics.trim();
+      const newSong: Song = {
+        id: createSongId("song-online"),
+        metadata: {
+          title: draft.title.trim(),
+          artist: draft.artist.trim(),
+        },
+        lyrics,
+        slides: generateSlides(lyrics, 2, true),
+        createdAt: now,
+        updatedAt: now,
+        importSourceType: "online",
+        importSourceName: pendingOnlineImport.sourceName,
+        importSourceUrl: pendingOnlineImport.url,
+        autoSplit: true,
+        linesPerSlide: 2,
+      };
+
+      await saveSong(newSong);
+      await reloadSongs();
+      setSongSearch(newSong.metadata.title);
+      setPendingOnlineImport(null);
+      setSelectedSongId(newSong.id);
+    } catch (error) {
+      console.error("[WorshipModule] Failed to import online lyrics:", error);
+      setOnlineSearchMessage(
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setSavingOnlineImport(false);
+    }
+  }, [pendingOnlineImport, reloadSongs]);
+
   useEffect(() => {
     const trimmedSearch = songSearch.trim();
     const firstResult = onlineSearchResults[0];
@@ -2027,10 +2078,9 @@ export function WorshipModule({
       </div>
 
       {manualImportOpen && (
-        <SongImportFullprocess
-          mode="manual"
+        <WorshipSongModal
           onClose={() => setManualImportOpen(false)}
-          onImported={() => {
+          onSave={() => {
             void reloadSongs();
             setManualImportOpen(false);
           }}
@@ -2038,19 +2088,11 @@ export function WorshipModule({
       )}
 
       {pendingOnlineImport && (
-        <SongImportFullprocess
-          mode="onlineReview"
+        <OnlineLyricsImportModal
           result={pendingOnlineImport}
+          saving={savingOnlineImport}
           onClose={() => setPendingOnlineImport(null)}
-          onImported={() => {
-            void reloadSongs();
-            setSongSearch(pendingOnlineImport.title);
-            setPendingOnlineImport(null);
-          }}
-          onOpenExistingSong={(song) => {
-            setPendingOnlineImport(null);
-            selectSongById(song.id);
-          }}
+          onImport={(draft) => void handleImportOnlineSong(draft)}
         />
       )}
 

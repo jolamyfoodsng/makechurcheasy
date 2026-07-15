@@ -181,6 +181,93 @@
   min-height: 0;
 }
 
+.ws-lyrics-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-dark) 82%, var(--bg-dark));
+}
+
+.ws-lyrics-toolbar__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ws-lyrics-toolbar__meta-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+.ws-lyrics-toolbar__group {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.ws-lyrics-toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.ws-lyrics-toolbar__btn:hover {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+  background: color-mix(in srgb, var(--surface-dark) 70%, var(--surface));
+  color: var(--text-primary);
+}
+
+.ws-lyrics-toolbar__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ws-lyrics-toolbar__group .ws-lyrics-toolbar__btn {
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 0;
+}
+
+.ws-lyrics-toolbar__group .ws-lyrics-toolbar__btn:last-child {
+  border-right: 0;
+}
+
+.ws-lyrics-toolbar__btn--case {
+  min-width: 34px;
+  padding: 0 7px;
+  letter-spacing: 0;
+}
+
 .ws-lyrics-textarea {
   flex: 1;
   width: 100%;

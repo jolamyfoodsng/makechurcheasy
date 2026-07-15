@@ -899,7 +899,16 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
       setSendingFile(`upload:${fileName}`);
       try {
         const filePath = await resolveUploadFilePath(fileName);
-        await dockObsClient.pushMedia(filePath, fileName, options);
+        try {
+          await dockObsClient.pushMedia(filePath, fileName, options);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (!/scene item|create.*input|create.*scene|failed to create/i.test(message)) {
+            throw err;
+          }
+          await ensureObsConnected();
+          await dockObsClient.pushMedia(filePath, fileName, options);
+        }
         setSendError(null);
         track("media_presented");
         trackMediaPresented("uploaded");
@@ -929,7 +938,16 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
       setSendingFile(`library:${item.id}`);
       try {
         const filePath = await resolveLibraryMediaFilePath(item);
-        await dockObsClient.pushMedia(filePath, item.name, options);
+        try {
+          await dockObsClient.pushMedia(filePath, item.name, options);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (!/scene item|create.*input|create.*scene|failed to create/i.test(message)) {
+            throw err;
+          }
+          await ensureObsConnected();
+          await dockObsClient.pushMedia(filePath, item.name, options);
+        }
         setSendError(null);
         track("media_presented");
         trackMediaPresented("library");

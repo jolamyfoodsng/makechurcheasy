@@ -8,7 +8,6 @@ interface BulkImportModalProps {
 export function BulkImportModal({ onClose, onImported }: BulkImportModalProps) {
   return (
     <SongImportFullprocess
-      mode="file"
       onClose={onClose}
       onImported={onImported}
     />

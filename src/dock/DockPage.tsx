@@ -73,6 +73,7 @@ import Icon from "./DockIcon";
 
 const DOCK_SHELL_PREFS_KEY = "ocs-dock-shell-preferences";
 const DOCK_STAGED_ITEM_KEY = "ocs-dock-staged-item";
+const DOCK_TAB_PREWARM_DELAY_MS = 250;
 
 interface DockShellPreferences {
   activeTab?: DockTab | "live";
@@ -251,6 +252,20 @@ export default function DockPage() {
     ));
   }, [activeTab]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setMountedTabs((current) => {
+        if (current.bible && current.worship) return current;
+        return {
+          ...current,
+          bible: true,
+          worship: true,
+        };
+      });
+    }, DOCK_TAB_PREWARM_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   // Refresh plan from overlay server on any click in the dock (debounced)
   useEffect(() => {
     let lastRefresh = 0;
@@ -358,57 +373,58 @@ export default function DockPage() {
         // Stop auto-reconnect — we're connected
         if (autoReconnectTimer) { clearInterval(autoReconnectTimer); autoReconnectTimer = null; }
 
-        void dockObsClient.applyProjectionSettings().catch(() => { });
-        dockObsClient.recoverLiveState().then((recovered) => {
-          setStaged((current) => {
-            if (current) return current;
-            if (recovered.bible) {
-              setActiveTab("bible");
-              const compare = recovered.bible.compare;
-              const leftColumn = compare?.columns?.[0] ?? null;
-              const compareLabel =
-                compare?.columns?.map((column) => column.referenceLabel).filter(Boolean).join(" | ") || "";
-              const compareSubtitle =
-                compare?.columns?.map((column) => column.translation).filter(Boolean).join(" · ") || "";
-              return {
-                type: "bible",
-                label: compareLabel || recovered.bible.reference || t('dock.bibleVerseFallback'),
-                subtitle: compareSubtitle || recovered.bible.text || "",
-                data: {
-                  book: leftColumn?.book ?? "",
-                  chapter: leftColumn?.chapter ?? 0,
-                  verse: leftColumn?.verse ?? 0,
-                  verseEnd: leftColumn?.verseEnd ?? leftColumn?.verse ?? 0,
-                  verseRange: leftColumn?.verseRange ?? "",
-                  translation: leftColumn?.translation ?? "",
-                  referenceLabel: compareLabel || recovered.bible.reference,
-                  verseText: recovered.bible.text,
-                  overlayMode: recovered.bible.overlayMode,
-                  compare,
-                  _recovered: true,
-                  _dockLive: true,
-                },
-              };
-            }
-            if (recovered.worship) {
-              setActiveTab("worship");
-              return {
-                type: "worship",
-                label: recovered.worship.sectionLabel || t('dock.worshipFallback'),
-                subtitle: recovered.worship.songTitle || "",
-                data: {
-                  sectionText: recovered.worship.sectionText,
-                  sectionLabel: recovered.worship.sectionLabel,
-                  song: { title: recovered.worship.songTitle, artist: recovered.worship.artist },
-                  overlayMode: recovered.worship.overlayMode,
-                  _recovered: true,
-                  _dockLive: true,
-                },
-              };
-            }
-            return null;
-          });
-        }).catch((error) => {
+        dockObsClient.waitUntilReady().then(() =>
+          dockObsClient.recoverLiveState().then((recovered) => {
+            setStaged((current) => {
+              if (current) return current;
+              if (recovered.bible) {
+                setActiveTab("bible");
+                const compare = recovered.bible.compare;
+                const leftColumn = compare?.columns?.[0] ?? null;
+                const compareLabel =
+                  compare?.columns?.map((column) => column.referenceLabel).filter(Boolean).join(" | ") || "";
+                const compareSubtitle =
+                  compare?.columns?.map((column) => column.translation).filter(Boolean).join(" · ") || "";
+                return {
+                  type: "bible",
+                  label: compareLabel || recovered.bible.reference || t('dock.bibleVerseFallback'),
+                  subtitle: compareSubtitle || recovered.bible.text || "",
+                  data: {
+                    book: leftColumn?.book ?? "",
+                    chapter: leftColumn?.chapter ?? 0,
+                    verse: leftColumn?.verse ?? 0,
+                    verseEnd: leftColumn?.verseEnd ?? leftColumn?.verse ?? 0,
+                    verseRange: leftColumn?.verseRange ?? "",
+                    translation: leftColumn?.translation ?? "",
+                    referenceLabel: compareLabel || recovered.bible.reference,
+                    verseText: recovered.bible.text,
+                    overlayMode: recovered.bible.overlayMode,
+                    compare,
+                    _recovered: true,
+                    _dockLive: true,
+                  },
+                };
+              }
+              if (recovered.worship) {
+                setActiveTab("worship");
+                return {
+                  type: "worship",
+                  label: recovered.worship.sectionLabel || t('dock.worshipFallback'),
+                  subtitle: recovered.worship.songTitle || "",
+                  data: {
+                    sectionText: recovered.worship.sectionText,
+                    sectionLabel: recovered.worship.sectionLabel,
+                    song: { title: recovered.worship.songTitle, artist: recovered.worship.artist },
+                    overlayMode: recovered.worship.overlayMode,
+                    _recovered: true,
+                    _dockLive: true,
+                  },
+                };
+              }
+              return null;
+            });
+          }),
+        ).catch((error) => {
           console.warn("[Dock] Failed to recover live state:", error);
         });
       }
@@ -879,6 +895,24 @@ export default function DockPage() {
                       {t('page.returnsObsToPreviousState')}
                     </div>
 
+                    <label
+                      className="dock-sidebar__check"
+                      style={{ marginTop: 8, cursor: "pointer" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={projectionSettings.hideOtherMceSourcesOnSend}
+                        onChange={(e) => setProjectionSettings((s) => ({ ...s, hideOtherMceSourcesOnSend: e.target.checked }))}
+                      />
+                      <span>{t('page.hideOtherMceSourcesOnSend', 'Hide Other MCE Sources on Send')}</span>
+                    </label>
+                    <div style={{ fontSize: 10, opacity: 0.5, padding: "2px 8px 0 22px", lineHeight: 1.4 }}>
+                      {t(
+                        'page.hideOtherMceSourcesOnSendDesc',
+                        'When off, sending Bible, Worship, media, or lower thirds keeps other MCE Presentation sources visible.',
+                      )}
+                    </div>
+
                     {/* Lower Thirds → Presentation Only */}
                     <label
                       className="dock-sidebar__check"
@@ -887,8 +921,8 @@ export default function DockPage() {
                       <input
                         type="checkbox"
                         checked
-                        disabled
-                        readOnly
+
+
                       />
                       <span>{t('page.presentationOnly', 'Lower Thirds in Presentation')}</span>
                     </label>
@@ -1076,7 +1110,13 @@ export default function DockPage() {
 
           <div className="dock-content-main">
             {mountedTabs.planner && (
-              <div hidden={activeTab !== "planner"}>
+              <div
+                key="planner-pane"
+                className="dock-content-pane"
+                hidden={activeTab !== "planner"}
+                aria-hidden={activeTab !== "planner"}
+                style={activeTab === "planner" ? undefined : { display: "none" }}
+              >
                 <DockPlannerTab
                   staged={staged}
                   onStage={handleStage}
@@ -1084,8 +1124,14 @@ export default function DockPage() {
                 />
               </div>
             )}
-            {activeTab === "bible" && (
-              <div>
+            {mountedTabs.bible && (
+              <div
+                key="bible-pane"
+                className="dock-content-pane"
+                hidden={activeTab !== "bible"}
+                aria-hidden={activeTab !== "bible"}
+                style={activeTab === "bible" ? undefined : { display: "none" }}
+              >
                 <DockBibleTab
                   staged={staged}
                   onStage={handleStage}
@@ -1098,8 +1144,14 @@ export default function DockPage() {
                 />
               </div>
             )}
-            {activeTab === "worship" && (
-              <div>
+            {mountedTabs.worship && (
+              <div
+                key="worship-pane"
+                className="dock-content-pane"
+                hidden={activeTab !== "worship"}
+                aria-hidden={activeTab !== "worship"}
+                style={activeTab === "worship" ? undefined : { display: "none" }}
+              >
                 <DockWorshipTab
                   staged={staged}
                   onStage={handleStage}
@@ -1110,7 +1162,13 @@ export default function DockPage() {
               </div>
             )}
             {mountedTabs.media && (
-              <div hidden={activeTab !== "media"}>
+              <div
+                key="media-pane"
+                className="dock-content-pane"
+                hidden={activeTab !== "media"}
+                aria-hidden={activeTab !== "media"}
+                style={activeTab === "media" ? undefined : { display: "none" }}
+              >
                 <DockMediaTab
                   staged={staged}
                   onStage={handleStage}
@@ -1119,12 +1177,24 @@ export default function DockPage() {
               </div>
             )}
             {mountedTabs.multiview && (
-              <div hidden={activeTab !== "multiview"}>
+              <div
+                key="multiview-pane"
+                className="dock-content-pane"
+                hidden={activeTab !== "multiview"}
+                aria-hidden={activeTab !== "multiview"}
+                style={activeTab === "multiview" ? undefined : { display: "none" }}
+              >
                 <DockMultiviewTab />
               </div>
             )}
             {mountedTabs.ministry && (
-              <div hidden={activeTab !== "ministry"}>
+              <div
+                key="ministry-pane"
+                className="dock-content-pane"
+                hidden={activeTab !== "ministry"}
+                aria-hidden={activeTab !== "ministry"}
+                style={activeTab === "ministry" ? undefined : { display: "none" }}
+              >
                 <DockMinistryTab
                   staged={staged}
                   onStage={handleStage}

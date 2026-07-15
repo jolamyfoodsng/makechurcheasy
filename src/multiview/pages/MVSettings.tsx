@@ -6,33 +6,32 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
+import { getBibleSettings, getInstalledTranslations, saveBibleSettings } from "../../bible/bibleDb";
+import { useBible } from "../../bible/bibleStore";
+import type { BibleTranslation } from "../../bible/types";
+import { AppLogo } from "../../components/AppLogo";
+import { UpgradeModal } from "../../components/UpgradeModal";
+import { useAuth } from "../../contexts/AuthContext";
 import {
   INTERFACE_LOCALES,
 } from "../../i18n/localeCatalog";
+import { ltDurationStore } from "../../lowerthirds/ltDurationStore";
+import { applyBrandingSettingsToDom } from "../../services/branding";
+import { fetchCreditDetails, fetchCreditTransactions, onCreditChange, type CreditTransaction } from "../../services/credits";
 import {
   applyInterfaceLanguagePreference,
   getInterfaceLanguageLabel,
   getResolvedInterfaceLanguage,
 } from "../../services/interfaceLanguage";
-import { getBibleSettings, getInstalledTranslations, saveBibleSettings } from "../../bible/bibleDb";
-import { useBible } from "../../bible/bibleStore";
-import type { BibleTranslation } from "../../bible/types";
-import { AppLogo } from "../../components/AppLogo";
-import { useAuth } from "../../contexts/AuthContext";
-import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
-import { createAudioProcessor } from "../../services/audio/audioProcessor";
-import { voiceBibleService } from "../../services/voiceBibleService";
+import { canUseMobileControl, getEffectivePlan, getTrialDaysRemaining, getUserPlan, isInTrial } from "../../services/licenseService";
 import { lmDockService } from "../../services/lmDockService";
-import { ltDurationStore } from "../../lowerthirds/ltDurationStore";
-import { applyBrandingSettingsToDom } from "../../services/branding";
-import { fetchCreditDetails, fetchCreditTransactions, onCreditChange, type CreditTransaction } from "../../services/credits";
 import { obsService } from "../../services/obsService";
+import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
 import { formatCredits, getPlanConfig, getPlanCredits, getPlanLabel, type PlanConfig } from "../../services/planConfig";
 import { isProUnlocked } from "../../services/proLicense";
-import { getUserPlan, isInTrial, getTrialDaysRemaining, getEffectivePlan, canUseMobileControl } from "../../services/licenseService";
-import { UpgradeModal } from "../../components/UpgradeModal";
+import { voiceBibleService } from "../../services/voiceBibleService";
 import { clearAllSongs } from "../../worship/worshipDb";
 import { refreshTheme } from "../components/MVThemeProvider";
 import * as db from "../mvStore";
@@ -42,21 +41,24 @@ import {
   type SpeakerProfileSetting
 } from "../mvStore";
 
+import { invoke } from "@tauri-apps/api/core";
 import {
-  Book,
+  Bell,
   Calendar,
   Check,
   CheckCircle,
-  ChevronDown, ExternalLink,
+  ChevronDown,
+  Copy,
+  ExternalLink,
   FileText,
   Globe,
   History,
-  Mic,
   Monitor,
   Moon,
   Music,
   Paintbrush,
   Palette,
+  Printer,
   Radio,
   RefreshCw,
   RotateCcw,
@@ -65,12 +67,8 @@ import {
   Sun,
   Trash2,
   Users,
-  Bell,
-  Copy,
-  Printer,
   Zap,
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
 import { refreshAccountBootstrapFromServer } from "../../services/authService";
 
 import "./MVSettings.css";
@@ -155,23 +153,6 @@ export function MVSettings() {
   });
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
-
-  // ── Audio settings state ──
-  const [inputGain, setInputGain] = useState(() => db.getSettings().inputGain ?? 100);
-  const [testMicActive, setTestMicActive] = useState(false);
-  const [testMicLevel, setTestMicLevel] = useState(0);
-  const [testMicClipping, setTestMicClipping] = useState(false);
-  const testMicProcessorRef = useRef<import("../../services/audio/audioProcessor").AudioProcessor | null>(null);
-  const testMicRafRef = useRef<number>(0);
-
-  // Clean up test mic on unmount
-  useEffect(() => {
-    return () => {
-      testMicProcessorRef.current?.destroy();
-      testMicProcessorRef.current = null;
-      cancelAnimationFrame(testMicRafRef.current);
-    };
-  }, []);
 
   // ── Bible settings state ──
   const { state: bibleState, dispatch: bibleDispatch, setTheme: bibleSetTheme } = useBible();
@@ -752,7 +733,6 @@ export function MVSettings() {
             else if (activeTab === "appearance") handleResetAppearance();
             else if (activeTab === "bible") handleSaveBible();
             else if (activeTab === "audio") {
-              setInputGain(100);
               db.updateSettings({ inputGain: 100 });
               voiceBibleService.setInputGain(100);
               lmDockService.setInputGain(100);
@@ -781,12 +761,12 @@ export function MVSettings() {
         <div className="tabs-navigation">
           {([
             ["general", Settings, t("mvSettings.tabs.general")],
-            ["obs", Radio, t("mvSettings.tabs.obs")],
-            ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
-            ["appearance", Palette, t("mvSettings.tabs.appearance")],
             ["branding", Paintbrush, t("mvSettings.tabs.branding")],
-            ["audio", Mic, t("mvSettings.tabs.audio")],
+            ["appearance", Palette, t("mvSettings.tabs.appearance")],
             ["usage", History, t("mvSettings.tabs.usage")],
+            ["obs", Radio, t("mvSettings.tabs.obs")],
+            // ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
+            // ["audio", Mic, t("mvSettings.tabs.audio")],
             // ["pro", ShieldCheck, "Pro License"],
             // ["developer", Key, "Developer"],
           ] as const).map(([id, IconComp, label]) => (
@@ -1416,23 +1396,6 @@ export function MVSettings() {
 
                     <hr className="settings-divider" />
 
-                    {/* Font size */}
-                    <div className="form-group">
-                      <label className="form-label">{t("mvSettings.appearance.fontScale")}</label>
-                      <div className="grid-3-col" style={{ marginTop: "4px" }}>
-                        {([1, 2, 3] as const).map((v) => (
-                          <label key={v} className="option-select-card">
-                            <input type="radio" name="font_size" checked={fontSizeRange === v} onChange={() => setFontSizeRange(v)} />
-                            <div className="option-select-inner" style={{ padding: "12px", textAlign: "center" }}>
-                              <div className="checked-indicator"><Check size={10} /></div>
-                              <span className="option-title">{v === 1 ? t("mvSettings.appearance.small") : v === 2 ? t("mvSettings.appearance.medium") : t("mvSettings.appearance.large")}</span>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-
 
                     {/* Toggles */}
                     <div className="switch-row">
@@ -1737,96 +1700,11 @@ export function MVSettings() {
                   </div>
 
                   {/* ── Credit Consumption Rates ── */}
-                  <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <h4 className="section-title">Credit Consumption</h4>
-                    <div className="credit-rates-grid" style={{ marginTop: "16px" }}>
-                      {(planConfig?.creditCosts ?? []).map((rate, i) => {
-                        const icons = [Mic, Globe, FileText, Book, Paintbrush];
-                        const IconComp = icons[i] || Mic;
-                        return (
-                          <div key={i} className="credit-rate-row">
-                            <div className="credit-rate-icon">
-                              <IconComp size={16} />
-                            </div>
-                            <div className="credit-rate-content">
-                              <div className="credit-rate-header">
-                                <span className="credit-rate-title">{rate.name}</span>
-                                <span className="credit-rate-cost">{rate.cost} Credit{rate.cost !== 1 ? "s" : ""} / {rate.unit.replace("flat", "use")}</span>
-                              </div>
-                              <p className="credit-rate-desc">{rate.description}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+
 
 
                   {/* ── Plan Features ── */}
-                  <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <h4 className="section-title">{proUnlocked ? "Pro Plan Features" : trialActive ? "Growth Trial Features" : "Free Plan Features"}</h4>
-                    <div className="plan-features-columns" style={{ marginTop: "16px" }}>
-                      {/* Included */}
-                      <div className="plan-features-col">
-                        <span className="plan-features-col-title plan-features-col-included">Included</span>
-                        <ul className="plan-features-list">
-                          {[
-                            "Unlimited Songs",
-                            "Unlimited Media",
-                            "10,000+ Bible Translations",
-                            "OBS Integration",
-                            "Custom Themes",
-                            "Lower Thirds",
-                            "Speaker Profiles",
-                            "EasyWorship Import",
-                            "ProPresenter Import",
-                            "Offline Bible Access",
-                          ].map((f, i) => (
-                            <li key={i} className="plan-features-list-item plan-features-list-included">
-                              <Check size={13} />
-                              <span>{f}</span>
-                            </li>
-                          ))}
-                          {proUnlocked && [
-                            "Speech-to-Scripture",
-                            "Live Translation",
-                            "Multiview",
-                            "Mobile Control",
-                            "Team Members",
-                            "Cloud Backup",
-                            "Priority Support",
-                          ].map((f, i) => (
-                            <li key={`pro-${i}`} className="plan-features-list-item plan-features-list-included">
-                              <Check size={13} />
-                              <span>{f}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      {/* Not Included */}
-                      {!proUnlocked && (
-                        <div className="plan-features-col">
-                          <span className="plan-features-col-title plan-features-col-excluded">Not Included</span>
-                          <ul className="plan-features-list">
-                            {[
-                              "Speech-to-Scripture",
-                              "Live Translation",
-                              "Multiview",
-                              "Mobile Control",
-                              "Team Members",
-                              "Cloud Backup",
-                              "Priority Support",
-                            ].map((f, i) => (
-                              <li key={i} className="plan-features-list-item plan-features-list-excluded">
-                                <span className="plan-feature-x">✗</span>
-                                <span>{f}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+
                 </div>
               )}
             </div>
@@ -2007,138 +1885,7 @@ export function MVSettings() {
               )}
 
               {/* ══════════════ AUDIO TAB ══════════════ */}
-              {activeTab === "audio" && (
-                <div className="settings-section">
-                  <div className="section-header">
-                    <h3 className="section-title">Microphone Input</h3>
-                    <p className="section-desc">Configure input gain and monitor audio levels.</p>
-                  </div>
 
-                  <div className="settings-card fields-rows-stack">
-                    {/* ── Gain Slider ── */}
-                    <div className="setting-item">
-                      <label className="setting-label">Input Gain</label>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%" }}>
-                        <input
-                          type="range"
-                          min={0}
-                          max={300}
-                          step={1}
-                          value={inputGain}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setInputGain(val);
-                            db.updateSettings({ inputGain: val });
-                            voiceBibleService.setInputGain(val);
-                            lmDockService.setInputGain(val);
-                          }}
-                          style={{ flex: 1 }}
-                        />
-                        <span style={{ minWidth: 56, textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.88rem", color: "var(--text-primary)" }}>
-                          {inputGain}%
-                        </span>
-                        <button
-                          className="action-btn"
-                          style={{ fontSize: "0.75rem", padding: "4px 10px" }}
-                          onClick={() => {
-                            setInputGain(100);
-                            db.updateSettings({ inputGain: 100 });
-                            voiceBibleService.setInputGain(100);
-                            lmDockService.setInputGain(100);
-                          }}
-                          title="Reset">
-                          Reset
-                        </button>
-                      </div>
-                      <p className="setting-hint" style={{ color: "var(--text-muted)", fontSize: "0.75rem", marginTop: 4 }}>
-                        0% = muted · 100% = unity · 300% = max boost
-                      </p>
-                    </div>
-
-                    {/* ── Live Level Meter ── */}
-                    <div className="setting-item">
-                      <label className="setting-label">Input Level</label>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
-                        <div style={{
-                          flex: 1, height: 10, borderRadius: 5,
-                          background: "var(--surface-2, rgba(255,255,255,0.06))",
-                          overflow: "hidden", position: "relative",
-                        }}>
-                          <div style={{
-                            width: `${Math.min(100, (testMicActive ? testMicLevel : 0) * 100)}%`,
-                            height: "100%", borderRadius: 5,
-                            background: testMicClipping
-                              ? "#ef4444"
-                              : (testMicActive ? testMicLevel : 0) >= 0.7
-                                ? "#ef4444"
-                                : (testMicActive ? testMicLevel : 0) >= 0.25
-                                  ? "#eab308"
-                                  : "#22c55e",
-                            transition: "width 0.05s linear",
-                          }} />
-                        </div>
-                        {testMicActive && testMicClipping && (
-                          <span style={{ color: "#ef4444", fontWeight: 700, fontSize: "0.75rem", letterSpacing: "0.05em" }}>
-                            CLIPPING
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* ── Test Mic Button ── */}
-                    <div className="setting-item">
-                      <label className="setting-label">Test Microphone</label>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <button
-                          className={`action-btn ${testMicActive ? "btn-danger" : "btn-primary"}`}
-                          style={{ fontSize: "0.82rem", padding: "6px 16px" }}
-                          onClick={async () => {
-                            if (testMicActive) {
-                              // Stop test
-                              testMicProcessorRef.current?.destroy();
-                              testMicProcessorRef.current = null;
-                              cancelAnimationFrame(testMicRafRef.current);
-                              setTestMicActive(false);
-                              setTestMicLevel(0);
-                              setTestMicClipping(false);
-                              return;
-                            }
-                            try {
-                              const stream = await navigator.mediaDevices.getUserMedia({
-                                audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-                              });
-                              const gainMultiplier = (db.getSettings().inputGain ?? 100) / 100;
-                              const processor = createAudioProcessor(stream, gainMultiplier);
-                              testMicProcessorRef.current = processor;
-                              setTestMicActive(true);
-
-                              const tick = () => {
-                                if (!testMicProcessorRef.current) return;
-                                const level = processor.getLevel();
-                                const clipping = processor.isClipping();
-                                setTestMicLevel(level);
-                                setTestMicClipping(clipping);
-                                testMicRafRef.current = requestAnimationFrame(tick);
-                              };
-                              testMicRafRef.current = requestAnimationFrame(tick);
-                            } catch (err) {
-                              console.warn("[Audio Settings] Mic test failed:", err);
-                              triggerToast("Could not access microphone", "accent");
-                            }
-                          }}
-                        >
-                          {testMicActive ? "Stop Test" : "Start Test"}
-                        </button>
-                        {testMicActive && (
-                          <span style={{ color: "var(--success-color, #22c55e)", fontSize: "0.8rem", fontWeight: 500 }}>
-                            Listening…
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Tips card */}
 

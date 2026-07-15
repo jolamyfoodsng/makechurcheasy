@@ -276,6 +276,16 @@ fn parse_query_value(url_path: &str, key: &str) -> String {
         .unwrap_or_default()
 }
 
+fn extract_path_session_id(clean: &str) -> Option<String> {
+    let token = clean.strip_prefix("p/")?.trim_matches('/');
+    if token.is_empty() {
+        return None;
+    }
+    urlencoding::decode(token)
+        .ok()
+        .map(|value| value.into_owned())
+}
+
 fn content_type_for_extension(extension: &str) -> &'static str {
     match extension {
         "html" => "text/html; charset=utf-8",
@@ -380,7 +390,7 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
                 continue;
             }
 
-            if clean == "presentation.html" {
+            if clean == "presentation.html" || clean == "p" || clean.starts_with("p/") {
                 let response = Response::from_string(PRESENTATION_HTML)
                     .with_header(
                         Header::from_bytes("Content-Type", "text/html; charset=utf-8").unwrap(),
@@ -390,7 +400,123 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
                 continue;
             }
 
-            if clean == "api/presentation-state" && request.method() == &Method::Get {
+            if clean == "api/presentation-meta" && request.method() == &Method::Get {
+                let mut session_id = parse_query_value(&url_path, "sessionId");
+                if session_id.trim().is_empty() {
+                    session_id = extract_path_session_id(clean).unwrap_or_default();
+                }
+
+                if session_id.trim().is_empty() {
+                    let response = Response::from_string(r#"{"error":"sessionId is required"}"#)
+                        .with_status_code(400)
+                        .with_header(json_header())
+                        .with_header(cors_header());
+                    let _ = request.respond(response);
+                    continue;
+                }
+
+                let viewer_count = presentation_viewer_count(&session_id);
+                let response = Response::from_string(
+                    serde_json::json!({
+                        "sessionId": session_id,
+                        "wsPort": ws_port(),
+                        "viewerCount": viewer_count,
+                    })
+                    .to_string(),
+                )
+                .with_header(json_header())
+                .with_header(cors_header());
+                let _ = request.respond(response);
+                continue;
+            }
+
+            if clean == "api/presentation-state" {
+                if request.method() == &Method::Options {
+                    let response = Response::from_string("")
+                        .with_header(
+                            Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(
+                            Header::from_bytes("Access-Control-Allow-Headers", "Content-Type")
+                                .unwrap(),
+                        )
+                        .with_header(cors_header());
+                    let _ = request.respond(response);
+                    continue;
+                }
+
+                if request.method() == &Method::Post {
+                    let mut body = String::new();
+                    if request.as_reader().read_to_string(&mut body).is_err() {
+                        let response = Response::from_string("Bad Request").with_status_code(400);
+                        let _ = request.respond(response);
+                        continue;
+                    }
+
+                    match serde_json::from_str::<PresentationStateEnvelope>(&body) {
+                        Ok(mut payload) => {
+                            if payload.session_id.trim().is_empty() {
+                                let response =
+                                    Response::from_string(r#"{"error":"sessionId is required"}"#)
+                                        .with_status_code(400)
+                                        .with_header(json_header())
+                                        .with_header(cors_header());
+                                let _ = request.respond(response);
+                                continue;
+                            }
+
+                            if payload.updated_at == 0 {
+                                payload.updated_at = now_unix_millis();
+                            }
+
+                            let session_id = payload.session_id.clone();
+                            let state_store = PRESENTATION_STATE.get_or_init(|| {
+                                std::sync::Mutex::new(std::collections::BTreeMap::new())
+                            });
+                            if let Ok(mut state) = state_store.lock() {
+                                state.insert(session_id.clone(), payload.clone());
+                            }
+                            broadcast_presentation_state(&payload);
+
+                            let viewer_count = presentation_viewer_count(&session_id);
+                            let response = Response::from_string(
+                                serde_json::json!({
+                                    "ok": true,
+                                    "viewerCount": viewer_count,
+                                })
+                                .to_string(),
+                            )
+                            .with_header(json_header())
+                            .with_header(cors_header());
+                            let _ = request.respond(response);
+                        }
+                        Err(error) => {
+                            let response = Response::from_string(
+                                serde_json::json!({
+                                    "error": format!("Invalid presentation state: {}", error),
+                                })
+                                .to_string(),
+                            )
+                            .with_status_code(400)
+                            .with_header(json_header())
+                            .with_header(cors_header());
+                            let _ = request.respond(response);
+                        }
+                    }
+                    continue;
+                }
+
+                if request.method() != &Method::Get {
+                    let response =
+                        Response::from_string("Method Not Allowed").with_status_code(405);
+                    let _ = request.respond(response);
+                    continue;
+                }
+
                 let session_id = parse_query_value(&url_path, "sessionId");
                 if session_id.trim().is_empty() {
                     let response = Response::from_string(r#"{"error":"sessionId is required"}"#)

@@ -1,498 +1,909 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Icon from "../src/components/Icon";
-import { useAuth } from "../src/contexts/AuthContext";
-import { checkEntitlementSync } from "../src/services/entitlementClient";
-import { getEffectivePlan, getRemainingSongSlots } from "../src/services/licenseService";
-import { OnlineLyricsImportModal, type OnlineLyricsImportDraft } from "../src/worship/OnlineLyricsImportModal";
-import { BulkImportDocumentFlow } from "../src/worship/BulkImportDocumentFlow";
-import WorshipSongEditor from "../src/worship/WorshipSongEditor";
+import { useMemo, useRef, useState } from "react";
 import {
-  formatOnlineLyricsSearchError,
-  isSpotifyTrackLyricsQuery,
-  searchOnlineSongLyrics,
-  type OnlineLyricsSearchResult,
-} from "../src/worship/onlineLyricsService";
-import { generateSlides } from "../src/worship/slideEngine";
-import type { Song } from "../src/worship/types";
-import { unicodeSearchNormalize } from "../src/worship/unicodeUtils";
-import { getAllSongs, saveSong } from "../src/worship/worshipDb";
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+  ClipboardPaste,
+  FileSearch,
+  FileText,
+  FileUp,
+  Loader2,
+  Music2,
+  Plus,
+  RefreshCcw,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import {
+  assessExtractedTextQuality,
+  extractTextFromFile,
+  getFileTypeLabel,
+  normalizeExtractedLyricsText,
+  type ExtractedTextQuality,
+} from "../src/worship/bulkImportService";
+import { processDocumentViaApi } from "../src/worship/bulkImportAiService";
+import {
+  createEmptyImportSection,
+  estimateDraftSlideCount,
+  importSmartSongs,
+} from "../src/worship/smartImportService";
+import { parseWorshipLyricSections } from "../src/worship/slideEngine";
+import type {
+  SmartImportSectionDraft,
+  SmartImportSongDraft,
+} from "../src/worship/smartImportTypes";
 import "./SongimportFullprocess.css";
 
-export type SongImportFullprocessMode = "manual" | "file" | "onlineSearch" | "onlineReview";
+type ImportStep = "pick" | "review" | "importing" | "done";
+type SourceMode = "file" | "text";
 
 interface SongImportFullprocessProps {
-  mode?: SongImportFullprocessMode;
   onClose: () => void;
-  onImported?: () => void | Promise<void>;
-  initialQuery?: string;
-  result?: OnlineLyricsSearchResult | null;
-  onOpenExistingSong?: (song: Song) => void;
+  onImported: () => void;
 }
 
-const MIN_ONLINE_LYRICS_QUERY_LENGTH = 3;
-const ONLINE_LYRICS_SEARCH_DELAY_MS = 80;
-
-function normalizeSongLookupPart(value: string): string {
-  return unicodeSearchNormalize(value);
+interface EditableImportSongDraft extends SmartImportSongDraft {
+  enabled: boolean;
 }
 
-function buildSongLookupKeys(title: string, artist: string): string[] {
-  const normalizedTitle = normalizeSongLookupPart(title);
-  const normalizedArtist = normalizeSongLookupPart(artist);
+interface LocalDetectedSong {
+  title: string;
+  lyrics: string;
+  hymnNumber?: string;
+}
 
-  if (!normalizedTitle) {
+function uid(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function extractNumber(value: string): string | undefined {
+  const match = value.match(/\b(\d+|[ivxlcdm]+)\b/i);
+  return match?.[1];
+}
+
+function toSectionDrafts(lyrics: string): SmartImportSectionDraft[] {
+  const normalized = normalizeExtractedLyricsText(lyrics);
+  const parsed = parseWorshipLyricSections(normalized, 2);
+  if (parsed.length === 0) {
+    return [{
+      ...createEmptyImportSection("verse"),
+      content: normalized,
+    }];
+  }
+
+  return parsed.map((section, index) => ({
+    id: uid(`import-section-${index + 1}`),
+    type: section.type,
+    label: section.label,
+    number: extractNumber(section.label),
+    content: section.lines.join("\n"),
+    warnings: [],
+  }));
+}
+
+function defaultSongTitle(sourceName: string, index = 0): string {
+  const base = sourceName.replace(/\.[^.]+$/, "").trim() || "Imported Song";
+  return index > 0 ? `${base} ${index + 1}` : base;
+}
+
+function buildDraftFromLyrics(
+  title: string,
+  lyrics: string,
+  sourceName: string,
+  index = 0,
+  hymnNumber?: string,
+): SmartImportSongDraft {
+  const normalizedLyrics = normalizeExtractedLyricsText(lyrics);
+  return {
+    id: uid(`import-song-${index + 1}`),
+    title: title.trim() || defaultSongTitle(sourceName, index),
+    artist: "",
+    hymnNumber: hymnNumber?.trim() || undefined,
+    language: undefined,
+    method: "fallback",
+    warnings: [],
+    reviewNotes: [],
+    rawExcerpt: normalizedLyrics.slice(0, 2400),
+    sections: toSectionDrafts(normalizedLyrics),
+  };
+}
+
+function detectNumberedSongs(text: string, sourceName: string): LocalDetectedSong[] {
+  const lines = text.split("\n");
+  const boundaries: Array<{ index: number; title: string; hymnNumber?: string }> = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (!line) continue;
+
+    let match = line.match(/^(?:song|hymn|orin)\s+(\d{1,4})(?:[.: -]+(.+))?$/i);
+    if (match) {
+      boundaries.push({
+        index,
+        hymnNumber: match[1],
+        title: match[2]?.trim() || `Hymn ${match[1]}`,
+      });
+      continue;
+    }
+
+    match = line.match(/^(\d{1,4})[.)-]\s+(.+)$/);
+    if (match) {
+      boundaries.push({
+        index,
+        hymnNumber: match[1],
+        title: match[2].trim() || `Song ${match[1]}`,
+      });
+      continue;
+    }
+
+    match = line.match(/^(\d{1,4})$/);
+    if (match) {
+      const nextLine = lines[index + 1]?.trim() ?? "";
+      boundaries.push({
+        index,
+        hymnNumber: match[1],
+        title: nextLine && nextLine.length <= 90 ? nextLine : `Hymn ${match[1]}`,
+      });
+    }
+  }
+
+  if (boundaries.length < 2) {
     return [];
   }
 
-  return normalizedArtist
-    ? [`${normalizedTitle}::${normalizedArtist}`, normalizedTitle]
-    : [normalizedTitle];
+  const songs: LocalDetectedSong[] = [];
+  for (let i = 0; i < boundaries.length; i += 1) {
+    const start = boundaries[i];
+    const endIndex = i + 1 < boundaries.length ? boundaries[i + 1].index : lines.length;
+    const bodyStart = lines[start.index + 1]?.trim() === start.title ? start.index + 2 : start.index + 1;
+    const lyrics = lines
+      .slice(bodyStart, endIndex)
+      .join("\n")
+      .trim();
+
+    if (!lyrics) continue;
+
+    songs.push({
+      title: start.title || defaultSongTitle(sourceName, i),
+      lyrics,
+      hymnNumber: start.hymnNumber,
+    });
+  }
+
+  return songs.filter((song) => song.lyrics.trim().length > 0);
+}
+
+function isTitleCandidate(lines: string[], index: number): boolean {
+  const line = lines[index]?.trim() ?? "";
+  if (!line || line.length > 90) return false;
+  if (/^\d{1,4}$/.test(line)) return false;
+  if (/^(?:song|hymn|orin)\s+\d{1,4}/i.test(line)) return false;
+  if (/^(?:verse|chorus|bridge|tag|intro|outro|pre-chorus|refrain)\b/i.test(line)) return false;
+  const next = lines[index + 1]?.trim() ?? "";
+  return next === "";
+}
+
+function detectTitledSongs(text: string, sourceName: string): LocalDetectedSong[] {
+  const lines = text.split("\n");
+  const songs: LocalDetectedSong[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    if (!isTitleCandidate(lines, index)) {
+      index += 1;
+      continue;
+    }
+
+    const title = lines[index].trim();
+    let cursor = index + 2;
+    const lyricsLines: string[] = [];
+    let lyricCount = 0;
+
+    while (cursor < lines.length) {
+      if (isTitleCandidate(lines, cursor) && lyricCount >= 2) {
+        break;
+      }
+
+      const line = lines[cursor];
+      if (line.trim()) {
+        lyricCount += 1;
+      }
+      lyricsLines.push(line);
+      cursor += 1;
+    }
+
+    const lyrics = lyricsLines.join("\n").trim();
+    if (lyrics && lyricCount >= 2) {
+      songs.push({
+        title: title || defaultSongTitle(sourceName, songs.length),
+        lyrics,
+      });
+      index = cursor;
+      continue;
+    }
+
+    index += 1;
+  }
+
+  return songs;
+}
+
+function detectSongsLocally(text: string, sourceName: string): {
+  songs: LocalDetectedSong[];
+  warning: string;
+} {
+  const numbered = detectNumberedSongs(text, sourceName);
+  if (numbered.length > 1) {
+    return {
+      songs: numbered,
+      warning: `API structuring was unavailable. Local detection found ${numbered.length} songs from numbered headings.`,
+    };
+  }
+
+  const titled = detectTitledSongs(text, sourceName);
+  if (titled.length > 1) {
+    return {
+      songs: titled,
+      warning: `API structuring was unavailable. Local detection found ${titled.length} titled songs.`,
+    };
+  }
+
+  return {
+    songs: [{
+      title: defaultSongTitle(sourceName),
+      lyrics: text,
+    }],
+    warning: "API structuring was unavailable. The document is loaded as one song for review.",
+  };
+}
+
+function sanitizeDraftsForImport(drafts: EditableImportSongDraft[]): SmartImportSongDraft[] {
+  return drafts
+    .filter((draft) => draft.enabled)
+    .map((draft) => ({
+      ...draft,
+      title: draft.title.trim(),
+      artist: draft.artist?.trim() || "",
+      hymnNumber: draft.hymnNumber?.trim() || undefined,
+      sections: draft.sections
+        .map((section) => ({
+          ...section,
+          label: section.label.trim(),
+          number: section.number?.trim() || undefined,
+          content: normalizeExtractedLyricsText(section.content),
+          warnings: section.warnings ?? [],
+        }))
+        .filter((section) => section.content.trim().length > 0),
+    }))
+    .filter((draft) => draft.title.length > 0 && draft.sections.length > 0);
 }
 
 export default function SongImportFullprocess({
-  mode = "manual",
   onClose,
   onImported,
-  initialQuery = "",
-  result = null,
-  onOpenExistingSong,
 }: SongImportFullprocessProps) {
-  const { user } = useAuth();
-  const effectivePlan = getEffectivePlan(user);
-  const { limit: songLimit } = checkEntitlementSync("songs", effectivePlan);
-  const isSongUnlimited = songLimit === -1;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [step, setStep] = useState<ImportStep>("pick");
+  const [sourceMode, setSourceMode] = useState<SourceMode>("file");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [pastedText, setPastedText] = useState("");
+  const [sourceName, setSourceName] = useState("Imported Document");
+  const [drafts, setDrafts] = useState<EditableImportSongDraft[]>([]);
+  const [activeSongId, setActiveSongId] = useState<string | null>(null);
+  const [quality, setQuality] = useState<ExtractedTextQuality | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [error, setError] = useState("");
+  const [loadingLabel, setLoadingLabel] = useState("Preparing import...");
+  const [importProgress, setImportProgress] = useState({ saved: 0, total: 0 });
+  const [importedTitles, setImportedTitles] = useState<string[]>([]);
 
-  const [songCount, setSongCount] = useState(0);
-  const [existingSongs, setExistingSongs] = useState<Song[]>([]);
-  const [query, setQuery] = useState(initialQuery);
-  const [searchResults, setSearchResults] = useState<OnlineLyricsSearchResult[]>([]);
-  const [searchState, setSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [searchMessage, setSearchMessage] = useState("");
-  const [reviewResult, setReviewResult] = useState<OnlineLyricsSearchResult | null>(mode === "onlineReview" ? result : null);
-  const [savingResultId, setSavingResultId] = useState<string | null>(null);
+  const activeSong = useMemo(
+    () => drafts.find((draft) => draft.id === activeSongId) ?? drafts[0] ?? null,
+    [activeSongId, drafts],
+  );
 
-  const onlineSearchRequestRef = useRef(0);
-  const spotifyAutoImportRef = useRef<string | null>(null);
+  const enabledCount = useMemo(
+    () => drafts.filter((draft) => draft.enabled).length,
+    [drafts],
+  );
 
-  const refreshExistingSongs = useCallback(async () => {
+  const handleReset = () => {
+    setStep("pick");
+    setSelectedFile(null);
+    setPastedText("");
+    setSourceName("Imported Document");
+    setDrafts([]);
+    setActiveSongId(null);
+    setQuality(null);
+    setWarnings([]);
+    setError("");
+    setLoadingLabel("Preparing import...");
+    setImportProgress({ saved: 0, total: 0 });
+    setImportedTitles([]);
+  };
+
+  const handleDetectSongs = async () => {
+    setError("");
+    setWarnings([]);
+
     try {
-      const songs = await getAllSongs();
-      setExistingSongs(songs);
-    } catch {
-      // Leave the current lookup in place.
-    }
-  }, []);
+      setStep("importing");
+      setLoadingLabel("Extracting text...");
 
-  useEffect(() => {
-    if (mode !== "onlineSearch" && mode !== "onlineReview") {
-      return;
-    }
+      const resolvedSourceName = sourceMode === "file"
+        ? selectedFile?.name || "Imported Document"
+        : "Pasted Lyrics";
 
-    void refreshExistingSongs();
-  }, [mode, refreshExistingSongs]);
+      const rawText = sourceMode === "file"
+        ? await extractTextFromFile(selectedFile as File)
+        : normalizeExtractedLyricsText(pastedText);
 
-  useEffect(() => {
-    if (mode !== "onlineSearch" && mode !== "onlineReview") {
-      return;
-    }
-
-    let cancelled = false;
-
-    getRemainingSongSlots(user)
-      .then((slots) => {
-        if (cancelled) {
-          return;
-        }
-
-        if (isSongUnlimited) {
-          setSongCount(0);
-          return;
-        }
-
-        setSongCount(songLimit - slots);
-      })
-      .catch(() => {
-        if (!cancelled && isSongUnlimited) {
-          setSongCount(0);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isSongUnlimited, mode, songLimit, user]);
-
-  useEffect(() => {
-    if (mode === "onlineReview") {
-      setReviewResult(result ?? null);
-    }
-  }, [mode, result]);
-
-  useEffect(() => {
-    if (mode === "onlineSearch") {
-      setQuery(initialQuery);
-    }
-  }, [initialQuery, mode]);
-
-  const importedSongsLookup = useMemo(() => {
-    const lookup = new Map<string, Song>();
-
-    for (const song of existingSongs) {
-      for (const key of buildSongLookupKeys(song.metadata.title, song.metadata.artist)) {
-        if (!lookup.has(key)) {
-          lookup.set(key, song);
-        }
+      const normalizedText = normalizeExtractedLyricsText(rawText);
+      if (!normalizedText.trim()) {
+        throw new Error("No text was found. Upload a file with readable lyrics or paste the text directly.");
       }
-    }
 
-    return lookup;
-  }, [existingSongs]);
-
-  const findImportedSong = useCallback((entry: OnlineLyricsSearchResult): Song | undefined => {
-    for (const key of buildSongLookupKeys(entry.title, entry.artist)) {
-      const existingSong = importedSongsLookup.get(key);
-      if (existingSong) {
-        return existingSong;
+      const textQuality = assessExtractedTextQuality(normalizedText);
+      const nextWarnings: string[] = [];
+      if (!textQuality.usable) {
+        nextWarnings.push("The extracted text looks noisy. Review titles and lyrics carefully before importing.");
       }
-    }
 
-    return undefined;
-  }, [importedSongsLookup]);
+      setQuality(textQuality);
+      setSourceName(resolvedSourceName);
+      setLoadingLabel("Structuring songs...");
 
-  const hasReachedSongLimit = !isSongUnlimited && songCount >= songLimit;
+      let processedSongs: SmartImportSongDraft[] = [];
 
-  const handleImportedRefresh = useCallback(() => {
-    if (!onImported) {
-      return;
-    }
-
-    void Promise.resolve(onImported());
-  }, [onImported]);
-
-  const handleImportedAndClose = useCallback(() => {
-    void Promise.resolve(onImported?.()).finally(() => {
-      onClose();
-    });
-  }, [onClose, onImported]);
-
-  useEffect(() => {
-    if (mode !== "onlineSearch") {
-      return;
-    }
-
-    const trimmedQuery = query.trim();
-
-    if (!trimmedQuery) {
-      onlineSearchRequestRef.current += 1;
-      setSearchResults([]);
-      setSearchState("idle");
-      setSearchMessage("");
-      return;
-    }
-
-    if (trimmedQuery.length < MIN_ONLINE_LYRICS_QUERY_LENGTH) {
-      onlineSearchRequestRef.current += 1;
-      setSearchResults([]);
-      setSearchState("idle");
-      setSearchMessage(`Type at least ${MIN_ONLINE_LYRICS_QUERY_LENGTH} letters to search online lyrics.`);
-      return;
-    }
-
-    const requestId = onlineSearchRequestRef.current + 1;
-    onlineSearchRequestRef.current = requestId;
-    setSearchState("loading");
-    setSearchMessage("");
-
-    const timeoutId = window.setTimeout(async () => {
       try {
-        const results = await searchOnlineSongLyrics(trimmedQuery);
-        if (onlineSearchRequestRef.current !== requestId) {
-          return;
-        }
+        const apiResult = await processDocumentViaApi(normalizedText, resolvedSourceName);
+        processedSongs = apiResult.songs;
+        nextWarnings.push(...apiResult.warnings);
+      } catch (apiError) {
+        const fallback = detectSongsLocally(normalizedText, resolvedSourceName);
+        processedSongs = fallback.songs.map((song, index) =>
+          buildDraftFromLyrics(song.title, song.lyrics, resolvedSourceName, index, song.hymnNumber),
+        );
 
-        setSearchResults(results);
-        setSearchState("ready");
-        setSearchMessage(results.length === 0 ? "No online lyrics found for this search yet." : "");
-      } catch (error) {
-        if (onlineSearchRequestRef.current !== requestId) {
-          return;
-        }
-
-        setSearchResults([]);
-        setSearchState("error");
-        setSearchMessage(formatOnlineLyricsSearchError(error));
+        const message = apiError instanceof Error ? apiError.message : String(apiError);
+        nextWarnings.push(fallback.warning);
+        nextWarnings.push(`AI import service error: ${message}`);
       }
-    }, ONLINE_LYRICS_SEARCH_DELAY_MS);
 
-    return () => window.clearTimeout(timeoutId);
-  }, [mode, query]);
+      if (processedSongs.length === 0) {
+        processedSongs = [buildDraftFromLyrics(defaultSongTitle(resolvedSourceName), normalizedText, resolvedSourceName)];
+      }
 
-  useEffect(() => {
-    if (mode !== "onlineSearch") {
+      const editableDrafts = processedSongs.map((draft) => ({
+        ...draft,
+        enabled: true,
+        title: draft.title.trim() || defaultSongTitle(resolvedSourceName),
+        sections: draft.sections.length > 0 ? draft.sections : toSectionDrafts(normalizedText),
+      }));
+
+      setDrafts(editableDrafts);
+      setActiveSongId(editableDrafts[0]?.id ?? null);
+      setWarnings(nextWarnings);
+      setStep("review");
+    } catch (detectError) {
+      setError(detectError instanceof Error ? detectError.message : String(detectError));
+      setStep("pick");
+    }
+  };
+
+  const handleImport = async () => {
+    setError("");
+
+    const sanitizedDrafts = sanitizeDraftsForImport(drafts);
+    if (sanitizedDrafts.length === 0) {
+      setError("Select at least one song with a title and lyrics before importing.");
       return;
     }
 
-    const trimmedQuery = query.trim();
-    const firstResult = searchResults[0];
-
-    if (
-      !isSpotifyTrackLyricsQuery(trimmedQuery)
-      || searchState !== "ready"
-      || !firstResult
-      || findImportedSong(firstResult)
-    ) {
-      return;
-    }
-
-    const importKey = `${trimmedQuery}::${firstResult.id}`;
-    if (spotifyAutoImportRef.current === importKey) {
-      return;
-    }
-
-    spotifyAutoImportRef.current = importKey;
-    setReviewResult(firstResult);
-  }, [findImportedSong, mode, query, searchResults, searchState]);
-
-  const handleOpenExisting = useCallback((song: Song | undefined) => {
-    if (!song) {
-      return;
-    }
-
-    onOpenExistingSong?.(song);
-    onClose();
-  }, [onClose, onOpenExistingSong]);
-
-  const handleOpenOnlineImport = useCallback((entry: OnlineLyricsSearchResult) => {
-    const existingSong = findImportedSong(entry);
-    if (existingSong) {
-      handleOpenExisting(existingSong);
-      return;
-    }
-
-    setReviewResult(entry);
-  }, [findImportedSong, handleOpenExisting]);
-
-  const handleConfirmOnlineImport = useCallback(async (
-    entry: OnlineLyricsSearchResult,
-    draft: OnlineLyricsImportDraft,
-  ) => {
-    const existingSong = findImportedSong(entry);
-    if (existingSong) {
-      handleOpenExisting(existingSong);
-      return;
-    }
-
-    if (hasReachedSongLimit) {
-      return;
-    }
-
-    const lyrics = draft.lyrics.trim();
-    if (!lyrics) {
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const newSong: Song = {
-      id: `song-online-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      metadata: {
-        title: draft.title.trim() || query.trim() || "Imported Song",
-        artist: draft.artist.trim(),
-      },
-      lyrics,
-      slides: generateSlides(lyrics, 2, true),
-      createdAt: now,
-      updatedAt: now,
-      importSourceName: entry.sourceName,
-      importSourceType: "online",
-      importSourceUrl: entry.url,
-    };
-
-    setSavingResultId(entry.id);
     try {
-      await saveSong(newSong);
-      await refreshExistingSongs();
-      await Promise.resolve(onImported?.());
-      setReviewResult(null);
-      onClose();
-    } finally {
-      setSavingResultId(null);
+      setStep("importing");
+      setLoadingLabel("Saving songs to your worship library...");
+      setImportProgress({ saved: 0, total: sanitizedDrafts.length });
+
+      const imported = await importSmartSongs(
+        sanitizedDrafts,
+        { sourceName },
+        (saved, total) => setImportProgress({ saved, total }),
+      );
+
+      setImportedTitles(imported.map((song) => song.metadata.title));
+      onImported();
+      setStep("done");
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : String(importError));
+      setStep("review");
     }
-  }, [findImportedSong, handleOpenExisting, hasReachedSongLimit, onClose, onImported, query, refreshExistingSongs]);
+  };
 
-  if (mode === "manual") {
-    return (
-      <WorshipSongEditor
-        onClose={onClose}
-        onSave={handleImportedAndClose}
-      />
-    );
-  }
+  const updateSong = (songId: string, updater: (draft: EditableImportSongDraft) => EditableImportSongDraft) => {
+    setDrafts((current) => current.map((draft) => (draft.id === songId ? updater(draft) : draft)));
+  };
 
-  if (mode === "file") {
-    return (
-      <BulkImportDocumentFlow
-        onClose={onClose}
-        onImported={handleImportedRefresh}
-      />
-    );
-  }
+  const updateActiveSection = (
+    songId: string,
+    sectionId: string,
+    field: "label" | "type" | "content",
+    value: string,
+  ) => {
+    updateSong(songId, (draft) => ({
+      ...draft,
+      sections: draft.sections.map((section) => {
+        if (section.id !== sectionId) return section;
+        if (field === "type") {
+          return { ...section, type: value as SmartImportSectionDraft["type"] };
+        }
+        return { ...section, [field]: value };
+      }),
+    }));
+  };
 
-  if (reviewResult) {
-    return (
-      <OnlineLyricsImportModal
-        result={reviewResult}
-        saving={savingResultId === reviewResult.id}
-        onClose={() => {
-          if (mode === "onlineReview") {
-            onClose();
-            return;
-          }
-
-          setReviewResult(null);
-        }}
-        onImport={(draft) => handleConfirmOnlineImport(reviewResult, draft)}
-      />
-    );
-  }
-
-  if (mode !== "onlineSearch") {
-    return null;
-  }
+  const activeSongLyricsPreview = useMemo(() => {
+    if (!activeSong) return "";
+    return activeSong.sections
+      .map((section) => [section.label, section.content].filter(Boolean).join("\n"))
+      .join("\n\n");
+  }, [activeSong]);
 
   return (
-    <div className="song-import-fullprocess-backdrop" onMouseDown={onClose}>
+    <div className="song-import-modal-backdrop" onMouseDown={step === "importing" ? undefined : onClose}>
       <div
-        className="song-import-fullprocess-modal"
+        className="song-import-modal"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="song-import-online-title"
+        aria-label="Bulk import songs"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="song-import-fullprocess-header">
+        <header className="song-import-modal__header">
           <div>
-            <p className="song-import-fullprocess-eyebrow">Song Import</p>
-            <h2 id="song-import-online-title">Search Online Lyrics</h2>
-            <p className="song-import-fullprocess-subtitle">
-              Find a song online, review the lyrics, then bring it into the worship library.
+            <p className="song-import-modal__eyebrow">Worship</p>
+            <h2>Bulk Import Songs</h2>
+            <p className="song-import-modal__description">
+              Use this screen for document import only. Add Song and online lyrics stay in their own flows.
             </p>
           </div>
-          <button
-            type="button"
-            className="song-import-fullprocess-close"
-            onClick={onClose}
-            aria-label="Close online song import"
-            title="Close"
-          >
-            <Icon name="close" size={18} />
-          </button>
-        </div>
 
-        <div className="song-import-fullprocess-body">
-          <label className="song-import-fullprocess-search">
-            <Icon name="search" size={18} className="song-import-fullprocess-search-icon" />
-            <input
-              type="text"
-              value={query}
-              autoFocus
-              placeholder="Search title, artist, lyrics, or paste a Spotify track link..."
-              onChange={(event) => setQuery(event.target.value)}
-              aria-label="Search online lyrics"
-            />
-            {query ? (
+          <div className="song-import-modal__header-actions">
+            {step === "review" && (
               <button
                 type="button"
-                className="song-import-fullprocess-search-clear"
-                onClick={() => setQuery("")}
-                aria-label="Clear online search"
-                title="Clear"
+                className="song-import-btn song-import-btn--secondary"
+                onClick={handleReset}
+                title="Start over"
               >
-                <Icon name="close" size={14} />
+                <RefreshCcw size={16} />
+                Start Over
               </button>
-            ) : null}
-          </label>
-
-          {hasReachedSongLimit ? (
-            <div className="song-import-fullprocess-banner">
-              <Icon name="lock" size={16} />
-              <span>You have reached your song limit. You can still open existing imported songs.</span>
-            </div>
-          ) : null}
-
-          <div className="song-import-fullprocess-results">
-            {searchState === "loading" ? (
-              <div className="song-import-fullprocess-status">Searching online lyrics…</div>
-            ) : null}
-
-            {searchState !== "loading" && searchMessage ? (
-              <div className={`song-import-fullprocess-status${searchState === "error" ? " error" : ""}`}>
-                {searchMessage}
-              </div>
-            ) : null}
-
-            {searchState === "idle" && !query.trim() ? (
-              <div className="song-import-fullprocess-status">
-                Search by song title, artist, lyrics, or Spotify track link.
-              </div>
-            ) : null}
-
-            {searchResults.map((entry) => {
-              const importedSong = findImportedSong(entry);
-              const actionLabel = importedSong ? "Open" : "Import";
-              const atLimit = hasReachedSongLimit && !importedSong;
-
-              return (
-                <div key={entry.id} className="song-import-fullprocess-result">
-                  <div className="song-import-fullprocess-result-main">
-                    <div className="song-import-fullprocess-result-top">
-                      <div>
-                        <h3>{entry.title}</h3>
-                        <div className="song-import-fullprocess-result-meta">
-                          <span>{entry.artist || "Unknown artist"}</span>
-                          <span className="song-import-fullprocess-tag">{entry.sourceName}</span>
-                          {importedSong ? <span className="song-import-fullprocess-tag">Imported</span> : null}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className={`song-import-fullprocess-action${atLimit ? " at-limit" : ""}`}
-                        onClick={() => {
-                          if (importedSong) {
-                            handleOpenExisting(importedSong);
-                            return;
-                          }
-
-                          if (atLimit) {
-                            return;
-                          }
-
-                          handleOpenOnlineImport(entry);
-                        }}
-                        disabled={atLimit}
-                        title={atLimit ? "Limit reached" : actionLabel}
-                      >
-                        {atLimit ? "Limit Reached" : actionLabel}
-                      </button>
-                    </div>
-                    <p className="song-import-fullprocess-preview">
-                      {entry.preview || "No preview available yet."}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
+            )}
+            <button
+              type="button"
+              className="song-import-modal__close"
+              onClick={onClose}
+              title="Close"
+              aria-label="Close bulk import"
+              disabled={step === "importing"}
+            >
+              <X size={18} />
+            </button>
           </div>
+        </header>
+
+        <div className="song-import-steps">
+          <div className={`song-import-step${step === "pick" ? " is-active" : ""}`}>1. Pick</div>
+          <div className={`song-import-step${step === "review" ? " is-active" : ""}`}>2. Review</div>
+          <div className={`song-import-step${step === "importing" ? " is-active" : ""}`}>3. Import</div>
+          <div className={`song-import-step${step === "done" ? " is-active" : ""}`}>4. Done</div>
         </div>
 
-        <div className="song-import-fullprocess-footer">
-          <button
-            type="button"
-            className="song-import-fullprocess-secondary"
-            onClick={onClose}
-            title="Close"
-          >
-            Close
-          </button>
-        </div>
+        {error && (
+          <div className="song-import-alert song-import-alert--error">
+            <AlertCircle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {step === "pick" && (
+          <section className="song-import-pick">
+            <div className="song-import-pick__workspace">
+              <div className="song-import-source-tabs">
+                <button
+                  type="button"
+                  className={`song-import-source-tab${sourceMode === "file" ? " is-active" : ""}`}
+                  onClick={() => setSourceMode("file")}
+                >
+                  <FileUp size={16} />
+                  File Upload
+                </button>
+                <button
+                  type="button"
+                  className={`song-import-source-tab${sourceMode === "text" ? " is-active" : ""}`}
+                  onClick={() => setSourceMode("text")}
+                >
+                  <ClipboardPaste size={16} />
+                  Paste Text
+                </button>
+              </div>
+
+              {sourceMode === "file" ? (
+                <div
+                  className="song-import-dropzone"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const file = event.dataTransfer.files?.[0];
+                    if (!file) return;
+                    setSelectedFile(file);
+                    setError("");
+                  }}
+                >
+                  <input
+                    ref={fileInputRef}
+                    className="song-import-hidden-input"
+                    type="file"
+                    accept=".pdf,.docx,.txt,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      setSelectedFile(file);
+                      setError("");
+                    }}
+                  />
+                  <Upload size={28} />
+                  <h3>{selectedFile ? selectedFile.name : "Drop a PDF, DOCX, or TXT file here"}</h3>
+                  <p>
+                    {selectedFile
+                      ? `${getFileTypeLabel(selectedFile.name)} ready for extraction`
+                      : "Click to browse or drag a file into the import area."}
+                  </p>
+                </div>
+              ) : (
+                <div className="song-import-paste">
+                  <label htmlFor="song-import-text">Paste lyrics or hymn text</label>
+                  <textarea
+                    id="song-import-text"
+                    value={pastedText}
+                    onChange={(event) => setPastedText(event.target.value)}
+                    placeholder="Paste one song or many songs here."
+                  />
+                </div>
+              )}
+            </div>
+
+            <aside className="song-import-pick__sidebar">
+              <div className="song-import-side-card">
+                <div className="song-import-side-card__icon">
+                  <FileSearch size={18} />
+                </div>
+                <div>
+                  <h3>What happens next</h3>
+                  <p>Text is extracted, songs are detected, then you review titles and lyrics before anything is saved.</p>
+                </div>
+              </div>
+
+              <div className="song-import-side-card">
+                <div className="song-import-side-card__icon">
+                  <Music2 size={18} />
+                </div>
+                <div>
+                  <h3>Only for bulk import</h3>
+                  <p>This screen is now reserved for document and pasted-text imports. Manual add and online lyrics use their own screens.</p>
+                </div>
+              </div>
+            </aside>
+          </section>
+        )}
+
+        {step === "review" && activeSong && (
+          <section className="song-import-review">
+            <div className="song-import-review__summary">
+              <div className="song-import-summary-card">
+                <span className="song-import-summary-card__label">Source</span>
+                <strong>{sourceName}</strong>
+              </div>
+              <div className="song-import-summary-card">
+                <span className="song-import-summary-card__label">Detected</span>
+                <strong>{drafts.length} song{drafts.length === 1 ? "" : "s"}</strong>
+              </div>
+              <div className="song-import-summary-card">
+                <span className="song-import-summary-card__label">Importing</span>
+                <strong>{enabledCount} selected</strong>
+              </div>
+              <div className="song-import-summary-card">
+                <span className="song-import-summary-card__label">Text Quality</span>
+                <strong>{quality ? `${quality.score}/100` : "--"}</strong>
+              </div>
+            </div>
+
+            {warnings.length > 0 && (
+              <div className="song-import-alert song-import-alert--warning">
+                <AlertCircle size={18} />
+                <div>
+                  {warnings.map((warning) => (
+                    <p key={warning}>{warning}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="song-import-review__body">
+              <aside className="song-import-review__list">
+                {drafts.map((draft) => {
+                  const slideCount = estimateDraftSlideCount(draft, { linesPerSlide: 2, autoSplit: true });
+                  return (
+                    <button
+                      key={draft.id}
+                      type="button"
+                      className={`song-import-song-tile${draft.id === activeSong.id ? " is-active" : ""}`}
+                      onClick={() => setActiveSongId(draft.id)}
+                    >
+                      <div className="song-import-song-tile__head">
+                        <label
+                          className="song-import-checkbox"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={draft.enabled}
+                            onChange={(event) => {
+                              updateSong(draft.id, (current) => ({ ...current, enabled: event.target.checked }));
+                            }}
+                          />
+                          <span>{draft.enabled ? "Import" : "Skip"}</span>
+                        </label>
+                        <button
+                          type="button"
+                          className="song-import-icon-btn"
+                          title="Remove from batch"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDrafts((current) => {
+                              const next = current.filter((item) => item.id !== draft.id);
+                              if (draft.id === activeSongId) {
+                                setActiveSongId(next[0]?.id ?? null);
+                              }
+                              return next;
+                            });
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                      <strong>{draft.title || "Untitled song"}</strong>
+                      <span>{draft.sections.length} sections</span>
+                      <span>{slideCount} slides</span>
+                    </button>
+                  );
+                })}
+              </aside>
+
+              <div className="song-import-review__editor">
+                <div className="song-import-editor-grid">
+                  <label>
+                    <span>Song title</span>
+                    <input
+                      value={activeSong.title}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        updateSong(activeSong.id, (draft) => ({ ...draft, title: value }));
+                      }}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Artist</span>
+                    <input
+                      value={activeSong.artist ?? ""}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        updateSong(activeSong.id, (draft) => ({ ...draft, artist: value }));
+                      }}
+                      placeholder="Optional"
+                    />
+                  </label>
+
+                  <label>
+                    <span>Hymn number</span>
+                    <input
+                      value={activeSong.hymnNumber ?? ""}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        updateSong(activeSong.id, (draft) => ({ ...draft, hymnNumber: value }));
+                      }}
+                      placeholder="Optional"
+                    />
+                  </label>
+                </div>
+
+                <div className="song-import-sections">
+                  <div className="song-import-sections__head">
+                    <h3>Sections</h3>
+                    <button
+                      type="button"
+                      className="song-import-btn song-import-btn--secondary"
+                      onClick={() => {
+                        updateSong(activeSong.id, (draft) => ({
+                          ...draft,
+                          sections: [...draft.sections, createEmptyImportSection("verse")],
+                        }));
+                      }}
+                    >
+                      <Plus size={16} />
+                      Add Section
+                    </button>
+                  </div>
+
+                  {activeSong.sections.map((section) => (
+                    <div key={section.id} className="song-import-section-card">
+                      <div className="song-import-section-card__row">
+                        <input
+                          value={section.label}
+                          onChange={(event) => updateActiveSection(activeSong.id, section.id, "label", event.target.value)}
+                          placeholder="Section label"
+                        />
+
+                        <select
+                          value={section.type}
+                          onChange={(event) => updateActiveSection(activeSong.id, section.id, "type", event.target.value)}
+                        >
+                          <option value="verse">Verse</option>
+                          <option value="chorus">Chorus</option>
+                          <option value="bridge">Bridge</option>
+                          <option value="pre-chorus">Pre-Chorus</option>
+                          <option value="tag">Tag</option>
+                          <option value="intro">Intro</option>
+                          <option value="outro">Outro</option>
+                          <option value="other">Other</option>
+                          <option value="refrain">Refrain</option>
+                        </select>
+                      </div>
+
+                      <textarea
+                        value={section.content}
+                        onChange={(event) => updateActiveSection(activeSong.id, section.id, "content", event.target.value)}
+                        placeholder="Section lyrics"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <aside className="song-import-review__preview">
+                <div className="song-import-preview-card">
+                  <h3>Preview</h3>
+                  <pre>{activeSongLyricsPreview}</pre>
+                </div>
+
+                {quality && (
+                  <div className="song-import-preview-card">
+                    <h3>Extraction Stats</h3>
+                    <dl className="song-import-stats">
+                      <div>
+                        <dt>Words</dt>
+                        <dd>{quality.stats.words}</dd>
+                      </div>
+                      <div>
+                        <dt>Lines</dt>
+                        <dd>{quality.stats.lines}</dd>
+                      </div>
+                      <div>
+                        <dt>Readable</dt>
+                        <dd>{quality.stats.readableLines}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                )}
+              </aside>
+            </div>
+          </section>
+        )}
+
+        {step === "importing" && (
+          <section className="song-import-loading">
+            <Loader2 className="song-import-loading__spinner" size={34} />
+            <h3>{loadingLabel}</h3>
+            <p>
+              {importProgress.total > 0
+                ? `${importProgress.saved} of ${importProgress.total} saved`
+                : "Please wait while the document is processed."}
+            </p>
+            {importProgress.total > 0 && (
+              <div className="song-import-progress">
+                <div
+                  className="song-import-progress__bar"
+                  style={{
+                    width: `${Math.max(8, (importProgress.saved / Math.max(importProgress.total, 1)) * 100)}%`,
+                  }}
+                />
+              </div>
+            )}
+          </section>
+        )}
+
+        {step === "done" && (
+          <section className="song-import-done">
+            <CheckCircle2 size={42} />
+            <h3>Import complete</h3>
+            <p>{importedTitles.length} song{importedTitles.length === 1 ? "" : "s"} added to the worship library.</p>
+
+            {importedTitles.length > 0 && (
+              <div className="song-import-done__list">
+                {importedTitles.map((title) => (
+                  <span key={title}>{title}</span>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        <footer className="song-import-modal__footer">
+          {step === "pick" && (
+            <>
+              <button
+                type="button"
+                className="song-import-btn song-import-btn--secondary"
+                onClick={onClose}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="song-import-btn song-import-btn--primary"
+                onClick={() => void handleDetectSongs()}
+                disabled={sourceMode === "file" ? !selectedFile : !pastedText.trim()}
+              >
+                Detect Songs
+                <FileSearch size={16} />
+              </button>
+            </>
+          )}
+
+          {step === "review" && (
+            <>
+              <button
+                type="button"
+                className="song-import-btn song-import-btn--secondary"
+                onClick={handleReset}
+              >
+                <ArrowLeft size={16} />
+                Back
+              </button>
+              <button
+                type="button"
+                className="song-import-btn song-import-btn--primary"
+                onClick={() => void handleImport()}
+                disabled={enabledCount === 0 || drafts.length === 0}
+              >
+                Import Selected
+                <FileText size={16} />
+              </button>
+            </>
+          )}
+
+          {step === "done" && (
+            <>
+              <button
+                type="button"
+                className="song-import-btn song-import-btn--secondary"
+                onClick={handleReset}
+              >
+                Import Another
+              </button>
+              <button
+                type="button"
+                className="song-import-btn song-import-btn--primary"
+                onClick={onClose}
+              >
+                Close
+                <ArrowLeft size={16} className="song-import-btn__flip" />
+              </button>
+            </>
+          )}
+        </footer>
       </div>
     </div>
   );

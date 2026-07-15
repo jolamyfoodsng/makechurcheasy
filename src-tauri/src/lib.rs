@@ -625,6 +625,10 @@ fn overlay_content_type_for_extension(extension: Option<&str>) -> &'static str {
     }
 }
 
+fn overlay_header(name: &str, value: &str) -> tiny_http::Header {
+    tiny_http::Header::from_bytes(name, value).unwrap()
+}
+
 fn overlay_header_value(request: &tiny_http::Request, name: &'static str) -> Option<String> {
     request
         .headers()
@@ -739,7 +743,7 @@ fn respond_overlay_file_request(request: tiny_http::Request, file_path: &Path, c
                     Some(content_length_usize),
                     None,
                 )
-                .with_header(tiny_http::Header::from_bytes("Content-Type", content_type).unwrap())
+                .with_header(overlay_header("Content-Type", content_type))
                 .with_header(
                     tiny_http::Header::from_bytes(
                         "Content-Range",
@@ -751,10 +755,14 @@ fn respond_overlay_file_request(request: tiny_http::Request, file_path: &Path, c
                     tiny_http::Header::from_bytes("Content-Length", content_length.to_string())
                         .unwrap(),
                 )
-                .with_header(tiny_http::Header::from_bytes("Accept-Ranges", "bytes").unwrap())
-                .with_header(
-                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap(),
-                );
+                .with_header(overlay_header("Accept-Ranges", "bytes"))
+                .with_header(overlay_header("Access-Control-Allow-Origin", "*"))
+                .with_header(overlay_header(
+                    "Cache-Control",
+                    "no-store, no-cache, must-revalidate, max-age=0",
+                ))
+                .with_header(overlay_header("Pragma", "no-cache"))
+                .with_header(overlay_header("Expires", "0"));
                 let _ = request.respond(response);
             }
             Err(_) => {
@@ -766,10 +774,14 @@ fn respond_overlay_file_request(request: tiny_http::Request, file_path: &Path, c
                         )
                         .unwrap(),
                     )
-                    .with_header(tiny_http::Header::from_bytes("Accept-Ranges", "bytes").unwrap())
-                    .with_header(
-                        tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap(),
-                    );
+                    .with_header(overlay_header("Accept-Ranges", "bytes"))
+                    .with_header(overlay_header("Access-Control-Allow-Origin", "*"))
+                    .with_header(overlay_header(
+                        "Cache-Control",
+                        "no-store, no-cache, must-revalidate, max-age=0",
+                    ))
+                    .with_header(overlay_header("Pragma", "no-cache"))
+                    .with_header(overlay_header("Expires", "0"));
                 let _ = request.respond(response);
             }
         }
@@ -777,9 +789,15 @@ fn respond_overlay_file_request(request: tiny_http::Request, file_path: &Path, c
     }
 
     let response = tiny_http::Response::from_file(file)
-        .with_header(tiny_http::Header::from_bytes("Content-Type", content_type).unwrap())
-        .with_header(tiny_http::Header::from_bytes("Accept-Ranges", "bytes").unwrap())
-        .with_header(tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap());
+        .with_header(overlay_header("Content-Type", content_type))
+        .with_header(overlay_header("Accept-Ranges", "bytes"))
+        .with_header(overlay_header("Access-Control-Allow-Origin", "*"))
+        .with_header(overlay_header(
+            "Cache-Control",
+            "no-store, no-cache, must-revalidate, max-age=0",
+        ))
+        .with_header(overlay_header("Pragma", "no-cache"))
+        .with_header(overlay_header("Expires", "0"));
     let _ = request.respond(response);
 }
 
@@ -4650,17 +4668,19 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                         // Redirect to Vite dev server (localhost:1420) so it handles
                         // module transforms, HMR, etc.
                         let redirect_url = format!("http://localhost:1420/{}", clean);
-                        let header =
-                            tiny_http::Header::from_bytes("Location", redirect_url.as_str())
-                                .unwrap();
-                        let cors =
-                            tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
-                                .unwrap();
+                        let header = overlay_header("Location", redirect_url.as_str());
+                        let cors = overlay_header("Access-Control-Allow-Origin", "*");
                         let resp =
                             tiny_http::Response::from_string("Redirecting to Vite dev server")
                                 .with_status_code(302)
                                 .with_header(header)
-                                .with_header(cors);
+                                .with_header(cors)
+                                .with_header(overlay_header(
+                                    "Cache-Control",
+                                    "no-store, no-cache, must-revalidate, max-age=0",
+                                ))
+                                .with_header(overlay_header("Pragma", "no-cache"))
+                                .with_header(overlay_header("Expires", "0"));
                         let _ = request.respond(resp);
                         continue;
                     }
@@ -4681,25 +4701,29 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 if index_path.exists() && index_path.is_file() {
                     match fs::read(&index_path) {
                         Ok(data) => {
-                            let header = tiny_http::Header::from_bytes(
-                                "Content-Type",
-                                "text/html; charset=utf-8",
-                            )
-                            .unwrap();
-                            let cors =
-                                tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
-                                    .unwrap();
+                            let header =
+                                overlay_header("Content-Type", "text/html; charset=utf-8");
+                            let cors = overlay_header("Access-Control-Allow-Origin", "*");
                             let resp = tiny_http::Response::from_data(data)
                                 .with_header(header)
-                                .with_header(cors);
+                                .with_header(cors)
+                                .with_header(overlay_header(
+                                    "Cache-Control",
+                                    "no-store, no-cache, must-revalidate, max-age=0",
+                                ))
+                                .with_header(overlay_header("Pragma", "no-cache"))
+                                .with_header(overlay_header("Expires", "0"));
                             let _ = request.respond(resp);
                         }
                         Err(_) => {
                             let resp = tiny_http::Response::from_string("Internal Server Error")
                                 .with_status_code(500)
                                 .with_header(
-                                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
-                                        .unwrap(),
+                                    tiny_http::Header::from_bytes(
+                                        "Access-Control-Allow-Origin",
+                                        "*",
+                                    )
+                                    .unwrap(),
                                 );
                             let _ = request.respond(resp);
                         }
@@ -4891,14 +4915,8 @@ async fn get_presentation_remote_info(session_id: String) -> Result<serde_json::
 
     let encoded_session = urlencoding::encode(session_id);
     let local_ip = get_local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
-    let local_link = format!(
-        "http://127.0.0.1:{}/presentation.html?sessionId={}&wsPort={}",
-        http_port, encoded_session, ws_port
-    );
-    let link = format!(
-        "http://{}:{}/presentation.html?sessionId={}&wsPort={}",
-        local_ip, http_port, encoded_session, ws_port
-    );
+    let local_link = format!("http://127.0.0.1:{}/p/{}", http_port, encoded_session);
+    let link = format!("http://{}:{}/p/{}", local_ip, http_port, encoded_session);
 
     Ok(serde_json::json!({
         "running": http_port > 0 && ws_port > 0,

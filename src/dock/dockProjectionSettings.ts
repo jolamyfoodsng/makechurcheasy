@@ -5,6 +5,7 @@ export interface ProjectionSettings {
   tickerLayerPriority: "ticker-above" | "content-above";
   restoreOriginalScene: boolean;
   presentationOnly: boolean;
+  hideOtherMceSourcesOnSend: boolean;
 }
 
 export const PROJECTION_SETTINGS_KEY = "ocs-dock-projection-settings";
@@ -15,6 +16,7 @@ export const DEFAULT_PROJECTION_SETTINGS: ProjectionSettings = {
   tickerLayerPriority: "ticker-above",
   restoreOriginalScene: false,
   presentationOnly: true,
+  hideOtherMceSourcesOnSend: false,
 };
 
 export function normalizeProjectionSettings(
@@ -31,6 +33,7 @@ export function normalizeProjectionSettings(
     restoreOriginalScene: value?.restoreOriginalScene === true,
     // Lower thirds are always routed through the presentation scene.
     presentationOnly: true,
+    hideOtherMceSourcesOnSend: value?.hideOtherMceSourcesOnSend === true,
   };
 }
 

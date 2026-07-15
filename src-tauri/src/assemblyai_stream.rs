@@ -1,14 +1,15 @@
 /**
- * assemblyai_stream.rs — Background-safe AssemblyAI Universal Streaming.
+ * assemblyai_stream.rs — Background-safe AssemblyAI Sync STT capture.
  *
- * Captures microphone audio via cpal and streams it to AssemblyAI over a
- * native Rust WebSocket.  Because this runs entirely in the Tauri backend
+ * Captures microphone audio via cpal, segments completed utterances locally,
+ * and submits each short PCM clip to AssemblyAI Sync STT. Because this runs
+ * entirely in the Tauri backend
  * (outside the WebView), it is immune to browser throttling, App Nap,
  * and AudioContext suspension when the app loses focus.
  *
  * Tauri commands:
- *   start_assemblyai_stream — begin mic capture → WS → transcript events
- *   stop_assemblyai_stream  — tear down the stream
+ *   start_assemblyai_stream — begin mic capture → Sync STT → transcript events
+ *   stop_assemblyai_stream  — tear down the capture/transcription pipeline
  *   set_microphone_gain     — update user gain (0.0–3.0) at runtime
  *
  * Tauri events emitted:
@@ -18,19 +19,30 @@
  */
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, StreamConfig};
-use futures_util::{SinkExt, StreamExt};
-use serde::Serialize;
+use reqwest::multipart::{Form, Part};
+use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 /// User-controlled gain multiplier, stored as f32 bits in an AtomicU32.
 /// Positioned AFTER AGC so it doesn't fight the auto-gain.
 /// 1.0 = unity (100%), 0.0 = muted (0%), 3.0 = max boost (300%).
 static USER_GAIN: AtomicU32 = AtomicU32::new(f32_to_bits(1.0));
+
+const SYNC_TRANSCRIBE_URL: &str = "https://sync.assemblyai.com/transcribe";
+const SYNC_MODEL: &str = "universal-3-5-pro";
+const TARGET_RATE: u32 = 16_000;
+const CHUNK_MS: u64 = 100;
+const PRE_ROLL_CHUNKS: usize = 3;
+const END_SILENCE_CHUNKS: usize = 8;
+const MIN_UTTERANCE_MS: u64 = 300;
+const MAX_UTTERANCE_MS: u64 = 115_000;
+const SPEECH_LEVEL_THRESHOLD: f32 = 0.015;
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -38,7 +50,7 @@ struct StreamBox(Option<cpal::Stream>);
 unsafe impl Send for StreamBox {}
 unsafe impl Sync for StreamBox {}
 
-/// Managed state for the AssemblyAI streaming pipeline.
+/// Managed state for the AssemblyAI Sync STT capture pipeline.
 pub struct AssemblyAiStreamState {
     /// cpal mic stream — dropped to stop capture.
     stream: Mutex<StreamBox>,
@@ -78,6 +90,23 @@ struct StatusPayload {
 #[derive(Serialize, Clone)]
 struct LevelPayload {
     level: f32,
+}
+
+struct PendingUtterance {
+    pcm: Vec<u8>,
+    audio_start_ms: f64,
+    audio_end_ms: f64,
+}
+
+#[derive(Deserialize)]
+struct SyncTranscriptResponse {
+    text: String,
+    #[allow(dead_code)]
+    confidence: Option<f64>,
+    #[allow(dead_code)]
+    audio_duration_ms: Option<u64>,
+    #[allow(dead_code)]
+    session_id: Option<String>,
 }
 
 // ── Atomic f32 helpers ───────────────────────────────────────────────────────
@@ -153,7 +182,7 @@ pub async fn start_assemblyai_stream(
         buffer_size: cpal::BufferSize::Default,
     };
 
-    let target_rate: u32 = 16_000;
+    let target_rate: u32 = TARGET_RATE;
     let chunk_target: usize = (target_rate / 10) as usize; // 100 ms chunks
 
     let app_clone = app.clone();
@@ -236,142 +265,145 @@ pub async fn start_assemblyai_stream(
         *c = true;
     }
 
-    // ── 2. Spawn the AssemblyAI WebSocket task ─────────────────────────────
-    let ws_app = app.clone();
+    // ── 2. Spawn the AssemblyAI Sync STT task ─────────────────────────────
+    let sync_app = app.clone();
     let task = tokio::spawn(async move {
-        let url = format!(
-            "wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&token={}&speech_model=u3-rt-pro&modes=max_accuracy&language_code=en",
-            urlencoding::encode(&api_key)
-        );
-
-        let ws_result = connect_async(&url).await;
-
-        let ws_stream = match ws_result {
-            Ok((ws, _)) => ws,
-            Err(e) => {
-                eprintln!("[AssemblyAI Stream] WebSocket connect failed: {e}");
-                let _ = ws_app.emit(
-                    "assemblyai-status",
-                    StatusPayload {
-                        status: format!("error: {e}"),
-                    },
-                );
-                return;
-            }
-        };
-
-        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
-
-        let _ = ws_app.emit(
+        let _ = sync_app.emit(
             "assemblyai-status",
             StatusPayload {
                 status: "connected".to_string(),
             },
         );
-        println!("[AssemblyAI Stream] Connected to AssemblyAI WebSocket");
+        println!("[AssemblyAI Sync] Capture pipeline connected");
 
-        // Spawn a task to send audio from the channel to the WS.
-        let send_app = ws_app.clone();
-        let send_task = tokio::spawn(async move {
-            let mut audio_rx = audio_rx;
-            while let Some(pcm_bytes) = audio_rx.recv().await {
-                if ws_sender
-                    .send(Message::Binary(pcm_bytes.into()))
-                    .await
-                    .is_err()
-                {
-                    break;
+        let (utterance_tx, mut utterance_rx) = mpsc::channel::<PendingUtterance>(16);
+
+        let transcript_app = sync_app.clone();
+        let transcript_key = api_key.clone();
+        let transcribe_task = tokio::spawn(async move {
+            while let Some(utterance) = utterance_rx.recv().await {
+                match transcribe_sync_pcm(&transcript_key, utterance.pcm).await {
+                    Ok(result) => {
+                        let transcript = result.text.trim();
+                        if transcript.is_empty() {
+                            continue;
+                        }
+
+                        let payload = TranscriptPayload {
+                            text: transcript.to_string(),
+                            end_of_turn: true,
+                            audio_start: utterance.audio_start_ms,
+                            audio_end: utterance.audio_end_ms,
+                        };
+
+                        let _ = transcript_app.emit("assemblyai-transcript", payload);
+                    }
+                    Err(e) => {
+                        eprintln!("[AssemblyAI Sync] Transcription failed: {e}");
+                        let _ = transcript_app.emit(
+                            "assemblyai-status",
+                            StatusPayload {
+                                status: format!("error: {e}"),
+                            },
+                        );
+                    }
                 }
             }
-            // Send termination message to gracefully close.
-            let _ = ws_sender
-                .send(Message::Text(r#"{"type": "Terminate"}"#.into()))
-                .await;
         });
 
-        // Receive transcripts and emit events.
-        let recv_task = tokio::spawn(async move {
-            while let Some(msg) = ws_receiver.next().await {
-                match msg {
-                    Ok(Message::Text(text)) => {
-                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                            let msg_type = json.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                            match msg_type {
-                                "Turn" => {
-                                    let transcript = json
-                                        .get("transcript")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("");
-                                    if !transcript.is_empty() {
-                                        let end_of_turn = json
-                                            .get("end_of_turn")
-                                            .and_then(|v| {
-                                                if let Some(b) = v.as_bool() {
-                                                    return Some(b);
-                                                }
-                                                v.as_str().map(|s| s == "true")
-                                            })
-                                            .unwrap_or(false);
+        let mut audio_rx = audio_rx;
+        let mut shutdown_rx = shutdown_rx;
+        let mut pre_roll: VecDeque<(Vec<u8>, u64)> = VecDeque::with_capacity(PRE_ROLL_CHUNKS);
+        let mut current_pcm: Vec<u8> = Vec::with_capacity((TARGET_RATE as usize) * 2 * 8);
+        let mut current_start_ms = 0_u64;
+        let mut current_end_ms = 0_u64;
+        let mut audio_cursor_ms = 0_u64;
+        let mut in_speech = false;
+        let mut trailing_silence_chunks = 0_usize;
 
-                                        let audio_start = json
-                                            .get("audio_start")
-                                            .and_then(|v| v.as_f64())
-                                            .unwrap_or(0.0);
-                                        let audio_end = json
-                                            .get("audio_end")
-                                            .and_then(|v| v.as_f64())
-                                            .unwrap_or(0.0);
+        loop {
+            tokio::select! {
+                _ = &mut shutdown_rx => {
+                    println!("[AssemblyAI Sync] Shutdown signal received");
+                    if in_speech {
+                        queue_utterance(
+                            &utterance_tx,
+                            std::mem::take(&mut current_pcm),
+                            current_start_ms,
+                            current_end_ms,
+                        ).await;
+                    }
+                    break;
+                }
+                maybe_pcm = audio_rx.recv() => {
+                    let Some(pcm_bytes) = maybe_pcm else {
+                        break;
+                    };
 
-                                        let payload = TranscriptPayload {
-                                            text: transcript.to_string(),
-                                            end_of_turn,
-                                            audio_start,
-                                            audio_end,
-                                        };
+                    let chunk_duration_ms = pcm_duration_ms(&pcm_bytes).max(CHUNK_MS);
+                    let chunk_end_ms = audio_cursor_ms + chunk_duration_ms;
+                    audio_cursor_ms = chunk_end_ms;
 
-                                        let _ = send_app.emit("assemblyai-transcript", payload);
-                                    }
-                                }
-                                "Begin" => {
-                                    println!("[AssemblyAI Stream] Session started (Begin)");
-                                }
-                                "Termination" => {
-                                    println!("[AssemblyAI Stream] Server terminated session");
-                                    break;
-                                }
-                                _ => {}
+                    let level = pcm_level(&pcm_bytes);
+                    let is_speech = level >= SPEECH_LEVEL_THRESHOLD;
+
+                    if in_speech {
+                        current_pcm.extend_from_slice(&pcm_bytes);
+                        current_end_ms = chunk_end_ms;
+
+                        if is_speech {
+                            trailing_silence_chunks = 0;
+                        } else {
+                            trailing_silence_chunks += 1;
+                        }
+
+                        if trailing_silence_chunks >= END_SILENCE_CHUNKS ||
+                            current_end_ms.saturating_sub(current_start_ms) >= MAX_UTTERANCE_MS
+                        {
+                            queue_utterance(
+                                &utterance_tx,
+                                std::mem::take(&mut current_pcm),
+                                current_start_ms,
+                                current_end_ms,
+                            ).await;
+                            in_speech = false;
+                            trailing_silence_chunks = 0;
+                            pre_roll.clear();
+                        }
+                    } else {
+                        pre_roll.push_back((pcm_bytes.clone(), chunk_duration_ms));
+                        while pre_roll.len() > PRE_ROLL_CHUNKS {
+                            pre_roll.pop_front();
+                        }
+
+                        if is_speech {
+                            in_speech = true;
+                            trailing_silence_chunks = 0;
+                            current_pcm.clear();
+
+                            let pre_roll_ms = pre_roll.iter().map(|(_, ms)| *ms).sum::<u64>();
+                            current_start_ms = chunk_end_ms.saturating_sub(pre_roll_ms);
+                            current_end_ms = chunk_end_ms;
+
+                            for (pcm, _) in pre_roll.drain(..) {
+                                current_pcm.extend_from_slice(&pcm);
                             }
                         }
                     }
-                    Ok(Message::Close(_)) => {
-                        println!("[AssemblyAI Stream] WebSocket closed by server");
-                        break;
-                    }
-                    Err(e) => {
-                        eprintln!("[AssemblyAI Stream] WebSocket error: {e}");
-                        break;
-                    }
-                    _ => {}
                 }
-            }
-        });
-
-        // Wait for either the send task to finish (shutdown signal) or the recv task to end.
-        tokio::select! {
-            _ = send_task => {},
-            _ = recv_task => {},
-            _ = shutdown_rx => {
-                println!("[AssemblyAI Stream] Shutdown signal received");
             }
         }
 
-        let _ = ws_app.emit(
+        drop(utterance_tx);
+        transcribe_task.abort();
+
+        let _ = sync_app.emit(
             "assemblyai-status",
             StatusPayload {
                 status: "stopped".to_string(),
             },
         );
-        println!("[AssemblyAI Stream] WS task ended");
+        println!("[AssemblyAI Sync] Capture task ended");
     });
 
     {
@@ -379,7 +411,7 @@ pub async fn start_assemblyai_stream(
         *h = Some(task);
     }
 
-    println!("[AssemblyAI Stream] Started — native rate {native_rate} Hz, {channels} ch");
+    println!("[AssemblyAI Sync] Started — native rate {native_rate} Hz, {channels} ch");
     Ok(())
 }
 
@@ -426,6 +458,133 @@ pub fn set_microphone_gain(gain: f32) {
     let clamped = gain.clamp(0.0, 3.0);
     USER_GAIN.store(f32_to_bits(clamped), Ordering::Relaxed);
     println!("[AssemblyAI Stream] User gain set to {clamped:.2}");
+}
+
+async fn queue_utterance(
+    utterance_tx: &mpsc::Sender<PendingUtterance>,
+    pcm: Vec<u8>,
+    audio_start_ms: u64,
+    audio_end_ms: u64,
+) {
+    if pcm.is_empty() {
+        return;
+    }
+
+    let duration_ms = audio_end_ms.saturating_sub(audio_start_ms);
+    if duration_ms < MIN_UTTERANCE_MS {
+        return;
+    }
+
+    let utterance = PendingUtterance {
+        pcm,
+        audio_start_ms: audio_start_ms as f64,
+        audio_end_ms: audio_end_ms as f64,
+    };
+
+    if utterance_tx.send(utterance).await.is_err() {
+        eprintln!("[AssemblyAI Sync] Dropped utterance because transcriber stopped");
+    }
+}
+
+async fn transcribe_sync_pcm(
+    api_key: &str,
+    pcm: Vec<u8>,
+) -> Result<SyncTranscriptResponse, String> {
+    let config = serde_json::json!({
+        "sample_rate": TARGET_RATE,
+        "channels": 1,
+        "timestamps": false,
+        "prompt": "English Christian church sermon, Bible teaching, worship service, or pastor speaking scripture references, Bible book names, chapters, verses, and short sermon phrases.",
+        "keyterms_prompt": [
+            "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy",
+            "Joshua", "Judges", "Ruth", "Samuel", "Kings", "Chronicles",
+            "Ezra", "Nehemiah", "Esther", "Job", "Psalm", "Psalms",
+            "Proverbs", "Ecclesiastes", "Isaiah", "Jeremiah", "Ezekiel",
+            "Daniel", "Hosea", "Joel", "Amos", "Obadiah", "Jonah",
+            "Micah", "Nahum", "Habakkuk", "Zephaniah", "Haggai",
+            "Zechariah", "Malachi", "Matthew", "Mark", "Luke", "John",
+            "Acts", "Romans", "Corinthians", "Galatians", "Ephesians",
+            "Philippians", "Colossians", "Thessalonians", "Timothy",
+            "Titus", "Philemon", "Hebrews", "James", "Peter", "Jude",
+            "Revelation", "chapter", "verse", "scripture"
+        ]
+    });
+
+    let audio_part = Part::bytes(pcm)
+        .file_name("speech.pcm")
+        .mime_str("audio/pcm")
+        .map_err(|e| format!("Invalid audio multipart part: {e}"))?;
+
+    let config_part = Part::text(config.to_string())
+        .mime_str("application/json")
+        .map_err(|e| format!("Invalid config multipart part: {e}"))?;
+
+    let form = Form::new()
+        .part("audio", audio_part)
+        .part("config", config_part);
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()
+        .map_err(|e| format!("Failed to create Sync API client: {e}"))?;
+
+    let response = client
+        .post(SYNC_TRANSCRIBE_URL)
+        .header("Authorization", api_key)
+        .header("X-AAI-Model", SYNC_MODEL)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| format!("Sync API request failed: {e}"))?;
+
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read Sync API response: {e}"))?;
+
+    if !status.is_success() {
+        let message = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("message")
+                    .or_else(|| value.get("detail"))
+                    .and_then(|v| v.as_str())
+                    .map(ToOwned::to_owned)
+            })
+            .unwrap_or_else(|| body.trim().to_string());
+        return Err(format!("Sync API returned {status}: {message}"));
+    }
+
+    serde_json::from_str::<SyncTranscriptResponse>(&body)
+        .map_err(|e| format!("Failed to parse Sync API response: {e}"))
+}
+
+fn pcm_duration_ms(pcm: &[u8]) -> u64 {
+    let sample_count = (pcm.len() / 2) as u64;
+    ((sample_count * 1000) / TARGET_RATE as u64).max(1)
+}
+
+fn pcm_level(pcm: &[u8]) -> f32 {
+    if pcm.len() < 2 {
+        return 0.0;
+    }
+
+    let mut sum = 0.0_f32;
+    let mut count = 0_usize;
+
+    for sample in pcm.chunks_exact(2) {
+        let value = i16::from_le_bytes([sample[0], sample[1]]) as f32 / 32768.0;
+        sum += value * value;
+        count += 1;
+    }
+
+    if count == 0 {
+        return 0.0;
+    }
+
+    ((sum / count as f32).sqrt() * 3.0).min(1.0)
 }
 
 // ── Audio processing ─────────────────────────────────────────────────────────

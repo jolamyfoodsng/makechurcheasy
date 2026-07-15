@@ -1,11 +1,11 @@
 /**
- * lmDockService.ts — Main-app service for LM Dock mic capture + AssemblyAI streaming.
+ * lmDockService.ts — Main-app service for LM Dock mic capture + AssemblyAI Sync STT.
  *
  * Uses Rust-side cpal audio capture (via Tauri commands) so mic access
  * works even in the Tauri WKWebView where navigator.mediaDevices is unavailable.
  *
- * Audio chunks arrive as "audio-chunk" Tauri events with base64-encoded PCM16 data.
- * These are forwarded to the AssemblyAI streaming WebSocket for real-time transcription.
+ * The Tauri backend captures mic audio, segments completed utterances, and
+ * submits them to AssemblyAI Sync STT for finalized transcription.
  *
  * Transcript is stored as TranscriptEntry[] — each finalized speech segment
  * is its own line. Interim text is a separate active entry with a live indicator.
@@ -99,7 +99,7 @@ class LmDockService {
     detectionSpeed: "balanced",
   };
 
-  // Audio refs — Rust-side AssemblyAI streaming (via Tauri commands)
+  // Audio refs — Rust-side AssemblyAI Sync STT (via Tauri commands)
   private transcriptUnlisten: UnlistenFn | null = null;
   private statusUnlisten: UnlistenFn | null = null;
   private levelUnlisten: UnlistenFn | null = null;
@@ -832,7 +832,7 @@ class LmDockService {
         }
       }
 
-      // Start Rust-side AssemblyAI streaming — captures mic + sends WS in backend.
+      // Start Rust-side AssemblyAI Sync STT — captures mic + transcribes completed turns in backend.
       // Immune to WebView throttling, AudioContext suspension, and App Nap.
       this.snapshot = { ...this.snapshot, status: "connecting" };
       this.pushStatus();
@@ -985,7 +985,7 @@ class LmDockService {
         }
       }, 100);
 
-      // Invoke the Rust backend to start mic capture + AssemblyAI WebSocket.
+      // Invoke the Rust backend to start mic capture + AssemblyAI Sync STT.
       // Pass the current user gain so the Rust pipeline applies it from the start.
       const mvSettings = getMvSettings();
       const gainMultiplier = (mvSettings.inputGain ?? 100) / 100;
@@ -1097,7 +1097,7 @@ class LmDockService {
       this.focusHandler = null;
     }
 
-    // Stop Rust-side AssemblyAI streaming (mic capture + WebSocket)
+    // Stop Rust-side AssemblyAI Sync STT (mic capture + transcription task)
     invoke("stop_assemblyai_stream").catch((err) => {
       console.warn("[LmDockService] Failed to stop voice stream:", err);
     });
