@@ -2573,6 +2573,39 @@ struct WorshipImportReviewSectionOutput {
     warnings: Option<Vec<String>>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportStructureRequest {
+    chunk_index: usize,
+    total_chunks: usize,
+    text: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportStructureResponse {
+    songs: Vec<WorshipImportStructureSong>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportStructureSong {
+    title: String,
+    hymn_number: Option<String>,
+    warnings: Option<Vec<String>>,
+    sections: Vec<WorshipImportStructureSection>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportStructureSection {
+    #[serde(rename = "type")]
+    section_type: String,
+    label: Option<String>,
+    number: Option<String>,
+    content: String,
+}
+
 fn get_opencode_api_key() -> Result<String, String> {
     if let Ok(value) = std::env::var("OPENCODE_API_KEY") {
         if !value.trim().is_empty() {
@@ -2703,6 +2736,143 @@ fn build_worship_import_review_prompt(
     ))
 }
 
+fn build_worship_import_system_prompt() -> &'static str {
+    r#"You are a worship document parser.
+
+ABSOLUTE RULES - VIOLATION WILL TERMINATE THE SESSION:
+- Output EXACTLY ONE valid JSON object. Nothing before. Nothing after. No code fences. No markdown. No ``` . Just raw JSON.
+- Do NOT write new lyrics.
+- Do NOT translate.
+- Do NOT summarize.
+- Do NOT paraphrase.
+- Do NOT normalize spelling.
+- Do NOT fix OCR errors by changing words. If you suspect OCR issues, keep the original text and mention them in warnings.
+- Use ONLY text that already exists in the input.
+- Keep section content verbatim.
+- Escape all JSON string content correctly, including quotes, backslashes, and lyric line breaks.
+- Put lyric line breaks inside JSON strings as \n, not as literal unescaped newlines.
+- If a title is unclear, use the first line as title and add a warning.
+- If no hymn number is present, omit it.
+- One object per song.
+- Identify sections as: verse, chorus, refrain, bridge, pre-chorus, tag, intro, outro, other, stanza, response, solo, congregation, men, women, all, leader, choir.
+
+RESPONSE MUST BE EXACTLY THIS FORMAT:
+{"songs":[{"title":"Song title","hymnNumber":"optional","warnings":[],"sections":[{"type":"verse","label":"Verse 1","number":"1","content":"exact lyric text"}]}]}
+
+Return valid JSON only. No markdown. No code fences. No explanation. Just JSON."#
+}
+
+fn build_worship_import_user_prompt(request: &WorshipImportStructureRequest) -> String {
+    let chunk_context = if request.total_chunks > 1 {
+        format!(
+            "\nThis is chunk {} of {}. Songs may be split across chunks. Only extract songs that appear complete in this chunk.",
+            request.chunk_index + 1,
+            request.total_chunks
+        )
+    } else {
+        String::new()
+    };
+
+    format!(
+        "You are processing church worship documents.\n\
+These documents may originate from:\n\
+- Hymn books\n\
+- Worship sheets\n\
+- Choir documents\n\
+- Sunday service song lists\n\
+- CCC hymn books\n\
+- Anglican hymn books\n\
+- Methodist hymn books\n\
+- Catholic hymn books\n\
+- Redeemed Christian Church hymn books\n\
+- Assemblies of God hymn books\n\
+- Hand-typed church documents\n\
+- OCR-scanned PDFs\n\
+- Historical church publications\n\
+The formatting may be inconsistent.\n\
+Do not assume modern song formatting.\n\
+Many documents use:\n\
+- Stanza\n\
+- Verse\n\
+- Chorus\n\
+- Refrain\n\
+- Response\n\
+- Solo\n\
+- Congregation\n\
+- Men\n\
+- Women\n\
+- All\n\
+- Leader\n\
+- Choir\n\
+These should be preserved whenever possible.\n\
+Some hymn books use numbering formats such as:\n\
+1.\n\
+2.\n\
+3.\n\
+or\n\
+I.\n\
+II.\n\
+III.\n\
+or\n\
+(1)\n\
+(2)\n\
+(3)\n\
+These often indicate verses.\n\
+Do not automatically treat every numbered section as a new song.\n\
+A song may span multiple pages.\n\
+A hymn number often appears near the title.\n\
+Examples:\n\
+101 Amazing Grace\n\
+Hymn 101\n\
+No. 101\n\
+101.\n\
+101\n\
+However page numbers may appear similarly.\n\
+Be conservative.\n\
+When uncertain, preserve rather than guess.\n\
+Documents may contain:\n\
+- Page numbers\n\
+- Running headers\n\
+- Running footers\n\
+- Copyright notices\n\
+- Publisher information\n\
+- Index pages\n\
+- Table of contents pages\n\
+These are not songs.\n\
+Exclude them only when confidence is very high.\n\
+If confidence is low, preserve the text and add a warning.\n\
+Many scanned hymn books contain OCR mistakes.\n\
+Examples:\n\
+G0D instead of GOD\n\
+L0RD instead of LORD\n\
+rn instead of m\n\
+l instead of I\n\
+Only correct errors when the intended text is obvious.\n\
+Otherwise preserve the original.\n\
+Church documents frequently repeat choruses.\n\
+Repeated text does not necessarily mean duplication.\n\
+Do not remove repeated sections.\n\
+Preserve all meaningful content.\n\n\
+Since many Nigerian churches use CCC books:\n\
+Documents may contain bilingual content.\n\
+Examples:\n\
+English + Yoruba\n\
+English + Twi\n\
+English + French\n\
+Do not separate bilingual sections into different songs.\n\
+Keep them together when they clearly belong to the same hymn.\n\
+Examples:\n\
+Verse 1 (English)\n\
+Verse 1 (Yoruba)\n\
+should remain inside the same song.\n\
+Do not translate.\n\
+Do not merge languages.\n\
+Preserve original ordering.{}\n\n\
+INPUT TEXT:\n{}",
+        chunk_context, request.text
+    )
+}
+
 #[tauri::command]
 fn get_worship_import_ai_status() -> WorshipImportAiStatus {
     WorshipImportAiStatus {
@@ -2711,6 +2881,87 @@ fn get_worship_import_ai_status() -> WorshipImportAiStatus {
             .unwrap_or(false),
         model: OPENCODE_MODEL.to_string(),
     }
+}
+
+#[tauri::command]
+fn structure_worship_import_chunk(
+    request: WorshipImportStructureRequest,
+) -> Result<WorshipImportStructureResponse, String> {
+    let api_key = get_opencode_api_key()?;
+    let client = build_opencode_client(120)?;
+    let system_prompt = build_worship_import_system_prompt();
+    let user_prompt = build_worship_import_user_prompt(&request);
+
+    let request_body = serde_json::json!({
+        "model": OPENCODE_MODEL,
+        "messages": [
+            { "role": "system", "content": system_prompt },
+            { "role": "user", "content": user_prompt }
+        ],
+        "temperature": 0.0,
+        "max_tokens": 32768,
+        "response_format": { "type": "json_object" }
+    });
+
+    let mut resp = client
+        .post(format!("{}/chat/completions", OPENCODE_BASE_URL))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&request_body)
+        .send()
+        .map_err(|e| format!("Worship import structure request failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().unwrap_or_default();
+
+        if status.as_u16() == 400 && text.to_lowercase().contains("response_format") {
+            let fallback_body = serde_json::json!({
+                "model": OPENCODE_MODEL,
+                "messages": [
+                    { "role": "system", "content": system_prompt },
+                    { "role": "user", "content": user_prompt }
+                ],
+                "temperature": 0.0,
+                "max_tokens": 32768
+            });
+
+            resp = client
+                .post(format!("{}/chat/completions", OPENCODE_BASE_URL))
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .json(&fallback_body)
+                .send()
+                .map_err(|e| format!("Worship import structure retry failed: {}", e))?;
+
+            if !resp.status().is_success() {
+                let retry_status = resp.status();
+                let retry_text = resp.text().unwrap_or_default();
+                return Err(format!(
+                    "OpenCode API returned {}: {}",
+                    retry_status, retry_text
+                ));
+            }
+        } else {
+            return Err(format!("OpenCode API returned {}: {}", status, text));
+        }
+    }
+
+    let data: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("Failed to parse worship structure response: {}", e))?;
+
+    let content = data
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .ok_or("Worship import structure returned empty content")?;
+
+    let payload = extract_json_payload(content);
+    serde_json::from_str::<WorshipImportStructureResponse>(payload)
+        .map_err(|e| format!("Failed to parse worship import structure JSON: {}", e))
 }
 
 #[tauri::command]
@@ -4701,8 +4952,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 if index_path.exists() && index_path.is_file() {
                     match fs::read(&index_path) {
                         Ok(data) => {
-                            let header =
-                                overlay_header("Content-Type", "text/html; charset=utf-8");
+                            let header = overlay_header("Content-Type", "text/html; charset=utf-8");
                             let cors = overlay_header("Access-Control-Allow-Origin", "*");
                             let resp = tiny_http::Response::from_data(data)
                                 .with_header(header)
@@ -5063,6 +5313,7 @@ pub fn run() {
             delete_transcript,
             get_transcript_stats,
             get_worship_import_ai_status,
+            structure_worship_import_chunk,
             review_worship_import_batch,
             translate_transcript,
             extract_text_from_pdf,

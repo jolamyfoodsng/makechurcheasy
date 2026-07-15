@@ -22,7 +22,7 @@ import {
   normalizeExtractedLyricsText,
   type ExtractedTextQuality,
 } from "../src/worship/bulkImportService";
-import { processDocumentViaApi } from "../src/worship/bulkImportAiService";
+import { processDocumentLocally } from "../src/worship/bulkImportAiService";
 import {
   createEmptyImportSection,
   estimateDraftSlideCount,
@@ -357,7 +357,7 @@ export default function SongImportFullprocess({
       let processedSongs: SmartImportSongDraft[] = [];
 
       try {
-        const apiResult = await processDocumentViaApi(normalizedText, resolvedSourceName);
+        const apiResult = await processDocumentLocally(normalizedText, resolvedSourceName);
         processedSongs = apiResult.songs;
         nextWarnings.push(...apiResult.warnings);
       } catch (apiError) {

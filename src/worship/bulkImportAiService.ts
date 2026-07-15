@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { buildFallbackDraft } from "./smartImportService";
 import type {
   AiProcessResult,
@@ -90,6 +91,11 @@ interface ChunkResult {
   error?: string;
 }
 
+function isRateLimitFallback(error?: string): boolean {
+  if (!error) return false;
+  return /returned 429|freeusagelimiterror|rate limit exceeded/i.test(error);
+}
+
 async function processChunk(
   chunk: TextChunk,
   provider: DocumentStructureProvider,
@@ -167,7 +173,19 @@ export async function processDocumentWithAi(
 
   const warnings: string[] = [];
   if (fallbackChunks > 0) {
-    warnings.push(`${fallbackChunks} section${fallbackChunks === 1 ? "" : "s"} require${fallbackChunks === 1 ? "s" : ""} manual review`);
+    const rateLimitedChunks = results.filter((result) => result.fallback && isRateLimitFallback(result.error)).length;
+    const manualReviewChunks = fallbackChunks - rateLimitedChunks;
+
+    if (rateLimitedChunks > 0) {
+      warnings.push(
+        `${rateLimitedChunks} section${rateLimitedChunks === 1 ? "" : "s"} fell back because the AI provider rate limit was exceeded. Retry later.`,
+      );
+    }
+    if (manualReviewChunks > 0) {
+      warnings.push(
+        `${manualReviewChunks} section${manualReviewChunks === 1 ? "" : "s"} require${manualReviewChunks === 1 ? "s" : ""} manual review`,
+      );
+    }
     for (const result of results) {
       if (result.fallback && result.error) {
         warnings.push(`Chunk ${results.indexOf(result) + 1}: ${result.error}`);
@@ -198,6 +216,72 @@ class NoopProvider implements DocumentStructureProvider {
   async structureChunk(_request: BulkImportChunkRequest): Promise<{ songs: SmartImportSongDraft[] }> {
     throw new Error("No AI provider configured");
   }
+}
+
+interface LocalWorshipImportAiStatus {
+  aiConfigured: boolean;
+  model: string;
+}
+
+interface LocalStructuredSongResponse {
+  title: string;
+  hymnNumber?: string;
+  warnings?: string[];
+  sections: Array<{
+    type: string;
+    label?: string;
+    number?: string;
+    content: string;
+  }>;
+}
+
+interface LocalWorshipImportStructureResponse {
+  songs: LocalStructuredSongResponse[];
+}
+
+class TauriOpenCodeProvider implements DocumentStructureProvider {
+  readonly name = "opencode-local";
+
+  async structureChunk(request: BulkImportChunkRequest): Promise<{ songs: SmartImportSongDraft[] }> {
+    const response = await invoke<LocalWorshipImportStructureResponse>("structure_worship_import_chunk", {
+      request,
+    });
+
+    return {
+      songs: response.songs.map((song) => ({
+        id: generateId(),
+        title: song.title,
+        hymnNumber: song.hymnNumber,
+        sections: song.sections.map((section) => ({
+          id: generateId(),
+          type: normalizeSectionType(section.type),
+          label: section.label ?? capitalize(section.type),
+          number: section.number,
+          content: section.content,
+          warnings: [],
+        })),
+        method: "ai" as const,
+        warnings: song.warnings ?? [],
+        reviewNotes: [],
+        rawExcerpt: request.text.slice(0, 2400),
+      })),
+    };
+  }
+}
+
+async function ensureLocalWorshipImportAiConfigured(): Promise<void> {
+  const status = await invoke<LocalWorshipImportAiStatus>("get_worship_import_ai_status");
+  if (!status.aiConfigured) {
+    throw new Error("Local worship import AI is not configured. Set OPENCODE_API_KEY for the desktop app.");
+  }
+}
+
+export async function processDocumentLocally(
+  text: string,
+  fileName: string,
+): Promise<AiProcessResult> {
+  await ensureLocalWorshipImportAiConfigured();
+  return processDocumentWithAi(text, fileName, new TauriOpenCodeProvider());
 }
 
 // ── API-based processing (desktop → backend API → AI provider) ──

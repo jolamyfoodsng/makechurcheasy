@@ -450,6 +450,23 @@ describe("Phase 6: Retry Logic", () => {
     expect(result.stats.fallbackChunks).toBe(1);
     expect(result.needsReview).toBe(true);
   });
+
+  it("surfaces rate limit fallbacks clearly", { timeout: 15000 }, async () => {
+    const provider: DocumentStructureProvider = {
+      name: "rate-limit",
+      async structureChunk() {
+        throw new Error('OpenCode API returned 429: {"type":"error","error":{"type":"FreeUsageLimitError","message":"Rate limit exceeded. Please try again later."},"metadata":{}}');
+      },
+    };
+
+    const text = "Rate limit test\n".repeat(500);
+    const result = await processDocumentWithAi(text, "rate-limit.txt", provider);
+
+    expect(result.stats.fallbackChunks).toBe(1);
+    expect(result.needsReview).toBe(true);
+    expect(result.warnings[0]).toBe("1 section fell back because the AI provider rate limit was exceeded. Retry later.");
+    expect(result.warnings[1]).toContain("Chunk 1: OpenCode API returned 429");
+  });
 });
 
 // ── Phase 7: Deduplication ──
