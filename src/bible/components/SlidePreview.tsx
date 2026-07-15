@@ -57,12 +57,15 @@ export default function SlidePreview({
 
   const bgStyle = useMemo(() => {
     if (!settings) return {};
+    const backgroundPattern = settings.backgroundPattern ? `url(${settings.backgroundPattern})` : undefined;
     const background = settings.backgroundColorEnd
       ? `linear-gradient(${settings.bgGradientAngle ?? 135}deg, ${settings.backgroundColor}, ${settings.backgroundColorEnd})`
       : settings.backgroundColor;
     return {
-      background: settings.backgroundImage ? undefined : background,
-      backgroundImage: settings.backgroundImage ? `url(${settings.backgroundImage})` : undefined,
+      background: settings.backgroundImage || settings.backgroundPattern || settings.backgroundVideo ? undefined : background,
+      backgroundImage: settings.backgroundImage
+        ? `url(${settings.backgroundImage})`
+        : (settings.backgroundPattern ? backgroundPattern : undefined),
       backgroundSize: "cover",
       backgroundPosition: "center",
       opacity: settings.backgroundOpacity,
@@ -126,6 +129,17 @@ export default function SlidePreview({
   const renderPreviewFrame = (scale: number, expanded = false) => (
     <div className={`preview-frame${expanded ? " preview-frame--expanded" : ""}`}>
       <div className="preview-frame-bg" style={bgStyle} />
+      {settings?.backgroundVideo && (
+        <video
+          className="preview-frame-video"
+          src={settings.backgroundVideo}
+          autoPlay
+          loop
+          muted
+          playsInline
+          style={{ opacity: settings.backgroundOpacity }}
+        />
+      )}
       {settings?.fullscreenShadeEnabled && (
         <div
           className="preview-frame-shade"

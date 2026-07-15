@@ -20,18 +20,22 @@
       box-sizing: border-box;
     }
 
-    html,
+    html {
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
     body {
       width: 100vw;
       height: 100vh;
       margin: 0;
       overflow: hidden;
-      background: #000;
+      background: var(--bg);
       color: var(--fg);
       font-family: "Inter", "Segoe UI", sans-serif;
-    }
-
-    body {
       position: relative;
     }
 
@@ -40,7 +44,7 @@
       inset: 0;
       width: 100vw;
       height: 100vh;
-      background: #000;
+      background: transparent;
       overflow: hidden;
     }
 
@@ -295,7 +299,7 @@
 
   <script>
     (function () {
-      const remoteScreen = document.querySelector(".remote-screen");
+      const body = document.body;
       const waitingState = document.getElementById("waitingState");
       const invalidState = document.getElementById("invalidState");
       const stage = document.getElementById("stage");
@@ -356,8 +360,8 @@
       }
 
       function showInvalid() {
-        if (remoteScreen) {
-          remoteScreen.style.background = "#000";
+        if (body) {
+          body.style.background = "#000";
         }
         stage.style.background = "transparent";
         invalidState.classList.remove("hidden");
@@ -366,8 +370,8 @@
       }
 
       function showWaiting() {
-        if (remoteScreen) {
-          remoteScreen.style.background = "#000";
+        if (body) {
+          body.style.background = "#000";
         }
         stage.style.background = "transparent";
         invalidState.classList.add("hidden");
@@ -379,8 +383,8 @@
         invalidState.classList.add("hidden");
         waitingState.classList.add("hidden");
         stage.innerHTML = "";
-        if (remoteScreen) {
-          remoteScreen.style.background = "#000";
+        if (body) {
+          body.style.background = "#000";
         }
         stage.style.background = "transparent";
       }
@@ -615,8 +619,8 @@
               ? renderMediaLayer(item)
               : renderTextLayer(item);
 
-        if (remoteScreen) {
-          remoteScreen.style.background = getStyle(item).backgroundColor || "#000000";
+        if (body) {
+          body.style.background = getStyle(item).backgroundColor || "#000000";
         }
         stage.style.background = "transparent";
         stage.innerHTML = `${stageMarkup}${tickerMarkup}`;

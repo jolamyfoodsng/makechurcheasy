@@ -799,6 +799,35 @@
   gap: 10px;
 }
 
+.bible-preview-bg-modes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.bible-preview-bg-mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--b-border);
+  border-radius: 8px;
+  background: var(--b-tile);
+  color: var(--b-text-3);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.bible-preview-bg-mode.active {
+  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(96, 165, 250, 0.12);
+  color: #bfdbfe;
+}
+
 .bible-preview-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -947,6 +976,152 @@ bible-preview-toggle>span {
 .bible-preview-swatch-input::-webkit-color-swatch {
   border: none;
   border-radius: 999px;
+}
+
+.bible-preview-media {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bible-preview-media-toolbar {
+  display: flex;
+  gap: 8px;
+}
+
+.bible-preview-media-search {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--b-border);
+  border-radius: 8px;
+  background: var(--b-tile);
+  color: var(--b-text-3);
+}
+
+.bible-preview-media-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--b-text-1);
+  font-size: 11px;
+  outline: none;
+}
+
+.bible-preview-media-search button,
+.bible-preview-media-upload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--b-border);
+  border-radius: 8px;
+  background: var(--b-tile);
+  color: var(--b-text-2);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.bible-preview-media-search button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+}
+
+.bible-preview-media-upload {
+  min-width: 78px;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.bible-preview-media-grid,
+.bible-preview-pattern-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.bible-preview-media-card,
+.bible-preview-pattern-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--b-border);
+  border-radius: 8px;
+  background: var(--b-tile);
+  color: var(--b-text-1);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.bible-preview-media-card.active,
+.bible-preview-pattern-card.active {
+  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.bible-preview-media-thumb,
+.bible-preview-pattern-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  background-color: #0f172a;
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+}
+
+.bible-preview-pattern-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.bible-preview-media-name,
+.bible-preview-pattern-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--b-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bible-preview-media-check {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #bfdbfe;
+}
+
+.bible-preview-media-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 68px;
+  padding: 12px;
+  border: 1px dashed var(--b-border);
+  border-radius: 8px;
+  color: var(--b-text-3);
+  font-size: 11px;
 }
 
 .bible-right-preview-section .live-preview-col {
@@ -3290,6 +3465,14 @@ bible-preview-toggle>span {
 .preview-frame-bg {
   position: absolute;
   inset: 0;
+}
+
+.preview-frame-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .preview-frame-shade {

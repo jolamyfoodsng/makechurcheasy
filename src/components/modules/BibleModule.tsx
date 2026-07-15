@@ -27,6 +27,8 @@ import BookChapterPanel from "../../bible/components/BookChapterPanel";
 import VerseListPanel from "../../bible/components/VerseListPanel";
 import SlidePreview from "../../bible/components/SlidePreview";
 import BibleLibrary from "../../bible/components/BibleLibrary";
+import type { MediaItem } from "../../library/libraryTypes";
+import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
 import ThemePreviewSurface from "../ThemePreviewSurface";
 import BibleCommandPalette from "../BibleCommandPalette";
 import { obsService } from "../../services/obsService";
@@ -62,6 +64,20 @@ const SHARED_WORSHIP_BIBLE_THEME_TAG = "shared-worship-bible";
 const BIBLE_PREVIEW_SWATCHES = ["#FFFFFF", "#F8FAFC", "#CBD5E1", "#FDE68A", "#B9CCFF", "#60A5FA", "#22C55E", "#0F172A", "#111827", "#000000"] as const;
 
 type BiblePreviewPanelTab = "text" | "background";
+type BiblePreviewBackgroundMode = "color" | "image" | "pattern" | "video";
+
+const BIBLE_BG_MODE_OPTIONS: Array<{ id: BiblePreviewBackgroundMode; label: string; icon: string }> = [
+  { id: "color", label: "Color", icon: "palette" },
+  { id: "image", label: "Image", icon: "image" },
+  { id: "pattern", label: "Pattern", icon: "texture" },
+  { id: "video", label: "Video", icon: "videocam" },
+];
+
+const BIBLE_PATTERN_OPTIONS = BACKGROUND_PATTERNS.map((pattern, index) => ({
+  id: `pattern-${index}`,
+  label: pattern.label,
+  src: pattern.src,
+}));
 
 const BIBLE_LOWER_THIRD_THEMES: LowerThirdTheme[] = (() => {
   const sharedThemes = LT_ALL_THEMES.filter((theme) =>
@@ -75,6 +91,173 @@ const BIBLE_LOWER_THIRD_THEMES: LowerThirdTheme[] = (() => {
   return Array.from(byId.values());
 })();
 
+function toRelativeBiblePreviewUrl(url: string): string {
+  if (!url) return "";
+  try {
+    const resolved = new URL(url, window.location.origin);
+    return resolved.pathname;
+  } catch {
+    return url;
+  }
+}
+
+function inferBiblePreviewBackgroundMode(settings: BibleThemeSettings): BiblePreviewBackgroundMode {
+  if (settings.backgroundVideo) return "video";
+  if (settings.backgroundPattern) return "pattern";
+  if (settings.backgroundImage) return "image";
+  return "color";
+}
+
+function BiblePreviewMediaPicker({
+  kind,
+  selectedUrl,
+  onSelect,
+}: {
+  kind: "image" | "video";
+  selectedUrl: string;
+  onSelect: (item: MediaItem) => void;
+}) {
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        try {
+          const { getAllMedia } = await import("../../library/libraryDb");
+          const all = await getAllMedia();
+          if (!cancelled && all.length > 0) {
+            setMedia(all.filter((item) => item.type === kind));
+            return;
+          }
+        } catch { /* ignore */ }
+
+        try {
+          const { loadLocalLibrary } = await import("../../dock/dockUploadService");
+          const all = loadLocalLibrary();
+          if (!cancelled && all.length > 0) {
+            setMedia(all.filter((item) => item.type === kind));
+            return;
+          }
+        } catch { /* ignore */ }
+
+        try {
+          const response = await fetch("/uploads/dock-media-library.json");
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const all = await response.json();
+          if (!cancelled && Array.isArray(all)) {
+            setMedia(all.filter((item: MediaItem) => item.type === kind));
+          }
+        } catch { /* ignore */ }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [kind]);
+
+  const filteredMedia = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return media;
+    return media.filter((item) => item.name.toLowerCase().includes(query));
+  }, [media, search]);
+
+  const handleUpload = useCallback(async (files: FileList | null) => {
+    if (!files?.length) return;
+    for (const file of Array.from(files)) {
+      const allowed = kind === "image" ? file.type.startsWith("image/") : file.type.startsWith("video/");
+      if (!allowed) continue;
+      try {
+        const { registerDockMediaItem, uploadFileToDock } = await import("../../dock/dockUploadService");
+        const result = await uploadFileToDock(file);
+        if (result.item) {
+          await registerDockMediaItem(result.item);
+          setMedia((prev) => [result.item, ...prev]);
+          onSelect(result.item);
+        }
+      } catch (err) {
+        console.warn("[BiblePreview] Background upload failed:", err);
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    }
+  }, [kind, onSelect]);
+
+  return (
+    <div className="bible-preview-media">
+      <div className="bible-preview-media-toolbar">
+        <div className="bible-preview-media-search">
+          <Icon name="search" size={13} />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={kind === "image" ? "Search images" : "Search videos"}
+            aria-label={kind === "image" ? "Search images" : "Search videos"}
+          />
+          {search && (
+            <button type="button" onClick={() => setSearch("")} aria-label="Clear search">
+              <Icon name="close" size={12} />
+            </button>
+          )}
+        </div>
+        <button type="button" className="bible-preview-media-upload" onClick={() => fileInputRef.current?.click()}>
+          <Icon name="add_photo_alternate" size={13} />
+          <span>Upload</span>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={kind === "image" ? "image/*" : "video/*"}
+          multiple
+          hidden
+          onChange={(e) => handleUpload(e.target.files)}
+        />
+      </div>
+
+      {loading ? (
+        <div className="bible-preview-media-empty">Loading {kind === "image" ? "images" : "videos"}…</div>
+      ) : filteredMedia.length === 0 ? (
+        <div className="bible-preview-media-empty">
+          <Icon name={kind === "image" ? "image" : "videocam"} size={18} />
+          <span>{search ? "No matches found" : `No ${kind}s uploaded yet`}</span>
+        </div>
+      ) : (
+        <div className="bible-preview-media-grid">
+          {filteredMedia.map((item) => {
+            const relativeUrl = toRelativeBiblePreviewUrl(item.url);
+            const isSelected = selectedUrl === relativeUrl || selectedUrl === item.url;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`bible-preview-media-card${isSelected ? " active" : ""}`}
+                onClick={() => onSelect(item)}
+                title={item.name}
+              >
+                <div
+                  className="bible-preview-media-thumb"
+                  style={{ backgroundImage: `url(${item.thumbnailUrl || item.url})` }}
+                />
+                <span className="bible-preview-media-name">{item.name}</span>
+                {isSelected && (
+                  <span className="bible-preview-media-check">
+                    <Icon name="check" size={13} />
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BiblePreviewControls({
   settings,
   activeTab,
@@ -86,6 +269,69 @@ function BiblePreviewControls({
   onTabChange: (tab: BiblePreviewPanelTab) => void;
   onUpdate: (patch: Partial<BibleThemeSettings>) => void;
 }) {
+  const [backgroundMode, setBackgroundMode] = useState<BiblePreviewBackgroundMode>(() => inferBiblePreviewBackgroundMode(settings));
+
+  useEffect(() => {
+    setBackgroundMode(inferBiblePreviewBackgroundMode(settings));
+  }, [settings.backgroundImage, settings.backgroundPattern, settings.backgroundVideo, settings.backgroundColor, settings.backgroundColorEnd]);
+
+  const selectBackgroundMode = useCallback((mode: BiblePreviewBackgroundMode) => {
+    setBackgroundMode(mode);
+    if (mode === "color") {
+      onUpdate({
+        backgroundPattern: "",
+        backgroundImage: "",
+        backgroundImageFilePath: "",
+        backgroundVideo: "",
+        backgroundVideoFilePath: "",
+      });
+      return;
+    }
+    if (mode === "image") {
+      onUpdate({
+        backgroundPattern: "",
+        backgroundVideo: "",
+        backgroundVideoFilePath: "",
+      });
+      return;
+    }
+    if (mode === "pattern") {
+      onUpdate({
+        backgroundImage: "",
+        backgroundImageFilePath: "",
+        backgroundVideo: "",
+        backgroundVideoFilePath: "",
+      });
+      return;
+    }
+    onUpdate({
+      backgroundPattern: "",
+      backgroundImage: "",
+      backgroundImageFilePath: "",
+    });
+  }, [onUpdate]);
+
+  const handleBackgroundMediaSelect = useCallback((item: MediaItem) => {
+    const relativeUrl = toRelativeBiblePreviewUrl(item.url);
+    if (item.type === "image") {
+      onUpdate({
+        backgroundImage: settings.backgroundImage === relativeUrl ? "" : relativeUrl,
+        backgroundImageFilePath: settings.backgroundImage === relativeUrl ? "" : (item.filePath || ""),
+        backgroundPattern: "",
+        backgroundVideo: "",
+        backgroundVideoFilePath: "",
+      });
+      return;
+    }
+    onUpdate({
+      backgroundVideo: settings.backgroundVideo === relativeUrl ? "" : relativeUrl,
+      backgroundVideoFilePath: settings.backgroundVideo === relativeUrl ? "" : (item.filePath || ""),
+      backgroundPattern: "",
+      backgroundImage: "",
+      backgroundImageFilePath: "",
+    });
+  }, [onUpdate, settings.backgroundImage, settings.backgroundVideo]);
+
   return (
     <div className="bible-preview-controls">
       <div className="bible-preview-tabs" role="tablist" aria-label="Preview controls">
@@ -227,6 +473,148 @@ function BiblePreviewControls({
                 />
               </label>
             </div>
+          </>
+        ) : (
+          <>
+            <div className="bible-preview-bg-modes">
+              {BIBLE_BG_MODE_OPTIONS.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  className={`bible-preview-bg-mode${backgroundMode === mode.id ? " active" : ""}`}
+                  onClick={() => selectBackgroundMode(mode.id)}
+                >
+                  <Icon name={mode.icon} size={13} />
+                  <span>{mode.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {backgroundMode === "color" && (
+              <div className="bible-preview-option-group">
+                <span className="bible-preview-group-label">Color</span>
+                <div className="bible-preview-swatch-row">
+                  {BIBLE_PREVIEW_SWATCHES.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className={`bible-preview-swatch${settings.backgroundColor === color && !settings.backgroundImage ? " active" : ""}`}
+                      style={{ background: color }}
+                      onClick={() => onUpdate({
+                        backgroundColor: color,
+                        backgroundColorEnd: undefined,
+                        backgroundImage: "",
+                        backgroundImageFilePath: "",
+                        backgroundPattern: "",
+                        backgroundVideo: "",
+                        backgroundVideoFilePath: "",
+                      })}
+                      aria-label={`Background ${color}`}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    className="bible-preview-swatch bible-preview-swatch-input"
+                    value={settings.backgroundColor}
+                    onChange={(e) => onUpdate({
+                      backgroundColor: e.target.value,
+                      backgroundColorEnd: undefined,
+                      backgroundImage: "",
+                      backgroundImageFilePath: "",
+                      backgroundPattern: "",
+                      backgroundVideo: "",
+                      backgroundVideoFilePath: "",
+                    })}
+                    aria-label="Custom background color"
+                  />
+                </div>
+              </div>
+            )}
+
+            {backgroundMode === "image" && (
+              <BiblePreviewMediaPicker kind="image" selectedUrl={settings.backgroundImage} onSelect={handleBackgroundMediaSelect} />
+            )}
+
+            {backgroundMode === "video" && (
+              <BiblePreviewMediaPicker kind="video" selectedUrl={settings.backgroundVideo} onSelect={handleBackgroundMediaSelect} />
+            )}
+
+            {backgroundMode === "pattern" && (
+              <div className="bible-preview-pattern-grid">
+                {BIBLE_PATTERN_OPTIONS.map((pattern) => {
+                  const isSelected = settings.backgroundPattern === pattern.src;
+                  return (
+                    <button
+                      key={pattern.id}
+                      type="button"
+                      className={`bible-preview-pattern-card${isSelected ? " active" : ""}`}
+                      onClick={() => onUpdate({
+                        backgroundPattern: pattern.src,
+                        backgroundImage: "",
+                        backgroundImageFilePath: "",
+                        backgroundVideo: "",
+                        backgroundVideoFilePath: "",
+                      })}
+                      title={pattern.label}
+                    >
+                      <div className="bible-preview-pattern-thumb">
+                        <img src={pattern.src} alt={pattern.label} />
+                      </div>
+                      <span className="bible-preview-pattern-label">{pattern.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="bible-preview-grid">
+              <label className="bible-preview-field">
+                <span>Shade</span>
+                <input
+                  type="color"
+                  value={settings.fullscreenShadeColor}
+                  onChange={(e) => onUpdate({ fullscreenShadeColor: e.target.value, fullscreenShadeEnabled: true })}
+                />
+              </label>
+              <label className="bible-preview-toggle">
+                <span>Overlay</span>
+                <input
+                  type="checkbox"
+                  checked={settings.fullscreenShadeEnabled}
+                  onChange={(e) => onUpdate({ fullscreenShadeEnabled: e.target.checked })}
+                />
+              </label>
+            </div>
+
+            <label className="bible-preview-range">
+              <span>
+                <span>Background Opacity</span>
+                <strong>{Math.round(settings.backgroundOpacity * 100)}%</strong>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={settings.backgroundOpacity}
+                onChange={(e) => onUpdate({ backgroundOpacity: Number(e.target.value) })}
+              />
+            </label>
+
+            <label className="bible-preview-range">
+              <span>
+                <span>Shade Opacity</span>
+                <strong>{Math.round(settings.fullscreenShadeOpacity * 100)}%</strong>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={0.85}
+                step={0.01}
+                value={settings.fullscreenShadeOpacity}
+                onChange={(e) => onUpdate({ fullscreenShadeOpacity: Number(e.target.value), fullscreenShadeEnabled: true })}
+              />
+            </label>
 
             <div className="bible-preview-option-group">
               <span className="bible-preview-group-label">Ref Background</span>
@@ -266,81 +654,6 @@ function BiblePreviewControls({
                 ))}
               </div>
             </div>
-          </>
-        ) : (
-          <>
-            <div className="bible-preview-option-group">
-              <span className="bible-preview-group-label">Color</span>
-              <div className="bible-preview-swatch-row">
-                {BIBLE_PREVIEW_SWATCHES.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    className={`bible-preview-swatch${settings.backgroundColor === color && !settings.backgroundImage ? " active" : ""}`}
-                    style={{ background: color }}
-                    onClick={() => onUpdate({
-                      backgroundColor: color,
-                      backgroundColorEnd: undefined,
-                      backgroundImage: "",
-                      backgroundImageFilePath: "",
-                      backgroundPattern: "",
-                      backgroundVideo: "",
-                      backgroundVideoFilePath: "",
-                    })}
-                    aria-label={`Background ${color}`}
-                  />
-                ))}
-                <input
-                  type="color"
-                  className="bible-preview-swatch bible-preview-swatch-input"
-                  value={settings.backgroundColor}
-                  onChange={(e) => onUpdate({
-                    backgroundColor: e.target.value,
-                    backgroundColorEnd: undefined,
-                    backgroundImage: "",
-                    backgroundImageFilePath: "",
-                    backgroundPattern: "",
-                    backgroundVideo: "",
-                    backgroundVideoFilePath: "",
-                  })}
-                  aria-label="Custom background color"
-                />
-              </div>
-            </div>
-
-            <div className="bible-preview-grid">
-              <label className="bible-preview-field">
-                <span>Shade</span>
-                <input
-                  type="color"
-                  value={settings.fullscreenShadeColor}
-                  onChange={(e) => onUpdate({ fullscreenShadeColor: e.target.value, fullscreenShadeEnabled: true })}
-                />
-              </label>
-              <label className="bible-preview-toggle">
-                <span>Overlay</span>
-                <input
-                  type="checkbox"
-                  checked={settings.fullscreenShadeEnabled}
-                  onChange={(e) => onUpdate({ fullscreenShadeEnabled: e.target.checked })}
-                />
-              </label>
-            </div>
-
-            <label className="bible-preview-range">
-              <span>
-                <span>Shade Opacity</span>
-                <strong>{Math.round(settings.fullscreenShadeOpacity * 100)}%</strong>
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={0.85}
-                step={0.01}
-                value={settings.fullscreenShadeOpacity}
-                onChange={(e) => onUpdate({ fullscreenShadeOpacity: Number(e.target.value), fullscreenShadeEnabled: true })}
-              />
-            </label>
           </>
         )}
       </div>
