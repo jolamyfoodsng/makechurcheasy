@@ -781,6 +781,7 @@ export default function DockBibleTab({
     () => loadDockBibleUiPreferences().controlsCollapsed ?? false,
   );
   const [bibleBgOnly, setBibleBgOnly] = useState(false);
+  const [bibleOverlayVisible, setBibleOverlayVisible] = useState(true);
   const liveVerseRequestIdRef = useRef(0);
   const searchRef = useRef<HTMLDivElement>(null);
   const verseGridRef = useRef<HTMLDivElement>(null);
@@ -796,6 +797,7 @@ export default function DockBibleTab({
   const suppressNextVerseLineRestageRef = useRef(false);
   const prefsReadyRef = useRef(false);
   const suppressAutoStageRef = useRef(true);
+  const obsAutoPushArmedRef = useRef(false);
   const previousStagedRef = useRef(staged);
   const suppressAutoStageTimerRef = useRef<number | null>(null);
   const latestStagedRef = useRef(staged);
@@ -1699,6 +1701,7 @@ export default function DockBibleTab({
         lineCount?: number;
       },
     ) => {
+      obsAutoPushArmedRef.current = true;
       const requestId = ++liveVerseRequestIdRef.current;
       const effectiveTranslation = options?.translation ?? activeTranslation;
       const effectiveLineCount = clampVerseLineCount(options?.lineCount ?? verseLineCount);
@@ -1883,6 +1886,7 @@ export default function DockBibleTab({
         .then(pushLive)
         .then(() => {
           if (requestId !== liveVerseRequestIdRef.current) return;
+          setBibleOverlayVisible(true);
           trackBiblePresent(selection.text);
         })
         .catch(async (err) => {
@@ -1894,6 +1898,7 @@ export default function DockBibleTab({
               if (requestId !== liveVerseRequestIdRef.current) return;
               await pushLive();
               if (requestId !== liveVerseRequestIdRef.current) return;
+              setBibleOverlayVisible(true);
               trackBiblePresent(selection.text);
               return;
             } catch (retryErr) {
@@ -1945,6 +1950,7 @@ export default function DockBibleTab({
     // Direct OBS push: use ref-based theme to avoid stale closure when theme
     // selection and save happen in the same rAF callback (modal handleSave).
     try {
+      if (!obsAutoPushArmedRef.current) return;
       const staged = latestStagedRef.current;
       if (staged && staged.type === "bible") {
         const d = staged.data as Record<string, unknown> | undefined;
@@ -1988,6 +1994,7 @@ export default function DockBibleTab({
     // Best-effort live preview: push updated theme settings to OBS for the
     // currently staged Bible item so background changes appear immediately.
     try {
+      if (!obsAutoPushArmedRef.current) return;
       const staged = latestStagedRef.current;
       if (staged && staged.type === "bible") {
         const d = staged.data as Record<string, unknown> | undefined;
@@ -2031,6 +2038,7 @@ export default function DockBibleTab({
     });
     // Direct OBS push for lower-third: use ref-based theme.
     try {
+      if (!obsAutoPushArmedRef.current) return;
       const staged = latestStagedRef.current;
       if (staged && staged.type === "bible") {
         const d = staged.data as Record<string, unknown> | undefined;
@@ -2062,6 +2070,7 @@ export default function DockBibleTab({
     });
     // Lightweight preview for lower-third: update CSS overlay on the browser source.
     try {
+      if (!obsAutoPushArmedRef.current) return;
       const staged = latestStagedRef.current;
       if (staged && staged.type === "bible") {
         const d = staged.data as Record<string, unknown> | undefined;
@@ -2151,6 +2160,10 @@ export default function DockBibleTab({
     if (liveData?.type === "bible") {
       const d = liveData.data as Record<string, unknown> | undefined;
       if (d) {
+        if (!obsAutoPushArmedRef.current) {
+          void stageVerse(selectedBook, selectedChapter, verse, {});
+          return;
+        }
         // Trigger morphing pulse on the mode switcher
         setModeMorphing(true);
         const morphTimer = setTimeout(() => setModeMorphing(false), 400);
@@ -2224,6 +2237,7 @@ export default function DockBibleTab({
     prevFullscreenQuickSettingsSignature.current = nextSignature;
     if (!changed) return;
     if (suppressAutoStageRef.current) return;
+    if (!obsAutoPushArmedRef.current) return;
 
     if (overlayMode !== "fullscreen") return;
     const verse = selectedVerseRef.current;
@@ -2296,6 +2310,7 @@ export default function DockBibleTab({
     if (!changed) return;
     if (overlayMode !== "lower-third") return;
     if (suppressAutoStageRef.current) return;
+    if (!obsAutoPushArmedRef.current) return;
 
     // Debounce OBS push (100ms Rule 8) — rapid slider changes should not spam OBS
     if (lowerThirdQuickSettingsDebounceRef.current !== null) {
@@ -2871,25 +2886,47 @@ export default function DockBibleTab({
     setActionError("");
     pendingScrollVerseRef.current = null;
     onStage(null);
+    setBibleOverlayVisible(false);
     ensureObsConnected().then(() => dockObsClient.clearBible()).catch((err) =>
       console.warn("[DockBibleTab] clearBible failed:", err)
     );
   }, [onStage]);
 
-  const handleClearBible = useCallback(() => {
+  const handleToggleBibleVisibility = useCallback(() => {
     setActionError("");
-    // Fire-and-forget OBS clear — UI is already cleared via onStage(null) (Rule 1)
-    ensureObsConnected()
-      .then(() => dockObsClient.clearBible())
-      .catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
-        if (!isTransient) {
-          console.warn("[DockBibleTab] clearBible failed:", err);
-          setActionError(message);
-        }
-      });
-  }, []);
+    const run = async () => {
+      await ensureObsConnected();
+
+      if (bibleOverlayVisible) {
+        await dockObsClient.clearBible();
+        setBibleOverlayVisible(false);
+        return;
+      }
+
+      const current = latestStagedRef.current;
+      const data = current?.type === "bible"
+        ? current.data as Parameters<typeof dockObsClient.pushBible>[0]
+        : null;
+      const mode = data?.overlayMode === "lower-third" || data?.overlayMode === "fullscreen"
+        ? data.overlayMode
+        : (readDockBibleOverlayMode() ?? overlayMode);
+
+      await dockObsClient.bringBibleOverlayForward(mode);
+      if (data) {
+        await dockObsClient.pushBible({ ...data, overlayMode: mode });
+      }
+      setBibleOverlayVisible(true);
+    };
+
+    void run().catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
+      if (!isTransient) {
+        console.warn("[DockBibleTab] toggle Bible visibility failed:", err);
+        setActionError(message);
+      }
+    });
+  }, [bibleOverlayVisible, overlayMode]);
 
   const handleTranslationAChange = useCallback((newTranslation: string) => {
     if (newTranslation === translationB) {
@@ -3891,9 +3928,12 @@ export default function DockBibleTab({
           displayMode={displayMode}
           onDisplayModeChange={handleDisplayModeChange}
           morphing={modeMorphing}
-          clearLabel={t("common.clear")}
-          onClear={handleClearBible}
+          clearLabel={bibleOverlayVisible
+            ? t("dock.bottomToolbar.hideBible")
+            : t("dock.bottomToolbar.showBible", { defaultValue: "Show Bible" })}
+          onClear={handleToggleBibleVisibility}
           clearDisabled={false}
+          sourceVisible={bibleOverlayVisible}
           collapsed={toolbarCollapsed}
           onCollapseChange={setToolbarCollapsed}
           compact={compactToolbar}

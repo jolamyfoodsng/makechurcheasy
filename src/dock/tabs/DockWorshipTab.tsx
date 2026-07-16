@@ -905,6 +905,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const [announcementSearchQuery, setAnnouncementSearchQuery] = useState("");
   const [announcementSlideIdx, setAnnouncementSlideIdx] = useState<number | null>(null);
   const [visibleAnnouncementSlideIdx, setVisibleAnnouncementSlideIdx] = useState<number | null>(null);
+  const [announcementOverlayVisible, setAnnouncementOverlayVisible] = useState(true);
   const [isNewAnnouncementModalOpen, setIsNewAnnouncementModalOpen] = useState(false);
   const [announcementDraft, setAnnouncementDraft] = useState<{
     type: AnnouncementType;
@@ -920,6 +921,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const [selectedSong, setSelectedSong] = useState<DockSong | null>(null);
   const [visibleIdx, setVisibleIdx] = useState<number | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [worshipOverlayVisible, setWorshipOverlayVisible] = useState(true);
   const [selectedFSTheme, setSelectedFSTheme] = useState<BibleTheme>(
     productionDefaults.fullscreenTheme ?? BUILTIN_THEMES[0],
   );
@@ -966,6 +968,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const deletedSectionsPopoverRef = useRef<HTMLDivElement>(null);
   const prefsReadyRef = useRef(false);
   const suppressAutoProjectionRef = useRef(true);
+  const obsAutoPushArmedRef = useRef(false);
   const suppressAutoProjectionTimerRef = useRef<number | null>(null);
   const songsPollBusyRef = useRef(false);
   const liveSectionRequestIdRef = useRef(0);
@@ -1570,6 +1573,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
 
   const goLiveSection = useCallback(
     async (idx: number, options?: { backgroundOnly?: boolean }) => {
+      obsAutoPushArmedRef.current = true;
       const payload = buildSectionPayload(idx, options);
       if (!payload) return;
       const requestId = ++liveSectionRequestIdRef.current;
@@ -1594,6 +1598,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
           await dockObsClient.pushWorshipLyrics(payload.obsData);
         }
         if (requestId !== liveSectionRequestIdRef.current) return;
+        setWorshipOverlayVisible(true);
         track("song_presented");
         trackWorshipSongPresented();
       } catch (err) {
@@ -1681,6 +1686,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
 
   const pushAnnouncementSection = useCallback(
     async (idx: number) => {
+      obsAutoPushArmedRef.current = true;
       const payload = buildAnnouncementPayload(idx);
       if (!payload) return;
 
@@ -1697,6 +1703,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
 
       try {
         await dockObsClient.pushAnnouncement(payload.obsData);
+        setAnnouncementOverlayVisible(true);
       } catch (err) {
         console.warn("[DockWorshipTab] Announcement OBS push failed:", err);
         setActionError(err instanceof Error ? err.message : String(err));
@@ -1712,6 +1719,29 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     },
     [activeAnnouncementIndex, pushAnnouncementSection],
   );
+
+  const handleToggleAnnouncementVisibility = useCallback(async () => {
+    setActionError("");
+
+    try {
+      await ensureObsConnected();
+
+      if (announcementOverlayVisible) {
+        await dockObsClient.clearAnnouncement();
+        setAnnouncementOverlayVisible(false);
+        return;
+      }
+
+      if (activeAnnouncementIndex !== null) {
+        await pushAnnouncementSection(activeAnnouncementIndex);
+      } else {
+        setAnnouncementOverlayVisible(true);
+      }
+    } catch (err) {
+      console.warn("[DockWorshipTab] Toggle announcement visibility failed:", err);
+      setActionError(err instanceof Error ? err.message : String(err));
+    }
+  }, [activeAnnouncementIndex, announcementOverlayVisible, pushAnnouncementSection]);
 
   const saveSongInMainApp = useCallback(
     (payload: WorshipDockSongSavePayload): Promise<DockSong> =>
@@ -2580,6 +2610,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     setSelectedIdx(null);
     setShowWorshipBackgroundOnly(false);
     onStage(null);
+    setWorshipOverlayVisible(false);
     showToast(t('worship.clearOverlay'));
 
     try {
@@ -2589,6 +2620,34 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       console.warn("[DockWorshipTab] clear worship failed:", err);
     }
   }, [onStage, showToast]);
+
+  const handleToggleWorshipVisibility = useCallback(async () => {
+    setActionError("");
+
+    try {
+      await ensureObsConnected();
+
+      if (worshipOverlayVisible) {
+        await dockObsClient.clearWorshipLyrics();
+        setWorshipOverlayVisible(false);
+        return;
+      }
+
+      if (activeSectionIndex !== null) {
+        await goLiveSection(activeSectionIndex);
+      } else {
+        await dockObsClient.bringWorshipOverlayForward(overlayMode);
+        setWorshipOverlayVisible(true);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
+      if (!isTransient) {
+        console.warn("[DockWorshipTab] toggle worship visibility failed:", err);
+        setActionError(message);
+      }
+    }
+  }, [activeSectionIndex, goLiveSection, overlayMode, worshipOverlayVisible]);
 
   const handleShowWorshipBackgroundOnly = useCallback(async () => {
     if (activeSectionIndex === null) return;
@@ -2614,6 +2673,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     if (!changed) return;
     if (suppressAutoProjectionRef.current) return;
     if (!prefsReadyRef.current) return;
+    if (!obsAutoPushArmedRef.current) return;
     if (openedAnnouncement && activeAnnouncementIndex !== null) {
       void restageAnnouncementCurrent();
       return;
@@ -2639,6 +2699,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     if (!changed) return;
     if (suppressAutoProjectionRef.current) return;
     if (!prefsReadyRef.current) return;
+    if (!obsAutoPushArmedRef.current) return;
     if (openedAnnouncement && activeAnnouncementIndex !== null) {
       void restageAnnouncementCurrent();
       return;
@@ -2667,6 +2728,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     if (!changed) return;
     if (suppressAutoProjectionRef.current) return;
     if (!prefsReadyRef.current) return;
+    if (!obsAutoPushArmedRef.current) return;
     if (overlayMode === "fullscreen" && openedAnnouncement && activeAnnouncementIndex !== null) {
       void restageAnnouncementCurrent();
       return;
@@ -2697,6 +2759,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     if (overlayMode !== "lower-third") return;
     if (suppressAutoProjectionRef.current) return;
     if (!prefsReadyRef.current) return;
+    if (!obsAutoPushArmedRef.current) return;
     if (openedAnnouncement && activeAnnouncementIndex !== null) {
       void restageAnnouncementCurrent();
       return;
@@ -2757,6 +2820,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
           setOpenedAnnouncement(null);
           setAnnouncementSlideIdx(null);
           setVisibleAnnouncementSlideIdx(null);
+          setAnnouncementOverlayVisible(false);
           onStage(null);
           ensureObsConnected().then(() => dockObsClient.clearAnnouncement()).catch(() => { });
           return;
@@ -3228,8 +3292,11 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                     <DockBottomToolbar
                       overlayMode={overlayMode}
                       onModeChange={handleOverlayModeChange}
-                      clearLabel={t('common.clear')}
-                      onClear={handleClearLyrics}
+                      clearLabel={worshipOverlayVisible
+                        ? t('worship.hideLyrics', { defaultValue: 'Hide lyrics' })
+                        : t('worship.showLyrics', { defaultValue: 'Show lyrics' })}
+                      onClear={handleToggleWorshipVisibility}
+                      sourceVisible={worshipOverlayVisible}
                       collapsed={toolbarCollapsed}
                       onCollapseChange={setToolbarCollapsed}
                       compact={compactToolbar}
@@ -3786,15 +3853,9 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                     <DockBottomToolbar
                       overlayMode={overlayMode}
                       onModeChange={handleOverlayModeChange}
-                      clearLabel="Clear"
-                      onClear={() => {
-                        setVisibleAnnouncementSlideIdx(null);
-                        setAnnouncementSlideIdx(null);
-                        onStage(null);
-                        ensureObsConnected()
-                          .then(() => dockObsClient.clearAnnouncement())
-                          .catch((err) => console.warn("[DockWorshipTab] Clear announcement failed:", err));
-                      }}
+                      clearLabel={announcementOverlayVisible ? "Hide announcement" : "Show announcement"}
+                      onClear={handleToggleAnnouncementVisibility}
+                      sourceVisible={announcementOverlayVisible}
                       collapsed={toolbarCollapsed}
                       onCollapseChange={setToolbarCollapsed}
                       compact={compactToolbar}

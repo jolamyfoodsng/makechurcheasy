@@ -2,8 +2,8 @@
  * DockBottomToolbar.tsx — Shared bottom toolbar for Bible & Worship tabs
  *
  * Default: single-row (toggle | divider | actions | spacer | collapse) + clear below
- * ≤250px: two-row compact (toggle + collapse | action icons incl. delete inline)
- * compact (panel ≤350px): Full | LT ... Delete | ⋯ overflow
+ * ≤250px: two-row compact (toggle + collapse | action icons incl. visibility inline)
+ * compact (panel ≤360px): Full | LT ... Visibility | ⋯ overflow
  */
 
 import { useCallback, useRef, useEffect, useState } from "react";
@@ -17,6 +17,7 @@ const DISPLAY_MODES = [
   { id: "single" as const, labelKey: "dock.bottomToolbar.singleTranslation" },
   { id: "compare" as const, labelKey: "dock.bottomToolbar.compareTranslations" },
 ];
+const COMPACT_WIDTH_PX = 360;
 
 interface Props {
   /** Current overlay mode */
@@ -37,6 +38,8 @@ interface Props {
   onClear?: () => void;
   /** Whether the clear button is disabled */
   clearDisabled?: boolean;
+  /** Whether the associated OBS source is currently visible */
+  sourceVisible?: boolean;
   /** Whether the toolbar is collapsed (controlled) */
   collapsed?: boolean;
   /** Called when collapse/expand is toggled */
@@ -55,6 +58,7 @@ export default function DockBottomToolbar({
   clearLabel,
   onClear,
   clearDisabled = false,
+  sourceVisible = true,
   collapsed = false,
   onCollapseChange,
   compact = false,
@@ -62,9 +66,13 @@ export default function DockBottomToolbar({
   const { t } = useTranslation();
   const resolvedClearLabel = clearLabel ?? t("dock.bottomToolbar.hideBible");
   const [showOverflow, setShowOverflow] = useState(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const overflowRef = useRef<HTMLDivElement>(null);
   const [showDisplayModeMenu, setShowDisplayModeMenu] = useState(false);
   const displayModeMenuRef = useRef<HTMLDivElement>(null);
+  const [widthCompact, setWidthCompact] = useState(false);
+  const effectiveCompact = compact || widthCompact;
+  const visibilityIcon = sourceVisible ? "visibility_off" : "visibility";
 
   // Close overflow on outside click
   useEffect(() => {
@@ -90,6 +98,21 @@ export default function DockBottomToolbar({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [showDisplayModeMenu]);
 
+  useEffect(() => {
+    const el = toolbarRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const updateWidth = (width: number) => {
+      setWidthCompact(width > 0 && width <= COMPACT_WIDTH_PX);
+    };
+    updateWidth(el.getBoundingClientRect().width);
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) updateWidth(entry.contentRect.width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [collapsed, effectiveCompact]);
+
   const toggleOverflow = useCallback(() => setShowOverflow((prev) => !prev), []);
 
   const handleDisplayModeSelect = useCallback(
@@ -102,13 +125,13 @@ export default function DockBottomToolbar({
 
   if (collapsed) {
     return (
-      <div className="dock-btm-toolbar dock-btm-toolbar--collapsed">
+      <div className="dock-btm-toolbar dock-btm-toolbar--collapsed" ref={toolbarRef}>
         {onClear && (
           <button
             type="button"
             className="dock-btm-toolbar__clear dock-btm-toolbar__clear--bible"
             onClick={onClear}
-            disabled={clearDisabled}
+            disabled={!clearDisabled}
             title={resolvedClearLabel}
           >
             <span>{t("dock.bottomToolbar.hideBible")}</span>
@@ -127,12 +150,12 @@ export default function DockBottomToolbar({
     );
   }
 
-  /* ═══ COMPACT MODE (panel ≤350px) ═══
+  /* ═══ COMPACT MODE (panel ≤360px) ═══
    * Layout: [ Full ▼ | LT ] ... [ Delete ] [ ⋯ ]
    * Hidden actions (children) go into the ⋯ overflow dropdown */
-  if (compact) {
+  if (effectiveCompact) {
     return (
-      <div className="dock-btm-toolbar dock-btm-toolbar--compact">
+      <div className="dock-btm-toolbar dock-btm-toolbar--compact" ref={toolbarRef}>
         <div className="dock-btm-toolbar__row">
           {/* Segmented: Full ▼ | LT */}
           <div
@@ -178,16 +201,18 @@ export default function DockBottomToolbar({
           {/* Spacer pushes right actions to the end */}
           <div className="dock-btm-spacer" />
 
-          {/* Delete / Hide button — always accessible */}
+          {/* Visibility toggle — always accessible */}
           {onClear && (
             <button
               type="button"
               className="dock-btm-toolbar__clear--inline"
               onClick={onClear}
               disabled={clearDisabled}
+              aria-label={resolvedClearLabel}
+              aria-pressed={!sourceVisible}
               title={resolvedClearLabel}
             >
-              {resolvedClearLabel}
+              <Icon name={visibilityIcon} size={16} />
             </button>
           )}
 
@@ -216,7 +241,7 @@ export default function DockBottomToolbar({
   }
 
   return (
-    <div className="dock-btm-toolbar">
+    <div className="dock-btm-toolbar" ref={toolbarRef}>
       <div className="dock-btm-toolbar__row">
         {/* Segmented mode control */}
         <div
@@ -278,9 +303,11 @@ export default function DockBottomToolbar({
               className="dock-btm-toolbar__clear--inline"
               onClick={onClear}
               disabled={clearDisabled}
+              aria-label={resolvedClearLabel}
+              aria-pressed={!sourceVisible}
               title={resolvedClearLabel}
             >
-              <Icon name="delete_sweep" size={16} />
+              <Icon name={visibilityIcon} size={16} />
             </button>
           )}
           <button
@@ -293,19 +320,6 @@ export default function DockBottomToolbar({
             <Icon name="expand_more" size={18} />
           </button>
         </div>
-
-        {/* Clear button — inline with actions at ≤250px, full-width below at wider */}
-        {onClear && (
-          <button
-            type="button"
-            className="dock-btm-toolbar__clear dock-btm-toolbar__clear--bible"
-            onClick={onClear}
-            disabled={clearDisabled}
-            title={resolvedClearLabel}
-          >
-            <span>{t("dock.bottomToolbar.hideBible")}</span>
-          </button>
-        )}
       </div>
       <button
         type="button"

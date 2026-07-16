@@ -14,14 +14,17 @@
   background: var(--dock-surface, #111827);
   padding: 8px 10px;
   min-height: 35px;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 /* ── Main row ── */
 .dock-btm-toolbar__row {
   display: flex;
   align-items: center;
-  /* flex-wrap: wrap; */
+  flex-wrap: nowrap;
   gap: 10px;
+  min-width: 0;
 }
 
 /* ── Segmented control ── */
@@ -31,6 +34,7 @@
   border-radius: var(--radius, 4px);
   overflow: hidden;
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .dock-btm-segmented__item {
@@ -97,6 +101,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 /* ── Spacer ── */
@@ -258,21 +263,38 @@
    Layout: [ Full | LT ] ... [ Delete ] [ ⋯ ]
    ══════════════════════════════════════════════════ */
 .dock-btm-toolbar--compact {
-  padding: 6px 10px;
+  padding: 6px 8px;
   min-height: auto;
 }
 
 .dock-btm-toolbar--compact .dock-btm-toolbar__row {
-  gap: 8px;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
 }
 
 .dock-btm-toolbar--compact .dock-btm-segmented {
-  flex-shrink: 0;
+  flex: 0 1 116px;
+  width: auto;
+  max-width: 128px;
 }
 
 .dock-btm-toolbar--compact .dock-btm-segmented__item {
-  padding: 0 10px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 8px;
   height: 26px;
+}
+
+.dock-btm-toolbar--compact .dock-btm-spacer {
+  display: block;
+  min-width: 0;
+}
+
+.dock-btm-toolbar--compact .dock-btm-toolbar__clear,
+.dock-btm-toolbar--compact .dock-btm-toolbar__clear--full,
+.dock-btm-toolbar--compact .dock-btm-toolbar__clear--bible {
+  display: none !important;
 }
 
 /* ── Inline delete/clear button ── */
@@ -282,22 +304,40 @@
   justify-content: center;
   min-width: 32px;
   min-height: 32px;
-  border: 1px solid var(--error-border, #991B1B);
+  border: 1px solid var(--border, #334155);
   border-radius: var(--radius, 4px);
-  background: var(--error-bg, #7F1D1D);
-  color: var(--error, #DC2626);
+  background: var(--surface-raised, #242428);
+  color: var(--text-muted, #94A3B8);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   flex-shrink: 0;
 }
 
+.dock-btm-toolbar--compact .dock-btm-toolbar__clear--inline {
+  display: inline-flex !important;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  font-size: 0;
+  line-height: 0;
+}
+
+.dock-btm-toolbar--compact .dock-btm-toolbar__clear--inline svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
 .dock-btm-toolbar__clear--inline:hover {
-  background: rgba(220, 38, 38, 0.1);
-  border-color: var(--error, #DC2626);
+  background: var(--surface-hover, #2A2A2E);
+  border-color: var(--border-strong, #64748B);
+  color: var(--text-primary, #F8FAFC);
 }
 
 .dock-btm-toolbar__clear--inline:active {
-  background: rgba(220, 38, 38, 0.15);
+  background: var(--surface-active, #2E2E34);
 }
 
 .dock-btm-toolbar__clear--inline:disabled {
@@ -309,6 +349,10 @@
 .dock-btm-overflow {
   position: relative;
   flex-shrink: 0;
+}
+
+.dock-btm-toolbar--compact .dock-btm-overflow {
+  display: inline-flex;
 }
 
 /* ── Overflow dropdown ── */

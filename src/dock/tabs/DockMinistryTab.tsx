@@ -453,7 +453,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
         });
       }
 
-      await dockObsClient.applyProjectionSettings().catch(() => { });
+      await dockObsClient.applyProjectionSettings({ allowSceneMutation: true }).catch(() => { });
 
       setRunning(true);
       setIsPaused(false);

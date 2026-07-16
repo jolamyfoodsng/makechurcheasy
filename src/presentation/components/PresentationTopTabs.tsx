@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Settings2 } from "lucide-react";
+import { ArrowLeft, Settings2 } from "lucide-react";
 
 import { PresentationLinkCard } from "./PresentationLinkCard";
 import type {
@@ -13,6 +13,7 @@ interface PresentationTopTabsProps {
   description: string;
   mode: PresentationMode;
   onChange: (mode: PresentationMode) => void;
+  onBack: () => void | Promise<void>;
   session: PresentationSessionSettings;
   connectionStatus: PresentationConnectionStatus;
   onCopyLink: () => Promise<void> | void;
@@ -26,6 +27,7 @@ export function PresentationTopTabs({
   description,
   mode,
   onChange,
+  onBack,
   session,
   connectionStatus,
   onCopyLink,
@@ -64,6 +66,16 @@ export function PresentationTopTabs({
 
   return (
     <div className="presentation-top-tabs-bar">
+      <button
+        type="button"
+        className="presentation-icon-button presentation-top-tabs-back"
+        title="Back to setup"
+        aria-label="Back to setup"
+        onClick={onBack}
+      >
+        <ArrowLeft size={16} />
+      </button>
+
       <div className="presentation-top-tabs-copy">
         <h1>{title}</h1>
         <p>{description}</p>

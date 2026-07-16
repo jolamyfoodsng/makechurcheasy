@@ -8074,7 +8074,7 @@
 }
 
 .dock-bible-verse-row__text {
-  min-width: 300px;
+  min-width: 400px;
   color: var(--dock-text);
   font-size: 12px;
   line-height: 1.55;
@@ -24421,45 +24421,45 @@ button.dock-btm-toolbar__clear--inline,
   display: none !important;
 }
 
-.dock-btm-toolbar--compact button {
-  display: block !important;
+.dock-btm-toolbar--compact > .dock-btm-toolbar__row button {
+  display: inline-flex !important;
 }
 
 @media (max-width:345px) {
-  .dock-btm-toolbar__clear.dock-btm-toolbar__clear--bible {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-toolbar__clear.dock-btm-toolbar__clear--bible {
     display: none !important;
 
   }
 
-  .dock-btm-toolbar__clear.dock-btm-toolbar__clear--full {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-toolbar__clear.dock-btm-toolbar__clear--full {
     display: block !important;
   }
 
-  .dock-btm-segmented {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-segmented {
     width: 46%;
   }
 
-  .dock-btm-segmented button {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-segmented button {
     width: 100%;
   }
 
 }
 
 @media (max-width:290px) {
-  .dock-btm-toolbar__clear.dock-btm-toolbar__clear--full {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-toolbar__clear.dock-btm-toolbar__clear--full {
     display: none !important;
   }
 
-  .dock-btm-toolbar__clear {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-toolbar__clear {
     display: none !important;
 
   }
 
-  .dock-btm-toolbar__row {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-toolbar__row {
     display: block !important;
   }
 
-  .dock-btm-toolbar__actions {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-toolbar__actions {
     margin-top: 12px !important;
     display: grid !important;
     grid-template-columns: repeat(6, 1fr);
@@ -24471,7 +24471,7 @@ button.dock-btm-toolbar__clear--inline,
     grid-template-columns: repeat(4, 1fr) !important;
   } */
 
-  button.dock-btm-toolbar__clear--inline {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) button.dock-btm-toolbar__clear--inline {
     display: block !important;
     padding: 4px;
     grid-column: span 3;
@@ -24495,19 +24495,19 @@ button.dock-btm-toolbar__clear--inline,
     transition: background 0.15s ease, border-color 0.15s ease;
   }
 
-  .dock-btm-toolbar__icon-btn--collapse_two {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-toolbar__icon-btn--collapse_two {
     display: none !important;
   }
 
-  .dock-btm-segmented {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-segmented {
     width: 98%;
   }
 
-  .dock-btm-segmented button {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-segmented button {
     width: 100%;
   }
 
-  .dock-btm-toolbar__icon-btn--collapse {
+  .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-toolbar__icon-btn--collapse {
     display: block;
     width: fit-content !important;
     margin-left: 20px !important;
@@ -27000,6 +27000,18 @@ button.dock-btm-toolbar__clear--inline,
 
 .dock-console-panel .dock-btm-toolbar--compact .dock-btm-toolbar__clear--inline {
   display: inline-flex !important;
+}
+
+.dock-console-panel .dock-btm-toolbar--compact .dock-btm-toolbar__row {
+  display: flex !important;
+}
+
+.dock-console-panel .dock-btm-toolbar--compact .dock-btm-segmented {
+  width: auto !important;
+}
+
+.dock-console-panel .dock-btm-toolbar--compact .dock-btm-toolbar__actions {
+  display: flex !important;
 }
 
 .dock-console-panel .dock-btm-toolbar:not(.dock-btm-toolbar--compact) .dock-btm-toolbar__clear--inline {

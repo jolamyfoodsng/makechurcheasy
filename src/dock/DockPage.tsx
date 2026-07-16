@@ -281,12 +281,40 @@ export default function DockPage() {
   }, []);
 
   useEffect(() => {
+    const root = dockRootRef.current;
+    if (!root) return;
+
+    let inFlight = false;
+    let lastActivationAt = 0;
+    const MIN_INTERVAL = 150;
+
+    const handleDockClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const trigger = target.closest('button, [role="tab"]');
+      if (!trigger || !root.contains(trigger)) return;
+
+      const now = Date.now();
+      if (inFlight || now - lastActivationAt < MIN_INTERVAL) return;
+      lastActivationAt = now;
+      inFlight = true;
+
+      void dockObsClient.ensurePresentationPreviewActive().catch(() => { }).finally(() => {
+        inFlight = false;
+      });
+    };
+
+    root.addEventListener("click", handleDockClick, true);
+    return () => root.removeEventListener("click", handleDockClick, true);
+  }, []);
+
+  useEffect(() => {
     saveDockStagedItem(staged);
   }, [staged]);
 
   useEffect(() => {
     saveProjectionSettings(projectionSettings);
-    void dockObsClient.applyProjectionSettings().catch(() => { });
   }, [projectionSettings]);
 
   useEffect(() => installDockTextShortcuts(), []);

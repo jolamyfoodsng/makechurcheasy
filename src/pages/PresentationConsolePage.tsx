@@ -1882,6 +1882,7 @@ export default function PresentationConsolePage() {
           description="Choose content, preview it locally, then present it to the locally hosted screen."
           mode={mode}
           onChange={setMode}
+          onBack={() => navigate("/presentation/setup")}
           session={session}
           connectionStatus={connectionStatus}
           onCopyLink={handleCopyLink}

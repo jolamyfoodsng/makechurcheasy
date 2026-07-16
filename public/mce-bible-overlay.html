@@ -346,6 +346,13 @@
       display: none !important;
     }
 
+    body[data-mode="lower-third"] #background,
+    body[data-mode="lower-third"] #bg-crossfade,
+    body[data-mode="lower-third"] #background-video {
+      display: none !important;
+      opacity: 0 !important;
+    }
+
     body[data-mode="lower-third"] #compare-layout {
       display: none !important;
     }
@@ -390,43 +397,6 @@
     #lt-bar {
       will-change: opacity, transform, filter;
       transform-origin: center center;
-    }
-
-    body.mode-switch-out[data-mode="fullscreen"] #overlay,
-    body.mode-switch-out[data-mode="fullscreen"] #compare-layout.is-visible,
-    body.mode-switch-out[data-mode="fullscreen"] #background-shade {
-      opacity: 0;
-      transform: translateY(18px) scale(0.985);
-      filter: blur(6px);
-      transition:
-        opacity 150ms ease,
-        transform 190ms cubic-bezier(0.22, 1, 0.36, 1),
-        filter 150ms ease;
-    }
-
-    body.mode-switch-out[data-mode="lower-third"] #overlay,
-    body.mode-switch-out[data-mode="lower-third"] #lt-bar {
-      opacity: 0;
-      transform: translateY(26px) scale(0.985);
-      filter: blur(6px);
-      transition:
-        opacity 150ms ease,
-        transform 190ms cubic-bezier(0.22, 1, 0.36, 1),
-        filter 150ms ease;
-    }
-
-    body.mode-switch-in[data-mode="fullscreen"] #overlay,
-    body.mode-switch-in[data-mode="fullscreen"] #compare-layout.is-visible {
-      animation: modeFullscreenIn 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
-    }
-
-    body.mode-switch-in[data-mode="fullscreen"] #background-shade {
-      animation: modeShadeIn 220ms ease both;
-    }
-
-    body.mode-switch-in[data-mode="lower-third"] #overlay,
-    body.mode-switch-in[data-mode="lower-third"] #lt-bar {
-      animation: modeLowerThirdIn 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
     }
 
     body[data-mode="lower-third"] #lt-bar::before {
@@ -590,44 +560,6 @@
 
       to {
         clip-path: inset(0 0 0% 0);
-      }
-    }
-
-    @keyframes modeFullscreenIn {
-      from {
-        opacity: 0;
-        transform: translateY(22px) scale(0.986);
-        filter: blur(8px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-        filter: blur(0);
-      }
-    }
-
-    @keyframes modeShadeIn {
-      from {
-        opacity: 0;
-      }
-
-      to {
-        opacity: 1;
-      }
-    }
-
-    @keyframes modeLowerThirdIn {
-      from {
-        opacity: 0;
-        transform: translateY(28px) scale(0.982);
-        filter: blur(8px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-        filter: blur(0);
       }
     }
 
@@ -839,12 +771,6 @@
       let baseCompareLayoutPadding = { top: 60, right: 60, bottom: 60, left: 60 };
       let baseBarPadding = 28;
       let barMaxHeight = 600;
-      let modeTransitionTimer = 0;
-      let modeTransitionToken = 0;
-      let modeTransitionActive = false;
-      const MODE_SWITCH_OUT_MS = 150;
-      const MODE_SWITCH_IN_MS = 260;
-
       function toCssFontWeight(w, fb) {
         const n = Number(w); if (!n || isNaN(n)) return fb || '400';
         if (n <= 100) return '100'; if (n <= 200) return '200'; if (n <= 300) return '300';
@@ -1178,40 +1104,29 @@
           ltBar.insertBefore(verseContainer, ltRefText);
           overlay.style.display = '';
           compareLayout.classList.remove('is-visible');
+          background.style.display = 'none';
+          if (bgCrossfade) {
+            bgCrossfade.style.display = 'none';
+            bgCrossfade.style.opacity = '0';
+          }
+          clearFullscreenBackgroundVideo();
           backgroundShade.style.display = 'none';
           ltBar.style.display = '';
           overlay.classList.remove('hidden');
         } else {
           overlay.insertBefore(verseContainer, ltBar.parentElement === overlay ? ltBar : null);
           overlay.style.display = '';
+          background.style.display = '';
+          if (bgCrossfade) {
+            bgCrossfade.style.display = '';
+          }
           backgroundShade.style.display = '';
           ltBar.style.display = 'none';
         }
       }
 
-      function finishModeTransition(token, newMode) {
-        if (token !== modeTransitionToken) return;
-        body.classList.remove('mode-switch-out');
-        applyModeDom(newMode);
-        renderCurrentOverlayForMode();
-        requestAnimationFrame(() => {
-          if (token !== modeTransitionToken) return;
-          body.classList.add('mode-switch-in');
-          clearTimeout(modeTransitionTimer);
-          modeTransitionTimer = setTimeout(() => {
-            if (token !== modeTransitionToken) return;
-            body.classList.remove('mode-switch-in');
-            modeTransitionActive = false;
-          }, MODE_SWITCH_IN_MS + 30);
-        });
-      }
-
       function setMode(newMode) {
-        if (newMode === currentMode && !body.classList.contains('mode-switch-out')) return;
-        clearTimeout(modeTransitionTimer);
-        modeTransitionToken += 1;
-        body.classList.remove('mode-switch-out', 'mode-switch-in');
-        modeTransitionActive = false;
+        if (newMode === currentMode) return;
         applyModeDom(newMode);
         renderCurrentOverlayForMode();
       }
@@ -1573,7 +1488,6 @@
         if (isCL) autoScaleCompareContent();
         else { autoScaleContent(); scheduleContentFit(); }
         const anim = data.theme?.animation || 'fade'; lastAnimation = anim;
-        if (modeTransitionActive) return;
         if (!hasShownOnce) hasShownOnce = true;
         clearEntranceAnimationClasses();
       }
@@ -1587,7 +1501,6 @@
         verseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; reference.style.display = rt ? 'block' : 'none';
         try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-bible-overlay lower-third theme error', error); }
         const anim = data.theme?.animation || 'slide-up'; lastAnimation = anim;
-        if (modeTransitionActive) return;
         if (!hasShownOnce) hasShownOnce = true;
         clearEntranceAnimationClasses();
       }

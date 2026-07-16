@@ -125,7 +125,7 @@ const DOCK_PREVIEW_SCENE_STATE_KEY = "ocs-dock-preview-scene-state-v1";
 const DOCK_OBS_RECONNECT_DELAY_MS = 300;
 const DOCK_OBS_RECONNECT_MAX_DELAY_MS = 8000;
 const DOCK_OBS_PARAMS_KEY = "ocs-dock-obs-params";
-const OVERLAY_HTML_VERSION = "2026-07-15-1-v5";
+const OVERLAY_HTML_VERSION = "2026-07-15-1-v7";
 const DOCK_TICKER_CLEARANCE_FALLBACK_PX = 80;
 const DOCK_TICKER_CLEARANCE_GAP_PX = 10;
 const DOCK_TICKER_CLEARANCE_MAX_PX = 220;
@@ -741,20 +741,14 @@ class DockObsClient {
         // and the dock stays stuck in "connecting".
         this.setStatus("connected");
         connTracker.register("dock-cef", this._url);
-        await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE).catch((err) => {
-          console.warn(`[DockOBS] Failed to pre-create "${DOCK_PRESENTATION_SCENE}":`, err);
-        });
 
         // Persist connection params so auto-reconnect works across dock reloads
         this.persistParams();
 
         const startupPromise = (async () => {
-          await this.prewarmPrimaryDockSources().catch((err) => {
-            console.warn("[DockOBS] Primary dock source prewarm failed:", err);
-          });
-          await this.applyProjectionSettings().catch((err) => {
-            console.warn("[DockOBS] Projection bootstrap failed:", err);
-          });
+          // A dock reload must not reorder, rebuild, or otherwise mutate the
+          // MCE Presentation scene. Scene creation and source wiring now happen
+          // only when an explicit dock command is sent.
         })();
         this._startupReadyPromise = startupPromise;
         void startupPromise;
@@ -1014,27 +1008,87 @@ class DockObsClient {
 
   private async fitSceneItemToCanvas(sceneName: string, sceneItemId: number): Promise<void> {
     const { width, height } = await this.getCanvasSize();
+    const sceneItemTransform: Record<string, unknown> = {
+      positionX: 0,
+      positionY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      boundsType: "OBS_BOUNDS_STRETCH",
+      boundsWidth: width,
+      boundsHeight: height,
+      boundsAlignment: 0,
+      cropLeft: 0,
+      cropTop: 0,
+      cropRight: 0,
+      cropBottom: 0,
+    };
     try {
       await this.call("SetSceneItemTransform", {
         sceneName,
         sceneItemId,
-        sceneItemTransform: {
-          positionX: 0,
-          positionY: 0,
-          scaleX: 1,
-          scaleY: 1,
-          rotation: 0,
-          boundsType: "OBS_BOUNDS_STRETCH",
-          boundsWidth: width,
-          boundsHeight: height,
-          boundsAlignment: 0,
-          cropLeft: 0,
-          cropTop: 0,
-          cropRight: 0,
-          cropBottom: 0,
-        },
+        sceneItemTransform,
       });
     } catch { /* ignore — transform is best-effort */ }
+  }
+
+  private async fitSceneSourceToCanvas(sceneName: string, sourceName: string): Promise<void> {
+    const item = await this.getSceneItemBySource(sceneName, sourceName);
+    if (!item) return;
+    await this.fitSceneItemToCanvas(sceneName, item.sceneItemId);
+  }
+
+  private async fitSceneSourceToLowerThirdWindow(sceneName: string, sourceName: string): Promise<void> {
+    const item = await this.getSceneItemBySource(sceneName, sourceName);
+    if (!item) return;
+    const { width, height } = await this.getCanvasSize();
+    const visibleHeight = Math.min(height, Math.max(360, Math.round(height * 0.42)));
+    const cropTop = Math.max(0, height - visibleHeight);
+    const sceneItemTransform: Record<string, unknown> = {
+      positionX: 0,
+      positionY: cropTop,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      boundsType: "OBS_BOUNDS_STRETCH",
+      boundsWidth: width,
+      boundsHeight: visibleHeight,
+      boundsAlignment: 0,
+      cropLeft: 0,
+      cropTop,
+      cropRight: 0,
+      cropBottom: 0,
+    };
+
+    await this.call("SetSceneItemTransform", {
+      sceneName,
+      sceneItemId: item.sceneItemId,
+      sceneItemTransform,
+    });
+  }
+
+  private async setSceneSourceEnabledByName(sceneName: string, sourceName: string, enabled: boolean): Promise<boolean> {
+    const item = await this.getSceneItemBySource(sceneName, sourceName);
+    if (!item) return false;
+    await this.call("SetSceneItemEnabled", {
+      sceneName,
+      sceneItemId: item.sceneItemId,
+      sceneItemEnabled: enabled,
+    });
+    this.invalidateSceneItemListCache(sceneName);
+    return true;
+  }
+
+  private async fitSceneSourceToOverlayMode(
+    sceneName: string,
+    sourceName: string,
+    mode: DockOverlayMode,
+  ): Promise<void> {
+    if (mode === "fullscreen") {
+      await this.fitSceneSourceToCanvas(sceneName, sourceName);
+    } else {
+      await this.fitSceneSourceToLowerThirdWindow(sceneName, sourceName);
+    }
   }
 
   private async sleep(ms: number): Promise<void> {
@@ -1924,6 +1978,39 @@ class DockObsClient {
     }
   }
 
+  async ensurePresentationPreviewActive(tabId?: DockPreviewTab): Promise<boolean> {
+    if (!this.isConnected) return false;
+
+    await this.waitUntilReady().catch(() => { });
+
+    const studioMode = await this.isStudioModeEnabled(true).catch(() => false);
+    if (!studioMode) return false;
+
+    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE).catch(() => { });
+
+    const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
+    if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
+      this.rememberUserScene(currentProgramScene, tabId);
+      await this.ensureProgramSceneAsSourceInPresentation(true).catch(() => { });
+    }
+
+    const currentPreviewScene = await this.getCurrentPreviewSceneName().catch(() => "");
+    const originalPreviewScene = currentPreviewScene || currentProgramScene;
+    if (originalPreviewScene && originalPreviewScene !== DOCK_PRESENTATION_SCENE) {
+      if (tabId) {
+        this.setPreviewSceneStateForTab(tabId, originalPreviewScene, DOCK_PRESENTATION_SCENE, "presentation");
+      } else {
+        this.setPreviewSceneState(originalPreviewScene, DOCK_PRESENTATION_SCENE, "presentation");
+      }
+    }
+
+    const previewSet = await this.setCurrentPreviewScene(DOCK_PRESENTATION_SCENE);
+    if (previewSet) {
+      await this.waitForSceneMatch("preview", DOCK_PRESENTATION_SCENE).catch(() => { });
+    }
+    return previewSet;
+  }
+
   /**
    * Route OBS output to MCE Presentation without creating a circular scene graph.
    *
@@ -1932,28 +2019,15 @@ class DockObsClient {
    * MCE Presentation directly instead of nesting Presentation back into Program.
    */
   private async promotePresentationScene(tabId?: DockPreviewTab): Promise<void> {
-    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
-
-    const studioMode = await this.isStudioModeEnabled().catch(() => false);
-    const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
-
-    if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
-      this.rememberUserScene(currentProgramScene, tabId);
+    if (await this.ensurePresentationPreviewActive(tabId).catch(() => false)) {
+      return;
     }
 
-    if (studioMode) {
-      const currentPreviewScene = await this.getCurrentPreviewSceneName().catch(() => "");
-      const originalPreviewScene = currentPreviewScene || currentProgramScene;
-      if (originalPreviewScene && originalPreviewScene !== DOCK_PRESENTATION_SCENE) {
-        if (tabId) {
-          this.setPreviewSceneStateForTab(tabId, originalPreviewScene, DOCK_PRESENTATION_SCENE, "presentation");
-        } else {
-          this.setPreviewSceneState(originalPreviewScene, DOCK_PRESENTATION_SCENE, "presentation");
-        }
-      }
-      await this.setCurrentPreviewScene(DOCK_PRESENTATION_SCENE);
-      await this.waitForSceneMatch("preview", DOCK_PRESENTATION_SCENE).catch(() => { });
-      return;
+    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
+
+    const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
+    if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
+      this.rememberUserScene(currentProgramScene, tabId);
     }
 
     if (currentProgramScene === DOCK_PRESENTATION_SCENE) return;
@@ -2199,7 +2273,9 @@ class DockObsClient {
     }
   }
 
-  async applyProjectionSettings(): Promise<void> {
+  async applyProjectionSettings(options: { allowSceneMutation?: boolean } = {}): Promise<void> {
+    if (!options.allowSceneMutation) return;
+
     await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE).catch(() => { });
 
     if (this.readSceneMode() === "no-clone") {
@@ -2324,9 +2400,9 @@ class DockObsClient {
     return (resp.currentPreviewSceneName || resp.sceneName || "").trim();
   }
 
-  private async isStudioModeEnabled(): Promise<boolean> {
+  private async isStudioModeEnabled(forceRefresh = false): Promise<boolean> {
     // Cache for 30s — studio mode rarely changes mid-session
-    if (this._studioModeCache && Date.now() < this._studioModeCache.expiresAt) {
+    if (!forceRefresh && this._studioModeCache && Date.now() < this._studioModeCache.expiresAt) {
       return this._studioModeCache.value;
     }
     try {
@@ -3001,6 +3077,13 @@ class DockObsClient {
 
     let sceneItemId: number | null = null;
     const existing = items.find((i) => i.sourceName === sourceName);
+    let createdSceneItem = false;
+    const modeManagedSourceNames = new Set([
+      this._fullscreenSceneDefs["bible"]?.browserSourceName,
+      getDockResources().worshipSource,
+      getDockResources().announcementSource,
+    ]);
+    const preserveExistingTransform = Boolean(existing && modeManagedSourceNames.has(sourceName));
 
     if (existing) {
       sceneItemId = existing.sceneItemId;
@@ -3037,6 +3120,7 @@ class DockObsClient {
               sceneItemEnabled: true,
             }) as { sceneItemId: number };
             sceneItemId = created.sceneItemId;
+            createdSceneItem = true;
           } else {
             // Create brand new browser source
             delete this._lastBrowserSourceUrlBySource[sourceName];
@@ -3059,6 +3143,7 @@ class DockObsClient {
               sceneItemEnabled: true,
             }) as { sceneItemId: number };
             sceneItemId = created.sceneItemId;
+            createdSceneItem = true;
           }
           lastError = null;
           break;
@@ -3098,6 +3183,7 @@ class DockObsClient {
                 sceneItemEnabled: true,
               }) as { sceneItemId: number };
               sceneItemId = created.sceneItemId;
+              createdSceneItem = true;
               lastError = null;
             }
           } catch { /* ignore */ }
@@ -3122,10 +3208,12 @@ class DockObsClient {
       // Some pre-existing sources may reject size-only updates; keep going.
     }
 
-    try {
-      await this.fitSceneItemToCanvas(sceneName, sceneItemId!);
-    } catch (err) {
-      console.warn(`[DockOBS] Failed to set transform for "${sourceName}":`, err);
+    if (createdSceneItem || !preserveExistingTransform) {
+      try {
+        await this.fitSceneItemToCanvas(sceneName, sceneItemId!);
+      } catch (err) {
+        console.warn(`[DockOBS] Failed to set transform for "${sourceName}":`, err);
+      }
     }
 
     // 3. Move to top of z-order.
@@ -3885,9 +3973,11 @@ class DockObsClient {
   ): Promise<void> {
     const overlayCss = this.buildCssOverlayDataCss(packet, themeCss);
     const urlChanged = this._lastBrowserSourceUrlBySource[inputName] !== baseUrl;
+    const previousMode = this._lastCssOverlayPacketBySource[inputName]?.mode;
+    const modeChanged = previousMode !== undefined && previousMode !== packet.mode;
 
-    if (urlChanged) {
-      await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
+    if (urlChanged || modeChanged) {
+      await this.setBrowserSourceUrl(inputName, baseUrl, modeChanged, overlayCss);
       this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
       return;
     }
@@ -5150,6 +5240,7 @@ class DockObsClient {
               this._lastCssOverlayThemeCssBySource[browserSrc] || "",
             ).catch(() => { });
           }
+          await this.fitSceneSourceToOverlayMode(sourceScene, browserSrc, mode).catch(() => { });
           await this.ensureTickerAboveSource(sceneName, browserSrc).catch(() => { });
         }
         return;
@@ -5322,6 +5413,10 @@ class DockObsClient {
             resources,
           );
         }
+        if (modeChanged) {
+          await this.setSceneSourceEnabledByName(sceneName, browserSourceName, false).catch(() => { });
+        }
+        await this.fitSceneSourceToOverlayMode(sceneName, browserSourceName, mode).catch(() => { });
       } else {
         // ── Fullscreen: unified browser source in MCE Presentation ──
 
@@ -5398,6 +5493,7 @@ class DockObsClient {
               cssOverlayBaseUrl,
               themeCss,
             ).catch(() => { });
+            await this.fitSceneSourceToCanvas(PRESENTATION_SCENE_NAME, def.browserSourceName).catch(() => { });
 
             this._bibleLtInitialized = true;
             this._lastBiblePushSignature = pushSignature;
@@ -5425,6 +5521,10 @@ class DockObsClient {
         await this._hideFullscreenBgSource("bible");
         this.invalidateActiveMceOverlayState(sceneName);
         await this.ensureActiveMceOverlaySource(sceneName, def.browserSourceName, [def.browserSourceName], resources);
+        if (modeChanged) {
+          await this.setSceneSourceEnabledByName(sceneName, def.browserSourceName, false).catch(() => { });
+        }
+        await this.fitSceneSourceToOverlayMode(sceneName, def.browserSourceName, mode).catch(() => { });
 
         // Keep the URL stable, but still push the latest packet through OBS CSS.
         // OBS browser sources do not reliably share localStorage/BroadcastChannel
@@ -5458,11 +5558,13 @@ class DockObsClient {
           if (browserItem) {
             sceneItemId = browserItem.sceneItemId;
             alreadyImported = true;
-            await this.call("SetSceneItemEnabled", {
-              sceneName,
-              sceneItemId: browserItem.sceneItemId,
-              sceneItemEnabled: true,
-            });
+            if (!modeChanged) {
+              await this.call("SetSceneItemEnabled", {
+                sceneName,
+                sceneItemId: browserItem.sceneItemId,
+                sceneItemEnabled: true,
+              });
+            }
           }
         } catch { /* ignore */ }
 
@@ -5513,7 +5615,7 @@ class DockObsClient {
         await this.promotePresentationScene("bible").catch(() => { });
 
         const animation = effectiveThemeSettings?.animation as string | undefined;
-        if (animation && animation !== "none" && sceneItemId && !alreadyImported) {
+        if (!modeChanged && animation && animation !== "none" && sceneItemId && !alreadyImported) {
           const canvas = await this.getCanvasSize();
           await this.setMediaSceneItemScale(sceneName, sceneItemId, canvas, 0.965);
           await this.sleep(30);
@@ -5554,24 +5656,10 @@ class DockObsClient {
           nextBaseUrl,
           themeCss,
         );
-      } else if (mode === "lower-third") {
-        const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
-        if (modeChanged && this._lastCssOverlayBaseUrlBySource[browserSourceName]) {
-          // Same mode-switch shortcut: skip URL reload, just update CSS
-          try {
-            const fallbackCss = themeCss || "";
-            await this.call("SetInputSettings", {
-              inputName: browserSourceName,
-              inputSettings: { css: fallbackCss },
-            });
-          } catch { /* best effort */ }
-        } else {
-          const cachedBaseUrl = this._lastCssOverlayBaseUrlBySource[browserSourceName];
-          const cachedThemeCss = this._lastCssOverlayThemeCssBySource[browserSourceName] || "";
-          const nextBaseUrl = cssOverlayBaseUrl || url;
-          const nextThemeCss = themeCss || "";
-          if (cachedBaseUrl !== nextBaseUrl || cachedThemeCss !== nextThemeCss || modeChanged) {
-            await this.setBrowserSourceUrl(browserSourceName, nextBaseUrl, modeChanged, themeCss || undefined);
+        if (mode === "fullscreen") {
+          await this.fitSceneSourceToOverlayMode(PRESENTATION_SCENE_NAME, browserSourceName, mode).catch(() => { });
+          if (modeChanged) {
+            await this.setSceneSourceEnabledByName(PRESENTATION_SCENE_NAME, browserSourceName, true).catch(() => { });
           }
         }
       }
@@ -5586,6 +5674,14 @@ class DockObsClient {
 
       if (mode === "lower-third") {
         await this.promotePresentationScene("bible").catch(() => { });
+        const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
+        await this.fitSceneSourceToOverlayMode(PRESENTATION_SCENE_NAME, browserSourceName, mode).catch(() => { });
+        if (modeChanged) {
+          await this.setSceneSourceEnabledByName(PRESENTATION_SCENE_NAME, browserSourceName, true).catch(() => { });
+          if (sceneName !== PRESENTATION_SCENE_NAME) {
+            await this.setSceneSourceEnabledByName(sceneName, browserSourceName, true).catch(() => { });
+          }
+        }
       }
 
       this._lastBiblePushSignature = pushSignature;
@@ -5707,7 +5803,12 @@ class DockObsClient {
       cssOverlayBaseUrl,
       themeCss,
     );
+    const target = await this.getPresentationTargetScene("bible", { activate: false }).catch(() => null);
+    if (target?.sceneName) {
+      await this.fitSceneSourceToLowerThirdWindow(target.sceneName, browserSourceName).catch(() => { });
+    }
     await this.promotePresentationScene("bible").catch(() => { });
+    await this.fitSceneSourceToLowerThirdWindow(PRESENTATION_SCENE_NAME, browserSourceName).catch(() => { });
   }
 
   async pushWorshipOverlayFast(data: {
@@ -5781,7 +5882,12 @@ class DockObsClient {
       cssOverlayBaseUrl,
       themeCss,
     );
+    const target = await this.getPresentationTargetScene("worship", { activate: false }).catch(() => null);
+    if (target?.sceneName) {
+      await this.fitSceneSourceToLowerThirdWindow(target.sceneName, sourceName).catch(() => { });
+    }
     await this.promotePresentationScene("worship").catch(() => { });
+    await this.fitSceneSourceToLowerThirdWindow(PRESENTATION_SCENE_NAME, sourceName).catch(() => { });
   }
 
   /**
@@ -6361,6 +6467,7 @@ class DockObsClient {
         }, tab, themeCss);
 
         await this.deliverCssOverlayPacket(sourceName, tab, packet, cssOverlayBaseUrl, themeCss);
+        await this.fitSceneSourceToCanvas(resources.worshipScene, sourceName).catch(() => { });
         this._lastOverlayMode[sourceName] = mode;
         setLastPushSignature("");
         return;
@@ -6406,6 +6513,11 @@ class DockObsClient {
             cachedBaseUrl,
             this._lastCssOverlayThemeCssBySource[sourceName] || "",
           ).catch(() => { });
+        }
+        if (mode === "fullscreen") {
+          await this.fitSceneSourceToCanvas(resources.worshipScene, sourceName).catch(() => { });
+        } else {
+          await this.fitSceneSourceToLowerThirdWindow(recoveryScene, sourceName).catch(() => { });
         }
 
         if (mode === "lower-third") {
@@ -6465,6 +6577,10 @@ class DockObsClient {
 
         // Only keep the overlay browser source active; BG is applied via CSS.
         await this.ensureActiveMceOverlaySource(resources.worshipScene, sourceName, [sourceName], resources);
+        if (modeChanged) {
+          await this.setSceneSourceEnabledByName(resources.worshipScene, sourceName, false).catch(() => { });
+        }
+        await this.fitSceneSourceToOverlayMode(resources.worshipScene, sourceName, mode).catch(() => { });
 
         if (presentationLive) {
           await this.promotePresentationScene(tab).catch(() => { });
@@ -6588,6 +6704,12 @@ class DockObsClient {
           );
         }
       }
+      if (mode === "lower-third") {
+        if (modeChanged) {
+          await this.setSceneSourceEnabledByName(sceneName, sourceName, false).catch(() => { });
+        }
+        await this.fitSceneSourceToOverlayMode(sceneName, sourceName, mode).catch(() => { });
+      }
 
       if (useCssOverlayTransport && cssOverlayPacket) {
         if (isWorship) {
@@ -6609,6 +6731,12 @@ class DockObsClient {
           cssOverlayBaseUrl,
           themeCss,
         );
+        if (mode === "fullscreen") {
+          await this.fitSceneSourceToOverlayMode(resources.worshipScene, sourceName, mode).catch(() => { });
+          if (modeChanged) {
+            await this.setSceneSourceEnabledByName(resources.worshipScene, sourceName, true).catch(() => { });
+          }
+        }
       } else {
         await this.setBrowserSourceUrl(sourceName, url, modeChanged, themeCss || undefined);
       }
@@ -6623,6 +6751,13 @@ class DockObsClient {
 
       if (mode === "lower-third") {
         await this.promotePresentationScene(tab).catch(() => { });
+        await this.fitSceneSourceToOverlayMode(PRESENTATION_SCENE_NAME, sourceName, mode).catch(() => { });
+        if (modeChanged) {
+          await this.setSceneSourceEnabledByName(PRESENTATION_SCENE_NAME, sourceName, true).catch(() => { });
+          if (sceneName !== PRESENTATION_SCENE_NAME) {
+            await this.setSceneSourceEnabledByName(sceneName, sourceName, true).catch(() => { });
+          }
+        }
       }
 
       setLastPushSignature(pushSignature);
@@ -8186,6 +8321,7 @@ class DockObsClient {
 
     // Ensure browser source exists inside MCE Presentation
     let browserItemId: number | null = null;
+    let createdSceneItem = false;
     try {
       let items = await this.getSceneItemListCached(DOCK_PRESENTATION_SCENE);
       const existing = items.find((i) => i.sourceName === def.browserSourceName);
@@ -8211,6 +8347,7 @@ class DockObsClient {
           sceneItemEnabled: true,
         }) as { sceneItemId: number };
         browserItemId = created.sceneItemId;
+        createdSceneItem = true;
         this._lastFullscreenSourceSignature[def.browserSourceName] = sourceSignature;
         this.invalidateSceneItemListCache(DOCK_PRESENTATION_SCENE);
       } catch (err: unknown) {
@@ -8219,6 +8356,7 @@ class DockObsClient {
           try {
             const added = await this.call("CreateSceneItem", { sceneName: DOCK_PRESENTATION_SCENE, sourceName: def.browserSourceName, sceneItemEnabled: true }) as { sceneItemId: number };
             browserItemId = added.sceneItemId;
+            createdSceneItem = true;
             this._lastFullscreenSourceSignature[def.browserSourceName] = sourceSignature;
             this.invalidateSceneItemListCache(DOCK_PRESENTATION_SCENE);
           } catch {
@@ -8238,25 +8376,31 @@ class DockObsClient {
     // Stretch to fill canvas once per source/canvas/item combination.
     if (browserItemId !== null) {
       const sceneItemSignature = `${sourceSignature}|item:${browserItemId}`;
-      if (this._lastFullscreenSceneItemSignature[def.browserSourceName] === sceneItemSignature) {
+      if (!createdSceneItem && this._lastFullscreenSceneItemSignature[def.browserSourceName] === sceneItemSignature) {
         return { sceneName: DOCK_PRESENTATION_SCENE, browserItemId };
       }
       try {
-        await this.call("SetSceneItemTransform", {
-          sceneName: DOCK_PRESENTATION_SCENE,
-          sceneItemId: browserItemId,
-          sceneItemTransform: {
-            positionX: 0,
-            positionY: 0,
-            scaleX: 1,
-            scaleY: 1,
-            boundsType: "OBS_BOUNDS_STRETCH",
-            boundsWidth: canvas.width,
-            boundsHeight: canvas.height,
-            boundsAlignment: 0,
-            rotation: 0,
-          },
-        });
+        if (createdSceneItem) {
+          await this.call("SetSceneItemTransform", {
+            sceneName: DOCK_PRESENTATION_SCENE,
+            sceneItemId: browserItemId,
+            sceneItemTransform: {
+              positionX: 0,
+              positionY: 0,
+              scaleX: 1,
+              scaleY: 1,
+              boundsType: "OBS_BOUNDS_STRETCH",
+              boundsWidth: canvas.width,
+              boundsHeight: canvas.height,
+              boundsAlignment: 0,
+              rotation: 0,
+              cropLeft: 0,
+              cropTop: 0,
+              cropRight: 0,
+              cropBottom: 0,
+            },
+          });
+        }
         await this.ensureTickerAboveSource(DOCK_PRESENTATION_SCENE, def.browserSourceName).catch(() => { });
         await this.call("SetSceneItemEnabled", { sceneName: DOCK_PRESENTATION_SCENE, sceneItemId: browserItemId, sceneItemEnabled: true });
         this._lastFullscreenSceneItemSignature[def.browserSourceName] = sceneItemSignature;

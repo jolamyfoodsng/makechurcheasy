@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Visibility Toggle Test</title>
+<pre id="result">running</pre>
+<script type="module">
+  import { dockObsClient } from "/src/dock/dockObsClient.ts";
+
+  const result = document.getElementById("result");
+  const sceneName = "MCE Presentation";
+  const tickerName = "MCE Ticker";
+  const bibleName = "MCE Browser - Bible";
+  const worshipName = "MCE Worship";
+
+  async function snapshot(label, sourceName) {
+    const list = await dockObsClient.call("GetSceneItemList", { sceneName });
+    const items = list.sceneItems || [];
+    const source = items.find((item) => item.sourceName === sourceName);
+    const ticker = items.find((item) => item.sourceName === tickerName);
+    return {
+      label,
+      sourceName,
+      sourceEnabled: source?.sceneItemEnabled ?? null,
+      sourceIndex: source?.sceneItemIndex ?? null,
+      tickerEnabled: ticker?.sceneItemEnabled ?? null,
+      tickerIndex: ticker?.sceneItemIndex ?? null,
+      sourceBelowTicker: source && ticker
+        ? source.sceneItemIndex === ticker.sceneItemIndex - 1
+        : null,
+    };
+  }
+
+  async function run() {
+    const snapshots = [];
+    await dockObsClient.connect("ws://127.0.0.1:4455");
+
+    await dockObsClient.clearBible();
+    snapshots.push(await snapshot("bible-hidden", bibleName));
+    await dockObsClient.bringBibleOverlayForward("fullscreen");
+    snapshots.push(await snapshot("bible-shown", bibleName));
+
+    await dockObsClient.clearWorshipLyrics();
+    snapshots.push(await snapshot("worship-hidden", worshipName));
+    await dockObsClient.bringWorshipOverlayForward("fullscreen");
+    snapshots.push(await snapshot("worship-shown", worshipName));
+
+    await dockObsClient.disconnect();
+    return { test: "visibility toggle ticker ordering", snapshots };
+  }
+
+  run()
+    .then((payload) => {
+      result.textContent = JSON.stringify(payload, null, 2);
+      document.body.dataset.done = "true";
+    })
+    .catch((error) => {
+      result.textContent = JSON.stringify({
+        test: "visibility toggle ticker ordering",
+        error: error?.stack || error?.message || String(error),
+      }, null, 2);
+      document.body.dataset.done = "error";
+    });
+</script>

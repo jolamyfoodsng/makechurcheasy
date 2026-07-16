@@ -31,9 +31,13 @@
 
 .presentation-top-tabs-bar {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto minmax(40px, 1fr);
+  grid-template-columns: auto minmax(260px, 1fr) auto minmax(40px, 1fr);
   align-items: center;
   gap: 16px;
+}
+
+.presentation-top-tabs-back {
+  justify-self: start;
 }
 
 .presentation-top-tabs-copy {
@@ -65,7 +69,6 @@
 }
 
 .presentation-top-tabs-settings {
-  grid-column: 3;
   justify-self: end;
   position: relative;
   flex-shrink: 0;
@@ -781,6 +784,10 @@
   .presentation-top-tabs-bar {
     align-items: stretch;
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .presentation-top-tabs-back {
+    order: 0;
   }
 
   .presentation-top-tabs-copy {
