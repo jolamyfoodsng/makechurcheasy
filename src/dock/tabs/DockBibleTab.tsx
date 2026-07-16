@@ -3668,7 +3668,7 @@ export default function DockBibleTab({
   return (
     <BibleDockContainer
       ref={containerRef}
-      isCompact={compactLayout}
+      isCompact={false}
       isTopbarExpanded={isTopbarExpanded}
       setIsTopbarExpanded={setIsTopbarExpanded}
       selectedBook={selectedBook}
