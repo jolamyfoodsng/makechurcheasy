@@ -3937,6 +3937,17 @@ export default function DockBibleTab({
           collapsed={toolbarCollapsed}
           onCollapseChange={setToolbarCollapsed}
           compact={compactToolbar}
+          inlineAction={
+            <button
+              type="button"
+              className="dock-btm-toolbar__icon-btn"
+              onClick={() => openThemeSettings("text")}
+              title={t("bible.quickEdits")}
+              aria-label={t("bible.quickEdits")}
+            >
+              <Icon name="edit" size={14} />
+            </button>
+          }
         >
           <button
             type="button"
@@ -3984,16 +3995,6 @@ export default function DockBibleTab({
               </div>
             )}
           </div>
-
-          <button
-            type="button"
-            className="dock-btm-toolbar__icon-btn"
-            onClick={() => openThemeSettings("text")}
-            title={t("bible.quickEdits")}
-          >
-            <Icon name="edit" size={14} />
-          </button>
-
         </DockBottomToolbar>
 
         {/* ── Footer actions ── */}

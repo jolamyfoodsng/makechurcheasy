@@ -40,6 +40,8 @@ interface Props {
   clearDisabled?: boolean;
   /** Whether the associated OBS source is currently visible */
   sourceVisible?: boolean;
+  /** Action that stays visible outside the overflow menu */
+  inlineAction?: React.ReactNode;
   /** Whether the toolbar is collapsed (controlled) */
   collapsed?: boolean;
   /** Called when collapse/expand is toggled */
@@ -59,6 +61,7 @@ export default function DockBottomToolbar({
   onClear,
   clearDisabled = false,
   sourceVisible = true,
+  inlineAction,
   collapsed = false,
   onCollapseChange,
   compact = false,
@@ -137,6 +140,7 @@ export default function DockBottomToolbar({
             <span>{t("dock.bottomToolbar.hideBible")}</span>
           </button>
         )}
+        {inlineAction}
         <button
           type="button"
           className="dock-btm-toolbar__icon-btn"
@@ -215,6 +219,8 @@ export default function DockBottomToolbar({
               <Icon name={visibilityIcon} size={16} />
             </button>
           )}
+
+          {inlineAction}
 
           {/* ⋯ Overflow menu for hidden actions */}
           {children && (
@@ -297,6 +303,7 @@ export default function DockBottomToolbar({
         {/* Action buttons + collapse grouped together */}
         <div className="dock-btm-toolbar__actions">
           {children}
+          {inlineAction}
           {onClear && (
             <button
               type="button"

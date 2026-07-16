@@ -26,6 +26,7 @@ import { BibleProvider } from "./bible/bibleStore";
 import Icon from "./components/Icon";
 import DashboardSidebar from "./components/DashboardSidebar";
 import LiveStatusBar from "./components/LiveStatusBar";
+import VoiceBibleResumeBanner from "./components/VoiceBibleResumeBanner";
 import { getOverlayBaseUrlSync } from "./services/overlayUrl";
 import type { ConnectionStatus } from "./services/obsService";
 
@@ -168,6 +169,7 @@ export function AppShell() {
         <LiveStatusBar />
         <div className="app-glow" />
         <div className="app-content">
+          <VoiceBibleResumeBanner />
           <Outlet />
         </div>
       </main>

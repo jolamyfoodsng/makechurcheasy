@@ -1939,49 +1939,53 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     const isAutoSplitOpen = autoSplitPopoverTarget === target;
     const canUndo = Boolean(formatLyricsUndoRef.current[target]);
     return (
-      <div className="dock-lyrics-toolbar">
-        <div className="dock-lyrics-autosplit" ref={autoSplitPopoverRef}>
-          <button
-            type="button"
-            className={`dock-lyrics-toolbar__btn${isAutoSplitOpen ? " dock-lyrics-toolbar__btn--active" : ""}`}
-            onClick={() => setAutoSplitPopoverTarget((current) => current === target ? null : target)}
-            title="Auto Split"
-          >
-            <Icon name="format_align_left" size={12} />
-            <span>Auto Split</span>
-            <span className="dock-lyrics-toolbar__caret">▾</span>
+      <div className="dock-lyrics-toolbar" role="toolbar" aria-label="Lyrics formatting tools">
+        <div className="dock-lyrics-toolbar__cluster dock-lyrics-toolbar__cluster--format">
+          <div className="dock-lyrics-autosplit" ref={autoSplitPopoverRef}>
+            <button
+              type="button"
+              className={`dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--accent${isAutoSplitOpen ? " dock-lyrics-toolbar__btn--active" : ""}`}
+              onClick={() => setAutoSplitPopoverTarget((current) => current === target ? null : target)}
+              title="Auto Split"
+              aria-haspopup="menu"
+              aria-expanded={isAutoSplitOpen}
+            >
+              <Icon name="format_align_left" size={12} />
+              <span>Auto Split</span>
+              <span className="dock-lyrics-toolbar__caret">▾</span>
+            </button>
+            {isAutoSplitOpen && (
+              <div className="dock-lyrics-autosplit__menu" role="menu" aria-label="Auto split options">
+                {[2, 3, 4].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className="dock-lyrics-autosplit__option"
+                    onClick={() => {
+                      formatLyrics(target, "autosplit", n);
+                      setAutoSplitPopoverTarget(null);
+                    }}
+                  >
+                    {n} lines
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics(target, "clean")} title="Clean Text">
+            <Icon name="auto_fix_high" size={12} />
+            <span>Clean Text</span>
           </button>
-          {isAutoSplitOpen && (
-            <div className="dock-lyrics-autosplit__menu">
-              {[2, 3, 4].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  className="dock-lyrics-autosplit__option"
-                  onClick={() => {
-                    formatLyrics(target, "autosplit", n);
-                    setAutoSplitPopoverTarget(null);
-                  }}
-                >
-                  {n} lines
-                </button>
-              ))}
-            </div>
-          )}
+          <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics(target, "remove-empty")} title="Remove Empty">
+            <Icon name="remove" size={12} />
+            <span>Remove Empty</span>
+          </button>
+          <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics(target, "remove-verse-numbers")} title="Verse Numbers">
+            <Icon name="tag" size={12} />
+            <span>Verse Numbers</span>
+          </button>
         </div>
-        <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics(target, "clean")} title="Clean Text">
-          <Icon name="auto_fix_high" size={12} />
-          <span>Clean Text</span>
-        </button>
-        <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics(target, "remove-empty")} title="Remove Empty">
-          <Icon name="remove" size={12} />
-          <span>Remove Empty</span>
-        </button>
-        <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics(target, "remove-verse-numbers")} title="Verse Numbers">
-          <Icon name="tag" size={12} />
-          <span>Verse Numbers</span>
-        </button>
-        <div className="dock-lyrics-toolbar__group" aria-label="Text case controls">
+        <div className="dock-lyrics-toolbar__group" role="group" aria-label="Text case controls">
           <button
             type="button"
             className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
@@ -2012,7 +2016,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
         </div>
         <button
           type="button"
-          className="dock-lyrics-toolbar__btn"
+          className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--undo"
           onClick={() => handleUndoFormatting(target)}
           title="Undo"
           disabled={!canUndo}
@@ -3300,6 +3304,17 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                       collapsed={toolbarCollapsed}
                       onCollapseChange={setToolbarCollapsed}
                       compact={compactToolbar}
+                      inlineAction={
+                        <button
+                          type="button"
+                          className="dock-btm-toolbar__icon-btn"
+                          onClick={() => setShowThemeSettings(true)}
+                          title={t('worship.quickEdits')}
+                          aria-label={t('worship.quickEdits')}
+                        >
+                          <Icon name="edit" size={14} />
+                        </button>
+                      }
                     >
                       <button
                         type="button"
@@ -3350,15 +3365,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                           </div>
                         )}
                       </div>
-
-                      <button
-                        type="button"
-                        className="dock-btm-toolbar__icon-btn"
-                        onClick={() => setShowThemeSettings(true)}
-                        title={t('worship.quickEdits')}
-                      >
-                        <Icon name="edit" size={14} />
-                      </button>
                     </DockBottomToolbar>
                   </div>
                 </section>
@@ -3859,16 +3865,18 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                       collapsed={toolbarCollapsed}
                       onCollapseChange={setToolbarCollapsed}
                       compact={compactToolbar}
-                    >
-                      <button
-                        type="button"
-                        className="dock-btm-toolbar__icon-btn"
-                        onClick={() => setShowThemeSettings(true)}
-                        title="Theme Settings"
-                      >
-                        <Icon name="edit" size={14} />
-                      </button>
-                    </DockBottomToolbar>
+                      inlineAction={
+                        <button
+                          type="button"
+                          className="dock-btm-toolbar__icon-btn"
+                          onClick={() => setShowThemeSettings(true)}
+                          title="Theme Settings"
+                          aria-label="Theme Settings"
+                        >
+                          <Icon name="edit" size={14} />
+                        </button>
+                      }
+                    />
                   </div>
                 </section>
               )}

@@ -88,7 +88,7 @@
       --compare-outer-padding-bottom: var(--padding);
       --compare-outer-padding-left: var(--padding);
       --compare-panel-inner-padding: 38px;
-      --compare-reference-verse-spacing: 16px;
+      --compare-reference-verse-spacing: 10px;
       --compare-reference-align: var(--ref-text-align, center);
       --compare-reference-transform: var(--ref-text-transform, none);
     }
@@ -258,6 +258,8 @@
       width: 100%;
       height: 100%;
       padding: var(--compare-outer-padding-top, var(--padding)) var(--compare-outer-padding-right, var(--padding)) var(--compare-outer-padding-bottom, var(--padding)) var(--compare-outer-padding-left, var(--padding));
+      align-content: center;
+      align-items: stretch;
       position: relative;
       z-index: 3;
     }
@@ -269,15 +271,16 @@
     .compare-column {
       display: flex;
       flex-direction: column;
-      justify-content: center;
+      justify-content: flex-start;
       padding: var(--compare-panel-inner-padding, 38px);
     }
 
     .compare-column__text-wrap {
-      flex: 1;
+      flex: 0 1 auto;
       display: flex;
       align-items: center;
       justify-content: center;
+      width: 100%;
       min-height: 0;
       overflow: hidden;
     }
@@ -305,7 +308,7 @@
       font-style: var(--ref-font-style, normal);
       color: var(--ref-font-color);
       text-align: var(--compare-reference-align, var(--ref-text-align, var(--compare-text-align, var(--text-align))));
-      margin-top: var(--compare-reference-verse-spacing, 16px);
+      margin-top: var(--compare-reference-verse-spacing, 10px);
       width: var(--ref-width);
       padding: var(--ref-bg-padding);
       background: var(--ref-bg-color);
@@ -319,7 +322,7 @@
     .compare-column__reference.is-above {
       order: -1;
       margin-top: 0;
-      margin-bottom: var(--compare-reference-verse-spacing, 16px);
+      margin-bottom: var(--compare-reference-verse-spacing, 10px);
     }
 
     .compare-column__reference.is-hidden,
@@ -1228,8 +1231,10 @@
           compareLayout.style.gridTemplateColumns = '';
           compareLayout.style.gap = '';
           compareLayout.style.padding = '';
+          compareLayout.style.alignContent = '';
           compareLayout.querySelectorAll('.compare-column').forEach((column) => {
             column.style.padding = '';
+            column.style.justifyContent = '';
           });
         }
         [compareTextLeft, compareTextRight].forEach((node) => {
@@ -1369,7 +1374,7 @@
         root.style.setProperty('--compare-outer-padding-bottom', outerBottom + 'px');
         root.style.setProperty('--compare-outer-padding-left', outerLeft + 'px');
         root.style.setProperty('--compare-panel-inner-padding', baseComparePanelInnerPadding + 'px');
-        root.style.setProperty('--compare-reference-verse-spacing', clampSetting(s.compareReferenceVerseSpacing, 16, 0, 80) + 'px');
+        root.style.setProperty('--compare-reference-verse-spacing', clampSetting(s.compareReferenceVerseSpacing, 10, 0, 80) + 'px');
         root.style.setProperty('--compare-reference-transform', mapTextTransform(s.compareReferenceTextTransformLeft || s.refTextTransform));
         const fallbackRefAlign = s.refTextAlign && s.refTextAlign !== 'match' ? s.refTextAlign : (s.textAlign || 'center');
         root.style.setProperty('--compare-reference-align', compareMetaAlign(s.compareReferenceAlignmentLeft, fallbackRefAlign));
@@ -1379,8 +1384,11 @@
           compareLayout.style.gridTemplateColumns = `minmax(0,${leftWidth}fr) minmax(0,${rightWidth}fr)`;
           compareLayout.style.gap = cg + 'px';
           compareLayout.style.padding = `${outerTop}px ${outerRight}px ${outerBottom}px ${outerLeft}px`;
-          compareLayout.querySelectorAll('.compare-column').forEach((column) => {
+          compareLayout.style.alignContent = 'center';
+          const compareColumns = Array.from(compareLayout.querySelectorAll('.compare-column'));
+          compareColumns.forEach((column) => {
             column.style.padding = baseComparePanelInnerPadding + 'px';
+            column.style.justifyContent = 'flex-start';
           });
         }
         root.style.setProperty('--bg-shade-gradient', buildShadeGradient(s.fullscreenShadeColor || '#000', s.fullscreenShadeOpacity ?? 0.42));

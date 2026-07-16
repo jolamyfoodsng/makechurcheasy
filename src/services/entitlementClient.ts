@@ -52,6 +52,9 @@ export async function fetchPlanFromOverlayServer(): Promise<string> {
     const res = await fetch("/api/auth/status", { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
+      if (data.authenticated === false) {
+        return "free";
+      }
       if (data.user?.plan) {
         const effectivePlan = normalizePlanId(
           data.user.effectivePlan || resolveCanonicalPlan(data.user as any)

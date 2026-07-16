@@ -754,11 +754,11 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
     case "device_removed":
       return {
         icon: "devices_other",
-        title: "Device Removed",
+        title: "Device Verification Needed",
         description:
-          "This device has been removed from your account. Please re-pair this device to continue.",
-        primaryAction: "contact_support",
-        primaryLabel: "Contact Support",
+          "We could not verify this device registration. Retry verification first; reconnect the device only if it was intentionally removed from your account.",
+        primaryAction: "retry",
+        primaryLabel: "Retry Verification",
       };
 
     case "chargeback":

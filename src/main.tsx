@@ -6,6 +6,7 @@ import "./i18n";
 import App from "./App";
 import { LayoutStoreProvider } from "./hooks/useLayoutStore";
 import { AuthProvider } from "./contexts/AuthContext";
+import DesktopBrowserGate from "./components/DesktopBrowserGate";
 import { initOverlayUrl } from "./services/overlayUrl";
 import { initAuthStore } from "./services/authService";
 import { initAnalytics, captureException } from "./services/analytics";
@@ -38,11 +39,13 @@ const appRouter = createHashRouter([
   {
     path: "*",
     element: (
-      <AuthProvider>
-        <LayoutStoreProvider>
-          <App />
-        </LayoutStoreProvider>
-      </AuthProvider>
+      <DesktopBrowserGate>
+        <AuthProvider>
+          <LayoutStoreProvider>
+            <App />
+          </LayoutStoreProvider>
+        </AuthProvider>
+      </DesktopBrowserGate>
     ),
   },
 ]);

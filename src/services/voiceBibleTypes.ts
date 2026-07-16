@@ -12,11 +12,12 @@ export type VoiceBibleModel = "large-v3";
 
 /**
  * Detection speed mode — controls how aggressively the system searches
- * for scripture matches during live speech.
+ * for scripture matches during live speech and which AssemblyAI realtime
+ * latency/accuracy profile is used by the Tauri backend.
  *
- * - "fast": 3-word minimum, no sentence gate, 250ms debounce (live services)
- * - "balanced": 5-word minimum, 300ms debounce (default)
- * - "accurate": 8-word minimum, sentence boundary preferred (recordings)
+ * - "fast": min-latency STT, 3-word minimum, 250ms debounce
+ * - "balanced": balanced STT, 5-word minimum, 300ms debounce
+ * - "accurate": max-accuracy STT, sentence/final-turn search preferred
  */
 export type DetectionSpeed = "fast" | "balanced" | "accurate";
 
@@ -40,7 +41,7 @@ export const DETECTION_SPEED_CONFIG: Record<DetectionSpeed, {
     minWords: 5,
     debounceMs: 300,
     requireSentenceBoundary: false,
-    label: " Balanced",
+    label: "Balanced",
     icon: "",
     description: "Default — searches after 5 words",
   },
@@ -48,7 +49,7 @@ export const DETECTION_SPEED_CONFIG: Record<DetectionSpeed, {
     minWords: 8,
     debounceMs: 400,
     requireSentenceBoundary: true,
-    label: " Accurate",
+    label: "Accurate",
     icon: "",
     description: "Recordings — waits for complete sentences",
   },

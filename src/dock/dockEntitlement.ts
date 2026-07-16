@@ -150,6 +150,10 @@ async function refreshPlanFromOverlayServer(): Promise<void> {
     const res = await fetch("/api/auth/status", { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
+      if (data.authenticated === false) {
+        _serverEntitlements = null;
+        return;
+      }
       if (data.user?.plan) {
         const effectivePlan = normalizePlanId(
           data.user.effectivePlan || resolveCanonicalPlan(data.user as any)

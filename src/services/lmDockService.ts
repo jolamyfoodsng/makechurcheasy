@@ -1,11 +1,11 @@
 /**
- * lmDockService.ts — Main-app service for LM Dock mic capture + AssemblyAI Sync STT.
+ * lmDockService.ts — Main-app service for LM Dock mic capture + AssemblyAI realtime STT.
  *
  * Uses Rust-side cpal audio capture (via Tauri commands) so mic access
  * works even in the Tauri WKWebView where navigator.mediaDevices is unavailable.
  *
- * The Tauri backend captures mic audio, segments completed utterances, and
- * submits them to AssemblyAI Sync STT for finalized transcription.
+ * The Tauri backend captures mic audio and streams short PCM frames to
+ * AssemblyAI's realtime WebSocket API for live transcription turns.
  *
  * Transcript is stored as TranscriptEntry[] — each finalized speech segment
  * is its own line. Interim text is a separate active entry with a live indicator.
@@ -64,6 +64,7 @@ export interface LmDockSnapshot {
   matching: boolean;
   error?: string;
   inputLevel: number;
+  startedAt?: number;
   detectionSpeed: DetectionSpeed;
   telemetry?: LmDockTelemetry;
 }
@@ -99,7 +100,7 @@ class LmDockService {
     detectionSpeed: "balanced",
   };
 
-  // Audio refs — Rust-side AssemblyAI Sync STT (via Tauri commands)
+  // Audio refs — Rust-side AssemblyAI realtime STT (via Tauri commands)
   private transcriptUnlisten: UnlistenFn | null = null;
   private statusUnlisten: UnlistenFn | null = null;
   private levelUnlisten: UnlistenFn | null = null;
@@ -804,6 +805,7 @@ class LmDockService {
       suggestions: [],
       matching: false,
       inputLevel: 0,
+      startedAt: Date.now(),
       entries: this.snapshot.entries,
       detectionSpeed: this.detectionSpeed,
     };
@@ -832,7 +834,7 @@ class LmDockService {
         }
       }
 
-      // Start Rust-side AssemblyAI Sync STT — captures mic + transcribes completed turns in backend.
+      // Start Rust-side AssemblyAI realtime STT — captures mic + streams turns from backend.
       // Immune to WebView throttling, AudioContext suspension, and App Nap.
       this.snapshot = { ...this.snapshot, status: "connecting" };
       this.pushStatus();
@@ -883,9 +885,12 @@ class LmDockService {
           this.speechBuffer = text;
           this.lastSpeechTime = Date.now();
 
-          // Run scripture engine on interim text for live suggestions
-          // Minimum 15 chars to avoid running on tiny partials
-          if (text.length >= 15) {
+          const interimRef = resolveScriptureSpeech(text, this.scriptureSpeechState, Date.now());
+
+          // Run scripture engine on interim text for live suggestions.
+          // Accurate mode waits for final/sentence text unless this is a
+          // direct reference command like "John three sixteen".
+          if (interimRef || (!this.speedConfig.requireSentenceBoundary && text.length >= 15)) {
             void this.processChunk(text, false);
           }
 
@@ -898,10 +903,14 @@ class LmDockService {
           //   fast:      3 words, 250ms throttle
           //   balanced:  5 words, 300ms throttle
           //   accurate:  8 words, 400ms throttle
-          const interimRef = resolveScriptureSpeech(text, this.scriptureSpeechState, Date.now());
           const interimWordCount = text.split(/\s+/).filter(Boolean).length;
           const minWords = this.speedConfig.minWords;
-          if (!interimRef && interimWordCount >= minWords && text !== this.lastInterimSearched) {
+          if (
+            !this.speedConfig.requireSentenceBoundary &&
+            !interimRef &&
+            interimWordCount >= minWords &&
+            text !== this.lastInterimSearched
+          ) {
             this.scheduleLiveQuoteSearch(text);
           }
         }
@@ -923,6 +932,7 @@ class LmDockService {
           } else if (status.startsWith("error")) {
             this.snapshot = { ...this.snapshot, status: "error", error: status };
             this.pushStatus();
+            this.cleanup();
           } else if (status === "stopped") {
             this.snapshot = { ...this.snapshot, status: "idle" };
             this.pushStatus();
@@ -985,11 +995,15 @@ class LmDockService {
         }
       }, 100);
 
-      // Invoke the Rust backend to start mic capture + AssemblyAI Sync STT.
+      // Invoke the Rust backend to start mic capture + AssemblyAI realtime STT.
       // Pass the current user gain so the Rust pipeline applies it from the start.
       const mvSettings = getMvSettings();
       const gainMultiplier = (mvSettings.inputGain ?? 100) / 100;
-      await invoke("start_assemblyai_stream", { apiKey, deviceId: micId || null });
+      await invoke("start_assemblyai_stream", {
+        apiKey,
+        deviceId: micId || null,
+        detectionSpeed: this.detectionSpeed,
+      });
       if (token !== this.sessionToken) {
         await this.cleanup();
         return;
@@ -1043,6 +1057,7 @@ class LmDockService {
       ...this.snapshot,
       status: "idle",
       inputLevel: 0,
+      startedAt: undefined,
       entries: [],
       candidates: [],
       queue: [],
@@ -1097,7 +1112,7 @@ class LmDockService {
       this.focusHandler = null;
     }
 
-    // Stop Rust-side AssemblyAI Sync STT (mic capture + transcription task)
+    // Stop Rust-side AssemblyAI realtime STT (mic capture + transcription task)
     invoke("stop_assemblyai_stream").catch((err) => {
       console.warn("[LmDockService] Failed to stop voice stream:", err);
     });
@@ -1192,6 +1207,9 @@ class LmDockService {
     this.detectionSpeed = speed;
     this.snapshot = { ...this.snapshot, detectionSpeed: speed };
     this.pushStatus();
+    invoke("set_assemblyai_stream_speed", { detectionSpeed: speed }).catch((err) => {
+      console.warn("[LmDockService] Failed to update AssemblyAI stream speed:", err);
+    });
   }
 
   /**

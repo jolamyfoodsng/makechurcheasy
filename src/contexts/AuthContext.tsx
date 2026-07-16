@@ -74,13 +74,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!authenticated) return;
 
     // ── Grace period & retry constants ──────────────────────────────────────
-    // On first connect the device may not have fully replicated in MongoDB yet,
-    // or the server may still be cold.  Give it time before we treat
-    // `exists: false` as a hard logout.
-    const STARTUP_GRACE_MS = 15_000;          // 15 s — no logout during this window
-    const REQUIRED_FAILURES_TO_LOGOUT = 4;    // require 4+ consecutive failed cycles
-    const VISIBILITY_DEBOUNCE_MS = 5_000;     // 5 s debounce on visibility change
-    const HEARTBEAT_MS = 5 * 60 * 1000;       // 5 minutes while visible
+    // Keep local auth non-destructive. App updates, cold deploys, and temporary
+    // device lookup drift must not force users to log out and back in.
+    const STARTUP_GRACE_MS = 15_000;
+    const DEVICE_STATE_WARNING_THRESHOLD = 4;
+    const VISIBILITY_DEBOUNCE_MS = 5_000;
+    const HEARTBEAT_MS = 5 * 60 * 1000;
     const mountTimestamp = Date.now();
 
     async function refreshAccountState(): Promise<boolean> {
@@ -107,22 +106,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (duringGracePeriod) {
         console.warn(
-          `[AuthContext] refreshAccountState: ${result.status} during startup grace — deferring logout`,
+          `[AuthContext] refreshAccountState: ${result.status} during startup grace — preserving local session`,
         );
         return true;
       }
 
       consecutiveFailuresRef.current += 1;
-      if (consecutiveFailuresRef.current < REQUIRED_FAILURES_TO_LOGOUT) {
+      if (consecutiveFailuresRef.current < DEVICE_STATE_WARNING_THRESHOLD) {
         console.warn(
-          `[AuthContext] refreshAccountState: ${result.status} — failure ${consecutiveFailuresRef.current}/${REQUIRED_FAILURES_TO_LOGOUT}`,
+          `[AuthContext] refreshAccountState: ${result.status} — preserving local session, failure ${consecutiveFailuresRef.current}/${DEVICE_STATE_WARNING_THRESHOLD}`,
         );
         return true;
       }
 
-      console.warn(`[AuthContext] refreshAccountState: ${result.status} — forcing logout`);
-      logout();
-      return false;
+      console.warn(
+        `[AuthContext] refreshAccountState: ${result.status} — preserving local session after repeated failures`,
+      );
+      return true;
     }
 
     const heartbeatId = setInterval(() => {

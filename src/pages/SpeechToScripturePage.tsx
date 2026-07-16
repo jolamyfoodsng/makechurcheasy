@@ -5,7 +5,7 @@
  * Center: Verse matching engine (top match + candidate table)
  * Right: Detected references
  *
- * Captures mic audio, transcribes completed turns with AssemblyAI Sync STT,
+ * Captures mic audio, transcribes live turns with AssemblyAI realtime STT,
  * matches Bible verses,
  * and sends results to OBS via BroadcastChannel.
  */
@@ -29,7 +29,7 @@ import {
   Zap
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useBlocker, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { usePerformanceMonitor } from "../dock/usePerformanceMonitor";
 import SpeechToScriptureTutorial, {
@@ -42,7 +42,13 @@ import type { BibleSlide } from "../bible/types";
 import CreditsDisplay from "../components/CreditsDisplay";
 import { useAuth } from "../contexts/AuthContext";
 import { track } from "../services/analytics";
-import { getDeviceId, getDeviceSecret } from "../services/authService";
+import {
+  APP_VERSION,
+  clearDeviceSecretForRecovery,
+  getDeviceId,
+  getDeviceSecret,
+  refreshAccountBootstrapFromServer,
+} from "../services/authService";
 import { calculateTranscriptionCredits, deductCreditsWithSync, getCreditsBalance, onCreditChange, syncCreditsWithBackend } from "../services/credits";
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { getEffectivePlan } from "../services/licenseService";
@@ -159,14 +165,6 @@ export default function SpeechToScripturePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectivePlan, isAdmin]);
 
-  // ── Auto-logout on device_not_found (device was removed from admin) ──
-  useEffect(() => {
-    if (accessDenied?.reason === "device_not_found") {
-      const timer = setTimeout(() => logout(), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [accessDenied, logout]);
-
   // ── Track credit balance for Start button gating ──
   const [creditBalance, setCreditBalance] = useState(() => getCreditsBalance());
   const [isUnlimited, setIsUnlimited] = useState(false);
@@ -195,7 +193,6 @@ export default function SpeechToScripturePage() {
   const [micLoading, setMicLoading] = useState(false);
   const [micDropdownOpen, setMicDropdownOpen] = useState(false);
   const micDropdownRef = useRef<HTMLDivElement>(null);
-  const listeningStartedAt = useRef<number | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopyLine = useCallback(async (id: string, text: string) => {
@@ -212,11 +209,6 @@ export default function SpeechToScripturePage() {
   useEffect(() => {
     const unsub = obsService.onStatusChange((s) => setObsConnected(s === "connected"));
     return unsub;
-  }, []);
-
-  // Keep the live mic service from running if the route unmounts.
-  useEffect(() => {
-    return () => lmDockService.stopListening();
   }, []);
 
   // ── Subscribe to lmDockService ──
@@ -329,19 +321,38 @@ export default function SpeechToScripturePage() {
     try {
       const deviceId = getDeviceId();
       console.log("[SpeechToScripture] 🎤 handleStart called, deviceId:", deviceId);
-      const res = await fetch(
-        `${API_BASE}/api/device/speech-to-scripture/check-access?deviceId=${encodeURIComponent(deviceId || "")}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Device-Secret": getDeviceSecret() || "",
-          },
-        }
-      );
+      const requestAccess = async (deviceSecret: string | null) => {
+        const res = await fetch(
+          `${API_BASE}/api/device/speech-to-scripture/check-access?deviceId=${encodeURIComponent(deviceId || "")}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-App-Version": APP_VERSION,
+              ...(deviceSecret ? { "X-Device-Secret": deviceSecret } : {}),
+            },
+          }
+        );
+        const data = await res.json().catch(() => ({ allowed: false, reason: "server_error" }));
+        return { res, data };
+      };
 
-      const data = await res.json();
+      let { data } = await requestAccess(getDeviceSecret());
       console.log("[SpeechToScripture] 📋 Access check response:", JSON.stringify(data));
+
+      if (!data.allowed && (data.reason === "device_not_found" || data.reason === "device_revoked")) {
+        const refreshResult = await refreshAccountBootstrapFromServer();
+        console.warn("[SpeechToScripture] Access denied by device state; bootstrap refresh result:", refreshResult.status);
+        if (refreshResult.status === "ok") {
+          ({ data } = await requestAccess(getDeviceSecret()));
+        } else if (data.reason === "device_revoked") {
+          const retry = await requestAccess(null);
+          if (retry.data.allowed) {
+            await clearDeviceSecretForRecovery();
+            data = retry.data;
+          }
+        }
+      }
 
       if (!data.allowed) {
         console.warn("[SpeechToScripture] ❌ Access DENIED:", data.reason, "requiredPlan:", data.requiredPlan);
@@ -462,17 +473,7 @@ export default function SpeechToScripturePage() {
   const isTranscribing = isListening || isConnecting;
   const levelPercent = Math.round(snapshot.inputLevel * 100);
 
-  // Track wall-clock time when listening starts for timestamp display
-  useEffect(() => {
-    if (isListening) {
-      listeningStartedAt.current = Date.now();
-    }
-  }, [isListening]);
-
   // ── Guard: warn before closing app while transcribing ──
-  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-  const blocker = useBlocker(isTranscribing);
-
   useEffect(() => {
     if (!isTranscribing) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -486,96 +487,6 @@ export default function SpeechToScripturePage() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [isTranscribing]);
 
-  useEffect(() => {
-    setShowLeaveConfirm(blocker.state === "blocked");
-  }, [blocker.state]);
-
-  const confirmLeave = useCallback(async () => {
-    const serviceFailed = snapshot.status === "error";
-
-    // ── Persist transcript before navigating away ──
-    const finalized = snapshot.entries.filter((e) => e.finalized);
-    if (finalized.length > 0) {
-      const text = finalized.map((e, idx) => {
-        const prevWords = finalized.slice(0, idx).reduce((n, pe) => n + pe.text.split(/\s+/).length, 0);
-        const fallbackTime = prevWords * 0.4;
-        return `${formatTimestamp(e, fallbackTime)}\t${e.text}`;
-      }).join("\n");
-      const detectedScriptures = [
-        ...snapshot.queue.map((c) => ({
-          id: `sc-${c.book}-${c.chapter}-${c.verse}`,
-          transcriptId: "",
-          reference: c.label,
-          verseText: c.snippet,
-          confidence: c.confidence,
-        })),
-        ...snapshot.suggestions
-          .filter(s => !snapshot.queue.some(q => q.book === s.book && q.chapter === s.chapter && q.verse === s.verse))
-          .map((c) => ({
-            id: `sc-${c.book}-${c.chapter}-${c.verse}`,
-            transcriptId: "",
-            reference: c.label,
-            verseText: c.snippet,
-            confidence: c.confidence,
-          })),
-      ];
-      const durationSec = elapsedRef.current;
-      const title = new Date().toLocaleDateString("en-US", {
-        month: "short", day: "numeric", year: "numeric",
-      }) + " — " + (durationSec >= 60
-        ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`
-        : `${durationSec}s`);
-      loadData().then((appData) => {
-        const transcript = createTranscript({
-          title,
-          church: appData.churchName || "",
-          language: "English",
-          durationSeconds: durationSec,
-          transcriptText: text,
-          sourceType: "transcription",
-          scriptures: detectedScriptures,
-        });
-        void saveTranscript(transcript).then((result) => {
-          if (!result.ok) {
-            console.warn("[Transcript] Cloud save failed during leave:", result.error);
-          }
-        });
-        // Deduct transcription credits (1 credit per minute) — synced to MongoDB
-        // Skip if the transcription service failed
-        void (async () => {
-          try {
-            const creditsNeeded = await calculateTranscriptionCredits(durationSec);
-            if (creditsNeeded > 0 && user?.id && !serviceFailed) {
-              const ok = await deductCreditsWithSync(user.id, creditsNeeded, "transcription", `Transcription: ${Math.round(durationSec)}s audio`);
-              if (!ok) {
-                setSaveToast({ message: t("verseAi.creditDeductionFailed"), isError: true });
-                setTimeout(() => setSaveToast(null), 4000);
-              }
-            }
-          } catch (err) {
-            console.warn("[Credits] Transcription credit deduction error:", err);
-            setSaveToast({ message: t("verseAi.creditSyncFailed"), isError: true });
-            setTimeout(() => setSaveToast(null), 4000);
-          }
-        })();
-      }).catch(() => { });
-    }
-
-    lmDockService.stopListening();
-    setShowLeaveConfirm(false);
-    if (blocker.state === "blocked") {
-      blocker.proceed();
-    }
-  }, [blocker, snapshot.entries, snapshot.queue, snapshot.status, snapshot.suggestions, t, user?.id]);
-
-  const cancelLeave = useCallback(() => {
-    if (blocker.state === "blocked") {
-      blocker.reset();
-      return;
-    }
-    setShowLeaveConfirm(false);
-  }, [blocker]);
-
   // ── Timer ──
   const [elapsed, setElapsed] = useState(0);
   const elapsedRef = useRef(0);
@@ -587,21 +498,28 @@ export default function SpeechToScripturePage() {
   useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
 
   useEffect(() => {
-    if (isListening) {
+    if (isTranscribing && snapshot.startedAt) {
       setPendingSessionCredits(0);
-      setElapsed(0);
-      timerRef.current = setInterval(() => setElapsed((t) => t + 1), 1000);
+      const updateElapsed = () => {
+        setElapsed(Math.max(0, Math.floor((Date.now() - snapshot.startedAt!) / 1000)));
+      };
+      updateElapsed();
+      timerRef.current = setInterval(updateElapsed, 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
-      // Capture the credit count at the moment listening stopped so the
-      // display stays consistent until the backend deduction is confirmed.
-      setPendingSessionCredits(Math.max(1, Math.ceil(elapsedRef.current / 60)));
+      if (elapsedRef.current > 0) {
+        // Capture the credit count at the moment listening stopped so the
+        // display stays consistent until the backend deduction is confirmed.
+        setPendingSessionCredits(Math.max(1, Math.ceil(elapsedRef.current / 60)));
+      } else {
+        setPendingSessionCredits(0);
+      }
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isListening]);
+  }, [isTranscribing, snapshot.startedAt]);
 
   // ── Selected candidate (overrides auto top-match when set) ──
   const [selectedCandidate, setSelectedCandidate] = useState<VoiceBibleCandidate | null>(null);
@@ -1531,28 +1449,6 @@ export default function SpeechToScripturePage() {
               <button className="sts3-modal-btn sts3-modal-btn--ghost" onClick={() => setShowStopConfirm(false)} title={t("verseAi.cancel")}>{t("verseAi.cancel")}</button>
               <button className="sts3-modal-btn sts3-modal-btn--danger" onClick={confirmStop} title={t("verseAi.stopListening")}>
                 <StopCircle size={14} /> {t("verseAi.stopListening")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Leave Page Confirmation ── */}
-      {showLeaveConfirm && (
-        <div className="sts3-modal-overlay" onClick={cancelLeave}>
-          <div className="sts3-modal sts3-modal--small" onClick={(e) => e.stopPropagation()}>
-            <div className="sts3-modal-header">
-              <h3 className="sts3-modal-title">{t("verseAi.transcriptionStillActive")}</h3>
-            </div>
-            <div className="sts3-modal-body">
-              <p className="sts3-modal-text">
-                {t("verseAi.leaveConfirmDesc")}
-              </p>
-            </div>
-            <div className="sts3-modal-footer">
-              <button className="sts3-modal-btn sts3-modal-btn--ghost" onClick={cancelLeave} title={t("verseAi.stayOnPage")}>{t("verseAi.stayOnPage")}</button>
-              <button className="sts3-modal-btn sts3-modal-btn--danger" onClick={confirmLeave} title={t("verseAi.stopAndLeave")}>
-                <StopCircle size={14} /> {t("verseAi.stopAndLeave")}
               </button>
             </div>
           </div>

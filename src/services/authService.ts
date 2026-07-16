@@ -14,7 +14,7 @@ import { requestJsonWithRetry } from "./requestDedup";
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
 /** App version sent with every API request for server-side version gating */
-const APP_VERSION: string =
+export const APP_VERSION: string =
   typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
 
 export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador" | "unlimited";
@@ -186,6 +186,14 @@ export function getDeviceSecret(): string | null {
   return _session?.deviceSecret ?? null;
 }
 
+export async function clearDeviceSecretForRecovery(): Promise<void> {
+  if (!_session?.deviceSecret) return;
+  await saveSession({
+    ..._session,
+    deviceSecret: undefined,
+  });
+}
+
 async function saveSession(session: AuthSession) {
   _session = session;
 
@@ -321,17 +329,32 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
   }
 
   try {
-    const { response, data } = await requestJsonWithRetry<DeviceBootstrapResponse>(
-      `${API_BASE}/api/device/bootstrap?deviceId=${encodeURIComponent(_session.deviceId)}`,
-      {
-        dedupeKey: `account-bootstrap:${_session.deviceId}`,
+    const bootstrapUrl = `${API_BASE}/api/device/bootstrap?deviceId=${encodeURIComponent(_session.deviceId)}`;
+    const requestBootstrap = (deviceSecret?: string, dedupeSuffix = "primary") =>
+      requestJsonWithRetry<DeviceBootstrapResponse>(bootstrapUrl, {
+        dedupeKey: `account-bootstrap:${_session?.deviceId}:${dedupeSuffix}`,
         headers: {
           "X-App-Version": APP_VERSION,
-          "X-Device-Secret": _session.deviceSecret || "",
+          ...(deviceSecret ? { "X-Device-Secret": deviceSecret } : {}),
         },
         retryDelaysMs: [1000, 3000],
-      },
-    );
+      });
+
+    let { response, data } = await requestBootstrap(_session.deviceSecret, "primary");
+
+    if (response.status === 401 && _session.deviceSecret) {
+      const message = typeof data?.error === "string" ? data.error : "";
+      if (/invalid device secret/i.test(message)) {
+        const retry = await requestBootstrap(undefined, "secret-recovery");
+        if (retry.response.ok) {
+          await clearDeviceSecretForRecovery();
+          response = retry.response;
+          data = retry.data;
+        } else if (retry.response.status >= 500) {
+          return { status: "network_error" };
+        }
+      }
+    }
 
     if (response.status === 403) {
       const message = typeof data?.error === "string" ? data.error : "";

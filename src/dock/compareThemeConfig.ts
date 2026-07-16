@@ -131,7 +131,7 @@ export const DEFAULT_COMPARE_THEME_SETTINGS: CompareThemeSettings = {
   compareOuterPaddingRight: 24,
   compareLinkPadding: true,
   comparePanelInnerPadding: 20,
-  compareReferenceVerseSpacing: 12,
+  compareReferenceVerseSpacing: 10,
   compareParagraphSpacing: 12,
   compareFontFamilyLeft: "",
   compareFontFamilyRight: "",

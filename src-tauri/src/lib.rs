@@ -637,6 +637,132 @@ fn overlay_header_value(request: &tiny_http::Request, name: &'static str) -> Opt
         .map(|header| header.value.as_str().to_string())
 }
 
+fn overlay_session_value() -> Option<serde_json::Value> {
+    let mem_store = AUTH_SESSION.get_or_init(|| Mutex::new(None));
+    let raw = {
+        let guard = mem_store.lock().unwrap();
+        guard.clone()
+    }?;
+
+    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    if let Some(expires_at) = value.get("expiresAt").and_then(|v| v.as_i64()) {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        if now_ms >= expires_at {
+            return None;
+        }
+    }
+
+    Some(value)
+}
+
+fn overlay_auth_status_json() -> String {
+    match overlay_session_value() {
+        Some(mut value) => {
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("authenticated".to_string(), serde_json::Value::Bool(true));
+            }
+            serde_json::to_string(&value).unwrap_or_else(|_| r#"{"authenticated":true}"#.to_string())
+        }
+        None => r#"{"authenticated":false,"deviceId":null}"#.to_string(),
+    }
+}
+
+fn overlay_has_active_auth_session() -> bool {
+    overlay_session_value().is_some()
+}
+
+fn overlay_is_allowed_app_document(clean_path: &str) -> bool {
+    matches!(
+        clean_path,
+        "" | "index.html" | "dock" | "dock.html" | "lm-dock" | "lm-dock.html"
+    )
+}
+
+fn overlay_blocked_html_page() -> &'static str {
+    r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Authentication Required</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        font-family: Inter, "Open Sans", system-ui, sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+      .panel {
+        width: min(420px, 100%);
+        padding: 28px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.92);
+        box-shadow: 0 28px 80px rgba(2, 6, 23, 0.45);
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 1.4rem;
+        line-height: 1.2;
+      }
+      p {
+        margin: 0 0 16px;
+        color: #cbd5e1;
+        line-height: 1.5;
+      }
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 11px 16px;
+        font: inherit;
+        font-weight: 600;
+        color: #eff6ff;
+        background: #2563eb;
+        cursor: pointer;
+      }
+      .hint {
+        margin-top: 14px;
+        margin-bottom: 0;
+        font-size: 0.92rem;
+        color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <h1>Authentication Required</h1>
+      <p>Please open the MakeChurchEasy desktop app and log in first.</p>
+      <button type="button" onclick="window.location.reload()">Refresh</button>
+      <p class="hint">This page will start working again after the desktop app restores the local session.</p>
+    </main>
+  </body>
+</html>"#
+}
+
+fn respond_overlay_auth_blocked(request: tiny_http::Request) {
+    let resp = tiny_http::Response::from_string(overlay_blocked_html_page())
+        .with_status_code(401)
+        .with_header(overlay_header("Content-Type", "text/html; charset=utf-8"))
+        .with_header(overlay_header("Access-Control-Allow-Origin", "*"))
+        .with_header(overlay_header(
+            "Cache-Control",
+            "no-store, no-cache, must-revalidate, max-age=0",
+        ))
+        .with_header(overlay_header("Pragma", "no-cache"))
+        .with_header(overlay_header("Expires", "0"));
+    let _ = request.respond(resp);
+}
+
 fn parse_byte_range(range_header: &str, file_size: u64) -> Result<(u64, u64), ()> {
     if file_size == 0 {
         return Err(());
@@ -4795,15 +4921,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 .unwrap();
                 let cors =
                     tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
-
-                let mem_store = AUTH_SESSION.get_or_init(|| Mutex::new(None));
-                let json: String = {
-                    let guard = mem_store.lock().unwrap();
-                    match guard.as_ref() {
-                        Some(session) => session.clone(),
-                        None => r#"{"deviceId":null}"#.to_string(),
-                    }
-                };
+                let json = overlay_auth_status_json();
 
                 let resp = tiny_http::Response::from_string(json)
                     .with_header(header)
@@ -4916,6 +5034,19 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                         }
                     }
                     if root_candidate.exists() && root_candidate.is_file() {
+                        let is_html_entry = root_candidate
+                            .extension()
+                            .and_then(|ext| ext.to_str())
+                            .map(|ext| ext.eq_ignore_ascii_case("html"))
+                            .unwrap_or(false);
+                        if is_html_entry
+                            && !overlay_is_allowed_app_document(clean)
+                            && !overlay_has_active_auth_session()
+                        {
+                            respond_overlay_auth_blocked(request);
+                            continue;
+                        }
+
                         // Redirect to Vite dev server (localhost:1420) so it handles
                         // module transforms, HMR, etc.
                         let redirect_url = format!("http://localhost:1420/{}", clean);
@@ -4942,6 +5073,13 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 let content_type = overlay_content_type_for_extension(
                     file_path.extension().and_then(|e| e.to_str()),
                 );
+                if content_type.starts_with("text/html")
+                    && !overlay_is_allowed_app_document(clean)
+                    && !overlay_has_active_auth_session()
+                {
+                    respond_overlay_auth_blocked(request);
+                    continue;
+                }
                 respond_overlay_file_request(request, &file_path, content_type);
             } else {
                 // SPA fallback: for client-side routes, serve index.html
@@ -5324,6 +5462,7 @@ pub fn run() {
             assemblyai_stream::start_assemblyai_stream,
             assemblyai_stream::stop_assemblyai_stream,
             assemblyai_stream::set_microphone_gain,
+            assemblyai_stream::set_assemblyai_stream_speed,
             local_llm::get_local_llm_runtime_status,
             local_llm::install_local_llm_model,
             local_llm::generate_local_llm_text,

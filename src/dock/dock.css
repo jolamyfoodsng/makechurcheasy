@@ -7721,75 +7721,142 @@
 }
 
 .dock-lyrics-toolbar {
+  --dock-lyrics-surface-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --dock-lyrics-button-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 1px 2px rgba(2, 6, 23, 0.22);
+  --dock-lyrics-button-shadow-hover:
+    0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 6px 14px rgba(2, 6, 23, 0.18);
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.dock-lyrics-toolbar__cluster {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
-  margin-top: 2px;
+  padding: 4px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: var(--dock-lyrics-surface-shadow);
 }
 
 .dock-lyrics-toolbar__btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 3px;
-  padding: 3px 8px;
+  min-height: 30px;
+  padding: 0 12px 0 10px;
   font-size: 10.5px;
   font-weight: 500;
   line-height: 1;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
+  border: none;
+  border-radius: 7px;
   background: rgba(255, 255, 255, 0.06);
-  color: var(--dock-secondary-text, #9ca3af);
+  box-shadow: var(--dock-lyrics-button-shadow);
+  color: var(--dock-text-dim, #94A3B8);
   cursor: pointer;
-  transition: background 120ms, color 120ms, border-color 120ms;
+  transition-property: background-color, color, box-shadow, transform;
+  transition-duration: 140ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
   white-space: nowrap;
 }
 
 .dock-lyrics-toolbar__btn:hover {
   background: rgba(255, 255, 255, 0.10);
-  color: var(--dock-primary, #f1f5f9);
-  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--dock-text, #F8FAFC);
+  box-shadow: var(--dock-lyrics-button-shadow-hover);
+}
+
+.dock-lyrics-toolbar__btn:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 .dock-lyrics-toolbar__btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: var(--dock-lyrics-button-shadow);
 }
 
 .dock-lyrics-toolbar__btn--active {
   background: rgba(255, 255, 255, 0.12);
-  color: var(--dock-primary, #f1f5f9);
-  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--dock-text, #F8FAFC);
+  box-shadow:
+    0 0 0 1px rgba(96, 165, 250, 0.28),
+    0 8px 18px rgba(2, 6, 23, 0.2);
+}
+
+.dock-lyrics-toolbar__btn--accent {
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.18), rgba(37, 99, 235, 0.12));
+  color: var(--dock-text-secondary, #CBD5E1);
+  box-shadow:
+    0 0 0 1px rgba(96, 165, 250, 0.2),
+    0 8px 16px rgba(15, 23, 42, 0.14);
+}
+
+.dock-lyrics-toolbar__btn--accent:hover,
+.dock-lyrics-toolbar__btn--accent.dock-lyrics-toolbar__btn--active {
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.24), rgba(37, 99, 235, 0.16));
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-lyrics-toolbar__btn svg {
+  flex-shrink: 0;
+  opacity: 0.82;
+  transition-property: opacity, transform;
+  transition-duration: 140ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.dock-lyrics-toolbar__btn:hover svg,
+.dock-lyrics-toolbar__btn--active svg {
+  opacity: 1;
 }
 
 .dock-lyrics-toolbar__caret {
   opacity: 0.7;
   font-size: 10px;
+  transition-property: transform, opacity;
+  transition-duration: 140ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.dock-lyrics-toolbar__btn--active .dock-lyrics-toolbar__caret {
+  opacity: 1;
+  transform: rotate(180deg);
 }
 
 .dock-lyrics-toolbar__group {
   display: inline-flex;
-  align-items: stretch;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  overflow: hidden;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 4px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: var(--dock-lyrics-surface-shadow);
 }
 
 .dock-lyrics-toolbar__group .dock-lyrics-toolbar__btn {
-  border: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0;
-}
-
-.dock-lyrics-toolbar__group .dock-lyrics-toolbar__btn:last-child {
-  border-right: 0;
+  padding: 0 10px;
 }
 
 .dock-lyrics-toolbar__btn--case {
-  min-width: 34px;
+  min-width: 38px;
   justify-content: center;
-  padding: 3px 7px;
+  padding: 0 10px;
   font-weight: 600;
   letter-spacing: 0;
+}
+
+.dock-lyrics-toolbar__btn--undo {
+  min-width: 64px;
 }
 
 .dock-lyrics-autosplit {
@@ -7798,36 +7865,50 @@
 
 .dock-lyrics-autosplit__menu {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 8px);
   left: 0;
   z-index: 200;
-  min-width: 80px;
-  background: var(--dock-panel-bg, #1e1f24);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-  padding: 3px;
+  min-width: 96px;
+  background: var(--dock-surface-overlay, #1E2937);
+  border-radius: 10px;
+  box-shadow:
+    0 18px 36px rgba(2, 6, 23, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  padding: 4px;
 }
 
 .dock-lyrics-autosplit__option {
   display: block;
   width: 100%;
-  padding: 4px 8px;
+  min-height: 30px;
+  padding: 6px 10px;
   font-size: 10.5px;
   font-weight: 500;
-  color: var(--dock-secondary-text, #9ca3af);
+  color: var(--dock-text-dim, #94A3B8);
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: 7px;
   cursor: pointer;
   text-align: left;
   white-space: nowrap;
-  transition: background 80ms, color 80ms;
+  transition-property: background-color, color, transform;
+  transition-duration: 120ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .dock-lyrics-autosplit__option:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: var(--dock-primary, #f1f5f9);
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-lyrics-autosplit__option:active {
+  transform: scale(0.96);
+}
+
+@media (max-width: 320px) {
+  .dock-lyrics-toolbar__group {
+    margin-left: 0;
+  }
 }
 
 .dock-dialog-textarea--short {

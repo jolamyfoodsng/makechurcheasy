@@ -16,43 +16,66 @@ import {
  */
 
 const ONLINE_API = "https://api.creatorstudioslabs.stream";
+const PLAN_KEY = "ocs-dock-plan";
+const ENTITLEMENTS_KEY = "ocs-dock-entitlements";
+
+type LocalAuthStatus = "authenticated" | "unauthenticated" | "unreachable";
+
+function clearDockAuthCache(): void {
+  try {
+    localStorage.removeItem(getUserScopedKey(PLAN_KEY));
+    localStorage.removeItem(getUserScopedKey(ENTITLEMENTS_KEY));
+  } catch {
+    // ignore localStorage failures
+  }
+}
 
 /**
  * Check the local overlay server for an active auth session.
  * Returns true if the overlay server has a stored deviceId (set by the Tauri app).
  * Also extracts the plan from the full session and stores it for entitlement checks.
  */
-async function checkLocalAuth(): Promise<boolean> {
+async function checkLocalAuth(expectedDeviceId: string): Promise<LocalAuthStatus> {
   try {
     const res = await fetch("/api/auth/status", { cache: "no-store" });
-    if (res.ok) {
-      const data = await res.json();
-      const hasDevice = data.deviceId != null && String(data.deviceId).trim() !== "";
-      if (hasDevice && data.user?.plan) {
-        const effectivePlan = normalizePlanId(
-          data.user.effectivePlan || resolveCanonicalPlan(data.user as any)
-        );
+    if (!res.ok) return "unreachable";
 
-        try {
-          localStorage.setItem(getUserScopedKey("ocs-dock-plan"), effectivePlan);
-        } catch { /* ignore */ }
+    const data = await res.json();
+    const sessionDeviceId =
+      data.deviceId != null ? String(data.deviceId).trim() : "";
+    const hasMatchingDevice =
+      sessionDeviceId !== "" && sessionDeviceId === expectedDeviceId;
 
-        const entitlements =
-          data.user?.entitlements
-          || (DEFAULT_PLAN_CONFIG.plans[effectivePlan]?.entitlements as unknown as Record<string, number | boolean> | undefined);
-
-        if (entitlements) {
-          try {
-            localStorage.setItem(getUserScopedKey("ocs-dock-entitlements"), JSON.stringify(entitlements));
-          } catch { /* ignore */ }
-        }
-      }
-      return hasDevice;
+    if (data.authenticated === false || !hasMatchingDevice) {
+      clearDockAuthCache();
+      return "unauthenticated";
     }
+
+    if (data.user?.plan) {
+      const effectivePlan = normalizePlanId(
+        data.user.effectivePlan || resolveCanonicalPlan(data.user as any)
+      );
+
+      try {
+        localStorage.setItem(getUserScopedKey(PLAN_KEY), effectivePlan);
+      } catch { /* ignore */ }
+
+      const entitlements =
+        data.user?.entitlements
+        || (DEFAULT_PLAN_CONFIG.plans[effectivePlan]?.entitlements as unknown as Record<string, number | boolean> | undefined);
+
+      if (entitlements) {
+        try {
+          localStorage.setItem(getUserScopedKey(ENTITLEMENTS_KEY), JSON.stringify(entitlements));
+        } catch { /* ignore */ }
+      }
+    }
+
+    return "authenticated";
   } catch {
     // Overlay server not reachable
+    return "unreachable";
   }
-  return false;
 }
 
 /**
@@ -97,7 +120,6 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
-  const [failedAttempts, setFailedAttempts] = useState(0);
 
   const checkAuth = useCallback(async (attempt = 0) => {
     const deviceId = getDeviceIdFromUrl();
@@ -109,11 +131,16 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
     }
 
     // 1) Try local overlay server first (works offline)
-    const localOk = await checkLocalAuth();
-    if (localOk) {
+    const localStatus = await checkLocalAuth(deviceId);
+    if (localStatus === "authenticated") {
       setAuthed(true);
       setReady(true);
-      setFailedAttempts(0);
+      return;
+    }
+
+    if (localStatus === "unauthenticated") {
+      setAuthed(false);
+      setReady(true);
       return;
     }
 
@@ -122,11 +149,8 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
     if (onlineOk) {
       setAuthed(true);
       setReady(true);
-      setFailedAttempts(0);
       return;
     }
-
-    setFailedAttempts((prev) => prev + 1);
 
     // Retry up to 3 times with backoff
     if (attempt < 3) {
@@ -145,10 +169,10 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
   // Auto-poll every 15s while blocked. Local overlay checks remain frequent;
   // the online fallback is only a safety net when the overlay server is unavailable.
   useEffect(() => {
-    if (authed || !ready || failedAttempts >= 3) return;
+    if (authed || !ready) return;
     const id = setInterval(() => checkAuth(), 15_000);
     return () => clearInterval(id);
-  }, [authed, ready, checkAuth, failedAttempts]);
+  }, [authed, ready, checkAuth]);
 
   // Re-check auth every 30s while authenticated (detects logout from main app)
   // Only checks locally — the online fallback is for initial auth when the
@@ -156,8 +180,8 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authed || !ready) return;
     const id = setInterval(async () => {
-      const stillAuthed = await checkLocalAuth();
-      if (!stillAuthed) {
+      const stillAuthed = await checkLocalAuth(getDeviceIdFromUrl() || "");
+      if (stillAuthed !== "authenticated") {
         setAuthed(false);
       }
     }, 30_000);
