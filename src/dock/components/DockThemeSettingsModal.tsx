@@ -87,6 +87,8 @@ export default function DockThemeSettingsModal({
   const [draftSettings, setDraftSettings] = useState(quickSettings);
   const [draftSelectedThemeId, setDraftSelectedThemeId] = useState<string | null>(selectedThemeId);
   const [draftSelectedTheme, setDraftSelectedTheme] = useState<BibleTheme | null>(null);
+  const draftSettingsRef = useRef(quickSettings);
+  const draftSelectedThemeRef = useRef<BibleTheme | null>(null);
   const pendingBackgroundPresetRef = useRef<DockBackgroundPreset | null>(null);
   const [saving, setSaving] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
@@ -102,8 +104,10 @@ export default function DockThemeSettingsModal({
     if (isOpen && !wasOpen) {
       originalSettingsRef.current = quickSettings;
       lastPreviewSettingsRef.current = quickSettings;
+      draftSettingsRef.current = quickSettings;
       setDraftSettings(quickSettings);
       setDraftSelectedThemeId(selectedThemeId);
+      draftSelectedThemeRef.current = null;
       setDraftSelectedTheme(null);
       pendingBackgroundPresetRef.current = null;
     }
@@ -111,7 +115,9 @@ export default function DockThemeSettingsModal({
 
   const updateDraft = useCallback(
     (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => {
-      setDraftSettings((prev) => updater(prev));
+      const next = updater(draftSettingsRef.current);
+      draftSettingsRef.current = next;
+      setDraftSettings(next);
     },
     [],
   );
@@ -191,14 +197,17 @@ export default function DockThemeSettingsModal({
   }, [view]);
 
   const openSettings = useCallback(() => {
+    draftSettingsRef.current = quickSettings;
     setDraftSettings(quickSettings);
     setDraftSelectedThemeId(selectedThemeId);
+    draftSelectedThemeRef.current = null;
     setDraftSelectedTheme(null);
     pendingBackgroundPresetRef.current = null;
     setView("settings");
   }, [quickSettings, selectedThemeId]);
 
   const handleThemeSelect = useCallback((theme: BibleTheme) => {
+    draftSelectedThemeRef.current = theme;
     setDraftSelectedTheme(theme);
     setDraftSelectedThemeId(theme.id);
     pendingBackgroundPresetRef.current = "theme";
@@ -206,6 +215,7 @@ export default function DockThemeSettingsModal({
     onBackgroundPresetChange?.("theme");
     const nextSettings = resolveThemeQuickSettings?.(theme);
     if (nextSettings) {
+      draftSettingsRef.current = nextSettings;
       setDraftSettings(nextSettings);
       return;
     }
@@ -213,8 +223,8 @@ export default function DockThemeSettingsModal({
   }, [onBackgroundPresetChange, onSelect, resolveThemeQuickSettings, updateDraft, _onQuickSettingsChange]);
 
   const handleSave = useCallback(() => {
-    const nextSettings = { ...draftSettings };
-    const nextTheme = draftSelectedTheme;
+    const nextSettings = { ...draftSettingsRef.current };
+    const nextTheme = draftSelectedThemeRef.current;
     const nextPreset = pendingBackgroundPresetRef.current;
     setSaving(true);
     flushSync(() => setView("closed"));
@@ -242,7 +252,10 @@ export default function DockThemeSettingsModal({
   }, [draftSelectedTheme, draftSettings, onBackgroundPresetChange, onQuickSettingsSave, onSelect]);
 
   const handleReset = useCallback(() => {
-    updateDraft(() => defaultQuickSettings ?? originalSettingsRef.current);
+    const nextSettings = defaultQuickSettings ?? originalSettingsRef.current;
+    draftSelectedThemeRef.current = null;
+    setDraftSelectedTheme(null);
+    updateDraft(() => nextSettings);
   }, [updateDraft, defaultQuickSettings]);
 
   /* ── Render ── */

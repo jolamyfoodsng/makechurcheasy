@@ -928,6 +928,34 @@ export default function DockMultiviewTab() {
     } catch { /* ignore */ }
   }, []);
 
+  const setPreviewSceneWithRetry = useCallback(async (sceneName: string, attempts = 4) => {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        await dockObsClient.call("SetCurrentPreviewScene", { sceneName });
+      } catch {
+        // Retry below after a short settle.
+      }
+
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const resp = await dockObsClient.call("GetCurrentPreviewScene") as {
+          currentPreviewSceneName?: string;
+          sceneName?: string;
+        };
+        const currentPreviewSceneName = (resp.currentPreviewSceneName || resp.sceneName || "").trim();
+        if (currentPreviewSceneName === sceneName) {
+          return true;
+        }
+      } catch {
+        // Retry below.
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+
+    return false;
+  }, []);
+
   const handlePush = useCallback(async (mv: SavedMultiView) => {
     if (!(await requireEntitlement("multiview", 0))) return;
     try {
@@ -1051,7 +1079,7 @@ export default function DockMultiviewTab() {
         }
       }
 
-      try { await dockObsClient.call("SetCurrentPreviewScene", { sceneName }); } catch { }
+      await setPreviewSceneWithRetry(sceneName);
 
       showFeedback("success", `"${sceneName}" pushed to OBS`);
       refreshObsScenes();
@@ -1060,7 +1088,7 @@ export default function DockMultiviewTab() {
     } finally {
       if (mountedRef.current) setPushingId(null);
     }
-  }, [ensureScene, refreshObsScenes, showFeedback, t]);
+  }, [ensureScene, refreshObsScenes, setPreviewSceneWithRetry, showFeedback, t]);
 
   const handleClear = useCallback(async (mv: SavedMultiView) => {
     try {

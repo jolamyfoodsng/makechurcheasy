@@ -3975,6 +3975,17 @@ class DockObsClient {
     const urlChanged = this._lastBrowserSourceUrlBySource[inputName] !== baseUrl;
     const previousMode = this._lastCssOverlayPacketBySource[inputName]?.mode;
     const modeChanged = previousMode !== undefined && previousMode !== packet.mode;
+    const previousPacket = this._lastCssOverlayPacketBySource[inputName];
+    const previousThemeCss = this._lastCssOverlayThemeCssBySource[inputName] || "";
+    let themePayloadChanged = previousThemeCss !== (themeCss || "");
+    if (!themePayloadChanged) {
+      try {
+        themePayloadChanged =
+          JSON.stringify(previousPacket?.theme ?? null) !== JSON.stringify(packet.theme ?? null);
+      } catch {
+        themePayloadChanged = true;
+      }
+    }
 
     if (urlChanged || modeChanged) {
       await this.setBrowserSourceUrl(inputName, baseUrl, modeChanged, overlayCss);
@@ -3983,7 +3994,10 @@ class DockObsClient {
     }
 
     const emitted = await this.emitBrowserOverlayPacket(tabType, packet, overlayCss);
-    if (!emitted) {
+    // Theme changes must also update the browser source CSS in OBS itself.
+    // The live browser event path is fine for high-frequency text/slide updates,
+    // but theme-only updates can otherwise leave OBS rendering stale visuals.
+    if (!emitted || themePayloadChanged) {
       await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
     }
     this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);

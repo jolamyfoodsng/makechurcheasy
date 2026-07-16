@@ -261,6 +261,154 @@ describe("Full pipeline: Text tab → BibleThemeSettings → extract back", () =
     expect(themed.settings.backgroundColor).toBe("transparent");
     expect(themed.settings.backgroundColorEnd).toBe("");
   });
+
+  it("survives 50 sequential font and background changes without dropping the latest values", () => {
+    const variants: Array<{
+      backgroundType: DockFullscreenQuickThemeSettings["backgroundType"];
+      backgroundColor: string;
+      backgroundColorEnd: string;
+      backgroundImage: string;
+      backgroundVideo: string;
+      backgroundPattern: string;
+    }> = [
+        {
+          backgroundType: "color",
+          backgroundColor: "#102030",
+          backgroundColorEnd: "#405060",
+          backgroundImage: "",
+          backgroundVideo: "",
+          backgroundPattern: "",
+        },
+        {
+          backgroundType: "image",
+          backgroundColor: "",
+          backgroundColorEnd: "",
+          backgroundImage: "/uploads/stress-image.png",
+          backgroundVideo: "",
+          backgroundPattern: "",
+        },
+        {
+          backgroundType: "video",
+          backgroundColor: "",
+          backgroundColorEnd: "",
+          backgroundImage: "",
+          backgroundVideo: "/uploads/stress-video.mp4",
+          backgroundPattern: "",
+        },
+        {
+          backgroundType: "pattern",
+          backgroundColor: "transparent",
+          backgroundColorEnd: "",
+          backgroundImage: "",
+          backgroundVideo: "",
+          backgroundPattern: "diagonal-lines",
+        },
+        {
+          backgroundType: "off",
+          backgroundColor: "transparent",
+          backgroundColorEnd: "transparent",
+          backgroundImage: "",
+          backgroundVideo: "",
+          backgroundPattern: "",
+        },
+      ];
+
+    const baseTheme = {
+      settings: {
+        fontSize: 48,
+        fontColor: "#ffffff",
+        textAlign: "center",
+        lineHeight: 1.4,
+        fontWeight: "normal",
+        fontStyle: "normal",
+        textTransform: "none",
+        refFontSize: 20,
+        refFontWeight: "normal",
+        refFontColor: "#ffffff",
+        refPosition: "bottom",
+        refTextTransform: "none",
+        refLetterSpacing: 0,
+        refOpacity: 1,
+        refTextAlign: "match",
+        refSpacing: 24,
+        fullscreenShadeColor: "#000000",
+        fullscreenShadeOpacity: 0,
+        fullscreenShadeEnabled: false,
+        textShadow: "none",
+        animation: "none",
+        animationDuration: 400,
+        backgroundImage: "",
+        backgroundImageFilePath: "",
+        backgroundPattern: "",
+        backgroundVideo: "",
+        backgroundVideoFilePath: "",
+        backgroundOpacity: 1,
+        backgroundColor: "#000000",
+        backgroundColorEnd: "#000000",
+        bgGradientAngle: 180,
+        referenceBackgroundEnabled: false,
+        referenceBackgroundColor: "#ffffff",
+        referenceBackgroundStyle: "solid",
+        referenceBackgroundRadius: 12,
+        lowerThirdPosition: "left",
+        lowerThirdSize: "medium",
+        lowerThirdWidthPreset: "md",
+        lowerThirdOffsetX: 0,
+        lowerThirdCaptionPosition: "bottom",
+      } as unknown as BibleThemeSettings,
+    };
+
+    for (let index = 0; index < 50; index += 1) {
+      const variant = variants[index % variants.length];
+      const fontSize = 48 + index;
+      const quickSettings: DockFullscreenQuickThemeSettings = {
+        ...BASE,
+        fontSize,
+        fontColor: `#${(0x110000 + index).toString(16).padStart(6, "0").slice(-6)}`,
+        backgroundType: variant.backgroundType,
+        backgroundColor: variant.backgroundColor,
+        backgroundColorEnd: variant.backgroundColorEnd,
+        backgroundImage: variant.backgroundImage,
+        backgroundVideo: variant.backgroundVideo,
+        backgroundPattern: variant.backgroundPattern,
+      };
+
+      const themed = applyFullscreenQuickThemeSettings(baseTheme, quickSettings);
+      const extracted = extractFullscreenQuickThemeSettings(themed.settings);
+
+      expect(themed.settings.fontSize).toBe(fontSize);
+      expect(extracted.fontSize).toBe(fontSize);
+      expect(themed.settings.fontColor).toBe(quickSettings.fontColor);
+      expect(extracted.fontColor).toBe(quickSettings.fontColor);
+      switch (variant.backgroundType) {
+        case "color":
+          expect(themed.settings.backgroundColor).toBe(variant.backgroundColor);
+          expect(themed.settings.backgroundColorEnd).toBe(variant.backgroundColorEnd);
+          break;
+        case "image":
+          expect(themed.settings.backgroundImage).toBe(variant.backgroundImage);
+          expect(themed.settings.backgroundColor).toBe("transparent");
+          break;
+        case "video":
+          expect(themed.settings.backgroundVideo).toBe(variant.backgroundVideo);
+          expect(themed.settings.backgroundColor).toBe("transparent");
+          break;
+        case "pattern":
+          expect(themed.settings.backgroundPattern).toBe(variant.backgroundPattern);
+          expect(themed.settings.backgroundColor).toBe("transparent");
+          break;
+        case "off":
+          expect(themed.settings.backgroundColor).toBe("transparent");
+          expect(themed.settings.backgroundImage).toBe("");
+          expect(themed.settings.backgroundVideo).toBe("");
+          expect(themed.settings.backgroundPattern).toBe("");
+          expect(themed.settings.backgroundOpacity).toBe(0);
+          break;
+        default:
+          break;
+      }
+    }
+  });
 });
 
 describe("Active OBS Bible overlay wiring", () => {
