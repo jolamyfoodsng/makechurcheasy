@@ -1467,7 +1467,7 @@ function ReferenceSection({
   const { t } = useTranslation();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const refPosition = quickSettings.refPosition ?? "bottom";
-  const refFontSize = quickSettings.refFontSize ?? 24;
+  const refFontSize = quickSettings.refFontSize ?? 12;
   const refFontWeight = quickSettings.refFontWeight ?? "normal";
   const refTextTransform = quickSettings.refTextTransform ?? "none";
   const refOpacity = quickSettings.refOpacity ?? 1;
@@ -1508,8 +1508,8 @@ function ReferenceSection({
         <input
           type="range"
           className="dtb-slider"
-          min={12}
-          max={72}
+          min={10}
+          max={80}
           step={1}
           value={refFontSize}
           onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, refFontSize: Number(e.target.value) }))}
@@ -2013,7 +2013,6 @@ const COMPARE_ALIGN_OPTIONS: Array<{ value: CompareTextAlign; label: string }> =
 
 const COMPARE_META_POSITION_OPTIONS: Array<{ value: CompareMetadataPosition; label: string }> = [
   { value: "above-verse", label: "Above Verse" },
-  { value: "same-row", label: "Same Row" },
   { value: "below-verse", label: "Below Verse" },
   { value: "hidden", label: "Hidden" },
 ];
@@ -2257,7 +2256,7 @@ function CompareSettingsPanel({
         <SliderNumberField
           label="Reference font size"
           value={compare.compareReferenceFontSizeLeft}
-          min={10} max={48} step={1} unit="px"
+          min={10} max={160} step={1} unit="px"
           onChange={(value) => applyPatch({
             compareReferenceFontSizeLeft: value,
             compareReferenceFontSizeRight: value,

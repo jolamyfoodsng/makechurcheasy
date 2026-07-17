@@ -454,7 +454,7 @@
       margin-bottom: 12px;
     }
 
-    body[data-mode="lower-third"] #lt-ref-text {
+    body[data-mode="lower-third"] #ref-text {
       font-size: var(--ref-font-size);
       font-weight: var(--ref-font-weight);
       font-style: var(--ref-font-style, normal);
@@ -658,13 +658,13 @@
       const BAR_LINE_HEIGHT_MIN = 1.2;
 
       const SIZE_PRESETS = {
-        'smallest': { fontSize: 24, refFontSize: 13, lineHeight: 1.25 },
-        'smaller': { fontSize: 28, refFontSize: 14, lineHeight: 1.26 },
-        'small': { fontSize: 32, refFontSize: 16, lineHeight: 1.27 },
-        'medium': { fontSize: 36, refFontSize: 18, lineHeight: 1.28 },
-        'big': { fontSize: 42, refFontSize: 20, lineHeight: 1.29 },
-        'bigger': { fontSize: 48, refFontSize: 22, lineHeight: 1.3 },
-        'biggest': { fontSize: 56, refFontSize: 26, lineHeight: 1.32 },
+        'smallest': { fontSize: 24, refFontSize: 10, lineHeight: 1.25 },
+        'smaller': { fontSize: 28, refFontSize: 10, lineHeight: 1.26 },
+        'small': { fontSize: 32, refFontSize: 11, lineHeight: 1.27 },
+        'medium': { fontSize: 36, refFontSize: 12, lineHeight: 1.28 },
+        'big': { fontSize: 42, refFontSize: 12, lineHeight: 1.29 },
+        'bigger': { fontSize: 48, refFontSize: 13, lineHeight: 1.3 },
+        'biggest': { fontSize: 56, refFontSize: 14, lineHeight: 1.32 },
       };
       const WIDTH_PRESETS = {
         'sm': { maxWidth: 1000, hMargin: 460 },
@@ -728,11 +728,15 @@
       const logo = document.getElementById('logo');
 
       const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
-      const _storageKey = _tabParam === 'worship' ? 'worship-overlay-data' : 'bible-overlay-data';
-      const _ackStorageKey = _tabParam === 'worship' ? 'worship-overlay-render-ack' : 'bible-overlay-render-ack';
-      const _channelName = _tabParam === 'worship' ? 'obs-church-studio-worship-overlay' : 'obs-church-studio-bible-overlay';
+      const _isBibleLt = _tabParam === 'biblef';
+      const _isBibleFs = _tabParam === 'bible';
+      const _storageKey = _tabParam === 'worship' ? 'worship-overlay-data' : _isBibleLt ? 'bible-lt-overlay-data' : 'bible-overlay-data';
+      const _ackStorageKey = _tabParam === 'worship' ? 'worship-overlay-render-ack' : _isBibleLt ? 'bible-lt-overlay-render-ack' : 'bible-overlay-render-ack';
+      const _channelName = _tabParam === 'worship' ? 'obs-church-studio-worship-overlay' : _isBibleLt ? 'obs-church-studio-bible-lt-overlay' : 'obs-church-studio-bible-overlay';
 
       function readInitialMode() {
+        if (_isBibleLt) return 'lower-third';
+        if (_isBibleFs) return 'fullscreen';
         try {
           const raw = localStorage.getItem(_storageKey);
           const parsed = raw ? JSON.parse(raw) : null;
@@ -1129,6 +1133,8 @@
       }
 
       function setMode(newMode) {
+        if (_isBibleLt) newMode = 'lower-third';
+        if (_isBibleFs) newMode = 'fullscreen';
         if (newMode === currentMode) return;
         applyModeDom(newMode);
         renderCurrentOverlayForMode();
@@ -1409,9 +1415,17 @@
         if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.style.setProperty('--font-size', baseFontSize + 'px'); root.style.setProperty('--ref-font-size', baseRefFontSize + 'px'); }
         root.style.setProperty('--line-height', String(s.lineHeight || preset.lineHeight));
         root.style.setProperty('--ref-spacing', (s.refSpacing ?? 16) + 'px');
-        const wp2 = s.lowerThirdWidthPreset || 'md', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['md'];
-        root.style.setProperty('--lt-max-width', (s.lowerThirdMaxWidth || wpr.maxWidth) + 'px');
-        root.style.setProperty('--lt-h-margin', (s.lowerThirdHMargin ?? wpr.hMargin) + 'px');
+        if (_isBibleLt) {
+          root.style.setProperty('--lt-max-width', 'none');
+        } else {
+          const wp2 = s.lowerThirdWidthPreset || 'md', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['md'];
+          root.style.setProperty('--lt-max-width', (s.lowerThirdMaxWidth || wpr.maxWidth) + 'px');
+        }
+        if (_isBibleLt) {
+          root.style.setProperty('--lt-h-margin', '0px');
+        } else {
+          root.style.setProperty('--lt-h-margin', (s.lowerThirdHMargin ?? wpr.hMargin) + 'px');
+        }
         barMaxHeight = Math.max(120, Math.min(900, Number(s.lowerThirdBarMaxHeight) || 600));
         root.style.setProperty('--lt-max-height', barMaxHeight + 'px');
         root.style.setProperty('--lt-min-height', (s.lowerThirdBarMinHeight || 0) + 'px');
@@ -1458,8 +1472,11 @@
         if (incomingTs && incomingTs <= lastTimestamp && !(incomingHasSlide && !currentHasSlide)) return;
         lastTimestamp = Math.max(lastTimestamp, incomingTs);
         currentOverlayData = data;
-        if (data.mode && data.mode !== currentMode) {
-          setMode(data.mode);
+        var effectiveMode = data.mode;
+        if (_isBibleFs) effectiveMode = 'fullscreen';
+        if (_isBibleLt) effectiveMode = 'lower-third';
+        if (effectiveMode && effectiveMode !== currentMode) {
+          setMode(effectiveMode);
           writeRenderAck(data);
           return;
         }
@@ -1506,7 +1523,7 @@
         bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId; currentSlideId = sl.id;
         if (data.blanked) { overlay.classList.add('blank'); return; } else overlay.classList.remove('blank');
         overlay.classList.remove('hidden');
-        verseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; reference.style.display = rt ? 'block' : 'none';
+        verseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; reference.textContent = rt; reference.style.display = rt ? 'block' : 'none';
         try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-bible-overlay lower-third theme error', error); }
         const anim = data.theme?.animation || 'slide-up'; lastAnimation = anim;
         if (!hasShownOnce) hasShownOnce = true;
@@ -1526,7 +1543,7 @@
         } catch { }
         return false;
       }
-      function readModeFromCssVar() { try { const raw = getComputedStyle(root).getPropertyValue('--display-mode').trim().replace(/^['"]|['"]$/g, ''); if (raw === 'lower-third' || raw === 'fullscreen') { if (raw !== currentMode) setMode(raw); } } catch { } }
+      function readModeFromCssVar() { try { const raw = getComputedStyle(root).getPropertyValue('--display-mode').trim().replace(/^['"]|['"]$/g, ''); if (!_isBibleLt && !_isBibleFs && (raw === 'lower-third' || raw === 'fullscreen')) { if (raw !== currentMode) setMode(raw); } } catch { } }
       function readFromUrlHash() { try { const h = window.location.hash; if (h && h.startsWith('#data=')) { processOverlayUpdate(JSON.parse(decodeURIComponent(h.slice(6)))); return true; } } catch { } return false; }
       function readFromUrlSearch() { try { const raw = new URLSearchParams(window.location.search).get('overlayData'); if (raw) { processOverlayUpdate(JSON.parse(decodeURIComponent(raw))); return true; } } catch { } return false; }
       function readFromLocalStorage() { try { const raw = localStorage.getItem(_storageKey); if (raw) { processOverlayUpdate(JSON.parse(raw)); return true; } } catch { } return false; }

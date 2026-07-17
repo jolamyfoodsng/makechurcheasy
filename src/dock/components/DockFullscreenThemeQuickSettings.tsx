@@ -463,9 +463,9 @@ export default function DockFullscreenThemeQuickSettings({
                   <input
                     className="dock-theme-quick__range"
                     type="range"
-                    min={14}
-                    max={150}
-                    step={1}
+                    min={10}
+                    max={14}
+                    step={0.5}
                     value={settings.refFontSize}
                     onChange={(event) =>
                       onChange(withPatch(settings, { refFontSize: Number(event.target.value) }))

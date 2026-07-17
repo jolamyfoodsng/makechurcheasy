@@ -179,7 +179,7 @@ function extractFullscreenQuickThemeSettings(
     backgroundType,
     fontSize: clampNumber(settings.fontSize, 28, 200),
     fontFamily: settings.fontFamily || DEFAULT_THEME_SETTINGS.fontFamily || "",
-    refFontSize: clampNumber(settings.refFontSize, 14, 150),
+    refFontSize: clampNumber(settings.refFontSize, 10, 14),
     refFontWeight: settings.refFontWeight || DEFAULT_THEME_SETTINGS.refFontWeight,
     fontColor: settings.fontColor || DEFAULT_THEME_SETTINGS.fontColor,
     refFontColor: settings.refFontColor || settings.fontColor || DEFAULT_THEME_SETTINGS.refFontColor,
@@ -832,7 +832,6 @@ export default function DockBibleTab({
   const liveTranscriptWordCounterRef = useRef(0);
   const lastTranscriptWordsRef = useRef<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
-  const compactLayout = false;
   const [isBookDropdownOpen, setIsBookDropdownOpen] = useState(false);
   const [isChapterDropdownOpen, setIsChapterDropdownOpen] = useState(false);
   const [isVerseDropdownOpen, setIsVerseDropdownOpen] = useState(false);
@@ -3211,9 +3210,10 @@ export default function DockBibleTab({
 
   const handleOverlayModeChange = useCallback((nextMode: OverlayMode) => {
     setOverlayMode(nextMode);
-    // Persist synchronously so any in-flight send/recovery reads the operator's
-    // latest choice instead of the previous render's mode.
     saveDockBibleOverlayMode(nextMode);
+    ensureObsConnected().then(() => {
+      dockObsClient.switchBibleOverlayMode(nextMode).catch(() => {});
+    }).catch(() => {});
   }, []);
 
   const handleToggleFavoritePassage = useCallback(async () => {
