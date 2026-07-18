@@ -1476,6 +1476,141 @@
   background: #ef4444;
 }
 
+.lib-upgrade-prompt {
+  position: relative;
+  width: min(100%, 460px);
+  padding: 32px;
+  background: var(--surface-dark);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.52);
+  align-items: center;
+  text-align: center;
+}
+
+.lib-upgrade-prompt .ssm-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.lib-upgrade-prompt .ssm-close:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+  border-color: var(--border);
+}
+
+.lib-upgrade-prompt__icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  margin: 0 0 20px;
+  color: #93c5fd;
+  background: rgba(29, 78, 216, 0.14);
+  border: 1px solid rgba(147, 197, 253, 0.22);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lib-upgrade-prompt .ssm-title {
+  margin: 0 0 10px;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.lib-upgrade-prompt .ssm-desc {
+  max-width: 360px;
+  margin: 0 auto 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.lib-upgrade-prompt .ssm-hint {
+  max-width: 380px;
+  margin: 0 auto 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.lib-upgrade-prompt__actions {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.lib-upgrade-prompt .ssm-btn-cancel,
+.lib-upgrade-prompt .ssm-btn-upgrade {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.lib-upgrade-prompt .ssm-btn-cancel {
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.lib-upgrade-prompt .ssm-btn-cancel:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.lib-upgrade-prompt .ssm-btn-upgrade {
+  color: #fff;
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  box-shadow: 0 8px 20px rgba(var(--primary-rgb), 0.24);
+}
+
+.lib-upgrade-prompt .ssm-btn-upgrade:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 520px) {
+  .lib-upgrade-prompt {
+    padding: 28px 20px 22px;
+  }
+
+  .lib-upgrade-prompt__actions {
+    flex-direction: column-reverse;
+  }
+
+  .lib-upgrade-prompt .ssm-btn-cancel,
+  .lib-upgrade-prompt .ssm-btn-upgrade {
+    width: 100%;
+  }
+}
+
 .lib-archive-modal {
   max-width: 860px;
 }

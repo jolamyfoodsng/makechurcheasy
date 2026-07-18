@@ -2,6 +2,7 @@ import { AppLogo } from "@/components/AppLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   createPairingCode,
+  getDashboardBaseForAuth,
   redeemPairingCode,
   watchPairingStatus
 } from "@/services/authService";
@@ -10,11 +11,6 @@ import { trackDevicePaired, trackLogin } from "@/services/tracking";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-
-
-const AUTH_API = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
-console.log('AUTH_API :', AUTH_API);
-
 
 function detectOS(): string {
   const ua = navigator.userAgent;
@@ -54,16 +50,8 @@ export default function LoginPage() {
 
   if (authenticated && user) return null;
 
-  const PAIRING_BASE = AUTH_API.startsWith("http://localhost")
-    ? "http://localhost:4000"
-    : "https://makechurcheasy.creatorstudioslabs.stream";
-
-  const DASHBOARD_URL = AUTH_API.startsWith("http://localhost")
-    ? "http://localhost:4000"
-    : "https://makechurcheasy.creatorstudioslabs.stream";
-
   async function generateQrDataUrl(pairCode: string): Promise<string> {
-    const pairUrl = `${DASHBOARD_URL}/pair/mobile?code=${pairCode}`;
+    const pairUrl = `${getDashboardBaseForAuth()}/pair/mobile?code=${pairCode}`;
     return QRCode.toDataURL(pairUrl, {
       width: 240,
       margin: 2,
@@ -91,7 +79,7 @@ export default function LoginPage() {
     const params = new URLSearchParams();
     if (targetCode) params.set("code", targetCode);
     params.set("os", os);
-    const url = `${PAIRING_BASE}/device?${params.toString()}`;
+    const url = `${getDashboardBaseForAuth()}/device?${params.toString()}`;
     try {
       const { openUrl } = await import("@tauri-apps/plugin-opener");
       await openUrl(url);
@@ -468,7 +456,7 @@ export default function LoginPage() {
                 </button>
                 <button
                   onClick={() => {
-                    const url = `https://makechurcheasy.creatorstudioslabs.stream/device?code=${code}`;
+                    const url = `${getDashboardBaseForAuth()}/device?code=${code}`;
                     navigator.clipboard.writeText(url).then(() => {
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);

@@ -1478,6 +1478,71 @@
         } catch { }
         return false;
       }
+      function readFromOverlayRelayPacket(packet) {
+        try {
+          if (!packet || typeof packet !== 'object') return false;
+          if (packet.channel && packet.channel !== _tabParam) return false;
+          if (packet.type === 'mode-change' && packet.mode) {
+            if (packet.theme) {
+              applyThemeIfChanged(packet.theme, true, packet.mode);
+            }
+            setActiveLayer(packet.mode);
+            return true;
+          }
+          const data = packet.data || packet.packet || packet.overlayData;
+          if (!data || typeof data !== 'object') return false;
+          processOverlayUpdate(data);
+          return true;
+        } catch { }
+        return false;
+      }
+      function connectOverlayRelay() {
+        if (!('WebSocket' in window)) return;
+        try {
+          var params = new URLSearchParams(window.location.search);
+          if (params.get('mceRelay') === '0') return;
+          var host = window.location.hostname;
+          var allowed = params.get('mceRelay') === '1' || host === 'localhost' || host === '127.0.0.1' || host === 'tauri.localhost' || host === '::1';
+          if (!allowed) return;
+        } catch { return; }
+        var attempts = 0;
+        var timer = null;
+        var disabledUntil = 0;
+        function schedule() {
+          if (timer) return;
+          if (attempts >= 3) {
+            disabledUntil = Date.now() + 60000;
+            attempts = 0;
+            timer = setTimeout(function () {
+              timer = null;
+              open();
+            }, 60000);
+            return;
+          }
+          var delay = Math.min(10000, 500 * Math.pow(2, attempts++));
+          timer = setTimeout(function () {
+            timer = null;
+            open();
+          }, delay);
+        }
+        function open() {
+          if (Date.now() < disabledUntil) return;
+          try {
+            var ws = new WebSocket('ws://127.0.0.1:17891');
+            ws.onopen = function () { attempts = 0; };
+            ws.onmessage = function (event) {
+              try { readFromOverlayRelayPacket(JSON.parse(event.data)); } catch { }
+            };
+            ws.onclose = schedule;
+            ws.onerror = function () {
+              try { ws.close(); } catch { }
+            };
+          } catch {
+            schedule();
+          }
+        }
+        open();
+      }
       function syncOverlayState() {
         if (hasReceivedLiveOverlayUpdate) return false;
         // Seed from the dock packet before trusting stale CSS on a reloaded OBS source.
@@ -1513,6 +1578,7 @@
           }
         };
       } catch { }
+      connectOverlayRelay();
       window.addEventListener('mce-overlay-packet', readFromObsBrowserEvent);
       window.addEventListener('message', (e) => { if (e.data?.action === 'animate-out') processOverlayUpdate(e.data); });
       window.addEventListener('hashchange', () => { readFromUrlHash(); });

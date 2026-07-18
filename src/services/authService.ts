@@ -11,7 +11,55 @@ import {
 } from "../lib/subscriptionSourceOfTruth";
 import { requestJsonWithRetry } from "./requestDedup";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+const PRODUCTION_API_BASE = "https://api.creatorstudioslabs.stream";
+const PRODUCTION_DASHBOARD_BASE = "https://makechurcheasy.creatorstudioslabs.stream";
+const LOCAL_DASHBOARD_BASE = "http://localhost:4000";
+
+function normalizeApiBase(value: string | undefined): string {
+  return (value || PRODUCTION_API_BASE).replace(/\/+$/, "");
+}
+
+const API_BASE = normalizeApiBase(import.meta.env.VITE_AUTH_API_URL);
+let _activePairingApiBase = API_BASE;
+
+function isLocalApiBase(apiBase: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(apiBase);
+}
+
+function shouldRetryOnProduction(apiBase: string, response?: Response): boolean {
+  if (!isLocalApiBase(apiBase) || apiBase === PRODUCTION_API_BASE) return false;
+  if (!response) return true;
+  return response.status === 404 || response.status >= 500;
+}
+
+async function fetchAuthApi(path: string, init?: RequestInit): Promise<{ response: Response; apiBase: string }> {
+  let primaryResponse: Response | null = null;
+
+  try {
+    primaryResponse = await fetch(`${API_BASE}${path}`, init);
+    if (!shouldRetryOnProduction(API_BASE, primaryResponse)) {
+      _activePairingApiBase = API_BASE;
+      return { response: primaryResponse, apiBase: API_BASE };
+    }
+  } catch {
+    if (!shouldRetryOnProduction(API_BASE)) {
+      throw new Error("auth_api_unavailable");
+    }
+  }
+
+  const response = await fetch(`${PRODUCTION_API_BASE}${path}`, init);
+  _activePairingApiBase = PRODUCTION_API_BASE;
+  if (primaryResponse) {
+    console.warn("[authService] Local auth API returned %s; using production auth API.", primaryResponse.status);
+  } else {
+    console.warn("[authService] Local auth API unavailable; using production auth API.");
+  }
+  return { response, apiBase: PRODUCTION_API_BASE };
+}
+
+export function getDashboardBaseForAuth(): string {
+  return isLocalApiBase(_activePairingApiBase) ? LOCAL_DASHBOARD_BASE : PRODUCTION_DASHBOARD_BASE;
+}
 
 /** App version sent with every API request for server-side version gating */
 export const APP_VERSION: string =
@@ -476,7 +524,7 @@ export async function createPairingCode(
   }
 
   try {
-    const res = await fetch(`${API_BASE}/api/pairing/create`, {
+    const { response: res } = await fetchAuthApi("/api/pairing/create", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -518,7 +566,7 @@ export async function redeemPairingCode(
 > {
   try {
     const os = detectOS();
-    const res = await fetch(`${API_BASE}/api/pairing/redeem`, {
+    const { response: res } = await fetchAuthApi("/api/pairing/redeem", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -588,11 +636,18 @@ export function watchPairingStatus(
   }
 ): () => void {
   const os = detectOS();
-  const url = `${API_BASE}/api/pairing/stream?code=${encodeURIComponent(code)}&v=${encodeURIComponent(APP_VERSION)}&os=${encodeURIComponent(os)}`;
+  const url = `${_activePairingApiBase}/api/pairing/stream?code=${encodeURIComponent(code)}&v=${encodeURIComponent(APP_VERSION)}&os=${encodeURIComponent(os)}`;
   const es = new EventSource(url);
+  let settled = false;
+
+  function finish(callback: () => void): void {
+    if (settled) return;
+    settled = true;
+    es.close();
+    callback();
+  }
 
   es.addEventListener("authorized", (e: MessageEvent) => {
-    es.close();
     const data = JSON.parse(e.data);
     const authUser: AuthUser = {
       id: data.user.id,
@@ -622,44 +677,57 @@ export function watchPairingStatus(
     // Code consumed — clear tracked reference
     _lastPairingCode = null;
 
-    callbacks.onAuthorized(authUser, data.deviceId);
+    finish(() => callbacks.onAuthorized(authUser, data.deviceId));
   });
 
   es.addEventListener("expired", () => {
-    es.close();
-    callbacks.onExpired();
+    finish(callbacks.onExpired);
   });
 
   es.addEventListener("version-blocked", (e: MessageEvent) => {
-    es.close();
     const data = JSON.parse(e.data);
-    callbacks.onVersionBlocked?.(data.message || "This version is no longer supported. Please update.");
+    finish(() => {
+      callbacks.onVersionBlocked?.(data.message || "This version is no longer supported. Please update.");
+    });
   });
 
   es.addEventListener("verification_required", (e: MessageEvent) => {
-    es.close();
     const data = JSON.parse(e.data);
-    callbacks.onVerificationRequired?.(
-      data.email || "",
-      data.name || "",
-      data.message || "Please verify your email address before authorizing a device."
-    );
+    finish(() => {
+      callbacks.onVerificationRequired?.(
+        data.email || "",
+        data.name || "",
+        data.message || "Please verify your email address before authorizing a device."
+      );
+    });
+  });
+
+  es.addEventListener("device_limit_reached", (e: MessageEvent) => {
+    const data = JSON.parse(e.data);
+    finish(() => {
+      callbacks.onError(data.message || "Device limit reached. Remove an old device or upgrade your plan.");
+    });
   });
 
   es.addEventListener("error", (e: MessageEvent | Event) => {
-    es.close();
-    const msg = "data" in e ? JSON.parse(e.data).message : "Connection lost";
-    callbacks.onError(msg);
+    if (settled) return;
+    const msg = "data" in e
+      ? JSON.parse(e.data).message || "Connection lost"
+      : "Connection lost";
+    finish(() => callbacks.onError(msg));
   });
 
-  return () => es.close();
+  return () => {
+    settled = true;
+    es.close();
+  };
 }
 
 /**
  * Open the browser to the device pairing page.
  */
 export async function openBrowserForPairing(code: string): Promise<void> {
-  const url = `${API_BASE}/device?code=${encodeURIComponent(code)}`;
+  const url = `${getDashboardBaseForAuth()}/device?code=${encodeURIComponent(code)}`;
   try {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
     await openUrl(url);
@@ -677,7 +745,7 @@ export async function resendVerificationEmail(
   code: string
 ): Promise<{ success?: boolean; alreadyVerified?: boolean; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/api/pairing/resend-verification`, {
+    const { response: res } = await fetchAuthApi("/api/pairing/resend-verification", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),
@@ -699,7 +767,7 @@ export async function checkVerificationStatus(
   code: string
 ): Promise<{ verified: boolean; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/api/pairing/check-verification`, {
+    const { response: res } = await fetchAuthApi("/api/pairing/check-verification", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),

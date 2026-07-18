@@ -2747,8 +2747,14 @@ fn get_opencode_api_key() -> Result<String, String> {
         }
     }
 
+    if let Some(value) = option_env!("OPENCODE_API_KEY") {
+        if !value.trim().is_empty() {
+            return Ok(value.to_string());
+        }
+    }
+
     Err("OPENCODE_API_KEY environment variable not set. \
-         Set it in your shell or .env before running the app."
+         Set it in your shell, .env, or GitHub Actions release secret."
         .to_string())
 }
 

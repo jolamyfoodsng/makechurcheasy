@@ -23,10 +23,8 @@ import {
   type ExtractedTextQuality,
 } from "../src/worship/bulkImportService";
 import {
-  processDocumentViaApi,
-  processFileViaUpload,
+  processDocumentLocally,
 } from "../src/worship/bulkImportAiService";
-import { parseCccHymnDrafts } from "../src/worship/cccHymnImport";
 import {
   createEmptyImportSection,
   estimateDraftSlideCount,
@@ -49,12 +47,6 @@ interface SongImportFullprocessProps {
 
 interface EditableImportSongDraft extends SmartImportSongDraft {
   enabled: boolean;
-}
-
-interface LocalDetectedSong {
-  title: string;
-  lyrics: string;
-  hymnNumber?: string;
 }
 
 function uid(prefix: string): string {
@@ -89,177 +81,6 @@ function toSectionDrafts(lyrics: string): SmartImportSectionDraft[] {
 function defaultSongTitle(sourceName: string, index = 0): string {
   const base = sourceName.replace(/\.[^.]+$/, "").trim() || "Imported Song";
   return index > 0 ? `${base} ${index + 1}` : base;
-}
-
-function buildDraftFromLyrics(
-  title: string,
-  lyrics: string,
-  sourceName: string,
-  index = 0,
-  hymnNumber?: string,
-): SmartImportSongDraft {
-  const normalizedLyrics = normalizeExtractedLyricsText(lyrics);
-  return {
-    id: uid(`import-song-${index + 1}`),
-    title: title.trim() || defaultSongTitle(sourceName, index),
-    artist: "",
-    hymnNumber: hymnNumber?.trim() || undefined,
-    language: undefined,
-    method: "fallback",
-    warnings: [],
-    reviewNotes: [],
-    rawExcerpt: normalizedLyrics.slice(0, 2400),
-    sections: toSectionDrafts(normalizedLyrics),
-  };
-}
-
-function detectNumberedSongs(text: string, sourceName: string): LocalDetectedSong[] {
-  const lines = text.split("\n");
-  const boundaries: Array<{ index: number; title: string; hymnNumber?: string }> = [];
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index].trim();
-    if (!line) continue;
-
-    let match = line.match(/^(?:song|hymn|orin)\s+(\d{1,4})(?:[.: -]+(.+))?$/i);
-    if (match) {
-      boundaries.push({
-        index,
-        hymnNumber: match[1],
-        title: match[2]?.trim() || `Hymn ${match[1]}`,
-      });
-      continue;
-    }
-
-    match = line.match(/^(\d{1,4})[.)-]\s+(.+)$/);
-    if (match) {
-      boundaries.push({
-        index,
-        hymnNumber: match[1],
-        title: match[2].trim() || `Song ${match[1]}`,
-      });
-      continue;
-    }
-
-    match = line.match(/^(\d{1,4})$/);
-    if (match) {
-      const nextLine = lines[index + 1]?.trim() ?? "";
-      boundaries.push({
-        index,
-        hymnNumber: match[1],
-        title: nextLine && nextLine.length <= 90 ? nextLine : `Hymn ${match[1]}`,
-      });
-    }
-  }
-
-  if (boundaries.length < 2) {
-    return [];
-  }
-
-  const songs: LocalDetectedSong[] = [];
-  for (let i = 0; i < boundaries.length; i += 1) {
-    const start = boundaries[i];
-    const endIndex = i + 1 < boundaries.length ? boundaries[i + 1].index : lines.length;
-    const bodyStart = lines[start.index + 1]?.trim() === start.title ? start.index + 2 : start.index + 1;
-    const lyrics = lines
-      .slice(bodyStart, endIndex)
-      .join("\n")
-      .trim();
-
-    if (!lyrics) continue;
-
-    songs.push({
-      title: start.title || defaultSongTitle(sourceName, i),
-      lyrics,
-      hymnNumber: start.hymnNumber,
-    });
-  }
-
-  return songs.filter((song) => song.lyrics.trim().length > 0);
-}
-
-function isTitleCandidate(lines: string[], index: number): boolean {
-  const line = lines[index]?.trim() ?? "";
-  if (!line || line.length > 90) return false;
-  if (/^\d{1,4}$/.test(line)) return false;
-  if (/^(?:song|hymn|orin)\s+\d{1,4}/i.test(line)) return false;
-  if (/^(?:verse|chorus|bridge|tag|intro|outro|pre-chorus|refrain)\b/i.test(line)) return false;
-  const next = lines[index + 1]?.trim() ?? "";
-  return next === "";
-}
-
-function detectTitledSongs(text: string, sourceName: string): LocalDetectedSong[] {
-  const lines = text.split("\n");
-  const songs: LocalDetectedSong[] = [];
-  let index = 0;
-
-  while (index < lines.length) {
-    if (!isTitleCandidate(lines, index)) {
-      index += 1;
-      continue;
-    }
-
-    const title = lines[index].trim();
-    let cursor = index + 2;
-    const lyricsLines: string[] = [];
-    let lyricCount = 0;
-
-    while (cursor < lines.length) {
-      if (isTitleCandidate(lines, cursor) && lyricCount >= 2) {
-        break;
-      }
-
-      const line = lines[cursor];
-      if (line.trim()) {
-        lyricCount += 1;
-      }
-      lyricsLines.push(line);
-      cursor += 1;
-    }
-
-    const lyrics = lyricsLines.join("\n").trim();
-    if (lyrics && lyricCount >= 2) {
-      songs.push({
-        title: title || defaultSongTitle(sourceName, songs.length),
-        lyrics,
-      });
-      index = cursor;
-      continue;
-    }
-
-    index += 1;
-  }
-
-  return songs;
-}
-
-function detectSongsLocally(text: string, sourceName: string): {
-  songs: LocalDetectedSong[];
-  warning: string;
-} {
-  const numbered = detectNumberedSongs(text, sourceName);
-  if (numbered.length > 1) {
-    return {
-      songs: numbered,
-      warning: `API structuring was unavailable. Local detection found ${numbered.length} songs from numbered headings.`,
-    };
-  }
-
-  const titled = detectTitledSongs(text, sourceName);
-  if (titled.length > 1) {
-    return {
-      songs: titled,
-      warning: `API structuring was unavailable. Local detection found ${titled.length} titled songs.`,
-    };
-  }
-
-  return {
-    songs: [{
-      title: defaultSongTitle(sourceName),
-      lyrics: text,
-    }],
-    warning: "API structuring was unavailable. The document is loaded as one song for review.",
-  };
 }
 
 function sanitizeDraftsForImport(drafts: EditableImportSongDraft[]): SmartImportSongDraft[] {
@@ -353,11 +174,11 @@ export default function SongImportFullprocess({
               nextWarnings.push("The extracted text looks noisy. Review titles and lyrics carefully before importing.");
             }
           } else {
-            nextWarnings.push("No readable text was extracted locally. The AI service will process the original file.");
+            throw new Error("No readable text was extracted locally. Try a clearer PDF/DOCX or paste the lyrics text.");
           }
         } catch (extractError) {
           const message = extractError instanceof Error ? extractError.message : String(extractError);
-          nextWarnings.push(`Local text extraction failed. The AI service will process the original file. ${message}`);
+          throw new Error(`Local text extraction failed: ${message}`);
         }
       } else {
         normalizedText = normalizeExtractedLyricsText(pastedText);
@@ -373,68 +194,21 @@ export default function SongImportFullprocess({
       setQuality(textQuality);
       setSourceName(resolvedSourceName);
 
-      if (sourceMode === "file" && normalizedText.trim()) {
-        const cccDrafts = parseCccHymnDrafts(normalizedText);
-        if (cccDrafts.length >= 20) {
-          setDrafts(cccDrafts.map((draft) => ({ ...draft, enabled: true })));
-          setActiveSongId(cccDrafts[0]?.id ?? null);
-          setWarnings([
-            ...nextWarnings,
-            `Detected CCC hymnal structure and prepared ${cccDrafts.length} hymn drafts from the PDF song markers.`,
-          ]);
-          setStep("review");
-          return;
-        }
-      }
-
-      setLoadingLabel("Structuring songs with AI...");
+      setLoadingLabel("Structuring songs locally with OpenCode...");
 
       let processedSongs: SmartImportSongDraft[] = [];
 
       try {
-        const apiResult = sourceMode === "file"
-          ? await processFileViaUpload(selectedFile as File, (_progress, label) => {
-            if (label) setLoadingLabel(label);
-          })
-          : await processDocumentViaApi(normalizedText, resolvedSourceName);
-        processedSongs = apiResult.songs;
-        nextWarnings.push(...apiResult.warnings);
-      } catch (apiError) {
-        const message = apiError instanceof Error ? apiError.message : String(apiError);
-
-        if (sourceMode === "file" && normalizedText.trim()) {
-          try {
-            setLoadingLabel("Structuring extracted text with AI...");
-            const apiResult = await processDocumentViaApi(normalizedText, resolvedSourceName);
-            processedSongs = apiResult.songs;
-            nextWarnings.push("Original file upload failed, so AI used the extracted document text instead.");
-            nextWarnings.push(...apiResult.warnings);
-          } catch (textApiError) {
-            const fallback = detectSongsLocally(normalizedText, resolvedSourceName);
-            processedSongs = fallback.songs.map((song, index) =>
-              buildDraftFromLyrics(song.title, song.lyrics, resolvedSourceName, index, song.hymnNumber),
-            );
-
-            const textApiMessage = textApiError instanceof Error ? textApiError.message : String(textApiError);
-            nextWarnings.push(fallback.warning);
-            nextWarnings.push(`AI import service error: ${message}`);
-            nextWarnings.push(`Extracted-text AI error: ${textApiMessage}`);
-          }
-        } else if (normalizedText.trim()) {
-          const fallback = detectSongsLocally(normalizedText, resolvedSourceName);
-          processedSongs = fallback.songs.map((song, index) =>
-            buildDraftFromLyrics(song.title, song.lyrics, resolvedSourceName, index, song.hymnNumber),
-          );
-
-          nextWarnings.push(fallback.warning);
-          nextWarnings.push(`AI import service error: ${message}`);
-        } else {
-          throw new Error(`AI import service error: ${message}`);
-        }
+        const localResult = await processDocumentLocally(normalizedText, resolvedSourceName);
+        processedSongs = localResult.songs;
+        nextWarnings.push(...localResult.warnings);
+      } catch (localError) {
+        const message = localError instanceof Error ? localError.message : String(localError);
+        throw new Error(`Local OpenCode import failed: ${message}`);
       }
 
       if (processedSongs.length === 0) {
-        processedSongs = [buildDraftFromLyrics(defaultSongTitle(resolvedSourceName), normalizedText, resolvedSourceName)];
+        throw new Error("OpenCode did not return any songs. Try a clearer PDF/DOCX or paste readable lyrics.");
       }
 
       const editableDrafts = processedSongs.map((draft) => ({

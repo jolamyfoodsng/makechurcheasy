@@ -1065,13 +1065,12 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       }
                     }}
                     onBlank={async (url) => {
-                      void url;
                       setLtSending(true);
                       setLtFeedback(null);
                       try {
                         await ensureObsConnected();
                         const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
-                        await dockObsClient.clearLowerThirds(exitDuration);
+                        await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
                         setLtLive(false);
                         setLtFeedbackTone("success");
                         setLtFeedback(t("ministry.lowerThirdCleared"));
@@ -1083,13 +1082,12 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       }
                     }}
                     onAnimateOut={async (url) => {
-                      void url;
                       setLtSending(true);
                       setLtFeedback(null);
                       try {
                         await ensureObsConnected();
                         const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
-                        await dockObsClient.clearLowerThirds(exitDuration);
+                        await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
                         setLtLive(false);
                         setLtFeedbackTone("success");
                         setLtFeedback(t("ministry.lowerThirdAnimatedOut"));

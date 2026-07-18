@@ -35,6 +35,7 @@ import { AnnouncementModalHost } from "./components/AnnouncementModalHost";
 import { InterfaceLanguagePrompt } from "./components/InterfaceLanguagePrompt";
 import VersionFloorWarningBanner from "./components/VersionFloorWarningBanner";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
+import TrialExpiredUpgradeModal from "./components/TrialExpiredUpgradeModal";
 import VerificationGate from "./components/VerificationGate";
 import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
@@ -1381,6 +1382,9 @@ function App() {
 
       {/* Global upgrade modal — triggered by useFeatureGate.checkFeature() */}
       <UpgradeModalBridge />
+      {!splashVisible && !versionFloorBlocked?.blocked && !forcedUpdateState.blocked && (
+        <TrialExpiredUpgradeModal />
+      )}
       {!splashVisible && user && !versionFloorBlocked?.blocked && !forcedUpdateState.blocked && (
         <AnnouncementModalHost />
       )}

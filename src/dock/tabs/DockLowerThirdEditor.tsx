@@ -513,6 +513,7 @@ export default function DockLowerThirdEditor({
 
   // ── Send / Blank handlers ──
   const handleSend = useCallback(() => {
+    const overlayExitStyle = exitStyle === "fade" ? undefined : exitStyle;
     const url = buildOverlayUrl(
       theme,
       variableValues,
@@ -525,13 +526,14 @@ export default function DockLowerThirdEditor({
       undefined,
       undefined,
       animationIn,
-      exitStyle,
+      overlayExitStyle,
     );
     onSend(url);
   }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onSend]);
 
   const handleAnimateOut = useCallback(() => {
     if (!onAnimateOut) return;
+    const overlayExitStyle = exitStyle === "fade" ? undefined : exitStyle;
     const url = buildOverlayUrl(
       theme,
       variableValues,
@@ -544,7 +546,7 @@ export default function DockLowerThirdEditor({
       undefined,
       undefined,
       animationIn,
-      exitStyle,
+      overlayExitStyle,
     );
     onAnimateOut(url);
   }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onAnimateOut]);

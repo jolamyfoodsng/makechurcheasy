@@ -145,6 +145,7 @@ jobs:
           VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
           VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
           VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           LIBCLANG_PATH: ${{ steps.resolve-llvm.outputs.RESOLVED_LLVM_PATH }}/bin
         with:
           tauriScript: npx tauri

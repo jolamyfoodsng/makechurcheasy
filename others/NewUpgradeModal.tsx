@@ -91,6 +91,40 @@ const CAPABILITY_DEFS: Array<{
   { key: "teamManagement", label: "Team Access", icon: Users },
 ];
 
+const PRESENTATION_FEATURES: Array<{ label: string; icon: typeof Radio }> = [
+  { label: "Dynamic Text Tickers", icon: Radio },
+  { label: "Multiview Layouts", icon: LayoutTemplate },
+  { label: "Mobile Remote Controller", icon: Smartphone },
+  { label: "Presentation Mode", icon: Monitor },
+  { label: "Bulk Asset Import", icon: FolderInput },
+  { label: "EasyWorship / ProPresenter", icon: WandSparkles },
+  { label: "Cloud Config Sync", icon: Cloud },
+  { label: "AI Transcription Tools", icon: Sparkles },
+];
+
+const PRESENTATION_UNLOCKS: Array<{ title: string; detail: string; icon: typeof Smartphone }> = [
+  {
+    title: "Mobile Controller",
+    detail: "Control your stream scenes, triggers, and lower thirds from any smartphone on the same network.",
+    icon: Smartphone,
+  },
+  {
+    title: "Native Presentation",
+    detail: "Directly display lyrics, scriptures, and slides within the app without needing external window captures.",
+    icon: Monitor,
+  },
+  {
+    title: "Bulk Library Import",
+    detail: "Import hundreds of assets, song libraries, and OBS scenes in seconds using the bulk processor.",
+    icon: FolderInput,
+  },
+  {
+    title: "Team Access",
+    detail: "Invite up to 3 operators with custom permissions to manage your sanctuary streams concurrently.",
+    icon: Users,
+  },
+];
+
 function clampPlan(plan?: string): "free" | "basic" | "growth" | "pro" {
   const normalized = normalizePlanId(plan || "free");
   return PLAN_ORDER.includes(normalized) ? normalized : "free";
@@ -236,6 +270,131 @@ export default function NewUpgradeModal({
   });
 
   if (!open) return null;
+
+  const isPresentationGrowth = feature === "presentationMode" && requiredPlanKey === "growth";
+
+  if (isPresentationGrowth) {
+    const growthPriceLabel = priceBlock?.recurringLabel || `₦${UPGRADE_ENTRY_PRICE_NGN.toLocaleString("en-US")}/mo`;
+
+    return (
+      <div className="upgrade-modal-backdrop upgrade-modal-backdrop--presentation" onClick={onClose}>
+        <div
+          aria-labelledby="upgrade-modal-title"
+          aria-modal="true"
+          className="upgrade-modal-shell upgrade-modal-shell--blue upgrade-modal-shell--presentation"
+          onClick={(event) => event.stopPropagation()}
+          role="dialog"
+        >
+          <header className="upgrade-presentation-header">
+            <div>
+              <div className="upgrade-presentation-badges">
+                <span className="upgrade-presentation-badge upgrade-presentation-badge--primary">
+                  <Monitor size={14} />
+                  PRESENTATION MODE
+                </span>
+                <span className="upgrade-presentation-badge upgrade-presentation-badge--success">
+                  GROWTH EXCLUSIVE
+                </span>
+              </div>
+              <h1 className="upgrade-modal-title" id="upgrade-modal-title">Upgrade to Growth</h1>
+              <p className="upgrade-modal-subtitle">
+                Unlock professional broadcast tools designed for modern ministries and high-production live streams.
+              </p>
+            </div>
+
+            <button
+              aria-label="Close upgrade modal"
+              className="upgrade-modal-close upgrade-modal-close--inline"
+              onClick={onClose}
+              type="button"
+            >
+              <X size={18} />
+            </button>
+          </header>
+
+          <div className="upgrade-presentation-body">
+            <div className="upgrade-presentation-main">
+              <div className="upgrade-presentation-plans">
+                <section className="upgrade-presentation-plan upgrade-presentation-plan--current">
+                  <p className="upgrade-plan-card__eyebrow">Your plan</p>
+                  <h2>{currentLabel || "Basic (Free Trial)"}</h2>
+                  <p>Limited access to fundamental streaming controls.</p>
+                  <div className="upgrade-presentation-price">
+                    <strong>₦0</strong>
+                    <span>/forever</span>
+                  </div>
+                </section>
+
+                <section className="upgrade-presentation-plan upgrade-presentation-plan--growth">
+                  <div className="upgrade-presentation-plan__mark">
+                    <ShieldCheck size={34} />
+                  </div>
+                  <p className="upgrade-plan-card__eyebrow">Recommended</p>
+                  <h2>Growth Plan</h2>
+                  <p>Everything you need for a seamless church broadcast experience.</p>
+                  <div className="upgrade-presentation-price">
+                    <strong>{growthPriceLabel.replace("/mo", "")}</strong>
+                    <span>/mo</span>
+                  </div>
+                </section>
+              </div>
+
+              <section className="upgrade-presentation-features">
+                <h3>Growth Feature Set</h3>
+                <div className="upgrade-presentation-feature-grid">
+                  {PRESENTATION_FEATURES.map((item) => {
+                    return (
+                      <div className="upgrade-presentation-feature" key={item.label}>
+                        <CheckCircle2 size={18} />
+                        <span>{item.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
+
+            <aside className="upgrade-presentation-unlocks">
+              <h3>
+                <Sparkles size={18} />
+                What changes immediately
+              </h3>
+              <div className="upgrade-presentation-unlock-list">
+                {PRESENTATION_UNLOCKS.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div className="upgrade-presentation-unlock" key={item.title}>
+                      <div className="upgrade-presentation-unlock__icon">
+                        <Icon size={18} />
+                      </div>
+                      <div>
+                        <strong>{item.title}</strong>
+                        <p>{item.detail}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </aside>
+          </div>
+
+          <footer className="upgrade-presentation-footer">
+            <button className="upgrade-modal-button upgrade-modal-button--ghost" onClick={onClose} type="button">
+              Maybe later
+            </button>
+            <button
+              className="upgrade-modal-button upgrade-modal-button--primary"
+              onClick={() => window.open(PRICING_URL, "_blank", "noopener,noreferrer")}
+              type="button"
+            >
+              <span>View Growth plans</span>
+              <ArrowRight size={16} />
+            </button>
+          </footer>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="upgrade-modal-backdrop" onClick={onClose}>

@@ -402,6 +402,8 @@ class DockObsClient {
   private _lastCssOverlayThemeCssBySource: Record<string, string> = {};
   /** Track the last browser source URL per input so identical verse pushes can skip reloads. */
   private _lastBrowserSourceUrlBySource: Record<string, string> = {};
+  /** Avoid repeating expensive source order/fit checks on every fast overlay packet. */
+  private _lastFastOverlayPrepAtBySource: Record<string, number> = {};
   /** Serialize Bible overlay mutations so rapid verse clicks do not overlap OBS scene rebuilds. */
   private _bibleMutationTail: Promise<void> = Promise.resolve();
   private _lastBiblePushSignature = "";
@@ -1529,6 +1531,28 @@ class DockObsClient {
 
   async bringWorshipOverlayForward(_mode: DockOverlayMode = "lower-third"): Promise<void> {
     await this.bringMceOverlayForward(getDockResources().worshipSource);
+  }
+
+  private async prepareFastOverlayScene(
+    tabId: DockPreviewTab,
+    sourceName: string,
+    fitSource: (sceneName: string) => Promise<void>,
+  ): Promise<void> {
+    const key = `${tabId}:${sourceName}`;
+    const now = Date.now();
+    if (this._lastFastOverlayPrepAtBySource[key] && now - this._lastFastOverlayPrepAtBySource[key] < 10_000) {
+      return;
+    }
+    this._lastFastOverlayPrepAtBySource[key] = now;
+
+    const target = await this.getPresentationTargetScene(tabId, { activate: false }).catch(() => null);
+    if (target?.sceneName) {
+      await fitSource(target.sceneName).catch(() => { });
+      await this.ensureTickerAboveSource(target.sceneName, sourceName).catch(() => { });
+    }
+    await this.promotePresentationScene(tabId).catch(() => { });
+    await fitSource(PRESENTATION_SCENE_NAME).catch(() => { });
+    await this.ensureTickerAboveSource(PRESENTATION_SCENE_NAME, sourceName).catch(() => { });
   }
 
   private sceneItemKey(sceneName: string, sceneItemId: number): string {
@@ -4053,6 +4077,16 @@ class DockObsClient {
       return;
     }
 
+    if (!themePayloadChanged) {
+      void browserQueue.enqueue(
+        `event:${inputName}`,
+        () => this.emitBrowserOverlayPacket(tabType, packet, overlayCss).then(() => { }),
+        { label: `${inputName} event` },
+      );
+      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
+      return;
+    }
+
     const emitted = await this.emitBrowserOverlayPacket(tabType, packet, overlayCss);
     // Theme changes must also update the browser source CSS in OBS itself.
     // The live browser event path is fine for high-frequency text/slide updates,
@@ -4580,14 +4614,17 @@ class DockObsClient {
       bc.close();
     } catch { /* ignore */ }
 
-    if (tabType === "bible") {
-      overlayBridge.publish({
-        channel: "bible",
-        type: "overlay-update",
-        revision: Date.now(),
-        data: { ...packet, revision: Date.now() },
-      });
-    }
+    const bridgeChannel = tabType === "notes"
+      ? "notes"
+      : tabType === "worship" || tabType === "announcements"
+        ? "worship"
+        : "bible";
+    overlayBridge.publish({
+      channel: bridgeChannel,
+      type: "overlay-update",
+      revision: Date.now(),
+      data: { ...packet, revision: Date.now() },
+    });
   }
 
   private publishBlankFullscreenOverlayPacket(
@@ -5902,14 +5939,11 @@ class DockObsClient {
       cssOverlayBaseUrl,
       themeCss,
     );
-    const target = await this.getPresentationTargetScene("bible", { activate: false }).catch(() => null);
-    if (target?.sceneName) {
-      await this.fitSceneSourceToCanvas(target.sceneName, browserSourceName).catch(() => { });
-      await this.ensureTickerAboveSource(target.sceneName, browserSourceName).catch(() => { });
-    }
-    await this.promotePresentationScene("bible").catch(() => { });
-    await this.fitSceneSourceToCanvas(PRESENTATION_SCENE_NAME, browserSourceName).catch(() => { });
-    await this.ensureTickerAboveSource(PRESENTATION_SCENE_NAME, browserSourceName).catch(() => { });
+    await this.prepareFastOverlayScene(
+      "bible",
+      browserSourceName,
+      (sceneName) => this.fitSceneSourceToCanvas(sceneName, browserSourceName),
+    );
   }
 
   async pushWorshipOverlayFast(data: {
@@ -5982,14 +6016,11 @@ class DockObsClient {
       cssOverlayBaseUrl,
       themeCss,
     );
-    const target = await this.getPresentationTargetScene("worship", { activate: false }).catch(() => null);
-    if (target?.sceneName) {
-      await this.fitSceneSourceToLowerThirdWindow(target.sceneName, sourceName).catch(() => { });
-      await this.ensureTickerAboveSource(target.sceneName, sourceName).catch(() => { });
-    }
-    await this.promotePresentationScene("worship").catch(() => { });
-    await this.fitSceneSourceToLowerThirdWindow(PRESENTATION_SCENE_NAME, sourceName).catch(() => { });
-    await this.ensureTickerAboveSource(PRESENTATION_SCENE_NAME, sourceName).catch(() => { });
+    await this.prepareFastOverlayScene(
+      "worship",
+      sourceName,
+      (sceneName) => this.fitSceneSourceToLowerThirdWindow(sceneName, sourceName),
+    );
   }
 
   async bringNotesOverlayForward(_mode: DockOverlayMode = "lower-third"): Promise<void> {
@@ -6102,14 +6133,11 @@ class DockObsClient {
       cssOverlayBaseUrl,
       themeCss,
     );
-    const target = await this.getPresentationTargetScene("notes", { activate: false }).catch(() => null);
-    if (target?.sceneName) {
-      await this.fitSceneSourceToLowerThirdWindow(target.sceneName, sourceName).catch(() => { });
-      await this.ensureTickerAboveSource(target.sceneName, sourceName).catch(() => { });
-    }
-    await this.promotePresentationScene("notes").catch(() => { });
-    await this.fitSceneSourceToLowerThirdWindow(PRESENTATION_SCENE_NAME, sourceName).catch(() => { });
-    await this.ensureTickerAboveSource(PRESENTATION_SCENE_NAME, sourceName).catch(() => { });
+    await this.prepareFastOverlayScene(
+      "notes",
+      sourceName,
+      (sceneName) => this.fitSceneSourceToLowerThirdWindow(sceneName, sourceName),
+    );
   }
 
   /**
@@ -6648,6 +6676,76 @@ class DockObsClient {
     // Restore Program scene to what it was before Lower Third was pushed
     await this.restoreProgramSceneBeforePush("lower-third");
 
+  }
+
+  /**
+   * Animate the dock lower-third source out with a prepared blanked URL, then
+   * hide/remove it after the theme's exit duration.
+   */
+  async animateLowerThirdOverlayUrlOut(
+    url: string,
+    waitMs = FULLSCREEN_CLEAR_WAIT_MS,
+  ): Promise<void> {
+    const resources = getDockResources();
+    const scenes = new Set<string>();
+    scenes.add(DOCK_PRESENTATION_SCENE);
+    try {
+      const target = await this.getPresentationTargetScene("lower-third");
+      if (target.sceneName) scenes.add(target.sceneName);
+    } catch { /* ignore */ }
+    try {
+      const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
+      if (currentProgramScene) scenes.add(currentProgramScene);
+    } catch { /* ignore */ }
+
+    let delivered = false;
+    try {
+      await this.call("SetInputSettings", {
+        inputName: resources.ltSource,
+        inputSettings: {
+          url,
+          bgcolor: "#00000000",
+          shutdown: false,
+          restart_when_active: false,
+          fps_custom: true,
+          fps: 60,
+        },
+      });
+      this._lastBrowserSourceUrlBySource[resources.ltSource] = url;
+      delivered = true;
+    } catch {
+      await this.clearLowerThirds(waitMs);
+      return;
+    }
+
+    if (delivered) {
+      for (const sceneName of scenes) {
+        const item = await this.getSceneItemBySource(sceneName, resources.ltSource).catch(() => null);
+        if (!item) continue;
+        await this.call("SetSceneItemEnabled", {
+          sceneName,
+          sceneItemId: item.sceneItemId,
+          sceneItemEnabled: true,
+        }).catch(() => { });
+      }
+    }
+
+    await this.sleep(waitMs);
+
+    for (const sceneName of scenes) {
+      await this.hideOverlaySource(sceneName, resources.ltSource);
+      await this.hideFullscreenBg(sceneName, resources);
+      await this.removeSceneItemBySource(sceneName, resources.ltSource);
+      await this.removeSceneItemBySource(sceneName, resources.fsBgSource);
+    }
+
+    delete this._lastOverlayMode[resources.ltSource];
+    delete this._lastFullscreenSourceSignature[resources.ltSource];
+    delete this._lastCssOverlayPacketBySource[resources.ltSource];
+    delete this._lastCssOverlayBaseUrlBySource[resources.ltSource];
+    delete this._lastCssOverlayThemeCssBySource[resources.ltSource];
+
+    await this.restoreProgramSceneBeforePush("lower-third");
   }
 
   // ── Worship lyrics overlay ──

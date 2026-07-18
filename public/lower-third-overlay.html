@@ -1281,6 +1281,13 @@
 
       const { themeId, html, css, values, live, blanked } = data;
 
+      // Always inject CSS before any out/blanked path. OBS may reload the
+      // browser source directly into a blanked URL, and the exit animation
+      // still needs the theme's [data-state="out"] rules.
+      if (css) {
+        cssEl.textContent = compactEntryMotionCss(css);
+      }
+
       // Handle animate-out command — set data-state="out" on existing elements
       // The theme's CSS exit animation fires automatically via the attribute selector
       if (data.action === "animate-out") {
@@ -1313,11 +1320,6 @@
           }, exitDuration);
         }
         return;
-      }
-
-      // Inject CSS
-      if (css) {
-        cssEl.textContent = compactEntryMotionCss(css);
       }
 
       // Inject animation override — editor-selected animationIn/exitStyle

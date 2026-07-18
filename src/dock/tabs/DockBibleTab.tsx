@@ -885,11 +885,6 @@ export default function DockBibleTab({
     if (showHistory !== undefined) setShowBibleHistory(showHistory);
   }, [showHistory]);
 
-  // Connect the local overlay relay for instant mode-change delivery
-  useEffect(() => {
-    overlayBridge.connect();
-  }, []);
-
   // Keep overlayModeRef in sync for callbacks that must not depend on overlayMode
   useEffect(() => {
     overlayModeRef.current = overlayMode;
@@ -1419,7 +1414,7 @@ export default function DockBibleTab({
   }, [queueCurrentVerseQuickThemeRestage]);
 
   const buildFullscreenQuickThemeRestageExpectation = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
-    const liveOverlayMode = readDockBibleOverlayMode() ?? overlayMode;
+    const liveOverlayMode = overlayModeRef.current;
     if (liveOverlayMode === "lower-third") {
       if (!lowerThirdQuickThemeSettingsLinkedToFullscreen) return null;
       const linkedSettings = buildLinkedLowerThirdQuickThemeSettings(nextSettings, nextSettings);
@@ -1447,11 +1442,10 @@ export default function DockBibleTab({
   }, [
     baseLowerThirdTheme,
     lowerThirdQuickThemeSettingsLinkedToFullscreen,
-    overlayMode,
   ]);
 
   const buildLowerThirdQuickThemeRestageExpectation = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
-    const liveOverlayMode = readDockBibleOverlayMode() ?? overlayMode;
+    const liveOverlayMode = overlayModeRef.current;
     if (liveOverlayMode !== "lower-third") return null;
     const nextLowerThirdTheme = applyLowerThirdQuickThemeSettings(baseLowerThirdTheme, nextSettings);
     return buildQuickThemeRestageSignature(
@@ -1460,7 +1454,7 @@ export default function DockBibleTab({
       nextLowerThirdTheme.settings as unknown as Record<string, unknown>,
       null,
     );
-  }, [baseLowerThirdTheme, overlayMode]);
+  }, [baseLowerThirdTheme]);
 
   // ── Fetch verse count when chapter changes ──
   useEffect(() => {
@@ -1878,7 +1872,7 @@ export default function DockBibleTab({
       const requestId = ++liveVerseRequestIdRef.current;
       const effectiveTranslation = options?.translation ?? activeTranslation;
       const effectiveLineCount = clampVerseLineCount(options?.lineCount ?? verseLineCount);
-      const liveOverlayMode = readDockBibleOverlayMode() ?? overlayMode;
+      const liveOverlayMode = overlayModeRef.current;
       const sameChapter = book === selectedBook && chapter === selectedChapter;
       const existingPrimaryPassage = sameChapter
         ? getLoadedPassageForTranslation(effectiveTranslation)
@@ -2359,7 +2353,7 @@ export default function DockBibleTab({
     selectedLowerThirdTheme.id,
   ]);
 
-  // Sync theme settings to localStorage + BroadcastChannel for standalone overlay
+  // Keep the standalone overlay's cached theme fresh without forcing a live mode switch.
   useEffect(() => {
     const theme = overlayMode === "fullscreen"
       ? effectiveSelectedBibleTheme.settings
@@ -2372,16 +2366,6 @@ export default function DockBibleTab({
       existing.timestamp = performance.now();
       localStorage.setItem("bible-overlay-data", JSON.stringify(existing));
     } catch { /* ignore */ }
-    try {
-      const bc = new BroadcastChannel("obs-church-studio-bible-overlay");
-      bc.postMessage({
-        type: "mode-change",
-        mode: overlayMode,
-        theme,
-        timestamp: performance.now(),
-      });
-      bc.close();
-    } catch { /* browser may not support BroadcastChannel */ }
   }, [
     effectiveSelectedBibleTheme.settings,
     effectiveSelectedLowerThirdTheme.settings,
@@ -3078,7 +3062,7 @@ export default function DockBibleTab({
         : null;
       const mode = data?.overlayMode === "lower-third" || data?.overlayMode === "fullscreen"
         ? data.overlayMode
-        : (readDockBibleOverlayMode() ?? overlayMode);
+        : overlayModeRef.current;
 
       await dockObsClient.bringBibleOverlayForward(mode);
       if (data) {
@@ -3128,7 +3112,7 @@ export default function DockBibleTab({
       ]);
       const refA = `${selectedBook} ${selectedChapter}:${selA.verseRange}`;
       const refB = `${selectedBook} ${selectedChapter}:${selB.verseRange}`;
-      const liveOverlayMode = readDockBibleOverlayMode() ?? overlayMode;
+      const liveOverlayMode = overlayModeRef.current;
       const theme = liveOverlayMode === "fullscreen" ? effectiveSelectedBibleTheme.id : selectedLowerThirdTheme.id;
       const stageData = {
         book: selectedBook,
