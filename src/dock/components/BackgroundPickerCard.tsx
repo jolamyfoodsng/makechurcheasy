@@ -1,9 +1,8 @@
 import { createPortal } from "react-dom";
 import { HexColorPicker } from "react-colorful";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { BibleTheme } from "../../bible/types";
-import { LOWER_THIRD_SIZE_PRESETS } from "../../bible/types";
 import {
   COMPARE_GAP_PRESETS,
   COMPARE_LAYOUT_PRESETS,
@@ -26,6 +25,15 @@ import { getUserScopedKey } from "../../services/userScopedStorage";
 /* ── Types ── */
 type BackgroundType = "off" | "theme" | "color" | "image" | "pattern" | "video";
 type BackgroundPickerTab = "text" | "background" | "compare";
+type BackgroundPickerStorageScope = "bible" | "worship" | "notes" | "global";
+
+interface SavedLocalStyle {
+  id: string;
+  name: string;
+  createdAt: number;
+  backgroundType: BackgroundType;
+  settings: DockFullscreenQuickThemeSettings;
+}
 
 interface Props {
   quickSettings: DockFullscreenQuickThemeSettings;
@@ -45,9 +53,14 @@ interface Props {
   /** Active display mode — controls whether Compare Layout section is visible */
   displayMode?: "single" | "compare";
   initialTab?: BackgroundPickerTab;
+  /** Storage scope keeps local picker preferences separate for Bible, Worship, and Notes */
+  storageScope?: BackgroundPickerStorageScope;
 }
 
 const BG_TYPE_KEY = "dtb-bg-picker-type";
+const ACTIVE_TAB_KEY = "dtb-bg-picker-tab";
+const LOCAL_STYLES_KEY = "dtb-bg-picker-local-styles";
+const LOCAL_STYLE_LIMIT = 12;
 
 const BG_OPTIONS: Array<{ id: BackgroundType; label: string; icon: string }> = [
   { id: "off", label: "bgPicker.off", icon: "block" },
@@ -112,11 +125,74 @@ function inferBgTypeFromSettings(qs: DockFullscreenQuickThemeSettings): Backgrou
 function resolveInitialTab(
   tab: BackgroundPickerTab | undefined,
   displayMode: Props["displayMode"],
+  activeTabKey: string,
 ): BackgroundPickerTab {
-  if (tab === "compare" && displayMode !== "compare") {
-    return "text";
+  const stored = !tab ? (() => {
+    try {
+      const v = localStorage.getItem(activeTabKey);
+      if (v === "text" || v === "background" || v === "compare") return v;
+    } catch { /* ignore */ }
+    return null;
+  })() : null;
+
+  const resolved = tab ?? stored ?? "text";
+  if (resolved === "compare" && displayMode !== "compare") return "text";
+  if (resolved === "text" && displayMode === "compare") return "background";
+  return resolved;
+}
+
+function isBackgroundType(value: string | null): value is BackgroundType {
+  return value === "off" || value === "theme" || value === "color" || value === "image" || value === "pattern" || value === "video";
+}
+
+function createLocalStyleId(): string {
+  try {
+    if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  } catch { /* ignore */ }
+  return `style-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function cloneQuickSettings(settings: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings {
+  try {
+    return JSON.parse(JSON.stringify(settings)) as DockFullscreenQuickThemeSettings;
+  } catch {
+    return { ...settings };
   }
-  return tab ?? "text";
+}
+
+function parseSavedLocalStyles(raw: string | null): SavedLocalStyle[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is SavedLocalStyle => {
+        if (!item || typeof item !== "object") return false;
+        const candidate = item as Partial<SavedLocalStyle>;
+        return (
+          typeof candidate.id === "string" &&
+          typeof candidate.name === "string" &&
+          typeof candidate.createdAt === "number" &&
+          isBackgroundType(candidate.backgroundType ?? null) &&
+          !!candidate.settings &&
+          typeof candidate.settings === "object"
+        );
+      })
+      .slice(0, LOCAL_STYLE_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function getScopeLabel(scope: BackgroundPickerStorageScope): string {
+  if (scope === "bible") return "Bible";
+  if (scope === "worship") return "Worship";
+  if (scope === "notes") return "Notes";
+  return "Local";
+}
+
+function getModeLabel(mode: NonNullable<Props["overlayMode"]>): string {
+  return mode === "lower-third" ? "Lower Third" : "Full Screen";
 }
 
 /* ── Main Component ── */
@@ -134,30 +210,78 @@ export default function BackgroundPickerCard({
   overlayMode = "fullscreen",
   displayMode = "single",
   initialTab,
+  storageScope = "global",
 }: Props) {
   const { t } = useTranslation();
+  const localStylesSelectId = useId();
+  const storageKeys = useMemo(() => {
+    const scopeKey = `${storageScope}:${overlayMode}`;
+    return {
+      activeTab: getUserScopedKey(`${ACTIVE_TAB_KEY}:${scopeKey}`),
+      bgType: getUserScopedKey(`${BG_TYPE_KEY}:${scopeKey}`),
+      localStyles: getUserScopedKey(`${LOCAL_STYLES_KEY}:${scopeKey}`),
+    };
+  }, [overlayMode, storageScope]);
   const [activeTab, setActiveTab] = useState<BackgroundPickerTab>(() =>
-    resolveInitialTab(initialTab, displayMode),
+    resolveInitialTab(initialTab, displayMode, storageKeys.activeTab),
   );
   const [bgType, setBgType] = useState<BackgroundType>(() => {
     try {
-      const stored = localStorage.getItem(getUserScopedKey(BG_TYPE_KEY));
-      if (stored === "off" || stored === "theme" || stored === "color" || stored === "image" || stored === "pattern" || stored === "video") return stored;
+      const stored = localStorage.getItem(storageKeys.bgType);
+      if (isBackgroundType(stored)) return stored;
     } catch { /* ignore */ }
     return inferBgTypeFromSettings(quickSettings);
   });
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [styleMenuOpen, setStyleMenuOpen] = useState(false);
+  const [savedStyles, setSavedStyles] = useState<SavedLocalStyle[]>(() => {
+    try { return parseSavedLocalStyles(localStorage.getItem(storageKeys.localStyles)); } catch { return []; }
+  });
+  const [selectedLocalStyleId, setSelectedLocalStyleId] = useState("");
+  const [localStyleStatus, setLocalStyleStatus] = useState("");
   const [textAdvancedOpen, setTextAdvancedOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const styleMenuRef = useRef<HTMLDivElement>(null);
+  const prevStorageKeysRef = useRef(storageKeys);
   const compareBackdropValue: "off" | "theme" | "color" =
     bgType === "off" ? "off" : bgType === "color" ? "color" : "theme";
 
   useEffect(() => {
-    if (displayMode !== "compare" && activeTab === "compare") {
+    const previous = prevStorageKeysRef.current;
+    if (previous.activeTab === storageKeys.activeTab && previous.bgType === storageKeys.bgType && previous.localStyles === storageKeys.localStyles) {
+      return;
+    }
+    prevStorageKeysRef.current = storageKeys;
+    setActiveTab(resolveInitialTab(initialTab, displayMode, storageKeys.activeTab));
+    try {
+      const stored = localStorage.getItem(storageKeys.bgType);
+      setBgType(isBackgroundType(stored) ? stored : inferBgTypeFromSettings(quickSettings));
+    } catch {
+      setBgType(inferBgTypeFromSettings(quickSettings));
+    }
+    try {
+      setSavedStyles(parseSavedLocalStyles(localStorage.getItem(storageKeys.localStyles)));
+    } catch {
+      setSavedStyles([]);
+    }
+    setSelectedLocalStyleId("");
+    setLocalStyleStatus("");
+    setStyleMenuOpen(false);
+  }, [displayMode, initialTab, quickSettings, storageKeys]);
+
+  useEffect(() => {
+    if (displayMode === "compare" && activeTab === "text") {
+      setActiveTab("background");
+    } else if (displayMode !== "compare" && activeTab === "compare") {
       setActiveTab("text");
     }
   }, [activeTab, displayMode]);
+
+  // Persist active tab preference
+  useEffect(() => {
+    try { localStorage.setItem(storageKeys.activeTab, activeTab); } catch { /* ignore */ }
+  }, [activeTab, storageKeys.activeTab]);
 
   useEffect(() => {
     const inferredType = inferBgTypeFromSettings(quickSettings);
@@ -176,7 +300,7 @@ export default function BackgroundPickerCard({
   const handleTypeChange = useCallback((type: BackgroundType) => {
     setBgType(type);
     setDropdownOpen(false);
-    try { localStorage.setItem(getUserScopedKey(BG_TYPE_KEY), type); } catch { /* ignore */ }
+    try { localStorage.setItem(storageKeys.bgType, type); } catch { /* ignore */ }
 
     // Reset background preset so it doesn't override the picker's choice
     if (onBackgroundPresetChange) {
@@ -272,19 +396,67 @@ export default function BackgroundPickerCard({
     }
 
     onQuickSettingsChange(updater);
-  }, [onQuickSettingsChange, onBackgroundPresetChange]);
+  }, [onQuickSettingsChange, onBackgroundPresetChange, storageKeys.bgType]);
+
+  const persistSavedStyles = useCallback((next: SavedLocalStyle[]) => {
+    const trimmed = next.slice(0, LOCAL_STYLE_LIMIT);
+    setSavedStyles(trimmed);
+    try { localStorage.setItem(storageKeys.localStyles, JSON.stringify(trimmed)); } catch { /* ignore */ }
+  }, [storageKeys.localStyles]);
+
+  const selectedLocalStyle = savedStyles.find((style) => style.id === selectedLocalStyleId) ?? null;
+
+  const handleSaveLocalStyle = useCallback(() => {
+    const nextIndex = savedStyles.length + 1;
+    const styleName = `${getScopeLabel(storageScope)} ${getModeLabel(overlayMode)} Style ${nextIndex}`;
+    const style: SavedLocalStyle = {
+      id: createLocalStyleId(),
+      name: styleName,
+      createdAt: Date.now(),
+      backgroundType: bgType,
+      settings: cloneQuickSettings(quickSettings),
+    };
+    persistSavedStyles([style, ...savedStyles].slice(0, LOCAL_STYLE_LIMIT));
+    setSelectedLocalStyleId(style.id);
+    setLocalStyleStatus(`Saved as ${style.name}`);
+    setStyleMenuOpen(false);
+  }, [bgType, overlayMode, persistSavedStyles, quickSettings, savedStyles, storageScope]);
+
+  const handleApplyLocalStyle = useCallback((styleId: string) => {
+    setSelectedLocalStyleId(styleId);
+    const style = savedStyles.find((item) => item.id === styleId);
+    if (!style) {
+      setLocalStyleStatus("");
+      return;
+    }
+    setBgType(style.backgroundType);
+    try { localStorage.setItem(storageKeys.bgType, style.backgroundType); } catch { /* ignore */ }
+    onQuickSettingsChange(() => cloneQuickSettings(style.settings));
+    setLocalStyleStatus(`Applied ${style.name}`);
+  }, [onQuickSettingsChange, savedStyles, storageKeys.bgType]);
+
+  const handleDeleteSelectedLocalStyle = useCallback(() => {
+    if (!selectedLocalStyle) return;
+    persistSavedStyles(savedStyles.filter((style) => style.id !== selectedLocalStyle.id));
+    setSelectedLocalStyleId("");
+    setLocalStyleStatus(`Deleted ${selectedLocalStyle.name}`);
+    setStyleMenuOpen(false);
+  }, [persistSavedStyles, savedStyles, selectedLocalStyle]);
 
   // Close dropdown on outside click
   useEffect(() => {
-    if (!dropdownOpen) return;
+    if (!dropdownOpen && !styleMenuOpen) return;
     const handle = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
       }
+      if (styleMenuRef.current && !styleMenuRef.current.contains(e.target as Node)) {
+        setStyleMenuOpen(false);
+      }
     };
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
-  }, [dropdownOpen]);
+  }, [dropdownOpen, styleMenuOpen]);
 
   const selectedOption = BG_OPTIONS.find((o) => o.id === bgType) ?? BG_OPTIONS[0];
 
@@ -294,14 +466,16 @@ export default function BackgroundPickerCard({
       <div className="dtb-studio-card__body dtb-bg-picker">
         {/* Tab Navigation */}
         <div className="dtb-bg-picker__tabs">
-          <button
-            type="button"
-            className={`dtb-bg-picker__tab${activeTab === "text" ? " dtb-bg-picker__tab--active" : ""}`}
-            onClick={() => setActiveTab("text")}
-          >
-            <Icon name="text_fields" size={13} />
-            <span>{t('bgPicker.text')}</span>
-          </button>
+          {displayMode !== "compare" && (
+            <button
+              type="button"
+              className={`dtb-bg-picker__tab${activeTab === "text" ? " dtb-bg-picker__tab--active" : ""}`}
+              onClick={() => setActiveTab("text")}
+            >
+              <Icon name="text_fields" size={13} />
+              <span>{t('bgPicker.text')}</span>
+            </button>
+          )}
           <button
             type="button"
             className={`dtb-bg-picker__tab${activeTab === "background" ? " dtb-bg-picker__tab--active" : ""}`}
@@ -310,21 +484,82 @@ export default function BackgroundPickerCard({
             <Icon name="wallpaper" size={13} />
             <span>{t('bgPicker.background')}</span>
           </button>
-          <button
-            type="button"
-            className={`dtb-bg-picker__tab${activeTab === "compare" ? " dtb-bg-picker__tab--active" : ""}`}
-            onClick={() => {
-              if (displayMode !== "compare") return;
-              setActiveTab("compare");
-            }}
-            disabled={displayMode !== "compare"}
-            aria-disabled={displayMode !== "compare"}
-            title={displayMode === "compare" ? t("bgPicker.compare", "Compare") : t("bgPicker.compareDisabled", "Enable compare mode to edit compare settings")}
-          >
-            <Icon name="compare_arrows" size={13} />
-            <span>{t("bgPicker.compare", "Compare")}</span>
-          </button>
+          {displayMode === "compare" && (
+            <button
+              type="button"
+              className={`dtb-bg-picker__tab${activeTab === "compare" ? " dtb-bg-picker__tab--active" : ""}`}
+              onClick={() => setActiveTab("compare")}
+            >
+              <Icon name="compare_arrows" size={13} />
+              <span>{t("bgPicker.compare", "Compare")}</span>
+            </button>
+          )}
         </div>
+
+        <div className="dtb-local-styles">
+          <label className="dtb-local-styles__label" htmlFor={localStylesSelectId}>
+            Local Styles
+          </label>
+          <select
+            id={localStylesSelectId}
+            className="dtb-local-styles__select"
+            value={selectedLocalStyleId}
+            onChange={(event) => handleApplyLocalStyle(event.target.value)}
+            disabled={savedStyles.length === 0}
+            aria-label="Local Styles"
+            title="Local Styles"
+          >
+            <option value="">
+              {savedStyles.length === 0 ? "No saved styles yet" : "Choose a saved style"}
+            </option>
+            {savedStyles.map((style) => (
+              <option key={style.id} value={style.id}>
+                {style.name}
+              </option>
+            ))}
+          </select>
+          <div className="dtb-local-styles__menu-wrap" ref={styleMenuRef}>
+            <button
+              type="button"
+              className={`dtb-local-styles__menu-btn${styleMenuOpen ? " dtb-local-styles__menu-btn--open" : ""}`}
+              onClick={() => setStyleMenuOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={styleMenuOpen}
+              aria-label="Local style actions"
+              title="Local style actions"
+            >
+              <Icon name="more_vert" size={15} />
+            </button>
+            {styleMenuOpen && (
+              <div className="dtb-local-styles__menu" role="menu">
+                <button
+                  type="button"
+                  className="dtb-local-styles__menu-item"
+                  role="menuitem"
+                  onClick={handleSaveLocalStyle}
+                >
+                  <Icon name="save" size={14} />
+                  <span>Save As Local Style</span>
+                </button>
+                <button
+                  type="button"
+                  className="dtb-local-styles__menu-item dtb-local-styles__menu-item--danger"
+                  role="menuitem"
+                  onClick={handleDeleteSelectedLocalStyle}
+                  disabled={!selectedLocalStyle}
+                >
+                  <Icon name="delete_outline" size={14} />
+                  <span>Delete Selected Style</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        {localStyleStatus && (
+          <p className="dtb-local-styles__status" role="status">
+            {localStyleStatus}
+          </p>
+        )}
 
         {/* Background Tab */}
         {activeTab === "background" && (
@@ -409,61 +644,8 @@ export default function BackgroundPickerCard({
               )}
             </div>
 
-            {/* Opacity controls (shown for color/image/video) */}
-            {bgType !== "off" && (
-              <div className="dtb-bg-picker__settings">
-                <div className="dtb-slider-field">
-                  <div className="dtb-slider-field__head">
-                    <span>{t('bgPicker.overlayDarkness')}</span>
-                    <span className="dtb-slider-field__value">
-                      {Math.round(quickSettings.fullscreenShadeOpacity * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    className="dtb-slider"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={Math.round(quickSettings.fullscreenShadeOpacity * 100)}
-                    onChange={(e) => {
-                      onBackgroundPresetChange?.("theme");
-                      onQuickSettingsChange((prev) => ({
-                        ...prev,
-                        fullscreenShadeOpacity: Number(e.target.value) / 100,
-                      }));
-                    }
-                    }
-                    aria-label={t('bgPicker.overlayDarkness')}
-                  />
-                </div>
-                <div className="dtb-slider-field">
-                  <div className="dtb-slider-field__head">
-                    <span>{t('bgPicker.backgroundOpacity')}</span>
-                    <span className="dtb-slider-field__value">
-                      {Math.round(quickSettings.backgroundOpacity * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    className="dtb-slider"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={Math.round(quickSettings.backgroundOpacity * 100)}
-                    onChange={(e) => {
-                      onBackgroundPresetChange?.("theme");
-                      onQuickSettingsChange((prev) => ({
-                        ...prev,
-                        backgroundOpacity: Number(e.target.value) / 100,
-                      }));
-                    }
-                    }
-                    aria-label={t('bgPicker.backgroundOpacity')}
-                  />
-                </div>
-              </div>
-            )}
+
+
           </>
         )}
 
@@ -599,84 +781,7 @@ export default function BackgroundPickerCard({
             )}
 
             {/* ── Lower Third Sizes (only relevant in lower-third mode) ── */}
-            {overlayMode === "lower-third" && (
-              <div className="dtb-bg-picker__settings">
-                <div className="dtb-section-title">{t('bgPicker.lowerThird', 'Lower Third')}</div>
 
-                {/* Size */}
-                <div className="dtb-font-weight-row">
-                  <span className="dtb-position-label">{t('bgPicker.size', 'Size')}</span>
-                  <div className="dtb-position-options">
-                    {(["smallest", "smaller", "small", "medium", "big", "bigger", "biggest"] as const).map((s) => {
-                      const p = LOWER_THIRD_SIZE_PRESETS[s];
-                      return (
-                        <button
-                          key={s}
-                          type="button"
-                          className={`dtb-position-btn${quickSettings.lowerThirdSize === s ? " dtb-position-btn--active" : ""}`}
-                          onClick={() => onQuickSettingsChange((prev) => ({
-                            ...prev,
-                            lowerThirdSize: s,
-                            fontSize: p.fontSize,
-                            refFontSize: p.refFontSize,
-                            lineHeight: p.lineHeight,
-                            refSpacing: p.refSpacing,
-                          }))}
-                        >
-                          {s === "smallest" ? "XS" : s === "smaller" ? "S" : s === "small" ? "S+" : s === "medium" ? "M" : s === "big" ? "L" : s === "bigger" ? "XL" : "XXL"}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Width */}
-                <div className="dtb-font-weight-row">
-                  <span className="dtb-position-label">{t('bgPicker.width', 'Width')}</span>
-                  <div className="dtb-position-options">
-                    <button
-                      type="button"
-                      className={`dtb-position-btn${quickSettings.lowerThirdWidthPreset === "full" ? " dtb-position-btn--active" : ""}`}
-                      onClick={() => onQuickSettingsChange((prev) => ({ ...prev, lowerThirdWidthPreset: "full" }))}
-                    >
-                      {t('bgPicker.fullWidth', 'Full')}
-                    </button>
-                    <button
-                      type="button"
-                      className={`dtb-position-btn${quickSettings.lowerThirdWidthPreset === "md" ? " dtb-position-btn--active" : ""}`}
-                      onClick={() => onQuickSettingsChange((prev) => ({ ...prev, lowerThirdWidthPreset: "md" }))}
-                    >
-                      {t('bgPicker.halfWidth', 'Half')}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Text Alignment */}
-                <div className="dtb-font-weight-row">
-                  <span className="dtb-position-label">{t('bgPicker.alignment', 'Alignment')}</span>
-                  <div className="dtb-position-options">
-                    {(["left", "center", "right"] as const).map((a) => (
-                      <button
-                        key={a}
-                        type="button"
-                        className={`dtb-position-btn${quickSettings.textAlign === a ? " dtb-position-btn--active" : ""}`}
-                        onClick={() => onQuickSettingsChange((prev) => ({
-                          ...prev,
-                          textAlign: a,
-                          refTextAlign: "match",
-                          lowerThirdPosition: a,
-                        }))}
-                      >
-                        {a === "left" ? t('common.left') : a === "center" ? t('common.center') : t('common.right')}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Reference Position */}
-
-              </div>
-            )}
           </>
         )}
 

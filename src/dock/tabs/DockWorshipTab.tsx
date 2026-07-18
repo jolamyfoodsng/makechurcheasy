@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { DockStagedItem, DockWorshipSection } from "../dockTypes";
 import { dockObsClient } from "../dockObsClient";
+import { overlayBridge } from "../dockOverlayBridge";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { BUILTIN_THEMES } from "../../bible/themes/builtinThemes";
 import {
@@ -46,42 +47,19 @@ import {
 } from "../lowerThirdQuickSettings";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
-import { ALL_THEMES, type ThemeLike } from "../../lowerthirds/themes";
 import { normalizeCompareThemeSettings } from "../compareThemeConfig";
+import DockNotesTab from "./DockNotesTab";
 
 interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
   productionDefaults: DockProductionModuleSettings;
   isActive?: boolean;
-  compactToolbar?: boolean;
 }
 
 type OverlayMode = "fullscreen" | "lower-third";
 
-type WorshipSubTab = "worship" | "announcements";
-type AnnouncementType = "general" | "speaker" | "event" | "welcome" | "giving";
-
-interface DockAnnouncement {
-  id: string;
-  type: AnnouncementType;
-  title: string;
-  subtitle: string;
-  content: string;
-  imageUrl?: string;
-  speakerName?: string;
-  speakerRole?: string;
-  speakerPhotoUrl?: string;
-  obsThemeId?: string;
-}
-
-const ANNOUNCEMENT_TYPES: { value: AnnouncementType; label: string }[] = [
-  { value: "general", label: "General" },
-  { value: "speaker", label: "Speaker" },
-  { value: "event", label: "Event" },
-  { value: "welcome", label: "Welcome" },
-  { value: "giving", label: "Giving" },
-];
+type WorshipSubTab = "worship" | "notes";
 
 interface DockSong {
   id: string;
@@ -115,6 +93,7 @@ const DOCK_WORSHIP_PREFS_KEY = "ocs-dock-worship-preferences";
 const DOCK_WORSHIP_PREFS_APP_KEY = "dock-worship-preferences";
 const DOCK_WORSHIP_UI_PREFS_KEY = "ocs-dock-worship-ui-preferences";
 const DOCK_WORSHIP_SONG_DEFAULTS_KEY = "ocs-dock-worship-song-defaults-v1";
+const DOCK_WORSHIP_CACHED_SONGS_KEY = "ocs-dock-worship-cached-songs-v1";
 const DOCK_WORSHIP_RECENT_SEARCHES_KEY = "ocs-dock-worship-recent-searches-v1";
 const MIN_LINES_PER_SLIDE = 1;
 const MAX_LINES_PER_SLIDE = 12;
@@ -123,7 +102,6 @@ const DOCK_WORSHIP_SAVE_TIMEOUT_MS = 3500;
 const DOCK_WORSHIP_SAVE_FALLBACK_DELAY_MS = 350;
 const DOCK_WORSHIP_SAVE_RESULT_POLL_MS = 250;
 const DOCK_WORSHIP_RECENT_SEARCH_LIMIT = 6;
-const DOCK_ANNOUNCEMENTS_KEY = "ocs-dock-announcements-v1";
 
 interface DockSongDraft {
   title: string;
@@ -222,6 +200,25 @@ function writeDockSongDefaults(next: DockSongDefaults): void {
   }
 }
 
+function cacheSongsLocally(songs: DockSong[]): void {
+  try {
+    localStorage.setItem(getUserScopedKey(DOCK_WORSHIP_CACHED_SONGS_KEY), JSON.stringify(songs));
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadCachedSongs(): DockSong[] {
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(DOCK_WORSHIP_CACHED_SONGS_KEY));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function rememberDockSongDefault(song: DockSong): void {
   const defaults = readDockSongDefaults();
   if (defaults[song.id]) return;
@@ -252,123 +249,6 @@ function rememberDockSongDefaults(songs: DockSong[]): void {
     changed = true;
   }
   if (changed) writeDockSongDefaults(defaults);
-}
-
-function getThemeFilterHintsForAnnouncementType(type: AnnouncementType): string[] {
-  switch (type) {
-    case "speaker": return ["speaker", "pastor", "name", "title"];
-    case "event": return ["event", "announcement", "date", "reminder"];
-    case "giving": return ["giving", "offering", "tithe"];
-    default: return ["announcement", "general", "welcome"];
-  }
-}
-
-function filterThemesByType(type: AnnouncementType): ThemeLike[] {
-  const hints = getThemeFilterHintsForAnnouncementType(type);
-  return ALL_THEMES.filter((t) => {
-    if (!t.html || !t.css) return false;
-    const tagList = (t.tags || []).map((tag) => tag.trim().toLowerCase());
-    const idName = `${t.id} ${t.name || ""} ${t.category || ""}`.toLowerCase();
-    return hints.some((hint) => {
-      if (idName.includes(hint)) return true;
-      return tagList.some((tag) => tag === hint || tag.includes(hint) || hint.includes(tag));
-    });
-  });
-}
-
-function buildAnnouncementValues(announcement: DockAnnouncement): Record<string, string> {
-  const v: Record<string, string> = {};
-  if (announcement.type === "speaker") {
-    const name = announcement.speakerName || announcement.title;
-    const role = announcement.speakerRole || announcement.subtitle;
-    v.name = name;
-    v.role = role;
-    v.title = role;
-    v.headline = name;
-    v.subtitle = role;
-    v.subline = role;
-    v.label = name;
-    v.details = role;
-    v.line1 = name;
-    v.line2 = role;
-  } else if (announcement.type === "event") {
-    const evName = announcement.title;
-    const evSub = announcement.subtitle;
-    const evDesc = announcement.content;
-    v.name = evName;
-    v.title = evName;
-    v.headline = evName;
-    v.subtitle = evSub;
-    v.subline = evSub;
-    v.role = evSub;
-    v.description = evDesc;
-    v.label = evName;
-    v.details = evDesc || evSub;
-    v.line1 = evName;
-    v.line2 = evSub;
-  } else {
-    v.name = announcement.title;
-    v.title = announcement.subtitle;
-    v.headline = announcement.title;
-    v.subtitle = announcement.subtitle;
-    v.role = announcement.subtitle;
-    v.description = announcement.content;
-    v.label = announcement.title;
-    v.details = announcement.subtitle || announcement.content;
-    v.line1 = announcement.title;
-    v.line2 = announcement.subtitle || announcement.content;
-  }
-  return v;
-}
-
-function generateAnnouncementSlides(announcement: DockAnnouncement): DockWorshipSection[] {
-  const slides: DockWorshipSection[] = [];
-
-  if (announcement.type === "speaker" && announcement.speakerName) {
-    slides.push({
-      id: crypto.randomUUID?.() ?? `slide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      label: "Speaker",
-      text: announcement.speakerName + (announcement.speakerRole ? "\n" + announcement.speakerRole : ""),
-    });
-  }
-
-  const sections = announcement.content.split(/\n\n+/).filter(Boolean);
-  if (sections.length > 0) {
-    sections.forEach((text) => {
-      slides.push({
-        id: crypto.randomUUID?.() ?? `slide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        label: announcement.title,
-        text,
-      });
-    });
-  } else if (announcement.title) {
-    slides.push({
-      id: crypto.randomUUID?.() ?? `slide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      label: announcement.subtitle || "",
-      text: announcement.title,
-    });
-  }
-
-  return slides;
-}
-
-function loadDockAnnouncements(): DockAnnouncement[] {
-  try {
-    const raw = localStorage.getItem(getUserScopedKey(DOCK_ANNOUNCEMENTS_KEY));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveDockAnnouncements(items: DockAnnouncement[]): void {
-  try {
-    localStorage.setItem(getUserScopedKey(DOCK_ANNOUNCEMENTS_KEY), JSON.stringify(items));
-  } catch {
-    /* ignore */
-  }
 }
 
 function mapAppSongToDockSong(song: {
@@ -862,7 +742,7 @@ function fuzzyMatch(query: string, target: string): boolean {
   return qi === q.length;
 }
 
-export default function DockWorshipTab({ staged, onStage, productionDefaults, isActive = true, compactToolbar }: Props) {
+export default function DockWorshipTab({ staged, onStage, productionDefaults, isActive = true }: Props) {
   const { t } = useTranslation();
   const [songs, setSongs] = useState<DockSong[]>([]);
   const rawSongsRef = useRef<DockSong[]>([]);
@@ -898,26 +778,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const [showLineCountPopover, setShowLineCountPopover] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
-  const [recentSearches, setRecentSearches] = useState<string[]>(() => readRecentWorshipSearches());
   const [worshipSubTab, setWorshipSubTab] = useState<WorshipSubTab>("worship");
-  const [announcements, setAnnouncements] = useState<DockAnnouncement[]>(() => loadDockAnnouncements());
-  const [openedAnnouncement, setOpenedAnnouncement] = useState<DockAnnouncement | null>(null);
-  const [announcementSearchQuery, setAnnouncementSearchQuery] = useState("");
-  const [announcementSlideIdx, setAnnouncementSlideIdx] = useState<number | null>(null);
-  const [visibleAnnouncementSlideIdx, setVisibleAnnouncementSlideIdx] = useState<number | null>(null);
-  const [announcementOverlayVisible, setAnnouncementOverlayVisible] = useState(true);
-  const [isNewAnnouncementModalOpen, setIsNewAnnouncementModalOpen] = useState(false);
-  const [announcementDraft, setAnnouncementDraft] = useState<{
-    type: AnnouncementType;
-    title: string;
-    subtitle: string;
-    content: string;
-    imageUrl: string;
-    speakerName: string;
-    speakerRole: string;
-    speakerPhotoUrl: string;
-    obsThemeId: string;
-  }>({ type: "general", title: "", subtitle: "", content: "", imageUrl: "", speakerName: "", speakerRole: "", speakerPhotoUrl: "", obsThemeId: "" });
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => readRecentWorshipSearches());
   const [selectedSong, setSelectedSong] = useState<DockSong | null>(null);
   const [visibleIdx, setVisibleIdx] = useState<number | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
@@ -949,6 +811,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const [newSongSource, setNewSongSource] = useState<Pick<DockSong, "importSourceName" | "importSourceType" | "importSourceUrl"> | null>(null);
   const [isNewSongModalOpen, setIsNewSongModalOpen] = useState(false);
   const [slideEditor, setSlideEditor] = useState<{ index: number; label: string; text: string } | null>(null);
+  const [slideEditorAutoSplitPopoverOpen, setSlideEditorAutoSplitPopoverOpen] = useState(false);
+  const slideEditorAutoSplitPopoverRef = useRef<HTMLDivElement>(null);
   const [deletedSections, setDeletedSections] = useState<DeletedWorshipSection[]>([]);
   const [showDeletedSectionsPopover, setShowDeletedSectionsPopover] = useState(false);
   const [onlineSearchOpen, setOnlineSearchOpen] = useState(false);
@@ -963,6 +827,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const toastTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const selectedFSThemeRef = useRef<BibleTheme>(productionDefaults.fullscreenTheme ?? BUILTIN_THEMES[0]);
   const selectedLTThemeRef = useRef<BibleTheme>(productionDefaults.lowerThirdTheme ?? BUILTIN_THEMES[0]);
+  const fsThemeSettingsRef = useRef<any>(null);
+  const ltThemeSettingsRef = useRef<any>(null);
   const searchRef = useRef<HTMLDivElement>(null);
   const lineCountPopoverRef = useRef<HTMLDivElement>(null);
   const deletedSectionsPopoverRef = useRef<HTMLDivElement>(null);
@@ -972,6 +838,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const suppressAutoProjectionTimerRef = useRef<number | null>(null);
   const songsPollBusyRef = useRef(false);
   const liveSectionRequestIdRef = useRef(0);
+  const modeOnlyChangeRef = useRef(false);
+  const modeSwitchSequenceRef = useRef(0);
 
   const selectedSongSections = useMemo(
     () => (selectedSong ? parseLyricSections(selectedSong.lyrics, linesPerSlide, selectedSong.autoSplit ?? false) : []),
@@ -1016,38 +884,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     () => selectedSongSections.map((_, index) => index).filter((index) => !hiddenSectionIndexes.has(index)),
     [hiddenSectionIndexes, selectedSongSections],
   );
-
-  const announcementSections = useMemo(
-    () => (openedAnnouncement ? generateAnnouncementSlides(openedAnnouncement) : []),
-    [openedAnnouncement],
-  );
-
-  const activeAnnouncementIndex = useMemo(() => {
-    if (!openedAnnouncement || announcementSections.length === 0) return null;
-    if (announcementSlideIdx !== null && announcementSlideIdx < announcementSections.length) {
-      return announcementSlideIdx;
-    }
-    if (visibleAnnouncementSlideIdx !== null && visibleAnnouncementSlideIdx < announcementSections.length) {
-      return visibleAnnouncementSlideIdx;
-    }
-    return 0;
-  }, [
-    announcementSections.length,
-    announcementSlideIdx,
-    openedAnnouncement,
-    visibleAnnouncementSlideIdx,
-  ]);
-
-  const filteredAnnouncements = useMemo(() => {
-    if (!announcementSearchQuery.trim()) return announcements;
-    const q = announcementSearchQuery.trim().toLowerCase();
-    return announcements.filter((a) =>
-      a.title.toLowerCase().includes(q) ||
-      a.subtitle.toLowerCase().includes(q) ||
-      a.content.toLowerCase().includes(q) ||
-      a.type.toLowerCase().includes(q),
-    );
-  }, [announcementSearchQuery, announcements]);
 
   const lyricsFilteredSectionIndexes = useMemo(() => {
     if (!lyricsSearchQuery.trim()) return visibleSectionIndexes;
@@ -1265,11 +1101,22 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
         return;
       }
     } catch { /* JSON fetch failed */ }
+
+    // Last resort: load from localStorage cache
+    const cached = loadCachedSongs();
+    if (cached.length > 0) {
+      applySongLimit(cached);
+    }
   }, [mapSongs]);
 
   useEffect(() => {
     void loadSongs();
   }, [loadSongs]);
+
+  // Persist songs to localStorage whenever they change (reliable fallback)
+  useEffect(() => {
+    if (songs.length > 0) cacheSongsLocally(songs);
+  }, [songs]);
 
   // Re-filter when songLimit changes
   useEffect(() => {
@@ -1472,11 +1319,46 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     selectedLTThemeRef.current = theme;
   }, []);
   const handleOverlayModeChange = useCallback((nextMode: OverlayMode) => {
+    if (nextMode === overlayMode) return;
+
+    modeOnlyChangeRef.current = true;
+
     setOverlayMode(nextMode);
-    // Persist synchronously so a send that starts during startup uses the
-    // operator's latest choice rather than the previous render's mode.
     saveDockWorshipOverlayMode(nextMode);
-  }, []);
+
+    overlayBridge.publish({
+      channel: "worship",
+      type: "mode-change",
+      mode: nextMode,
+      transitionId: ++modeSwitchSequenceRef.current,
+      timestamp: performance.now(),
+    });
+
+    try {
+      const bc = new BroadcastChannel("obs-church-studio-worship-overlay");
+      bc.postMessage({
+        type: "mode-change",
+        mode: nextMode,
+        theme: nextMode === "lower-third" ? ltThemeSettingsRef.current : fsThemeSettingsRef.current,
+        transitionId: modeSwitchSequenceRef.current,
+        timestamp: performance.now(),
+      });
+      bc.close();
+    } catch { /* browser may not support BroadcastChannel */ }
+
+    try {
+      const raw = localStorage.getItem("worship-overlay-data");
+      if (raw) {
+        const existing = JSON.parse(raw);
+        existing.mode = nextMode;
+        localStorage.setItem("worship-overlay-data", JSON.stringify(existing));
+      }
+    } catch { /* ignore */ }
+
+    requestAnimationFrame(() => {
+      modeOnlyChangeRef.current = false;
+    });
+  }, [overlayMode]);
   const activeThemePickerProps = overlayMode === "fullscreen"
     ? { selectedThemeId: selectedFSTheme.id, onSelect: handleSelectFSTheme }
     : { selectedThemeId: selectedLTTheme.id, onSelect: handleSelectLTTheme };
@@ -1500,6 +1382,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   useEffect(() => {
     selectedLTThemeRef.current = selectedLTTheme;
   }, [selectedLTTheme]);
+
+  useEffect(() => {
+    fsThemeSettingsRef.current = effectiveSelectedFSTheme.settings;
+  }, [effectiveSelectedFSTheme.settings]);
+
+  useEffect(() => {
+    ltThemeSettingsRef.current = effectiveSelectedLTTheme.settings;
+  }, [effectiveSelectedLTTheme.settings]);
 
   const buildSectionPayload = useCallback(
     (idx: number, options?: { backgroundOnly?: boolean }) => {
@@ -1572,7 +1462,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   );
 
   const goLiveSection = useCallback(
-    async (idx: number, options?: { backgroundOnly?: boolean }) => {
+    (idx: number, options?: { backgroundOnly?: boolean }) => {
       obsAutoPushArmedRef.current = true;
       const payload = buildSectionPayload(idx, options);
       if (!payload) return;
@@ -1583,165 +1473,41 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       setVisibleIdx(idx);
 
       onStage(payload.stageItem);
+
+      const pushLive = () => payload.obsData.overlayMode === "lower-third"
+        ? dockObsClient.pushWorshipOverlayFast(payload.obsData)
+        : dockObsClient.pushWorshipLyrics(payload.obsData);
+
       const bringWorshipForward = dockObsClient
         .bringWorshipOverlayForward(payload.obsData.overlayMode ?? "fullscreen")
         .catch(() => { });
+
       void bringWorshipForward
         .then(() => dockObsClient.primeWorshipOverlay(payload.obsData))
         .catch(() => { });
 
-      try {
-        await bringWorshipForward;
-        if (payload.obsData.overlayMode === "lower-third") {
-          await dockObsClient.pushWorshipOverlayFast(payload.obsData);
-        } else {
-          await dockObsClient.pushWorshipLyrics(payload.obsData);
-        }
-        if (requestId !== liveSectionRequestIdRef.current) return;
-        setWorshipOverlayVisible(true);
-        track("song_presented");
-        trackWorshipSongPresented();
-      } catch (err) {
-        if (requestId !== liveSectionRequestIdRef.current) return;
-        const message = err instanceof Error ? err.message : String(err);
-        const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
-        if (!isTransient) {
-          console.warn("[DockWorshipTab] Push worship failed:", err);
-          setActionError(message);
-        } else {
-          console.warn("[DockWorshipTab] Push worship failed (transient):", message);
-        }
-      }
+      bringWorshipForward
+        .then(pushLive)
+        .then(() => {
+          if (requestId !== liveSectionRequestIdRef.current) return;
+          setWorshipOverlayVisible(true);
+          track("song_presented");
+          trackWorshipSongPresented();
+        })
+        .catch((err) => {
+          if (requestId !== liveSectionRequestIdRef.current) return;
+          const message = err instanceof Error ? err.message : String(err);
+          const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
+          if (!isTransient) {
+            console.warn("[DockWorshipTab] Push worship failed:", err);
+            setActionError(message);
+          } else {
+            console.warn("[DockWorshipTab] Push worship failed (transient):", message);
+          }
+        });
     },
     [buildSectionPayload, onStage],
   );
-
-  const buildAnnouncementPayload = useCallback(
-    (idx: number) => {
-      if (!openedAnnouncement) return null;
-      const section = announcementSections[idx];
-      if (!section) return null;
-
-      const liveOverlayMode = readDockWorshipOverlayMode() ?? overlayMode;
-      const theme = liveOverlayMode === "fullscreen" ? effectiveSelectedFSTheme : effectiveSelectedLTTheme;
-      const sectionLabel = section.label || openedAnnouncement.title;
-      const stageItem = {
-        type: "worship" as const,
-        label: sectionLabel,
-        subtitle: openedAnnouncement.title,
-        data: {
-          announcement: openedAnnouncement,
-          sectionIdx: idx,
-          sectionText: section.text,
-          sectionLabel: section.label,
-          overlayMode: liveOverlayMode,
-          theme: theme.id,
-          bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
-          liveOverrides: null,
-          backgroundOnly: false,
-        },
-      };
-
-      if (openedAnnouncement.obsThemeId && liveOverlayMode === "lower-third") {
-        const customTheme = ALL_THEMES.find((entry) => entry.id === openedAnnouncement.obsThemeId);
-        if (customTheme?.html && customTheme?.css) {
-          return {
-            stageItem,
-            obsData: {
-              sectionText: section.text,
-              sectionLabel,
-              songTitle: openedAnnouncement.title,
-              overlayMode: "lower-third" as const,
-              ltTheme: { id: customTheme.id, html: customTheme.html, css: customTheme.css },
-              values: buildAnnouncementValues(openedAnnouncement),
-              bibleThemeSettings: null,
-              liveOverrides: null,
-              backgroundOnly: false,
-            },
-          };
-        }
-      }
-
-      return {
-        stageItem,
-        obsData: {
-          sectionText: section.text,
-          sectionLabel,
-          songTitle: openedAnnouncement.title,
-          overlayMode: liveOverlayMode,
-          bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
-          liveOverrides: null,
-          backgroundOnly: false,
-        },
-      };
-    },
-    [
-      announcementSections,
-      effectiveSelectedFSTheme,
-      effectiveSelectedLTTheme,
-      openedAnnouncement,
-      overlayMode,
-    ],
-  );
-
-  const pushAnnouncementSection = useCallback(
-    async (idx: number) => {
-      obsAutoPushArmedRef.current = true;
-      const payload = buildAnnouncementPayload(idx);
-      if (!payload) return;
-
-      setActionError("");
-      setAnnouncementSlideIdx(idx);
-      setVisibleAnnouncementSlideIdx(idx);
-      onStage(payload.stageItem);
-
-      try {
-        await ensureObsConnected();
-      } catch {
-        return;
-      }
-
-      try {
-        await dockObsClient.pushAnnouncement(payload.obsData);
-        setAnnouncementOverlayVisible(true);
-      } catch (err) {
-        console.warn("[DockWorshipTab] Announcement OBS push failed:", err);
-        setActionError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [buildAnnouncementPayload, onStage],
-  );
-
-  const restageAnnouncementCurrent = useCallback(
-    async () => {
-      if (activeAnnouncementIndex === null) return;
-      await pushAnnouncementSection(activeAnnouncementIndex);
-    },
-    [activeAnnouncementIndex, pushAnnouncementSection],
-  );
-
-  const handleToggleAnnouncementVisibility = useCallback(async () => {
-    setActionError("");
-
-    try {
-      await ensureObsConnected();
-
-      if (announcementOverlayVisible) {
-        await dockObsClient.clearAnnouncement();
-        setAnnouncementOverlayVisible(false);
-        return;
-      }
-
-      if (activeAnnouncementIndex !== null) {
-        await pushAnnouncementSection(activeAnnouncementIndex);
-      } else {
-        setAnnouncementOverlayVisible(true);
-      }
-    } catch (err) {
-      console.warn("[DockWorshipTab] Toggle announcement visibility failed:", err);
-      setActionError(err instanceof Error ? err.message : String(err));
-    }
-  }, [activeAnnouncementIndex, announcementOverlayVisible, pushAnnouncementSection]);
 
   const saveSongInMainApp = useCallback(
     (payload: WorshipDockSongSavePayload): Promise<DockSong> =>
@@ -1937,7 +1703,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
 
   const renderLyricsToolbar = useCallback((target: LyricsEditorTarget) => {
     const isAutoSplitOpen = autoSplitPopoverTarget === target;
-    const canUndo = Boolean(formatLyricsUndoRef.current[target]);
     return (
       <div className="dock-lyrics-toolbar" role="toolbar" aria-label="Lyrics formatting tools">
         <div className="dock-lyrics-toolbar__cluster dock-lyrics-toolbar__cluster--format">
@@ -1976,10 +1741,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
             <Icon name="auto_fix_high" size={12} />
             <span>Clean Text</span>
           </button>
-          <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics(target, "remove-empty")} title="Remove Empty">
-            <Icon name="remove" size={12} />
-            <span>Remove Empty</span>
-          </button>
+
           <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics(target, "remove-verse-numbers")} title="Verse Numbers">
             <Icon name="tag" size={12} />
             <span>Verse Numbers</span>
@@ -2014,16 +1776,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
             <span>Tt</span>
           </button>
         </div>
-        <button
-          type="button"
-          className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--undo"
-          onClick={() => handleUndoFormatting(target)}
-          title="Undo"
-          disabled={!canUndo}
-        >
-          <Icon name="undo" size={12} />
-          <span>Undo</span>
-        </button>
+
       </div>
     );
   }, [autoSplitPopoverTarget, formatLyrics, handleUndoFormatting, t]);
@@ -2122,104 +1875,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     return visibleSectionIndexes[0] ?? null;
   }, [visibleIdx, selectedIdx, selectedSong, visibleSectionIndexes]);
 
-  const pushActiveContentWithThemeSettings = useCallback(async (
-    nextFullscreenQuickThemeSettings: DockFullscreenQuickThemeSettings | null | undefined,
-    nextLowerThirdQuickThemeSettings: DockFullscreenQuickThemeSettings | null | undefined,
-    nextLowerThirdQuickThemeSettingsLinkedToFullscreen = lowerThirdQuickThemeSettingsLinkedToFullscreen,
-  ) => {
-    const fullscreenTheme = selectedFSThemeRef.current;
-    const lowerThirdTheme = selectedLTThemeRef.current;
-    const fullscreenVariant = fullscreenTheme.variants?.fullscreen;
-    const lowerThirdVariant = lowerThirdTheme.variants?.lowerThird;
-    const fullscreenBaseTheme = fullscreenVariant
-      ? { ...fullscreenTheme, settings: fullscreenVariant.settings, rawTemplate: fullscreenVariant.rawTemplate }
-      : fullscreenTheme;
-    const lowerThirdBaseTheme = lowerThirdVariant
-      ? { ...lowerThirdTheme, settings: lowerThirdVariant.settings, rawTemplate: lowerThirdVariant.rawTemplate }
-      : lowerThirdTheme;
-    const effectiveFullscreenTheme = applyQuickThemeSettings(fullscreenBaseTheme, nextFullscreenQuickThemeSettings ?? null);
-    const defaultLowerThirdSettings = buildDefaultLowerThirdQuickThemeSettings(lowerThirdBaseTheme.settings, "theme");
-    const effectiveLowerThirdTheme = applyQuickThemeSettings(
-      lowerThirdBaseTheme,
-      nextLowerThirdQuickThemeSettingsLinkedToFullscreen
-        ? buildLinkedLowerThirdQuickThemeSettings(defaultLowerThirdSettings, nextFullscreenQuickThemeSettings)
-        : (nextLowerThirdQuickThemeSettings ?? defaultLowerThirdSettings),
-    );
-
-    if (openedAnnouncement && activeAnnouncementIndex !== null) {
-      const section = announcementSections[activeAnnouncementIndex];
-      if (!section || !openedAnnouncement) return;
-
-      const liveOverlayMode = readDockWorshipOverlayMode() ?? overlayMode;
-      const theme = liveOverlayMode === "fullscreen" ? effectiveFullscreenTheme : effectiveLowerThirdTheme;
-      const sectionLabel = section.label || openedAnnouncement.title;
-
-      if (openedAnnouncement.obsThemeId && liveOverlayMode === "lower-third") {
-        const customTheme = ALL_THEMES.find((entry) => entry.id === openedAnnouncement.obsThemeId);
-        if (customTheme?.html && customTheme?.css) {
-          await ensureObsConnected();
-          await dockObsClient.pushAnnouncement({
-            sectionText: section.text,
-            sectionLabel,
-            songTitle: openedAnnouncement.title,
-            overlayMode: "lower-third",
-            ltTheme: { id: customTheme.id, html: customTheme.html, css: customTheme.css },
-            values: buildAnnouncementValues(openedAnnouncement),
-            bibleThemeSettings: null,
-            liveOverrides: null,
-            backgroundOnly: false,
-          });
-          return;
-        }
-      }
-
-      await ensureObsConnected();
-      await dockObsClient.pushAnnouncement({
-        sectionText: section.text,
-        sectionLabel,
-        songTitle: openedAnnouncement.title,
-        overlayMode: liveOverlayMode,
-        bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
-        liveOverrides: null,
-        backgroundOnly: false,
-      });
-      return;
-    }
-
-    if (!selectedSong || activeSectionIndex === null) return;
-    const section = selectedSongSections[activeSectionIndex];
-    if (!section) return;
-
-    const liveOverlayMode = readDockWorshipOverlayMode() ?? overlayMode;
-    const theme = liveOverlayMode === "fullscreen" ? effectiveFullscreenTheme : effectiveLowerThirdTheme;
-    await ensureObsConnected();
-    const obsData = {
-      sectionText: section.text,
-      sectionLabel: cleanWorshipSectionLabel(section.label),
-      songTitle: selectedSong.title,
-      artist: selectedSong.artist,
-      overlayMode: liveOverlayMode,
-      bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
-      liveOverrides: null,
-      backgroundOnly: showWorshipBackgroundOnly,
-    };
-    if (liveOverlayMode === "lower-third") {
-      await dockObsClient.pushWorshipOverlayFast(obsData);
-      return;
-    }
-    await dockObsClient.pushWorshipLyrics(obsData);
-  }, [
-    activeAnnouncementIndex,
-    activeSectionIndex,
-    announcementSections,
-    lowerThirdQuickThemeSettingsLinkedToFullscreen,
-    openedAnnouncement,
-    overlayMode,
-    selectedSong,
-    selectedSongSections,
-    showWorshipBackgroundOnly,
-  ]);
-
   const handleSaveFullscreenQuickThemeSettings = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
     const nextSavedSettings = { ...nextSettings };
     setSavedFullscreenQuickThemeSettings(nextSavedSettings);
@@ -2228,60 +1883,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       setSavedLowerThirdQuickThemeSettings(null);
       setLowerThirdQuickThemeSettings(null);
     }
-    void pushActiveContentWithThemeSettings(
-      nextSavedSettings,
-      lowerThirdQuickThemeSettingsLinkedToFullscreen
-        ? null
-        : lowerThirdQuickThemeSettings,
-      lowerThirdQuickThemeSettingsLinkedToFullscreen,
-    ).catch((err) => {
-      console.warn("[DockWorshipTab] Save fullscreen quick settings push failed:", err);
-    });
-  }, [lowerThirdQuickThemeSettings, lowerThirdQuickThemeSettingsLinkedToFullscreen, pushActiveContentWithThemeSettings]);
-
-  const handlePreviewFullscreenQuickThemeSettings = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
-    const nextPreviewSettings = { ...nextSettings };
-    setFullscreenQuickThemeSettings(nextPreviewSettings);
-    if (lowerThirdQuickThemeSettingsLinkedToFullscreen) {
-      setLowerThirdQuickThemeSettings(null);
-    }
-    void pushActiveContentWithThemeSettings(
-      nextPreviewSettings,
-      lowerThirdQuickThemeSettingsLinkedToFullscreen
-        ? null
-        : lowerThirdQuickThemeSettings,
-      lowerThirdQuickThemeSettingsLinkedToFullscreen,
-    ).catch((err) => {
-      console.warn("[DockWorshipTab] Preview fullscreen quick settings push failed:", err);
-    });
-  }, [lowerThirdQuickThemeSettings, lowerThirdQuickThemeSettingsLinkedToFullscreen, pushActiveContentWithThemeSettings]);
+  }, [lowerThirdQuickThemeSettingsLinkedToFullscreen]);
 
   const handleSaveLowerThirdQuickThemeSettings = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
     const nextSavedSettings = { ...nextSettings };
     setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
     setSavedLowerThirdQuickThemeSettings(nextSavedSettings);
     setLowerThirdQuickThemeSettings(nextSavedSettings);
-    void pushActiveContentWithThemeSettings(
-      fullscreenQuickThemeSettings,
-      nextSavedSettings,
-      false,
-    ).catch((err) => {
-      console.warn("[DockWorshipTab] Save lower-third quick settings push failed:", err);
-    });
-  }, [fullscreenQuickThemeSettings, pushActiveContentWithThemeSettings]);
-
-  const handlePreviewLowerThirdQuickThemeSettings = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
-    setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
-    setLowerThirdQuickThemeSettings({ ...nextSettings });
-    void pushActiveContentWithThemeSettings(
-      fullscreenQuickThemeSettings,
-      nextSettings,
-      false,
-    ).catch((err) => {
-      console.warn("[DockWorshipTab] Preview lower-third quick settings push failed:", err);
-    });
-  }, [fullscreenQuickThemeSettings, pushActiveContentWithThemeSettings]);
-
+  }, []);
 
   const handleSelectSong = useCallback((song: DockSong) => {
     setRecentSearches(pushRecentWorshipSearch(`song: ${song.title}`));
@@ -2345,6 +1954,23 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     },
     [selectedSongSections],
   );
+
+  const handleFormatSlideEditor = useCallback((action: LyricsFormatAction, autosplitLines?: number) => {
+    setSlideEditor((draft) => {
+      if (!draft) return draft;
+      return { ...draft, text: applyLyricsFormat(draft.text, action, autosplitLines) };
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (slideEditorAutoSplitPopoverRef.current && !slideEditorAutoSplitPopoverRef.current.contains(event.target as Node)) {
+        setSlideEditorAutoSplitPopoverOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleSaveSlideEditor = useCallback(async () => {
     if (!selectedSong || !slideEditor) return;
@@ -2675,22 +2301,16 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     const changed = prevOverlayMode.current !== overlayMode;
     prevOverlayMode.current = overlayMode;
     if (!changed) return;
+    if (modeOnlyChangeRef.current) return;
     if (suppressAutoProjectionRef.current) return;
     if (!prefsReadyRef.current) return;
     if (!obsAutoPushArmedRef.current) return;
-    if (openedAnnouncement && activeAnnouncementIndex !== null) {
-      void restageAnnouncementCurrent();
-      return;
-    }
     if (selectedSong && activeSectionIndex !== null) {
       void restageCurrent();
     }
   }, [
-    activeAnnouncementIndex,
     activeSectionIndex,
-    openedAnnouncement,
     overlayMode,
-    restageAnnouncementCurrent,
     restageCurrent,
     selectedSong,
   ]);
@@ -2701,21 +2321,15 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     const changed = prevThemeSignature.current !== nextSignature;
     prevThemeSignature.current = nextSignature;
     if (!changed) return;
+    if (modeOnlyChangeRef.current) return;
     if (suppressAutoProjectionRef.current) return;
     if (!prefsReadyRef.current) return;
     if (!obsAutoPushArmedRef.current) return;
-    if (openedAnnouncement && activeAnnouncementIndex !== null) {
-      void restageAnnouncementCurrent();
-      return;
-    }
     if (selectedSong && activeSectionIndex !== null) {
       void restageCurrent();
     }
   }, [
-    activeAnnouncementIndex,
     activeSectionIndex,
-    openedAnnouncement,
-    restageAnnouncementCurrent,
     restageCurrent,
     selectedFSTheme.id,
     selectedLTTheme.id,
@@ -2730,23 +2344,17 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     const changed = prevFullscreenQuickSettingsSignature.current !== nextSignature;
     prevFullscreenQuickSettingsSignature.current = nextSignature;
     if (!changed) return;
+    if (modeOnlyChangeRef.current) return;
     if (suppressAutoProjectionRef.current) return;
     if (!prefsReadyRef.current) return;
     if (!obsAutoPushArmedRef.current) return;
-    if (overlayMode === "fullscreen" && openedAnnouncement && activeAnnouncementIndex !== null) {
-      void restageAnnouncementCurrent();
-      return;
-    }
     if (overlayMode === "fullscreen" && selectedSong && activeSectionIndex !== null) {
       void restageCurrent();
     }
   }, [
-    activeAnnouncementIndex,
     activeSectionIndex,
     activeFullscreenQuickThemeSettings,
-    openedAnnouncement,
     overlayMode,
-    restageAnnouncementCurrent,
     restageCurrent,
     selectedSong,
   ]);
@@ -2764,10 +2372,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     if (suppressAutoProjectionRef.current) return;
     if (!prefsReadyRef.current) return;
     if (!obsAutoPushArmedRef.current) return;
-    if (openedAnnouncement && activeAnnouncementIndex !== null) {
-      void restageAnnouncementCurrent();
-      return;
-    }
 
     if (!selectedSong || activeSectionIndex === null) return;
     const section = selectedSongSections[activeSectionIndex];
@@ -2789,12 +2393,9 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
         console.warn("[DockWorshipTab] Lower-third auto-push on quick settings change failed:", err);
       });
   }, [
-    activeAnnouncementIndex,
     activeSectionIndex,
     effectiveSelectedLTTheme.settings,
-    openedAnnouncement,
     overlayMode,
-    restageAnnouncementCurrent,
     selectedSong,
     selectedSongSections,
     showWorshipBackgroundOnly,
@@ -2809,26 +2410,16 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
       if (event.key === "Escape") {
-        if (songEditor || slideEditor || isNewSongModalOpen || onlineSearchOpen || isNewAnnouncementModalOpen) {
+        if (songEditor || slideEditor || isNewSongModalOpen || onlineSearchOpen) {
           event.preventDefault();
           setSongEditor(null);
           setSlideEditor(null);
           setIsNewSongModalOpen(false);
           setOnlineSearchOpen(false);
           setNewSongSource(null);
-          setIsNewAnnouncementModalOpen(false);
           return;
         }
         if (targetElement?.closest(".dtb-modal, .dock-dialog")) return;
-        if (openedAnnouncement) {
-          setOpenedAnnouncement(null);
-          setAnnouncementSlideIdx(null);
-          setVisibleAnnouncementSlideIdx(null);
-          setAnnouncementOverlayVisible(false);
-          onStage(null);
-          ensureObsConnected().then(() => dockObsClient.clearAnnouncement()).catch(() => { });
-          return;
-        }
         event.preventDefault();
         handleClearLyrics();
         return;
@@ -2875,42 +2466,31 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
 
   return (
     <div className="dock-module dock-module--worship">
-      {/* Sub-tab Navigation */}
-      <div className="dock-worship-subtabs">
+      <div className="dock-worship-subtab-bar" style={{ display: "flex", width: "100%" }}>
         <button
           type="button"
-          className={`dock-worship-subtab${worshipSubTab === "worship" ? " dock-worship-subtab--active" : ""}`}
-          onClick={() => {
-            setWorshipSubTab("worship");
-            setSelectedSong(null);
-            setSelectedIdx(null);
-            setVisibleIdx(null);
-            setLyricsSearchQuery("");
-          }}
+          className={`dock-worship-subtab ${worshipSubTab === "worship" ? "dock-worship-subtab--active" : ""}`}
+          onClick={() => setWorshipSubTab("worship")}
+          style={{ flex: 1 }}
         >
           <Icon name="music_note" size={13} />
-          <span>Worship</span>
+          Worship
         </button>
         <button
           type="button"
-          className={`dock-worship-subtab${worshipSubTab === "announcements" ? " dock-worship-subtab--active" : ""}`}
-          onClick={() => {
-            setWorshipSubTab("announcements");
-            setOpenedAnnouncement(null);
-            setAnnouncementSlideIdx(null);
-            setVisibleAnnouncementSlideIdx(null);
-            setAnnouncementSearchQuery("");
-          }}
+          className={`dock-worship-subtab ${worshipSubTab === "notes" ? "dock-worship-subtab--active" : ""}`}
+          onClick={() => setWorshipSubTab("notes")}
+          style={{ flex: 1 }}
         >
-          <Icon name="campaign" size={13} />
-          <span>Announcements</span>
+          <Icon name="sticky_note_2" size={13} />
+          Notes
         </button>
       </div>
 
       {worshipSubTab === "worship" ? (
         <>
-          {/* Song Browser (when no song selected) */}
-          {!selectedSong ? (
+      {/* Song Browser (when no song selected) */}
+      {!selectedSong ? (
             <>
               <section className="dock-console-panel dock-console-panel--toolbar">
                 <div className="dock-console-header">
@@ -3303,7 +2883,6 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                       sourceVisible={worshipOverlayVisible}
                       collapsed={toolbarCollapsed}
                       onCollapseChange={setToolbarCollapsed}
-                      compact={compactToolbar}
                       inlineAction={
                         <button
                           type="button"
@@ -3459,6 +3038,59 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                   </button>
                 </div>
                 <div className="dock-dialog__body">
+                  <div className="dock-lyrics-toolbar" role="toolbar" aria-label="Slide text formatting">
+                    <div className="dock-lyrics-toolbar__cluster dock-lyrics-toolbar__cluster--format">
+                      <div className="dock-lyrics-autosplit" ref={slideEditorAutoSplitPopoverRef}>
+                        <button
+                          type="button"
+                          className={`dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--accent${slideEditorAutoSplitPopoverOpen ? " dock-lyrics-toolbar__btn--active" : ""}`}
+                          onClick={() => setSlideEditorAutoSplitPopoverOpen((v) => !v)}
+                          title="Auto Split"
+                          aria-haspopup="menu"
+                          aria-expanded={slideEditorAutoSplitPopoverOpen}
+                        >
+                          <Icon name="format_align_left" size={12} />
+                          <span>Auto Split</span>
+                          <span className="dock-lyrics-toolbar__caret">▾</span>
+                        </button>
+                        {slideEditorAutoSplitPopoverOpen && (
+                          <div className="dock-lyrics-autosplit__menu" role="menu" aria-label="Auto split options">
+                            {[2, 3, 4].map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                className="dock-lyrics-autosplit__option"
+                                onClick={() => {
+                                  handleFormatSlideEditor("autosplit", n);
+                                  setSlideEditorAutoSplitPopoverOpen(false);
+                                }}
+                              >
+                                {n} lines
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => handleFormatSlideEditor("clean")} title="Clean Text">
+                        <Icon name="auto_fix_high" size={12} />
+                        <span>Clean Text</span>
+                      </button>
+                    </div>
+                    <div className="dock-lyrics-toolbar__group" role="group" aria-label="Text case controls">
+                      <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
+                        onClick={() => handleFormatSlideEditor("uppercase")} title="Uppercase" aria-label="Uppercase">
+                        <span>TT</span>
+                      </button>
+                      <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
+                        onClick={() => handleFormatSlideEditor("lowercase")} title="Lowercase" aria-label="Lowercase">
+                        <span>tt</span>
+                      </button>
+                      <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
+                        onClick={() => handleFormatSlideEditor("capitalize")} title="Capitalize" aria-label="Capitalize">
+                        <span>Tt</span>
+                      </button>
+                    </div>
+                  </div>
                   <label className="dock-dialog-field">
                     <span>{t('worship.slideText')}</span>
                     <textarea
@@ -3638,252 +3270,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
             </div>
           )}
 
-        </>
-      ) : (
-        <>
-          {/* Announcements Content */}
-          {!openedAnnouncement ? (
-            <>
-              {/* Announcement Browser */}
-              <section className="dock-console-panel dock-console-panel--toolbar">
-                <div className="dock-console-header">
-                  <div>
-                    <div className="dock-console-header__eyebrow"></div>
-                    <div className="dock-console-header__eyebrow"></div>
-                    <div className="dock-console-header__eyebrow"></div>
-                    <div className="dock-console-header__eyebrow">Search Announcements</div>
-                    <div className="dock-console-header__eyebrow"></div>
-                  </div>
-                  <div className="dock-console-actions dock-console-actions--song-browser">
-                    <button
-                      type="button"
-                      className="dock-console-toggle"
-                      onClick={() => {
-                        setAnnouncementDraft({ type: "general", title: "", subtitle: "", content: "", imageUrl: "", speakerName: "", speakerRole: "", speakerPhotoUrl: "", obsThemeId: "" });
-                        setIsNewAnnouncementModalOpen(true);
-                      }}
-                      title="Add Announcement"
-                      aria-label="Add Announcement"
-                    >
-                      <Icon name="add" size={13} />
-                      <span className="dock-console-toggle__label">Add Announcement</span>
-                    </button>
-                  </div>
-                </div>
-                <div className="dock-search dock-search--console" style={{ marginBottom: 0 }}>
-                  <Icon name="search" size={14} className="dock-search__icon" />
-                  <input
-                    className="dock-input"
-                    placeholder="Search announcements..."
-                    value={announcementSearchQuery}
-                    onChange={(e) => setAnnouncementSearchQuery(e.target.value)}
-                    aria-label="Search announcements"
-                  />
-                  {announcementSearchQuery && (
-                    <button
-                      type="button"
-                      className="dock-search__clear"
-                      onClick={() => setAnnouncementSearchQuery("")}
-                      aria-label="Clear"
-                      title="Clear"
-                    >
-                      <Icon name="close" size={13} />
-                    </button>
-                  )}
-                </div>
-              </section>
-
-              <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace" data-toolbar-collapsed={toolbarCollapsed || undefined}>
-                {filteredAnnouncements.length === 0 ? (
-                  <div className="dock-empty dock-worship-workspace__empty">
-                    <Icon name={announcements.length === 0 ? "campaign" : "search_off"} size={20} />
-                    <div className="dock-empty__title">
-                      {announcements.length === 0 ? "No announcements yet" : "No announcements match"}
-                    </div>
-                    <div className="dock-empty__text">
-                      {announcements.length === 0
-                        ? "Click \"Add Announcement\" to create your first one."
-                        : `No results for "${announcementSearchQuery}"`}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="dock-console-list dock-worship-workspace__list">
-                    {filteredAnnouncements.map((announcement) => (
-                      <div
-                        key={announcement.id}
-                        className="dock-card dock-card--console dock-song-card"
-                      >
-                        <button
-                          type="button"
-                          className="dock-song-card__main"
-                          onClick={() => {
-                            setOpenedAnnouncement(announcement);
-                            setAnnouncementSlideIdx(0);
-                            setVisibleAnnouncementSlideIdx(null);
-                          }}
-                          title={announcement.title}
-                        >
-                          <span className="dock-card__title">{announcement.title}</span>
-                          <span className="dock-card__subtitle">
-                            {ANNOUNCEMENT_TYPES.find((t) => t.value === announcement.type)?.label ?? announcement.type}
-                            {announcement.subtitle ? ` · ${announcement.subtitle}` : ""}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          className="dock-song-card__edit"
-                          onClick={() => {
-                            setAnnouncementDraft({
-                              type: announcement.type,
-                              title: announcement.title,
-                              subtitle: announcement.subtitle,
-                              content: announcement.content,
-                              imageUrl: announcement.imageUrl || "",
-                              speakerName: announcement.speakerName || "",
-                              speakerRole: announcement.speakerRole || "",
-                              speakerPhotoUrl: announcement.speakerPhotoUrl || "",
-                              obsThemeId: announcement.obsThemeId || "",
-                            });
-                            setIsNewAnnouncementModalOpen(true);
-                          }}
-                          aria-label="Edit"
-                          title="Edit"
-                        >
-                          <Icon name="edit" size={13} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-            </>
-          ) : (
-            <>
-              {/* Announcement Detail View */}
-              <section className="dock-console-panel dock-console-panel--toolbar dock-worship-summary">
-                <div className="dock-worship-summary__header">
-                  <div className="dock-worship-summary__left">
-                    <button
-                      type="button"
-                      className="dock-worship-back-btn"
-                      onClick={() => {
-                        setOpenedAnnouncement(null);
-                        setAnnouncementSlideIdx(null);
-                        setVisibleAnnouncementSlideIdx(null);
-                      }}
-                      title="Back"
-                    >
-                      <Icon name="arrow_back" size={14} />
-                    </button>
-                    <div className="dock-worship-summary__copy">
-                      <div className="dock-worship-summary__title">{openedAnnouncement.title}</div>
-                      {openedAnnouncement.subtitle && (
-                        <div className="dock-worship-summary__artist">{openedAnnouncement.subtitle}</div>
-                      )}
-
-                    </div>
-                  </div>
-                  <div className="dock-worship-summary__actions">
-                    <button
-                      type="button"
-                      className="dock-shell-icon-btn"
-                      onClick={() => {
-                        setAnnouncementDraft({
-                          type: openedAnnouncement.type,
-                          title: openedAnnouncement.title,
-                          subtitle: openedAnnouncement.subtitle,
-                          content: openedAnnouncement.content,
-                          imageUrl: openedAnnouncement.imageUrl || "",
-                          speakerName: openedAnnouncement.speakerName || "",
-                          speakerRole: openedAnnouncement.speakerRole || "",
-                          speakerPhotoUrl: openedAnnouncement.speakerPhotoUrl || "",
-                          obsThemeId: openedAnnouncement.obsThemeId || "",
-                        });
-                        setIsNewAnnouncementModalOpen(true);
-                      }}
-                      title="Edit"
-                    >
-                      <Icon name="edit" size={14} />
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              {/* Announcement Slide List */}
-              <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace" data-toolbar-collapsed={toolbarCollapsed || undefined}>
-                {announcementSections.length === 0 ? (
-                  <div className="dock-empty dock-worship-workspace__empty">
-                    <Icon name="campaign" size={18} />
-                    <div className="dock-empty__text">No content to display</div>
-                  </div>
-                ) : (
-                  <div className="dock-console-list dock-worship-workspace__list dock-worship-slide-queue">
-                    {announcementSections.map((section, idx) => {
-                      const isVisible = visibleAnnouncementSlideIdx === idx;
-                      const isSelected = announcementSlideIdx === idx;
-                      return (
-                        <div
-                          key={section.id}
-                          className={`dock-worship-slide-card${isVisible ? " dock-worship-slide-card--visible" : ""}${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}`}
-                          title="Click to view in OBS"
-                        >
-                          <button
-                            type="button"
-                            className="dock-worship-slide-card__main"
-                            onClick={() => {
-                              void pushAnnouncementSection(idx);
-                            }}
-                          >
-                            <div className="dock-worship-slide-card__header">
-                              <div className="dock-worship-slide-card__label">
-                                <span className="dock-worship-slide-card__name">
-                                  {section.label || `Slide ${idx + 1}`}
-                                </span>
-                                <span className="dock-worship-slide-card__index">{idx + 1}</span>
-                              </div>
-                              <div className="dock-worship-slide-card__badges" />
-                            </div>
-                            <div className="dock-worship-slide-card__text">{section.text}</div>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-
-              {/* Announcement Output Controls */}
-              {openedAnnouncement && (
-                <section className="dock-console-panel dock-console-panel--deck dock-console-panel--deck-static dock-console-panel--deck-worship">
-                  <div className="dock-worship-toolbar">
-                    <DockBottomToolbar
-                      overlayMode={overlayMode}
-                      onModeChange={handleOverlayModeChange}
-                      clearLabel={announcementOverlayVisible ? "Hide announcement" : "Show announcement"}
-                      onClear={handleToggleAnnouncementVisibility}
-                      sourceVisible={announcementOverlayVisible}
-                      collapsed={toolbarCollapsed}
-                      onCollapseChange={setToolbarCollapsed}
-                      compact={compactToolbar}
-                      inlineAction={
-                        <button
-                          type="button"
-                          className="dock-btm-toolbar__icon-btn"
-                          onClick={() => setShowThemeSettings(true)}
-                          title="Theme Settings"
-                          aria-label="Theme Settings"
-                        >
-                          <Icon name="edit" size={14} />
-                        </button>
-                      }
-                    />
-                  </div>
-                </section>
-              )}
-            </>
-          )}
-        </>
-      )}
+          </>
+        ) : (
+          <DockNotesTab
+            staged={staged}
+            onStage={onStage}
+            isActive={isActive && worshipSubTab === "notes"}
+          />
+        )}
 
       {/* Theme Settings Modal */}
       <DockThemeSettingsModal
@@ -3901,18 +3295,13 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
             : defaultLowerThirdQuickThemeSettings
         }
         onQuickSettingsSave={(next) => {
+          suppressAutoProjectionRef.current = true;
           if (overlayMode === "fullscreen") {
             handleSaveFullscreenQuickThemeSettings(next);
           } else {
             handleSaveLowerThirdQuickThemeSettings(next);
           }
-        }}
-        onQuickSettingsChange={(next) => {
-          if (overlayMode === "fullscreen") {
-            handlePreviewFullscreenQuickThemeSettings(next);
-          } else {
-            handlePreviewLowerThirdQuickThemeSettings(next);
-          }
+          setTimeout(() => { suppressAutoProjectionRef.current = false; }, 100);
         }}
         resolveThemeQuickSettings={resolveThemeQuickSettings}
         title={t('worship.quickEdits')}
@@ -3921,213 +3310,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
         onClose={() => setShowThemeSettings(false)}
         overlayMode={overlayMode}
         showReferences={false}
+        storageScope="worship"
       />
-
-      {/* New/Edit Announcement Modal */}
-      {isNewAnnouncementModalOpen && (
-        <div className="dock-dialog-backdrop" role="presentation">
-          <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-announcement-editor-title">
-            <div className="dock-dialog__header">
-              <div>
-                <div className="dock-dialog__eyebrow">{announcementDraft.title ? "Edit Announcement" : "Add Announcement"}</div>
-                <h2 id="dock-announcement-editor-title" className="dock-dialog__title">
-                  {announcementDraft.title ? "Edit Announcement" : "New Announcement"}
-                </h2>
-              </div>
-              <button
-                type="button"
-                className="dock-dialog__close"
-                onClick={() => setIsNewAnnouncementModalOpen(false)}
-                aria-label="Close"
-                title="Close"
-              >
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-            <div className="dock-dialog__body">
-              <label className="dock-dialog-field">
-                <span className="dock-dialog-field__label">
-                  <span>Type</span>
-                  <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
-                </span>
-                <select
-                  className="dock-input"
-                  value={announcementDraft.type}
-                  onChange={(e) => setAnnouncementDraft((d) => ({ ...d, type: e.target.value as AnnouncementType }))}
-                >
-                  {ANNOUNCEMENT_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                </select>
-              </label>
-              <div className="dock-dialog__row dock-dialog__row--two">
-                <label className="dock-dialog-field">
-                  <span className="dock-dialog-field__label">
-                    <span>Title</span>
-                    <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
-                  </span>
-                  <input
-                    className="dock-input"
-                    value={announcementDraft.title}
-                    onChange={(e) => setAnnouncementDraft((d) => ({ ...d, title: e.target.value }))}
-                    placeholder="Announcement title"
-                  />
-                </label>
-                <label className="dock-dialog-field">
-                  <span className="dock-dialog-field__label">
-                    <span>Subtitle</span>
-                    <span className="dock-dialog-field__tag">Optional</span>
-                  </span>
-                  <input
-                    className="dock-input"
-                    value={announcementDraft.subtitle}
-                    onChange={(e) => setAnnouncementDraft((d) => ({ ...d, subtitle: e.target.value }))}
-                    placeholder="Short description"
-                  />
-                </label>
-              </div>
-
-              {announcementDraft.type === "speaker" && (
-                <div className="dock-dialog__row dock-dialog__row--two">
-                  <label className="dock-dialog-field">
-                    <span className="dock-dialog-field__label">
-                      <span>Speaker Name</span>
-                      <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
-                    </span>
-                    <input
-                      className="dock-input"
-                      value={announcementDraft.speakerName}
-                      onChange={(e) => setAnnouncementDraft((d) => ({ ...d, speakerName: e.target.value }))}
-                      placeholder="e.g. Pastor Henry Odewale"
-                    />
-                  </label>
-                  <label className="dock-dialog-field">
-                    <span className="dock-dialog-field__label">
-                      <span>Speaker Role</span>
-                      <span className="dock-dialog-field__tag">Optional</span>
-                    </span>
-                    <input
-                      className="dock-input"
-                      value={announcementDraft.speakerRole}
-                      onChange={(e) => setAnnouncementDraft((d) => ({ ...d, speakerRole: e.target.value }))}
-                      placeholder="e.g. Lead Pastor"
-                    />
-                  </label>
-                </div>
-              )}
-
-              <label className="dock-dialog-field">
-                <span className="dock-dialog-field__label">
-                  <span>Content</span>
-                  <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
-                </span>
-                <textarea
-                  className="dock-input dock-dialog-textarea"
-                  value={announcementDraft.content}
-                  onChange={(e) => setAnnouncementDraft((d) => ({ ...d, content: e.target.value }))}
-                  placeholder="Announcement content. Use blank lines to separate slides."
-                  rows={6}
-                />
-              </label>
-
-              <label className="dock-dialog-field">
-                <span className="dock-dialog-field__label">
-                  <span>Image URL</span>
-                  <span className="dock-dialog-field__tag">Optional</span>
-                </span>
-                <input
-                  className="dock-input"
-                  value={announcementDraft.imageUrl}
-                  onChange={(e) => setAnnouncementDraft((d) => ({ ...d, imageUrl: e.target.value }))}
-                  placeholder="https://example.com/image.jpg"
-                />
-              </label>
-
-              <label className="dock-dialog-field">
-                <span className="dock-dialog-field__label">
-                  <span>{t('announcements.lowerThirdTheme')}</span>
-                  <span className="dock-dialog-field__tag">{t('common.optional')}</span>
-                </span>
-                <select
-                  className="dock-input"
-                  value={announcementDraft.obsThemeId}
-                  onChange={(e) => setAnnouncementDraft((d) => ({ ...d, obsThemeId: e.target.value }))}
-                >
-                  <option value="">{t('announcements.lowerThirdThemeNone')}</option>
-                  {filterThemesByType(announcementDraft.type).map((theme) => (
-                    <option key={theme.id} value={theme.id}>
-                      {theme.name || theme.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="dock-dialog__footer">
-              <button
-                type="button"
-                className="dock-btn dock-btn--ghost"
-                onClick={() => setIsNewAnnouncementModalOpen(false)}
-                title="Cancel"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="dock-btn dock-btn--primary"
-                onClick={() => {
-                  const trimmedTitle = announcementDraft.title.trim();
-                  const trimmedContent = announcementDraft.content.trim();
-                  if (!trimmedTitle || !trimmedContent) return;
-
-                  const isEditing = openedAnnouncement !== null && announcements.some((a) => a.id === openedAnnouncement.id);
-                  const now = Date.now();
-
-                  if (isEditing && openedAnnouncement) {
-                    const updated: DockAnnouncement = {
-                      ...openedAnnouncement,
-                      type: announcementDraft.type,
-                      title: trimmedTitle,
-                      subtitle: announcementDraft.subtitle.trim(),
-                      content: trimmedContent,
-                      imageUrl: announcementDraft.imageUrl.trim() || undefined,
-                      speakerName: announcementDraft.type === "speaker" ? announcementDraft.speakerName.trim() : undefined,
-                      speakerRole: announcementDraft.type === "speaker" ? announcementDraft.speakerRole.trim() : undefined,
-                      speakerPhotoUrl: announcementDraft.type === "speaker" ? announcementDraft.speakerPhotoUrl.trim() || undefined : undefined,
-                      obsThemeId: announcementDraft.obsThemeId.trim() || undefined,
-                    };
-                    const next = announcements.map((a) => a.id === updated.id ? updated : a);
-                    setAnnouncements(next);
-                    saveDockAnnouncements(next);
-                    setOpenedAnnouncement(updated);
-                  } else {
-                    const newAnnouncement: DockAnnouncement = {
-                      id: crypto.randomUUID?.() ?? `ann-${now}-${Math.random().toString(36).slice(2, 8)}`,
-                      type: announcementDraft.type,
-                      title: trimmedTitle,
-                      subtitle: announcementDraft.subtitle.trim(),
-                      content: trimmedContent,
-                      imageUrl: announcementDraft.imageUrl.trim() || undefined,
-                      speakerName: announcementDraft.type === "speaker" ? announcementDraft.speakerName.trim() : undefined,
-                      speakerRole: announcementDraft.type === "speaker" ? announcementDraft.speakerRole.trim() : undefined,
-                      speakerPhotoUrl: announcementDraft.type === "speaker" ? announcementDraft.speakerPhotoUrl.trim() || undefined : undefined,
-                      obsThemeId: announcementDraft.obsThemeId.trim() || undefined,
-                    };
-                    const next = [newAnnouncement, ...announcements];
-                    setAnnouncements(next);
-                    saveDockAnnouncements(next);
-                  }
-
-                  setIsNewAnnouncementModalOpen(false);
-                }}
-                disabled={!announcementDraft.title.trim() || !announcementDraft.content.trim()}
-                title="Save"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {toasts.length > 0 && (
         <div className="dock-toast-stack" role="status" aria-live="polite">

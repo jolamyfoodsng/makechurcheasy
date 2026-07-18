@@ -22,7 +22,11 @@ import {
   normalizeExtractedLyricsText,
   type ExtractedTextQuality,
 } from "../src/worship/bulkImportService";
-import { processDocumentLocally } from "../src/worship/bulkImportAiService";
+import {
+  processDocumentViaApi,
+  processFileViaUpload,
+} from "../src/worship/bulkImportAiService";
+import { parseCccHymnDrafts } from "../src/worship/cccHymnImport";
 import {
   createEmptyImportSection,
   estimateDraftSlideCount,
@@ -335,40 +339,98 @@ export default function SongImportFullprocess({
         ? selectedFile?.name || "Imported Document"
         : "Pasted Lyrics";
 
-      const rawText = sourceMode === "file"
-        ? await extractTextFromFile(selectedFile as File)
-        : normalizeExtractedLyricsText(pastedText);
-
-      const normalizedText = normalizeExtractedLyricsText(rawText);
-      if (!normalizedText.trim()) {
-        throw new Error("No text was found. Upload a file with readable lyrics or paste the text directly.");
-      }
-
-      const textQuality = assessExtractedTextQuality(normalizedText);
       const nextWarnings: string[] = [];
-      if (!textQuality.usable) {
-        nextWarnings.push("The extracted text looks noisy. Review titles and lyrics carefully before importing.");
+      let normalizedText = "";
+      let textQuality: ExtractedTextQuality | null = null;
+
+      if (sourceMode === "file") {
+        try {
+          const rawText = await extractTextFromFile(selectedFile as File);
+          normalizedText = normalizeExtractedLyricsText(rawText);
+          if (normalizedText.trim()) {
+            textQuality = assessExtractedTextQuality(normalizedText);
+            if (!textQuality.usable) {
+              nextWarnings.push("The extracted text looks noisy. Review titles and lyrics carefully before importing.");
+            }
+          } else {
+            nextWarnings.push("No readable text was extracted locally. The AI service will process the original file.");
+          }
+        } catch (extractError) {
+          const message = extractError instanceof Error ? extractError.message : String(extractError);
+          nextWarnings.push(`Local text extraction failed. The AI service will process the original file. ${message}`);
+        }
+      } else {
+        normalizedText = normalizeExtractedLyricsText(pastedText);
+        if (!normalizedText.trim()) {
+          throw new Error("Paste readable lyrics before importing.");
+        }
+        textQuality = assessExtractedTextQuality(normalizedText);
+        if (!textQuality.usable) {
+          nextWarnings.push("The pasted text looks noisy. Review titles and lyrics carefully before importing.");
+        }
       }
 
       setQuality(textQuality);
       setSourceName(resolvedSourceName);
-      setLoadingLabel("Structuring songs...");
+
+      if (sourceMode === "file" && normalizedText.trim()) {
+        const cccDrafts = parseCccHymnDrafts(normalizedText);
+        if (cccDrafts.length >= 20) {
+          setDrafts(cccDrafts.map((draft) => ({ ...draft, enabled: true })));
+          setActiveSongId(cccDrafts[0]?.id ?? null);
+          setWarnings([
+            ...nextWarnings,
+            `Detected CCC hymnal structure and prepared ${cccDrafts.length} hymn drafts from the PDF song markers.`,
+          ]);
+          setStep("review");
+          return;
+        }
+      }
+
+      setLoadingLabel("Structuring songs with AI...");
 
       let processedSongs: SmartImportSongDraft[] = [];
 
       try {
-        const apiResult = await processDocumentLocally(normalizedText, resolvedSourceName);
+        const apiResult = sourceMode === "file"
+          ? await processFileViaUpload(selectedFile as File, (_progress, label) => {
+            if (label) setLoadingLabel(label);
+          })
+          : await processDocumentViaApi(normalizedText, resolvedSourceName);
         processedSongs = apiResult.songs;
         nextWarnings.push(...apiResult.warnings);
       } catch (apiError) {
-        const fallback = detectSongsLocally(normalizedText, resolvedSourceName);
-        processedSongs = fallback.songs.map((song, index) =>
-          buildDraftFromLyrics(song.title, song.lyrics, resolvedSourceName, index, song.hymnNumber),
-        );
-
         const message = apiError instanceof Error ? apiError.message : String(apiError);
-        nextWarnings.push(fallback.warning);
-        nextWarnings.push(`AI import service error: ${message}`);
+
+        if (sourceMode === "file" && normalizedText.trim()) {
+          try {
+            setLoadingLabel("Structuring extracted text with AI...");
+            const apiResult = await processDocumentViaApi(normalizedText, resolvedSourceName);
+            processedSongs = apiResult.songs;
+            nextWarnings.push("Original file upload failed, so AI used the extracted document text instead.");
+            nextWarnings.push(...apiResult.warnings);
+          } catch (textApiError) {
+            const fallback = detectSongsLocally(normalizedText, resolvedSourceName);
+            processedSongs = fallback.songs.map((song, index) =>
+              buildDraftFromLyrics(song.title, song.lyrics, resolvedSourceName, index, song.hymnNumber),
+            );
+
+            const textApiMessage = textApiError instanceof Error ? textApiError.message : String(textApiError);
+            nextWarnings.push(fallback.warning);
+            nextWarnings.push(`AI import service error: ${message}`);
+            nextWarnings.push(`Extracted-text AI error: ${textApiMessage}`);
+          }
+        } else if (normalizedText.trim()) {
+          const fallback = detectSongsLocally(normalizedText, resolvedSourceName);
+          processedSongs = fallback.songs.map((song, index) =>
+            buildDraftFromLyrics(song.title, song.lyrics, resolvedSourceName, index, song.hymnNumber),
+          );
+
+          nextWarnings.push(fallback.warning);
+          nextWarnings.push(`AI import service error: ${message}`);
+        } else {
+          throw new Error(`AI import service error: ${message}`);
+        }
       }
 
       if (processedSongs.length === 0) {

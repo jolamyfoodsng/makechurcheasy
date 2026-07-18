@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   assessExtractedTextQuality,
   extractTextFromFile,
   normalizeExtractedLyricsText,
   reorderTwoColumnText,
 } from "./bulkImportService";
+import { parseCccHymnDrafts } from "./cccHymnImport";
 import { processDocumentWithAi } from "./bulkImportAiService";
 import type { DocumentStructureProvider } from "./bulkImportAiService";
 import type { BulkImportChunkRequest } from "./smartImportTypes";
@@ -147,6 +149,29 @@ describe("Phase 1: Core Import", () => {
     expect(result.songs).toHaveLength(1);
     expect(result.songs[0].title).toBe("CCC-Hymns");
     expect(result.songs[0].sections[0].content.length).toBeGreaterThan(100);
+  });
+
+  it("imports the CCC hymns PDF as separate hymn drafts", { timeout: 30000 }, async () => {
+    const bytes = readFileSync(new URL("../CCC-Hymns.pdf", import.meta.url));
+    const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const file = new File([arrayBuffer], "CCC-Hymns.pdf", { type: "application/pdf" });
+
+    const text = await extractTextFromFile(file);
+    const quality = assessExtractedTextQuality(text);
+    const drafts = parseCccHymnDrafts(text);
+    const hymnNumbers = new Set(drafts.map((draft) => draft.hymnNumber).filter(Boolean));
+
+    expect(text.length).toBeGreaterThan(20_000);
+    expect(quality.usable).toBe(true);
+    expect(drafts.length).toBeGreaterThanOrEqual(450);
+    expect(hymnNumbers.size).toBeGreaterThanOrEqual(450);
+    expect(drafts[0].title).toBe("Hymn 1");
+    expect(drafts[0].hymnNumber).toBe("1");
+    expect(drafts[0].sections.map((section) => section.label)).toEqual(["Yoruba", "English"]);
+    expect(drafts[0].sections[0].content).toContain("Jerih mo yah mah");
+    expect(drafts[0].sections[1].content).toContain("The host of Angels");
+    expect(drafts.some((draft) => draft.title === "Hymn 51")).toBe(true);
+    expect(drafts.some((draft) => draft.sections.some((section) => /are Reserved/i.test(section.content)))).toBe(false);
   });
 });
 

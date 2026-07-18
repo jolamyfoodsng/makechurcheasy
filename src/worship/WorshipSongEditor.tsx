@@ -7,7 +7,7 @@
  * Replaces the old SongFormModal in SongsTab.tsx.
  */
 
-import { ListX, Music, Save, Type, Undo, Wand2, X } from "lucide-react";
+import { ListX, Music, Save, Undo, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
 import { DEFAULT_THEME_SETTINGS, type BibleTheme, type BibleThemeSettings } from "../bible/types";
@@ -145,7 +145,7 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
   const [lyrics, setLyrics] = useState(song?.lyrics ?? "");
   const [autoSplit, setAutoSplit] = useState(song?.autoSplit ?? true);
   const [linesPerSlide, setLinesPerSlide] = useState(song?.linesPerSlide ?? 2);
-  const [selectedThemeId, setSelectedThemeId] = useState<string>(
+  const [selectedThemeId] = useState<string>(
     song?.themeId ?? FULLSCREEN_THEMES[0]?.id ?? "",
   );
   const [saving, setSaving] = useState(false);
@@ -189,14 +189,6 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
   }, [selectedThemeId]);
 
   const bgStyle = useMemo(() => themeBackgroundStyle(resolvedTheme), [resolvedTheme]);
-
-  /* ── Cycle to next theme ── */
-  const cycleTheme = useCallback(() => {
-    setSelectedThemeId((prev) => {
-      const idx = FULLSCREEN_THEMES.findIndex((t) => t.id === prev);
-      return FULLSCREEN_THEMES[(idx + 1) % FULLSCREEN_THEMES.length].id;
-    });
-  }, []);
 
   /* ── Layout preset selection ── */
   const activeLayoutKey = useMemo(() => {
@@ -290,8 +282,6 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
   const lineCount = useMemo(() => {
     return lyrics.split("\n").filter((l) => l.trim().length > 0).length;
   }, [lyrics]);
-
-  const selectionLength = Math.max(0, selectionRange.end - selectionRange.start);
 
   /* ── Save handler ── */
   const handleSave = useCallback(async () => {
@@ -403,12 +393,7 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
 
             <div className="ws-lyrics-wrap">
               <div className="ws-lyrics-toolbar">
-                <div className="ws-lyrics-toolbar__meta">
-                  <span className="ws-lyrics-toolbar__meta-icon">
-                    <Type size={12} />
-                  </span>
-                  <span>{selectionLength > 0 ? `${selectionLength} selected` : "Lyrics tools"}</span>
-                </div>
+
                 <div className="ws-lyrics-toolbar__group" aria-label="Text case controls">
                   <button
                     type="button"
@@ -536,22 +521,7 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
             </div>
 
             {/* Theme gallery strip */}
-            <div className="ws-theme-strip">
-              <button
-                type="button"
-                className="ws-theme-cycle"
-                onClick={cycleTheme}
-                title="Click to cycle theme"
-              >
-                <div
-                  className="ws-theme-cycle-preview"
-                  style={bgStyle}
-                />
-                <span className="ws-theme-cycle-name">
-                  {FULLSCREEN_THEMES.find((t) => t.id === selectedThemeId)?.name ?? "Theme"}
-                </span>
-              </button>
-            </div>
+
           </div>
         </div>
 

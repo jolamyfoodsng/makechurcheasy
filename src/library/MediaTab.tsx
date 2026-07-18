@@ -507,7 +507,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
         <div className="lib-toolbar-left">
           {/* Search */}
           <div className="lib-search-wrap">
-            <Icon name="search" size={20} className="lib-search-icon" />
+
             <input
               className="lib-search-input"
               type="text"

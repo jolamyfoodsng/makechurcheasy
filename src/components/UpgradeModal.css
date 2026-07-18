@@ -1,16 +1,16 @@
 :root {
-  --bg-color: #111827;
-  --modal-bg: #0f141e;
-  --card-bg: rgba(26, 31, 43, 0.4);
-  --card-bg-solid: #1a1f2b;
+  --bg-color: #0A0A0A;
+  --modal-bg: #080808;
+  --card-bg: rgba(21, 21, 21, 0.4);
+  --card-bg-solid: #151515;
   --accent-purple-start: #8b5cf6;
   --accent-purple-end: #6366f1;
   --text-white: #ffffff;
   --text-gray-300: #d1d5db;
   --text-gray-400: #9ca3af;
   --text-gray-500: #6b7280;
-  --border-subtle: #2d3748;
-  --border-color: #1f2937;
+  --border-subtle: #292929;
+  --border-color: #303030;
   --gold: #fbbf24;
   --gold-text: #fbbf24;
   --purple-text: #c084fc;

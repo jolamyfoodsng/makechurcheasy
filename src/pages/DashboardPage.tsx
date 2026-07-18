@@ -50,7 +50,8 @@ export default function DashboardPage() {
     const isDev = window.location.protocol === "http:" && window.location.port === "1420";
     const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
     const deviceId = getDeviceId();
-    const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : "";
+    const versionParam = `_v=${__APP_VERSION__}`;
+    const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}&${versionParam}` : `?${versionParam}`;
     return (isDev ? `${base}/dock` : `${base}/dock.html`) + deviceIdParam;
   }, []);
 
@@ -58,7 +59,8 @@ export default function DashboardPage() {
     const isDev = window.location.protocol === "http:" && window.location.port === "1420";
     const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
     const deviceId = getDeviceId();
-    const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : "";
+    const versionParam = `_v=${__APP_VERSION__}`;
+    const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}&${versionParam}` : `?${versionParam}`;
     return (isDev ? `${base}/lm-dock` : `${base}/lm-dock.html`) + deviceIdParam;
   }, []);
 

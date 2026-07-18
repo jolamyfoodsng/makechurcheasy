@@ -14,20 +14,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   searchCatalog,
-  downloadAndParseBible,
   fetchAllLanguages,
   parseXmlToBibleData,
   getCachedCatalogResult,
   AUTO_DOWNLOAD_BIBLES,
   type CatalogResponse,
 } from "../bibleApi";
-import type { CatalogBible, InstalledBible } from "../types";
+import type { InstalledBible } from "../types";
 import {
   getInstalledTranslations,
   saveInstalledTranslation,
   deleteInstalledTranslation,
   isFirstRun,
 } from "../bibleDb";
+import {
+  deriveBibleAbbr,
+  formatBibleFileSize,
+  installBibleFromCatalog,
+} from "../bibleInstallService";
 import { evictTranslationCache } from "../bibleData";
 import Icon from "../../components/Icon";
 import { useAuth } from "../../contexts/AuthContext";
@@ -68,25 +72,6 @@ interface DownloadState {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Extract a short abbreviation from a catalog Bible name/version */
-function deriveAbbr(bible: CatalogBible): string {
-  const v = (bible.version ?? "").trim().toUpperCase();
-  if (v && v.length <= 8 && /^[A-Z]/.test(v)) return v;
-  return (bible.name ?? "Unknown")
-    .split(/\s+/)
-    .map((w) => w?.[0] ?? "")
-    .join("")
-    .toUpperCase()
-    .slice(0, 6);
-}
-
-function formatFileSize(bytes: number): string {
-  if (!bytes || bytes <= 0) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -274,30 +259,27 @@ export default function BibleLibrary({
       setDownloads((prev) => new Map(prev).set(catalogId, state));
 
       try {
-        const data = await downloadAndParseBible(catalogId, (frac) => {
-          setDownloads((prev) => {
-            const next = new Map(prev);
-            next.set(catalogId, { ...state, progress: frac, status: "downloading" });
-            return next;
-          });
-        });
-
-        setDownloads((prev) => {
-          const next = new Map(prev);
-          next.set(catalogId, { ...state, progress: 1, status: "parsing" });
-          return next;
-        });
-
-        const record: InstalledBible = {
-          id: catalogId,
-          abbr,
-          name,
-          language: lang,
-          data,
-          downloadedAt: new Date().toISOString(),
-          filesize,
-        };
-        await saveInstalledTranslation(record);
+        const record = await installBibleFromCatalog(
+          {
+            id: catalogId,
+            name,
+            language: lang,
+            filesize,
+            version: abbr,
+            country: "",
+            filename: "",
+            sha256: "",
+          },
+          (progressState) => {
+            const frac = progressState.progress;
+            const status = progressState.status === "parsing" ? "parsing" : "downloading";
+            setDownloads((prev) => {
+              const next = new Map(prev);
+              next.set(catalogId, { ...state, progress: frac, status });
+              return next;
+            });
+          },
+        );
 
         setDownloads((prev) => {
           const next = new Map(prev);
@@ -307,6 +289,8 @@ export default function BibleLibrary({
 
         await refreshInstalled();
         onTranslationsChanged?.();
+
+        void record;
 
         setTimeout(() => {
           setDownloads((prev) => {
@@ -631,7 +615,7 @@ export default function BibleLibrary({
 
               <div className="bible-library-list">
                 {catalogResult.items.map((bible) => {
-                  const abbr = deriveAbbr(bible);
+                  const abbr = deriveBibleAbbr(bible);
                   const isInst = installedIds.has(bible.id);
                   const dl = downloads.get(bible.id);
 
@@ -646,7 +630,7 @@ export default function BibleLibrary({
                       </div>
                       <div className="bible-library-row-right">
                         <span className="bible-library-row-lang">{bible.language}</span>
-                        <span className="bible-library-row-size">{formatFileSize(bible.filesize)}</span>
+                        <span className="bible-library-row-size">{formatBibleFileSize(bible.filesize)}</span>
 
                         {/* Status / Action */}
                         {isInst ? (
@@ -756,7 +740,7 @@ export default function BibleLibrary({
                         )}
                       </span>
                       <span className="bible-library-installed-meta">
-                        {b.language} · {formatFileSize(b.filesize)} · Downloaded{" "}
+                        {b.language} · {formatBibleFileSize(b.filesize)} · Downloaded{" "}
                         {new Date(b.downloadedAt).toLocaleDateString()}
                       </span>
                     </div>

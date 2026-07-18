@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1920, initial-scale=1">
-  <title>MCE Bible Overlay</title>
+  <title>MCE Worship Overlay</title>
   <style>
     /* ── Shared: Font-face ── */
     @font-face {
@@ -627,10 +627,10 @@
       const fullscreenLayer = document.getElementById('fullscreen-layer');
       const lowerThirdLayer = document.getElementById('lower-third-layer');
 
-      const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
-      const _storageKey = _tabParam === 'worship' ? 'worship-overlay-data' : 'bible-overlay-data';
-      const _ackStorageKey = _tabParam === 'worship' ? 'worship-overlay-render-ack' : 'bible-overlay-render-ack';
-      const _channelName = _tabParam === 'worship' ? 'obs-church-studio-worship-overlay' : 'obs-church-studio-bible-overlay';
+      const _tabParam = 'worship';
+      const _storageKey = 'worship-overlay-data';
+      const _ackStorageKey = 'worship-overlay-render-ack';
+      const _channelName = 'obs-church-studio-worship-overlay';
 
       function readInitialMode() {
         try {
@@ -1396,7 +1396,7 @@
           reference.textContent = rt;
           reference.style.display = rt ? 'block' : 'none';
         }
-        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-bible-overlay fullscreen theme error', error); }
+        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-worship-overlay fullscreen theme error', error); }
         if (isCL) autoScaleCompareContent();
         else { autoScaleContent(); }
         if (!hasShownOnce) hasShownOnce = true;
@@ -1409,7 +1409,7 @@
         if (data.blanked) { overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
         overlay.classList.remove('hidden'); ltBar.classList.remove('hidden');
         ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
-        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-bible-overlay lower-third theme error', error); }
+        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-worship-overlay lower-third theme error', error); }
         if (!hasShownOnce) hasShownOnce = true;
       }
 

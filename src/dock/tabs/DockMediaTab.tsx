@@ -504,7 +504,10 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
   const { t } = useTranslation();
   const overlayBaseUrl = getOverlayBaseUrlSync();
   const tabsRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [compactTabs, setCompactTabs] = useState(false);
+  const [isCompactHeight, setIsCompactHeight] = useState(false);
+  const [isUltraCompactHeight, setIsUltraCompactHeight] = useState(false);
   const [mediaSession] = useState<DockMediaSessionState>(() => loadMediaSessionState());
   const [browserTab, setBrowserTab] = useState<DockMediaBrowserTab>(() => mediaSession.browserTab);
   const [activeKind, setActiveKind] = useState<DockMediaFilter>(() => mediaSession.activeKind);
@@ -574,6 +577,19 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
       setCompactTabs(entry.contentRect.width < 290);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Compact mode based on container height
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const h = entry.contentRect.height;
+      setIsCompactHeight(h <= 600);
+      setIsUltraCompactHeight(h <= 400);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -1835,6 +1851,13 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     if (!hasContent && !hasBg) return;
 
     const snapshot = JSON.stringify(textOverlay);
+
+    // Skip initial mount to avoid pushing to OBS when merely switching to the text tab
+    if (lastAppliedRef.current === "") {
+      lastAppliedRef.current = snapshot;
+      return;
+    }
+
     if (snapshot === lastAppliedRef.current) return;
 
     const timer = setTimeout(() => {
@@ -2094,61 +2117,60 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
 
 
   return (
-    <div ref={tabsRef} className="dock-media-console">
-      {/* ── Header ── */}
-      <div className="dock-media-header">
-        <div className="dock-media-header__left">
-          <span className="dock-media-header__label">{t('media.title')}</span>
-
-        </div>
-        <div className="dock-media-header__actions">
-          <button
-            type="button"
-            className="dock-btn dock-btn--compact dock-btn--primary"
-            onClick={() => {
-              if (browserTab === "animations") {
-                openAddMediaModal("template-videos");
-              } else {
-                uploadInputRef.current?.click();
+    <div ref={(node) => { tabsRef.current = node; containerRef.current = node; }} className={`dock-media-console${isCompactHeight ? " dock-media-console--compact" : ""}${isUltraCompactHeight ? " dock-media-console--ultra-compact" : ""}`}>
+      {/* ── Header (normal mode only) ── */}
+      {!isCompactHeight && (
+        <div className="dock-media-header">
+          <div className="dock-media-header__left">
+            <span className="dock-media-header__label">{t('media.title')}</span>
+          </div>
+          <div className="dock-media-header__actions">
+            <button
+              type="button"
+              className="dock-btn dock-btn--compact dock-btn--primary"
+              onClick={() => {
+                if (browserTab === "animations") {
+                  openAddMediaModal("template-videos");
+                } else {
+                  uploadInputRef.current?.click();
+                }
+              }}
+              disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations")}
+              title={
+                browserTab === "animations"
+                  ? t('media.addAnimation')
+                  : browserTab !== "uploads"
+                    ? t('media.uploadRestricted')
+                    : uploading ? t('media.preparing') : t('media.addMedia')
               }
-            }}
-            disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations")}
-            title={
-              browserTab === "animations"
-                ? t('media.addAnimation')
-                : browserTab !== "uploads"
-                  ? t('media.uploadRestricted')
-                  : uploading ? t('media.preparing') : t('media.addMedia')
-            }
-          >
-            <Icon name="add" size={12} />
-            {uploading
-              ? t('media.preparing')
-              : browserTab === "animations"
-                ? t('media.addAnimation')
-                : t('media.addMedia')}
-          </button>
-          <button
-            type="button"
-            className={`dock-btn dock-btn--compact${selectionMode ? " dock-btn--ghost" : " dock-btn--secondary"}`}
-            onClick={async () => {
-              // Allow cancelling selection mode without entitlement check
-              if (selectionMode) {
+            >
+              <Icon name="add" size={12} />
+              {uploading
+                ? t('media.preparing')
+                : browserTab === "animations"
+                  ? t('media.addAnimation')
+                  : t('media.addMedia')}
+            </button>
+            <button
+              type="button"
+              className={`dock-btn dock-btn--compact${selectionMode ? " dock-btn--ghost" : " dock-btn--secondary"}`}
+              onClick={async () => {
+                // Allow cancelling selection mode without entitlement check
+                if (selectionMode) {
+                  toggleSelectionMode();
+                  return;
+                }
+                if (!(await requireEntitlement("slideshow", 0))) return;
                 toggleSelectionMode();
-                return;
-              }
-              if (!(await requireEntitlement("slideshow", 0))) return;
-              toggleSelectionMode();
-            }}
-            disabled={browserTab !== "uploads"}
-            title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
-          >
-            {/* {selectionMode ? "Cancel" : "Create Slideshow"} */}
-            <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
-          </button>
-
+              }}
+              disabled={browserTab !== "uploads"}
+              title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
+            >
+              <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <input
         ref={uploadInputRef}
@@ -2168,47 +2190,92 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
         }}
       />
 
-      {/* ── Category Tabs ── */}
-      <div className={`dock-media-tabs${compactTabs ? " dock-media-tabs--compact" : ""}`} role="tablist" aria-label={t('media.mediaBrowserViews')}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={browserTab === "uploads"}
-          className={`dock-media-tab ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
-          onClick={() => setBrowserTab("uploads")}
-          title={t('media.upload')}>
-          {compactTabs ? <Icon name="upload" size={12} /> : t('media.tabImages')}
-          {!compactTabs && <span className="dock-media-tab__count">{mediaEntries.length}</span>}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={browserTab === "animations"}
-          className={`dock-media-tab ${browserTab === "animations" ? "dock-media-tab--active" : ""}`}
-          onClick={() => setBrowserTab("animations")}
-        >
-          {compactTabs ? <Icon name="animation" size={12} /> : t('media.tabAnimations')}
-          {!compactTabs && <span className="dock-media-tab__count">{animationEntries.length}</span>}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={browserTab === "patterns"}
-          className={`dock-media-tab ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
-          onClick={() => setBrowserTab("patterns")}
-          title={t('media.gridView')}>
-          {compactTabs ? <Icon name="grid_view" size={12} /> : t('media.patterns')}
-          {!compactTabs && <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={browserTab === "text"}
-          className={`dock-media-tab ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
-          onClick={() => setBrowserTab("text")}
-          title={t('media.tabText')}>
-          {compactTabs ? <Icon name="text_fields" size={12} /> : t('media.tabText')}
-        </button>
+      {/* ── Category Tabs (with inline actions in compact mode) ── */}
+      <div className={`dock-media-tabs-row${isCompactHeight ? " dock-media-tabs-row--compact" : ""}`}>
+        <div className={`dock-media-tabs${compactTabs || isCompactHeight ? " dock-media-tabs--compact" : ""}`} role="tablist" aria-label={t('media.mediaBrowserViews')}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={browserTab === "uploads"}
+            className={`dock-media-tab ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
+            onClick={() => setBrowserTab("uploads")}
+            title={t('media.upload')}>
+            {compactTabs ? <Icon name="upload" size={12} /> : t('media.tabImages')}
+            {!compactTabs && <span className="dock-media-tab__count">{mediaEntries.length}</span>}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={browserTab === "animations"}
+            className={`dock-media-tab ${browserTab === "animations" ? "dock-media-tab--active" : ""}`}
+            onClick={() => setBrowserTab("animations")}
+          >
+            {compactTabs ? <Icon name="animation" size={12} /> : t('media.tabAnimations')}
+            {!compactTabs && <span className="dock-media-tab__count">{animationEntries.length}</span>}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={browserTab === "patterns"}
+            className={`dock-media-tab ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
+            onClick={() => setBrowserTab("patterns")}
+            title={t('media.gridView')}>
+            {compactTabs ? <Icon name="grid_view" size={12} /> : t('media.patterns')}
+            {!compactTabs && <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={browserTab === "text"}
+            className={`dock-media-tab ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
+            onClick={() => setBrowserTab("text")}
+            title={t('media.tabText')}>
+            {compactTabs ? <Icon name="text_fields" size={12} /> : t('media.tabText')}
+          </button>
+        </div>
+        {isCompactHeight && (
+          <div className="dock-media-tabs-row__actions">
+            <button
+              type="button"
+              className="dock-btn dock-btn--compact dock-btn--primary"
+              onClick={() => {
+                if (browserTab === "animations") {
+                  openAddMediaModal("template-videos");
+                } else {
+                  uploadInputRef.current?.click();
+                }
+              }}
+              disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations")}
+              title={
+                browserTab === "animations"
+                  ? t('media.addAnimation')
+                  : browserTab !== "uploads"
+                    ? t('media.uploadRestricted')
+                    : uploading ? t('media.preparing') : t('media.addMedia')
+              }
+            >
+              <Icon name="add" size={12} />
+            </button>
+            {!isUltraCompactHeight && (
+              <button
+                type="button"
+                className={`dock-btn dock-btn--compact${selectionMode ? " dock-btn--ghost" : " dock-btn--secondary"}`}
+                onClick={async () => {
+                  if (selectionMode) {
+                    toggleSelectionMode();
+                    return;
+                  }
+                  if (!(await requireEntitlement("slideshow", 0))) return;
+                  toggleSelectionMode();
+                }}
+                disabled={browserTab !== "uploads"}
+                title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
+              >
+                <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Search Bar ── */}
@@ -3319,14 +3386,9 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
       {activeOptionsEntry && (() => {
         const entry = activeOptionsEntry;
         const entryPrefs = mediaPrefs[entry.prefKey] ?? {};
-        const isActive = activeTargets.active?.key === entry.key;
-        const isPaused = isActive && pausedTargets.active;
-        const statusLabel = isActive ? (isPaused ? t('media.inPreview') : t('media.live')) : t('media.notActive');
-        const statusVariant = isActive ? (isPaused ? "preview" : "live") : "idle";
         const thumbUrl = entry.thumbnailUrl || (entry.previewUrl && entry.kind === "image" ? entry.previewUrl : null);
         const cleanName = entryPrefs.label?.trim()
           || entry.name.replace(/^media_\d+_/, "").replace(/\.[^.]+$/, "");
-        const fileExt = (entry.name.split(".").pop() || entry.mimeLabel || (entry.kind === "video" ? "MP4" : "IMG")).toUpperCase();
         // const addedDate = entry.createdAt ? new Date(entry.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
         // const usedDate = entryPrefs.lastUsedAt ? new Date(entryPrefs.lastUsedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
 
@@ -3378,11 +3440,6 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
               {/* ── Title + Status ── */}
               <div className="dock-media-inspector__title-block">
                 <h2 id="dock-media-inspector-title" className="dock-media-inspector__title">{cleanName}</h2>
-                <div className="dock-media-inspector__subtitle">
-                  <span className={`dock-media-inspector__badge dock-media-inspector__badge--${statusVariant}`}>{statusLabel}</span>
-                  <span className="dock-media-inspector__meta-chip">{fileExt}</span>
-                  {entry.originLabel && <span className="dock-media-inspector__meta-chip">{t(`media.${entry.originLabel.toLowerCase()}`, entry.originLabel)}</span>}
-                </div>
               </div>
 
               {/* ── Quick Rename ── */}

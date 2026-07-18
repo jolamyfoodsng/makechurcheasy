@@ -116,15 +116,34 @@ function getDeviceIdFromUrl(): string | null {
   return params.get("deviceId");
 }
 
+/**
+ * Try to get the deviceId from the local overlay server's auth session.
+ * This avoids requiring ?deviceId= in the URL — the Tauri app syncs the
+ * session before the dock loads, so the deviceId is already available.
+ */
+async function getDeviceIdFromSession(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/auth/status", { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const did = data.deviceId != null ? String(data.deviceId).trim() : "";
+    return did || null;
+  } catch {
+    return null;
+  }
+}
+
 export default function DockAuthGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
 
   const checkAuth = useCallback(async (attempt = 0) => {
-    const deviceId = getDeviceIdFromUrl();
+    // Try session first (no URL parameter needed), fall back to URL for
+    // backward compat with old OBS browser sources that embed ?deviceId=
+    const deviceId = (await getDeviceIdFromSession()) || getDeviceIdFromUrl();
     if (!deviceId) {
-      // No deviceId in URL — can't verify
+      // No deviceId anywhere — can't verify
       setAuthed(false);
       setReady(true);
       return;
@@ -180,7 +199,9 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authed || !ready) return;
     const id = setInterval(async () => {
-      const stillAuthed = await checkLocalAuth(getDeviceIdFromUrl() || "");
+      const stillAuthed = await checkLocalAuth(
+        (await getDeviceIdFromSession()) || getDeviceIdFromUrl() || "",
+      );
       if (stillAuthed !== "authenticated") {
         setAuthed(false);
       }

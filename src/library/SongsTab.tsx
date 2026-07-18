@@ -439,7 +439,6 @@ export function SongsTab() {
       <div className="lib-toolbar">
         <div className="lib-toolbar-left">
           <div className="lib-search-wrap">
-            <Icon name="search" size={18} className="lib-search-icon" />
             <input
               className="lib-search-input"
               type="text"
@@ -737,7 +736,6 @@ export function SongsTab() {
 
             <div className="lib-song-modal-body lib-online-search-modal-body">
               <div className="lib-search-wrap lib-online-search-wrap">
-                <Icon name="search" size={18} className="lib-search-icon" />
                 <input
                   className="lib-search-input"
                   type="text"

@@ -119,6 +119,7 @@ export default function DockEventTab({ staged, onStage }: Props) {
     <>
       {/* Event list */}
       <div className="dock-section-label">{t("event.title")}</div>
+      <div className="dock-section-desc">{t("event.titleDesc")}</div>
 
       {events.length === 0 && (
         <div className="dock-empty" style={{ padding: 16 }}>

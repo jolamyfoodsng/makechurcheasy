@@ -464,6 +464,17 @@ let _lastPairingCode: string | null = null;
 export async function createPairingCode(
   deviceName: string
 ): Promise<{ code: string; expiresAt: string } | { error: string; versionBlocked?: boolean }> {
+  let installationId: string | undefined;
+  let fingerprintHash: string | undefined;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const fp = await invoke<{ installationId: string; fingerprintHash: string }>("get_device_fingerprint");
+    installationId = fp.installationId;
+    fingerprintHash = fp.fingerprintHash;
+  } catch {
+    // Not running in Tauri — send without fingerprint
+  }
+
   try {
     const res = await fetch(`${API_BASE}/api/pairing/create`, {
       method: "POST",
@@ -471,7 +482,12 @@ export async function createPairingCode(
         "Content-Type": "application/json",
         "X-App-Version": APP_VERSION,
       },
-      body: JSON.stringify({ deviceName, previousCode: _lastPairingCode }),
+      body: JSON.stringify({
+        deviceName,
+        previousCode: _lastPairingCode,
+        installationId,
+        fingerprintHash,
+      }),
     });
     if (res.status === 403) {
       const body = await res.json().catch(() => ({}));

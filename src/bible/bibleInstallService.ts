@@ -1,0 +1,100 @@
+import { downloadAndParseBible } from "./bibleApi";
+import type { CatalogBible, InstalledBible } from "./types";
+import {
+  getInstalledTranslations,
+  saveInstalledTranslation,
+} from "./bibleDb";
+
+export interface BibleDownloadProgress {
+  catalogId: string;
+  abbr: string;
+  progress: number;
+  status: "downloading" | "parsing" | "done";
+}
+
+export function deriveBibleAbbr(bible: CatalogBible): string {
+  const version = (bible.version ?? "").trim().toUpperCase();
+  if (version && version.length <= 8 && /^[A-Z]/.test(version)) return version;
+  return (bible.name ?? "Unknown")
+    .split(/\s+/)
+    .map((word) => word?.[0] ?? "")
+    .join("")
+    .toUpperCase()
+    .slice(0, 6);
+}
+
+export function formatBibleFileSize(bytes: number): string {
+  if (!bytes || bytes <= 0) return "-";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export async function isBibleCatalogItemInstalled(
+  catalogId: string,
+  abbr: string,
+): Promise<boolean> {
+  const normalizedAbbr = abbr.trim().toUpperCase();
+  const installed = await getInstalledTranslations();
+  return installed.some(
+    (entry) =>
+      entry.id === catalogId ||
+      entry.abbr.trim().toUpperCase() === normalizedAbbr,
+  );
+}
+
+export async function installBibleFromCatalog(
+  bible: CatalogBible,
+  onProgress?: (state: BibleDownloadProgress) => void,
+): Promise<InstalledBible> {
+  const abbr = deriveBibleAbbr(bible);
+  const normalizedAbbr = abbr.trim().toUpperCase();
+
+  if (await isBibleCatalogItemInstalled(bible.id, normalizedAbbr)) {
+    throw new Error(`${normalizedAbbr} is already installed.`);
+  }
+
+  onProgress?.({
+    catalogId: bible.id,
+    abbr: normalizedAbbr,
+    progress: 0,
+    status: "downloading",
+  });
+
+  const data = await downloadAndParseBible(bible.id, (progress) => {
+    onProgress?.({
+      catalogId: bible.id,
+      abbr: normalizedAbbr,
+      progress,
+      status: "downloading",
+    });
+  });
+
+  onProgress?.({
+    catalogId: bible.id,
+    abbr: normalizedAbbr,
+    progress: 1,
+    status: "parsing",
+  });
+
+  const record: InstalledBible = {
+    id: bible.id,
+    abbr: normalizedAbbr,
+    name: bible.name,
+    language: bible.language,
+    data,
+    downloadedAt: new Date().toISOString(),
+    filesize: bible.filesize,
+  };
+
+  await saveInstalledTranslation(record);
+
+  onProgress?.({
+    catalogId: bible.id,
+    abbr: normalizedAbbr,
+    progress: 1,
+    status: "done",
+  });
+
+  return record;
+}

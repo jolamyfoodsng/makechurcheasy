@@ -65,14 +65,23 @@ export default function DockLowerThirdEditor({
   onSend,
   onBlank: _onBlank,
   onAnimateOut,
-  onUpdate,
   sending,
   size = "xl",
-  live = false,
 }: DockLTEditorProps) {
   const { t } = useTranslation();
+
+  function loadSlot1(): SlotState | null {
+    try {
+      const saved = loadSlots(theme.id, "default")[0];
+      if (saved) return resolveSlotState(saved);
+    } catch { /* ignore */ }
+    return null;
+  }
+
   // ── Variable values ──
   const [variableValues, setVariableValues] = useState<Record<string, string>>(() => {
+    const s1 = loadSlot1();
+    if (s1) return { ...s1.variableValues };
     const init: Record<string, string> = {};
     for (const v of theme.variables) {
       init[v.key] = v.defaultValue ?? "";
@@ -81,14 +90,30 @@ export default function DockLowerThirdEditor({
   });
 
   // ── Custom style overrides ──
-  const [customStyles, setCustomStyles] = useState<LTCustomStyle>({ ...LT_DEFAULT_CUSTOM_STYLE });
+  const [customStyles, setCustomStyles] = useState<LTCustomStyle>(() => {
+    const s1 = loadSlot1();
+    if (s1) return { ...s1.customStyles };
+    return { ...LT_DEFAULT_CUSTOM_STYLE };
+  });
 
   // ── Position ──
-  const [position, setPosition] = useState<LTPosition>("bottom-left");
+  const [position, setPosition] = useState<LTPosition>(() => {
+    const s1 = loadSlot1();
+    if (s1) return s1.position;
+    return "bottom-left";
+  });
 
   // ── Animation ──
-  const [animationIn, setAnimationIn] = useState<LTAnimationIn>("slide-left");
-  const [exitStyle, setExitStyle] = useState<LTExitStyle>("fade");
+  const [animationIn, setAnimationIn] = useState<LTAnimationIn>(() => {
+    const s1 = loadSlot1();
+    if (s1) return s1.animationIn;
+    return "slide-left";
+  });
+  const [exitStyle, setExitStyle] = useState<LTExitStyle>(() => {
+    const s1 = loadSlot1();
+    if (s1) return s1.exitStyle;
+    return "fade";
+  });
 
   // ── Preview zoom (persisted) ──
   // Currently unused — will be wired to UI controls in a follow-up
@@ -169,11 +194,8 @@ export default function DockLowerThirdEditor({
     }));
     setSpeakers(list);
 
-    // Auto-select main pastor
-    if (list.length > 0) {
-      const mainIdx = list.findIndex((s) => s.isMain || s.name.trim().toLowerCase() === ministry.mainPastorName.toLowerCase());
-      setSelectedSpeakerIdx(mainIdx >= 0 ? mainIdx : 0);
-    } else {
+    // Don't auto-select — user picks manually
+    if (list.length === 0) {
       // localStorage empty — try fetching from the API (OBS dock context)
       ensureMinistryData().then((fetched) => {
         if (!fetched) return;
@@ -185,10 +207,6 @@ export default function DockLowerThirdEditor({
           isMain: s.isMain,
         }));
         setSpeakers(freshList);
-        if (freshList.length > 0) {
-          const mainIdx = freshList.findIndex((s) => s.isMain || s.name.trim().toLowerCase() === fresh.mainPastorName.toLowerCase());
-          setSelectedSpeakerIdx(mainIdx >= 0 ? mainIdx : 0);
-        }
       });
     }
   }, [theme.id, isCurrentThemeSpeaker]);
@@ -310,8 +328,17 @@ export default function DockLowerThirdEditor({
       setPosition("bottom-left");
       setAnimationIn(theme.animation?.name as LTAnimationIn || "slide-left");
       setExitStyle("fade");
-      setSlots(loadSlots(theme.id, "default"));
-      setActiveSlotIndex(null);
+      const newSlots = loadSlots(theme.id, "default");
+      setSlots(newSlots);
+      if (newSlots[0]) {
+        const resolved = resolveSlotState(newSlots[0]);
+        setVariableValues({ ...resolved.variableValues });
+        setCustomStyles({ ...resolved.customStyles });
+        setPosition(resolved.position);
+        setAnimationIn(resolved.animationIn);
+        setExitStyle(resolved.exitStyle);
+      }
+      setActiveSlotIndex(0);
       setCardsOpen(true);
     }
   }, [theme]);
@@ -320,7 +347,8 @@ export default function DockLowerThirdEditor({
   const [cardsOpen, setCardsOpen] = useState(true);
 
   const [slots, setSlots] = useState<(ContentSlot | null)[]>(() => loadSlots(theme.id, "default"));
-  const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
+  const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(0);
+  const skipFirstSaveRef = useRef(true);
   const suppressLiveUpdateRef = useRef(false);
   const isSavingRef = useRef(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -352,7 +380,7 @@ export default function DockLowerThirdEditor({
   const handleDeleteSlot = useCallback((index: number) => {
     deleteSlot(theme.id, "default", index);
     reloadSlots();
-    if (activeSlotIndex === index) setActiveSlotIndex(null);
+    if (activeSlotIndex === index) setActiveSlotIndex(0);
   }, [theme.id, reloadSlots, activeSlotIndex]);
 
   const handleRenameSlot = useCallback((index: number) => {
@@ -362,15 +390,15 @@ export default function DockLowerThirdEditor({
     setRenamingSlotName("");
   }, [theme.id, renamingSlotName, reloadSlots]);
 
-  // ── Auto-save active slot on editor changes (debounced 300ms) ──
-  // Use theme.id (not theme object ref) so parent re-renders with the same
-  // theme don't cancel the debounce timer before it fires.
-  useEffect(() => {
+  // Keep a ref with the latest state so saves always write fresh data
+  const latestRef = useRef({ variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex });
+  latestRef.current = { variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex };
+
+  const doSave = useCallback(() => {
+    const { variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex } = latestRef.current;
     if (activeSlotIndex === null) return;
     if (isSavingRef.current) return;
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => {
-      if (isSavingRef.current) return;
+    try {
       const fullState: SlotState = {
         variableValues: { ...variableValues },
         customStyles: { ...customStyles },
@@ -379,27 +407,17 @@ export default function DockLowerThirdEditor({
         exitStyle,
       };
       saveSlot(theme.id, "default", activeSlotIndex, variableValues, theme, fullState);
-      autoSaveTimerRef.current = null;
-      reloadSlots();
-    }, 300);
-    return () => {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-        // Flush pending save so data isn't lost on unmount / effect re-run
-        if (!isSavingRef.current) {
-          const fullState: SlotState = {
-            variableValues: { ...variableValues },
-            customStyles: { ...customStyles },
-            position,
-            animationIn,
-            exitStyle,
-          };
-          saveSlot(theme.id, "default", activeSlotIndex, variableValues, theme, fullState);
-        }
-      }
-    };
-  }, [activeSlotIndex, variableValues, customStyles, position, animationIn, exitStyle, theme.id, reloadSlots]);
+    } catch (err) {
+      console.warn("[AutoSave] saveSlot failed:", err);
+    }
+    reloadSlots();
+  }, [theme.id]);
+
+  // Auto-save whenever editor state changes (skip first render to avoid overwriting loaded slot data)
+  useEffect(() => {
+    if (skipFirstSaveRef.current) { skipFirstSaveRef.current = false; return; }
+    doSave();
+  }, [doSave, variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex]);
 
   // ── Context menu open (right-click or left-click empty slot) ──
   const openContextMenu = useCallback((slotIndex: number, x: number, y: number) => {
@@ -531,29 +549,6 @@ export default function DockLowerThirdEditor({
     onAnimateOut(url);
   }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onAnimateOut]);
 
-  useEffect(() => {
-    if (!live || !onUpdate) return;
-    const timer = window.setTimeout(() => {
-      const url = buildOverlayUrl(
-        theme,
-        variableValues,
-        true,
-        false,
-        size,
-        customStyles,
-        undefined as LTFontSize | undefined,
-        position,
-        undefined,
-        undefined,
-        animationIn,
-        exitStyle,
-      );
-      onUpdate(url);
-    }, 180);
-
-    return () => window.clearTimeout(timer);
-  }, [live, onUpdate, theme, variableValues, customStyles, position, animationIn, exitStyle, size]);
-
   return (
     <div className="dock-lt-editor-layout">
       {/* ── Preview (fixed top) ── */}
@@ -621,6 +616,7 @@ export default function DockLowerThirdEditor({
                   cursor: "pointer",
                 }}
               >
+                <option value="">—</option>
                 {speakers.map((sp, i) => (
                   <option key={`${sp.name}-${i}`} value={i}>
                     {sp.name}{sp.isMain ? " ★" : ""}{sp.role ? ` — ${sp.role}` : ""}

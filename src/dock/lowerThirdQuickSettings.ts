@@ -1,7 +1,13 @@
 import type { DockFullscreenQuickThemeSettings } from "./components/DockFullscreenThemeQuickSettings";
 
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 const LINKED_LOWER_THIRD_INHERITED_KEYS: Array<keyof DockFullscreenQuickThemeSettings> = [
   "fontFamily",
+  "fontSize",
+  "refFontSize",
   "fontColor",
   "refFontColor",
   "refPosition",
@@ -72,6 +78,14 @@ export function buildLinkedLowerThirdQuickThemeSettings(
     if (value !== undefined) {
       assignableNext[key] = value;
     }
+  }
+
+  // Clamp font sizes to lower-third-safe ranges
+  if (typeof assignableNext.fontSize === "number") {
+    assignableNext.fontSize = clampNumber(assignableNext.fontSize, 14, 100);
+  }
+  if (typeof assignableNext.refFontSize === "number") {
+    assignableNext.refFontSize = clampNumber(assignableNext.refFontSize, 10, 80);
   }
 
   return next;

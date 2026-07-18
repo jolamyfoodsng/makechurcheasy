@@ -2326,7 +2326,7 @@
   "quickMergePanel.sourceSlots.showLayer": "Show Layer",
   "quickMergePanel.sourceSlots.slotLabel": "Slot",
   "quickMergePanel.sourceSlots.title": "Source Slots",
-  "resources.tabBibleSubtitle": "Download translations like KJV and ASV or import custom XML Bibles for the MakeChurchEasy Dock.",
+  "resources.tabBibleSubtitle": "Download translations like KJV and ASV.",
   "resources.tabBibleTitle": "Bible Resources",
   "resources.tabMediaSubtitle": "Manage videos, images, and backgrounds that the dock can send into OBS.",
   "resources.tabMediaTitle": "Media Resources",

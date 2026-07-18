@@ -7,8 +7,8 @@
     --font-mono: 'JetBrains Mono', SFMono-Regular, Consolas, monospace;
 
     /* Accent Swatches */
-    --color-purple: #1D4ED8;
-    --color-blue: #60A5FA;
+    --color-purple: #2563EB;
+    --color-blue: #3B82F6;
     --color-cyan: #06B6D4;
     --color-green: #22C55E;
     --color-yellow: #F59E0B;
@@ -18,7 +18,7 @@
 
     /* Dynamic variables (changed by state inside App.tsx) */
     --accent-color: var(--color-purple);
-    --accent-rgb: 29, 78, 216;
+    --accent-rgb: 37, 99, 235;
     /* Used for translucent tags/glows */
 
     /* Semantic colors */
@@ -60,35 +60,35 @@
 
 /* Handle system layouts and custom properties */
 :root[data-theme="dark"] {
-    --bg-app: #0F172A;
-    --bg-sidebar: #111827;
-    --bg-header: #0F172A;
-    --bg-card: #1F2937;
-    --bg-card-hover: #334155;
-    --bg-input: #0F172A;
-    --bg-hover: #334155;
-    --border-color: #334155;
-    --text-primary: #f1f5f9;
-    --text-secondary: #c8d0de;
-    --text-muted: #94a3b8;
+    --bg-app: #0A0A0A;
+    --bg-sidebar: #0A0A0A;
+    --bg-header: #0A0A0A;
+    --bg-card: #151515;
+    --bg-card-hover: #1F1F1F;
+    --bg-input: #151515;
+    --bg-hover: #292929;
+    --border-color: #303030;
+    --text-primary: #F5F5F5;
+    --text-secondary: #B3B3B3;
+    --text-muted: #737373;
     --text-on-accent: #ffffff;
     --glow-opacity: 0.15;
     --shadow-main: 0 4px 18px rgba(0, 0, 0, 0.4);
     --switch-knob: #ffffff;
     --range-thumb-border: #ffffff;
     --swatch-check: #ffffff;
-    --preview-bg: #0F172A;
-    --preview-border: #1e293b;
-    --preview-surface: #0F172A;
-    --preview-sidebar-bg: #111827;
-    --preview-card-bg: #1f2937;
-    --preview-card-border: #374151;
-    --preview-text: #f1f5f9;
-    --preview-text-muted: #9ca3af;
-    --logs-bg: #0F172A;
-    --logs-text: #94A3B8;
+    --preview-bg: #0A0A0A;
+    --preview-border: #303030;
+    --preview-surface: #0A0A0A;
+    --preview-sidebar-bg: #0A0A0A;
+    --preview-card-bg: #151515;
+    --preview-card-border: #303030;
+    --preview-text: #F5F5F5;
+    --preview-text-muted: #737373;
+    --logs-bg: #0A0A0A;
+    --logs-text: #737373;
     --logs-time: #22c55e;
-    --logs-source: #1D4ED8;
+    --logs-source: #2563EB;
     --overlay-bg: rgba(0, 0, 0, 0.7);
     --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
     --shadow-toast: 0 10px 15px -3px rgba(0, 0, 0, 0.3);

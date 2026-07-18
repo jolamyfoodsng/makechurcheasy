@@ -352,6 +352,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
       <div className="dock-planner-header">
         <div>
           <div className="dock-section-label">{t("planner.title")}</div>
+          <div className="dock-section-desc">{t("planner.titleDesc")}</div>
           <div className="dock-planner-title">{activePlan.title}</div>
           <div className="dock-planner-meta">
             {planDateLabel(activePlan.serviceDate, t)} · {t("planner.cueCount", { count: activePlan.items.length })}

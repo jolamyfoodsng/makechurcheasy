@@ -1,9 +1,8 @@
 /**
  * DockBottomToolbar.tsx — Shared bottom toolbar for Bible & Worship tabs
  *
- * Default: single-row (toggle | divider | actions | spacer | collapse) + clear below
- * ≤250px: two-row compact (toggle + collapse | action icons incl. visibility inline)
- * compact (panel ≤360px): Full | LT ... Visibility | ⋯ overflow
+ * Always compact one-row layout at every width.
+ * [ Full | LT ] ... [ visibility ] [ inline action ] [ ⋯ ]
  */
 
 import { useCallback, useRef, useEffect, useState } from "react";
@@ -17,7 +16,6 @@ const DISPLAY_MODES = [
   { id: "single" as const, labelKey: "dock.bottomToolbar.singleTranslation" },
   { id: "compare" as const, labelKey: "dock.bottomToolbar.compareTranslations" },
 ];
-const COMPACT_WIDTH_PX = 360;
 
 interface Props {
   /** Current overlay mode */
@@ -46,8 +44,6 @@ interface Props {
   collapsed?: boolean;
   /** Called when collapse/expand is toggled */
   onCollapseChange?: (collapsed: boolean) => void;
-  /** Compact mode: hides action children behind a ⋯ overflow menu */
-  compact?: boolean;
 }
 
 export default function DockBottomToolbar({
@@ -64,7 +60,6 @@ export default function DockBottomToolbar({
   inlineAction,
   collapsed = false,
   onCollapseChange,
-  compact = false,
 }: Props) {
   const { t } = useTranslation();
   const resolvedClearLabel = clearLabel ?? t("dock.bottomToolbar.hideBible");
@@ -73,8 +68,6 @@ export default function DockBottomToolbar({
   const overflowRef = useRef<HTMLDivElement>(null);
   const [showDisplayModeMenu, setShowDisplayModeMenu] = useState(false);
   const displayModeMenuRef = useRef<HTMLDivElement>(null);
-  const [widthCompact, setWidthCompact] = useState(false);
-  const effectiveCompact = compact || widthCompact;
   const visibilityIcon = sourceVisible ? "visibility_off" : "visibility";
 
   // Close overflow on outside click
@@ -100,21 +93,6 @@ export default function DockBottomToolbar({
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [showDisplayModeMenu]);
-
-  useEffect(() => {
-    const el = toolbarRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const updateWidth = (width: number) => {
-      setWidthCompact(width > 0 && width <= COMPACT_WIDTH_PX);
-    };
-    updateWidth(el.getBoundingClientRect().width);
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) updateWidth(entry.contentRect.width);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [collapsed, effectiveCompact]);
 
   const toggleOverflow = useCallback(() => setShowOverflow((prev) => !prev), []);
 
@@ -154,102 +132,10 @@ export default function DockBottomToolbar({
     );
   }
 
-  /* ═══ COMPACT MODE (panel ≤360px) ═══
-   * Layout: [ Full ▼ | LT ] ... [ Delete ] [ ⋯ ]
-   * Hidden actions (children) go into the ⋯ overflow dropdown */
-  if (effectiveCompact) {
-    return (
-      <div className="dock-btm-toolbar dock-btm-toolbar--compact" ref={toolbarRef}>
-        <div className="dock-btm-toolbar__row">
-          {/* Segmented: Full ▼ | LT */}
-          <div
-            className={`dock-btm-segmented${morphing ? " dock-btm-segmented--morphing" : ""}`}
-            role="group"
-            aria-label={t("dock.bottomToolbar.overlayModeLabel")}
-          >
-            <div className="dock-btm-display-mode-anchor" ref={displayModeMenuRef}>
-              <button
-                type="button"
-                className={`dock-btm-segmented__item dock-btm-segmented__item--full${overlayMode === "fullscreen" ? " dock-btm-segmented__item--active" : ""}`}
-                onClick={() => onModeChange("fullscreen")}
-                title={t("dock.bottomToolbar.fullscreenTooltip")}
-              >
-                {t("dock.bottomToolbar.fullLabel")}
-              </button>
-              {showDisplayModeMenu && onDisplayModeChange && (
-                <div className="dock-btm-display-mode-menu" role="menu">
-                  {DISPLAY_MODES.map((mode) => (
-                    <button
-                      key={mode.id}
-                      type="button"
-                      className={`dock-btm-display-mode-menu__item${displayMode === mode.id ? " dock-btm-display-mode-menu__item--active" : ""}`}
-                      onClick={() => handleDisplayModeSelect(mode.id)}
-                      role="menuitem"
-                    >
-                      {t(mode.labelKey)}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              className={`dock-btm-segmented__item${overlayMode === "lower-third" ? " dock-btm-segmented__item--active" : ""}`}
-              onClick={() => onModeChange("lower-third")}
-              title={t("dock.bottomToolbar.lowerThirdTooltip")}
-            >
-              {t("dock.bottomToolbar.ltLabel")}
-            </button>
-          </div>
-
-          {/* Spacer pushes right actions to the end */}
-          <div className="dock-btm-spacer" />
-
-          {/* Visibility toggle — always accessible */}
-          {onClear && (
-            <button
-              type="button"
-              className="dock-btm-toolbar__clear--inline"
-              onClick={onClear}
-              disabled={clearDisabled}
-              aria-label={resolvedClearLabel}
-              aria-pressed={!sourceVisible}
-              title={resolvedClearLabel}
-            >
-              <Icon name={visibilityIcon} size={16} />
-            </button>
-          )}
-
-          {inlineAction}
-
-          {/* ⋯ Overflow menu for hidden actions */}
-          {children && (
-            <div className="dock-btm-overflow" ref={overflowRef}>
-              <button
-                type="button"
-                className={`dock-btm-toolbar__icon-btn${showOverflow ? " dock-btm-toolbar__icon-btn--active" : ""}`}
-                onClick={toggleOverflow}
-                aria-label={t("dock.bottomToolbar.moreActions")}
-                title={t("dock.bottomToolbar.moreActions")}
-              >
-                <Icon name="more_horiz" size={16} />
-              </button>
-              {showOverflow && (
-                <div className="dock-btm-overflow__menu" role="menu">
-                  {children}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="dock-btm-toolbar" ref={toolbarRef}>
+    <div className="dock-btm-toolbar dock-btm-toolbar--compact" ref={toolbarRef}>
       <div className="dock-btm-toolbar__row">
-        {/* Segmented mode control */}
+        {/* Segmented: Full ▼ | LT */}
         <div
           className={`dock-btm-segmented${morphing ? " dock-btm-segmented--morphing" : ""}`}
           role="group"
@@ -259,11 +145,14 @@ export default function DockBottomToolbar({
             <button
               type="button"
               className={`dock-btm-segmented__item dock-btm-segmented__item--full${overlayMode === "fullscreen" ? " dock-btm-segmented__item--active" : ""}`}
-              onClick={() => onModeChange("fullscreen")}
+              onClick={() => {
+                if (!morphing && overlayMode !== "fullscreen") onModeChange("fullscreen");
+              }}
+              disabled={morphing}
+              aria-busy={morphing}
               title={t("dock.bottomToolbar.fullscreenTooltip")}
             >
               {t("dock.bottomToolbar.fullLabel")}
-
             </button>
             {showDisplayModeMenu && onDisplayModeChange && (
               <div className="dock-btm-display-mode-menu" role="menu">
@@ -284,59 +173,57 @@ export default function DockBottomToolbar({
           <button
             type="button"
             className={`dock-btm-segmented__item${overlayMode === "lower-third" ? " dock-btm-segmented__item--active" : ""}`}
-            onClick={() => onModeChange("lower-third")}
+            onClick={() => {
+              if (!morphing && overlayMode !== "lower-third") onModeChange("lower-third");
+            }}
+            disabled={morphing}
+            aria-busy={morphing}
             title={t("dock.bottomToolbar.lowerThirdTooltip")}
           >
             {t("dock.bottomToolbar.ltLabel")}
           </button>
-          <button
-            type="button"
-            className="dock-btm-toolbar__icon-btn dock-btm-toolbar__icon-btn--collapse"
-            onClick={() => onCollapseChange?.(true)}
-            aria-label={t("dock.bottomToolbar.collapseTooltip")}
-            title={t("dock.bottomToolbar.collapseTooltip")}
-          >
-            <Icon name="expand_more" size={18} />
-          </button>
         </div>
 
-        {/* Action buttons + collapse grouped together */}
-        <div className="dock-btm-toolbar__actions">
-          {children}
-          {inlineAction}
-          {onClear && (
-            <button
-              type="button"
-              className="dock-btm-toolbar__clear--inline"
-              onClick={onClear}
-              disabled={clearDisabled}
-              aria-label={resolvedClearLabel}
-              aria-pressed={!sourceVisible}
-              title={resolvedClearLabel}
-            >
-              <Icon name={visibilityIcon} size={16} />
-            </button>
-          )}
+        {/* Spacer pushes right actions to the end */}
+        <div className="dock-btm-spacer" />
+
+        {/* Visibility toggle — always accessible */}
+        {onClear && (
           <button
             type="button"
-            className="dock-btm-toolbar__icon-btn dock-btm-toolbar__icon-btn--collapse_two"
-            onClick={() => onCollapseChange?.(true)}
-            aria-label={t("dock.bottomToolbar.collapseTooltip")}
-            title={t("dock.bottomToolbar.collapseTooltip")}
+            className="dock-btm-toolbar__clear--inline"
+            onClick={onClear}
+            disabled={clearDisabled}
+            aria-label={resolvedClearLabel}
+            aria-pressed={!sourceVisible}
+            title={resolvedClearLabel}
           >
-            <Icon name="expand_more" size={18} />
+            <Icon name={visibilityIcon} size={16} />
           </button>
-        </div>
+        )}
+
+        {inlineAction}
+
+        {/* ⋯ Overflow menu for hidden actions */}
+        {children && (
+          <div className="dock-btm-overflow" ref={overflowRef}>
+            <button
+              type="button"
+              className={`dock-btm-toolbar__icon-btn${showOverflow ? " dock-btm-toolbar__icon-btn--active" : ""}`}
+              onClick={toggleOverflow}
+              aria-label={t("dock.bottomToolbar.moreActions")}
+              title={t("dock.bottomToolbar.moreActions")}
+            >
+              <Icon name="more_horiz" size={16} />
+            </button>
+            {showOverflow && (
+              <div className="dock-btm-overflow__menu" role="menu">
+                {children}
+              </div>
+            )}
+          </div>
+        )}
       </div>
-      <button
-        type="button"
-        className="dock-btm-toolbar__clear dock-btm-toolbar__clear--full"
-        onClick={onClear}
-        disabled={clearDisabled}
-        title={resolvedClearLabel}
-      >
-        <span>{resolvedClearLabel}</span>
-      </button>
     </div>
   );
 }

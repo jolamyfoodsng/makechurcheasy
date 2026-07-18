@@ -529,9 +529,10 @@ function StepInstallDock({
     window.location.protocol === "http:" && window.location.port === "1420";
   const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
   const deviceId = getDeviceId();
+  const versionParam = `_v=${__APP_VERSION__}`;
   const deviceIdParam = deviceId
-    ? `?deviceId=${encodeURIComponent(deviceId)}`
-    : "";
+    ? `?deviceId=${encodeURIComponent(deviceId)}&${versionParam}`
+    : `?${versionParam}`;
   const dockUrl =
     (isDev ? `${base}/dock` : `${base}/dock.html`) + deviceIdParam;
   const aiUrl =

@@ -40,7 +40,7 @@ const ALL_LT_THEMES: LowerThirdTheme[] = [
     .map((t) => localizeLowerThirdThemeAssets(t))
     .filter(
       (t) => !LT_ALL_THEMES.some((lt) => lt.id === t.id),
-  ),
+    ),
 ];
 
 // Tagged union: supports both LowerThirdTheme (HTML template) and BibleTheme (CSS overlay)
@@ -650,6 +650,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             {/* Settings */}
             <div className="dock-mv-tab__section">
               <div className="dock-mv-tab__section-label">{t("ministry.settings")}</div>
+              <div className="dock-mv-tab__section-desc">{t("ministry.settingsDesc")}</div>
               <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "block", alignItems: "center", gap: 6 }}>
                   <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.heading")}</label>
@@ -704,17 +705,23 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       {t("ministry.bottom")}
                     </button>
                   </div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.loop")}</label>
-                  <button
-                    type="button"
-                    className={`dock-console-segmented__item${settings.loop ? " dock-console-segmented__item--active" : ""}`}
-                    onClick={() => setSettings((s) => ({ ...s, loop: !s.loop }))}
-                    style={{ fontSize: 10, padding: "2px 10px", borderRadius: 3, border: "1px solid var(--dock-border)", background: settings.loop ? "var(--dock-accent)" : "transparent", color: settings.loop ? "#fff" : "var(--dock-text-dim)", cursor: "pointer" }}
-                    title={settings.loop ? t("ministry.looping") : t("ministry.once")}>
-                    {settings.loop ? t("ministry.looping") : t("ministry.once")}
-                  </button>
+                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", marginLeft: 8 }}>{t("ministry.loop")}</label>
+                  <div className="dock-console-segmented dock-console-segmented--compact">
+                    <button
+                      type="button"
+                      className={`dock-console-segmented__item${!settings.loop ? " dock-console-segmented__item--active" : ""}`}
+                      onClick={() => setSettings((s) => ({ ...s, loop: false }))}
+                      title={t("ministry.once")}>
+                      {t("ministry.once")}
+                    </button>
+                    <button
+                      type="button"
+                      className={`dock-console-segmented__item${settings.loop ? " dock-console-segmented__item--active" : ""}`}
+                      onClick={() => setSettings((s) => ({ ...s, loop: true }))}
+                      title={t("ministry.looping")}>
+                      {t("ministry.looping")}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -722,19 +729,19 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             {/* Compose */}
             <div className="dock-mv-tab__section">
               <div className="dock-mv-tab__section-label">{t("ministry.messages")}</div>
+              <div className="dock-mv-tab__section-desc">{t("ministry.messagesDesc")}</div>
               <div style={{ padding: "4px 0" }}>
-                <div style={{ display: "block", gap: 4 }}>
+                <div style={{ display: "flex", gap: 4, alignItems: "flex-end" }}>
                   <textarea
                     ref={textareaRef}
                     value={newText}
                     onChange={(e) => setNewText(e.target.value.slice(0, MAX_CHARS))}
                     onKeyDown={handleKeyDown}
                     placeholder={t("ministry.typeMessage")}
-                    rows={2}
+                    rows={4}
                     style={{
                       flex: 1,
-                      width: "95%",
-                      minHeight: '50px',
+                      minHeight: '80px',
                       background: "var(--dock-surface)",
                       border: "1px solid var(--dock-border)",
                       borderRadius: 3,
@@ -750,7 +757,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     className="dock-btn dock-btn--accent dock-btn--sm"
                     onClick={handleAdd}
                     disabled={!newText.trim()}
-                    style={{ alignSelf: "flex-end", height: 30 }}
+                    style={{ height: 30, whiteSpace: "nowrap" }}
                     title={t("common.add")}>
                     Add Message
                     <Icon name="add" size={14} />
@@ -956,6 +963,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                 {/* Theme Picker Dropdown */}
                 <div className="dock-mv-tab__section">
                   <div className="dock-mv-tab__section-label">{t("ministry.theme")}</div>
+                  <div className="dock-mv-tab__section-desc">{t("ministry.themeDesc")}</div>
                   <div style={{ padding: "4px 0" }}>
                     <select
                       value={ltSelectedIdx}
@@ -985,8 +993,9 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                 {/* Size Multiplier */}
                 <div className="dock-mv-tab__section">
                   <div className="dock-mv-tab__section-label">{t("ministry.size")}</div>
+                  <div className="dock-mv-tab__section-desc">{t("ministry.sizeDesc")}</div>
                   <div style={{ padding: "4px 0", display: "flex", gap: 4 }}>
-                    {(["xl", "x2", "x3"] as LTSize[]).map((s) => (
+                    {(["xl", "x2"] as LTSize[]).map((s) => (
                       <button
                         key={s}
                         type="button"
@@ -1096,6 +1105,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   /* BibleTheme lower-third: simple text input + send via pushBible */
                   <div className="dock-mv-tab__section">
                     <div className="dock-mv-tab__section-label">{t("ministry.content")}</div>
+                    <div className="dock-mv-tab__section-desc">{t("ministry.contentDesc")}</div>
                     <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
                       <textarea
                         value={bibleLtText}
@@ -1205,27 +1215,27 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                         type="button"
                         className={`dock-btn dock-btn--sm ${ltSending ? "dock-btn--loading" : ""}`}
                         disabled={ltSending || !obsConnected}
-                          onClick={async () => {
-                            setLtSending(true);
-                            setLtFeedback(null);
-                            try {
-                              await ensureObsConnected();
-                              await dockObsClient.pushBible({
+                        onClick={async () => {
+                          setLtSending(true);
+                          setLtFeedback(null);
+                          try {
+                            await ensureObsConnected();
+                            await dockObsClient.pushBible({
                               book: "",
                               chapter: 0,
                               verse: 0,
                               translation: "",
                               verseText: "",
-                                overlayMode: "lower-third",
-                                bibleThemeSettings: ltSelectedEntry?.kind === "bible" ? ltSelectedEntry.theme.settings as unknown as Record<string, unknown> : null,
-                              });
-                              // Wait for exit animation (use theme's animation duration), then disable the source
-                              const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
-                              await new Promise((r) => setTimeout(r, animDuration + 100));
-                              await dockObsClient.clearBible();
-                              setLtLive(false);
-                              setLtFeedbackTone("success");
-                              setLtFeedback(t("ministry.lowerThirdCleared"));
+                              overlayMode: "lower-third",
+                              bibleThemeSettings: ltSelectedEntry?.kind === "bible" ? ltSelectedEntry.theme.settings as unknown as Record<string, unknown> : null,
+                            });
+                            // Wait for exit animation (use theme's animation duration), then disable the source
+                            const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
+                            await new Promise((r) => setTimeout(r, animDuration + 100));
+                            await dockObsClient.clearBible();
+                            setLtLive(false);
+                            setLtFeedbackTone("success");
+                            setLtFeedback(t("ministry.lowerThirdCleared"));
                           } catch (err) {
                             setLtFeedbackTone("error");
                             setLtFeedback(err instanceof Error ? err.message : t("ministry.blankFailed"));

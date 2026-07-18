@@ -13,7 +13,10 @@ beforeEach(() => {
   mockFetch.mockReset();
 });
 
-import { processDocumentViaApi } from "./bulkImportAiService";
+import {
+  processDocumentViaApi,
+  processFileViaUpload,
+} from "./bulkImportAiService";
 
 function makeApiResponse(overrides: Record<string, unknown> = {}) {
   return {
@@ -176,5 +179,29 @@ describe("processDocumentViaApi", () => {
 
     const result = await processDocumentViaApi("text", "file.txt");
     expect(result.songs[0].id).not.toBe(result.songs[1].id);
+  });
+});
+
+describe("processFileViaUpload", () => {
+  it("uploads the original file to the AI import endpoint", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(makeApiResponse()),
+    });
+
+    const file = new File(["%PDF-1.4"], "CCC-Hymns.pdf", { type: "application/pdf" });
+    const result = await processFileViaUpload(file);
+
+    expect(result.songs).toHaveLength(1);
+    expect(result.aiUsed).toBe(true);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/worship/import");
+    expect(url).toContain("deviceId=test-device-123");
+    expect(options.method).toBe("POST");
+    expect((options.headers as Record<string, string>)["X-Device-Secret"]).toBe("test-secret-456");
+    expect(options.body).toBeInstanceOf(FormData);
+    expect((options.body as FormData).get("file")).toBe(file);
   });
 });

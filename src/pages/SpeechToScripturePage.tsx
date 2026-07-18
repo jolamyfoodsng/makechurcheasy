@@ -321,7 +321,7 @@ export default function SpeechToScripturePage() {
     try {
       const deviceId = getDeviceId();
       console.log("[SpeechToScripture] 🎤 handleStart called, deviceId:", deviceId);
-      const requestAccess = async (deviceSecret: string | null) => {
+      const requestAccess = async () => {
         const res = await fetch(
           `${API_BASE}/api/device/speech-to-scripture/check-access?deviceId=${encodeURIComponent(deviceId || "")}`,
           {
@@ -329,7 +329,7 @@ export default function SpeechToScripturePage() {
             headers: {
               "Content-Type": "application/json",
               "X-App-Version": APP_VERSION,
-              ...(deviceSecret ? { "X-Device-Secret": deviceSecret } : {}),
+              "X-Device-Secret": getDeviceSecret() || "",
             },
           }
         );
@@ -337,21 +337,26 @@ export default function SpeechToScripturePage() {
         return { res, data };
       };
 
-      let { data } = await requestAccess(getDeviceSecret());
+      let { data } = await requestAccess();
       console.log("[SpeechToScripture] 📋 Access check response:", JSON.stringify(data));
 
-      if (!data.allowed && (data.reason === "device_not_found" || data.reason === "device_revoked")) {
+      // If device not found, try refreshing bootstrap (may re-register device) and retry once
+      if (!data.allowed && data.reason === "device_not_found") {
+        console.warn("[SpeechToScripture] Device not found, refreshing bootstrap...");
         const refreshResult = await refreshAccountBootstrapFromServer();
-        console.warn("[SpeechToScripture] Access denied by device state; bootstrap refresh result:", refreshResult.status);
         if (refreshResult.status === "ok") {
-          ({ data } = await requestAccess(getDeviceSecret()));
-        } else if (data.reason === "device_revoked") {
-          const retry = await requestAccess(null);
-          if (retry.data.allowed) {
-            await clearDeviceSecretForRecovery();
-            data = retry.data;
-          }
+          ({ data } = await requestAccess());
+        } else {
+          console.warn("[SpeechToScripture] Bootstrap refresh failed:", refreshResult.status);
         }
+      }
+
+      // If still not found, retry without device secret (legacy recovery path:
+      // the API allows devices without a stored secret through)
+      if (!data.allowed && data.reason === "device_not_found") {
+        console.warn("[SpeechToScripture] Still not found, retrying without device secret...");
+        await clearDeviceSecretForRecovery();
+        ({ data } = await requestAccess());
       }
 
       if (!data.allowed) {

@@ -16,7 +16,6 @@ interface Props {
   quickSettings: DockFullscreenQuickThemeSettings;
   defaultQuickSettings?: DockFullscreenQuickThemeSettings;
   onQuickSettingsSave: (settings: DockFullscreenQuickThemeSettings) => void | Promise<void>;
-  onQuickSettingsChange?: (settings: DockFullscreenQuickThemeSettings) => void;
   resolveThemeQuickSettings?: (theme: BibleTheme) => DockFullscreenQuickThemeSettings;
   title: string;
   subtitle: string;
@@ -31,6 +30,8 @@ interface Props {
   /** Active display mode — controls whether Compare Layout section is visible */
   displayMode?: "single" | "compare";
   initialTab?: "text" | "background" | "compare";
+  /** Keeps BackgroundPickerCard local styles separate per dock section */
+  storageScope?: "bible" | "worship" | "notes" | "global";
 }
 
 type StudioView = "closed" | "settings";
@@ -60,7 +61,6 @@ export default function DockThemeSettingsModal({
   quickSettings,
   defaultQuickSettings,
   onQuickSettingsSave,
-  onQuickSettingsChange: _onQuickSettingsChange,
   resolveThemeQuickSettings,
   title,
   subtitle,
@@ -71,6 +71,7 @@ export default function DockThemeSettingsModal({
   showReferences = true,
   displayMode = "single",
   initialTab = "text",
+  storageScope = "global",
 }: Props) {
   const { t } = useTranslation();
   const [internalView, setInternalView] = useState<StudioView>("closed");
@@ -95,7 +96,6 @@ export default function DockThemeSettingsModal({
   const modalRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(view !== "closed");
   const originalSettingsRef = useRef(quickSettings);
-  const lastPreviewSettingsRef = useRef(quickSettings);
 
   useEffect(() => {
     const isOpen = view !== "closed";
@@ -103,7 +103,6 @@ export default function DockThemeSettingsModal({
     wasOpenRef.current = isOpen;
     if (isOpen && !wasOpen) {
       originalSettingsRef.current = quickSettings;
-      lastPreviewSettingsRef.current = quickSettings;
       draftSettingsRef.current = quickSettings;
       setDraftSettings(quickSettings);
       setDraftSelectedThemeId(selectedThemeId);
@@ -121,13 +120,6 @@ export default function DockThemeSettingsModal({
     },
     [],
   );
-
-  useEffect(() => {
-    if (view === "closed") return;
-    if (lastPreviewSettingsRef.current === draftSettings) return;
-    lastPreviewSettingsRef.current = draftSettings;
-    _onQuickSettingsChange?.(draftSettings);
-  }, [draftSettings, view, _onQuickSettingsChange]);
 
   const EFFECT_DEFS = useMemo(() => [
     {
@@ -220,7 +212,7 @@ export default function DockThemeSettingsModal({
       return;
     }
     updateDraft((prev) => ({ ...prev, backgroundType: "theme" }));
-  }, [onBackgroundPresetChange, onSelect, resolveThemeQuickSettings, updateDraft, _onQuickSettingsChange]);
+  }, [onBackgroundPresetChange, onSelect, resolveThemeQuickSettings, updateDraft]);
 
   const handleSave = useCallback(() => {
     const nextSettings = { ...draftSettingsRef.current };
@@ -324,6 +316,7 @@ export default function DockThemeSettingsModal({
                   overlayMode={overlayMode}
                   displayMode={displayMode}
                   initialTab={initialTab}
+                  storageScope={storageScope}
                 />
 
                 {/* Lower-Third Positioning — only shown in lower-third mode */}

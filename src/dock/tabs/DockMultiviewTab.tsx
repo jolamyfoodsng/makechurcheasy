@@ -393,6 +393,7 @@ function BackgroundPicker({
       <div className="dock-mv-bg__header">
         <span>{t('multiview.background')}</span>
       </div>
+      <div className="dock-mv-desc">{t('multiview.backgroundDesc')}</div>
       <div className="dock-mv-bg__types">
         {BG_TYPE_OPTIONS.map(opt => (
           <button
@@ -537,8 +538,6 @@ function MVCard({
   onUpdateBackground,
   onAssign,
   onClearSlot,
-  onDuplicate,
-  onDelete,
 }: {
   mv: SavedMultiView;
   index: number;
@@ -616,50 +615,13 @@ function MVCard({
         </div>
 
         {/* Card Actions Menu */}
-        <div className="dock-mv-card__menu-wrap" ref={menuRef}>
-          <button
-            type="button"
-            className="dock-mv-card__menu-btn"
-            onClick={() => setMenuOpen(!menuOpen)}
-            title={t('multiview.actions')}
-          >
-            <Icon name="more_vert" size={14} />
-          </button>
-          {menuOpen && (
-            <div className="dock-mv-card__menu">
-              <button
-                type="button"
-                className="dock-mv-card__menu-item"
-                onClick={() => { setRenaming(true); setRenameValue(mv.name); setMenuOpen(false); }}
-                title={t('common.rename')}>
-                <Icon name="drive_file_rename_outline" size={13} />
-                <span>{t('multiview.rename')}</span>
-              </button>
-              <button
-                type="button"
-                className="dock-mv-card__menu-item"
-                onClick={() => { onDuplicate(mv.id); setMenuOpen(false); }}
-                title={t('common.duplicate')}>
-                <Icon name="content_copy" size={13} />
-                <span>{t('multiview.duplicate')}</span>
-              </button>
-              <div className="dock-mv-card__menu-divider" />
-              <button
-                type="button"
-                className="dock-mv-card__menu-item dock-mv-card__menu-item--danger"
-                onClick={() => { onDelete(mv.id); setMenuOpen(false); }}
-                title={t('common.delete')}>
-                <Icon name="delete" size={13} />
-                <span>{t('multiview.delete')}</span>
-              </button>
-            </div>
-          )}
-        </div>
+
       </div>
 
       {/* Template Dropdown */}
       <div className="dock-mv-card__template">
         <label className="dock-mv-card__template-label">{t('multiview.template')}</label>
+        <div className="dock-mv-desc">{t('multiview.templateDesc')}</div>
         <select
           className="dock-mv-field__select"
           value={mv.layoutId}
@@ -696,6 +658,7 @@ function MVCard({
                 {assignedCount}/{layout.slots.length}
               </span>
             </div>
+            <div className="dock-mv-desc">{t('multiview.sceneAssignmentsDesc')}</div>
             {layout.slots.map((slot) => {
               const val = mv.assignments[slot.id] ?? "";
               const info = CONTENT_TYPE_INFO[slot.contentType] || CONTENT_TYPE_INFO.camera;

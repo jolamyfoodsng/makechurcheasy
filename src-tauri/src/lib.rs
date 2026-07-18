@@ -19,11 +19,13 @@
 mod assemblyai_stream;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod audio_capture;
+mod device_fingerprint;
 #[cfg(target_os = "macos")]
 mod local_llm;
 #[cfg(not(target_os = "macos"))]
 mod local_llm_stub;
 mod mobile_companion;
+mod overlay_relay;
 mod presentation_remote;
 #[cfg(not(target_os = "macos"))]
 use local_llm_stub as local_llm;
@@ -215,7 +217,7 @@ pub(crate) fn presentation_viewer_count(session_id: &str) -> usize {
 
 /// True if the directory contains the overlay HTML entrypoint(s).
 fn has_overlay_assets(dir: &std::path::Path) -> bool {
-    dir.join("mce-bible-overlay.html").is_file()
+    dir.join("mce-bible-overlay.html").is_file() || dir.join("mce-worship-overlay.html").is_file()
 }
 
 /// Resolve where bundled overlay HTML files were placed.
@@ -5081,11 +5083,21 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     continue;
                 }
                 respond_overlay_file_request(request, &file_path, content_type);
+            } else if Path::new(clean).extension().is_some() {
+                // Request has a file extension (e.g. .json, .png) but the
+                // file doesn't exist — return 404 instead of SPA fallback.
+                let resp = tiny_http::Response::from_string("Not Found")
+                    .with_status_code(404)
+                    .with_header(
+                        tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                            .unwrap(),
+                    );
+                let _ = request.respond(resp);
             } else {
-                // SPA fallback: for client-side routes, serve index.html
-                // so React Router can handle them. Note: dedicated HTML files
-                // (like dock.html) are resolved above via the .html extension
-                // fallback, so this only triggers for true SPA routes.
+                // SPA fallback: for client-side routes (no extension), serve
+                // index.html so React Router can handle them. Note: dedicated
+                // HTML files (like dock.html) are resolved above via the .html
+                // extension fallback, so this only triggers for true SPA routes.
                 let index_path = resource_dir.join("index.html");
                 if index_path.exists() && index_path.is_file() {
                     match fs::read(&index_path) {
@@ -5428,6 +5440,14 @@ pub fn run() {
             });
             println!("[Tauri] Presentation WebSocket server starting on port 8766");
 
+            // Start the overlay relay for instant dock-to-overlay communication
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = overlay_relay::start_overlay_relay(17891).await {
+                    eprintln!("[OverlayRelay] Server failed: {}", error);
+                }
+            });
+            println!("[Tauri] Overlay relay starting on port 17891");
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -5456,6 +5476,7 @@ pub fn run() {
             translate_transcript,
             extract_text_from_pdf,
             extract_text_elements_from_pdf,
+            device_fingerprint::get_device_fingerprint,
             audio_capture::list_audio_devices,
             audio_capture::start_audio_capture,
             audio_capture::stop_audio_capture,

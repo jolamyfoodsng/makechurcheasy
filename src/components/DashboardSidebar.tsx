@@ -16,9 +16,6 @@ import {
   Images,
   BookOpen,
   Music,
-  Copy,
-  Check,
-  Fingerprint,
   PanelLeftClose,
   PanelLeftOpen,
   LogOut,
@@ -27,7 +24,7 @@ import {
   Tv,
 } from "lucide-react";
 import type { ConnectionStatus } from "../services/obsService";
-import { track } from "../services/analytics";
+
 import { useAuth } from "../contexts/AuthContext";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -55,17 +52,7 @@ export default function DashboardSidebar({
   const { t } = useTranslation();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  // ── App ID ──
-  const [appIdCopied, setAppIdCopied] = useState(false);
-  const appId = user?.appId || "—";
 
-  const handleCopyAppId = useCallback(() => {
-    navigator.clipboard.writeText(appId).then(() => {
-      setAppIdCopied(true);
-      track("app_id_copied", { appId, source: "sidebar" });
-      setTimeout(() => setAppIdCopied(false), 2000);
-    }).catch(() => { });
-  }, [appId]);
 
   const navItem = useCallback(
     (to: string, Icon: typeof Mic, label: string) => {
@@ -133,27 +120,7 @@ export default function DashboardSidebar({
           {navItem("/settings", Settings, t("sidebar.settings"))}
         </div>
 
-        <div className="sidebar-appid-section">
-          <div className="sidebar-appid-header">
-            <Fingerprint className="sidebar-appid-icon" />
-            <span className="sidebar-appid-label">{t("sidebar.appId")}</span>
-          </div>
-          <button
-            className="sidebar-appid-copy"
-            onClick={handleCopyAppId}
-            title={t("sidebar.appIdHint")}
-          >
-            <span className="sidebar-appid-value">{appId}</span>
-            {appIdCopied ? (
-              <Check className="sidebar-appid-check" />
-            ) : (
-              <Copy className="sidebar-appid-copy-icon" />
-            )}
-          </button>
-          <p className="sidebar-appid-hint">
-            {t("sidebar.shareWhenReportingBugs")}
-          </p>
-        </div>
+
 
         {/* User Profile */}
         {user && !collapsed && (

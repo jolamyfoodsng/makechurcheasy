@@ -185,7 +185,6 @@ export default function DockPage() {
   }));
   const [dockHeight, setDockHeight] = useState(0);
   const verticalTabs = dockHeight > 0 && dockHeight < 550;
-  const compactToolbar = dockHeight > 0 && dockHeight <= 550;
   const [tickerOutputMode, setTickerOutputMode] = useState<"source" | "scene">(() => {
     try { return (localStorage.getItem("dock-ticker-output-mode") as "source" | "scene") || "scene"; } catch { return "scene"; }
   });
@@ -278,35 +277,6 @@ export default function DockPage() {
     };
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
-  }, []);
-
-  useEffect(() => {
-    const root = dockRootRef.current;
-    if (!root) return;
-
-    let inFlight = false;
-    let lastActivationAt = 0;
-    const MIN_INTERVAL = 150;
-
-    const handleDockClick = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-
-      const trigger = target.closest('button, [role="tab"]');
-      if (!trigger || !root.contains(trigger)) return;
-
-      const now = Date.now();
-      if (inFlight || now - lastActivationAt < MIN_INTERVAL) return;
-      lastActivationAt = now;
-      inFlight = true;
-
-      void dockObsClient.ensurePresentationPreviewActive().catch(() => { }).finally(() => {
-        inFlight = false;
-      });
-    };
-
-    root.addEventListener("click", handleDockClick, true);
-    return () => root.removeEventListener("click", handleDockClick, true);
   }, []);
 
   useEffect(() => {
@@ -577,6 +547,13 @@ export default function DockPage() {
   const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => getResolvedInterfaceLanguage());
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
+
+  // Listen for compact-mode menu button from Bible tab
+  useEffect(() => {
+    const handler = () => setShowSettingsMenu(true);
+    window.addEventListener("dock-open-menu", handler);
+    return () => window.removeEventListener("dock-open-menu", handler);
+  }, []);
 
   return (
     <div className={`dock-root${verticalTabs ? " dock-root--vertical-tabs" : ""}`} ref={dockRootRef}>
@@ -1168,7 +1145,6 @@ export default function DockPage() {
                   isActive={activeTab === "bible"}
                   showHistory={showHistory}
                   onHistoryClose={() => setShowHistory(false)}
-                  compactToolbar={compactToolbar}
                 />
               </div>
             )}
@@ -1185,7 +1161,6 @@ export default function DockPage() {
                   onStage={handleStage}
                   productionDefaults={productionSettings.worship}
                   isActive={activeTab === "worship"}
-                  compactToolbar={compactToolbar}
                 />
               </div>
             )}

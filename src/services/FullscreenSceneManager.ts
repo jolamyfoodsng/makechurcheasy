@@ -44,7 +44,7 @@ export const FULLSCREEN_SCENES: Record<string, FullscreenSceneDef> = {
     key: "worship",
     sceneName: PRESENTATION_SCENE_NAME,
     browserSourceName: FULLSCREEN_SOURCE_NAMES.WORSHIP,
-    overlayFile: "mce-bible-overlay.html",
+    overlayFile: "mce-worship-overlay.html",
   },
   countdown: {
     key: "countdown",
@@ -63,6 +63,12 @@ export const FULLSCREEN_SCENES: Record<string, FullscreenSceneDef> = {
     sceneName: PRESENTATION_SCENE_NAME,
     browserSourceName: FULLSCREEN_SOURCE_NAMES.BIBLE, // reuse bible source for sermon
     overlayFile: "mce-bible-overlay.html",
+  },
+  notes: {
+    key: "notes",
+    sceneName: PRESENTATION_SCENE_NAME,
+    browserSourceName: FULLSCREEN_SOURCE_NAMES.NOTES,
+    overlayFile: "mce-note.html",
   },
 };
 

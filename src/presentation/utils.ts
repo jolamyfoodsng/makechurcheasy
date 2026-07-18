@@ -1,6 +1,6 @@
 import type { BibleVerse, BibleTheme } from "../bible/types";
 import type { MediaItem } from "../library/libraryTypes";
-import { toStoredOverlayAssetUrl } from "../services/overlayUrl";
+import { getOverlayBaseUrlSync, toStoredOverlayAssetUrl } from "../services/overlayUrl";
 import type { Song, Slide } from "../worship/types";
 import type {
   PresentationCountdownPayload,
@@ -73,9 +73,15 @@ export function themeToStyle(
 
 export function getMediaViewerUrl(media: MediaItem): string {
   if (media.diskFileName) {
-    return `/uploads/${encodeURIComponent(media.diskFileName)}`;
+    if (media.url && (media.url.startsWith("http://") || media.url.startsWith("https://"))) {
+      return media.url;
+    }
+    return `${getOverlayBaseUrlSync()}/uploads/${encodeURIComponent(media.diskFileName)}`;
   }
   const stored = toStoredOverlayAssetUrl(media.url);
+  if (stored && stored.startsWith("/uploads/")) {
+    return `${getOverlayBaseUrlSync()}${stored}`;
+  }
   return stored || media.url;
 }
 

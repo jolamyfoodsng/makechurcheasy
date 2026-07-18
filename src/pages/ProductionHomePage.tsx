@@ -620,7 +620,8 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
   const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
 
   const deviceId = getDeviceId();
-  const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : "";
+  const versionParam = `_v=${__APP_VERSION__}`;
+  const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}&${versionParam}` : `?${versionParam}`;
   const overlayUrl = (isDev ? `${base}/dock` : `${base}/dock.html`) + deviceIdParam;
   const lmDockUrl = (isDev ? `${base}/lm-dock` : `${base}/lm-dock.html`) + deviceIdParam;
 
