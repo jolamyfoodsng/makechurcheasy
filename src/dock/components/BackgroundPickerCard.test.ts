@@ -3,6 +3,7 @@ import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuic
 import type { BibleThemeSettings } from "../../bible/types";
 import overlayHtml from "../../../public/mce-bible-overlay.html?raw";
 import backgroundOverlayHtml from "../../../public/bible-overlay-bg.html?raw";
+import backgroundPickerSource from "./BackgroundPickerCard.tsx?raw";
 
 /* ── Helpers — mirrors the updater pattern each Text tab control uses ── */
 
@@ -432,6 +433,18 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(overlayHtml).toContain("formatCompareReference(r.reference, r.translation)");
     expect(overlayHtml).toContain("compareTranslationLeft.textContent = ''");
     expect(overlayHtml).toContain("compareTranslationRight.textContent = ''");
+  });
+
+  it("orders scripture reference above or below the verse without DOM reshuffling", () => {
+    expect(overlayHtml).toContain("#reference.top");
+    expect(overlayHtml).toContain("#lt-bar #ref-text.top");
+    expect(overlayHtml).toContain("order: 0");
+    expect(overlayHtml).toContain("order: 2");
+  });
+
+  it("hides reference background controls from lower-third reference options", () => {
+    expect(backgroundPickerSource).toContain('overlayMode !== "lower-third"');
+    expect(backgroundPickerSource).toContain("<ReferenceBackgroundSection");
   });
 
   it("keeps background picker color/image/pattern/video fields wired into the active overlay", () => {

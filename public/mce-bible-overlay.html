@@ -63,6 +63,7 @@
       --ref-opacity: 1;
       --ref-spacing: 24px;
       --ref-text-align: center;
+      --ref-align-self: center;
       --ref-width: 100%;
       --ref-bg-color: transparent;
       --ref-bg-padding: 0;
@@ -206,11 +207,13 @@
       opacity: var(--ref-opacity);
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
+      order: 2;
     }
 
     #reference.top {
       margin-top: 0;
       margin-bottom: var(--ref-spacing);
+      order: 0;
     }
 
     #reference:empty {
@@ -444,18 +447,29 @@
 
     #lt-bar #ref-text {
       font-size: var(--ref-font-size);
+      font-family: var(--ref-font-family);
       font-weight: var(--ref-font-weight);
       font-style: var(--ref-font-style, normal);
       color: var(--ref-font-color);
       text-align: var(--ref-text-align, var(--text-align));
+      align-self: var(--ref-align-self, center);
+      width: var(--ref-width, 100%);
+      max-width: 100%;
+      padding: var(--ref-bg-padding);
+      background: var(--ref-bg-color);
+      border-radius: var(--ref-bg-radius);
+      border: var(--ref-bg-border);
+      box-sizing: border-box;
       opacity: var(--ref-opacity);
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
+      order: 2;
     }
 
     #lt-bar #ref-text.top {
       margin-top: 0;
       margin-bottom: 12px;
+      order: 0;
     }
 
     #bar-background-video {
@@ -696,6 +710,12 @@
         if (!t || t === 'none') return 'none';
         var m = { 'uppercase': 'uppercase', 'upper': 'uppercase', 'lowercase': 'lowercase', 'lower': 'lowercase', 'capitalize': 'capitalize', 'title': 'capitalize' };
         return m[t.toLowerCase()] || 'none';
+      }
+
+      function mapFlexAlign(value) {
+        if (value === 'left') return 'flex-start';
+        if (value === 'right') return 'flex-end';
+        return 'center';
       }
 
       function ensureCmgSansFont() {
@@ -1159,7 +1179,9 @@
         root.style.setProperty('--ref-letter-spacing', (s.refLetterSpacing || 0) + 'px');
         root.style.setProperty('--ref-opacity', String(s.refOpacity ?? 1));
         root.style.setProperty('--ref-spacing', (s.refSpacing ?? 24) + 'px');
-        if (s.refTextAlign && s.refTextAlign !== 'match') root.style.setProperty('--ref-text-align', s.refTextAlign); else root.style.setProperty('--ref-text-align', s.textAlign || 'center');
+        const effectiveRefTextAlign = s.refTextAlign && s.refTextAlign !== 'match' ? s.refTextAlign : (s.textAlign || 'center');
+        root.style.setProperty('--ref-text-align', effectiveRefTextAlign);
+        root.style.setProperty('--ref-align-self', mapFlexAlign(effectiveRefTextAlign));
 
         const rbe = s.referenceBackgroundEnabled === true, rbc = s.referenceBackgroundColor || '#F4D17B', rbs = s.referenceBackgroundStyle || 'solid', rbr = Number(s.referenceBackgroundRadius ?? 12);
         if (rbe) {

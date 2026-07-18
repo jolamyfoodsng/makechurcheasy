@@ -777,6 +777,7 @@ export default function BackgroundPickerCard({
               <ReferenceSection
                 quickSettings={quickSettings}
                 onQuickSettingsChange={onQuickSettingsChange}
+                overlayMode={overlayMode}
               />
             )}
 
@@ -1565,9 +1566,11 @@ const GRADIENT_PRESETS = [
 function ReferenceSection({
   quickSettings,
   onQuickSettingsChange,
+  overlayMode,
 }: {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
+  overlayMode: NonNullable<Props["overlayMode"]>;
 }) {
   const { t } = useTranslation();
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -1730,11 +1733,12 @@ function ReferenceSection({
             />
           </div>
 
-          {/* Reference Background (reuses existing section) */}
-          <ReferenceBackgroundSection
-            quickSettings={quickSettings}
-            onQuickSettingsChange={onQuickSettingsChange}
-          />
+          {overlayMode !== "lower-third" && (
+            <ReferenceBackgroundSection
+              quickSettings={quickSettings}
+              onQuickSettingsChange={onQuickSettingsChange}
+            />
+          )}
         </>
       )}
     </div>

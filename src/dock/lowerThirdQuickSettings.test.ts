@@ -66,7 +66,7 @@ describe("lowerThirdQuickSettings", () => {
     expect(areQuickThemeSettingsEquivalent(left, different)).toBe(false);
   });
 
-  it("keeps lower-third sizing while inheriting shared fullscreen styling", () => {
+  it("inherits shared fullscreen styling while keeping lower-third layout settings", () => {
     const lowerThirdDefaults = makeSettings({
       fontSize: 38,
       refFontSize: 18,
@@ -82,6 +82,11 @@ describe("lowerThirdQuickSettings", () => {
       fontColor: "#00FF88",
       backgroundColor: "#AA0000",
       backgroundType: "color",
+      refSpacing: 32,
+      referenceBackgroundEnabled: true,
+      referenceBackgroundColor: "#F4D17B",
+      referenceBackgroundStyle: "pill",
+      referenceBackgroundRadius: 24,
     });
 
     const linked = buildLinkedLowerThirdQuickThemeSettings(
@@ -89,11 +94,16 @@ describe("lowerThirdQuickSettings", () => {
       fullscreenSettings,
     );
 
-    expect(linked.fontSize).toBe(lowerThirdDefaults.fontSize);
-    expect(linked.refFontSize).toBe(lowerThirdDefaults.refFontSize);
+    expect(linked.fontSize).toBe(fullscreenSettings.fontSize);
+    expect(linked.refFontSize).toBe(fullscreenSettings.refFontSize);
     expect(linked.lineHeight).toBe(lowerThirdDefaults.lineHeight);
     expect(linked.fontColor).toBe(fullscreenSettings.fontColor);
     expect(linked.backgroundColor).toBe(fullscreenSettings.backgroundColor);
     expect(linked.backgroundType).toBe(fullscreenSettings.backgroundType);
+    expect(linked.refSpacing).toBe(fullscreenSettings.refSpacing);
+    expect(linked.referenceBackgroundEnabled).toBe(true);
+    expect(linked.referenceBackgroundColor).toBe(fullscreenSettings.referenceBackgroundColor);
+    expect(linked.referenceBackgroundStyle).toBe(fullscreenSettings.referenceBackgroundStyle);
+    expect(linked.referenceBackgroundRadius).toBe(fullscreenSettings.referenceBackgroundRadius);
   });
 });
