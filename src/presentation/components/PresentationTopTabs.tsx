@@ -78,7 +78,21 @@ export function PresentationTopTabs({
 
       <div className="presentation-top-tabs-copy">
         <h1>{title}</h1>
-        <p>{description}</p>
+        <div className="presentation-top-tabs-copy__row">
+          <p>{description}</p>
+          <span className={`presentation-status-indicator ${connectionStatus}`}>
+            <span className="presentation-status-indicator__dot" />
+            {connectionStatus === "connected"
+              ? session.connectedViewers > 1
+                ? `${session.connectedViewers} screens`
+                : "Connected"
+              : connectionStatus === "disconnected"
+                ? "Disconnected"
+                : connectionStatus === "error"
+                  ? "Error"
+                  : "Waiting"}
+          </span>
+        </div>
       </div>
 
       <div className="presentation-top-tabs" role="tablist" aria-label="Presentation mode">

@@ -3157,7 +3157,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
             <div className="dock-dialog__header">
               <div>
                 <div className="dock-dialog__eyebrow">{t('media.addMedia')}</div>
-                <h2 id="dock-media-add-title" className="dock-dialog__title">{t('media.chooseWhatToAdd')}</h2>
+                {/* <h2 id="dock-media-add-title" className="dock-dialog__title">{t('media.chooseWhatToAdd')}</h2> */}
               </div>
               <button type="button" className="dock-dialog__close" onClick={closeAddMediaModal} aria-label={t('media.closeAddMediaDialog')} title={t('common.close')}>
                 <Icon name="close" size={14} />

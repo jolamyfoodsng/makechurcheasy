@@ -46,7 +46,7 @@ export function DockUpgradeModal({ open, onClose, message }: DockUpgradeModalPro
             </button>
             <button
               className="dock-upgrade__btn dock-upgrade__btn--primary"
-              onClick={() => window.open("https://makechurcheasy.creatorstudioslabs.stream/pricing", "_blank")}
+              onClick={() => window.open("https://makechurcheasy.creatorstudioslabs.stream/subscription/plans", "_blank")}
               title={t('upgrade.upgrade')}>
               <Zap size={15} />
               <span>{t('upgrade.upgrade')}</span>

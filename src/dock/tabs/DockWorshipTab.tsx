@@ -687,6 +687,7 @@ function applyQuickThemeSettings(
       animation: quickSettings.animation,
       animationDuration: quickSettings.animationDuration,
       backgroundPattern: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundPattern ?? "") : quickSettings.backgroundPattern,
+      boxBackground: useNoBg ? "transparent" : (theme.settings.boxBackground || "rgba(0,0,0,0.7)"),
       backgroundImage: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImage ?? "") : quickSettings.backgroundImage,
       backgroundImageFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImageFilePath ?? "") : quickSettings.backgroundImageFilePath,
       backgroundVideo: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideo ?? "") : quickSettings.backgroundVideo,
@@ -3295,13 +3296,11 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
             : defaultLowerThirdQuickThemeSettings
         }
         onQuickSettingsSave={(next) => {
-          suppressAutoProjectionRef.current = true;
           if (overlayMode === "fullscreen") {
             handleSaveFullscreenQuickThemeSettings(next);
           } else {
             handleSaveLowerThirdQuickThemeSettings(next);
           }
-          setTimeout(() => { suppressAutoProjectionRef.current = false; }, 100);
         }}
         resolveThemeQuickSettings={resolveThemeQuickSettings}
         title={t('worship.quickEdits')}

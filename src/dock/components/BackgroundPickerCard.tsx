@@ -55,6 +55,8 @@ interface Props {
   initialTab?: BackgroundPickerTab;
   /** Storage scope keeps local picker preferences separate for Bible, Worship, and Notes */
   storageScope?: BackgroundPickerStorageScope;
+  /** When true and displayMode is "compare", hides the Background tab and shows only the Compare tab */
+  hideBackgroundOnCompare?: boolean;
 }
 
 const BG_TYPE_KEY = "dtb-bg-picker-type";
@@ -126,7 +128,10 @@ function resolveInitialTab(
   tab: BackgroundPickerTab | undefined,
   displayMode: Props["displayMode"],
   activeTabKey: string,
+  forceCompare?: boolean,
 ): BackgroundPickerTab {
+  if (forceCompare && displayMode === "compare") return "compare";
+
   const stored = !tab ? (() => {
     try {
       const v = localStorage.getItem(activeTabKey);
@@ -211,6 +216,7 @@ export default function BackgroundPickerCard({
   displayMode = "single",
   initialTab,
   storageScope = "global",
+  hideBackgroundOnCompare = false,
 }: Props) {
   const { t } = useTranslation();
   const localStylesSelectId = useId();
@@ -223,7 +229,7 @@ export default function BackgroundPickerCard({
     };
   }, [overlayMode, storageScope]);
   const [activeTab, setActiveTab] = useState<BackgroundPickerTab>(() =>
-    resolveInitialTab(initialTab, displayMode, storageKeys.activeTab),
+    resolveInitialTab(initialTab, displayMode, storageKeys.activeTab, hideBackgroundOnCompare && displayMode === "compare"),
   );
   const [bgType, setBgType] = useState<BackgroundType>(() => {
     try {
@@ -244,8 +250,7 @@ export default function BackgroundPickerCard({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const styleMenuRef = useRef<HTMLDivElement>(null);
   const prevStorageKeysRef = useRef(storageKeys);
-  const compareBackdropValue: "off" | "theme" | "color" =
-    bgType === "off" ? "off" : bgType === "color" ? "color" : "theme";
+  const compareBackdropValue: BackgroundType = bgType;
 
   useEffect(() => {
     const previous = prevStorageKeysRef.current;
@@ -253,7 +258,7 @@ export default function BackgroundPickerCard({
       return;
     }
     prevStorageKeysRef.current = storageKeys;
-    setActiveTab(resolveInitialTab(initialTab, displayMode, storageKeys.activeTab));
+    setActiveTab(resolveInitialTab(initialTab, displayMode, storageKeys.activeTab, hideBackgroundOnCompare && displayMode === "compare"));
     try {
       const stored = localStorage.getItem(storageKeys.bgType);
       setBgType(isBackgroundType(stored) ? stored : inferBgTypeFromSettings(quickSettings));
@@ -271,12 +276,14 @@ export default function BackgroundPickerCard({
   }, [displayMode, initialTab, quickSettings, storageKeys]);
 
   useEffect(() => {
-    if (displayMode === "compare" && activeTab === "text") {
+    if (hideBackgroundOnCompare && displayMode === "compare" && activeTab !== "compare") {
+      setActiveTab("compare");
+    } else if (displayMode === "compare" && activeTab === "text") {
       setActiveTab("background");
     } else if (displayMode !== "compare" && activeTab === "compare") {
       setActiveTab("text");
     }
-  }, [activeTab, displayMode]);
+  }, [activeTab, displayMode, hideBackgroundOnCompare]);
 
   // Persist active tab preference
   useEffect(() => {
@@ -318,6 +325,7 @@ export default function BackgroundPickerCard({
         backgroundImageFilePath: "",
         backgroundVideo: "",
         backgroundVideoFilePath: "",
+        backgroundColor: "",
         backgroundColorEnd: "",
         fullscreenShadeOpacity: 0,
         backgroundOpacity: 0,
@@ -476,14 +484,16 @@ export default function BackgroundPickerCard({
               <span>{t('bgPicker.text')}</span>
             </button>
           )}
-          <button
-            type="button"
-            className={`dtb-bg-picker__tab${activeTab === "background" ? " dtb-bg-picker__tab--active" : ""}`}
-            onClick={() => setActiveTab("background")}
-          >
-            <Icon name="wallpaper" size={13} />
-            <span>{t('bgPicker.background')}</span>
-          </button>
+          {(!hideBackgroundOnCompare || displayMode !== "compare") && (
+            <button
+              type="button"
+              className={`dtb-bg-picker__tab${activeTab === "background" ? " dtb-bg-picker__tab--active" : ""}`}
+              onClick={() => setActiveTab("background")}
+            >
+              <Icon name="wallpaper" size={13} />
+              <span>{t('bgPicker.background')}</span>
+            </button>
+          )}
           {displayMode === "compare" && (
             <button
               type="button"
@@ -793,6 +803,11 @@ export default function BackgroundPickerCard({
             onQuickSettingsChange={onQuickSettingsChange}
             compareBackdropValue={compareBackdropValue}
             onBackdropChange={handleTypeChange}
+            onBackgroundPresetChange={onBackgroundPresetChange}
+            selectedThemeId={_selectedThemeId}
+            onThemeSelect={_onThemeSelect}
+            allowedCategories={_allowedCategories}
+            overlayMode={overlayMode}
           />
         )}
       </div>
@@ -2219,11 +2234,21 @@ function CompareSettingsPanel({
   onQuickSettingsChange,
   compareBackdropValue,
   onBackdropChange,
+  onBackgroundPresetChange,
+  selectedThemeId,
+  onThemeSelect,
+  allowedCategories,
+  overlayMode = "fullscreen",
 }: {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
-  compareBackdropValue: "off" | "theme" | "color";
+  compareBackdropValue: BackgroundType;
   onBackdropChange: (type: BackgroundType) => void;
+  onBackgroundPresetChange?: (preset: DockBackgroundPreset) => void;
+  selectedThemeId?: string | null;
+  onThemeSelect?: (theme: BibleTheme) => void;
+  allowedCategories?: Array<NonNullable<BibleTheme["category"]>>;
+  overlayMode?: "fullscreen" | "lower-third";
 }) {
   const { t } = useTranslation();
   const compare = useMemo(
@@ -2307,6 +2332,9 @@ function CompareSettingsPanel({
             { value: "off", label: t("bgPicker.transparent", "Transparent") },
             { value: "theme", label: t("bgPicker.theme", "Theme") },
             { value: "color", label: t("common.color") },
+            { value: "image", label: t("common.image", "Image") },
+            { value: "pattern", label: t("common.pattern", "Pattern") },
+            { value: "video", label: t("common.video", "Video") },
           ]}
         />
 
@@ -2327,6 +2355,43 @@ function CompareSettingsPanel({
           onChange={(value) => setGap(value)}
         />
       </div>
+
+      {compareBackdropValue === "image" && (
+        <ImageTab
+          quickSettings={quickSettings}
+          onQuickSettingsChange={onQuickSettingsChange}
+          onBackgroundPresetChange={onBackgroundPresetChange}
+        />
+      )}
+      {compareBackdropValue === "video" && (
+        <VideoTab
+          quickSettings={quickSettings}
+          onQuickSettingsChange={onQuickSettingsChange}
+          onBackgroundPresetChange={onBackgroundPresetChange}
+        />
+      )}
+      {compareBackdropValue === "pattern" && (
+        <PatternTab
+          quickSettings={quickSettings}
+          onQuickSettingsChange={onQuickSettingsChange}
+          onBackgroundPresetChange={onBackgroundPresetChange}
+        />
+      )}
+      {compareBackdropValue === "color" && (
+        <ColorSection
+          quickSettings={quickSettings}
+          onQuickSettingsChange={onQuickSettingsChange}
+          onBackgroundPresetChange={onBackgroundPresetChange}
+        />
+      )}
+      {compareBackdropValue === "theme" && (
+        <ThemeSection
+          selectedThemeId={selectedThemeId ?? null}
+          onThemeSelect={onThemeSelect ?? (() => {})}
+          allowedCategories={allowedCategories}
+          overlayMode={overlayMode}
+        />
+      )}
 
       {/* Style */}
       <div className="dtb-bg-picker__settings" style={{ display: "flex", flexDirection: "column", gap: 8 }}>

@@ -19,7 +19,7 @@ export interface TimerSettings {
 
 // ── Background ─────────────────────────────────────────────────────────────
 
-export type BackgroundType = "solid" | "gradient" | "image" | "video";
+export type BackgroundType = "solid" | "gradient" | "image" | "video" | "transparent";
 
 export type BackgroundSource = "upload" | "media-library" | "builtin";
 

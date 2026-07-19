@@ -15,7 +15,6 @@ import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 import { getTextTheme, loadTextThemeFont } from "../../countdowns/textThemes";
 import { validateMediaFile, backgroundFileAccept } from "../../countdowns/mediaValidation";
 import { saveCountdownAsset, deleteCountdownAsset } from "../../countdowns/countdownStore";
-import { BUILTIN_CATEGORIES, getBuiltinsByCategory } from "../../countdowns/builtinBackgrounds";
 import type { MediaItem } from "../../library/libraryTypes";
 import {
   DOCK_COUNTDOWN_BG_SOURCE_NAME,
@@ -501,56 +500,6 @@ function CountdownCard({
   );
 }
 
-// ── Built-in Background Picker (for Edit Modal) ──────────────────────────────
-
-function EditBuiltinPicker({ editBg, setEditBg }: { editBg: BackgroundSettings; setEditBg: React.Dispatch<React.SetStateAction<BackgroundSettings>> }) {
-  const [showBuiltins, setShowBuiltins] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>("nature");
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <button type="button" onClick={() => setShowBuiltins(!showBuiltins)}
-        style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 11, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span>🖼️ Built-in Backgrounds</span>
-        <span style={{ fontSize: 9 }}>{showBuiltins ? "▲" : "▼"}</span>
-      </button>
-      {showBuiltins && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {BUILTIN_CATEGORIES.map((cat) => (
-              <button key={cat.id} type="button"
-                onClick={() => setSelectedCategory(selectedCategory === cat.id ? "" : cat.id)}
-                style={{ padding: "3px 8px", borderRadius: 12, fontSize: 10, fontWeight: 500, border: `1px solid ${selectedCategory === cat.id ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: selectedCategory === cat.id ? "rgba(99,102,241,0.2)" : "transparent", color: selectedCategory === cat.id ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer" }}>
-                {cat.icon} {cat.label}
-              </button>
-            ))}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, maxHeight: 120, overflowY: "auto" }}>
-            {getBuiltinsByCategory(selectedCategory).map((b) => (
-              <button key={b.id} type="button"
-                onClick={() => setEditBg((p) => ({
-                  ...p,
-                  type: b.type,
-                  source: "builtin",
-                  builtinId: b.id,
-                  imageUrl: b.type === "image" ? b.source : p.imageUrl,
-                  videoUrl: b.type === "video" ? b.source : p.videoUrl,
-                  assetId: "",
-                  gradientStart: b.type === "gradient" ? b.source.split(",")[0]?.replace(/.*\(/, "").trim() || p.gradientStart : p.gradientStart,
-                  gradientEnd: b.type === "gradient" ? b.source.split(",")[1]?.replace(/.*\(/, "").replace(/\).*/, "").trim() || p.gradientEnd : p.gradientEnd,
-                }))}
-                title={b.label}
-                style={{ borderRadius: 4, overflow: "hidden", border: editBg.builtinId === b.id ? "2px solid #6366f1" : "2px solid transparent", cursor: "pointer", background: "none", padding: 0 }}>
-                <div style={{ width: "100%", height: 36, background: b.thumbnail }} />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main Tab ───────────────────────────────────────────────────────────────
 
 export default function DockCountdownsTab() {
@@ -580,6 +529,8 @@ export default function DockCountdownsTab() {
   const [editMediaItems, setEditMediaItems] = useState<MediaItem[]>([]);
   const [editMediaLoading, setEditMediaLoading] = useState(false);
   const editBgFileRef = useRef<HTMLInputElement | null>(null);
+  const [editBgUploading, setEditBgUploading] = useState(false);
+  const [editBgUploadError, setEditBgUploadError] = useState("");
 
   // Per-card timer state
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -951,6 +902,8 @@ export default function DockCountdownsTab() {
                   setEditMessage(cd.message ? { ...cd.message } : { text: "", color: "#ffffff", position: "below" });
                   setShowBgSection(false);
                   setShowMsgSection(false);
+                  setEditBgUploadError("");
+                  setEditBgUploading(false);
                   const scenes = await loadObsScenes();
                   setObsScenes(scenes);
                 }}
@@ -1024,8 +977,8 @@ export default function DockCountdownsTab() {
                 <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
                   {/* Type selector */}
                   <div style={{ display: "flex", gap: 4 }}>
-                    {(["solid", "gradient", "image", "video"] as BackgroundType[]).map((bgType) => (
-                      <button key={bgType} type="button" onClick={() => setEditBg((prev) => ({ ...prev, type: bgType }))}
+                    {(["solid", "gradient", "image", "video", "transparent"] as BackgroundType[]).map((bgType) => (
+                      <button key={bgType} type="button" onClick={() => { setEditBgUploadError(""); setEditBg((prev) => ({ ...prev, type: bgType })); }}
                         style={{ flex: 1, padding: "5px 0", borderRadius: 6, fontSize: 11, fontWeight: 500, border: `1px solid ${editBg.type === bgType ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: editBg.type === bgType ? "rgba(99,102,241,0.2)" : "transparent", color: editBg.type === bgType ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer", textTransform: "capitalize" }}>
                         {bgType}
                       </button>
@@ -1091,25 +1044,36 @@ export default function DockCountdownsTab() {
                           </div>
                         </div>
                       ) : (
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button type="button" onClick={() => editBgFileRef.current?.click()}
-                            style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                            <Upload size={14} /> Upload
-                          </button>
-                          <button type="button" onClick={async () => {
-                            setEditBgMediaModal(true);
-                            setEditMediaLoading(true);
-                            try {
-                              const { getAllMedia } = await import("../../library/libraryDb");
-                              const all = await getAllMedia();
-                              setEditMediaItems(all.filter((m) => m.type === "image"));
-                            } catch { setEditMediaItems([]); }
-                            setEditMediaLoading(false);
-                          }}
-                            style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                            📁 Library
-                          </button>
-                        </div>
+                        <>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            {editBgUploading ? (
+                              <div style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                Uploading…
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => { setEditBgUploadError(""); editBgFileRef.current?.click(); }}
+                                style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                <Upload size={14} /> Upload
+                              </button>
+                            )}
+                            <button type="button" onClick={async () => {
+                              setEditBgMediaModal(true);
+                              setEditMediaLoading(true);
+                              try {
+                                const { getAllMedia } = await import("../../library/libraryDb");
+                                const all = await getAllMedia();
+                                setEditMediaItems(all.filter((m) => m.type === "image"));
+                              } catch { setEditMediaItems([]); }
+                              setEditMediaLoading(false);
+                            }}
+                              style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                              📁 Library
+                            </button>
+                          </div>
+                          {editBgUploadError && (
+                            <div style={{ fontSize: 10, color: "#ef4444", lineHeight: 1.3 }}>{editBgUploadError}</div>
+                          )}
+                        </>
                       )}
                       {/* Image fit */}
                       <div style={{ display: "flex", gap: 4 }}>
@@ -1146,25 +1110,36 @@ export default function DockCountdownsTab() {
                           </div>
                         </div>
                       ) : (
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button type="button" onClick={() => editBgFileRef.current?.click()}
-                            style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                            <Upload size={14} /> Upload
-                          </button>
-                          <button type="button" onClick={async () => {
-                            setEditBgMediaModal(true);
-                            setEditMediaLoading(true);
-                            try {
-                              const { getAllMedia } = await import("../../library/libraryDb");
-                              const all = await getAllMedia();
-                              setEditMediaItems(all.filter((m) => m.type === "video"));
-                            } catch { setEditMediaItems([]); }
-                            setEditMediaLoading(false);
-                          }}
-                            style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                            📁 Library
-                          </button>
-                        </div>
+                        <>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            {editBgUploading ? (
+                              <div style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                Uploading…
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => { setEditBgUploadError(""); editBgFileRef.current?.click(); }}
+                                style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                <Upload size={14} /> Upload
+                              </button>
+                            )}
+                            <button type="button" onClick={async () => {
+                              setEditBgMediaModal(true);
+                              setEditMediaLoading(true);
+                              try {
+                                const { getAllMedia } = await import("../../library/libraryDb");
+                                const all = await getAllMedia();
+                                setEditMediaItems(all.filter((m) => m.type === "video"));
+                              } catch { setEditMediaItems([]); }
+                              setEditMediaLoading(false);
+                            }}
+                              style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                              📁 Library
+                            </button>
+                          </div>
+                          {editBgUploadError && (
+                            <div style={{ fontSize: 10, color: "#ef4444", lineHeight: 1.3 }}>{editBgUploadError}</div>
+                          )}
+                        </>
                       )}
                       <div style={{ display: "flex", gap: 10, marginBottom: 4 }}>
                         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--dock-text-dim)", cursor: "pointer" }}>
@@ -1177,8 +1152,8 @@ export default function DockCountdownsTab() {
                     </>
                   )}
 
-                  {/* Built-in backgrounds */}
-                  <EditBuiltinPicker editBg={editBg} setEditBg={setEditBg} />
+
+
 
                   {/* Hidden file input */}
                   <input ref={editBgFileRef} type="file" accept={backgroundFileAccept()} style={{ display: "none" }}
@@ -1187,7 +1162,13 @@ export default function DockCountdownsTab() {
                       if (!files?.length) return;
                       const file = files[0];
                       const result = validateMediaFile(file);
-                      if (!result.valid) return;
+                      if (!result.valid) {
+                        setEditBgUploadError(result.error || "Unsupported file type");
+                        if (editBgFileRef.current) editBgFileRef.current.value = "";
+                        return;
+                      }
+                      setEditBgUploadError("");
+                      setEditBgUploading(true);
                       try {
                         if (editBg.assetId) await deleteCountdownAsset(editBg.assetId).catch(() => { });
                         const { assetId, overlayUrl } = await saveCountdownAsset(file);
@@ -1201,8 +1182,14 @@ export default function DockCountdownsTab() {
                           imageUrl: isImage ? overlayUrl : p.imageUrl,
                           videoUrl: !isImage ? overlayUrl : p.videoUrl,
                         }));
-                      } catch { /* upload failed silently */ }
-                      if (editBgFileRef.current) editBgFileRef.current.value = "";
+                      } catch (err) {
+                        const msg = err instanceof Error ? err.message : String(err);
+                        console.warn("[DockCountdowns] Upload failed:", msg);
+                        setEditBgUploadError(msg);
+                      } finally {
+                        setEditBgUploading(false);
+                        if (editBgFileRef.current) editBgFileRef.current.value = "";
+                      }
                     }} />
 
                   {/* Media library modal */}
@@ -1305,18 +1292,34 @@ export default function DockCountdownsTab() {
               <button type="button" className="dock-btn dock-btn--small dock-btn--success" onClick={async () => {
                 const mins = parseFloat(editMinutes) || 0;
                 const secs = Math.round(mins * 60);
-                setCountdowns((prev) => prev.map((c) =>
-                  c.id === editingCd.id
-                    ? {
-                      ...c,
-                      title: editTitle.trim() || c.title,
-                      timer: { ...c.timer, durationSeconds: secs },
-                      background: { ...editBg },
-                      message: editMessage.text.trim() ? { ...editMessage } : undefined,
-                    }
-                    : c,
-                ));
+                const updatedCd: CountdownConfig = {
+                  ...editingCd,
+                  title: editTitle.trim() || editingCd.title,
+                  timer: { ...editingCd.timer, durationSeconds: secs },
+                  background: { ...editBg },
+                  message: editMessage.text.trim() ? { ...editMessage } : undefined,
+                };
+                setCountdowns((prev) => prev.map((c) => c.id === editingCd.id ? updatedCd : c));
                 setEditingCd(null);
+
+                if (liveCountdownId === updatedCd.id) {
+                  try {
+                    await ensureObsConnected();
+                    if (dockObsClient.isConnected) {
+                      const baseUrl = getOverlayBaseUrlSync();
+                      const targetScene = resolveCountdownTargetScene(updatedCd.obs.sceneName);
+                      const bgPayload = { config: updatedCd, baseUrl, timestamp: Date.now() };
+                      const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
+                      await ensureObsSource(BG_SOURCE, bgUrl, targetScene, { setTransform: true });
+                      const sync: OverlaySyncState = { paused: playbackState === "paused", remaining: Math.floor(timer.remaining) };
+                      const payload: CountdownOverlayPayload = { config: updatedCd, baseUrl, timestamp: Date.now(), sync };
+                      const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
+                      await ensureObsSource(COUNTDOWN_SOURCE, contentUrl, targetScene, { setTransform: true });
+                    }
+                  } catch (err) {
+                    console.warn("[DockCountdowns] Failed to update OBS after edit:", err);
+                  }
+                }
               }} style={{ fontSize: 11 }}>
                 {t("common.save", "Save")}
               </button>

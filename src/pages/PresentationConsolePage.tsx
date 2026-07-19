@@ -1,12 +1,14 @@
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { HexColorPicker } from "react-colorful";
+import { ChevronDown, ChevronUp, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { getCustomThemes } from "../bible/bibleDb";
 import { BibleProvider } from "../bible/bibleStore";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
-import type { BibleTheme, BibleVerse } from "../bible/types";
+import { DEFAULT_THEME_SETTINGS, type BibleTheme, type BibleVerse } from "../bible/types";
 import { getChapter } from "../bible/bibleData";
 import { getCountdowns } from "../countdowns/countdownStore";
 import type { CountdownConfig } from "../countdowns/types";
@@ -56,10 +58,13 @@ import {
   buildTextPresentationItem,
   buildTickerPresentationItem,
   createVideoPlaybackState,
-  describePresentationItem,
+
   getMediaViewerUrl,
   themeToStyle,
 } from "../presentation/utils";
+
+import BackgroundPickerCard from "../dock/components/BackgroundPickerCard";
+import type { DockFullscreenQuickThemeSettings } from "../dock/components/DockFullscreenThemeQuickSettings";
 
 import "../presentation/presentationConsole.css";
 
@@ -80,8 +85,6 @@ interface ThemeOverrides {
 
 interface TextDraft {
   id: string;
-  title: string;
-  subtitle: string;
   body: string;
 }
 
@@ -228,11 +231,148 @@ function createDefaultTickerDraft(): TickerDraft {
   };
 }
 
+const INLINE_COLOR_SWATCHES = [
+  "#FFFFFF",
+  "#F8FAFC",
+  "#E2E8F0",
+  "#CBD5E1",
+  "#94A3B8",
+  "#0F172A",
+  "#111827",
+  "#FDE68A",
+  "#F4D17B",
+  "#B9CCFF",
+  "#60A5FA",
+  "#22C55E",
+];
+
+function InlineColorPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [hexInput, setHexInput] = useState(value);
+  const normalizedValue = value.toUpperCase();
+
+  useEffect(() => { setHexInput(value); }, [value]);
+
+  const openPopover = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const top = Math.min(rect.bottom + 6, window.innerHeight - 240);
+    const left = Math.min(rect.left, window.innerWidth - 210);
+    setPos({ top, left: Math.max(8, left) });
+    setOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        popoverRef.current && !popoverRef.current.contains(target) &&
+        triggerRef.current && !triggerRef.current.contains(target)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  const commitHex = useCallback(() => {
+    const cleaned = hexInput.trim().replace(/^#/, "");
+    if (/^[\da-f]{6}$/i.test(cleaned)) {
+      onChange(`#${cleaned.toUpperCase()}`);
+    } else {
+      setHexInput(value);
+    }
+  }, [hexInput, value, onChange]);
+
+  return (
+    <>
+      <button
+        type="button"
+        className="dtb-color-inline__trigger"
+        ref={triggerRef}
+        onClick={openPopover}
+      >
+        <span className="dtb-color-inline__preview" style={{ backgroundColor: value }} />
+        <span className="dtb-color-inline__meta">
+          <span className="dtb-color-inline__eyebrow">Color</span>
+          <span className="dtb-color-inline__hex">{normalizedValue}</span>
+        </span>
+        {open ? <ChevronUp size={14} className="dtb-color-inline__chevron" /> : <ChevronDown size={14} className="dtb-color-inline__chevron" />}
+      </button>
+      {open && createPortal(
+        <div
+          ref={popoverRef}
+          className="dtb-color-inline__popover"
+          style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 10000 }}
+        >
+          <div className="dtb-color-inline__popover-header">
+            <span className="dtb-color-inline__popover-preview" style={{ backgroundColor: value }} />
+            <div className="dtb-color-inline__popover-copy">
+              <span className="dtb-color-inline__popover-label">Selected color</span>
+              <span className="dtb-color-inline__popover-value">{normalizedValue}</span>
+            </div>
+          </div>
+          <div className="dtb-color-inline__swatches">
+            {INLINE_COLOR_SWATCHES.map((swatch) => (
+              <button
+                key={swatch}
+                type="button"
+                className={`dtb-color-inline__swatch${normalizedValue === swatch ? " dtb-color-inline__swatch--active" : ""}`}
+                style={{ backgroundColor: swatch }}
+                onClick={() => onChange(swatch)}
+                aria-label={swatch}
+                title={swatch}
+              />
+            ))}
+          </div>
+          <HexColorPicker color={value} onChange={onChange} />
+          <div className="dtb-color-inline__input-row">
+            <span className="dtb-color-inline__hash">#</span>
+            <input
+              className="dtb-color-inline__hex-input"
+              type="text"
+              maxLength={6}
+              value={hexInput.replace(/^#/, "")}
+              onChange={(e) => setHexInput(e.target.value)}
+              onBlur={commitHex}
+              onKeyDown={(e) => { if (e.key === "Enter") commitHex(); }}
+            />
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+const TICKER_THEME_PRESETS = [
+  { label: "Dark", bg: "#0F172A", text: "#FFFFFF" },
+  { label: "Navy", bg: "#1E3A5F", text: "#FFFFFF" },
+  { label: "Indigo", bg: "#162040", text: "#FFFFFF" },
+  { label: "Purple", bg: "#2D1B4E", text: "#FFFFFF" },
+  { label: "Green", bg: "#1B3A2D", text: "#FFFFFF" },
+  { label: "Slate", bg: "#334155", text: "#F1F5F9" },
+  { label: "Rose", bg: "#4C1D3A", text: "#FFF1F2" },
+  { label: "Light", bg: "#F8FAFC", text: "#0F172A" },
+  { label: "Warm", bg: "#FFF7ED", text: "#431407" },
+  { label: "Clean", bg: "#FFFFFF", text: "#1E293B" },
+];
+
 function createDefaultTextDraft(): TextDraft {
   return {
     id: nanoid(),
-    title: "",
-    subtitle: "",
     body: "",
   };
 }
@@ -303,6 +443,9 @@ export default function PresentationConsolePage() {
   const [worshipSongQuery, setWorshipSongQuery] = useState("");
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [editingSectionText, setEditingSectionText] = useState("");
+  const [editedSections, setEditedSections] = useState<Record<string, string[]>>({});
   const [worshipTheme, setWorshipTheme] = useState<ThemeOverrides>({
     themeId: BUILTIN_THEMES[0]?.id || "default-dark-fullscreen",
     fontSize: 64,
@@ -323,13 +466,16 @@ export default function PresentationConsolePage() {
   const [textSlides, setTextSlides] = useState<PresentationTextSlideRecord[]>(() => loadPresentationTextSlides());
   const [selectedTextSlideId, setSelectedTextSlideId] = useState<string | null>(null);
   const [textDraft, setTextDraft] = useState<TextDraft>(() => createDefaultTextDraft());
-  const [textTheme, setTextTheme] = useState<ThemeOverrides>({
-    themeId: BUILTIN_THEMES[0]?.id || "default-dark-fullscreen",
-    fontSize: 56,
-    textAlign: "center",
+  const [selectedTextThemeId, setSelectedTextThemeId] = useState<string | null>(BUILTIN_THEMES[0]?.id || "default-dark-fullscreen");
+  const [textQuickSettings, setTextQuickSettings] = useState<DockFullscreenQuickThemeSettings>(() => ({
+    ...DEFAULT_THEME_SETTINGS,
+    fontColor: "#FFFFFF",
+    refFontColor: "#FFFFFF",
     backgroundColor: "#050816",
-    textColor: "#FFFFFF",
-  });
+    fullscreenShadeColor: "#000000",
+    fullscreenShadeOpacity: 0.42,
+    backgroundType: "theme",
+  }));
 
   const [countdowns, setCountdowns] = useState<CountdownConfig[]>([]);
   const [selectedCountdownId, setSelectedCountdownId] = useState<string | null>(null);
@@ -338,6 +484,12 @@ export default function PresentationConsolePage() {
   const [tickers, setTickers] = useState<PresentationTickerRecord[]>(() => loadPresentationTickers());
   const [selectedTickerId, setSelectedTickerId] = useState<string | null>(null);
   const [tickerDraft, setTickerDraft] = useState<TickerDraft>(() => createDefaultTickerDraft());
+  const [tickerMessages, setTickerMessages] = useState<Array<{ id: string; text: string; active: boolean }>>([]);
+  const [tickerNewText, setTickerNewText] = useState("");
+  const [tickerHeading, setTickerHeading] = useState("");
+  const [tickerLoop, setTickerLoop] = useState(true);
+  const [tickerRunning, setTickerRunning] = useState(false);
+  const [tickerPaused, setTickerPaused] = useState(false);
   const mediaUploadRef = useRef<HTMLInputElement | null>(null);
 
   const currentSource = mode === "bible" ? "bible" : ministrySource;
@@ -510,8 +662,14 @@ export default function PresentationConsolePage() {
     [songs, selectedSongId],
   );
   const worshipSections = useMemo<LyricSection[]>(
-    () => (selectedSong ? parseWorshipLyricSections(selectedSong.lyrics, selectedSong.linesPerSlide || 2) : []),
-    [selectedSong],
+    () => {
+      if (!selectedSong) return [];
+      const base = parseWorshipLyricSections(selectedSong.lyrics, selectedSong.linesPerSlide || 2);
+      return base.map((s) =>
+        editedSections[s.id] ? { ...s, lines: editedSections[s.id] } : s,
+      );
+    },
+    [editedSections, selectedSong],
   );
 
   useEffect(() => {
@@ -606,22 +764,20 @@ export default function PresentationConsolePage() {
     });
   }, [bibleModuleSelection, bibleTheme, bibleTranslation, bibleVerses, getThemeById, selectedVerseNumber]);
 
-  const buildBibleItemFromVerse = useCallback((verse: BibleVerse) => {
-    return buildBiblePresentationItem({
-      verse,
-      translation: bibleTranslation,
-      style: themeToStyle(getThemeById(bibleTheme.themeId), {
-        fontSize: bibleTheme.fontSize,
-        textAlign: bibleTheme.textAlign,
-        backgroundColor: bibleTheme.backgroundColor,
-      }),
-      sequenceIndex: bibleVerses.findIndex((entry) => entry.verse === verse.verse),
-      sequenceTotal: bibleVerses.length,
-    });
-  }, [bibleTheme, bibleTranslation, bibleVerses, getThemeById]);
-
   const buildBibleItemFromPayload = useCallback((payload: BiblePresentationSelectionPayload) => {
     const themeId = payload.themeId || bibleTheme.themeId;
+    const overrides = payload.styleOverrides ? {
+      fontSize: payload.styleOverrides.fontSize,
+      textColor: payload.styleOverrides.fontColor,
+      textAlign: payload.styleOverrides.textAlign as "left" | "center" | "right" | undefined,
+      fontWeight: payload.styleOverrides.fontWeight === "bold" ? 700 : payload.styleOverrides.fontWeight === "light" ? 300 : undefined,
+      lineHeight: payload.styleOverrides.lineHeight,
+      backgroundColor: payload.styleOverrides.backgroundColor,
+      backgroundImage: payload.styleOverrides.backgroundImage,
+      backgroundVideo: payload.styleOverrides.backgroundVideo,
+      backgroundOpacity: payload.styleOverrides.backgroundOpacity,
+      overlayOpacity: payload.styleOverrides.fullscreenShadeOpacity,
+    } : undefined;
     return buildBiblePresentationItem({
       verse: {
         book: payload.book,
@@ -631,7 +787,7 @@ export default function PresentationConsolePage() {
         abbrev: payload.translation.toLowerCase(),
       },
       translation: payload.translation,
-      style: themeToStyle(getThemeById(themeId)),
+      style: themeToStyle(getThemeById(themeId), overrides),
       sequenceIndex: Math.max(0, payload.verse - 1),
       sequenceTotal: Math.max(1, payload.verseCount || bibleVerses.length || payload.verse),
     });
@@ -710,46 +866,24 @@ export default function PresentationConsolePage() {
   }, [mediaDraft]);
 
   const textPreviewItem = useMemo(() => {
-    if (!textDraft.title.trim() && !textDraft.body.trim() && !textDraft.subtitle.trim()) return null;
+    if (!textDraft.body.trim()) return null;
     return buildTextPresentationItem({
       slide: {
         id: textDraft.id,
-        title: textDraft.title,
-        subtitle: textDraft.subtitle,
+        title: "",
+        subtitle: "",
         body: textDraft.body,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
-      style: themeToStyle(getThemeById(textTheme.themeId), {
-        fontSize: textTheme.fontSize,
-        textAlign: textTheme.textAlign,
-        backgroundColor: textTheme.backgroundColor,
-        textColor: textTheme.textColor || "#FFFFFF",
+      style: themeToStyle(selectedTextThemeId ? getThemeById(selectedTextThemeId) : undefined, {
+        fontSize: textQuickSettings.fontSize,
+        textAlign: textQuickSettings.textAlign,
+        backgroundColor: textQuickSettings.backgroundColor,
+        textColor: textQuickSettings.fontColor,
       }),
     });
-  }, [getThemeById, textDraft, textTheme]);
-
-  const buildTextItemFromDraft = useCallback((draft: TextDraft) => {
-    if (!draft.title.trim() && !draft.body.trim() && !draft.subtitle.trim()) {
-      return null;
-    }
-    return buildTextPresentationItem({
-      slide: {
-        id: draft.id,
-        title: draft.title,
-        subtitle: draft.subtitle,
-        body: draft.body,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      style: themeToStyle(getThemeById(textTheme.themeId), {
-        fontSize: textTheme.fontSize,
-        textAlign: textTheme.textAlign,
-        backgroundColor: textTheme.backgroundColor,
-        textColor: textTheme.textColor || "#FFFFFF",
-      }),
-    });
-  }, [getThemeById, textTheme]);
+  }, [getThemeById, textDraft, selectedTextThemeId, textQuickSettings]);
 
   const countdownPreviewItem = useMemo(() => {
     if (!countdownDraft.title.trim()) return null;
@@ -784,18 +918,22 @@ export default function PresentationConsolePage() {
   }, [buildCountdownPayload]);
 
   const tickerPreviewItem = useMemo(() => {
-    if (!tickerDraft.text.trim()) return null;
+    const activeMessages = tickerMessages.filter((m) => m.active);
+    if (activeMessages.length === 0) return null;
+    const combinedText = activeMessages.map((m) => m.text).join("  •  ");
+    const heading = tickerHeading.trim();
+    const displayText = heading ? `${heading}  |  ${combinedText}` : combinedText;
     const payload: PresentationTickerPayload = {
       sourceTickerId: tickerDraft.id || undefined,
-      text: tickerDraft.text,
+      text: displayText,
       position: tickerDraft.position,
       direction: tickerDraft.direction,
       speed: tickerDraft.speed,
       textColor: tickerDraft.textColor,
       backgroundColor: tickerDraft.backgroundColor,
       fontSize: tickerDraft.fontSize,
-      paused: tickerDraft.paused,
-      hidden: tickerDraft.hidden,
+      paused: tickerPaused,
+      hidden: false,
       version: Date.now(),
     };
     return buildTickerPresentationItem({
@@ -806,33 +944,7 @@ export default function PresentationConsolePage() {
         overlayOpacity: 0,
       }),
     });
-  }, [tickerDraft]);
-
-  const buildTickerItemFromDraft = useCallback((draft: TickerDraft) => {
-    if (!draft.text.trim()) {
-      return null;
-    }
-    return buildTickerPresentationItem({
-      ticker: {
-        sourceTickerId: draft.id || undefined,
-        text: draft.text,
-        position: draft.position,
-        direction: draft.direction,
-        speed: draft.speed,
-        textColor: draft.textColor,
-        backgroundColor: draft.backgroundColor,
-        fontSize: draft.fontSize,
-        paused: draft.paused,
-        hidden: draft.hidden,
-        version: Date.now(),
-      },
-      style: themeToStyle(undefined, {
-        backgroundColor: "#000000",
-        backgroundOpacity: 1,
-        overlayOpacity: 0,
-      }),
-    });
-  }, []);
+  }, [tickerDraft, tickerMessages, tickerHeading, tickerPaused]);
 
   const selectedContent = useMemo(() => {
     switch (currentSource) {
@@ -956,6 +1068,14 @@ export default function PresentationConsolePage() {
     if (payload.themeId) {
       setBibleTheme((current) => ({ ...current, themeId: payload.themeId || current.themeId }));
     }
+    if (payload.styleOverrides) {
+      setBibleTheme((current) => ({
+        ...current,
+        fontSize: payload.styleOverrides?.fontSize ?? current.fontSize,
+        textAlign: (payload.styleOverrides?.textAlign as "left" | "center" | "right") ?? current.textAlign,
+        backgroundColor: payload.styleOverrides?.backgroundColor ?? current.backgroundColor,
+      }));
+    }
     pushItem(buildBibleItemFromPayload(payload));
   }, [buildBibleItemFromPayload, pushItem]);
 
@@ -981,6 +1101,7 @@ export default function PresentationConsolePage() {
   const handleSelectWorshipSong = useCallback((songId: string) => {
     const song = songs.find((entry) => entry.id === songId) || null;
     setSelectedSongId(songId);
+    setEditingSectionId(null);
     if (!song) {
       setSelectedSectionId(null);
       return;
@@ -988,22 +1109,40 @@ export default function PresentationConsolePage() {
     const sections = parseWorshipLyricSections(song.lyrics, song.linesPerSlide || 2);
     const firstSection = sections[0] || null;
     setSelectedSectionId(firstSection?.id || null);
-    if (firstSection) {
-      pushItem(buildWorshipItem(song, firstSection, sections));
-    }
-  }, [buildWorshipItem, pushItem, songs]);
+  }, [songs]);
 
   const handleSelectWorshipSection = useCallback((section: LyricSection) => {
     setSelectedSectionId(section.id);
-    if (selectedSong) {
-      pushItem(buildWorshipItem(selectedSong, section, worshipSections));
-    }
-  }, [buildWorshipItem, pushItem, selectedSong, worshipSections]);
+    setEditingSectionId(null);
+  }, []);
+
+  const handlePushWorshipSection = useCallback(() => {
+    if (!selectedSong || !activeSection) return;
+    pushItem(buildWorshipItem(selectedSong, activeSection, worshipSections));
+  }, [activeSection, buildWorshipItem, pushItem, selectedSong, worshipSections]);
+
+  const handleEditWorshipSection = useCallback((section: LyricSection) => {
+    setEditingSectionId(section.id);
+    setEditingSectionText(section.lines.join("\n"));
+  }, []);
+
+  const handleSaveWorshipSection = useCallback(() => {
+    if (!editingSectionId) return;
+    const lines = editingSectionText.split("\n");
+    setEditedSections((prev) => ({ ...prev, [editingSectionId]: lines }));
+    setSelectedSectionId(editingSectionId);
+    setEditingSectionId(null);
+    setEditingSectionText("");
+  }, [editingSectionId, editingSectionText]);
 
   const handleSelectMedia = useCallback((item: MediaItem) => {
     setSelectedMediaId(item.id);
-    pushItem(buildMediaItemForSelection(item));
-  }, [buildMediaItemForSelection, pushItem]);
+  }, []);
+
+  const handlePushMedia = useCallback(() => {
+    if (!selectedMedia) return;
+    pushItem(buildMediaItemForSelection(selectedMedia));
+  }, [buildMediaItemForSelection, pushItem, selectedMedia]);
 
   const handleUploadMedia = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -1032,24 +1171,12 @@ export default function PresentationConsolePage() {
       .catch(() => setActionError("Failed to delete media."));
   }, [reloadMedia]);
 
-  const handleSelectTextSlide = useCallback((slide: PresentationTextSlideRecord) => {
-    const nextDraft = {
-      id: slide.id,
-      title: slide.title,
-      subtitle: slide.subtitle,
-      body: slide.body,
-    };
-    setSelectedTextSlideId(slide.id);
-    setTextDraft(nextDraft);
-    pushItem(buildTextItemFromDraft(nextDraft));
-  }, [buildTextItemFromDraft, pushItem]);
-
   const handleSaveTextSlide = useCallback(() => {
     const now = new Date().toISOString();
     const record: PresentationTextSlideRecord = {
       id: textDraft.id || nanoid(),
-      title: textDraft.title.trim(),
-      subtitle: textDraft.subtitle.trim(),
+      title: "",
+      subtitle: "",
       body: textDraft.body.trim(),
       createdAt: selectedTextSlide?.createdAt || now,
       updatedAt: now,
@@ -1059,7 +1186,7 @@ export default function PresentationConsolePage() {
       : [record, ...textSlides];
     setTextSlides(nextSlides);
     setSelectedTextSlideId(record.id);
-    setTextDraft({ id: record.id, title: record.title, subtitle: record.subtitle, body: record.body });
+    setTextDraft({ id: record.id, body: record.body });
     savePresentationTextSlides(nextSlides);
   }, [selectedTextSlide?.createdAt, textDraft, textSlides]);
 
@@ -1067,8 +1194,18 @@ export default function PresentationConsolePage() {
     const nextDraft = mapCountdownToDraft(countdown);
     setSelectedCountdownId(countdown.id);
     setCountdownDraft(nextDraft);
-    pushItem(buildCountdownItemFromDraft(nextDraft));
-  }, [buildCountdownItemFromDraft, pushItem]);
+  }, [buildCountdownItemFromDraft]);
+
+  function parseTickerTextToMessages(text: string): Array<{ id: string; text: string; active: boolean }> {
+    const parts = text
+      .split(/\s{2}•{1,2}\s{2}/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length === 0 && text.trim()) {
+      return [{ id: nanoid(), text: text.trim(), active: true }];
+    }
+    return parts.map((t) => ({ id: nanoid(), text: t, active: true }));
+  }
 
   const handleSelectTicker = useCallback((ticker: PresentationTickerRecord) => {
     const nextDraft = {
@@ -1086,15 +1223,23 @@ export default function PresentationConsolePage() {
     };
     setSelectedTickerId(ticker.id);
     setTickerDraft(nextDraft);
-    pushItem(buildTickerItemFromDraft(nextDraft));
-  }, [buildTickerItemFromDraft, pushItem]);
+    setTickerMessages(parseTickerTextToMessages(ticker.text));
+    setTickerHeading("");
+    setTickerNewText("");
+    setTickerRunning(false);
+    setTickerPaused(false);
+  }, []);
 
   const handleSaveTicker = useCallback(() => {
     const now = new Date().toISOString();
+    const activeMessages = tickerMessages.filter((m) => m.active);
+    const combinedText = activeMessages.length > 0
+      ? activeMessages.map((m) => m.text).join("  •  ")
+      : "";
     const record: PresentationTickerRecord = {
       id: tickerDraft.id || nanoid(),
       name: tickerDraft.name.trim() || "Ticker",
-      text: tickerDraft.text.trim(),
+      text: combinedText,
       position: tickerDraft.position,
       direction: tickerDraft.direction,
       speed: tickerDraft.speed,
@@ -1109,21 +1254,14 @@ export default function PresentationConsolePage() {
       : [record, ...tickers];
     setTickers(nextTickers);
     setSelectedTickerId(record.id);
-    setTickerDraft({
+    setTickerDraft((prev) => ({
+      ...prev,
       id: record.id,
       name: record.name,
       text: record.text,
-      position: record.position,
-      direction: record.direction,
-      speed: record.speed,
-      textColor: record.textColor,
-      backgroundColor: record.backgroundColor,
-      fontSize: record.fontSize,
-      paused: false,
-      hidden: false,
-    });
+    }));
     savePresentationTickers(nextTickers);
-  }, [tickerDraft, tickers]);
+  }, [tickerDraft.id, tickerDraft.name, tickerDraft.position, tickerDraft.direction, tickerDraft.speed, tickerDraft.textColor, tickerDraft.backgroundColor, tickerDraft.fontSize, tickerMessages, tickers]);
 
   const handlePresent = useCallback(async () => {
     if (!selectedContent) {
@@ -1146,193 +1284,6 @@ export default function PresentationConsolePage() {
       setActionError(error instanceof Error ? error.message : "Failed to clear the screen.");
     }
   }, [session.sessionId]);
-
-  const handlePrevious = useCallback(() => {
-    switch (currentSource) {
-      case "bible": {
-        const index = bibleVerses.findIndex((verse) => verse.verse === selectedVerseNumber);
-        if (index > 0) {
-          const previousVerse = bibleVerses[index - 1] || null;
-          setSelectedVerseNumber(previousVerse?.verse ?? null);
-          if (previousVerse) {
-            setPendingBibleSelection({
-              book: bibleBook,
-              chapter: bibleChapter,
-              verse: previousVerse.verse,
-            });
-            pushItem(buildBibleItemFromVerse(previousVerse));
-          }
-        }
-        break;
-      }
-      case "worship": {
-        const index = worshipSections.findIndex((section) => section.id === selectedSectionId);
-        if (index > 0) {
-          const previousSection = worshipSections[index - 1] || null;
-          setSelectedSectionId(previousSection?.id || null);
-          if (selectedSong && previousSection) {
-            pushItem(buildWorshipItem(selectedSong, previousSection, worshipSections));
-          }
-        }
-        break;
-      }
-      case "media": {
-        const index = filteredMediaItems.findIndex((item) => item.id === selectedMediaId);
-        if (index > 0) {
-          const previousItem = filteredMediaItems[index - 1] || null;
-          setSelectedMediaId(previousItem?.id || null);
-          if (previousItem) {
-            pushItem(buildMediaItemForSelection(previousItem));
-          }
-        }
-        break;
-      }
-      case "text": {
-        const index = textSlides.findIndex((slide) => slide.id === selectedTextSlideId);
-        if (index > 0) {
-          const slide = textSlides[index - 1];
-          setSelectedTextSlideId(slide.id);
-          const nextDraft = { id: slide.id, title: slide.title, subtitle: slide.subtitle, body: slide.body };
-          setTextDraft(nextDraft);
-          pushItem(buildTextItemFromDraft(nextDraft));
-        }
-        break;
-      }
-      case "countdown": {
-        const index = countdowns.findIndex((entry) => entry.id === selectedCountdownId);
-        if (index > 0) {
-          const item = countdowns[index - 1];
-          setSelectedCountdownId(item.id);
-          const nextDraft = mapCountdownToDraft(item);
-          setCountdownDraft(nextDraft);
-          pushItem(buildCountdownItemFromDraft(nextDraft));
-        }
-        break;
-      }
-      case "ticker": {
-        const index = tickers.findIndex((entry) => entry.id === selectedTickerId);
-        if (index > 0) {
-          const entry = tickers[index - 1];
-          setSelectedTickerId(entry.id);
-          const nextDraft = {
-            id: entry.id,
-            name: entry.name,
-            text: entry.text,
-            position: entry.position,
-            direction: entry.direction,
-            speed: entry.speed,
-            textColor: entry.textColor,
-            backgroundColor: entry.backgroundColor,
-            fontSize: entry.fontSize,
-            paused: false,
-            hidden: false,
-          };
-          setTickerDraft(nextDraft);
-          pushItem(buildTickerItemFromDraft(nextDraft));
-        }
-        break;
-      }
-    }
-  }, [bibleBook, bibleChapter, bibleVerses, buildBibleItemFromVerse, buildCountdownItemFromDraft, buildMediaItemForSelection, buildTextItemFromDraft, buildTickerItemFromDraft, buildWorshipItem, countdowns, currentSource, filteredMediaItems, pushItem, selectedCountdownId, selectedMediaId, selectedSectionId, selectedSong, selectedTextSlideId, selectedTickerId, selectedVerseNumber, textSlides, tickers, worshipSections]);
-
-  const handleNext = useCallback(() => {
-    switch (currentSource) {
-      case "bible": {
-        const index = bibleVerses.findIndex((verse) => verse.verse === selectedVerseNumber);
-        if (index >= 0 && index < bibleVerses.length - 1) {
-          const nextVerse = bibleVerses[index + 1] || null;
-          setSelectedVerseNumber(nextVerse?.verse ?? null);
-          if (nextVerse) {
-            setPendingBibleSelection({
-              book: bibleBook,
-              chapter: bibleChapter,
-              verse: nextVerse.verse,
-            });
-            pushItem(buildBibleItemFromVerse(nextVerse));
-          }
-        }
-        break;
-      }
-      case "worship": {
-        const index = worshipSections.findIndex((section) => section.id === selectedSectionId);
-        if (index >= 0 && index < worshipSections.length - 1) {
-          const nextSection = worshipSections[index + 1] || null;
-          setSelectedSectionId(nextSection?.id || null);
-          if (selectedSong && nextSection) {
-            pushItem(buildWorshipItem(selectedSong, nextSection, worshipSections));
-          }
-        }
-        break;
-      }
-      case "media": {
-        const index = filteredMediaItems.findIndex((item) => item.id === selectedMediaId);
-        if (index >= 0 && index < filteredMediaItems.length - 1) {
-          const nextItem = filteredMediaItems[index + 1] || null;
-          setSelectedMediaId(nextItem?.id || null);
-          if (nextItem) {
-            pushItem(buildMediaItemForSelection(nextItem));
-          }
-        }
-        break;
-      }
-      case "text": {
-        const index = textSlides.findIndex((slide) => slide.id === selectedTextSlideId);
-        if (index >= 0 && index < textSlides.length - 1) {
-          const slide = textSlides[index + 1];
-          setSelectedTextSlideId(slide.id);
-          const nextDraft = { id: slide.id, title: slide.title, subtitle: slide.subtitle, body: slide.body };
-          setTextDraft(nextDraft);
-          pushItem(buildTextItemFromDraft(nextDraft));
-        }
-        break;
-      }
-      case "countdown": {
-        const index = countdowns.findIndex((entry) => entry.id === selectedCountdownId);
-        if (index >= 0 && index < countdowns.length - 1) {
-          const item = countdowns[index + 1];
-          setSelectedCountdownId(item.id);
-          const nextDraft = mapCountdownToDraft(item);
-          setCountdownDraft(nextDraft);
-          pushItem(buildCountdownItemFromDraft(nextDraft));
-        }
-        break;
-      }
-      case "ticker": {
-        const index = tickers.findIndex((entry) => entry.id === selectedTickerId);
-        if (index >= 0 && index < tickers.length - 1) {
-          const entry = tickers[index + 1];
-          setSelectedTickerId(entry.id);
-          const nextDraft = {
-            id: entry.id,
-            name: entry.name,
-            text: entry.text,
-            position: entry.position,
-            direction: entry.direction,
-            speed: entry.speed,
-            textColor: entry.textColor,
-            backgroundColor: entry.backgroundColor,
-            fontSize: entry.fontSize,
-            paused: false,
-            hidden: false,
-          };
-          setTickerDraft(nextDraft);
-          pushItem(buildTickerItemFromDraft(nextDraft));
-        }
-        break;
-      }
-    }
-  }, [bibleBook, bibleChapter, bibleVerses, buildBibleItemFromVerse, buildCountdownItemFromDraft, buildMediaItemForSelection, buildTextItemFromDraft, buildTickerItemFromDraft, buildWorshipItem, countdowns, currentSource, filteredMediaItems, pushItem, selectedCountdownId, selectedMediaId, selectedSectionId, selectedSong, selectedTextSlideId, selectedTickerId, selectedVerseNumber, textSlides, tickers, worshipSections]);
-
-  const remoteStatusLabel = useMemo(() => {
-    if (connectionStatus === "connected") {
-      return session.connectedViewers > 1
-        ? `${session.connectedViewers} screens connected`
-        : "Remote screen connected";
-    }
-    if (connectionStatus === "disconnected") return "Remote screen disconnected";
-    if (connectionStatus === "error") return "Remote status error";
-    return "Waiting for remote screen";
-  }, [connectionStatus, session.connectedViewers]);
 
   const selectedMediaUrl = useMemo(
     () => (selectedMedia ? getMediaViewerUrl(selectedMedia) : ""),
@@ -1434,22 +1385,19 @@ export default function PresentationConsolePage() {
       case "text":
         return (
           <div className="presentation-library-panel">
-            <div className="presentation-panel-title">Saved slides</div>
-            <div className="presentation-library-list">
-              {textSlides.map((slide) => (
-                <button
-                  key={slide.id}
-                  type="button"
-                  className={`presentation-library-item${selectedTextSlideId === slide.id ? " is-active" : ""}`}
-                  onClick={() => handleSelectTextSlide(slide)}
-                >
-                  <strong>{slide.title}</strong>
-                  <span>{slide.body}</span>
-                </button>
-              ))}
-              {textSlides.length === 0 ? (
-                <div className="presentation-library-empty">No saved slides yet.</div>
-              ) : null}
+            <div className="presentation-panel-title">
+              <span>Text</span>
+              <button
+                type="button"
+                className="presentation-icon-button"
+                onClick={() => {
+                  setTextDraft({ id: nanoid(), body: "" });
+                  setSelectedTextSlideId(null);
+                }}
+                title="New text"
+              >
+                <Plus size={14} />
+              </button>
             </div>
           </div>
         );
@@ -1507,7 +1455,14 @@ export default function PresentationConsolePage() {
       case "media":
         return (
           <div className="presentation-settings-panel">
-            <div className="presentation-panel-title">Selected media</div>
+            <div className="presentation-panel-title">
+              <span>Selected media</span>
+              {selectedMedia ? (
+                <button type="button" className="presentation-chip presentation-chip--push" onClick={handlePushMedia}>
+                  Present
+                </button>
+              ) : null}
+            </div>
             {selectedMedia ? (
               <div className="presentation-media-detail">
                 <div className="presentation-media-detail__stage">
@@ -1520,7 +1475,9 @@ export default function PresentationConsolePage() {
                       playsInline
                     />
                   ) : (
-                    <img className="presentation-media-detail__asset" src={selectedMediaUrl} alt={selectedMedia.name} />
+                    <button type="button" className="presentation-media-detail__image-button" onClick={handlePushMedia} title="Present to live screen">
+                      <img className="presentation-media-detail__asset" src={selectedMediaUrl} alt={selectedMedia.name} />
+                    </button>
                   )}
                 </div>
                 <div className="presentation-media-detail__meta">
@@ -1536,18 +1493,48 @@ export default function PresentationConsolePage() {
       case "worship":
         return (
           <div className="presentation-library-panel">
-            <div className="presentation-panel-title">{selectedSong ? selectedSong.metadata.title : "Sections"}</div>
+            <div className="presentation-panel-title">
+              <span>{selectedSong ? selectedSong.metadata.title : "Sections"}</span>
+              {activeSection ? (
+                <button type="button" className="presentation-chip presentation-chip--push" onClick={handlePushWorshipSection}>
+                  Present
+                </button>
+              ) : null}
+            </div>
             <div className="presentation-library-list">
               {worshipSections.map((section) => (
-                <button
+                <div
                   key={section.id}
-                  type="button"
                   className={`presentation-library-item${selectedSectionId === section.id ? " is-active" : ""}`}
-                  onClick={() => handleSelectWorshipSection(section)}
                 >
-                  <strong>{section.label}</strong>
-                  <span>{section.lines.join(" ")}</span>
-                </button>
+                  <button type="button" className="presentation-library-item__body" onClick={() => handleSelectWorshipSection(section)}>
+                    <strong>{section.label}</strong>
+                    {editingSectionId === section.id ? (
+                      <textarea
+                        className="presentation-section-edit"
+                        value={editingSectionText}
+                        onChange={(e) => setEditingSectionText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSaveWorshipSection();
+                          }
+                        }}
+                        onBlur={handleSaveWorshipSection}
+                        autoFocus
+                      />
+                    ) : (
+                      <span>{section.lines.join(" ")}</span>
+                    )}
+                  </button>
+                  {selectedSectionId === section.id && editingSectionId !== section.id ? (
+                    <div className="presentation-library-item__actions">
+                      <button type="button" className="presentation-icon-button" onClick={() => handleEditWorshipSection(section)} title="Edit">
+                        <Pencil size={14} />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               ))}
               {worshipSections.length === 0 ? (
                 <div className="presentation-library-empty">Select a song to view sections.</div>
@@ -1561,21 +1548,23 @@ export default function PresentationConsolePage() {
             <div className="presentation-panel-title">Text content</div>
             <div className="presentation-settings-grid presentation-settings-grid--single presentation-settings-panel__body">
               <label className="presentation-field">
-                <span>Title</span>
-                <input className="presentation-input" value={textDraft.title} onChange={(event) => setTextDraft((current) => ({ ...current, title: event.target.value }))} />
-              </label>
-              <label className="presentation-field">
-                <span>Subtitle</span>
-                <input className="presentation-input" value={textDraft.subtitle} onChange={(event) => setTextDraft((current) => ({ ...current, subtitle: event.target.value }))} />
-              </label>
-              <label className="presentation-field">
                 <span>Main text</span>
-                <textarea className="presentation-textarea" value={textDraft.body} onChange={(event) => setTextDraft((current) => ({ ...current, body: event.target.value }))} />
+                <textarea
+                  className="presentation-textarea"
+                  value={textDraft.body}
+                  onChange={(event) => setTextDraft((current) => ({ ...current, body: event.target.value }))}
+                />
               </label>
               <div className="presentation-inline-actions">
                 <button type="button" className="presentation-button" onClick={handleSaveTextSlide}>Save</button>
               </div>
             </div>
+            <PresentationControls
+              canPresent={Boolean(selectedContent)}
+              canClear={Boolean(liveContent)}
+              onPresent={handlePresent}
+              onClear={handleClear}
+            />
           </div>
         );
       case "countdown":
@@ -1667,24 +1656,287 @@ export default function PresentationConsolePage() {
           </div>
         );
       case "ticker":
+        const activeMsgCount = tickerMessages.filter((m) => m.active).length;
         return (
           <div className="presentation-settings-panel">
-            <div className="presentation-panel-title">Ticker content</div>
+            <div className="presentation-panel-title">
+              <span>Ticker</span>
+              {activeMsgCount > 0 ? (
+                <button type="button" className="presentation-chip presentation-chip--push" onClick={() => pushItem(tickerPreviewItem)}>
+                  Present
+                </button>
+              ) : null}
+            </div>
             <div className="presentation-settings-grid presentation-settings-grid--single presentation-settings-panel__body">
               <label className="presentation-field">
-                <span>Name</span>
-                <input className="presentation-input" value={tickerDraft.name} onChange={(event) => updateTickerDraft((current) => ({ ...current, name: event.target.value }))} />
+                <span>Heading</span>
+                <input
+                  className="presentation-input"
+                  value={tickerHeading}
+                  onChange={(e) => setTickerHeading(e.target.value.slice(0, 20))}
+                  placeholder="e.g. Announcements"
+                  maxLength={20}
+                />
               </label>
-              <label className="presentation-field">
-                <span>Ticker text</span>
-                <textarea className="presentation-textarea" value={tickerDraft.text} onChange={(event) => updateTickerDraft((current) => ({ ...current, text: event.target.value, hidden: false }))} />
-              </label>
+              <div className="presentation-settings-grid">
+                <label className="presentation-field">
+                  <span>Position</span>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button
+                      type="button"
+                      className={`presentation-chip${tickerDraft.position === "top" ? " is-active" : ""}`}
+                      onClick={() => setTickerDraft((prev) => ({ ...prev, position: "top" }))}
+                    >Top</button>
+                    <button
+                      type="button"
+                      className={`presentation-chip${tickerDraft.position === "bottom" ? " is-active" : ""}`}
+                      onClick={() => setTickerDraft((prev) => ({ ...prev, position: "bottom" }))}
+                    >Bottom</button>
+                  </div>
+                </label>
+                <label className="presentation-field">
+                  <span>Loop</span>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button
+                      type="button"
+                      className={`presentation-chip${!tickerLoop ? " is-active" : ""}`}
+                      onClick={() => setTickerLoop(false)}
+                    >Once</button>
+                    <button
+                      type="button"
+                      className={`presentation-chip${tickerLoop ? " is-active" : ""}`}
+                      onClick={() => setTickerLoop(true)}
+                    >Loop</button>
+                  </div>
+                </label>
+                <label className="presentation-field">
+                  <span>Speed</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="range"
+                      min={1}
+                      max={100}
+                      value={Math.round(tickerDraft.speed * 25)}
+                      onChange={(e) => setTickerDraft((prev) => ({ ...prev, speed: Number(e.target.value) / 25 }))}
+                      style={{ flex: 1 }}
+                    />
+                    <span style={{ fontSize: 11, color: "var(--text-secondary, #94a3b8)", minWidth: 24, textAlign: "right" }}>
+                      {Math.round(tickerDraft.speed * 25)}
+                    </span>
+                  </div>
+                </label>
+                <label className="presentation-field">
+                  <span>Direction</span>
+                  <select
+                    className="presentation-input"
+                    value={tickerDraft.direction}
+                    onChange={(e) => setTickerDraft((prev) => ({ ...prev, direction: e.target.value as PresentationTickerDirection }))}
+                  >
+                    <option value="ltr">Left to right</option>
+                    <option value="rtl">Right to left</option>
+                    <option value="static">Static</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="presentation-ticker-themes">
+                {TICKER_THEME_PRESETS.map((theme, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`presentation-ticker-theme${tickerDraft.backgroundColor === theme.bg && tickerDraft.textColor === theme.text
+                        ? " is-active"
+                        : ""
+                      }`}
+                    style={{ backgroundColor: theme.bg, color: theme.text }}
+                    onClick={() => setTickerDraft((prev) => ({
+                      ...prev,
+                      textColor: theme.text,
+                      backgroundColor: theme.bg,
+                    }))}
+                    title={theme.label}
+                  >
+                    {theme.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="presentation-settings-grid">
+                <label className="presentation-field">
+                  <span>Text colour</span>
+                  <InlineColorPicker
+                    value={tickerDraft.textColor}
+                    onChange={(v) => setTickerDraft((prev) => ({ ...prev, textColor: v }))}
+                  />
+                </label>
+                <label className="presentation-field">
+                  <span>Background</span>
+                  <InlineColorPicker
+                    value={tickerDraft.backgroundColor}
+                    onChange={(v) => setTickerDraft((prev) => ({ ...prev, backgroundColor: v }))}
+                  />
+                </label>
+                <label className="presentation-field">
+                  <span>Font size</span>
+                  <input
+                    type="range"
+                    min={18}
+                    max={72}
+                    value={tickerDraft.fontSize}
+                    onChange={(e) => setTickerDraft((prev) => ({ ...prev, fontSize: Number(e.target.value) }))}
+                  />
+                </label>
+              </div>
+
+              <div style={{ borderTop: "1px solid rgba(148,163,184,0.15)", paddingTop: 12, marginTop: 4 }}>
+                <label className="presentation-field">
+                  <span>Name</span>
+                  <input
+                    className="presentation-input"
+                    value={tickerDraft.name}
+                    onChange={(e) => setTickerDraft((prev) => ({ ...prev, name: e.target.value }))}
+                  />
+                </label>
+              </div>
+
+              <div style={{ display: "flex", gap: 4, alignItems: "flex-end" }}>
+                <textarea
+                  className="presentation-textarea"
+                  value={tickerNewText}
+                  onChange={(e) => setTickerNewText(e.target.value.slice(0, 140))}
+                  placeholder="Type a message..."
+                  rows={3}
+                  style={{ flex: 1, minHeight: 60, resize: "none" }}
+                />
+                <button
+                  type="button"
+                  className="presentation-button"
+                  onClick={() => {
+                    const text = tickerNewText.trim();
+                    if (!text) return;
+                    setTickerMessages((prev) => [...prev, { id: nanoid(), text, active: true }]);
+                    setTickerNewText("");
+                  }}
+                  disabled={!tickerNewText.trim()}
+                  style={{ height: 30, whiteSpace: "nowrap" }}
+                >
+                  <Plus size={14} />
+                  Add
+                </button>
+              </div>
+              <div style={{ fontSize: 10, color: "var(--text-secondary, #94a3b8)", textAlign: "right" }}>
+                {tickerNewText.length}/140
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 160, overflowY: "auto" }}>
+                {tickerMessages.length === 0 && (
+                  <div style={{ fontSize: 12, color: "var(--text-secondary, #94a3b8)", padding: "8px 0", textAlign: "center" }}>
+                    No messages. Type above and click Add.
+                  </div>
+                )}
+                {tickerMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "4px 6px",
+                      borderRadius: 6,
+                      background: msg.active ? "rgba(30,41,59,0.46)" : "transparent",
+                      opacity: msg.active ? 1 : 0.5,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setTickerMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, active: !m.active } : m))}
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: 3,
+                        border: `1.5px solid ${msg.active ? "rgba(59,130,246,0.8)" : "rgba(148,163,184,0.22)"}`,
+                        background: msg.active ? "rgba(59,130,246,0.8)" : "transparent",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 0,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {msg.active && (
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </button>
+                    <span style={{ flex: 1, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {msg.text}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setTickerMessages((prev) => prev.filter((m) => m.id !== msg.id))}
+                      style={{
+                        width: 16,
+                        height: 16,
+                        border: "none",
+                        background: "transparent",
+                        color: "var(--text-secondary, #94a3b8)",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 0,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: "flex", gap: 6, padding: "4px 0" }}>
+                <button
+                  type="button"
+                  className="presentation-button"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    if (tickerPreviewItem) pushItem(tickerPreviewItem);
+                    setTickerRunning(true);
+                    setTickerPaused(false);
+                  }}
+                  disabled={activeMsgCount === 0}
+                >
+                  Go Live
+                </button>
+                {tickerRunning && (
+                  <button
+                    type="button"
+                    className="presentation-button"
+                    onClick={() => setTickerPaused((p) => !p)}
+                  >
+                    {tickerPaused ? "Resume" : "Pause"}
+                  </button>
+                )}
+                {tickerRunning && (
+                  <button
+                    type="button"
+                    className="presentation-button"
+                    onClick={() => {
+                      setTickerRunning(false);
+                      setTickerPaused(false);
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
               <div className="presentation-inline-actions">
                 <button type="button" className="presentation-button" onClick={handleSaveTicker}>Save</button>
-                <button type="button" className="presentation-button" onClick={() => updateTickerDraft((current) => ({ ...current, paused: !current.paused, hidden: false }))}>
-                  {tickerDraft.paused ? "Resume" : "Pause"}
-                </button>
-                <button type="button" className="presentation-button" onClick={() => updateTickerDraft((current) => ({ ...current, hidden: true }))}>Hide</button>
               </div>
             </div>
           </div>
@@ -1699,35 +1951,76 @@ export default function PresentationConsolePage() {
       case "media":
         return (
           <div className="presentation-settings-panel">
-            <div className="presentation-panel-title">Presentation settings</div>
-            <div className="presentation-settings-grid presentation-settings-panel__body">
-              <label className="presentation-field">
-                <span>Fit</span>
-                <select value={mediaDraft.fit} className="presentation-input" onChange={(event) => updateMediaDraft((current) => ({ ...current, fit: event.target.value as PresentationMediaFit }))}>
-                  <option value="fit">Fit</option>
-                  <option value="fill">Fill</option>
-                  <option value="contain">Contain</option>
-                  <option value="stretch">Stretch</option>
-                </select>
-              </label>
-              <label className="presentation-field">
-                <span>Background</span>
-                <input type="color" value={mediaDraft.backgroundColor} onChange={(event) => updateMediaDraft((current) => ({ ...current, backgroundColor: event.target.value }))} />
-              </label>
-              <label className="presentation-field">
-                <span>Volume</span>
-                <input type="range" min={0} max={1} step={0.05} value={mediaDraft.playback.volume} onChange={(event) => updateMediaDraft((current) => ({ ...current, playback: { ...current.playback, volume: Number(event.target.value), version: Date.now() } }))} />
-              </label>
-              <div className="presentation-field">
-                <span>Video controls</span>
-                <div className="presentation-inline-actions">
-                  <button type="button" className="presentation-chip" onClick={() => updateMediaDraft((current) => ({ ...current, playback: { ...current.playback, playing: true, version: Date.now() } }))}>Play</button>
-                  <button type="button" className="presentation-chip" onClick={() => updateMediaDraft((current) => ({ ...current, playback: { ...current.playback, playing: false, version: Date.now() } }))}>Pause</button>
-                  <button type="button" className="presentation-chip" onClick={() => updateMediaDraft((current) => ({ ...current, playback: { ...current.playback, positionSeconds: 0, playing: true, version: Date.now() } }))}>Restart</button>
-                  <button type="button" className={`presentation-chip${mediaDraft.playback.muted ? " is-active" : ""}`} onClick={() => updateMediaDraft((current) => ({ ...current, playback: { ...current.playback, muted: !current.playback.muted, version: Date.now() } }))}>Mute</button>
-                  <button type="button" className={`presentation-chip${mediaDraft.playback.loop ? " is-active" : ""}`} onClick={() => updateMediaDraft((current) => ({ ...current, playback: { ...current.playback, loop: !current.playback.loop, version: Date.now() } }))}>Loop</button>
-                </div>
+            <div className="presentation-panel-title">Media controls</div>
+            <div className="presentation-settings-panel__body">
+              {selectedMedia?.type === "video" && (
+                <>
+                  <div className="presentation-section-label">Playback</div>
+                  <div className="presentation-media-playback">
+                    <button
+                      type="button"
+                      className="presentation-button presentation-button--playback"
+                      onClick={() => updateMediaDraft((current) => ({ ...current, playback: { ...current.playback, playing: true, version: Date.now() } }))}
+                    >
+                      ▶ Play
+                    </button>
+                    <button
+                      type="button"
+                      className="presentation-button presentation-button--playback-secondary"
+                      onClick={() => updateMediaDraft((current) => ({ ...current, playback: { ...current.playback, playing: false, version: Date.now() } }))}
+                    >
+                      ⏸ Pause
+                    </button>
+                    <button
+                      type="button"
+                      className="presentation-button presentation-button--playback-secondary"
+                      onClick={() => updateMediaDraft((current) => ({ ...current, playback: { ...current.playback, positionSeconds: 0, playing: true, version: Date.now() } }))}
+                    >
+                      ↺ Restart
+                    </button>
+                  </div>
+
+                  <div className="presentation-section-divider" />
+
+                  <div className="presentation-section-label">Options</div>
+                  <div className="presentation-media-options">
+                    <label className="presentation-toggle">
+                      <input type="checkbox" checked={mediaDraft.playback.muted} onChange={() => updateMediaDraft((current) => ({ ...current, playback: { ...current.playback, muted: !current.playback.muted, version: Date.now() } }))} />
+                      <span>Mute</span>
+                    </label>
+                    <label className="presentation-toggle">
+                      <input type="checkbox" checked={mediaDraft.playback.loop} onChange={() => updateMediaDraft((current) => ({ ...current, playback: { ...current.playback, loop: !current.playback.loop, version: Date.now() } }))} />
+                      <span>Loop</span>
+                    </label>
+                  </div>
+
+                  <div className="presentation-section-divider" />
+                </>
+              )}
+
+              <div className="presentation-section-label">Display</div>
+              <div className="presentation-settings-grid">
+                <label className="presentation-field">
+                  <span>Fit</span>
+                  <select value={mediaDraft.fit} className="presentation-input" onChange={(event) => updateMediaDraft((current) => ({ ...current, fit: event.target.value as PresentationMediaFit }))}>
+                    <option value="fit">Fit</option>
+                    <option value="fill">Fill</option>
+                    <option value="contain">Contain</option>
+                    <option value="stretch">Stretch</option>
+                  </select>
+                </label>
+                <label className="presentation-field">
+                  <span>Background</span>
+                  <InlineColorPicker value={mediaDraft.backgroundColor} onChange={(v) => updateMediaDraft((current) => ({ ...current, backgroundColor: v }))} />
+                </label>
               </div>
+
+              {selectedMedia?.type === "video" && (
+                <label className="presentation-field">
+                  <span>Volume</span>
+                  <input type="range" min={0} max={1} step={0.05} value={mediaDraft.playback.volume} onChange={(event) => updateMediaDraft((current) => ({ ...current, playback: { ...current.playback, volume: Number(event.target.value), version: Date.now() } }))} />
+                </label>
+              )}
             </div>
           </div>
         );
@@ -1758,44 +2051,28 @@ export default function PresentationConsolePage() {
               </label>
               <label className="presentation-field">
                 <span>Background</span>
-                <input type="color" value={worshipTheme.backgroundColor} onChange={(event) => setWorshipTheme((current) => ({ ...current, backgroundColor: event.target.value }))} />
+                <InlineColorPicker value={worshipTheme.backgroundColor} onChange={(v) => setWorshipTheme((current) => ({ ...current, backgroundColor: v }))} />
               </label>
             </div>
           </div>
         );
       case "text":
         return (
-          <div className="presentation-settings-panel">
+          <div className="presentation-settings-panel presentation-settings-panel--scrollable">
             <div className="presentation-panel-title">Theme settings</div>
-            <div className="presentation-settings-grid presentation-settings-panel__body">
-              <label className="presentation-field">
-                <span>Theme</span>
-                <select value={textTheme.themeId} className="presentation-input" onChange={(event) => setTextTheme((current) => ({ ...current, themeId: event.target.value }))}>
-                  {themeOptions.map((option) => (
-                    <option key={option.id} value={option.id}>{option.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="presentation-field">
-                <span>Font size</span>
-                <input type="range" min={24} max={120} value={textTheme.fontSize} onChange={(event) => setTextTheme((current) => ({ ...current, fontSize: Number(event.target.value) }))} />
-              </label>
-              <label className="presentation-field">
-                <span>Alignment</span>
-                <select value={textTheme.textAlign} className="presentation-input" onChange={(event) => setTextTheme((current) => ({ ...current, textAlign: event.target.value as PresentationTextAlign }))}>
-                  <option value="left">Left</option>
-                  <option value="center">Center</option>
-                  <option value="right">Right</option>
-                </select>
-              </label>
-              <label className="presentation-field">
-                <span>Text colour</span>
-                <input type="color" value={textTheme.textColor || "#FFFFFF"} onChange={(event) => setTextTheme((current) => ({ ...current, textColor: event.target.value }))} />
-              </label>
-              <label className="presentation-field">
-                <span>Background</span>
-                <input type="color" value={textTheme.backgroundColor} onChange={(event) => setTextTheme((current) => ({ ...current, backgroundColor: event.target.value }))} />
-              </label>
+            <div className="presentation-settings-panel__body presentation-settings-panel__body--no-pad">
+              <BackgroundPickerCard
+                quickSettings={textQuickSettings}
+                onQuickSettingsChange={(updater) => setTextQuickSettings((prev) => updater(prev))}
+                selectedThemeId={selectedTextThemeId}
+                onThemeSelect={(theme) => setSelectedTextThemeId(theme.id)}
+                overlayMode="fullscreen"
+                displayMode="single"
+                sampleText="Faith"
+                storageScope="notes"
+                initialTab="background"
+                showReferences={false}
+              />
             </div>
           </div>
         );
@@ -1810,11 +2087,11 @@ export default function PresentationConsolePage() {
               </label>
               <label className="presentation-field">
                 <span>Text colour</span>
-                <input type="color" value={countdownDraft.textColor} onChange={(event) => updateCountdownDraft((current) => ({ ...current, textColor: event.target.value }))} />
+                <InlineColorPicker value={countdownDraft.textColor} onChange={(v) => updateCountdownDraft((current) => ({ ...current, textColor: v }))} />
               </label>
               <label className="presentation-field">
                 <span>Background</span>
-                <input type="color" value={countdownDraft.backgroundColor} onChange={(event) => updateCountdownDraft((current) => ({ ...current, backgroundColor: event.target.value }))} />
+                <InlineColorPicker value={countdownDraft.backgroundColor} onChange={(v) => updateCountdownDraft((current) => ({ ...current, backgroundColor: v }))} />
               </label>
               <label className="presentation-toggle">
                 <input type="checkbox" checked={countdownDraft.showTitle} onChange={(event) => updateCountdownDraft((current) => ({ ...current, showTitle: event.target.checked }))} />
@@ -1857,11 +2134,11 @@ export default function PresentationConsolePage() {
               </label>
               <label className="presentation-field">
                 <span>Text colour</span>
-                <input type="color" value={tickerDraft.textColor} onChange={(event) => updateTickerDraft((current) => ({ ...current, textColor: event.target.value }))} />
+                <InlineColorPicker value={tickerDraft.textColor} onChange={(v) => updateTickerDraft((current) => ({ ...current, textColor: v }))} />
               </label>
               <label className="presentation-field">
                 <span>Background</span>
-                <input type="color" value={tickerDraft.backgroundColor} onChange={(event) => updateTickerDraft((current) => ({ ...current, backgroundColor: event.target.value }))} />
+                <InlineColorPicker value={tickerDraft.backgroundColor} onChange={(v) => updateTickerDraft((current) => ({ ...current, backgroundColor: v }))} />
               </label>
             </div>
           </div>
@@ -1871,7 +2148,6 @@ export default function PresentationConsolePage() {
     }
   };
 
-  const liveLabel = liveContent ? `Live: ${describePresentationItem(liveContent)}` : "Live: cleared";
   const selectedContentIsLive = Boolean(selectedContent && liveContent?.id === selectedContent.id);
 
   return (
@@ -1906,7 +2182,7 @@ export default function PresentationConsolePage() {
 
                 <div className="presentation-ministry-column presentation-ministry-column--preview">
                   <PresentationPreview
-                    content={selectedContent}
+                    presentationLink={session.presentationLink}
                     label="Live Preview"
                     live={selectedContentIsLive}
                     waitingCopy="Select or create content to preview it here."
@@ -1935,17 +2211,6 @@ export default function PresentationConsolePage() {
             )}
 
             {actionError ? <div className="presentation-error-banner">{actionError}</div> : null}
-
-            <PresentationControls
-              canPresent={Boolean(selectedContent)}
-              canClear={Boolean(liveContent)}
-              liveLabel={liveLabel}
-              remoteStatusLabel={remoteStatusLabel}
-              onPrevious={handlePrevious}
-              onPresent={handlePresent}
-              onClear={handleClear}
-              onNext={handleNext}
-            />
           </div>
         </div>
       </div>

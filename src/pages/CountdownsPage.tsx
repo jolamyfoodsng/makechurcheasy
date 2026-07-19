@@ -395,6 +395,7 @@ function BackgroundSettings({ cd, onUpdate }: { cd: CountdownConfig; onUpdate: (
     { value: "gradient", label: "Gradient" },
     { value: "image", label: "Image" },
     { value: "video", label: "Video" },
+    { value: "transparent", label: "Transparent" },
   ];
 
   // Load media library on demand

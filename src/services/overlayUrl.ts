@@ -86,14 +86,28 @@ export function resolveOverlayAssetUrl(value: string | undefined): string {
 export async function getOverlayBaseUrl(): Promise<string> {
   if (_cachedBaseUrl) return _cachedBaseUrl;
 
+  // In Vite dev mode (port 1420), try to resolve the actual overlay server
+  // URL from Tauri before falling back to the Vite origin. Uploaded assets
+  // are only served by Tauri's overlay HTTP server, not by Vite.
   if (typeof window !== "undefined" && window.location?.origin) {
-    const { protocol, hostname, port, origin } = window.location;
+    const { protocol, hostname, port } = window.location;
     const isHttpLocalOrigin =
       (protocol === "http:" || protocol === "https:")
       && (hostname === "localhost" || hostname === "127.0.0.1");
     if (isHttpLocalOrigin && port === DEV_VITE_PORT) {
-      _cachedBaseUrl = origin;
-      return _cachedBaseUrl;
+      const viteFallback = (): string => {
+        _cachedBaseUrl = window.location.origin;
+        return _cachedBaseUrl;
+      };
+      try {
+        const tauriPort = await invoke<number>("get_overlay_port");
+        if (tauriPort > 0) {
+          _cachedBaseUrl = `http://127.0.0.1:${tauriPort}`;
+          return _cachedBaseUrl;
+        }
+      } catch {
+        return viteFallback();
+      }
     }
   }
 

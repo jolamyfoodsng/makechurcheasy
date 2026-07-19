@@ -14,7 +14,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 
 const PRICING_URL =
-  "https://makechurcheasy.creatorstudioslabs.stream/pricing";
+  "https://makechurcheasy.creatorstudioslabs.stream/subscription/plans";
 
 const PLAN_LABELS: Record<string, string> = {
   free: "Free",

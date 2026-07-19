@@ -1477,7 +1477,7 @@ export default function SpeechToScripturePage() {
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
-                  onClick={() => navigate("/pricing")}
+                  onClick={() => navigate("/subscription/plans")}
                   title={t(accessDenied.reason === "trial_expired" ? "verseAi.chooseAPlan" : "verseAi.manageSubscription")}>
                   {t(accessDenied.reason === "trial_expired" ? "verseAi.chooseAPlan" : "verseAi.manageSubscription")}
                 </button>
@@ -1526,7 +1526,7 @@ export default function SpeechToScripturePage() {
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
                     className="sts3-btn sts3-btn--primary"
-                    onClick={() => navigate("/pricing")}
+                    onClick={() => navigate("/subscription/plans")}
                     title={t("verseAi.upgradePlan")}>
                     {t("verseAi.upgradePlan")}
                   </button>
@@ -1553,7 +1553,7 @@ export default function SpeechToScripturePage() {
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
-                  onClick={() => navigate("/pricing")}
+                  onClick={() => navigate("/subscription/plans")}
                   title={t("verseAi.viewPlans")}>
                   {t("verseAi.viewPlans")}
                 </button>

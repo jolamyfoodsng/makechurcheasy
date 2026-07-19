@@ -22,60 +22,11 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-export const TEXT_SLIDE_PRESETS: Array<Pick<PresentationTextSlideRecord, "title" | "subtitle" | "body">> = [
-  {
-    title: "Welcome to Church",
-    subtitle: "MakeChurchEasy",
-    body: "Welcome to our service today.",
-  },
-  {
-    title: "Offering Time",
-    subtitle: "",
-    body: "You can give as led during this part of the service.",
-  },
-  {
-    title: "Please Silence Your Phones",
-    subtitle: "",
-    body: "Help us keep the room focused and free from interruptions.",
-  },
-  {
-    title: "Service Will Begin Shortly",
-    subtitle: "",
-    body: "Please take your seats as we get ready to start.",
-  },
-  {
-    title: "Technical Difficulty",
-    subtitle: "",
-    body: "We are fixing a technical issue. Please stand by.",
-  },
-];
-
-function createDefaultTextSlides(): PresentationTextSlideRecord[] {
-  return TEXT_SLIDE_PRESETS.map((preset, index) => {
-    const stamp = nowIso();
-    return {
-      id: `text-preset-${index + 1}`,
-      title: preset.title,
-      subtitle: preset.subtitle,
-      body: preset.body,
-      createdAt: stamp,
-      updatedAt: stamp,
-    };
-  });
-}
-
 export function loadPresentationTextSlides(): PresentationTextSlideRecord[] {
-  const slides = safeParse<PresentationTextSlideRecord[]>(
+  return safeParse<PresentationTextSlideRecord[]>(
     typeof window === "undefined" ? null : localStorage.getItem(getTextSlidesKey()),
     [],
   );
-  if (slides.length > 0) {
-    return slides;
-  }
-
-  const defaults = createDefaultTextSlides();
-  savePresentationTextSlides(defaults);
-  return defaults;
 }
 
 export function savePresentationTextSlides(slides: PresentationTextSlideRecord[]): void {
@@ -83,11 +34,83 @@ export function savePresentationTextSlides(slides: PresentationTextSlideRecord[]
   localStorage.setItem(getTextSlidesKey(), JSON.stringify(slides));
 }
 
+export const TICKER_PRESETS: Array<Pick<PresentationTickerRecord, "name" | "text" | "position" | "direction" | "speed" | "textColor" | "backgroundColor" | "fontSize">> = [
+  {
+    name: "Welcome Message",
+    text: "Welcome to our service! Glad to have you with us today.",
+    position: "bottom",
+    direction: "ltr",
+    speed: 1,
+    textColor: "#FFFFFF",
+    backgroundColor: "#0F172A",
+    fontSize: 32,
+  },
+  {
+    name: "Announcements",
+    text: "Check the bulletin for upcoming events and announcements.",
+    position: "bottom",
+    direction: "ltr",
+    speed: 1,
+    textColor: "#FFFFFF",
+    backgroundColor: "#1E3A5F",
+    fontSize: 32,
+  },
+  {
+    name: "Social Media",
+    text: "Follow us on social media for updates and encouragement throughout the week.",
+    position: "bottom",
+    direction: "ltr",
+    speed: 1,
+    textColor: "#FFFFFF",
+    backgroundColor: "#162040",
+    fontSize: 32,
+  },
+  {
+    name: "Prayer Request",
+    text: "If you have a prayer request, please fill out a connection card.",
+    position: "bottom",
+    direction: "ltr",
+    speed: 1,
+    textColor: "#FFFFFF",
+    backgroundColor: "#2D1B4E",
+    fontSize: 32,
+  },
+  {
+    name: "Giving Reminder",
+    text: "You can give online or text GIVE to (555) 000-0000.",
+    position: "bottom",
+    direction: "ltr",
+    speed: 1,
+    textColor: "#FFFFFF",
+    backgroundColor: "#1B3A2D",
+    fontSize: 32,
+  },
+];
+
+function createDefaultTickers(): PresentationTickerRecord[] {
+  return TICKER_PRESETS.map((preset, index) => {
+    const stamp = nowIso();
+    return {
+      id: `ticker-preset-${index + 1}`,
+      ...preset,
+      createdAt: stamp,
+      updatedAt: stamp,
+    };
+  });
+}
+
 export function loadPresentationTickers(): PresentationTickerRecord[] {
-  return safeParse<PresentationTickerRecord[]>(
+  const tickers = safeParse<PresentationTickerRecord[]>(
     typeof window === "undefined" ? null : localStorage.getItem(getTickersKey()),
     [],
   );
+  if (tickers.length > 0) {
+    return tickers;
+  }
+
+  const defaults = createDefaultTickers();
+  savePresentationTickers(defaults);
+  return defaults;
 }
 
 export function savePresentationTickers(tickers: PresentationTickerRecord[]): void {

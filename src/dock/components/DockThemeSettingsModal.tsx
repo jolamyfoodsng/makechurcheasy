@@ -32,6 +32,8 @@ interface Props {
   initialTab?: "text" | "background" | "compare";
   /** Keeps BackgroundPickerCard local styles separate per dock section */
   storageScope?: "bible" | "worship" | "notes" | "global";
+  /** When true and displayMode is "compare", BackgroundPickerCard shows only the Compare tab */
+  hideBackgroundOnCompare?: boolean;
 }
 
 type StudioView = "closed" | "settings";
@@ -72,6 +74,7 @@ export default function DockThemeSettingsModal({
   displayMode = "single",
   initialTab = "text",
   storageScope = "global",
+  hideBackgroundOnCompare = false,
 }: Props) {
   const { t } = useTranslation();
   const [internalView, setInternalView] = useState<StudioView>("closed");
@@ -317,6 +320,7 @@ export default function DockThemeSettingsModal({
                   displayMode={displayMode}
                   initialTab={initialTab}
                   storageScope={storageScope}
+                  hideBackgroundOnCompare={hideBackgroundOnCompare}
                 />
 
                 {/* Lower-Third Positioning — only shown in lower-third mode */}

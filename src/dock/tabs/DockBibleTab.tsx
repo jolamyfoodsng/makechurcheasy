@@ -477,6 +477,7 @@ function applyFullscreenQuickThemeSettings(
             : (quickSettings.backgroundColorEnd || ""),
       bgGradientAngle: useThemeBg ? (theme.settings.bgGradientAngle ?? 180) : quickSettings.bgGradientAngle,
       backgroundPattern: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundPattern ?? "") : quickSettings.backgroundPattern,
+      boxBackground: useNoBg ? "transparent" : (theme.settings.boxBackground || "rgba(0,0,0,0.7)"),
       referenceBackgroundEnabled: quickSettings.referenceBackgroundEnabled,
       referenceBackgroundColor: quickSettings.referenceBackgroundColor,
       referenceBackgroundStyle: quickSettings.referenceBackgroundStyle,
@@ -4556,6 +4557,7 @@ export default function DockBibleTab({
         overlayMode={overlayMode}
         initialTab={themeSettingsInitialTab}
         storageScope="bible"
+        hideBackgroundOnCompare={displayMode === "compare"}
       />
 
       {showBibleHistory && (

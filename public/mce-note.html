@@ -1378,6 +1378,7 @@
         const cc = Array.isArray(sl.columns) ? sl.columns.slice(0, 2) : [], isCL = sl.layout === 'compare' && cc.length === 2;
         overlay.classList.remove('hidden'); ltBar.classList.remove('hidden');
         if (isCL) {
+          compareLayout.style.display = '';
           compareLayout.classList.add('is-visible');
           verseContainer.classList.add('is-hidden');
           const [l, r] = cc;
@@ -1390,6 +1391,7 @@
         }
         else {
           compareLayout.classList.remove('is-visible');
+          compareLayout.style.display = 'none';
           verseContainer.classList.remove('is-hidden');
           verseText.innerHTML = safeSupText(sl.text);
           const rt = typeof sl.reference === 'string' ? sl.reference.trim() : '';

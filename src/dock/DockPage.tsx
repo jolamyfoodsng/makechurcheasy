@@ -185,9 +185,7 @@ export default function DockPage() {
   }));
   const [dockHeight, setDockHeight] = useState(0);
   const verticalTabs = dockHeight > 0 && dockHeight < 550;
-  const [tickerOutputMode, setTickerOutputMode] = useState<"source" | "scene">(() => {
-    try { return (localStorage.getItem("dock-ticker-output-mode") as "source" | "scene") || "scene"; } catch { return "scene"; }
-  });
+
   const [obsConnected, setObsConnected] = useState(false);
   const [obsError, setObsError] = useState("");
   const [isReloadingDock, setIsReloadingDock] = useState(false);
@@ -761,52 +759,6 @@ export default function DockPage() {
 
                 <div className="dock-sidebar__divider" />
 
-                {/* Ticker Output */}
-                <div className="dock-sidebar__item" style={{ cursor: "default" }}>
-                  <Icon name="campaign" size={16} />
-                  <span>{t('dock.tickerOutput')}</span>
-                </div>
-                <div className="dock-sidebar__subpanel">
-                  {([
-                    { mode: "source" as const, icon: "view_module", label: t('dock.source'), desc: t('dock.insideCurrentScene') },
-                    { mode: "scene" as const, icon: "dashboard", label: t('dock.scene'), desc: t('dock.dedicatedSceneWithProgramBehind') },
-                  ]).map(({ mode, icon, label, desc }) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      className="dock-sidebar__radio"
-                      onClick={() => {
-                        setTickerOutputMode(mode);
-                        try { localStorage.setItem("dock-ticker-output-mode", mode); } catch { /* ignore */ }
-                      }}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        width: "100%",
-                        padding: "6px 8px",
-                        border: "none",
-                        borderRadius: 3,
-                        background: tickerOutputMode === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                        color: tickerOutputMode === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
-                        cursor: "pointer",
-                        textAlign: "left",
-                        fontSize: 11,
-                        transition: "background 0.15s",
-                      }}
-                      title={t('common.confirm')}>
-                      <Icon name={icon} size={14} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600 }}>{label}</div>
-                        <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
-                      </div>
-                      {tickerOutputMode === mode && <Icon name="check" size={12} />}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="dock-sidebar__divider" />
-
                 {/* Projection Settings */}
                 <button
                   type="button"
@@ -1201,7 +1153,6 @@ export default function DockPage() {
                 <DockMinistryTab
                   staged={staged}
                   onStage={handleStage}
-                  tickerOutputMode={tickerOutputMode}
                 />
               </div>
             )}

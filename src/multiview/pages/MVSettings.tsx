@@ -1600,7 +1600,7 @@ export function MVSettings() {
                           </div>
                         </div>
                       </div>
-                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to upgrade", "accent")} title="Upgrade">
+                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/subscription/plans to upgrade", "accent")} title="Upgrade">
                         <ExternalLink size={12} /> Upgrade
                       </button>
                     </div>
@@ -1846,7 +1846,7 @@ export function MVSettings() {
                             </li>
                           ))}
                         </ul>
-                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to view plans", "accent")} title="Open in new tab">
+                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/subscription/plans to view plans", "accent")} title="Open in new tab">
                           <ExternalLink size={14} />
                           <span>View Plans</span>
                         </button>
@@ -1874,7 +1874,7 @@ export function MVSettings() {
                             </li>
                           ))}
                         </ul>
-                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to view plans", "accent")} title="Open in new tab">
+                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/subscription/plans to view plans", "accent")} title="Open in new tab">
                           <ExternalLink size={14} />
                           <span>View Plans</span>
                         </button>
