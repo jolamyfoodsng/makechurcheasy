@@ -205,17 +205,14 @@ export async function initAuthStore(): Promise<void> {
     }
   }
 
-  // Refresh plan from server first so the session has current plan/role,
-  // then sync the enriched session to the overlay server.
-  // refreshPlanFromServer calls saveSession → syncSessionToOverlay internally,
-  // so we only need to sync here if no refresh happened (e.g. no deviceId).
+  // Refresh plan from server in the background — never block startup on network.
+  // The cached session (with potentially stale plan) is available synchronously
+  // from getSession() so the UI renders immediately regardless of connectivity.
   if (_session) {
     if (_session.deviceId) {
-      await refreshPlanFromServer();
-      // refreshPlanFromServer calls saveSession if plan changed,
-      // which already syncs to the overlay. Sync again to ensure
-      // the overlay always has the latest session (with entitlements).
-      syncSessionToOverlay(_session);
+      void refreshPlanFromServer().then(() => {
+        syncSessionToOverlay(_session);
+      });
     } else {
       syncSessionToOverlay(_session);
     }

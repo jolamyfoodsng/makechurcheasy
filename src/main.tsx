@@ -50,7 +50,9 @@ const appRouter = createHashRouter([
   },
 ]);
 
-// Await auth store so the session is in memory before any component reads it
+// Await auth store so the session is in memory before any component reads it.
+// initAuthStore no longer blocks on network (plan refresh is fire-and-forget),
+// so this resolves immediately from local storage.
 void initAuthStore().then(async () => {
   // Sync church profile from web API on startup (ensures speakers, branding, etc. are in localStorage)
   try {

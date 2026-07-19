@@ -163,15 +163,12 @@ export async function getOverlayBaseUrl(): Promise<string> {
 export function getOverlayBaseUrlSync(): string {
   if (_cachedBaseUrl) return _cachedBaseUrl;
   if (typeof window !== "undefined" && window.location?.origin) {
-    const { protocol, hostname, port } = window.location;
+    const { protocol, hostname } = window.location;
     const isHttpLocalOrigin =
       (protocol === "http:" || protocol === "https:")
       && (hostname === "localhost" || hostname === "127.0.0.1");
     if (isHttpLocalOrigin) {
-      if (port === DEV_VITE_PORT) {
-        return window.location.origin;
-      }
-      return DEFAULT_TAURI_OVERLAY_BASE_URL;
+      return window.location.origin;
     }
     if (protocol === "tauri:") {
       return DEFAULT_TAURI_OVERLAY_BASE_URL;

@@ -3968,9 +3968,8 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
         parent.filter(|p| p.join("dock.html").is_file())
     };
 
-    // Try port 45678 first, then fall back to any available port
+    // Use a fixed port so the OBS dock / overlay URL never changes
     let server = match tiny_http::Server::http("127.0.0.1:45678")
-        .or_else(|_| tiny_http::Server::http("127.0.0.1:0"))
     {
         Ok(s) => s,
         Err(e) => {
