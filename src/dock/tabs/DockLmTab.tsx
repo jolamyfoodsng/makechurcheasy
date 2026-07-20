@@ -316,7 +316,6 @@ export default function DockLmTab() {
       setPushError(t("lm.notConnected"));
       return;
     }
-    if (!(await requireEntitlement("speechToScripture", 0))) return;
 
     const refKey = `${candidate.book}:${candidate.chapter}:${candidate.verse}`;
     pushedVersesRef.current.add(refKey);
@@ -379,7 +378,6 @@ export default function DockLmTab() {
       showToast(t("lm.notConnected"));
       return;
     }
-    if (!(await requireEntitlement("speechToScripture", 0))) return;
     setPushing(true);
     try {
       const biblePrefs = loadBiblePrefs();

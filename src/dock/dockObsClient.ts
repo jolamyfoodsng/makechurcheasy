@@ -3753,6 +3753,7 @@ class DockObsClient {
           restart_on_activate: true,
           close_when_inactive: false,
           clear_on_media_end: false,
+          scale_to_fit: false,
         },
       };
     }
@@ -8899,7 +8900,7 @@ class DockObsClient {
               positionY: 0,
               scaleX: 1,
               scaleY: 1,
-              boundsType: "OBS_BOUNDS_STRETCH",
+        boundsType: "OBS_BOUNDS_SCALE_OUTER",
               boundsWidth: canvas.width,
               boundsHeight: canvas.height,
               boundsAlignment: 0,
@@ -9084,7 +9085,7 @@ class DockObsClient {
         sceneName: def.sceneName,
         sceneItemId: bgItemId,
         positionX: 0, positionY: 0,
-        boundsType: "OBS_BOUNDS_STRETCH",
+        boundsType: "OBS_BOUNDS_SCALE_OUTER",
         boundsWidth: canvas.width, boundsHeight: canvas.height,
         boundsAlignment: 0, rotation: 0,
       });

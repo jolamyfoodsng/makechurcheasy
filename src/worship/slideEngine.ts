@@ -325,26 +325,29 @@ export function generateSlides(
   }
 
   // ── Auto-split ON ──────────────────────────────────────────────────────
-  // Use the original user-entered lines directly — only newline characters
-  // (\n) count as line breaks.  Visual word-wrapping is handled by CSS, not
-  // by the slide engine.  Expanding at comma/semicolon boundaries here would
-  // inflate the line count and cause unexpected slide breaks.
-  const displayLines: string[] = [];
+  // Split each section independently through splitIntoBalancedSlides so
+  // stanza boundaries (blank lines / section labels) are always respected.
+  // Without this, lines from a verse and a chorus get mixed together when
+  // flattened across all sections.
+  const resultSlides: Slide[] = [];
+  let slideIndex = 0;
+
   for (const section of sections) {
-    displayLines.push(...section.lines);
+    const groups = splitIntoBalancedSlides(section.lines, linesPerSlide);
+    for (let i = 0; i < groups.length; i++) {
+      const group = groups[i];
+      const label = detectGroupLabel(group) || (slideIndex === 0 ? section.label : `${section.label} (cont)`);
+      const type = detectGroupType(group);
+      resultSlides.push({
+        id: `slide-auto-${slideIndex}`,
+        label,
+        content: group.join("\n"),
+        isContinuation: i > 0,
+        type,
+      });
+      slideIndex++;
+    }
   }
 
-  const groups = splitIntoBalancedSlides(displayLines, linesPerSlide);
-
-  return groups.map((group, i) => {
-    const label = detectGroupLabel(group) || (i === 0 ? sections[0]?.label ?? "Lyrics" : `${sections[0]?.label ?? "Lyrics"} (cont)`);
-    const type = detectGroupType(group);
-    return {
-      id: `slide-auto-${i}`,
-      label,
-      content: group.join("\n"),
-      isContinuation: i > 0,
-      type,
-    };
-  });
+  return resultSlides;
 }

@@ -842,9 +842,15 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const modeOnlyChangeRef = useRef(false);
   const modeSwitchSequenceRef = useRef(0);
 
+  // Preview sections from the draft lyrics when the song editor is open,
+  // so the user sees the effect of their edits (auto-split, spacing, etc.)
+  // in real time without having to save first.
+  const effectiveLyrics = songEditor && songDraft.lyrics !== selectedSong?.lyrics
+    ? songDraft.lyrics
+    : (selectedSong?.lyrics ?? "");
   const selectedSongSections = useMemo(
-    () => (selectedSong ? parseLyricSections(selectedSong.lyrics, linesPerSlide, selectedSong.autoSplit ?? false) : []),
-    [linesPerSlide, selectedSong],
+    () => (selectedSong ? parseLyricSections(effectiveLyrics, linesPerSlide, selectedSong.autoSplit ?? false) : []),
+    [effectiveLyrics, linesPerSlide, selectedSong],
   );
 
   const totalLyricLines = useMemo(
