@@ -23042,6 +23042,7 @@
 
 .dock-mv-bg__browse-btn:hover {
   background: var(--dock-input-bg);
+}
 .dock-mv-bg__media-title {
   font-size: 12px;
   font-weight: 600;
