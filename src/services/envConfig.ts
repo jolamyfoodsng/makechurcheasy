@@ -12,6 +12,14 @@ export interface EnvConfig {
   assemblyAiKeys: string[];
 }
 
+function requireEnv(name: string, value: string | undefined, env: AppEnv): string {
+  if (value) return value;
+  if (env === "production") {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return "";
+}
+
 function parseEnv(): EnvConfig {
   const raw = (import.meta.env.VITE_APP_ENV as string | undefined) || "development";
   const env: AppEnv = raw === "production" ? "production" : "development";
@@ -21,12 +29,12 @@ function parseEnv(): EnvConfig {
     env,
     isTest,
     appName: isTest ? "Test MCE" : "MakeChurchEasy",
-    authApiUrl: (import.meta.env.VITE_AUTH_API_URL as string) || "https://api.creatorstudioslabs.stream",
-    apiBaseUrl: (import.meta.env.VITE_API_BASE_URL as string) || "https://api.creatorstudioslabs.stream",
-    wsUrl: (import.meta.env.VITE_WS_URL as string) || "wss://relay.makechurcheasy.com",
-    analyticsEndpoint: (import.meta.env.VITE_ANALYTICS_ENDPOINT as string) || "",
-    analyticsToken: (import.meta.env.VITE_ANALYTICS_TOKEN as string) || "",
-    assemblyAiKeys: ((import.meta.env.VITE_ASSEMBLYAI_API_KEYS as string) || "").split(",").filter(Boolean),
+    authApiUrl: requireEnv("VITE_AUTH_API_URL", import.meta.env.VITE_AUTH_API_URL as string | undefined, env) || "https://api.creatorstudioslabs.stream",
+    apiBaseUrl: requireEnv("VITE_API_BASE_URL", import.meta.env.VITE_API_BASE_URL as string | undefined, env) || "https://api.creatorstudioslabs.stream",
+    wsUrl: requireEnv("VITE_WS_URL", import.meta.env.VITE_WS_URL as string | undefined, env) || "wss://relay.makechurcheasy.com",
+    analyticsEndpoint: requireEnv("VITE_ANALYTICS_ENDPOINT", import.meta.env.VITE_ANALYTICS_ENDPOINT as string | undefined, env),
+    analyticsToken: requireEnv("VITE_ANALYTICS_TOKEN", import.meta.env.VITE_ANALYTICS_TOKEN as string | undefined, env),
+    assemblyAiKeys: requireEnv("VITE_ASSEMBLYAI_API_KEYS", import.meta.env.VITE_ASSEMBLYAI_API_KEYS as string | undefined, env).split(",").filter(Boolean),
   };
 }
 

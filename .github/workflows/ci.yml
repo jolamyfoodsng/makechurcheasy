@@ -34,6 +34,10 @@ jobs:
       - name: Typecheck and build
         run: npm run build
         env:
+          VITE_APP_ENV: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+          VITE_AUTH_API_URL: ${{ secrets.VITE_AUTH_API_URL || 'https://api.creatorstudioslabs.stream' }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://api.creatorstudioslabs.stream' }}
+          VITE_WS_URL: ${{ secrets.VITE_WS_URL || 'wss://relay.makechurcheasy.com' }}
           VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
           VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
           VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
@@ -142,6 +146,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           TAURI_SIGNING_PUBLIC_KEY: ${{ secrets.TAURI_SIGNING_PUBLIC_KEY }}
+          VITE_APP_ENV: development
+          VITE_AUTH_API_URL: ${{ secrets.VITE_AUTH_API_URL || 'https://api.creatorstudioslabs.stream' }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://api.creatorstudioslabs.stream' }}
+          VITE_WS_URL: ${{ secrets.VITE_WS_URL || 'wss://relay.makechurcheasy.com' }}
           VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
           VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
           VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
