@@ -9,7 +9,6 @@
  *   - No detail pages, no back buttons, everything on one screen
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
 import { useState, useEffect, useCallback, useRef, useMemo, type ChangeEvent, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { dockObsClient } from "../dockObsClient";
@@ -109,6 +108,11 @@ function saveSaved(items: SavedMultiView[]) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function getBackgroundMediaLabel(filePath: string): string {
+  const parts = filePath.split(/[/\\]/);
+  return parts[parts.length - 1] || filePath;
+}
 
 function resolveLayout(layoutId: string): GalleryLayout | undefined {
   return GALLERY_LAYOUTS.find(l => l.id === layoutId);
@@ -818,6 +822,7 @@ function BackgroundSection({
   const imgInputRef = useRef<HTMLInputElement>(null);
   const vidInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [draggingType, setDraggingType] = useState<string | null>(null);
 
   const hasBg = background.type !== "color" || background.color !== "#0F172A" || background.filePath || background.sceneName;
 
@@ -834,121 +839,16 @@ function BackgroundSection({
     }
   }, [background, onChange]);
 
-  return (
-    <div className="dock-mv-bg">
-      <div className="dock-mv-bg__header">
-        <span>{t('multiview.background')}</span>
-      </div>
-      <div className="dock-mv-bg__types">
-        {BG_TYPE_OPTIONS.map(opt => (
-          <button
-            key={opt.type}
-            type="button"
-            className={`dock-mv-bg__type-btn${background.type === opt.type ? " dock-mv-bg__type-btn--active" : ""}`}
-            onClick={() => onChange({ ...background, type: opt.type })}
-          >
-            {t(opt.labelKey)}
-          </button>
-        ))}
-      </div>
-
-      {background.type === "color" && (
-        <div className="dock-mv-bg__row">
-          <input
-            type="color"
-            className="dock-mv-bg__color-input"
-            value={background.color}
-            onChange={(e) => onChange({ ...background, color: e.target.value })}
-          />
-          <input
-            className="dock-mv-bg__hex"
-            type="text"
-            value={background.color}
-            onChange={(e) => onChange({ ...background, color: e.target.value })}
-            placeholder="#0F172A"
-          />
-        </div>
-      )}
-
-      {background.type === "image" && (
-        <div className="dock-mv-bg__row">
-          <input
-            className="dock-mv-bg__path-input"
-            type="text"
-            value={background.filePath}
-            onChange={(e) => onChange({ ...background, filePath: e.target.value })}
-            placeholder={t('multiview.absolutePathPlaceholder')}
-          />
-          <button
-            type="button"
-            className="dock-mv-bg__browse-btn"
-            onClick={() => imgInputRef.current?.click()}
-            title={t('multiview.browseAndUpload')}
-            disabled={uploading}
-          >
-            {uploading ? <Icon name="hourglass_top" size={13} /> : <Icon name="folder_open" size={13} />}
-          </button>
-          <input
-            ref={imgInputRef}
-            type="file"
-            accept="image/*"
-            className="dock-mv-bg__file-hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) handleFileUpload(f, "image");
-              e.target.value = "";
-            }}
-          />
-        </div>
-      )}
-
-      {background.type === "video" && (
-        <div className="dock-mv-bg__row">
-          <input
-            className="dock-mv-bg__path-input"
-            type="text"
-            value={background.filePath}
-            onChange={(e) => onChange({ ...background, filePath: e.target.value })}
-            placeholder={t('multiview.absolutePathPlaceholder')}
-          />
-          <button
-            type="button"
-            className="dock-mv-bg__browse-btn"
-            onClick={() => vidInputRef.current?.click()}
-            title={t('multiview.browseAndUpload')}
-            disabled={uploading}
-          >
-            {uploading ? <Icon name="hourglass_top" size={13} /> : <Icon name="folder_open" size={13} />}
-          </button>
-          <input
-            ref={vidInputRef}
-            type="file"
-            accept="video/*"
-            className="dock-mv-bg__file-hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) handleFileUpload(f, "video");
-              e.target.value = "";
-            }}
-          />
-        </div>
-      )}
-
-      {background.type === "scene" && (
-        <div className="dock-mv-bg__row">
-          <select
-            className="dock-mv-bg__select"
-            value={background.sceneName}
-            onChange={(e) => onChange({ ...background, sceneName: e.target.value })}
-          >
-            <option value="">— {t('multiview.selectScene')} —</option>
-            {obsScenes.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
   const handlePickerChange = useCallback((event: ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
     const file = event.target.files?.[0];
     if (file) void handleFileUpload(file, type);
     event.target.value = "";
   }, [handleFileUpload]);
+
+  const matchesBackgroundMediaType = (file: File, type: "image" | "video"): boolean => {
+    if (type === "image") return file.type.startsWith("image/");
+    return file.type.startsWith("video/");
+  };
 
   const handleMediaDrop = useCallback((event: DragEvent<HTMLLabelElement>, type: "image" | "video") => {
     event.preventDefault();
@@ -1276,9 +1176,6 @@ function MVCard({
         </div>
       </div>
 
-      {/* Template Dropdown */}
-      <div className="dock-mv-card__template">
-        <label className="dock-mv-card__template-label">{t('multiview.template')}</label>
       {/* Template — compact property row */}
       <div className="dock-mv-property">
         <span className="dock-mv-property__label">{t('multiview.template')}</span>
@@ -1376,28 +1273,6 @@ function MVCard({
                 />
               )}
             </div>
-            {layout.slots.map((slot) => {
-              const val = mv.assignments[slot.id] ?? "";
-              const info = CONTENT_TYPE_INFO[slot.contentType] || CONTENT_TYPE_INFO.camera;
-              return (
-                <div key={slot.id} className="dock-mv-assign-row">
-                  <div className="dock-mv-assign-row__label">
-                    <SlotTypeIcon contentType={slot.contentType} />
-                    <span className="dock-mv-assign-row__name">{slot.label}</span>
-                    <span className="dock-mv-assign-row__type">{t(info.labelKey)}</span>
-                  </div>
-                  <SlotControl
-                    slot={slot}
-                    value={val}
-                    onChange={(v) => onAssign(mv.id, slot.id, v)}
-                    onClear={() => onClearSlot(mv.id, slot.id)}
-                    obsScenes={obsScenes}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </>
           );
         })}
       </div>
@@ -1762,27 +1637,14 @@ export default function DockMultiviewTab() {
         if (!assigned) continue;
         const slotSourceName = `${prefix}SLOT-${slot.id}`;
         try {
-          const existing = await dockObsClient.call("GetSceneItemId", { sceneName, sourceName: assignedScene }) as { sceneItemId: number };
-          itemId = existing.sceneItemId;
-        } catch {
-          try {
-            await ensureScene(assignedScene);
-            const resp = await dockObsClient.call("CreateSceneItem", { sceneName, sourceName: assignedScene, sceneItemEnabled: true }) as { sceneItemId: number };
-            itemId = resp.sceneItemId;
-          } catch { /* skip */ }
-        }
-        if (itemId > 0) {
-          await dockObsClient.animateSceneItemWithMove(sceneName, itemId, slot.x, slot.y, slot.width, slot.height);
-        }
-      }
-
-      try { await dockObsClient.call("SetCurrentPreviewScene", { sceneName }); } catch { }
           const itemId = await createManagedItem(slotSourceName, "scene_capture_source", { scene: assigned });
           if (itemId >= 0) {
             entries.push({ slotId: slot.id, sceneItemId: itemId, zIndex: slot.zIndex ?? 1 });
           }
         } catch { /* skip */ }
       }
+
+      try { await dockObsClient.call("SetCurrentPreviewScene", { sceneName }); } catch { }
 
       // ── Phase 2: Apply transforms ──────────────────────────────────────
       for (const entry of entries) {
@@ -1854,7 +1716,7 @@ export default function DockMultiviewTab() {
         }
       } catch { /* verify non-critical */ }
 
-      await setPreviewSceneWithRetry(sceneName);
+      try { await dockObsClient.call("SetCurrentPreviewScene", { sceneName }); } catch { }
 
       showFeedback("success", `"${sceneName}" pushed to OBS`);
       refreshObsScenes();
