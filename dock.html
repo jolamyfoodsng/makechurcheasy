@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>MakeChurchEasy — Dock</title>
   <script>
     (() => {
@@ -19,6 +19,71 @@
       } catch {
         // Ignore storage access issues inside OBS.
       }
+    })();
+  </script>
+  <!-- ════════════════════════════════════════════════════════════
+       ZOOM GUARD — Prevent dock zoom from affecting live overlays
+       
+       OBS Browser Source uses Chromium/CEF where zoom is applied
+       per domain. If the dock and overlay share the same origin,
+       zooming the dock (Ctrl+/-) can resize the live output.
+       
+       This guard:
+       1. Intercepts keyboard zoom shortcuts (Ctrl+/-/0, Cmd variants)
+       2. Blocks Ctrl/Cmd+wheel zoom
+       3. Blocks pinch-to-zoom
+       4. Monitors and logs if zoom changes despite prevention
+       ════════════════════════════════════════════════════════════ -->
+  <script>
+    (function() {
+      var ZOOM_LOCK_KEY = "mce-zoom-lock-active";
+
+      function isZoomActive() {
+        return window.devicePixelRatio > 1.01 || 
+               (window.visualViewport && Math.abs(window.visualViewport.scale - 1) > 0.01);
+      }
+
+      // 1. Block keyboard zoom shortcuts (capture phase to beat React)
+      document.addEventListener("keydown", function(e) {
+        var ctrl = e.ctrlKey || e.metaKey;
+        if (!ctrl) return;
+        var key = e.key;
+        // Ctrl+=, Ctrl+-, Ctrl+0 (Numpad variants, main keyboard)
+        if (key === "=" || key === "-" || key === "0" ||
+            key === "Plus" || key === "Minus" ||
+            key === "NumpadAdd" || key === "NumpadSubtract" || key === "Numpad0") {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }, true);
+
+      // 2. Block Ctrl/Cmd + scroll wheel zoom
+      document.addEventListener("wheel", function(e) {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+        }
+      }, { passive: false, capture: true });
+
+      // 3. Block pinch-zoom / gesture events
+      document.addEventListener("gesturestart", function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gesturechange", function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gestureend", function(e) { e.preventDefault(); }, { passive: false });
+
+      // 4. Monitor zoom — if it changes despite prevention, flag it
+      var zoomWarningShown = false;
+      setInterval(function() {
+        if (isZoomActive()) {
+          if (!zoomWarningShown) {
+            zoomWarningShown = true;
+            console.warn(
+              "[ZoomGuard] Dock zoom changed! This can affect live overlay Browser Sources. " +
+              "Resetting zoom with Ctrl+0 or Cmd+0 is recommended."
+            );
+          }
+        } else {
+          zoomWarningShown = false;
+        }
+      }, 2000);
     })();
   </script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -39,6 +104,8 @@
       font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       height: 100%;
       overflow: hidden;
+      touch-action: pan-y;
+      -ms-content-zooming: none;
     }
 
     html.light,

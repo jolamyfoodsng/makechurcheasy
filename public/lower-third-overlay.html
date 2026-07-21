@@ -3,19 +3,38 @@
 
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Lower Third Overlay</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap"
-    rel="stylesheet">
+  <!-- ════════════════════════════════════════════════════════════
+       ZOOM GUARD — Prevent zoom from affecting live overlays
+       OBS Browser Sources sharing a domain inherit zoom changes.
+       ════════════════════════════════════════════════════════════ -->
+  <script>
+    (function() {
+      document.addEventListener("keydown", function(e) {
+        var c = e.ctrlKey || e.metaKey;
+        if (!c) return;
+        var k = e.key;
+        if (k === "=" || k === "-" || k === "0" || k === "Plus" || k === "Minus" || k === "NumpadAdd" || k === "NumpadSubtract" || k === "Numpad0") { e.preventDefault(); e.stopPropagation(); }
+      }, true);
+      document.addEventListener("wheel", function(e) { if (e.ctrlKey || e.metaKey) { e.preventDefault(); } }, { passive: false, capture: true });
+      document.addEventListener("gesturestart", function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gesturechange", function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gestureend", function(e) { e.preventDefault(); }, { passive: false });
+    })();
+  </script>
+  <style>html,body,#overlay-root,#overlay-bg-buffer{touch-action:pan-y;-ms-content-zooming:none;}</style>
+  <!-- Local Tailwind CSS (bundled for offline use) -->
+  <link href="/tailwind.min.css" rel="stylesheet" />
 
-  <!-- Tailwind CDN (used by all themes) -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Local Google Fonts (Noto Sans, Material Icons, Inter, Work Sans, Montserrat, etc.) -->
+  <link href="/fonts/google/google-fonts.css" rel="stylesheet" />
 
-  <!-- CMG Sans + Material Icons -->
+  <!-- Local Font Awesome (for themes that use it) -->
+  <link href="/fonts/fontawesome/all.min.css" rel="stylesheet" />
+
+  <!-- CMG Sans -->
   <link href="/fonts/cmg-sans-fonts.css" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
 
   <!-- Dynamic font imports container (populated by JS when theme has fontImports) -->
   <div id="dynamic-fonts"></div>
@@ -632,23 +651,6 @@
      * Variables in the HTML are replaced: {{key}} → value
      */
 
-    // Tailwind config
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            primary: "#C8102E",
-            secondary: "#0033A0",
-          },
-          fontFamily: {
-            sans: ['"CMG Sans"', 'sans-serif'],
-            display: ['"CMG Sans"', 'sans-serif'],
-          }
-        },
-      },
-    };
-
     let currentThemeId = null;
     let currentThemePayload = null;
     let isVisible = false;
@@ -668,7 +670,7 @@
     const BACKGROUND_SNAPSHOT_HOLD_MS = 180;
     const FAST_ENTRY_DURATION_MIN_MS = 90;
     const FAST_ENTRY_DURATION_MAX_MS = 180;
-    const FAST_ENTRY_DELAY_MAX_MS = 70;
+    const FAST_ENTRY_DELAY_MAX_MS = 180;
     let backgroundSnapshotTimer = null;
 
     /**
@@ -1298,6 +1300,13 @@
 
       const { themeId, html, css, values, live, blanked } = data;
 
+      // Always inject CSS before any out/blanked path. OBS may reload the
+      // browser source directly into a blanked URL, and the exit animation
+      // still needs the theme's [data-state="out"] rules.
+      if (css) {
+        cssEl.textContent = compactEntryMotionCss(css);
+      }
+
       // Handle animate-out command — set data-state="out" on existing elements
       // The theme's CSS exit animation fires automatically via the attribute selector
       if (data.action === "animate-out") {
@@ -1330,11 +1339,6 @@
           }, exitDuration);
         }
         return;
-      }
-
-      // Inject CSS
-      if (css) {
-        cssEl.textContent = compactEntryMotionCss(css);
       }
 
       // Inject animation override — editor-selected animationIn/exitStyle
@@ -1578,11 +1582,17 @@
       for (var i = 0; i < imports.length; i++) {
         var url = imports[i];
         if (loadedFonts[url]) continue;
+        // Skip CDN URLs — Google Fonts and Font Awesome are already loaded locally via <head> stylesheets
+        if (url.indexOf("https://fonts.googleapis.com") === 0) continue;
+        if (url.indexOf("https://fonts.gstatic.com") === 0) continue;
+        if (url.indexOf("https://cdnjs.cloudflare.com") === 0) continue;
+        if (url === "/fonts/google/google-fonts.css") continue;
+        if (url === "/fonts/fontawesome/all.min.css") continue;
+        if (url === "/fonts/cmg-sans-fonts.css") continue;
         loadedFonts[url] = true;
         var link = document.createElement("link");
         link.rel = "stylesheet";
         link.href = url;
-        link.crossOrigin = "anonymous";
         container.appendChild(link);
       }
     }

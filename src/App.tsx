@@ -47,6 +47,8 @@ import { getSettings, MV_SETTINGS_UPDATED_EVENT, seedTemplates, syncLayoutsToDoc
 import { STARTER_TEMPLATES } from "./multiview/templates";
 import { applyBrandingSettingsToDom } from "./services/branding";
 import { useAppTheme } from "./hooks/useAppTheme";
+import { getAppTitle } from "./services/envConfig";
+import { UpgradeModalBridge } from "./hooks/useFeatureGate";
 import DevDashboard from "./pages/DevDashboard";
 
 import { dockBridge } from "./services/dockBridge";
@@ -240,6 +242,9 @@ function App() {
   useEffect(() => {
     const s = getSettings();
     applyBrandingSettingsToDom({ brandColor: s.brandColor, churchName: s.churchName });
+
+    // Set document title based on environment
+    document.title = getAppTitle("MakeChurchEasy");
 
     // Initialize dock bridge so the OBS Browser Dock can communicate
     dockBridge.init();

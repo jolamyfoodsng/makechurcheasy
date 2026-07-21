@@ -28,7 +28,7 @@ import DashboardSidebar from "./components/DashboardSidebar";
 import LiveStatusBar from "./components/LiveStatusBar";
 import { getOverlayBaseUrlSync } from "./services/overlayUrl";
 import type { ConnectionStatus } from "./services/obsService";
-
+import { getEnvConfig } from "./services/envConfig";
 
 
 export function AppShell() {
@@ -152,14 +152,23 @@ export function AppShell() {
 
   return (
     <div className="app-container">
-      <DashboardSidebar
-        currentPath={location.pathname + location.search}
-        obsStatus={obsStatus}
-        dockAvailable={dockAvailable}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebar}
-        onNavigate={handleNav}
-      />
+        <DashboardSidebar
+          currentPath={location.pathname + location.search}
+          obsStatus={obsStatus}
+          dockAvailable={dockAvailable}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={toggleSidebar}
+          onNavigate={handleNav}
+        />
+
+        {getEnvConfig().isTest && (
+          <div className="app-env-banner-test">
+            <span className="app-env-banner-test__badge">TEST</span>
+            <span className="app-env-banner-test__text">
+              {t('appShell.testEnvBanner', 'TEST ENVIRONMENT — This version is for development and testing. Changes made here do not affect the live platform.')}
+            </span>
+          </div>
+        )}
 
       <main className={`app-main${sidebarCollapsed ? " app-main--collapsed" : ""}`}>
         <LiveStatusBar />

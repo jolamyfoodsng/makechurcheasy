@@ -537,10 +537,47 @@ export default function DockPage() {
     }
   }, [obsPwInput, obsUrlInput]);
 
-  const activeTabDef = DOCK_TABS.find((tab) => tab.id === activeTab) ?? DOCK_TABS[0];
   const nextTheme = effective === "dark" ? "light" : "dark";
   const themeToggleLabel = nextTheme === "dark" ? t('dock.switchToDarkMode') : t('dock.switchToLightMode');
   const themeToggleIcon = nextTheme === "dark" ? "moon" : "sun";
+
+  // ── Tab header render function (used inside each tab pane) ──
+  const renderTabHeader = useCallback((label: string) => (
+    <div className="dock-shell-header">
+      <div className="dock-shell-status">
+        <div className="dock-shell-status__left">
+          <button
+            type="button"
+            className="dock-shell-icon-btn"
+            onClick={() => setShowSettingsMenu(true)}
+            aria-label={t('dock.menu')}
+            title={t('dock.menu')}
+          >
+            <Icon name="menu" size={14} />
+          </button>
+          <div className="dock-shell-status__center">
+            <div className="dock-shell-titleline">
+              <span className="dock-shell-titleline__app">{t('dock.mceStudio')}</span>
+              <span className="dock-shell-titleline__divider">/</span>
+              <span className="dock-shell-titleline__section">{label}</span>
+            </div>
+          </div>
+        </div>
+        <div className="dock-shell-status__right">
+          <button
+            type="button"
+            className="dock-shell-icon-btn"
+            onClick={() => void handleReloadDock()}
+            aria-label={t('page.reloadDock')}
+            title={isReloadingDock ? t('page.connecting') : t('page.reloadDock')}
+            disabled={isReloadingDock}
+          >
+            <Icon name="refresh" size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  ), [t, handleReloadDock, isReloadingDock]);
 
   // ── Keyboard Shortcuts ──────────────────────────────────────────────────
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -664,44 +701,6 @@ export default function DockPage() {
             <span>{t('page.maintenance')}</span>
           </div>
         )}
-
-        <div className="dock-shell-header">
-          <div className="dock-shell-status">
-            <div className="dock-shell-status__left">
-              <button
-                type="button"
-                className="dock-shell-icon-btn"
-                onClick={() => setShowSettingsMenu(true)}
-                aria-label={t('dock.menu')}
-                title={t('dock.menu')}
-              >
-                <Icon name="menu" size={14} />
-              </button>
-              <div className="dock-shell-status__center">
-                <div className="dock-shell-titleline">
-                  <span className="dock-shell-titleline__app">{t('dock.mceStudio')}</span>
-                  <span className="dock-shell-titleline__divider">/</span>
-                  <span className="dock-shell-titleline__section">{activeTabDef.label}</span>
-                </div>
-              </div>
-            </div>
-
-
-
-            <div className="dock-shell-status__right">
-              <button
-                type="button"
-                className="dock-shell-icon-btn"
-                onClick={() => void handleReloadDock()}
-                aria-label={t('page.reloadDock')}
-                title={isReloadingDock ? t('page.connecting') : t('page.reloadDock')}
-                disabled={isReloadingDock}
-              >
-                <Icon name="refresh" size={14} />
-              </button>
-            </div>
-          </div>
-        </div>
 
         {/* ── Sidebar ── */}
         {showSettingsMenu && (
@@ -1239,6 +1238,101 @@ export default function DockPage() {
                 onStage={handleStage}
                 tickerOutputMode={tickerOutputMode}
               />
+            {mountedTabs.planner && (
+              <div
+                key="planner-pane"
+                className="dock-content-pane"
+                hidden={activeTab !== "planner"}
+                aria-hidden={activeTab !== "planner"}
+                style={activeTab === "planner" ? undefined : { display: "none" }}
+              >
+                {renderTabHeader("Planner")}
+                <DockPlannerTab
+                  staged={staged}
+                  onStage={handleStage}
+                  initialSnapshot={servicePlanner}
+                />
+              </div>
+            )}
+            {mountedTabs.bible && (
+              <div
+                key="bible-pane"
+                className="dock-content-pane"
+                hidden={activeTab !== "bible"}
+                aria-hidden={activeTab !== "bible"}
+                style={activeTab === "bible" ? undefined : { display: "none" }}
+              >
+                {renderTabHeader("Bible")}
+                <DockBibleTab
+                  staged={staged}
+                  onStage={handleStage}
+                  productionDefaults={productionSettings.bible}
+                  appConnected={appConnected}
+                  isActive={activeTab === "bible"}
+                  showHistory={showHistory}
+                  onHistoryClose={() => setShowHistory(false)}
+                />
+              </div>
+            )}
+            {mountedTabs.worship && (
+              <div
+                key="worship-pane"
+                className="dock-content-pane"
+                hidden={activeTab !== "worship"}
+                aria-hidden={activeTab !== "worship"}
+                style={activeTab === "worship" ? undefined : { display: "none" }}
+              >
+                {renderTabHeader("Worship")}
+                <DockWorshipTab
+                  staged={staged}
+                  onStage={handleStage}
+                  productionDefaults={productionSettings.worship}
+                  isActive={activeTab === "worship"}
+                />
+              </div>
+            )}
+            {mountedTabs.media && (
+              <div
+                key="media-pane"
+                className="dock-content-pane"
+                hidden={activeTab !== "media"}
+                aria-hidden={activeTab !== "media"}
+                style={activeTab === "media" ? undefined : { display: "none" }}
+              >
+                {renderTabHeader("Media")}
+                <DockMediaTab
+                  staged={staged}
+                  onStage={handleStage}
+                  isActive={activeTab === "media"}
+                />
+              </div>
+            )}
+            {mountedTabs.multiview && (
+              <div
+                key="multiview-pane"
+                className="dock-content-pane"
+                hidden={activeTab !== "multiview"}
+                aria-hidden={activeTab !== "multiview"}
+                style={activeTab === "multiview" ? undefined : { display: "none" }}
+              >
+                {renderTabHeader("Multi-View")}
+                <DockMultiviewTab />
+              </div>
+            )}
+            {mountedTabs.ministry && (
+              <div
+                key="ministry-pane"
+                className="dock-content-pane"
+                hidden={activeTab !== "ministry"}
+                aria-hidden={activeTab !== "ministry"}
+                style={activeTab === "ministry" ? undefined : { display: "none" }}
+              >
+                {renderTabHeader("Ministry")}
+                <DockMinistryTab
+                  staged={staged}
+                  onStage={handleStage}
+                />
+              </div>
             )}
           </div>
         </div>

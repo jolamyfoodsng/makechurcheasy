@@ -21071,3 +21071,184 @@ html.mv-theme-light .tc-editor .canvas-area {
     transform: rotate(360deg);
   }
 }
+}
+
+.desktop-announcement-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.desktop-announcement-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.62);
+  backdrop-filter: blur(10px);
+}
+
+.desktop-announcement-modal {
+  position: relative;
+  width: min(520px, 100%);
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 24px;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.36);
+}
+
+.desktop-announcement-image {
+  display: block;
+  width: 100%;
+  height: 170px;
+  object-fit: cover;
+}
+
+.desktop-announcement-body {
+  padding: 24px 24px 8px;
+}
+
+.desktop-announcement-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(79, 70, 229, 0.18);
+  background: rgba(79, 70, 229, 0.08);
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.desktop-announcement-modal--success .desktop-announcement-pill {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+}
+
+.desktop-announcement-modal--warning .desktop-announcement-pill {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.12);
+  color: #92400e;
+}
+
+.desktop-announcement-modal--offer .desktop-announcement-pill {
+  border-color: rgba(217, 70, 239, 0.24);
+  background: rgba(217, 70, 239, 0.1);
+  color: #a21caf;
+}
+
+.desktop-announcement-modal--upgrade .desktop-announcement-pill {
+  border-color: rgba(37, 99, 235, 0.24);
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+}
+
+.desktop-announcement-body h2 {
+  margin: 16px 0 0;
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.desktop-announcement-body p {
+  margin: 10px 0 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.desktop-announcement-offer {
+  margin-top: 18px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  background: #f8fafc;
+  padding: 12px 14px;
+}
+
+.desktop-announcement-offer span {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.desktop-announcement-offer strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.desktop-announcement-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 20px 24px 24px;
+}
+
+.desktop-announcement-button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 12px;
+  background: #f1f5f9;
+  color: #334155;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.desktop-announcement-button:hover {
+  background: #e2e8f0;
+}
+
+.desktop-announcement-button--primary {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.desktop-announcement-button--primary:hover {
+  background: #1e293b;
+}
+
+/* ── Test environment banner ── */
+
+.app-env-banner-test {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: #fef3c7;
+  border-bottom: 1px solid #f59e0b;
+  font-size: 12px;
+  color: #92400e;
+  min-height: 24px;
+  flex-shrink: 0;
+}
+
+.app-env-banner-test__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.app-env-banner-test__text {
+  flex: 1;
+}

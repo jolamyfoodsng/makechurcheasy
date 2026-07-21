@@ -1,9 +1,10 @@
 /**
  * DockMinistryTab.tsx — Ministry tab for the MakeChurchEasy Dock
  *
- * Two sub-tabs:
- *   1. Ticker — live scrolling ticker announcements
- *   2. Lower Thirds — send/blank lower-third overlays via OBS
+ * Sub-tabs:
+ *   1. Lower Thirds — send/blank lower-third overlays via OBS
+ *   2. Countdowns — countdown timers
+ *   3. Tickers — push scrolling ticker announcements to OBS
  *
  * Uses dockObsClient for OBS communication (same WebSocket
  * connection shared across all dock tabs).
@@ -28,16 +29,19 @@ import type { BibleTheme } from "../../bible/types";
 import allThemesData from "../../../lower_thirds/all_themes.json";
 import DockLowerThirdEditor from "./DockLowerThirdEditor";
 import DockCountdownsTab from "./DockCountdownsTab";
-import { requireEntitlement, getDockPlan } from "../dockEntitlement";
+import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
-import { normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
+import { localizeLowerThirdThemeAssets, normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
+import { loadProjectionSettings, saveProjectionSettings } from "../dockProjectionSettings";
 
 const ALL_LT_THEMES: LowerThirdTheme[] = [
   ...LT_ALL_THEMES,
-  ...((allThemesData.themes as unknown as LowerThirdTheme[]) || []).filter(
-    (t) => !LT_ALL_THEMES.some((lt) => lt.id === t.id),
-  ),
+  ...((allThemesData.themes as unknown as LowerThirdTheme[]) || [])
+    .map((t) => localizeLowerThirdThemeAssets(t))
+    .filter(
+      (t) => !LT_ALL_THEMES.some((lt) => lt.id === t.id),
+    ),
 ];
 
 // Tagged union: supports both LowerThirdTheme (HTML template) and BibleTheme (CSS overlay)
@@ -53,12 +57,6 @@ interface BibleThemeEntry {
 }
 type MixedLTThemeEntry = LTThemeEntry | BibleThemeEntry;
 
-interface Props {
-  staged: DockStagedItem | null;
-  onStage: (item: DockStagedItem | null) => void;
-  tickerOutputMode: "source" | "scene";
-}
-
 interface TickerMessage {
   id: string;
   text: string;
@@ -73,12 +71,16 @@ interface TickerSettings {
   heading: string;
 }
 
+interface Props {
+  staged: DockStagedItem | null;
+  onStage: (item: DockStagedItem | null) => void;
+  tickerOutputMode?: "source" | "scene";
+}
+
 const STORAGE_KEY = "dock-ticker-messages";
 const SETTINGS_KEY = "dock-ticker-settings";
 const MAX_CHARS = 140;
 const TICKER_HEIGHT = 80;
-
-type MinistrySubTab = "ticker" | "lower-thirds" | "countdowns";
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -97,34 +99,24 @@ function saveMessages(msgs: TickerMessage[]) {
 }
 
 function loadSettings(): TickerSettings {
-  const defaultTheme = TICKER_THEMES[0];
   try {
     const raw = localStorage.getItem(getUserScopedKey(SETTINGS_KEY));
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<TickerSettings>;
-      return {
-        speed: typeof parsed.speed === "number" ? Math.max(1, Math.min(100, parsed.speed)) : getSettings().defaultTickerScrollSpeed * 20,
-        position: parsed.position === "top" ? "top" : "bottom",
-        loop: typeof parsed.loop === "boolean" ? parsed.loop : true,
-        themeId: parsed.themeId ?? defaultTheme.id,
-        heading: typeof parsed.heading === "string" && parsed.heading.trim()
-          ? parsed.heading.slice(0, 20)
-          : defaultTheme.defaultHeading,
-      };
-    }
+    if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
   return {
-    speed: getSettings().defaultTickerScrollSpeed * 20,
+    speed: 50,
     position: "bottom",
     loop: true,
-    themeId: defaultTheme.id,
-    heading: defaultTheme.defaultHeading,
+    themeId: TICKER_THEMES[0]?.id ?? "",
+    heading: TICKER_THEMES[0]?.defaultHeading ?? "LIVE",
   };
 }
 
 function saveSettings(s: TickerSettings) {
   try { localStorage.setItem(getUserScopedKey(SETTINGS_KEY), JSON.stringify(s)); } catch { /* ignore */ }
 }
+
+type MinistrySubTab = "ticker" | "lower-thirds" | "countdowns";
 
 const MINISTRY_TAB_KEY = "dock-ministry-active-tab";
 
@@ -154,6 +146,8 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const [success, setSuccess] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [dockPlan, setDockPlan] = useState<string>(() => getDockPlan());
+  const [tickerFavIds, setTickerFavIds] = useState<Set<string>>(new Set());
 
   // Lower-thirds state — mixed LowerThirdTheme + BibleTheme entries
   const [ltFavorites, setLtFavorites] = useState<MixedLTThemeEntry[]>([]);
@@ -168,8 +162,6 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const [ltLive, setLtLive] = useState(false);
   // BibleTheme lower-third text input (used when a BibleTheme is selected)
   const [bibleLtText, setBibleLtText] = useState("");
-  // Ticker favorites — filtered list of themes to show in dropdown
-  const [tickerFavorites, setTickerFavorites] = useState<typeof TICKER_THEMES>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mountedRef = useRef(true);
@@ -188,6 +180,28 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     if (mountedRef.current) setObsConnected(dockObsClient.isConnected);
     return () => { mountedRef.current = false; unsub(); };
   }, []);
+
+  // Refresh dock plan every 30s (matches DockAuthGate polling)
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (mountedRef.current) setDockPlan(getDockPlan());
+    }, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Enforce free plan: delete MCE Ticker source from OBS when user is free/downgraded
+  useEffect(() => {
+    if (dockPlan !== "free") return;
+    if (!obsConnected) return;
+
+    (async () => {
+      try {
+        // Remove "MCE Ticker" input — OBS auto-removes all scene items referencing it
+        await dockObsClient.call("RemoveInput", { inputName: "MCE Ticker" }).catch(() => { });
+        console.log("[DockMinistry] Free plan enforced: removed MCE Ticker source");
+      } catch { /* OBS may not be connected, source may not exist */ }
+    })();
+  }, [dockPlan, obsConnected]);
 
   // Clear feedback after 3s
   useEffect(() => {
@@ -234,32 +248,27 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     return () => { cancelled = true; };
   }, []);
 
-  const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? null;
-
-  // Reset selected index when favorites change
-  useEffect(() => { setLtSelectedIdx(0); }, [ltFavorites]);
-
-  const handleSelectLtTheme = useCallback((entryIdx: number) => {
-    if (entryIdx >= 0 && entryIdx < ltFavorites.length) setLtSelectedIdx(entryIdx);
-  }, [ltFavorites]);
-
-  // Load ticker favorites on mount
+  // Load ticker favorites
   useEffect(() => {
     let cancelled = false;
     loadDockTickerFavorites().then((favIds) => {
       if (cancelled) return;
-      const favSet = favIds.size > 0 ? favIds : null;
-      const filtered = favSet
-        ? TICKER_THEMES.filter((t) => favSet.has(t.id))
-        : TICKER_THEMES;
-      setTickerFavorites(filtered.length > 0 ? filtered : TICKER_THEMES);
-    }).catch(() => {
-      if (!cancelled) setTickerFavorites(TICKER_THEMES);
-    });
+      setTickerFavIds(favIds);
+      const available = favIds.size > 0
+        ? TICKER_THEMES.filter((t) => favIds.has(t.id))
+        : TICKER_THEMES.slice(0, 1);
+      const currentInList = available.some((t) => t.id === settings.themeId);
+      if (!currentInList && available.length > 0) {
+        setSettings((s) => ({ ...s, themeId: available[0].id, heading: available[0].defaultHeading }));
+      }
+    }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
-  const theme = TICKER_THEMES.find((t) => t.id === settings.themeId) ?? TICKER_THEMES[0];
+  const tickerThemeList = tickerFavIds.size > 0
+    ? TICKER_THEMES.filter((t) => tickerFavIds.has(t.id))
+    : TICKER_THEMES.slice(0, 1);
+  const theme = tickerThemeList.find((t) => t.id === settings.themeId) ?? tickerThemeList[0] ?? TICKER_THEMES[0];
   const activeMessages = messages.filter((m) => m.active);
 
   // Derive branded ticker colors from the app's brand color
@@ -271,6 +280,15 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       separator: brandColor,
     };
   })();
+
+  const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? null;
+
+  // Reset selected index when favorites change
+  useEffect(() => { setLtSelectedIdx(0); }, [ltFavorites]);
+
+  const handleSelectLtTheme = useCallback((entryIdx: number) => {
+    if (entryIdx >= 0 && entryIdx < ltFavorites.length) setLtSelectedIdx(entryIdx);
+  }, [ltFavorites]);
 
   // ── Add message ──
   const handleAdd = useCallback(async () => {
@@ -345,9 +363,6 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       const sourceName = "MCE Ticker";
       const presentationSceneName = "MCE Presentation";
 
-      const currentScene = await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string };
-      const programSceneName = currentScene.currentProgramSceneName;
-
       // Always route MCE Ticker to MCE Presentation scene
       const targetScene = presentationSceneName;
 
@@ -360,8 +375,9 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       }
 
       // In scene mode, switch preview to MCE Presentation for user to transition
+      const currentProgramScene = (await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string }).currentProgramSceneName;
       if (tickerOutputMode === "scene") {
-        try { localStorage.setItem("dock-ticker-original-scene", programSceneName); } catch { /* ignore */ }
+        try { localStorage.setItem("dock-ticker-original-scene", currentProgramScene); } catch { /* ignore */ }
         await dockObsClient.call("SetCurrentPreviewScene", { sceneName: presentationSceneName });
       }
 
@@ -416,10 +432,18 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           cropBottom: 0,
         },
       });
+      await dockObsClient.ensureTickerAboveSource(targetScene, sourceName).catch(() => { });
+      await dockObsClient.syncLowerThirdTickerClearance(targetScene).catch(() => { });
 
-      // Move ticker to top of scene (highest z-index)
-      const allItems = await dockObsClient.call("GetSceneItemList", { sceneName: targetScene }) as { sceneItems: Array<{ sceneItemId: number }> };
-      await dockObsClient.call("SetSceneItemIndex", { sceneName: targetScene, sceneItemId, sceneItemIndex: allItems.sceneItems.length - 1 });
+      const projectionSettings = loadProjectionSettings();
+      if (projectionSettings.tickerLayerPriority !== "ticker-above") {
+        saveProjectionSettings({
+          ...projectionSettings,
+          tickerLayerPriority: "ticker-above",
+        });
+      }
+
+      await dockObsClient.applyProjectionSettings({ allowSceneMutation: true }).catch(() => { });
 
       setRunning(true);
       setIsPaused(false);
@@ -490,6 +514,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           });
         }
       }
+      await dockObsClient.syncLowerThirdTickerClearance("MCE Presentation").catch(() => { });
 
       // Restore original scene in preview if we had switched away
       if (tickerOutputMode === "scene") {
@@ -514,7 +539,12 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   return (
     <div className="dock-mv-tab">
       {/* ── Header ── */}
-
+      <div className="dock-mv-tab__header">
+        <div className="dock-mv-tab__title-row">
+          <Icon name="campaign" size={16} />
+          <span className="dock-mv-tab__title">{t('ministry.title')}</span>
+        </div>
+      </div>
 
       {/* ── Sub-Tab Switcher ── */}
       <div className="dock-ministry-tabs">
@@ -534,7 +564,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           <Icon name="subtitles" size={12} />
           <span>{t("ministry.lowerThirds")}</span>
         </button>
-        {getDockPlan() !== "free" && (
+        {dockPlan !== "free" && (
           <button
             type="button"
             className={`dock-ministry-tab${subTab === "countdowns" ? " dock-ministry-tab--active" : ""}`}
@@ -547,7 +577,26 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       </div>
 
       {/* ── Ticker Tab ── */}
-      {subTab === "ticker" && (
+      {subTab === "ticker" && dockPlan === "free" && (
+        <div style={{ padding: "24px 16px", textAlign: "center" }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+            {t("upgrade.tickerRequired", "Ticker requires Basic plan or higher")}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--dock-text-dim)", marginBottom: 16, lineHeight: 1.5 }}>
+            {t("upgrade.tickerDescription", "Live-updating scripture, prayer points, and announcements for your congregation.")}
+          </div>
+          <button
+            type="button"
+            className="dock-btn dock-btn--primary dock-btn--sm"
+            onClick={() => showUpgradeModal("Upgrade to Basic or higher to enable the Ticker feature.")}
+          >
+            <Icon name="upgrade" size={14} />
+            <span>{t("upgrade.upgradePlan", "Upgrade Plan")}</span>
+          </button>
+        </div>
+      )}
+      {subTab === "ticker" && dockPlan !== "free" && (
         <>
           {/* Feedback */}
           {error && (
@@ -571,8 +620,11 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             <div className="dock-mv-tab__section">
               <div style={{ padding: "4px 0" }}>
                 <select
-                  value={settings.themeId}
-                  onChange={(e) => setSettings((s) => ({ ...s, themeId: e.target.value, heading: s.heading || TICKER_THEMES.find((t) => t.id === e.target.value)?.defaultHeading || "" }))}
+                  value={theme.id}
+                  onChange={(e) => {
+                    const t = TICKER_THEMES.find((x) => x.id === e.target.value);
+                    setSettings((s) => ({ ...s, themeId: e.target.value, heading: t?.defaultHeading ?? s.heading }));
+                  }}
                   style={{
                     width: "100%",
                     background: "var(--dock-surface)",
@@ -586,7 +638,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     cursor: "pointer",
                   }}
                 >
-                  {tickerFavorites.map((tpl) => (
+                  {tickerThemeList.map((tpl) => (
                     <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
                   ))}
                 </select>
@@ -596,6 +648,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             {/* Settings */}
             <div className="dock-mv-tab__section">
               <div className="dock-mv-tab__section-label">{t("ministry.settings")}</div>
+              <div className="dock-mv-tab__section-desc">{t("ministry.settingsDesc")}</div>
               <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "block", alignItems: "center", gap: 6 }}>
                   <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.heading")}</label>
@@ -632,35 +685,45 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   />
                   <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 24, textAlign: "right" }}>{settings.speed}</span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.position")}</label>
-                  <div className="dock-console-segmented dock-console-segmented--compact">
-                    <button
-                      type="button"
-                      className={`dock-console-segmented__item${settings.position === "top" ? " dock-console-segmented__item--active" : ""}`}
-                      onClick={() => setSettings((s) => ({ ...s, position: "top" }))}
-                      title={t("ministry.top")}>
-                      {t("ministry.top")}
-                    </button>
-                    <button
-                      type="button"
-                      className={`dock-console-segmented__item${settings.position === "bottom" ? " dock-console-segmented__item--active" : ""}`}
-                      onClick={() => setSettings((s) => ({ ...s, position: "bottom" }))}
-                      title={t("ministry.bottom")}>
-                      {t("ministry.bottom")}
-                    </button>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.position")}</label>
+                    <div className="dock-console-segmented dock-console-segmented--compact">
+                      <button
+                        type="button"
+                        className={`dock-console-segmented__item${settings.position === "top" ? " dock-console-segmented__item--active" : ""}`}
+                        onClick={() => setSettings((s) => ({ ...s, position: "top" }))}
+                        title={t("ministry.top")}>
+                        {t("ministry.top")}
+                      </button>
+                      <button
+                        type="button"
+                        className={`dock-console-segmented__item${settings.position === "bottom" ? " dock-console-segmented__item--active" : ""}`}
+                        onClick={() => setSettings((s) => ({ ...s, position: "bottom" }))}
+                        title={t("ministry.bottom")}>
+                        {t("ministry.bottom")}
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.loop")}</label>
-                  <button
-                    type="button"
-                    className={`dock-console-segmented__item${settings.loop ? " dock-console-segmented__item--active" : ""}`}
-                    onClick={() => setSettings((s) => ({ ...s, loop: !s.loop }))}
-                    style={{ fontSize: 10, padding: "2px 10px", borderRadius: 3, border: "1px solid var(--dock-border)", background: settings.loop ? "var(--dock-accent)" : "transparent", color: settings.loop ? "#fff" : "var(--dock-text-dim)", cursor: "pointer" }}
-                    title={settings.loop ? t("ministry.looping") : t("ministry.once")}>
-                    {settings.loop ? t("ministry.looping") : t("ministry.once")}
-                  </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <label style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("ministry.loop")}</label>
+                    <div className="dock-console-segmented dock-console-segmented--compact">
+                      <button
+                        type="button"
+                        className={`dock-console-segmented__item${!settings.loop ? " dock-console-segmented__item--active" : ""}`}
+                        onClick={() => setSettings((s) => ({ ...s, loop: false }))}
+                        title={t("ministry.once")}>
+                        {t("ministry.once")}
+                      </button>
+                      <button
+                        type="button"
+                        className={`dock-console-segmented__item${settings.loop ? " dock-console-segmented__item--active" : ""}`}
+                        onClick={() => setSettings((s) => ({ ...s, loop: true }))}
+                        title={t("ministry.looping")}>
+                        {t("ministry.looping")}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -668,19 +731,19 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             {/* Compose */}
             <div className="dock-mv-tab__section">
               <div className="dock-mv-tab__section-label">{t("ministry.messages")}</div>
+              <div className="dock-mv-tab__section-desc">{t("ministry.messagesDesc")}</div>
               <div style={{ padding: "4px 0" }}>
-                <div style={{ display: "block", gap: 4 }}>
+                <div style={{ display: "flex", gap: 4, alignItems: "flex-end" }}>
                   <textarea
                     ref={textareaRef}
                     value={newText}
                     onChange={(e) => setNewText(e.target.value.slice(0, MAX_CHARS))}
                     onKeyDown={handleKeyDown}
                     placeholder={t("ministry.typeMessage")}
-                    rows={2}
+                    rows={4}
                     style={{
                       flex: 1,
-                      width: "95%",
-                      minHeight: '50px',
+                      minHeight: '80px',
                       background: "var(--dock-surface)",
                       border: "1px solid var(--dock-border)",
                       borderRadius: 3,
@@ -696,7 +759,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     className="dock-btn dock-btn--accent dock-btn--sm"
                     onClick={handleAdd}
                     disabled={!newText.trim()}
-                    style={{ alignSelf: "flex-end", height: 30 }}
+                    style={{ height: 30, whiteSpace: "nowrap" }}
                     title={t("common.add")}>
                     Add Message
                     <Icon name="add" size={14} />
@@ -902,6 +965,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                 {/* Theme Picker Dropdown */}
                 <div className="dock-mv-tab__section">
                   <div className="dock-mv-tab__section-label">{t("ministry.theme")}</div>
+                  <div className="dock-mv-tab__section-desc">{t("ministry.themeDesc")}</div>
                   <div style={{ padding: "4px 0" }}>
                     <select
                       value={ltSelectedIdx}
@@ -931,8 +995,9 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                 {/* Size Multiplier */}
                 <div className="dock-mv-tab__section">
                   <div className="dock-mv-tab__section-label">{t("ministry.size")}</div>
+                  <div className="dock-mv-tab__section-desc">{t("ministry.sizeDesc")}</div>
                   <div style={{ padding: "4px 0", display: "flex", gap: 4 }}>
-                    {(["xl", "x2", "x3"] as LTSize[]).map((s) => (
+                    {(["xl", "x2"] as LTSize[]).map((s) => (
                       <button
                         key={s}
                         type="button"
@@ -976,41 +1041,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       try {
                         await ensureObsConnected();
                         const scale = LT_SIZE_SCALE[ltSize] ?? 1;
-                        const srcW = Math.round(1920 / scale);
-                        const srcH = Math.round(1080 / scale);
-                        const sceneName = "MCE Presentation";
-                        const sourceName = "MCE Lower Third";
-                        // Ensure scene exists
-                        const scenes = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
-                        if (!scenes.scenes.some((s) => s.sceneName === sceneName)) {
-                          await dockObsClient.call("CreateScene", { sceneName });
-                          await new Promise((r) => setTimeout(r, 100));
-                        }
-                        const inputs = await dockObsClient.call("GetInputList") as { inputs: Array<{ inputName: string }> };
-                        const inputExists = inputs.inputs.some((i) => i.inputName === sourceName);
-                        let sceneItemId: number;
-                        if (inputExists) {
-                          await dockObsClient.call("SetInputSettings", {
-                            inputName: sourceName,
-                            inputSettings: { url, width: srcW, height: srcH, fps_custom: true, fps: 60, shutdown: false, restart_when_active: false },
-                          });
-                          const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
-                          const existing = items.sceneItems.find((i) => i.sourceName === sourceName);
-                          if (existing) {
-                            sceneItemId = existing.sceneItemId;
-                            await dockObsClient.call("SetSceneItemEnabled", { sceneName, sceneItemId, sceneItemEnabled: true });
-                          } else {
-                            sceneItemId = (await dockObsClient.call("CreateSceneItem", { sceneName, sourceName, sceneItemEnabled: true }) as { sceneItemId: number }).sceneItemId;
-                          }
-                        } else {
-                          sceneItemId = (await dockObsClient.call("CreateInput", { sceneName, inputName: sourceName, inputKind: "browser_source", inputSettings: { url, width: srcW, height: srcH, css: "", fps_custom: true, fps: 60, shutdown: false, restart_when_active: false }, sceneItemEnabled: true }) as { sceneItemId: number }).sceneItemId;
-                        }
-                        await dockObsClient.call("SetSceneItemTransform", {
-                          sceneName, sceneItemId,
-                          sceneItemTransform: { positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0, boundsType: "OBS_BOUNDS_STRETCH", boundsWidth: 1920, boundsHeight: 1080, boundsAlignment: 0, cropLeft: 0, cropTop: 0, cropRight: 0, cropBottom: 0 },
+                        await dockObsClient.pushLowerThirdOverlayUrl(url, {
+                          sourceWidth: Math.round(1920 / scale),
+                          sourceHeight: Math.round(1080 / scale),
                         });
-                        const allItems = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sceneItemId: number }> };
-                        await dockObsClient.call("SetSceneItemIndex", { sceneName, sceneItemId, sceneItemIndex: allItems.sceneItems.length - 1 });
                         setLtLive(true);
                         setLtFeedbackTone("success");
                         setLtFeedback(t("ministry.lowerThirdLive"));
@@ -1037,25 +1071,8 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       setLtFeedback(null);
                       try {
                         await ensureObsConnected();
-                        const inputs = await dockObsClient.call("GetInputList") as { inputs: Array<{ inputName: string }> };
-                        const ltInput = inputs.inputs.find((i) => i.inputName === "MCE Lower Third");
-                        if (ltInput) {
-                          // Send blanked URL to trigger exit animation in overlay
-                          await dockObsClient.call("SetInputSettings", { inputName: "MCE Lower Third", inputSettings: { url } });
-                          // Wait for exit animation to finish, then disable the source
-                          const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
-                          await new Promise((r) => setTimeout(r, exitDuration));
-                          const sceneName = "MCE Presentation";
-                          const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
-                          const ltItem = items.sceneItems.find((i) => i.sourceName === "MCE Lower Third");
-                          if (ltItem) {
-                            await dockObsClient.call("SetSceneItemEnabled", {
-                              sceneName,
-                              sceneItemId: ltItem.sceneItemId,
-                              sceneItemEnabled: false,
-                            });
-                          }
-                        }
+                        const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
+                        await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
                         setLtLive(false);
                         setLtFeedbackTone("success");
                         setLtFeedback(t("ministry.lowerThirdCleared"));
@@ -1071,25 +1088,8 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       setLtFeedback(null);
                       try {
                         await ensureObsConnected();
-                        const inputs = await dockObsClient.call("GetInputList") as { inputs: Array<{ inputName: string }> };
-                        const ltInput = inputs.inputs.find((i) => i.inputName === "MCE Lower Third");
-                        if (ltInput) {
-                          // Set blanked URL to trigger exit animation in overlay
-                          await dockObsClient.call("SetInputSettings", { inputName: "MCE Lower Third", inputSettings: { url } });
-                          // Wait for overlay's exit animation to finish (overlay self-times via resolveThemeExitDuration), then disable the source
-                          const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
-                          await new Promise((r) => setTimeout(r, exitDuration));
-                          const sceneName = "MCE Presentation";
-                          const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
-                          const ltItem = items.sceneItems.find((i) => i.sourceName === "MCE Lower Third");
-                          if (ltItem) {
-                            await dockObsClient.call("SetSceneItemEnabled", {
-                              sceneName,
-                              sceneItemId: ltItem.sceneItemId,
-                              sceneItemEnabled: false,
-                            });
-                          }
-                        }
+                        const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
+                        await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
                         setLtLive(false);
                         setLtFeedbackTone("success");
                         setLtFeedback(t("ministry.lowerThirdAnimatedOut"));
@@ -1105,6 +1105,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   /* BibleTheme lower-third: simple text input + send via pushBible */
                   <div className="dock-mv-tab__section">
                     <div className="dock-mv-tab__section-label">{t("ministry.content")}</div>
+                    <div className="dock-mv-tab__section-desc">{t("ministry.contentDesc")}</div>
                     <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
                       <textarea
                         value={bibleLtText}
@@ -1188,16 +1189,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                               // Wait for exit animation (use theme's animation duration), then disable the source
                               const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
                               await new Promise((r) => setTimeout(r, animDuration + 100));
-                              const sceneName = "MCE Presentation";
-                              const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
-                              const ltItem = items.sceneItems.find((i) => i.sourceName === "MCE Lower Third");
-                              if (ltItem) {
-                                await dockObsClient.call("SetSceneItemEnabled", {
-                                  sceneName,
-                                  sceneItemId: ltItem.sceneItemId,
-                                  sceneItemEnabled: false,
-                                });
-                              }
+                              await dockObsClient.clearBible();
                               setLtLive(false);
                               setLtFeedbackTone("success");
                               setLtFeedback(t("ministry.lowerThirdAnimatedOut"));
@@ -1240,16 +1232,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                             // Wait for exit animation (use theme's animation duration), then disable the source
                             const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
                             await new Promise((r) => setTimeout(r, animDuration + 100));
-                            const sceneName = "MCE Presentation";
-                            const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
-                            const ltItem = items.sceneItems.find((i) => i.sourceName === "MCE Lower Third");
-                            if (ltItem) {
-                              await dockObsClient.call("SetSceneItemEnabled", {
-                                sceneName,
-                                sceneItemId: ltItem.sceneItemId,
-                                sceneItemEnabled: false,
-                              });
-                            }
+                            await dockObsClient.clearBible();
                             setLtLive(false);
                             setLtFeedbackTone("success");
                             setLtFeedback(t("ministry.lowerThirdCleared"));
@@ -1280,9 +1263,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       )}
 
       {/* ── Countdowns Tab ── */}
-      {subTab === "countdowns" && getDockPlan() !== "free" && (
+      {subTab === "countdowns" && dockPlan !== "free" && (
         <DockCountdownsTab />
       )}
+
     </div>
   );
 }
