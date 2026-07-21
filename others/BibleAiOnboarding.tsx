@@ -70,7 +70,7 @@ function buildSteps(
         "Save time by letting Bible AI automatically send detected verses to your broadcast. You can turn this on or off anytime.",
       icon: Settings,
       target: "[data-onboarding='auto-push-setting']",
-      onEnter: openSettings,
+      onEnter: _openSettings,
     },
     {
       title: "Translation",

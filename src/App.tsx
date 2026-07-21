@@ -48,7 +48,6 @@ import { STARTER_TEMPLATES } from "./multiview/templates";
 import { applyBrandingSettingsToDom } from "./services/branding";
 import { useAppTheme } from "./hooks/useAppTheme";
 import { getAppTitle } from "./services/envConfig";
-import { UpgradeModalBridge } from "./hooks/useFeatureGate";
 import DevDashboard from "./pages/DevDashboard";
 
 import { dockBridge } from "./services/dockBridge";

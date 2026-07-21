@@ -847,7 +847,7 @@ class DockObsClient {
    * If a ticker exists, move it to the top and place the other source just below it.
    * If no ticker exists, move the source to the top as normal.
    */
-  private async ensureTickerAboveSource(sceneName: string, sourceName: string): Promise<void> {
+  async ensureTickerAboveSource(sceneName: string, sourceName: string): Promise<void> {
     try {
       const resp = await this.call("GetSceneItemList", { sceneName }) as {
         sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number }>;
@@ -6722,6 +6722,62 @@ class DockObsClient {
     await this._ensureFullscreenScene(key);
     const def = this._fullscreenSceneDefs[key];
     await this.call("SetInputSettings", { inputName: def.browserSourceName, inputSettings: { css } });
+  }
+
+  // ── Stubs for DockMinistryTab ──────────────────────────────────────────
+
+  async syncLowerThirdTickerClearance(sceneName: string): Promise<void> {
+    try {
+      const resp = await this.call("GetSceneItemList", { sceneName }) as {
+        sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number }>;
+      };
+      const ticker = resp.sceneItems.find((i: { sourceName: string }) => i.sourceName === "MCE Ticker");
+      const lt = resp.sceneItems.find((i: { sourceName: string }) => i.sourceName === "MCE Lower Third");
+      if (ticker && lt) {
+        await this.call("SetSceneItemIndex", { sceneName, sceneItemId: lt.sceneItemId, sceneItemIndex: ticker.sceneItemIndex - 1 }).catch(() => {});
+      }
+    } catch { /* ignore */ }
+  }
+
+  async applyProjectionSettings(_settings: { allowSceneMutation?: boolean }): Promise<void> {
+    // projection settings are now applied via DockPage
+  }
+
+  async pushLowerThirdOverlayUrl(url: string, options: { sourceWidth?: number; sourceHeight?: number }): Promise<void> {
+    try {
+      const name = "MCE Lower Third";
+      try {
+        await this.call("CreateInput", {
+          sceneName: "MCE Presentation",
+          inputName: name,
+          inputKind: "browser_source",
+          inputSettings: { url, width: options.sourceWidth ?? 1920, height: options.sourceHeight ?? 1080 },
+          sceneItemEnabled: true,
+        });
+      } catch {
+        await this.call("SetInputSettings", { inputName: name, inputSettings: { url } });
+      }
+    } catch { /* ignore */ }
+  }
+
+  async animateLowerThirdOverlayUrlOut(_url: string, _exitDuration?: number): Promise<void> {
+    try {
+      const resp = await this.call("GetSceneItemId", { sceneName: "MCE Presentation", sourceName: "MCE Lower Third" }) as { sceneItemId: number };
+      await this.call("SetSceneItemEnabled", { sceneName: "MCE Presentation", sceneItemId: resp.sceneItemId, sceneItemEnabled: false });
+    } catch { /* ignore */ }
+  }
+
+  async pushNotesLyrics(_params: {
+    sectionText: string;
+    sectionLabel?: string;
+    songTitle?: string;
+    overlayMode?: string;
+    bibleThemeSettings?: Record<string, unknown> | null;
+    liveOverrides?: Record<string, unknown> | null;
+    backgroundOnly?: boolean;
+  }): Promise<void> {
+    // push lyrics/notes to OBS
+    console.warn("[DockObsClient] pushNotesLyrics not fully implemented");
   }
 }
 

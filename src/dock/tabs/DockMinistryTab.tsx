@@ -32,13 +32,13 @@ import DockCountdownsTab from "./DockCountdownsTab";
 import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
-import { localizeLowerThirdThemeAssets, normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
+import { normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
 import { loadProjectionSettings, saveProjectionSettings } from "../dockProjectionSettings";
 
 const ALL_LT_THEMES: LowerThirdTheme[] = [
   ...LT_ALL_THEMES,
   ...((allThemesData.themes as unknown as LowerThirdTheme[]) || [])
-    .map((t) => localizeLowerThirdThemeAssets(t))
+    .map((t) => t)
     .filter(
       (t) => !LT_ALL_THEMES.some((lt) => lt.id === t.id),
     ),

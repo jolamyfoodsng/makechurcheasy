@@ -268,13 +268,6 @@ export async function enqueue<T>(
       failedRequests++;
       recordLatency(latency);
       throw err;
-      const callLatencyMs = performance.now() - t0;
-      const totalTime = performance.now() - callStartTime;
-      if (!request.cancelled) {
-        failedRequests++;
-        recordLatency(totalTime, callLatencyMs);
-        request.reject(err);
-      }
     } finally {
       semaphore.release();
       if (dedupeKey) {
