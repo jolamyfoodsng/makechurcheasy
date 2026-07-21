@@ -23097,6 +23097,7 @@
 
 .dock-mv-bg__file-hidden {
   display: none;
+}
 .dock-mv-property__value--empty {
   color: var(--dock-text-dim);
   font-weight: 400;
