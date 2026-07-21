@@ -149,28 +149,28 @@ describe("getEffectivePlan", () => {
     expect(getEffectivePlan(user)).toBe("free");
   });
 
-  it("returns 'pro' during active trial (even if user.plan is free)", () => {
+  it("returns 'growth' during active trial (even if user.plan is free)", () => {
     const user = makeUser({
       plan: "free",
       trial: { active: true, endsAt: futureDate(5) },
     });
-    expect(getEffectivePlan(user)).toBe("pro");
+    expect(getEffectivePlan(user)).toBe("growth");
   });
 
-  it("returns 'pro' during active trial (7-day trial)", () => {
+  it("returns 'growth' during active trial (7-day trial)", () => {
     const user = makeUser({
       plan: "free",
       trial: { active: true, startedAt: pastDate(2), endsAt: futureDate(5), durationDays: 7 },
     });
-    expect(getEffectivePlan(user)).toBe("pro");
+    expect(getEffectivePlan(user)).toBe("growth");
   });
 
-  it("returns 'pro' during active trial (10-day trial)", () => {
+  it("returns 'growth' during active trial (10-day trial)", () => {
     const user = makeUser({
       plan: "free",
       trial: { active: true, startedAt: pastDate(1), endsAt: futureDate(9), durationDays: 10 },
     });
-    expect(getEffectivePlan(user)).toBe("pro");
+    expect(getEffectivePlan(user)).toBe("growth");
   });
 
   it("returns user.plan when trial is expired", () => {
@@ -209,7 +209,7 @@ describe("getEffectivePlan", () => {
     });
     vi.mocked(getCachedPlan).mockReturnValue("growth");
     vi.mocked(isOfflineValid).mockReturnValue(true);
-    expect(getEffectivePlan(user)).toBe("pro");
+    expect(getEffectivePlan(user)).toBe("growth");
   });
 });
 
@@ -290,26 +290,26 @@ describe("getTrialDaysRemaining", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("Feature gates — all plans", () => {
-  const ALL_PLANS: PlanTier[] = ["free", "trial", "basic", "growth", "pro", "ambassador"];
+  const ALL_PLANS: PlanTier[] = ["free", "trial", "basic", "growth", "pro", "ambassador", "unlimited"];
 
   // Feature → expected results per plan
-  // Trial users behave like Pro (getEffectivePlan returns "pro" during trial).
+  // Trial users behave like Growth (getEffectivePlan returns "growth" during trial).
   const FEATURE_MATRIX: Record<string, Record<PlanTier, boolean>> = {
-    translation: { free: false, trial: true, basic: true, growth: true, pro: true, ambassador: true },
-    massImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    multiview: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    easyWorshipImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    proPresenterImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    tickers: { free: false, trial: true, basic: true, growth: true, pro: true, ambassador: true },
-    speechToScripture: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    sermonExport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    aiFeatures: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    cloudSync: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    advancedAnalytics: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    customReports: { free: false, trial: true, basic: false, growth: false, pro: true, ambassador: true },
-    unlimitedDevices: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    unlimitedMultiview: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
-    mobileControl: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true },
+    translation: { free: false, trial: true, basic: true, growth: true, pro: true, ambassador: true, unlimited: true },
+    massImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    multiview: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    easyWorshipImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    proPresenterImport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    tickers: { free: false, trial: true, basic: true, growth: true, pro: true, ambassador: true, unlimited: true },
+    speechToScripture: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    sermonExport: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    aiFeatures: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    cloudSync: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    advancedAnalytics: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    customReports: { free: false, trial: true, basic: false, growth: false, pro: true, ambassador: true, unlimited: true },
+    unlimitedDevices: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    unlimitedMultiview: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
+    mobileControl: { free: false, trial: true, basic: false, growth: true, pro: true, ambassador: true, unlimited: true },
   };
 
   const FEATURE_FN_MAP: Record<string, (user: AuthUser | null) => boolean> = {
@@ -1055,8 +1055,8 @@ describe("Edge cases", () => {
 
 describe("Runtime Validation: Trial Expiration End-to-End", () => {
   // ── Test Case 1: Active Trial ─────────────────────────────────────────────
-  describe("Test Case 1: Active Trial (free + active trial → pro access)", () => {
-    it("resolves effectivePlan to 'pro' with active trial", () => {
+  describe("Test Case 1: Active Trial (free + active trial → growth access)", () => {
+    it("resolves effectivePlan to 'growth' with active trial", () => {
       const user = makeUser({
         plan: "free",
         trial: {
@@ -1070,7 +1070,7 @@ describe("Runtime Validation: Trial Expiration End-to-End", () => {
 
       // Core plan resolution
       expect(isInTrial(user)).toBe(true);
-      expect(getEffectivePlan(user)).toBe("pro");
+      expect(getEffectivePlan(user)).toBe("growth");
       expect(getUserPlan(user)).toBe("free"); // base plan unchanged
 
       // Premium features — all should be unlocked
@@ -1340,6 +1340,23 @@ describe("Runtime Validation: Trial Expiration End-to-End", () => {
       });
 
       expect(isInTrial(user)).toBe(false);
+      expect(getEffectivePlan(user)).toBe("pro");
+      expect(canUseMultiview(user)).toBe(true);
+      expect(canUseTranslation(user)).toBe(true);
+      expect(canUseSpeechToScripture(user)).toBe(true);
+    });
+
+    it("resolves effectivePlan to 'pro' even with active trial", () => {
+      const user = makeUser({
+        plan: "pro",
+        trial: {
+          active: true,
+          status: "active",
+          endsAt: futureDate(5),
+        },
+      });
+
+      expect(isInTrial(user)).toBe(true);
       expect(getEffectivePlan(user)).toBe("pro");
       expect(canUseMultiview(user)).toBe(true);
       expect(canUseTranslation(user)).toBe(true);

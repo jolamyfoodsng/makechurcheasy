@@ -81,6 +81,7 @@ body {
 }
 
 .header-right {
+<<<<<<< HEAD
     display: flex;
     align-items: center;
     gap: 6px;
@@ -109,6 +110,10 @@ body {
 
 .header-settings-btn {
     margin-right: -4px;
+=======
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+>>>>>>> origin/main
 }
 
 .transcript-main {

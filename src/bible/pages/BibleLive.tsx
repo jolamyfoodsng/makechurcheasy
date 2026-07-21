@@ -83,7 +83,7 @@ export default function BibleLive() {
           {/* Next slide preview */}
           {currentQueueItem &&
             currentQueueItem.currentSlide <
-              currentQueueItem.slides.length - 1 && (
+            currentQueueItem.slides.length - 1 && (
               <div className="bible-live-next">
                 <span className="bible-live-next-label">Next:</span>
                 <span className="bible-live-next-text">

@@ -1,3 +1,11 @@
+import {
+  getDesktopConfig,
+  readDesktopConfigCache,
+  refreshDesktopConfig,
+  type DesktopConfig,
+} from "./desktopConfig";
+import { coerce, gt, gte, lt } from "semver";
+
 /**
  * forcedUpdateService.ts — Client-side forced update enforcement
  *
@@ -22,14 +30,26 @@ export interface AppVersionSettings {
   gracePeriodHours: number;
   updateMessage: string;
   latestVersion: string;
+  emergencyLockMessage: string;
+  windowsDownloadUrl: string;
+  macDownloadUrl: string;
+  linuxDownloadUrl: string;
+  releaseNotesUrl: string;
+  policyPublishedAt: string;
+  emergencyLockEnabledAt: string | null;
+  emergencyLockEffectiveAt: string | null;
 }
 
 export type LockType = "forced-update" | "emergency-lock";
 
 /** What's stored in localStorage — the local source of truth */
 export interface ForcedUpdateRecord {
+  /** Signature of the current enforcement policy */
+  policyKey: string;
   /** ISO timestamp when the countdown started */
   startedAt: string;
+  /** ISO timestamp when access becomes restricted */
+  lockAt: string | null;
   /** Which type of lock triggered this */
   lockType: LockType;
   /** The version the user must update to */
@@ -53,17 +73,21 @@ export interface ForcedUpdateState {
   gracePeriodHours: number | null;
   /** ISO timestamp when the countdown started */
   startedAt: string | null;
+  /** ISO timestamp when the app becomes blocked */
+  lockAt: string | null;
   /** Custom update message from admin */
   updateMessage: string;
+  /** Current app version */
+  currentVersion: string;
+  /** Manual download URL for the current platform */
+  downloadUrl: string;
+  /** Release notes URL configured by admin */
+  releaseNotesUrl: string;
   /** Whether we're still loading settings */
   loading: boolean;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
-
-const API_BASE =
-  import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 const SETTINGS_CACHE_KEY = "ocs-forced-update-settings-v2";
 const RECORD_KEY = "ocs-forced-update-record-v1";
@@ -77,21 +101,60 @@ const RE_SHOW_COOLDOWN_HOURS = 4;
 
 // ── Version parsing ────────────────────────────────────────────────────────
 
-function parseVersionParts(v: string): [number, number, number] {
-  const parts = v.split(".").map(Number);
-  return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+function normalizeVersion(v: string): string | null {
+  return coerce(v)?.version ?? null;
 }
 
 function isBelowVersion(current: string, target: string): boolean {
-  const [a, b, c] = parseVersionParts(current);
-  const [tA, tB, tC] = parseVersionParts(target);
-  if (a !== tA) return a < tA;
-  if (b !== tB) return b < tB;
-  return c < tC;
+  const currentVersion = normalizeVersion(current);
+  const targetVersion = normalizeVersion(target);
+  if (!currentVersion || !targetVersion) return false;
+  return lt(currentVersion, targetVersion);
 }
 
 function isVersionAtOrAbove(current: string, target: string): boolean {
-  return !isBelowVersion(current, target);
+  const currentVersion = normalizeVersion(current);
+  const targetVersion = normalizeVersion(target);
+  if (!currentVersion || !targetVersion) return false;
+  return gte(currentVersion, targetVersion);
+}
+
+function isNewerVersion(current: string, target: string): boolean {
+  const currentVersion = normalizeVersion(current);
+  const targetVersion = normalizeVersion(target);
+  if (!currentVersion || !targetVersion) return false;
+  return gt(targetVersion, currentVersion);
+}
+
+function getCurrentVersion(currentVersion?: string): string {
+  return currentVersion || (typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0");
+}
+
+function detectPlatform(): "windows" | "mac" | "linux" {
+  const ua = navigator.userAgent;
+  if (ua.includes("Windows")) return "windows";
+  if (ua.includes("Mac") || ua.includes("Macintosh")) return "mac";
+  return "linux";
+}
+
+function getDownloadUrlForCurrentPlatform(settings: AppVersionSettings): string {
+  const platform = detectPlatform();
+  if (platform === "windows") return settings.windowsDownloadUrl || "";
+  if (platform === "mac") return settings.macDownloadUrl || "";
+  return settings.linuxDownloadUrl || "";
+}
+
+function buildEnforcementPolicyKey(settings: AppVersionSettings): string {
+  return JSON.stringify({
+    forceUpdatesEnabled: settings.forceUpdatesEnabled,
+    minimumSupportedVersion: settings.minimumSupportedVersion,
+    gracePeriodHours: settings.gracePeriodHours,
+    emergencyLock: settings.emergencyLock,
+    emergencyLockDelay: settings.emergencyLockDelay,
+    maintenanceMode: settings.maintenanceMode,
+    emergencyLockEnabledAt: settings.emergencyLockEnabledAt,
+    emergencyLockEffectiveAt: settings.emergencyLockEffectiveAt,
+  });
 }
 
 // ── Local record persistence (the anti-bypass core) ────────────────────────
@@ -233,10 +296,9 @@ function getCachedSettings(): AppVersionSettings | null {
 
 // ── Remaining time computation ─────────────────────────────────────────────
 
-function computeRemainingHours(startedAt: string, gracePeriodHours: number): number {
-  const startMs = new Date(startedAt).getTime();
-  const endMs = startMs + gracePeriodHours * 60 * 60 * 1000;
-  const remainingMs = endMs - Date.now();
+function computeRemainingHours(lockAt: string | null): number {
+  if (!lockAt) return 0;
+  const remainingMs = new Date(lockAt).getTime() - Date.now();
   return Math.max(0, remainingMs / (60 * 60 * 1000));
 }
 
@@ -248,21 +310,90 @@ function computeRemainingHours(startedAt: string, gracePeriodHours: number): num
  */
 export async function fetchAppSettings(): Promise<AppVersionSettings | null> {
   try {
-    // In dev mode the local API server may not be running — use cached
-    // settings to avoid a noisy "Load failed" on every startup.
-    if (import.meta.env.DEV) {
-      return getCachedSettings();
-    }
-
-    const res = await fetch(`${API_BASE}/api/app/version`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const settings: AppVersionSettings = await res.json();
+    const config = await getDesktopConfig();
+    const settings = mapDesktopConfigToAppSettings(config);
     cacheSettings(settings);
     return settings;
   } catch (err) {
     console.warn("[forcedUpdate] Fetch failed, trying cache:", err);
+    const cachedConfig = readDesktopConfigCache();
+    if (cachedConfig) {
+      const settings = mapDesktopConfigToAppSettings(cachedConfig);
+      cacheSettings(settings);
+      return settings;
+    }
     return getCachedSettings();
   }
+}
+
+export async function refreshAppSettings(): Promise<AppVersionSettings | null> {
+  try {
+    const config = await refreshDesktopConfig();
+    const settings = mapDesktopConfigToAppSettings(config);
+    cacheSettings(settings);
+    return settings;
+  } catch (err) {
+    console.warn("[forcedUpdate] Refresh failed, trying cache:", err);
+    const cachedConfig = readDesktopConfigCache();
+    if (cachedConfig) {
+      const settings = mapDesktopConfigToAppSettings(cachedConfig);
+      cacheSettings(settings);
+      return settings;
+    }
+    return getCachedSettings();
+  }
+}
+
+function mapDesktopConfigToAppSettings(config: DesktopConfig): AppVersionSettings {
+  return {
+    forceUpdatesEnabled: config.appUpdates.forceUpdatesEnabled ?? false,
+    emergencyLock: config.appUpdates.emergencyLock ?? false,
+    maintenanceMode: config.security.maintenanceMode ?? false,
+    emergencyLockDelay: config.appUpdates.emergencyLockDelay ?? 0,
+    minimumSupportedVersion: config.appUpdates.minimumSupportedVersion ?? "",
+    gracePeriodHours: config.appUpdates.gracePeriodHours ?? 0,
+    updateMessage: config.appUpdates.updateMessage ?? "A newer version is required.",
+    latestVersion:
+      config.appUpdates.latestVersion ??
+      config.appUpdates.minimumSupportedVersion ??
+      "",
+    emergencyLockMessage:
+      config.appUpdates.emergencyLockMessage ??
+      "MakeChurchEasy is temporarily unavailable due to emergency maintenance.",
+    windowsDownloadUrl: config.appUpdates.windowsDownloadUrl ?? "",
+    macDownloadUrl: config.appUpdates.macDownloadUrl ?? "",
+    linuxDownloadUrl: config.appUpdates.linuxDownloadUrl ?? "",
+    releaseNotesUrl: config.appUpdates.releaseNotesUrl ?? "",
+    policyPublishedAt: config.appUpdates.policyPublishedAt ?? new Date(0).toISOString(),
+    emergencyLockEnabledAt: config.appUpdates.emergencyLockEnabledAt ?? null,
+    emergencyLockEffectiveAt: config.appUpdates.emergencyLockEffectiveAt ?? null,
+  };
+}
+
+export interface PolicyUpdateNotice {
+  latestVersion: string;
+  currentVersion: string;
+  downloadUrl: string;
+  releaseNotesUrl: string;
+  message: string;
+}
+
+export function getPolicyUpdateNotice(
+  settings: AppVersionSettings | null,
+  currentVersion?: string,
+): PolicyUpdateNotice | null {
+  if (!settings) return null;
+  const version = getCurrentVersion(currentVersion);
+  if (!settings.latestVersion || !isNewerVersion(version, settings.latestVersion)) return null;
+  if (settings.minimumSupportedVersion && isBelowVersion(version, settings.minimumSupportedVersion)) return null;
+
+  return {
+    latestVersion: settings.latestVersion,
+    currentVersion: version,
+    downloadUrl: getDownloadUrlForCurrentPlatform(settings),
+    releaseNotesUrl: settings.releaseNotesUrl,
+    message: settings.updateMessage || `A newer version of MakeChurchEasy (v${settings.latestVersion}) is available.`,
+  };
 }
 
 /**
@@ -278,7 +409,7 @@ export function getForcedUpdateState(
   settings: AppVersionSettings | null,
   currentVersion?: string
 ): ForcedUpdateState {
-  const ver = currentVersion || (typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0");
+  const ver = getCurrentVersion(currentVersion);
 
   const base: ForcedUpdateState = {
     blocked: false,
@@ -288,30 +419,44 @@ export function getForcedUpdateState(
     hoursRemaining: null,
     gracePeriodHours: null,
     startedAt: null,
+    lockAt: null,
     updateMessage: "",
+    currentVersion: ver,
+    downloadUrl: "",
+    releaseNotesUrl: "",
     loading: !settings,
   };
 
   if (!settings) return base;
+  const downloadUrl = getDownloadUrlForCurrentPlatform(settings);
+  const policyKey = buildEnforcementPolicyKey(settings);
 
   // ── Step 1: Check existing local record (anti-bypass) ──
-  const record = getRecord();
+  let record = getRecord();
+  if (record && record.policyKey !== policyKey) {
+    clearRecord();
+    clearDismissInfo();
+    record = null;
+  }
+
   if (record) {
-    // If user has updated to the required version, clear the record
-    if (isVersionAtOrAbove(ver, record.requiredVersion)) {
+    if (record.lockType === "forced-update" && isVersionAtOrAbove(ver, record.requiredVersion)) {
       clearRecord();
       clearDismissInfo();
       return {
         ...base,
         updateMessage: settings.updateMessage,
+        releaseNotesUrl: settings.releaseNotesUrl,
+        downloadUrl,
+        loading: false,
       };
     }
 
-    // If the server has turned off the lock that created this record, clear the stale record
     const serverStillLocking =
       (record.lockType === "emergency-lock" && (settings.emergencyLock || settings.maintenanceMode)) ||
-      (record.lockType === "forced-update" && settings.forceUpdatesEnabled &&
-        (isBelowVersion(ver, settings.minimumSupportedVersion) || isBelowVersion(ver, settings.latestVersion)));
+      (record.lockType === "forced-update" &&
+        settings.forceUpdatesEnabled &&
+        isBelowVersion(ver, settings.minimumSupportedVersion));
 
     if (!serverStillLocking) {
       clearRecord();
@@ -319,22 +464,34 @@ export function getForcedUpdateState(
       return {
         ...base,
         updateMessage: settings.updateMessage,
+        releaseNotesUrl: settings.releaseNotesUrl,
+        downloadUrl,
+        loading: false,
       };
     }
 
-    // Record exists and user hasn't updated — enforce it
-    const hoursRemaining = computeRemainingHours(record.startedAt, record.gracePeriodHours);
-    const blocked = hoursRemaining <= 0;
+    const hoursRemaining =
+      record.lockAt && record.gracePeriodHours > 0
+        ? computeRemainingHours(record.lockAt)
+        : 0;
+    const blocked = !record.lockAt || hoursRemaining <= 0;
 
     return {
       blocked,
       active: true,
       lockType: record.lockType,
       requiredVersion: record.requiredVersion,
-      hoursRemaining,
-      gracePeriodHours: record.gracePeriodHours,
+      hoursRemaining: record.gracePeriodHours > 0 ? hoursRemaining : null,
+      gracePeriodHours: record.gracePeriodHours > 0 ? record.gracePeriodHours : null,
       startedAt: record.startedAt,
-      updateMessage: settings.updateMessage,
+      lockAt: record.lockAt,
+      updateMessage:
+        record.lockType === "emergency-lock"
+          ? settings.emergencyLockMessage
+          : settings.updateMessage,
+      currentVersion: ver,
+      downloadUrl,
+      releaseNotesUrl: settings.releaseNotesUrl,
       loading: false,
     };
   }
@@ -343,66 +500,81 @@ export function getForcedUpdateState(
 
   // Emergency lock
   if (settings.emergencyLock || settings.maintenanceMode) {
-    const delayHours = settings.emergencyLockDelay || 0;
-    const now = new Date().toISOString();
-    const requiredVersion = settings.latestVersion || settings.minimumSupportedVersion;
-
-    // If delay is 0, immediate block (but still store the record for persistence)
+    const startedAt =
+      settings.emergencyLockEnabledAt ||
+      settings.policyPublishedAt ||
+      new Date().toISOString();
+    const delayHours = Math.max(0, settings.emergencyLockDelay || 0);
+    const lockAt =
+      settings.emergencyLockEffectiveAt ||
+      (delayHours > 0
+        ? new Date(new Date(startedAt).getTime() + delayHours * 60 * 60 * 1000).toISOString()
+        : startedAt);
     setRecord({
-      startedAt: now,
+      policyKey,
+      startedAt,
+      lockAt,
       lockType: "emergency-lock",
-      requiredVersion,
+      requiredVersion: settings.minimumSupportedVersion || settings.latestVersion,
       gracePeriodHours: delayHours,
     });
 
-    const hoursRemaining = delayHours > 0 ? delayHours : 0;
+    const hoursRemaining = delayHours > 0 ? computeRemainingHours(lockAt) : 0;
 
     return {
       blocked: hoursRemaining <= 0,
       active: true,
       lockType: "emergency-lock",
-      requiredVersion,
-      hoursRemaining,
-      gracePeriodHours: delayHours,
-      startedAt: now,
-      updateMessage: settings.updateMessage || "Emergency update required. Please contact your administrator.",
+      requiredVersion: settings.minimumSupportedVersion || settings.latestVersion,
+      hoursRemaining: delayHours > 0 ? hoursRemaining : null,
+      gracePeriodHours: delayHours > 0 ? delayHours : null,
+      startedAt,
+      lockAt,
+      updateMessage:
+        settings.emergencyLockMessage ||
+        "MakeChurchEasy is temporarily unavailable due to emergency maintenance.",
+      currentVersion: ver,
+      downloadUrl,
+      releaseNotesUrl: settings.releaseNotesUrl,
       loading: false,
     };
   }
 
   // Forced updates (version gate)
-  if (settings.forceUpdatesEnabled) {
-    const belowMinimum = isBelowVersion(ver, settings.minimumSupportedVersion);
-    const belowLatest = isBelowVersion(ver, settings.latestVersion);
-    const requiredVersion = settings.latestVersion;
+  if (settings.forceUpdatesEnabled && isBelowVersion(ver, settings.minimumSupportedVersion)) {
+    const startedAt = new Date().toISOString();
+    const graceHours = Math.max(0, settings.gracePeriodHours || 0);
+    const lockAt =
+      graceHours > 0
+        ? new Date(new Date(startedAt).getTime() + graceHours * 60 * 60 * 1000).toISOString()
+        : startedAt;
 
-    if (belowMinimum || belowLatest) {
-      const now = new Date().toISOString();
-      const graceHours = belowMinimum ? 0 : settings.gracePeriodHours;
+    setRecord({
+      policyKey,
+      startedAt,
+      lockAt,
+      lockType: "forced-update",
+      requiredVersion: settings.minimumSupportedVersion,
+      gracePeriodHours: graceHours,
+    });
 
-      setRecord({
-        startedAt: now,
-        lockType: "forced-update",
-        requiredVersion,
-        gracePeriodHours: graceHours,
-      });
+    const hoursRemaining = graceHours > 0 ? computeRemainingHours(lockAt) : 0;
 
-      const hoursRemaining = graceHours > 0
-        ? computeRemainingHours(now, graceHours)
-        : 0;
-
-      return {
-        blocked: hoursRemaining <= 0,
-        active: true,
-        lockType: "forced-update",
-        requiredVersion,
-        hoursRemaining,
-        gracePeriodHours: graceHours,
-        startedAt: now,
-        updateMessage: settings.updateMessage,
-        loading: false,
-      };
-    }
+    return {
+      blocked: hoursRemaining <= 0,
+      active: true,
+      lockType: "forced-update",
+      requiredVersion: settings.minimumSupportedVersion,
+      hoursRemaining: graceHours > 0 ? hoursRemaining : null,
+      gracePeriodHours: graceHours > 0 ? graceHours : null,
+      startedAt,
+      lockAt,
+      updateMessage: settings.updateMessage,
+      currentVersion: ver,
+      downloadUrl,
+      releaseNotesUrl: settings.releaseNotesUrl,
+      loading: false,
+    };
   }
 
   // ── Step 3: No lock needed — clear any stale record if version is current ──
@@ -413,6 +585,9 @@ export function getForcedUpdateState(
   return {
     ...base,
     updateMessage: settings.updateMessage,
+    currentVersion: ver,
+    downloadUrl,
+    releaseNotesUrl: settings.releaseNotesUrl,
     loading: false,
   };
 }

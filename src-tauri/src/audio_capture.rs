@@ -10,7 +10,6 @@
  * resampled to 16 kHz, and emitted as PCM16 little-endian bytes encoded
  * in base64.  The payload also includes an RMS level (0..1) for a meter.
  */
-
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, StreamConfig};
 use serde::Serialize;
@@ -112,9 +111,7 @@ pub fn start_audio_capture(
         match found {
             Some(d) => d,
             None => {
-                eprintln!(
-                    "[AudioCapture] Device '{id}' not found — using default input device"
-                );
+                eprintln!("[AudioCapture] Device '{id}' not found — using default input device");
                 host.default_input_device()
                     .ok_or_else(|| "No default input device found".to_string())?
             }
@@ -167,8 +164,7 @@ pub fn start_audio_capture(
         SampleFormat::I16 => device.build_input_stream(
             &stream_config,
             move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                let float_data: Vec<f32> =
-                    data.iter().map(|&s| s as f32 / 32768.0).collect();
+                let float_data: Vec<f32> = data.iter().map(|&s| s as f32 / 32768.0).collect();
                 process_audio_chunk_f32(
                     &float_data,
                     channels,
@@ -185,8 +181,10 @@ pub fn start_audio_capture(
         SampleFormat::U16 => device.build_input_stream(
             &stream_config,
             move |data: &[u16], _: &cpal::InputCallbackInfo| {
-                let float_data: Vec<f32> =
-                    data.iter().map(|&s| (s as f32 - 32768.0) / 32768.0).collect();
+                let float_data: Vec<f32> = data
+                    .iter()
+                    .map(|&s| (s as f32 - 32768.0) / 32768.0)
+                    .collect();
                 process_audio_chunk_f32(
                     &float_data,
                     channels,
@@ -200,11 +198,7 @@ pub fn start_audio_capture(
             |err| eprintln!("[AudioCapture] Stream error: {err}"),
             None,
         ),
-        _ => {
-            return Err(format!(
-                "Unsupported sample format: {sample_format:?}"
-            ))
-        }
+        _ => return Err(format!("Unsupported sample format: {sample_format:?}")),
     }
     .map_err(|e| format!("Failed to build audio stream: {e}"))?;
 

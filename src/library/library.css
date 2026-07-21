@@ -113,6 +113,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
+  margin-bottom: 20px;
   gap: 12px;
   flex-shrink: 0;
 }
@@ -120,6 +121,7 @@
 .lib-toolbar-left {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   flex: 1;
   min-width: 0;
@@ -128,8 +130,101 @@
 .lib-toolbar-actions {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   flex-shrink: 0;
+  justify-content: flex-end;
+}
+
+.lib-song-toolbar-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lib-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.lib-toolbar-btn--secondary {
+  border-color: var(--border);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+
+.lib-toolbar-btn--secondary:hover {
+  border-color: rgba(var(--primary-rgb), 0.35);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.lib-toolbar-btn-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(var(--primary-rgb), 0.14);
+  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.lib-toolbar-select-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.lib-toolbar-select-chip span {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lib-filter-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.lib-filter-reset-btn:hover {
+  border-color: rgba(var(--primary-rgb), 0.35);
+  background: var(--surface-hover);
+  color: var(--text-primary);
 }
 
 .lib-archive-btn {
@@ -477,13 +572,54 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 64px 0;
+  padding: 52px 24px;
   color: var(--text-muted);
   font-size: 12px;
+  border: 1px dashed rgba(var(--primary-rgb), 0.18);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.04), rgba(15, 23, 42, 0.18));
 }
 
 .lib-empty .lib-add-btn {
   margin-top: 8px;
+}
+
+.lib-empty-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: rgba(var(--primary-rgb), 0.1);
+  color: var(--primary);
+}
+
+.lib-empty-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.lib-empty-copy {
+  max-width: 560px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.lib-empty-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.lib-empty--search,
+.lib-empty--rich {
+  min-height: 260px;
 }
 
 /* ==========================================================================
@@ -809,6 +945,37 @@
   padding: 2px 2px 0;
 }
 
+.lib-song-section-head--active {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.lib-song-section-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lib-song-section-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lib-song-section-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--primary-rgb), 0.18);
+  background: rgba(var(--primary-rgb), 0.08);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
 .lib-song-section-label {
   font-size: 11px;
   font-weight: 700;
@@ -897,7 +1064,7 @@
   justify-content: center;
   flex-shrink: 0;
   margin-right: 16px;
-  color: var(--primary);
+  color: white;
 }
 
 .lib-song-icon svg {
@@ -986,7 +1153,8 @@
 }
 
 .lib-song-imported-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 10px;
@@ -995,7 +1163,11 @@
   color: var(--success);
   border: 1px solid var(--success-border);
   white-space: nowrap;
-  flex-shrink: 0;
+  min-width: 0;
+  max-width: min(100%, 240px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
 }
 
 .lib-song-lyric-line {
@@ -1302,6 +1474,141 @@
 
 .lib-confirm-delete:hover {
   background: #ef4444;
+}
+
+.lib-upgrade-prompt {
+  position: relative;
+  width: min(100%, 460px);
+  padding: 32px;
+  background: var(--surface-dark);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.52);
+  align-items: center;
+  text-align: center;
+}
+
+.lib-upgrade-prompt .ssm-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.lib-upgrade-prompt .ssm-close:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+  border-color: var(--border);
+}
+
+.lib-upgrade-prompt__icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  margin: 0 0 20px;
+  color: #93c5fd;
+  background: rgba(29, 78, 216, 0.14);
+  border: 1px solid rgba(147, 197, 253, 0.22);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lib-upgrade-prompt .ssm-title {
+  margin: 0 0 10px;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.lib-upgrade-prompt .ssm-desc {
+  max-width: 360px;
+  margin: 0 auto 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.lib-upgrade-prompt .ssm-hint {
+  max-width: 380px;
+  margin: 0 auto 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.lib-upgrade-prompt__actions {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.lib-upgrade-prompt .ssm-btn-cancel,
+.lib-upgrade-prompt .ssm-btn-upgrade {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.lib-upgrade-prompt .ssm-btn-cancel {
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.lib-upgrade-prompt .ssm-btn-cancel:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.lib-upgrade-prompt .ssm-btn-upgrade {
+  color: #fff;
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  box-shadow: 0 8px 20px rgba(var(--primary-rgb), 0.24);
+}
+
+.lib-upgrade-prompt .ssm-btn-upgrade:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 520px) {
+  .lib-upgrade-prompt {
+    padding: 28px 20px 22px;
+  }
+
+  .lib-upgrade-prompt__actions {
+    flex-direction: column-reverse;
+  }
+
+  .lib-upgrade-prompt .ssm-btn-cancel,
+  .lib-upgrade-prompt .ssm-btn-upgrade {
+    width: 100%;
+  }
 }
 
 .lib-archive-modal {

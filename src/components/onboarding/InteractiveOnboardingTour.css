@@ -9,7 +9,7 @@
 .iob-tour-root {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 100100;
   pointer-events: none;
   font-family: var(--font-body);
 }
@@ -23,7 +23,7 @@
 .iob-tour-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9998;
+  z-index: 100098;
   pointer-events: none;
 }
 
@@ -71,7 +71,7 @@
 
 .iob-tour-card {
   position: fixed;
-  z-index: 9999;
+  z-index: 100100;
   width: 400px;
   max-width: calc(100vw - 40px);
   background: var(--surface);

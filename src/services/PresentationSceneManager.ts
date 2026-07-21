@@ -8,7 +8,7 @@
  *   - MCE Bible (browser source)
  *   - MCE Worship (browser source)
  *   - MCE Media (browser source)
- *   - MCE Announcements (browser source)
+ *   - MCE Notes (browser source)
  *   - MCE Lower Third (browser source)
  *   - Background sources for each module
  *
@@ -38,7 +38,7 @@ export const SOURCE_NAMES = {
   BIBLE: "MCE Bible",
   WORSHIP: "MCE Worship",
   MEDIA: "MCE Media",
-  ANNOUNCEMENTS: "MCE Announcements",
+  NOTES: "MCE Notes",
   LOWER_THIRD: "MCE Lower Third",
 } as const;
 
@@ -47,7 +47,7 @@ export const BG_SOURCE_NAMES = {
   BIBLE: "MCE Bible BG",
   WORSHIP: "MCE Worship BG",
   MEDIA: "MCE Media BG",
-  ANNOUNCEMENTS: "MCE Announcements BG",
+  NOTES: "MCE Notes BG",
   LOWER_THIRD: "MCE Lower Third BG",
 } as const;
 
@@ -56,6 +56,7 @@ export const FULLSCREEN_SOURCE_NAMES = {
   BIBLE: "MCE Browser - Bible",
   WORSHIP: "MCE Browser - Worship",
   COUNTDOWN: "MCE Browser - Countdown",
+  NOTES: "MCE Browser - Notes",
 } as const;
 
 /** Fullscreen background source names */
@@ -63,13 +64,14 @@ export const FULLSCREEN_BG_SOURCE_NAMES = {
   BIBLE: "MCE BG - Bible",
   WORSHIP: "MCE BG - Worship",
   COUNTDOWN: "MCE BG - Countdown",
+  NOTES: "MCE BG - Notes",
 } as const;
 
 /** Source types */
 export type SourceType = keyof typeof SOURCE_NAMES;
 
 /** Module type for identifying which module to show/hide */
-export type ModuleType = "bible" | "worship" | "media" | "announcements" | "lower-third" | "fullscreen-bible" | "fullscreen-worship" | "fullscreen-countdown";
+export type ModuleType = "bible" | "worship" | "media" | "notes" | "lower-third" | "fullscreen-bible" | "fullscreen-worship" | "fullscreen-countdown" | "fullscreen-notes";
 
 // ---------------------------------------------------------------------------
 // State
@@ -242,7 +244,7 @@ class PresentationSceneManager {
 
     // Create the source
     try {
-      const overlayUrl = `${getOverlayBaseUrlSync()}/bible-overlay-fullscreen.html`;
+      const overlayUrl = `${getOverlayBaseUrlSync()}/mce-bible-overlay.html`;
       const sceneItemId = await obsService.createInput(
         sceneName,
         sourceName,
@@ -307,6 +309,13 @@ class PresentationSceneManager {
     try {
       const resp = await obsService.call("GetSceneItemList", { sceneName });
       const items = (resp as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> }).sceneItems ?? [];
+      // If the module's browser overlay is already present in this scene,
+      // it will render its own background via CSS. Skip creating a separate
+      // BG input to avoid duplicate layers.
+      try {
+        const moduleSource = this.getModuleName(_moduleKey as ModuleType);
+        if (moduleSource && items.some((item) => item.sourceName === moduleSource)) return;
+      } catch { /* ignore */ }
       const existing = items.find((item) => item.sourceName === bgSourceName);
       if (existing) {
         _state.bgSources.set(bgSourceName, {
@@ -513,11 +522,12 @@ class PresentationSceneManager {
       case "bible": return SOURCE_NAMES.BIBLE;
       case "worship": return SOURCE_NAMES.WORSHIP;
       case "media": return SOURCE_NAMES.MEDIA;
-      case "announcements": return SOURCE_NAMES.ANNOUNCEMENTS;
+      case "notes": return SOURCE_NAMES.NOTES;
       case "lower-third": return SOURCE_NAMES.LOWER_THIRD;
       case "fullscreen-bible": return FULLSCREEN_SOURCE_NAMES.BIBLE;
       case "fullscreen-worship": return FULLSCREEN_SOURCE_NAMES.WORSHIP;
       case "fullscreen-countdown": return FULLSCREEN_SOURCE_NAMES.COUNTDOWN;
+      case "fullscreen-notes": return FULLSCREEN_SOURCE_NAMES.NOTES;
       default: return null;
     }
   }
@@ -530,7 +540,7 @@ class PresentationSceneManager {
       case "bible": return BG_SOURCE_NAMES.BIBLE;
       case "worship": return BG_SOURCE_NAMES.WORSHIP;
       case "media": return BG_SOURCE_NAMES.MEDIA;
-      case "announcements": return BG_SOURCE_NAMES.ANNOUNCEMENTS;
+      case "notes": return BG_SOURCE_NAMES.NOTES;
       case "lower-third": return BG_SOURCE_NAMES.LOWER_THIRD;
       case "fullscreen-bible": return FULLSCREEN_BG_SOURCE_NAMES.BIBLE;
       case "fullscreen-worship": return FULLSCREEN_BG_SOURCE_NAMES.WORSHIP;

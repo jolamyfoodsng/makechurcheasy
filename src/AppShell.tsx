@@ -26,6 +26,7 @@ import { BibleProvider } from "./bible/bibleStore";
 import Icon from "./components/Icon";
 import DashboardSidebar from "./components/DashboardSidebar";
 import LiveStatusBar from "./components/LiveStatusBar";
+import VoiceBibleResumeBanner from "./components/VoiceBibleResumeBanner";
 import { getOverlayBaseUrlSync } from "./services/overlayUrl";
 import type { ConnectionStatus } from "./services/obsService";
 import { getEnvConfig } from "./services/envConfig";
@@ -120,6 +121,9 @@ export function AppShell() {
     location.pathname.startsWith("/edit/") ||
     location.pathname.startsWith("/multiview") ||
     location.pathname.startsWith("/bible") ||
+    location.pathname.startsWith("/hub") ||
+    location.pathname.startsWith("/service-hub") ||
+    location.pathname.startsWith("/presentation/console") ||
     location.pathname === "/new";
 
   // ── Cancel confirmation modal ──
@@ -174,6 +178,7 @@ export function AppShell() {
         <LiveStatusBar />
         <div className="app-glow" />
         <div className="app-content">
+          <VoiceBibleResumeBanner />
           <Outlet />
         </div>
       </main>

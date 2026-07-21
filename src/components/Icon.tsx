@@ -393,6 +393,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
   /* Files */
   content_copy: Copy,
+  content_paste: Clipboard,
   cloud_upload: CloudUpload,
   upload: Upload,
   upload_file: UploadCloud,

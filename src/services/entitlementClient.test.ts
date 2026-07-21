@@ -35,7 +35,7 @@ describe("checkEntitlement (async — server)", () => {
   it("returns allowed=true when under limit", async () => {
     const result = await checkEntitlement("songs", "basic", 5);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(70);
+    expect(result.limit).toBe(50);
     expect(result.current).toBe(5);
   });
 
@@ -48,12 +48,12 @@ describe("checkEntitlement (async — server)", () => {
   it("returns allowed=true for basic plan under songs limit", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ allowed: true, limit: 70, current: 5 }),
+      json: async () => ({ allowed: true, limit: 50, current: 5 }),
     });
 
     const result = await checkEntitlement("songs", "basic", 5);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(70);
+    expect(result.limit).toBe(50);
   });
 
   it("returns allowed=true for boolean feature when enabled", async () => {
@@ -64,7 +64,7 @@ describe("checkEntitlement (async — server)", () => {
   it("returns allowed=false for boolean feature when disabled", async () => {
     const result = await checkEntitlement("multiview", "free");
     expect(result.allowed).toBe(false);
-    expect(result.requiredPlan).toBe("growth");
+    expect(result.requiredPlan).toBe("basic");
   });
 
   it("falls back to local config when server is unreachable", async () => {
@@ -80,7 +80,7 @@ describe("checkEntitlement (async — server)", () => {
 
     const result = await checkEntitlement("images", "basic", 10);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(70);
+    expect(result.limit).toBe(50);
   });
 
   it("defaults to free plan when plan is undefined", async () => {
@@ -111,13 +111,13 @@ describe("checkEntitlementSync (local fallback)", () => {
   it("returns allowed=true for basic plan under songs limit", () => {
     const result = checkEntitlementSync("songs", "basic", 5);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(70);
+    expect(result.limit).toBe(50);
   });
 
   it("returns allowed=false for disabled boolean feature", () => {
     const result = checkEntitlementSync("multiview", "free");
     expect(result.allowed).toBe(false);
-    expect(result.requiredPlan).toBe("growth");
+    expect(result.requiredPlan).toBe("basic");
   });
 
   it("returns allowed=true for enabled boolean feature", () => {
@@ -137,8 +137,8 @@ describe("getFeatureLimit", () => {
     expect(getFeatureLimit("songs", "free")).toBe(3);
   });
 
-  it("returns 70 for basic plan songs", () => {
-    expect(getFeatureLimit("songs", "basic")).toBe(70);
+  it("returns 50 for basic plan songs", () => {
+    expect(getFeatureLimit("songs", "basic")).toBe(50);
   });
 
   it("returns -1 for growth plan songs (unlimited)", () => {

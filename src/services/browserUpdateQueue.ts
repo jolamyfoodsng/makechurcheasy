@@ -54,6 +54,8 @@ interface PendingUpdate {
   lastQueuedAt: number;
   /** Number of updates coalesced into this single pending update */
   coalesceCount: number;
+  /** Promise resolvers waiting for the eventual coalesced update to finish */
+  resolvers: Array<() => void>;
 }
 
 interface SourceStats {
@@ -209,6 +211,7 @@ function flushSource(sourceId: string): void {
     console.error(`${LOG_PREFIX} Update failed for ${update.label}:`, err);
   }).finally(() => {
     executing.delete(sourceId);
+    update.resolvers.forEach((resolve) => resolve());
   });
 }
 
@@ -254,55 +257,60 @@ export function enqueue(
   sourceId: string,
   fn: () => Promise<void> | void,
   options: BrowserUpdateOptions = {}
-): void {
+): Promise<void> {
   totalUpdates++;
   startStatsLogging();
 
   const { force = false, label = sourceId } = options;
   const now = Date.now();
 
-  if (force) {
-    // Force bypasses coalescing — execute immediately
-    executing.add(sourceId);
-    lastExecutionTime = Date.now();
-    executed++;
+  return new Promise<void>((resolve) => {
+    if (force) {
+      // Force bypasses coalescing — execute immediately
+      executing.add(sourceId);
+      lastExecutionTime = Date.now();
+      executed++;
 
-    const stats = getOrCreateSourceStats(sourceId);
-    stats.updateCount++;
-    stats.lastUpdateMs = now;
+      const stats = getOrCreateSourceStats(sourceId);
+      stats.updateCount++;
+      stats.lastUpdateMs = now;
 
-    Promise.resolve(fn()).catch(err => {
-      console.error(`${LOG_PREFIX} Forced update failed for ${label}:`, err);
-    }).finally(() => {
-      executing.delete(sourceId);
+      Promise.resolve(fn()).catch(err => {
+        console.error(`${LOG_PREFIX} Forced update failed for ${label}:`, err);
+      }).finally(() => {
+        executing.delete(sourceId);
+        resolve();
+      });
+      return;
+    }
+
+    // Coalescing logic
+    const existing = pending.get(sourceId);
+    if (existing) {
+      // Coalesce — replace the function but keep the original timestamp
+      existing.fn = fn;
+      existing.label = label;
+      existing.lastQueuedAt = now;
+      existing.coalesceCount++;
+      existing.resolvers.push(resolve);
+      coalesced++;
+      return;
+    }
+
+    // New pending update
+    pending.set(sourceId, {
+      sourceId,
+      fn,
+      label,
+      firstQueuedAt: now,
+      lastQueuedAt: now,
+      coalesceCount: 1,
+      resolvers: [resolve],
     });
-    return;
-  }
 
-  // Coalescing logic
-  const existing = pending.get(sourceId);
-  if (existing) {
-    // Coalesce — replace the function but keep the original timestamp
-    existing.fn = fn;
-    existing.label = label;
-    existing.lastQueuedAt = now;
-    existing.coalesceCount++;
-    coalesced++;
-    return;
-  }
-
-  // New pending update
-  pending.set(sourceId, {
-    sourceId,
-    fn,
-    label,
-    firstQueuedAt: now,
-    lastQueuedAt: now,
-    coalesceCount: 1,
+    // Schedule flush (debounced)
+    scheduleFlush(COALESCE_WINDOW_MS);
   });
-
-  // Schedule flush (debounced)
-  scheduleFlush(COALESCE_WINDOW_MS);
 }
 
 /**

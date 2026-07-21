@@ -16,7 +16,7 @@ interface Props {
   quickSettings: DockFullscreenQuickThemeSettings;
   defaultQuickSettings?: DockFullscreenQuickThemeSettings;
   onQuickSettingsSave: (settings: DockFullscreenQuickThemeSettings) => void | Promise<void>;
-  onQuickSettingsChange?: (settings: DockFullscreenQuickThemeSettings) => void;
+  resolveThemeQuickSettings?: (theme: BibleTheme) => DockFullscreenQuickThemeSettings;
   title: string;
   subtitle: string;
   /** When provided, modal is externally controlled */
@@ -27,16 +27,16 @@ interface Props {
   overlayMode?: "fullscreen" | "lower-third";
   /** Show the Reference section in BackgroundPickerCard (only for Bible tab) */
   showReferences?: boolean;
+  /** Active display mode — controls whether Compare Layout section is visible */
+  displayMode?: "single" | "compare";
+  initialTab?: "text" | "background" | "compare";
+  /** Keeps BackgroundPickerCard local styles separate per dock section */
+  storageScope?: "bible" | "worship" | "notes" | "global";
+  /** When true and displayMode is "compare", BackgroundPickerCard shows only the Compare tab */
+  hideBackgroundOnCompare?: boolean;
 }
 
 type StudioView = "closed" | "settings";
-
-function withPatch(
-  current: DockFullscreenQuickThemeSettings,
-  patch: Partial<DockFullscreenQuickThemeSettings>,
-): DockFullscreenQuickThemeSettings {
-  return { ...current, ...patch };
-}
 
 /* ── Section Divider ── */
 function SectionDivider() {
@@ -63,7 +63,7 @@ export default function DockThemeSettingsModal({
   quickSettings,
   defaultQuickSettings,
   onQuickSettingsSave,
-  onQuickSettingsChange,
+  resolveThemeQuickSettings,
   title,
   subtitle,
   isOpen: externalIsOpen,
@@ -71,6 +71,10 @@ export default function DockThemeSettingsModal({
   onBackgroundPresetChange,
   overlayMode = "fullscreen",
   showReferences = true,
+  displayMode = "single",
+  initialTab = "text",
+  storageScope = "global",
+  hideBackgroundOnCompare = false,
 }: Props) {
   const { t } = useTranslation();
   const [internalView, setInternalView] = useState<StudioView>("closed");
@@ -85,6 +89,11 @@ export default function DockThemeSettingsModal({
     setInternalView(v);
   }, [externalIsOpen, externalOnClose]);
   const [draftSettings, setDraftSettings] = useState(quickSettings);
+  const [draftSelectedThemeId, setDraftSelectedThemeId] = useState<string | null>(selectedThemeId);
+  const [draftSelectedTheme, setDraftSelectedTheme] = useState<BibleTheme | null>(null);
+  const draftSettingsRef = useRef(quickSettings);
+  const draftSelectedThemeRef = useRef<BibleTheme | null>(null);
+  const pendingBackgroundPresetRef = useRef<DockBackgroundPreset | null>(null);
   const [saving, setSaving] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -97,19 +106,22 @@ export default function DockThemeSettingsModal({
     wasOpenRef.current = isOpen;
     if (isOpen && !wasOpen) {
       originalSettingsRef.current = quickSettings;
+      draftSettingsRef.current = quickSettings;
       setDraftSettings(quickSettings);
+      setDraftSelectedThemeId(selectedThemeId);
+      draftSelectedThemeRef.current = null;
+      setDraftSelectedTheme(null);
+      pendingBackgroundPresetRef.current = null;
     }
-  }, [view, quickSettings]);
+  }, [view, quickSettings, selectedThemeId]);
 
   const updateDraft = useCallback(
     (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => {
-      setDraftSettings((prev) => {
-        const next = updater(prev);
-        onQuickSettingsChange?.(next);
-        return next;
-      });
+      const next = updater(draftSettingsRef.current);
+      draftSettingsRef.current = next;
+      setDraftSettings(next);
     },
-    [onQuickSettingsChange],
+    [],
   );
 
   const EFFECT_DEFS = useMemo(() => [
@@ -180,59 +192,49 @@ export default function DockThemeSettingsModal({
   }, [view]);
 
   const openSettings = useCallback(() => {
+    draftSettingsRef.current = quickSettings;
     setDraftSettings(quickSettings);
+    setDraftSelectedThemeId(selectedThemeId);
+    draftSelectedThemeRef.current = null;
+    setDraftSelectedTheme(null);
+    pendingBackgroundPresetRef.current = null;
     setView("settings");
-  }, [quickSettings]);
+  }, [quickSettings, selectedThemeId]);
 
   const handleThemeSelect = useCallback((theme: BibleTheme) => {
+    draftSelectedThemeRef.current = theme;
+    setDraftSelectedTheme(theme);
+    setDraftSelectedThemeId(theme.id);
+    pendingBackgroundPresetRef.current = "theme";
     onSelect(theme);
-    // Resolve variant settings based on active overlay mode
-    const variant = overlayMode === "lower-third"
-      ? theme.variants?.lowerThird
-      : theme.variants?.fullscreen;
-    const ts = variant?.settings ?? theme.settings;
-    updateDraft((prev) => ({
-      ...prev,
-      fontColor: ts.fontColor,
-      refFontColor: ts.refFontColor,
-      refFontSize: ts.refFontSize,
-      refFontWeight: ts.refFontWeight || "normal",
-      refPosition: ts.refPosition || "bottom",
-      refTextTransform: ts.refTextTransform || "none",
-      refLetterSpacing: ts.refLetterSpacing ?? 0,
-      refOpacity: ts.refOpacity ?? 1,
-      refTextAlign: ts.refTextAlign || "match",
-      refSpacing: ts.refSpacing ?? 24,
-      fontWeight: ts.fontWeight === "light" ? "normal" : ts.fontWeight,
-      fontStyle: ts.fontStyle ?? "normal",
-      textTransform: ts.textTransform,
-      textAlign: ts.textAlign,
-      lineHeight: ts.lineHeight,
-      textShadow: ts.textShadow,
-      fullscreenShadeColor: ts.fullscreenShadeColor,
-      fullscreenShadeOpacity: ts.fullscreenShadeOpacity,
-      backgroundImage: ts.backgroundImage,
-      backgroundVideo: ts.backgroundVideo,
-      backgroundOpacity: ts.backgroundOpacity,
-      backgroundColor: ts.backgroundColor,
-      backgroundColorEnd: ts.backgroundColorEnd,
-      bgGradientAngle: ts.bgGradientAngle,
-      referenceBackgroundEnabled: ts.referenceBackgroundEnabled,
-      referenceBackgroundColor: ts.referenceBackgroundColor,
-      referenceBackgroundStyle: ts.referenceBackgroundStyle,
-      referenceBackgroundRadius: ts.referenceBackgroundRadius,
-      lowerThirdPosition: ts.lowerThirdPosition,
-      lowerThirdSize: ts.lowerThirdSize,
-      lowerThirdWidthPreset: ts.lowerThirdWidthPreset,
-      lowerThirdOffsetX: ts.lowerThirdOffsetX,
-    }));
-  }, [onSelect, updateDraft, overlayMode]);
+    onBackgroundPresetChange?.("theme");
+    const nextSettings = resolveThemeQuickSettings?.(theme);
+    if (nextSettings) {
+      draftSettingsRef.current = nextSettings;
+      setDraftSettings(nextSettings);
+      return;
+    }
+    updateDraft((prev) => ({ ...prev, backgroundType: "theme" }));
+  }, [onBackgroundPresetChange, onSelect, resolveThemeQuickSettings, updateDraft]);
 
   const handleSave = useCallback(() => {
-    const nextSettings = { ...draftSettings };
+    const nextSettings = { ...draftSettingsRef.current };
+    const nextTheme = draftSelectedThemeRef.current;
+    const nextPreset = pendingBackgroundPresetRef.current;
     setSaving(true);
     flushSync(() => setView("closed"));
     const commit = () => {
+      try {
+        if (nextTheme) {
+          onSelect(nextTheme);
+        }
+        if (nextPreset) {
+          onBackgroundPresetChange?.(nextPreset);
+        }
+      } catch (error) {
+        console.warn("[DockThemeSettingsModal] pre-save apply failed:", error);
+      }
+
       void Promise.resolve(onQuickSettingsSave(nextSettings))
         .catch((error) => console.warn("[DockThemeSettingsModal] quick settings save failed:", error))
         .finally(() => setSaving(false));
@@ -242,10 +244,13 @@ export default function DockThemeSettingsModal({
       return;
     }
     window.setTimeout(commit, 0);
-  }, [draftSettings, onQuickSettingsSave]);
+  }, [draftSelectedTheme, draftSettings, onBackgroundPresetChange, onQuickSettingsSave, onSelect]);
 
   const handleReset = useCallback(() => {
-    updateDraft(() => defaultQuickSettings ?? originalSettingsRef.current);
+    const nextSettings = defaultQuickSettings ?? originalSettingsRef.current;
+    draftSelectedThemeRef.current = null;
+    setDraftSelectedTheme(null);
+    updateDraft(() => nextSettings);
   }, [updateDraft, defaultQuickSettings]);
 
   /* ── Render ── */
@@ -301,93 +306,25 @@ export default function DockThemeSettingsModal({
                   quickSettings={draftSettings}
                   onQuickSettingsChange={(updater) => updateDraft(updater)}
                   onQuickSettingsSave={(settings) => onQuickSettingsSave(settings)}
-                  selectedThemeId={selectedThemeId}
+                  selectedThemeId={draftSelectedThemeId}
                   onThemeSelect={handleThemeSelect}
                   allowedCategories={allowedCategories}
                   sampleText={sampleText}
                   sampleReference={sampleReference}
-                  onBackgroundPresetChange={onBackgroundPresetChange}
+                  onBackgroundPresetChange={(preset) => {
+                    pendingBackgroundPresetRef.current = preset;
+                    onBackgroundPresetChange?.(preset);
+                  }}
                   showReferences={showReferences}
                   overlayMode={overlayMode}
+                  displayMode={displayMode}
+                  initialTab={initialTab}
+                  storageScope={storageScope}
+                  hideBackgroundOnCompare={hideBackgroundOnCompare}
                 />
 
                 {/* Lower-Third Positioning — only shown in lower-third mode */}
-                {overlayMode === "lower-third" && (
-                  <div className="dtb-studio-card dtb-studio-card--no-collapse">
-                    <div className="dtb-studio-card__body">
-                      <div className="dtb-bg-picker__header">
-                        <div className="dtb-bg-picker__header-left">
-                          <Icon name="swap_vert" size={14} className="dtb-studio-card__icon" />
-                          <span className="dtb-studio-card__title">{t('worship.lowerThirdPosition')}</span>
-                        </div>
-                      </div>
-                      <p className="dtb-bg-picker__subtitle">{t('worship.adjustDescription')}</p>
-
-                      <div className="dtb-align-group">
-                        <span className="dtb-align-group__label">{t('worship.containerPosition')}</span>
-                        <div className="dtb-segmented" role="group" aria-label={t('worship.containerPosition')}>
-                          {([
-                            { value: "left" as const, icon: "format_align_left", label: t('worship.left') },
-                            { value: "center" as const, icon: "format_align_center", label: t('worship.center') },
-                            { value: "right" as const, icon: "format_align_right", label: t('worship.right') },
-                          ]).map((opt) => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              className={`dtb-segmented__item${draftSettings.lowerThirdPosition === opt.value ? " dtb-segmented__item--active" : ""}`}
-                              onClick={() => updateDraft((c) => withPatch(c, { lowerThirdPosition: opt.value }))}
-                              aria-pressed={draftSettings.lowerThirdPosition === opt.value}
-                              title={opt.label}
-                            >
-                              <Icon name={opt.icon} size={14} />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="dtb-typo-row dtb-typo-row--inline">
-                        <span className="dtb-typo-row__label">{t('worship.width')}</span>
-                        <div className="dtb-segmented dtb-segmented--compact" role="group" aria-label={t('worship.width')}>
-                          {([
-                            { value: "full" as const, label: t('worship.full') },
-                            { value: "xl" as const, label: "XL" },
-                            { value: "lg" as const, label: "LG" },
-                            { value: "md" as const, label: "MD" },
-                            { value: "sm" as const, label: "SM" },
-                          ]).map((opt) => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              className={`dtb-segmented__item${draftSettings.lowerThirdWidthPreset === opt.value ? " dtb-segmented__item--active" : ""}`}
-                              onClick={() => updateDraft((c) => withPatch(c, { lowerThirdWidthPreset: opt.value }))}
-                              aria-pressed={draftSettings.lowerThirdWidthPreset === opt.value}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="dtb-slider-field">
-                        <div className="dtb-slider-field__head">
-                          <span>{t('worship.horizontalOffset')}</span>
-                          <span className="dtb-slider-field__value">{draftSettings.lowerThirdOffsetX}px</span>
-                        </div>
-                        <input
-                          type="range"
-                          className="dtb-slider"
-                          min={-300}
-                          max={300}
-                          step={1}
-                          value={draftSettings.lowerThirdOffsetX}
-                          onChange={(e) => updateDraft((c) => withPatch(c, { lowerThirdOffsetX: Number(e.target.value) }))}
-                          aria-label={t('worship.horizontalOffset')}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
+               
                 <SectionDivider />
 
                 {/* ═══ Effects Section (collapsed by default) ═══ */}

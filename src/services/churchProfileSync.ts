@@ -11,8 +11,9 @@
 
 import { updateSettings } from "../multiview/mvStore";
 import { getSession, initAuthStore } from "./authService";
+import { applyInterfaceLanguagePreference } from "./interfaceLanguage";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
 interface ChurchBranding {
   logoUrl: string;
@@ -26,13 +27,18 @@ interface ChurchBranding {
 interface ChurchSpeaker {
   name: string;
   role: string;
+  imageUrl?: string;
   isMain?: boolean;
 }
 
 interface ChurchProfile {
   churchName: string;
+  country?: string;
   branding: ChurchBranding;
   speakers: ChurchSpeaker[];
+  presentationDefaults?: {
+    language?: string;
+  };
 }
 
 export interface SyncResult {
@@ -109,44 +115,45 @@ export async function syncChurchProfile(): Promise<SyncResult> {
     }
 
 
-    const patch: Record<string, unknown> = {};
+    const patch: Record<string, unknown> = {
+      // Web is the source of truth, so overwrite even with empty values.
+      churchName: profile.churchName || "",
+      brandColor: profile.branding?.primaryColor || "",
+      brandSecondaryColor: profile.branding?.secondaryColor || "",
+      brandAccentColor: profile.branding?.accentColor || "",
+      brandFontFamily: profile.branding?.fontFamily || "",
+      brandFaviconUrl: profile.branding?.faviconUrl || "",
+    };
 
-    // Church name — always overwrite from web
-    if (profile.churchName) {
-      patch.churchName = profile.churchName;
-    }
+    const syncedSpeakers = await Promise.all(
+      (Array.isArray(profile.speakers) ? profile.speakers : []).map(async (speaker, index) => ({
+        name: speaker.name,
+        role: speaker.role,
+        isMain: speaker.isMain,
+        imageUrl: speaker.imageUrl
+          ? await downloadImageToDisk(
+            speaker.imageUrl,
+            `speaker-${index + 1}-${speaker.name || "profile"}`,
+          ) || speaker.imageUrl
+          : "",
+      })),
+    );
 
-    // Brand colors — always overwrite from web
-    if (profile.branding?.primaryColor) {
-      patch.brandColor = profile.branding.primaryColor;
-    }
-    if (profile.branding?.secondaryColor) {
-      patch.brandSecondaryColor = profile.branding.secondaryColor;
-    }
-    if (profile.branding?.accentColor) {
-      patch.brandAccentColor = profile.branding.accentColor;
-    }
-    if (profile.branding?.fontFamily) {
-      patch.brandFontFamily = profile.branding.fontFamily;
-    }
-    if (profile.branding?.faviconUrl !== undefined) {
-      patch.brandFaviconUrl = profile.branding.faviconUrl;
-    }
+    patch.pastorSpeakers = syncedSpeakers;
+    patch.pastorNames = syncedSpeakers.map((speaker) => speaker.name).filter(Boolean).join("\n");
+    patch.mainPastorName = syncedSpeakers.find((speaker) => speaker.isMain)?.name || "";
 
-    // Speakers — always overwrite from web
-    if (profile.speakers?.length) {
-      patch.pastorSpeakers = profile.speakers.map((s) => ({ name: s.name, role: s.role, isMain: s.isMain }));
-      const mainSpeaker = profile.speakers.find((s) => s.isMain);
-      patch.mainPastorName = mainSpeaker?.name ?? "";
+    if (profile.presentationDefaults?.language) {
+      await applyInterfaceLanguagePreference(profile.presentationDefaults.language, {
+        country: profile.country,
+        broadcast: true,
+      });
     }
 
     // Logo — download URL to disk via existing save_upload_file Tauri command
-    if (profile.branding?.logoUrl) {
-      const localPath = await downloadLogoToDisk(profile.branding.logoUrl);
-      if (localPath) {
-        patch.brandLogoPath = localPath;
-      }
-    }
+    patch.brandLogoPath = profile.branding?.logoUrl
+      ? (await downloadImageToDisk(profile.branding.logoUrl, "church-logo")) || ""
+      : "";
 
     if (Object.keys(patch).length > 0) {
       updateSettings(patch);
@@ -163,11 +170,11 @@ export async function syncChurchProfile(): Promise<SyncResult> {
 }
 
 /**
- * Download a logo from a URL and save it to the app's uploads directory
+ * Download an image from a URL and save it to the app's uploads directory
  * using the existing save_upload_file Tauri command.
  * Returns the absolute file path on disk, or null on failure.
  */
-async function downloadLogoToDisk(url: string): Promise<string | null> {
+async function downloadImageToDisk(url: string, fileStem: string): Promise<string | null> {
   try {
     // Handle relative URLs (e.g. /uploads/logo-xxx.jpeg) by prepending the API base
     const absoluteUrl = url.startsWith("http") ? url : `${API_BASE}${url}`;
@@ -181,10 +188,14 @@ async function downloadLogoToDisk(url: string): Promise<string | null> {
     const buffer = await blob.arrayBuffer();
     const data = new Uint8Array(buffer);
 
-    // Derive filename from URL, default to church-logo.png
+    // Derive filename from URL, default to png when no extension is present.
     const urlPath = new URL(absoluteUrl).pathname;
     const ext = urlPath.split(".").pop()?.split("?")[0] || "png";
-    const fileName = `church-logo.${ext}`;
+    const safeStem = fileStem
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "image";
+    const fileName = `${safeStem}.${ext}`;
 
     const { invoke } = await import("@tauri-apps/api/core");
     const savedPath: string = await invoke("save_upload_file", {
@@ -194,7 +205,7 @@ async function downloadLogoToDisk(url: string): Promise<string | null> {
 
     return savedPath || null;
   } catch (err) {
-    console.warn("[churchProfileSync] Logo download failed:", err);
+    console.warn("[churchProfileSync] Image download failed:", err);
     return null;
   }
 }

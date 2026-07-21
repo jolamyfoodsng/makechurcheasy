@@ -114,47 +114,50 @@ export function OnlineLyricsImportModal({
             className="online-lyrics-modal__close"
             aria-label="Close lyrics import"
             onClick={onClose}
-           title="Close">
+            title="Close"
+          >
             x
           </button>
         </div>
 
-        <div className="online-lyrics-modal__source-row">
-          <span className="online-lyrics-modal__source">Source: {result.sourceName}</span>
-          <span className="online-lyrics-modal__tag">Imported after save</span>
-        </div>
+        <div className="online-lyrics-modal__body">
+          <div className="online-lyrics-modal__source-row">
+            <span className="online-lyrics-modal__source">Source: {result.sourceName}</span>
+            <span className="online-lyrics-modal__tag">Imported after save</span>
+          </div>
 
-        <div className="online-lyrics-modal__fields">
-          <label className="online-lyrics-modal__field">
-            <span>Song title</span>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              aria-invalid={!cleanedTitle}
+          <div className="online-lyrics-modal__fields">
+            <label className="online-lyrics-modal__field">
+              <span>Song title</span>
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                aria-invalid={!cleanedTitle}
+              />
+            </label>
+
+            <label className="online-lyrics-modal__field">
+              <span>Artist</span>
+              <input
+                value={artist}
+                onChange={(event) => setArtist(event.target.value)}
+                placeholder="Optional"
+              />
+            </label>
+          </div>
+
+          <label className="online-lyrics-modal__field online-lyrics-modal__field--lyrics" htmlFor={lyricsId}>
+            <span>Lyrics</span>
+            <textarea
+              id={lyricsId}
+              ref={lyricsRef}
+              value={lyrics}
+              onChange={(event) => setLyrics(event.target.value)}
+              aria-invalid={!cleanedLyrics}
+              spellCheck
             />
           </label>
-
-          <label className="online-lyrics-modal__field">
-            <span>Artist</span>
-            <input
-              value={artist}
-              onChange={(event) => setArtist(event.target.value)}
-              placeholder="Optional"
-            />
-          </label>
         </div>
-
-        <label className="online-lyrics-modal__field online-lyrics-modal__field--lyrics" htmlFor={lyricsId}>
-          <span>Lyrics</span>
-          <textarea
-            id={lyricsId}
-            ref={lyricsRef}
-            value={lyrics}
-            onChange={(event) => setLyrics(event.target.value)}
-            aria-invalid={!cleanedLyrics}
-            spellCheck
-          />
-        </label>
 
         <div className="online-lyrics-modal__footer">
           <button
@@ -162,7 +165,8 @@ export function OnlineLyricsImportModal({
             className="online-lyrics-modal__secondary"
             onClick={onClose}
             disabled={saving}
-           title="Cancel">
+            title="Cancel"
+          >
             Cancel
           </button>
           <button
@@ -177,7 +181,8 @@ export function OnlineLyricsImportModal({
                 lyrics: cleanedLyrics,
               });
             }}
-           title="Import">
+            title="Import"
+          >
             {saving ? "Importing..." : "Import to Worship"}
           </button>
         </div>

@@ -391,7 +391,7 @@ function buildFullscreenPreviewHtml(settings: BibleThemeSettings, category: Bibl
     : "";
 
   return `<!DOCTYPE html><html><head><style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('/fonts/google/google-fonts.css');
 *{margin:0;padding:0;box-sizing:border-box}
 body{width:1920px;height:1080px;overflow:hidden;font-family:${settings.fontFamily};${alignCss}}
 .bg{position:absolute;inset:0;${bgStyle}${bgOpacityCss}}
@@ -444,7 +444,7 @@ function buildLowerThirdPreviewHtml(settings: BibleThemeSettings, _category: Bib
     : "";
 
   return `<!DOCTYPE html><html><head><style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('/fonts/google/google-fonts.css');
 *{margin:0;padding:0;box-sizing:border-box}
 body{width:1920px;height:1080px;overflow:hidden;font-family:${settings.fontFamily};background:transparent}
 .lt{position:absolute;bottom:64px;left:50%;transform:translateX(-50%);max-width:calc(100% - ${settings.safeArea * 2}px);padding:${settings.padding}px 32px;${boxBg}border-radius:${borderRadius}px;${ltHeight}${alignCss}}

@@ -1036,4 +1036,144 @@ describe("live quote replacement", () => {
     );
     expect(hasOld).toBe(false);
   });
+
+  it("rejects weak generic speech instead of inventing a verse", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const result = await engine.searchQuotesWithText("god be with");
+    expect(result).toHaveLength(0);
+  });
+
+  it("finds Genesis 3:7 from spontaneous lexical quote search", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const { matchVerseAlias } = await import("./scriptureReranker");
+    const engine = new ScriptureDetectionEngine();
+
+    expect(matchVerseAlias("And the eyes of them both were opened.")).toBeNull();
+
+    const result = await engine.searchQuotesWithText("And the eyes of them both were opened.");
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0].candidate.label).toContain("Genesis 3:7");
+  });
+});
+
+describe("reference continuations", () => {
+  it("moves forward one verse from the current queue reference", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const initial = await engine.processChunk("Genesis 1:2", true);
+    expect(initial.matches).toHaveLength(1);
+    expect(initial.matches[0].candidate.label).toContain("Genesis 1:2");
+
+    const next = await engine.processChunk("next verse", true);
+    expect(next.matches).toHaveLength(1);
+    expect(next.matches[0].candidate.label).toContain("Genesis 1:3");
+  });
+
+  it("moves backward one verse from the current queue reference", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const initial = await engine.processChunk("Genesis 1:3", true);
+    expect(initial.matches).toHaveLength(1);
+    expect(initial.matches[0].candidate.label).toContain("Genesis 1:3");
+
+    const previous = await engine.processChunk("previous verse", true);
+    expect(previous.matches).toHaveLength(1);
+    expect(previous.matches[0].candidate.label).toContain("Genesis 1:2");
+  });
+
+  it("moves forward from a spoken verse command", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const initial = await engine.processChunk("Genesis 1:2", true);
+    expect(initial.matches).toHaveLength(1);
+
+    const next = await engine.processChunk("verse 3", true);
+    expect(next.matches).toHaveLength(1);
+    expect(next.matches[0].candidate.label).toContain("Genesis 1:3");
+    expect(next.matches[0].source).toBe("reference");
+  });
+
+  it("treats a bare number as the next verse after a full reference", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const initial = await engine.processChunk("Genesis 1:2", true);
+    expect(initial.matches).toHaveLength(1);
+
+    const continuation = await engine.processChunk("3", true);
+    expect(continuation.matches).toHaveLength(1);
+    expect(continuation.matches[0].candidate.label).toContain("Genesis 1:3");
+  });
+
+  it("handles correction phrases as verse continuations", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    await engine.processChunk("Genesis 1:2", true);
+
+    const correction = await engine.processChunk("sorry 4", true);
+    expect(correction.matches).toHaveLength(1);
+    expect(correction.matches[0].candidate.label).toContain("Genesis 1:4");
+  });
+
+  it("handles change-that-to corrections as book-level overrides", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    await engine.processChunk("Matthew 5:5", true);
+
+    const correction = await engine.processChunk("change that to Luke 5:5", true);
+    expect(correction.matches).toHaveLength(1);
+    expect(correction.matches[0].candidate.label).toContain("Luke 5:5");
+  });
+
+  it("covers a full live continuation sequence", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const a = await engine.processChunk("Genesis 1:2", true);
+    expect(a.matches[0].candidate.label).toContain("Genesis 1:2");
+
+    const b = await engine.processChunk("verse 3", true);
+    expect(b.matches[0].candidate.label).toContain("Genesis 1:3");
+
+    const c = await engine.processChunk("previous verse", true);
+    expect(c.matches[0].candidate.label).toContain("Genesis 1:2");
+
+    const d = await engine.processChunk("next verse", true);
+    expect(d.matches[0].candidate.label).toContain("Genesis 1:3");
+  });
+
+  it("keeps chapter context through corrections, next verse, and bare verse numbers", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const chapter = await engine.processChunk("Let's go to Genesis chapter 4.", true);
+    expect(chapter.matches).toHaveLength(0);
+
+    const verse2 = await engine.processChunk("Verse 2.", true);
+    expect(verse2.matches).toHaveLength(1);
+    expect(verse2.matches[0].candidate.label).toContain("Genesis 4:2");
+
+    const verse7 = await engine.processChunk("Sorry, verse 7.", true);
+    expect(verse7.matches).toHaveLength(1);
+    expect(verse7.matches[0].candidate.label).toContain("Genesis 4:7");
+
+    const verse8 = await engine.processChunk("Next verse.", true);
+    expect(verse8.matches).toHaveLength(1);
+    expect(verse8.matches[0].candidate.label).toContain("Genesis 4:8");
+
+    const verse9 = await engine.processChunk("Next verse.", true);
+    expect(verse9.matches).toHaveLength(1);
+    expect(verse9.matches[0].candidate.label).toContain("Genesis 4:9");
+
+    const verse19 = await engine.processChunk("19.", true);
+    expect(verse19.matches).toHaveLength(1);
+    expect(verse19.matches[0].candidate.label).toContain("Genesis 4:19");
+  });
 });

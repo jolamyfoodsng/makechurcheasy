@@ -5,13 +5,67 @@
  * The user authorizes the desktop app through the browser.
  */
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+import {
+  getEffectivePlan as resolveEffectivePlan,
+  normalizePlanId,
+} from "../lib/subscriptionSourceOfTruth";
+import { requestJsonWithRetry } from "./requestDedup";
+
+const PRODUCTION_API_BASE = "https://api.creatorstudioslabs.stream";
+const PRODUCTION_DASHBOARD_BASE = "https://makechurcheasy.creatorstudioslabs.stream";
+const LOCAL_DASHBOARD_BASE = "http://localhost:4000";
+
+function normalizeApiBase(value: string | undefined): string {
+  return (value || PRODUCTION_API_BASE).replace(/\/+$/, "");
+}
+
+const API_BASE = normalizeApiBase(import.meta.env.VITE_AUTH_API_URL);
+let _activePairingApiBase = API_BASE;
+
+function isLocalApiBase(apiBase: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(apiBase);
+}
+
+function shouldRetryOnProduction(apiBase: string, response?: Response): boolean {
+  if (!isLocalApiBase(apiBase) || apiBase === PRODUCTION_API_BASE) return false;
+  if (!response) return true;
+  return response.status === 404 || response.status >= 500;
+}
+
+async function fetchAuthApi(path: string, init?: RequestInit): Promise<{ response: Response; apiBase: string }> {
+  let primaryResponse: Response | null = null;
+
+  try {
+    primaryResponse = await fetch(`${API_BASE}${path}`, init);
+    if (!shouldRetryOnProduction(API_BASE, primaryResponse)) {
+      _activePairingApiBase = API_BASE;
+      return { response: primaryResponse, apiBase: API_BASE };
+    }
+  } catch {
+    if (!shouldRetryOnProduction(API_BASE)) {
+      throw new Error("auth_api_unavailable");
+    }
+  }
+
+  const response = await fetch(`${PRODUCTION_API_BASE}${path}`, init);
+  _activePairingApiBase = PRODUCTION_API_BASE;
+  if (primaryResponse) {
+    console.warn("[authService] Local auth API returned %s; using production auth API.", primaryResponse.status);
+  } else {
+    console.warn("[authService] Local auth API unavailable; using production auth API.");
+  }
+  return { response, apiBase: PRODUCTION_API_BASE };
+}
+
+export function getDashboardBaseForAuth(): string {
+  return isLocalApiBase(_activePairingApiBase) ? LOCAL_DASHBOARD_BASE : PRODUCTION_DASHBOARD_BASE;
+}
 
 /** App version sent with every API request for server-side version gating */
-const APP_VERSION: string =
+export const APP_VERSION: string =
   typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
 
-export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador";
+export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador" | "unlimited";
 
 export interface AuthUser {
   id: string;
@@ -23,6 +77,7 @@ export interface AuthUser {
   createdAt: string;
   role?: "admin" | "user";
   plan?: PlanTier;
+  effectivePlan?: PlanTier;
   entitlements?: Record<string, number | boolean>;
   trial?: {
     active?: boolean;
@@ -40,6 +95,54 @@ interface AuthSession {
   deviceSecret?: string;
   expiresAt: number;
 }
+
+interface DeviceBootstrapResponse {
+  account?: {
+    deviceId: string;
+    verifiedAt: string;
+    user: {
+      id: string;
+      name: string;
+      email: string;
+      avatar?: string;
+      appId?: string;
+      churchName?: string;
+      country?: string;
+      createdAt?: string;
+      role?: "admin" | "user";
+      plan?: string;
+      effectivePlan?: string;
+      entitlements?: Record<string, number | boolean>;
+      trial?: AuthUser["trial"];
+    };
+    credits: {
+      remaining: number;
+      totalConsumed?: number;
+      planAllocation?: number;
+      adminGranted?: number;
+      isAdmin?: boolean;
+      unlimited?: boolean;
+    };
+  };
+  error?: string;
+}
+
+function resolveBootstrappedTrial(
+  remote: NonNullable<DeviceBootstrapResponse["account"]>["user"],
+  current: AuthUser,
+): AuthUser["trial"] {
+  if (Object.prototype.hasOwnProperty.call(remote, "trial")) {
+    return remote.trial ?? undefined;
+  }
+  return current.trial;
+}
+
+export type RefreshPlanResult =
+  | { status: "ok" }
+  | { status: "unauthenticated" }
+  | { status: "device_removed" }
+  | { status: "version_blocked" }
+  | { status: "network_error" };
 
 const SESSION_KEY = "mce-auth-session";
 
@@ -102,17 +205,14 @@ export async function initAuthStore(): Promise<void> {
     }
   }
 
-  // Refresh plan from server first so the session has current plan/role,
-  // then sync the enriched session to the overlay server.
-  // refreshPlanFromServer calls saveSession → syncSessionToOverlay internally,
-  // so we only need to sync here if no refresh happened (e.g. no deviceId).
+  // Refresh plan from server in the background — never block startup on network.
+  // The cached session (with potentially stale plan) is available synchronously
+  // from getSession() so the UI renders immediately regardless of connectivity.
   if (_session) {
     if (_session.deviceId) {
-      await refreshPlanFromServer();
-      // refreshPlanFromServer calls saveSession if plan changed,
-      // which already syncs to the overlay. Sync again to ensure
-      // the overlay always has the latest session (with entitlements).
-      syncSessionToOverlay(_session);
+      void refreshPlanFromServer().then(() => {
+        syncSessionToOverlay(_session);
+      });
     } else {
       syncSessionToOverlay(_session);
     }
@@ -129,6 +229,14 @@ export function getDeviceId(): string | null {
 
 export function getDeviceSecret(): string | null {
   return _session?.deviceSecret ?? null;
+}
+
+export async function clearDeviceSecretForRecovery(): Promise<void> {
+  if (!_session?.deviceSecret) return;
+  await saveSession({
+    ..._session,
+    deviceSecret: undefined,
+  });
 }
 
 async function saveSession(session: AuthSession) {
@@ -157,21 +265,23 @@ export async function syncSessionToOverlay(session: AuthSession | null): Promise
   let enriched = session;
   if (session?.user) {
     try {
-      const { DEFAULT_PLAN_CONFIG } = await import("./planConfigTypes");
-      // Trial users get pro-tier entitlements regardless of their base plan.
-      const trialActive = session.user.trial?.active
-        && session.user.trial?.endsAt
-        && Date.now() < new Date(session.user.trial.endsAt).getTime();
-      const planKey = trialActive
-        ? "pro"
-        : (session.user.plan || "free").toLowerCase() as keyof typeof DEFAULT_PLAN_CONFIG.plans;
-      const tier = DEFAULT_PLAN_CONFIG.plans[planKey];
-      if (tier?.entitlements) {
-        enriched = {
-          ...session,
-          user: { ...session.user, entitlements: tier.entitlements as unknown as Record<string, number | boolean> },
-        };
-      }
+      const {
+        getLegacyCompatibleEntitlementsForPlan,
+      } = await import("../lib/subscriptionSourceOfTruth");
+      const planKey = normalizePlanId(
+        session.user.effectivePlan
+        || resolveEffectivePlan(session.user as any)
+        || session.user.plan
+        || "free"
+      );
+      enriched = {
+        ...session,
+        user: {
+          ...session.user,
+          effectivePlan: planKey,
+          entitlements: getLegacyCompatibleEntitlementsForPlan(planKey) as unknown as Record<string, number | boolean>,
+        },
+      };
     } catch { /* import failed — send session without entitlements */ }
   }
 
@@ -248,65 +358,115 @@ export function getCurrentUser(): AuthUser | null {
  * Called at startup and periodically so plan upgrades on the web are
  * reflected in the desktop app without re-pairing.
  *
- * Uses /api/device/profile which returns the current MongoDB user state.
+ * Uses /api/device/bootstrap which returns the current account snapshot.
  */
 export async function refreshPlanFromServer(): Promise<void> {
   if (!_session?.deviceId) {
     console.debug("[authService] refreshPlanFromServer: no deviceId — skipping");
     return;
   }
+  await refreshAccountBootstrapFromServer();
+}
+
+export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanResult> {
+  if (!_session?.deviceId) {
+    return { status: "unauthenticated" };
+  }
+
   try {
-    const res = await fetch(
-      `${API_BASE}/api/device/profile?deviceId=${encodeURIComponent(_session.deviceId)}`,
-      { headers: { "X-App-Version": APP_VERSION, "X-Device-Secret": _session.deviceSecret || "" } },
-    );
-    if (!res.ok) {
-      console.debug("[authService] refreshPlanFromServer: server returned %d — skipping", res.status);
-      return;
+    const bootstrapUrl = `${API_BASE}/api/device/bootstrap?deviceId=${encodeURIComponent(_session.deviceId)}`;
+    const requestBootstrap = (deviceSecret?: string, dedupeSuffix = "primary") =>
+      requestJsonWithRetry<DeviceBootstrapResponse>(bootstrapUrl, {
+        dedupeKey: `account-bootstrap:${_session?.deviceId}:${dedupeSuffix}`,
+        headers: {
+          "X-App-Version": APP_VERSION,
+          ...(deviceSecret ? { "X-Device-Secret": deviceSecret } : {}),
+        },
+        retryDelaysMs: [1000, 3000],
+      });
+
+    let { response, data } = await requestBootstrap(_session.deviceSecret, "primary");
+
+    if (response.status === 401 && _session.deviceSecret) {
+      const message = typeof data?.error === "string" ? data.error : "";
+      if (/invalid device secret/i.test(message)) {
+        const retry = await requestBootstrap(undefined, "secret-recovery");
+        if (retry.response.ok) {
+          await clearDeviceSecretForRecovery();
+          response = retry.response;
+          data = retry.data;
+        } else if (retry.response.status >= 500) {
+          return { status: "network_error" };
+        }
+      }
     }
-    const data = await res.json();
-    const remote = data?.user;
-    if (!remote?.plan) return;
+
+    if (response.status === 403) {
+      const message = typeof data?.error === "string" ? data.error : "";
+      return {
+        status: message === "VERSION_TOO_OLD" ? "version_blocked" : "device_removed",
+      };
+    }
+
+    if (response.status === 401 || response.status === 404) {
+      return { status: "device_removed" };
+    }
+
+    if (!response.ok) {
+      return { status: "network_error" };
+    }
+
+    const remoteAccount = data?.account;
+    const remote = remoteAccount?.user;
+    if (!remote?.id) {
+      return { status: "network_error" };
+    }
 
     const current = _session.user;
-    const planChanged = remote.plan !== current.plan;
-    const roleChanged = remote.role && remote.role !== current.role;
-    const remoteTrial = remote.trial || {};
-    const currentTrial = current.trial || {};
-    const trialActiveChanged =
-      (remoteTrial.active ?? false) !== (currentTrial.active ?? false);
-    const trialDatesChanged =
-      remoteTrial.endsAt !== currentTrial.endsAt ||
-      remoteTrial.startedAt !== currentTrial.startedAt;
-    const trialChanged = trialActiveChanged || trialDatesChanged;
+    const normalizedPlan = normalizePlanId(
+      remote.effectivePlan || remote.plan || current.effectivePlan || current.plan || "free",
+    ) as PlanTier;
 
-    if (planChanged || roleChanged || trialChanged) {
+    const updatedUser: AuthUser = {
+      ...current,
+      id: remote.id,
+      name: remote.name || current.name,
+      email: remote.email || current.email,
+      avatar: remote.avatar || current.avatar,
+      appId: remote.appId || current.appId,
+      churchName: remote.churchName || current.churchName,
+      createdAt: remote.createdAt || current.createdAt,
+      role: remote.role || current.role,
+      plan: normalizePlanId(remote.plan || current.plan || normalizedPlan) as PlanTier,
+      effectivePlan: normalizedPlan,
+      entitlements: remote.entitlements || current.entitlements,
+      trial: resolveBootstrappedTrial(remote, current),
+    };
+
+    const sessionChanged = JSON.stringify(updatedUser) !== JSON.stringify(current);
+    if (sessionChanged) {
       console.debug(
-        "[authService] refreshPlanFromServer: changes detected — plan=%s→%s role=%s trial.active=%s→%s trial.status=%s",
-        current.plan, remote.plan, remote.role ?? current.role,
-        currentTrial.active, remoteTrial.active,
-        remoteTrial.status ?? currentTrial.status,
+        "[authService] refreshAccountBootstrapFromServer: changes detected — plan=%s→%s effective=%s→%s role=%s",
+        current.plan,
+        updatedUser.plan,
+        current.effectivePlan,
+        updatedUser.effectivePlan,
+        updatedUser.role ?? current.role,
       );
-      const updated: AuthSession = {
+      await saveSession({
         ..._session,
-        user: {
-          ...current,
-          plan: remote.plan || current.plan,
-          role: remote.role || current.role,
-          trial: {
-            active: remoteTrial.active ?? currentTrial.active,
-            status: remoteTrial.status ?? currentTrial.status,
-            startedAt: remoteTrial.startedAt || currentTrial.startedAt,
-            endsAt: remoteTrial.endsAt || currentTrial.endsAt,
-            durationDays: remoteTrial.durationDays ?? currentTrial.durationDays,
-            welcomeShown: remoteTrial.welcomeShown ?? currentTrial.welcomeShown,
-          },
-        },
-      };
-      await saveSession(updated);
+        user: updatedUser,
+      });
     }
+
+    if (typeof remoteAccount?.credits?.remaining === "number") {
+      const { applyCreditSnapshotFromServer } = await import("./credits");
+      applyCreditSnapshotFromServer(remoteAccount.credits.remaining);
+    }
+
+    return { status: "ok" };
   } catch {
-    // Network error — not critical, will retry next cycle
+    return { status: "network_error" };
   }
 }
 
@@ -349,14 +509,30 @@ let _lastPairingCode: string | null = null;
 export async function createPairingCode(
   deviceName: string
 ): Promise<{ code: string; expiresAt: string } | { error: string; versionBlocked?: boolean }> {
+  let installationId: string | undefined;
+  let fingerprintHash: string | undefined;
   try {
-    const res = await fetch(`${API_BASE}/api/pairing/create`, {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const fp = await invoke<{ installationId: string; fingerprintHash: string }>("get_device_fingerprint");
+    installationId = fp.installationId;
+    fingerprintHash = fp.fingerprintHash;
+  } catch {
+    // Not running in Tauri — send without fingerprint
+  }
+
+  try {
+    const { response: res } = await fetchAuthApi("/api/pairing/create", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-App-Version": APP_VERSION,
       },
-      body: JSON.stringify({ deviceName, previousCode: _lastPairingCode }),
+      body: JSON.stringify({
+        deviceName,
+        previousCode: _lastPairingCode,
+        installationId,
+        fingerprintHash,
+      }),
     });
     if (res.status === 403) {
       const body = await res.json().catch(() => ({}));
@@ -387,7 +563,7 @@ export async function redeemPairingCode(
 > {
   try {
     const os = detectOS();
-    const res = await fetch(`${API_BASE}/api/pairing/redeem`, {
+    const { response: res } = await fetchAuthApi("/api/pairing/redeem", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -416,6 +592,11 @@ export async function redeemPairingCode(
       createdAt: data.user.createdAt || "",
       role: data.user.role || "user",
       plan: data.user.plan || "free",
+      effectivePlan: resolveEffectivePlan({
+        plan: data.user.plan || "free",
+        role: data.user.role || "user",
+        trial: data.user.trial || undefined,
+      }) as PlanTier,
       trial: data.user.trial || undefined,
     };
 
@@ -452,11 +633,18 @@ export function watchPairingStatus(
   }
 ): () => void {
   const os = detectOS();
-  const url = `${API_BASE}/api/pairing/stream?code=${encodeURIComponent(code)}&v=${encodeURIComponent(APP_VERSION)}&os=${encodeURIComponent(os)}`;
+  const url = `${_activePairingApiBase}/api/pairing/stream?code=${encodeURIComponent(code)}&v=${encodeURIComponent(APP_VERSION)}&os=${encodeURIComponent(os)}`;
   const es = new EventSource(url);
+  let settled = false;
+
+  function finish(callback: () => void): void {
+    if (settled) return;
+    settled = true;
+    es.close();
+    callback();
+  }
 
   es.addEventListener("authorized", (e: MessageEvent) => {
-    es.close();
     const data = JSON.parse(e.data);
     const authUser: AuthUser = {
       id: data.user.id,
@@ -468,6 +656,11 @@ export function watchPairingStatus(
       createdAt: data.user.createdAt || "",
       role: data.user.role || "user",
       plan: data.user.plan || "free",
+      effectivePlan: resolveEffectivePlan({
+        plan: data.user.plan || "free",
+        role: data.user.role || "user",
+        trial: data.user.trial || undefined,
+      }) as PlanTier,
       trial: data.user.trial || undefined,
     };
 
@@ -481,44 +674,57 @@ export function watchPairingStatus(
     // Code consumed — clear tracked reference
     _lastPairingCode = null;
 
-    callbacks.onAuthorized(authUser, data.deviceId);
+    finish(() => callbacks.onAuthorized(authUser, data.deviceId));
   });
 
   es.addEventListener("expired", () => {
-    es.close();
-    callbacks.onExpired();
+    finish(callbacks.onExpired);
   });
 
   es.addEventListener("version-blocked", (e: MessageEvent) => {
-    es.close();
     const data = JSON.parse(e.data);
-    callbacks.onVersionBlocked?.(data.message || "This version is no longer supported. Please update.");
+    finish(() => {
+      callbacks.onVersionBlocked?.(data.message || "This version is no longer supported. Please update.");
+    });
   });
 
   es.addEventListener("verification_required", (e: MessageEvent) => {
-    es.close();
     const data = JSON.parse(e.data);
-    callbacks.onVerificationRequired?.(
-      data.email || "",
-      data.name || "",
-      data.message || "Please verify your email address before authorizing a device."
-    );
+    finish(() => {
+      callbacks.onVerificationRequired?.(
+        data.email || "",
+        data.name || "",
+        data.message || "Please verify your email address before authorizing a device."
+      );
+    });
+  });
+
+  es.addEventListener("device_limit_reached", (e: MessageEvent) => {
+    const data = JSON.parse(e.data);
+    finish(() => {
+      callbacks.onError(data.message || "Device limit reached. Remove an old device or upgrade your plan.");
+    });
   });
 
   es.addEventListener("error", (e: MessageEvent | Event) => {
-    es.close();
-    const msg = "data" in e ? JSON.parse(e.data).message : "Connection lost";
-    callbacks.onError(msg);
+    if (settled) return;
+    const msg = "data" in e
+      ? JSON.parse(e.data).message || "Connection lost"
+      : "Connection lost";
+    finish(() => callbacks.onError(msg));
   });
 
-  return () => es.close();
+  return () => {
+    settled = true;
+    es.close();
+  };
 }
 
 /**
  * Open the browser to the device pairing page.
  */
 export async function openBrowserForPairing(code: string): Promise<void> {
-  const url = `${API_BASE}/device?code=${encodeURIComponent(code)}`;
+  const url = `${getDashboardBaseForAuth()}/device?code=${encodeURIComponent(code)}`;
   try {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
     await openUrl(url);
@@ -536,7 +742,7 @@ export async function resendVerificationEmail(
   code: string
 ): Promise<{ success?: boolean; alreadyVerified?: boolean; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/api/pairing/resend-verification`, {
+    const { response: res } = await fetchAuthApi("/api/pairing/resend-verification", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),
@@ -558,7 +764,7 @@ export async function checkVerificationStatus(
   code: string
 ): Promise<{ verified: boolean; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/api/pairing/check-verification`, {
+    const { response: res } = await fetchAuthApi("/api/pairing/check-verification", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),

@@ -8,10 +8,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { ContentSlot, SlotState } from "../../lowerthirds/contentSlots";
+import {
+  deleteSlot,
+  loadSlots,
+  renameSlot, resolveSlotState,
+  saveSlot,
+} from "../../lowerthirds/contentSlots";
 import { buildOverlayUrl } from "../../lowerthirds/lowerThirdObsService";
+import { isLogoVariable, resolveOverlayAssetUrl } from "../../lowerthirds/runtimeBranding";
 import { isSpeakerTheme } from "../../lowerthirds/speakerThemeUtils";
-import { getMinistryData, buildSpeakerRoleMap, refreshMinistry, ensureMinistryData } from "../../services/ministryStore";
-import { MV_SETTINGS_UPDATED_EVENT } from "../../multiview/mvStore";
 import type {
   LTAnimationIn,
   LTCustomStyle,
@@ -24,11 +30,10 @@ import type {
 import {
   LT_DEFAULT_CUSTOM_STYLE,
 } from "../../lowerthirds/types";
+import type { SpeakerProfileSetting } from "../../multiview/mvStore";
+import { MV_SETTINGS_UPDATED_EVENT } from "../../multiview/mvStore";
+import { buildSpeakerRoleMap, ensureMinistryData, getMinistryData, refreshMinistry } from "../../services/ministryStore";
 import Icon from "../DockIcon";
-import {
-  loadSlots, saveSlot, deleteSlot, renameSlot, resolveSlotState,
-} from "../../lowerthirds/contentSlots";
-import type { ContentSlot, SlotState } from "../../lowerthirds/contentSlots";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -60,14 +65,23 @@ export default function DockLowerThirdEditor({
   onSend,
   onBlank: _onBlank,
   onAnimateOut,
-  onUpdate: _onUpdate,
   sending,
   size = "xl",
-  live: _live = false,
 }: DockLTEditorProps) {
   const { t } = useTranslation();
+
+  function loadSlot1(): SlotState | null {
+    try {
+      const saved = loadSlots(theme.id, "default")[0];
+      if (saved) return resolveSlotState(saved);
+    } catch { /* ignore */ }
+    return null;
+  }
+
   // ── Variable values ──
   const [variableValues, setVariableValues] = useState<Record<string, string>>(() => {
+    const s1 = loadSlot1();
+    if (s1) return { ...s1.variableValues };
     const init: Record<string, string> = {};
     for (const v of theme.variables) {
       init[v.key] = v.defaultValue ?? "";
@@ -76,27 +90,33 @@ export default function DockLowerThirdEditor({
   });
 
   // ── Custom style overrides ──
-  const [customStyles, setCustomStyles] = useState<LTCustomStyle>({ ...LT_DEFAULT_CUSTOM_STYLE });
+  const [customStyles, setCustomStyles] = useState<LTCustomStyle>(() => {
+    const s1 = loadSlot1();
+    if (s1) return { ...s1.customStyles };
+    return { ...LT_DEFAULT_CUSTOM_STYLE };
+  });
 
   // ── Position ──
-  const [position, setPosition] = useState<LTPosition>("bottom-left");
+  const [position, setPosition] = useState<LTPosition>(() => {
+    const s1 = loadSlot1();
+    if (s1) return s1.position;
+    return "bottom-left";
+  });
 
   // ── Animation ──
-  const [animationIn, setAnimationIn] = useState<LTAnimationIn>("slide-left");
-  const [exitStyle, setExitStyle] = useState<LTExitStyle>("fade");
+  const [animationIn, setAnimationIn] = useState<LTAnimationIn>(() => {
+    const s1 = loadSlot1();
+    if (s1) return s1.animationIn;
+    return "slide-left";
+  });
+  const [exitStyle, setExitStyle] = useState<LTExitStyle>(() => {
+    const s1 = loadSlot1();
+    if (s1) return s1.exitStyle;
+    return "fade";
+  });
 
   // ── Preview zoom (persisted) ──
-  const ZOOM_KEY = "ocs-dock-lt-zoom";
-  const [previewZoom, setPreviewZoom] = useState<number>(() => {
-    try { return parseFloat(localStorage.getItem(ZOOM_KEY) ?? "0.3") || 0.3; } catch { return 0.3; }
-  });
-  const adjustZoom = useCallback((delta: number) => {
-    setPreviewZoom((prev) => {
-      const next = Math.round(Math.min(1, Math.max(0.1, prev + delta)) * 100) / 100;
-      try { localStorage.setItem(ZOOM_KEY, String(next)); } catch { /* noop */ }
-      return next;
-    });
-  }, []);
+  // Currently unused — will be wired to UI controls in a follow-up
 
   // ── Speaker theme detection & ministry data ──
   const isCurrentThemeSpeaker = useMemo(() => isSpeakerTheme(theme), [theme]);
@@ -151,7 +171,7 @@ export default function DockLowerThirdEditor({
     }));
   }, [imageVariable, setVariableValues]);
 
-  const [speakers, setSpeakers] = useState<Array<{ name: string; role: string; isMain?: boolean }>>([]);
+  const [speakers, setSpeakers] = useState<SpeakerProfileSetting[]>([]);
   const [selectedSpeakerIdx, setSelectedSpeakerIdx] = useState<number | null>(null);
   const [showSpeakerHint, setShowSpeakerHint] = useState(() => {
     if (!isCurrentThemeSpeaker) return false;
@@ -166,24 +186,27 @@ export default function DockLowerThirdEditor({
     }
     refreshMinistry();
     const ministry = getMinistryData();
-    const list = ministry.speakers.map((s) => ({ name: s.name.trim(), role: (s.role || "").trim(), isMain: s.isMain }));
+    const list = ministry.speakers.map((s) => ({
+      name: s.name.trim(),
+      role: (s.role || "").trim(),
+      imageUrl: (s.imageUrl || "").trim(),
+      isMain: s.isMain,
+    }));
     setSpeakers(list);
 
-    // Auto-select main pastor
-    if (list.length > 0) {
-      const mainIdx = list.findIndex((s) => s.isMain || s.name.trim().toLowerCase() === ministry.mainPastorName.toLowerCase());
-      setSelectedSpeakerIdx(mainIdx >= 0 ? mainIdx : 0);
-    } else {
+    // Don't auto-select — user picks manually
+    if (list.length === 0) {
       // localStorage empty — try fetching from the API (OBS dock context)
       ensureMinistryData().then((fetched) => {
         if (!fetched) return;
         const fresh = getMinistryData();
-        const freshList = fresh.speakers.map((s) => ({ name: s.name.trim(), role: (s.role || "").trim(), isMain: s.isMain }));
+        const freshList = fresh.speakers.map((s) => ({
+          name: s.name.trim(),
+          role: (s.role || "").trim(),
+          imageUrl: (s.imageUrl || "").trim(),
+          isMain: s.isMain,
+        }));
         setSpeakers(freshList);
-        if (freshList.length > 0) {
-          const mainIdx = freshList.findIndex((s) => s.isMain || s.name.trim().toLowerCase() === fresh.mainPastorName.toLowerCase());
-          setSelectedSpeakerIdx(mainIdx >= 0 ? mainIdx : 0);
-        }
       });
     }
   }, [theme.id, isCurrentThemeSpeaker]);
@@ -194,7 +217,12 @@ export default function DockLowerThirdEditor({
     const handler = () => {
       refreshMinistry();
       const ministry = getMinistryData();
-      const list = ministry.speakers.map((s) => ({ name: s.name.trim(), role: (s.role || "").trim(), isMain: s.isMain }));
+      const list = ministry.speakers.map((s) => ({
+        name: s.name.trim(),
+        role: (s.role || "").trim(),
+        imageUrl: (s.imageUrl || "").trim(),
+        isMain: s.isMain,
+      }));
       setSpeakers(list);
     };
     window.addEventListener(MV_SETTINGS_UPDATED_EVENT, handler);
@@ -211,6 +239,7 @@ export default function DockLowerThirdEditor({
     const resolvedRole = sp.role || roleMap.get(sp.name.trim().toLowerCase()) || "";
     const ministry = getMinistryData();
     const churchName = ministry.churchName || "";
+    const resolvedSpeakerImage = sp.imageUrl ? resolveOverlayAssetUrl(sp.imageUrl) : "";
 
     setVariableValues((prev) => {
       const next = { ...prev };
@@ -218,21 +247,37 @@ export default function DockLowerThirdEditor({
         const key = v.key.toLowerCase();
         const label = (v.label || "").toLowerCase();
         const hint = `${key} ${label}`;
+        const logoField = isLogoVariable(v);
+
+        const isSpeakerImageField =
+          !logoField && (
+            String(v.type || "").toLowerCase() === "image"
+            || key === "image"
+            || hint.includes("photo")
+            || hint.includes("avatar")
+            || hint.includes("picture")
+          );
 
         // Name fields: exact key matches + label/hint heuristics
         const isNameField =
-          key === "name" || key === "fullname" || key === "firstname" || key === "lastname" ||
-          hint.includes("name") || hint.includes("speaker") || hint.includes("pastor");
+          !isSpeakerImageField && (
+            key === "name" || key === "fullname" || key === "firstname" || key === "lastname"
+            || hint.includes("name") || hint.includes("speaker") || hint.includes("pastor")
+          );
 
         // Title/role fields: exact key matches + label/hint heuristics
         const isTitleField =
-          key === "title" || key === "role" || key === "position" || key === "subtitle" ||
-          hint.includes("title") || hint.includes("role") || hint.includes("position");
+          !isSpeakerImageField && (
+            key === "title" || key === "role" || key === "position" || key === "subtitle"
+            || hint.includes("title") || hint.includes("role") || hint.includes("position")
+          );
 
         // Ministry/church fields
         const isChurchField =
-          key === "ministry" || key === "church" || key === "organization" ||
-          hint.includes("ministry") || hint.includes("church");
+          !isSpeakerImageField && (
+            key === "ministry" || key === "church" || key === "organization"
+            || hint.includes("ministry") || hint.includes("church")
+          );
 
         if (isNameField) {
           next[v.key] = sp.name;
@@ -241,6 +286,8 @@ export default function DockLowerThirdEditor({
           next[v.key] = combined || resolvedRole || v.defaultValue || "";
         } else if (isChurchField) {
           next[v.key] = churchName || v.defaultValue || "";
+        } else if (isSpeakerImageField) {
+          next[v.key] = resolvedSpeakerImage || v.defaultValue || "";
         }
       }
       return next;
@@ -256,8 +303,22 @@ export default function DockLowerThirdEditor({
   const prevThemeId = useRef(theme.id);
   useEffect(() => {
     if (prevThemeId.current !== theme.id) {
+      // Flush pending auto-save for the OLD theme before switching
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+        if (!isSavingRef.current && activeSlotIndex !== null) {
+          const fullState: SlotState = {
+            variableValues: { ...variableValues },
+            customStyles: { ...customStyles },
+            position,
+            animationIn,
+            exitStyle,
+          };
+          saveSlot(prevThemeId.current, "default", activeSlotIndex, variableValues, theme, fullState);
+        }
+      }
       prevThemeId.current = theme.id;
-      if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null; }
       const init: Record<string, string> = {};
       for (const v of theme.variables) {
         init[v.key] = v.defaultValue ?? "";
@@ -267,8 +328,17 @@ export default function DockLowerThirdEditor({
       setPosition("bottom-left");
       setAnimationIn(theme.animation?.name as LTAnimationIn || "slide-left");
       setExitStyle("fade");
-      setSlots(loadSlots(theme.id, "default"));
-      setActiveSlotIndex(null);
+      const newSlots = loadSlots(theme.id, "default");
+      setSlots(newSlots);
+      if (newSlots[0]) {
+        const resolved = resolveSlotState(newSlots[0]);
+        setVariableValues({ ...resolved.variableValues });
+        setCustomStyles({ ...resolved.customStyles });
+        setPosition(resolved.position);
+        setAnimationIn(resolved.animationIn);
+        setExitStyle(resolved.exitStyle);
+      }
+      setActiveSlotIndex(0);
       setCardsOpen(true);
     }
   }, [theme]);
@@ -277,7 +347,8 @@ export default function DockLowerThirdEditor({
   const [cardsOpen, setCardsOpen] = useState(true);
 
   const [slots, setSlots] = useState<(ContentSlot | null)[]>(() => loadSlots(theme.id, "default"));
-  const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
+  const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(0);
+  const skipFirstSaveRef = useRef(true);
   const suppressLiveUpdateRef = useRef(false);
   const isSavingRef = useRef(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -309,7 +380,7 @@ export default function DockLowerThirdEditor({
   const handleDeleteSlot = useCallback((index: number) => {
     deleteSlot(theme.id, "default", index);
     reloadSlots();
-    if (activeSlotIndex === index) setActiveSlotIndex(null);
+    if (activeSlotIndex === index) setActiveSlotIndex(0);
   }, [theme.id, reloadSlots, activeSlotIndex]);
 
   const handleRenameSlot = useCallback((index: number) => {
@@ -319,13 +390,15 @@ export default function DockLowerThirdEditor({
     setRenamingSlotName("");
   }, [theme.id, renamingSlotName, reloadSlots]);
 
-  // ── Auto-save active slot on editor changes (debounced 300ms) ──
-  useEffect(() => {
+  // Keep a ref with the latest state so saves always write fresh data
+  const latestRef = useRef({ variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex });
+  latestRef.current = { variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex };
+
+  const doSave = useCallback(() => {
+    const { variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex } = latestRef.current;
     if (activeSlotIndex === null) return;
     if (isSavingRef.current) return;
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => {
-      if (isSavingRef.current) return;
+    try {
       const fullState: SlotState = {
         variableValues: { ...variableValues },
         customStyles: { ...customStyles },
@@ -334,12 +407,17 @@ export default function DockLowerThirdEditor({
         exitStyle,
       };
       saveSlot(theme.id, "default", activeSlotIndex, variableValues, theme, fullState);
-      reloadSlots();
-    }, 300);
-    return () => {
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    };
-  }, [activeSlotIndex, variableValues, customStyles, position, animationIn, exitStyle, theme, reloadSlots]);
+    } catch (err) {
+      console.warn("[AutoSave] saveSlot failed:", err);
+    }
+    reloadSlots();
+  }, [theme.id]);
+
+  // Auto-save whenever editor state changes (skip first render to avoid overwriting loaded slot data)
+  useEffect(() => {
+    if (skipFirstSaveRef.current) { skipFirstSaveRef.current = false; return; }
+    doSave();
+  }, [doSave, variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex]);
 
   // ── Context menu open (right-click or left-click empty slot) ──
   const openContextMenu = useCallback((slotIndex: number, x: number, y: number) => {
@@ -435,6 +513,7 @@ export default function DockLowerThirdEditor({
 
   // ── Send / Blank handlers ──
   const handleSend = useCallback(() => {
+    const overlayExitStyle = exitStyle === "fade" ? undefined : exitStyle;
     const url = buildOverlayUrl(
       theme,
       variableValues,
@@ -447,13 +526,14 @@ export default function DockLowerThirdEditor({
       undefined,
       undefined,
       animationIn,
-      exitStyle,
+      overlayExitStyle,
     );
     onSend(url);
   }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onSend]);
 
   const handleAnimateOut = useCallback(() => {
     if (!onAnimateOut) return;
+    const overlayExitStyle = exitStyle === "fade" ? undefined : exitStyle;
     const url = buildOverlayUrl(
       theme,
       variableValues,
@@ -466,77 +546,15 @@ export default function DockLowerThirdEditor({
       undefined,
       undefined,
       animationIn,
-      exitStyle,
+      overlayExitStyle,
     );
     onAnimateOut(url);
   }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onAnimateOut]);
 
-  // ── Preview URL ──
-  const previewUrl = useMemo(() => buildOverlayUrl(
-    theme, variableValues, false, false, size, customStyles,
-    undefined as LTFontSize | undefined, position,
-    undefined, undefined, animationIn, exitStyle,
-  ), [theme, variableValues, size, customStyles, position, animationIn, exitStyle]);
-
   return (
     <div className="dock-lt-editor-layout">
       {/* ── Preview (fixed top) ── */}
-      <div className="dock-lt-editor-layout__preview" style={{ zoom: previewZoom }}>
-        <iframe
-          key={previewUrl}
-          src={previewUrl}
-          title="lt-preview"
-          sandbox="allow-scripts allow-same-origin"
-        />
-        {/* Zoom controls */}
-        <div style={{
-          position: "absolute",
-          bottom: 4,
-          right: 4,
-          display: "flex",
-          alignItems: "center",
-          gap: 2,
-          background: "rgba(0,0,0,0.65)",
-          borderRadius: 4,
-          padding: "2px 4px",
-          zIndex: 10,
-        }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            onClick={() => adjustZoom(-0.05)}
-            style={{
-              width: 18, height: 18, border: "none", borderRadius: 3,
-              background: "var(--dock-surface, #222)", color: "var(--dock-text, #ccc)",
-              cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex",
-              alignItems: "center", justifyContent: "center", padding: 0,
-            }}
-            title="Zoom out"
-          >
-            −
-          </button>
-          <span style={{
-            fontSize: 9, color: "var(--dock-text-dim, #888)",
-            minWidth: 28, textAlign: "center", userSelect: "none",
-          }}>
-            {Math.round(previewZoom * 100)}%
-          </span>
-          <button
-            type="button"
-            onClick={() => adjustZoom(0.05)}
-            style={{
-              width: 18, height: 18, border: "none", borderRadius: 3,
-              background: "var(--dock-surface, #222)", color: "var(--dock-text, #ccc)",
-              cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex",
-              alignItems: "center", justifyContent: "center", padding: 0,
-            }}
-            title="Zoom in"
-          >
-            +
-          </button>
-        </div>
-      </div>
+
 
       {/* ── Scrollable settings ── */}
       <div className="dock-lt-editor-layout__scroll">
@@ -600,6 +618,7 @@ export default function DockLowerThirdEditor({
                   cursor: "pointer",
                 }}
               >
+                <option value="">—</option>
                 {speakers.map((sp, i) => (
                   <option key={`${sp.name}-${i}`} value={i}>
                     {sp.name}{sp.isMain ? " ★" : ""}{sp.role ? ` — ${sp.role}` : ""}
@@ -699,8 +718,7 @@ export default function DockLowerThirdEditor({
                     return true;
                   })
                   .map((v, idx) => {
-                    const isPrimary = idx === 0;
-                    const isSecondary = idx === 1;
+                    void idx;
                     return (
                       <div className="dock-lt-field-row" key={v.key}>
                         <input
@@ -710,38 +728,7 @@ export default function DockLowerThirdEditor({
                           onChange={(e) => setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
                           placeholder={v.label || v.key}
                         />
-                        <div className="dock-lt-field-toolbar">
-                          <label className="dock-lt-app-btn">
-                            <input
-                              type="checkbox"
-                              checked={isPrimary ? customStyles.nameUpper : isSecondary ? customStyles.infoUpper : false}
-                              onChange={(e) => {
-                                if (isPrimary) setCustomStyles((p) => ({ ...p, nameUpper: e.target.checked }));
-                                else if (isSecondary) setCustomStyles((p) => ({ ...p, infoUpper: e.target.checked }));
-                              }}
-                            />
-                            <span className="material-icons">text_fields</span>
-                          </label>
-                          <label className="dock-lt-app-btn">
-                            <input
-                              type="checkbox"
-                              checked={isPrimary ? customStyles.nameBold : isSecondary ? customStyles.infoBold : false}
-                              onChange={(e) => {
-                                if (isPrimary) setCustomStyles((p) => ({ ...p, nameBold: e.target.checked }));
-                                else if (isSecondary) setCustomStyles((p) => ({ ...p, infoBold: e.target.checked }));
-                              }}
-                            />
-                            <span className="material-icons">format_bold</span>
-                          </label>
-                          <input
-                            type="color"
-                            value={isPrimary ? customStyles.nameColor : isSecondary ? customStyles.infoColor : ""}
-                            onChange={(e) => {
-                              if (isPrimary) setCustomStyles((p) => ({ ...p, nameColor: e.target.value }));
-                              else if (isSecondary) setCustomStyles((p) => ({ ...p, infoColor: e.target.value }));
-                            }}
-                          />
-                        </div>
+
                       </div>
                     );
                   })}

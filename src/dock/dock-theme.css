@@ -16,8 +16,8 @@ body,
 body {
   margin: 0;
   overflow: hidden;
-  background: #0F172A;
-  color: #F8FAFC;
+  background: var(--bg-dark, #080808);
+  color: var(--text-primary, #F5F5F5);
   color-scheme: inherit;
 }
 

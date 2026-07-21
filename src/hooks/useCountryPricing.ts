@@ -21,6 +21,7 @@ import { getUserScopedKey } from "../services/userScopedStorage";
 export interface PlanPrice {
   monthly: number;
   yearly: number;
+  introductoryMonthly?: number;
 }
 
 export interface CountryPricing {
@@ -34,14 +35,15 @@ export interface CountryPricing {
     pro: PlanPrice;
   };
   pricingVersion: number;
-  source: "country" | "regional" | "global";
+  region?: "NG" | "AFRICA" | "ROW";
+  source: "country" | "billing" | "geoip" | "override" | "regional" | "global";
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.makechurcheasy.creatorstudioslabs.stream";
+  "https://api.creatorstudioslabs.stream";
 
 const CACHE_KEY = "ocs-country-pricing";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -54,16 +56,20 @@ interface CacheEntry {
   fetchedAt: number;
 }
 
-function readCache(): CountryPricing | null {
+function readCacheEntry(): CacheEntry | null {
   try {
     const raw = localStorage.getItem(getUserScopedKey(CACHE_KEY));
     if (!raw) return null;
     const entry: CacheEntry = JSON.parse(raw);
     if (Date.now() - entry.fetchedAt > HARD_EXPIRY_MS) return null;
-    return entry.pricing;
+    return entry;
   } catch {
     return null;
   }
+}
+
+function readCache(): CountryPricing | null {
+  return readCacheEntry()?.pricing ?? null;
 }
 
 function writeCache(pricing: CountryPricing): void {
@@ -123,6 +129,7 @@ interface UseCountryPricingResult {
     planId: "basic" | "growth" | "pro",
     cycle: "monthly" | "yearly"
   ) => string;
+  getIntroPrice: (planId: "basic" | "growth" | "pro") => number | undefined;
   currency: string;
   currencySymbol: string;
 }
@@ -135,14 +142,15 @@ export function useCountryPricing(): UseCountryPricingResult {
   const load = useCallback(async (force = false) => {
     // Serve cache unless forced refresh
     if (!force) {
-      const cached = readCache();
-      if (cached) {
-        setPricing(cached);
+      const cachedEntry = readCacheEntry();
+      if (cachedEntry) {
+        setPricing(cachedEntry.pricing);
         setLoading(false);
-        // Background refresh
-        fetchPricing()
-          .then((fresh) => setPricing(fresh))
-          .catch(() => { });
+        if (Date.now() - cachedEntry.fetchedAt >= CACHE_TTL_MS) {
+          fetchPricing()
+            .then((fresh) => setPricing(fresh))
+            .catch(() => { });
+        }
         return;
       }
     }
@@ -203,6 +211,13 @@ export function useCountryPricing(): UseCountryPricingResult {
     [getPlanPrice, formatPrice]
   );
 
+  const getIntroPrice = useCallback(
+    (planId: "basic" | "growth" | "pro"): number | undefined => {
+      return pricing?.plans[planId]?.introductoryMonthly;
+    },
+    [pricing]
+  );
+
   return {
     pricing,
     loading,
@@ -211,6 +226,7 @@ export function useCountryPricing(): UseCountryPricingResult {
     formatPrice,
     getPlanPrice,
     getFormattedPlanPrice,
+    getIntroPrice,
     currency: pricing?.currency ?? "",
     currencySymbol: pricing?.currencySymbol ?? "",
   };

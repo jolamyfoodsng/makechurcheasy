@@ -10,9 +10,7 @@ fn main() {
             .ok()
             .and_then(|o| String::from_utf8(o.stdout).ok())
             .map(|s| s.trim().to_string())
-            .unwrap_or_else(|| {
-                "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk".into()
-            });
+            .unwrap_or_else(|| "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk".into());
 
         cc::Build::new()
             .file("macos_icon.m")

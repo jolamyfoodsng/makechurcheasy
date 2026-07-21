@@ -5,7 +5,8 @@
  * Center: Verse matching engine (top match + candidate table)
  * Right: Detected references
  *
- * Captures mic audio, streams to AssemblyAI, matches Bible verses,
+ * Captures mic audio, transcribes live turns with AssemblyAI realtime STT,
+ * matches Bible verses,
  * and sends results to OBS via BroadcastChannel.
  */
 
@@ -16,7 +17,6 @@ import {
   CheckCircle,
   ChevronDown,
   Copy,
-  CreditCard,
   Download,
   HelpCircle,
   Lock,
@@ -31,6 +31,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { usePerformanceMonitor } from "../dock/usePerformanceMonitor";
 import SpeechToScriptureTutorial, {
   isSpeechToScriptureTutorialCompleted,
   markSpeechToScriptureTutorialCompleted,
@@ -41,9 +42,15 @@ import type { BibleSlide } from "../bible/types";
 import CreditsDisplay from "../components/CreditsDisplay";
 import { useAuth } from "../contexts/AuthContext";
 import { track } from "../services/analytics";
-import { getDeviceId, getDeviceSecret } from "../services/authService";
+import {
+  APP_VERSION,
+  clearDeviceSecretForRecovery,
+  getDeviceId,
+  getDeviceSecret,
+  refreshAccountBootstrapFromServer,
+} from "../services/authService";
 import { calculateTranscriptionCredits, deductCreditsWithSync, getCreditsBalance, onCreditChange, syncCreditsWithBackend } from "../services/credits";
-import { checkEntitlement, checkEntitlementSync } from "../services/entitlementClient";
+import { checkEntitlementSync } from "../services/entitlementClient";
 import { getEffectivePlan } from "../services/licenseService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService } from "../services/obsService";
@@ -53,33 +60,27 @@ import type { VoiceBibleCandidate, DetectionSpeed } from "../services/voiceBible
 import { DETECTION_SPEED_CONFIG, MATCH_SOURCE_LABEL } from "../services/voiceBibleTypes";
 import { isWhisperReady, loadWhisperModel } from "../services/whisperService";
 import { createTranscript, saveTranscript } from "../transcripts/transcriptService";
+import { isConfirmedAppClose } from "../services/appCloseGuard";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.makechurcheasy.creatorstudioslabs.stream";
+  "https://api.creatorstudioslabs.stream";
 
 // ── Connectivity hook ──
 function useOnlineStatus(): boolean {
-  const [isOnline, setIsOnline] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
 
   useEffect(() => {
-    let cancelled = false;
-    const check = async () => {
-      try {
-        const res = await fetch("https://www.gstatic.com/generate_204", {
-          method: "HEAD",
-          mode: "no-cors",
-          cache: "no-store",
-          signal: AbortSignal.timeout(4000),
-        });
-        if (!cancelled) setIsOnline(res.ok || res.type === "opaque");
-      } catch {
-        if (!cancelled) setIsOnline(false);
-      }
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
-    check();
-    const id = setInterval(check, 10000);
-    return () => { cancelled = true; clearInterval(id); };
   }, []);
 
   return isOnline;
@@ -127,12 +128,13 @@ export default function SpeechToScripturePage() {
   }), [t]);
 
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const effectivePlan = getEffectivePlan(user);
 
   // ── Tutorial state ──
   const [tourActive, setTourActive] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // ── Backend access check (declared early for use in useEffects below) ──
   const [checkingAccess, setCheckingAccess] = useState(false);
@@ -152,6 +154,7 @@ export default function SpeechToScripturePage() {
 
   // ── Upfront plan gate — block immediately if plan doesn't include Verse AI ──
   useEffect(() => {
+    if (isAdmin) return; // Admins bypass all entitlement checks
     const result = checkEntitlementSync("speechToScripture", effectivePlan);
     if (!result.allowed) {
       setAccessDenied({
@@ -160,30 +163,28 @@ export default function SpeechToScripturePage() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectivePlan]);
-
-  // ── Auto-logout on device_not_found (device was removed from admin) ──
-  useEffect(() => {
-    if (accessDenied?.reason === "device_not_found") {
-      const timer = setTimeout(() => logout(), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [accessDenied, logout]);
+  }, [effectivePlan, isAdmin]);
 
   // ── Track credit balance for Start button gating ──
   const [creditBalance, setCreditBalance] = useState(() => getCreditsBalance());
+  const [isUnlimited, setIsUnlimited] = useState(false);
   const isPro = effectivePlan === "pro";
 
   useEffect(() => {
     if (isPro) return;
     void syncCreditsWithBackend().then((bal) => {
-      if (bal >= 0) setCreditBalance(bal);
+      if (bal === -1) {
+        setIsUnlimited(true);
+      } else if (bal >= 0) {
+        setIsUnlimited(false);
+        setCreditBalance(bal);
+      }
     });
     const unsub = onCreditChange((bal) => setCreditBalance(bal));
     return unsub;
   }, [isPro]);
 
-  const hasCredits = isPro || creditBalance > 0;
+  const hasCredits = isAdmin || isPro || isUnlimited || creditBalance > 0;
 
   // ── LM state ──
   const [snapshot, setSnapshot] = useState<LmDockSnapshot>(lmDockService.getSnapshot());
@@ -192,7 +193,6 @@ export default function SpeechToScripturePage() {
   const [micLoading, setMicLoading] = useState(false);
   const [micDropdownOpen, setMicDropdownOpen] = useState(false);
   const micDropdownRef = useRef<HTMLDivElement>(null);
-  const listeningStartedAt = useRef<number | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopyLine = useCallback(async (id: string, text: string) => {
@@ -251,6 +251,63 @@ export default function SpeechToScripturePage() {
   // ── Connectivity & service states ──
   const isOnline = useOnlineStatus();
   const isOffline = !isOnline;
+  const performanceMonitor = usePerformanceMonitor(true);
+  const performanceSnapshotRef = useRef(performanceMonitor.current);
+  const lmDiagnostics = lmDockService.getDiagnostics();
+  const lmDiagnosticsRef = useRef(lmDiagnostics);
+
+  useEffect(() => {
+    performanceSnapshotRef.current = performanceMonitor.current;
+  }, [performanceMonitor.current]);
+
+  useEffect(() => {
+    lmDiagnosticsRef.current = lmDiagnostics;
+  }, [lmDiagnostics]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.altKey && e.shiftKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        setShowDiagnostics((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  useEffect(() => {
+    const sample = () => {
+      const perf = performanceSnapshotRef.current;
+      if (!performanceMonitor.memorySupported || perf.heapUsedMB <= 0) return;
+
+      const diag = lmDiagnosticsRef.current;
+      const logPayload = {
+        heapUsedMB: perf.heapUsedMB,
+        heapLimitMB: perf.heapLimitMB,
+        heapFraction: perf.heapFraction,
+        fps: perf.fps,
+        avgFrameMs: perf.avgFrameMs,
+        obsWebSockets: obsConnected ? 1 : 0,
+        speechHttpSync: diag.status !== "idle" ? 1 : 0,
+        audioContexts: 0,
+        recognitionSessions: diag.status !== "idle" ? 1 : 0,
+        activeTimers: diag.activeTimers,
+        transcriptEntries: diag.entryCount,
+      };
+
+      if (perf.heapUsedMB >= 2000) {
+        console.error("[SpeechToScripture] High Memory Critical", logPayload);
+      } else if (perf.heapUsedMB >= 1500) {
+        console.warn("[SpeechToScripture] High Memory Warning", logPayload);
+      } else {
+        console.info("[SpeechToScripture] Memory sample", logPayload);
+      }
+    };
+
+    sample();
+    const interval = window.setInterval(sample, 60_000);
+    return () => window.clearInterval(interval);
+  }, [obsConnected, performanceMonitor.memorySupported]);
 
   // ── Start / Stop ──
   const [showStopConfirm, setShowStopConfirm] = useState(false);
@@ -264,19 +321,43 @@ export default function SpeechToScripturePage() {
     try {
       const deviceId = getDeviceId();
       console.log("[SpeechToScripture] 🎤 handleStart called, deviceId:", deviceId);
-      const res = await fetch(
-        `${API_BASE}/api/device/speech-to-scripture/check-access?deviceId=${encodeURIComponent(deviceId || "")}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Device-Secret": getDeviceSecret() || "",
-          },
-        }
-      );
+      const requestAccess = async () => {
+        const res = await fetch(
+          `${API_BASE}/api/device/speech-to-scripture/check-access?deviceId=${encodeURIComponent(deviceId || "")}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-App-Version": APP_VERSION,
+              "X-Device-Secret": getDeviceSecret() || "",
+            },
+          }
+        );
+        const data = await res.json().catch(() => ({ allowed: false, reason: "server_error" }));
+        return { res, data };
+      };
 
-      const data = await res.json();
+      let { data } = await requestAccess();
       console.log("[SpeechToScripture] 📋 Access check response:", JSON.stringify(data));
+
+      // If device not found, try refreshing bootstrap (may re-register device) and retry once
+      if (!data.allowed && data.reason === "device_not_found") {
+        console.warn("[SpeechToScripture] Device not found, refreshing bootstrap...");
+        const refreshResult = await refreshAccountBootstrapFromServer();
+        if (refreshResult.status === "ok") {
+          ({ data } = await requestAccess());
+        } else {
+          console.warn("[SpeechToScripture] Bootstrap refresh failed:", refreshResult.status);
+        }
+      }
+
+      // If still not found, retry without device secret (legacy recovery path:
+      // the API allows devices without a stored secret through)
+      if (!data.allowed && data.reason === "device_not_found") {
+        console.warn("[SpeechToScripture] Still not found, retrying without device secret...");
+        await clearDeviceSecretForRecovery();
+        ({ data } = await requestAccess());
+      }
 
       if (!data.allowed) {
         console.warn("[SpeechToScripture] ❌ Access DENIED:", data.reason, "requiredPlan:", data.requiredPlan);
@@ -302,10 +383,7 @@ export default function SpeechToScripturePage() {
     setShowStopConfirm(true);
   }, []);
 
-  const confirmStop = useCallback(async () => {
-    const { allowed } = await checkEntitlement("speechToScripture", effectivePlan);
-    if (!allowed) return;
-
+  const confirmStop = useCallback(() => {
     track("sts_listening_stopped", { durationSec: elapsedRef.current });
     trackVoiceSessionCompleted(Math.round(elapsedRef.current));
 
@@ -393,114 +471,26 @@ export default function SpeechToScripturePage() {
 
     lmDockService.stopListening();
     setShowStopConfirm(false);
-  }, [effectivePlan, snapshot.entries, snapshot.queue, snapshot.suggestions]);
+  }, [snapshot.entries, snapshot.queue, snapshot.status, snapshot.suggestions, t, user?.id]);
 
   const isListening = snapshot.status === "listening";
   const isConnecting = snapshot.status === "requesting-mic" || snapshot.status === "connecting";
   const isTranscribing = isListening || isConnecting;
   const levelPercent = Math.round(snapshot.inputLevel * 100);
 
-  // Track wall-clock time when listening starts for timestamp display
-  useEffect(() => {
-    if (isListening) {
-      listeningStartedAt.current = Date.now();
-    }
-  }, [isListening]);
-
   // ── Guard: warn before closing app while transcribing ──
-  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-
   useEffect(() => {
     if (!isTranscribing) return;
     const handler = (e: BeforeUnloadEvent) => {
+      if (isConfirmedAppClose()) {
+        return;
+      }
       e.preventDefault();
+      e.returnValue = "";
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [isTranscribing]);
-
-  const confirmLeave = useCallback(async () => {
-    const { allowed } = await checkEntitlement("speechToScripture", effectivePlan);
-    if (!allowed) return;
-
-    const serviceFailed = snapshot.status === "error";
-
-    // ── Persist transcript before navigating away ──
-    const finalized = snapshot.entries.filter((e) => e.finalized);
-    if (finalized.length > 0) {
-      const text = finalized.map((e, idx) => {
-        const prevWords = finalized.slice(0, idx).reduce((n, pe) => n + pe.text.split(/\s+/).length, 0);
-        const fallbackTime = prevWords * 0.4;
-        return `${formatTimestamp(e, fallbackTime)}\t${e.text}`;
-      }).join("\n");
-      const detectedScriptures = [
-        ...snapshot.queue.map((c) => ({
-          id: `sc-${c.book}-${c.chapter}-${c.verse}`,
-          transcriptId: "",
-          reference: c.label,
-          verseText: c.snippet,
-          confidence: c.confidence,
-        })),
-        ...snapshot.suggestions
-          .filter(s => !snapshot.queue.some(q => q.book === s.book && q.chapter === s.chapter && q.verse === s.verse))
-          .map((c) => ({
-            id: `sc-${c.book}-${c.chapter}-${c.verse}`,
-            transcriptId: "",
-            reference: c.label,
-            verseText: c.snippet,
-            confidence: c.confidence,
-          })),
-      ];
-      const durationSec = elapsedRef.current;
-      const title = new Date().toLocaleDateString("en-US", {
-        month: "short", day: "numeric", year: "numeric",
-      }) + " — " + (durationSec >= 60
-        ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`
-        : `${durationSec}s`);
-      loadData().then((appData) => {
-        const transcript = createTranscript({
-          title,
-          church: appData.churchName || "",
-          language: "English",
-          durationSeconds: durationSec,
-          transcriptText: text,
-          sourceType: "transcription",
-          scriptures: detectedScriptures,
-        });
-        void saveTranscript(transcript).then((result) => {
-          if (!result.ok) {
-            console.warn("[Transcript] Cloud save failed during leave:", result.error);
-          }
-        });
-        // Deduct transcription credits (1 credit per minute) — synced to MongoDB
-        // Skip if the transcription service failed
-        void (async () => {
-          try {
-            const creditsNeeded = await calculateTranscriptionCredits(durationSec);
-            if (creditsNeeded > 0 && user?.id && !serviceFailed) {
-              const ok = await deductCreditsWithSync(user.id, creditsNeeded, "transcription", `Transcription: ${Math.round(durationSec)}s audio`);
-              if (!ok) {
-                setSaveToast({ message: t("verseAi.creditDeductionFailed"), isError: true });
-                setTimeout(() => setSaveToast(null), 4000);
-              }
-            }
-          } catch (err) {
-            console.warn("[Credits] Transcription credit deduction error:", err);
-            setSaveToast({ message: t("verseAi.creditSyncFailed"), isError: true });
-            setTimeout(() => setSaveToast(null), 4000);
-          }
-        })();
-      }).catch(() => { });
-    }
-
-    lmDockService.stopListening();
-    setShowLeaveConfirm(false);
-    navigate("/");
-  }, [effectivePlan, navigate, snapshot.entries, snapshot.queue, snapshot.suggestions]);
-
-  const cancelLeave = useCallback(() => {
-    setShowLeaveConfirm(false);
-  }, []);
 
   // ── Timer ──
   const [elapsed, setElapsed] = useState(0);
@@ -513,21 +503,28 @@ export default function SpeechToScripturePage() {
   useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
 
   useEffect(() => {
-    if (isListening) {
+    if (isTranscribing && snapshot.startedAt) {
       setPendingSessionCredits(0);
-      setElapsed(0);
-      timerRef.current = setInterval(() => setElapsed((t) => t + 1), 1000);
+      const updateElapsed = () => {
+        setElapsed(Math.max(0, Math.floor((Date.now() - snapshot.startedAt!) / 1000)));
+      };
+      updateElapsed();
+      timerRef.current = setInterval(updateElapsed, 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
-      // Capture the credit count at the moment listening stopped so the
-      // display stays consistent until the backend deduction is confirmed.
-      setPendingSessionCredits(Math.max(1, Math.ceil(elapsedRef.current / 60)));
+      if (elapsedRef.current > 0) {
+        // Capture the credit count at the moment listening stopped so the
+        // display stays consistent until the backend deduction is confirmed.
+        setPendingSessionCredits(Math.max(1, Math.ceil(elapsedRef.current / 60)));
+      } else {
+        setPendingSessionCredits(0);
+      }
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isListening]);
+  }, [isTranscribing, snapshot.startedAt]);
 
   // ── Selected candidate (overrides auto top-match when set) ──
   const [selectedCandidate, setSelectedCandidate] = useState<VoiceBibleCandidate | null>(null);
@@ -610,7 +607,10 @@ export default function SpeechToScripturePage() {
   useEffect(() => {
     if (isListening) {
       setWasListening(true);
+      return;
     }
+    setWasListening(false);
+    setConnectionLostBanner(false);
   }, [isListening]);
 
   useEffect(() => {
@@ -619,7 +619,6 @@ export default function SpeechToScripturePage() {
     }
     if (isOnline) {
       setConnectionLostBanner(false);
-      setWasListening(false);
     }
   }, [isOffline, isListening, isOnline, wasListening]);
 
@@ -653,8 +652,8 @@ export default function SpeechToScripturePage() {
   }, [snapshot.entries]);
 
   // ── Copy / Download transcript ──
-  const finalizedEntries = snapshot.entries.filter((e) => e.finalized);
-  const fullTranscript = finalizedEntries.map((e) => e.text).join("\n");
+  const finalizedEntries = useMemo(() => snapshot.entries.filter((e) => e.finalized), [snapshot.entries]);
+  const fullTranscript = useMemo(() => finalizedEntries.map((e) => e.text).join("\n"), [finalizedEntries]);
   const [copyToast, setCopyToast] = useState(false);
 
   const handleCopyTranscript = useCallback(() => {
@@ -792,11 +791,17 @@ export default function SpeechToScripturePage() {
     return snapshot.entries.filter((e) => e.text.toLowerCase().includes(q));
   }, [snapshot.entries, transcriptSearch]);
 
+  const visibleEntries = useMemo(() => filteredEntries.slice(-250), [filteredEntries]);
+  const hiddenEntryCount = Math.max(0, filteredEntries.length - visibleEntries.length);
+
   // ── Scripture engine active ──
   const _scriptureActive = isListening || snapshot.suggestions.length > 0 || snapshot.queue.length > 0;
   void _scriptureActive;
 
   const isBroadcastConnected = obsConnected;
+  const perf = performanceMonitor.current;
+  const diagnostics = lmDiagnostics;
+  const websocketCount = obsConnected ? 1 : 0;
 
   return (
     <div className="sts3-root">
@@ -901,6 +906,110 @@ export default function SpeechToScripturePage() {
           {whisperStatus === "loading" && <span className="sts3-banner-status">{t("verseAi.loadingModel")}</span>}
           {whisperStatus === "ready" && <span className="sts3-banner-status sts3-banner-status--ready">{t("verseAi.ready")}</span>}
         </div>
+      )}
+
+      {showDiagnostics && (
+        <section
+          aria-label="Speech diagnostics"
+          style={{
+            position: "fixed",
+            right: 16,
+            bottom: 16,
+            zIndex: 1200,
+            width: 360,
+            maxWidth: "calc(100vw - 32px)",
+            border: "1px solid var(--border)",
+            borderRadius: 14,
+            background: "rgba(12, 14, 18, 0.96)",
+            boxShadow: "0 18px 60px rgba(0, 0, 0, 0.35)",
+            color: "var(--text)",
+            padding: 14,
+            backdropFilter: "blur(10px)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: "0.8rem", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+                Hidden Diagnostics
+              </div>
+              <div style={{ fontSize: "1rem", fontWeight: 700 }}>Speech-to-Scripture</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowDiagnostics(false)}
+              style={{
+                border: "1px solid var(--border)",
+                background: "transparent",
+                color: "var(--text-muted)",
+                borderRadius: 999,
+                padding: "4px 10px",
+                fontSize: "0.75rem",
+                cursor: "pointer",
+              }}
+            >
+              Close
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>RAM Usage</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>
+                {performanceMonitor.memorySupported ? `${perf.heapUsedMB} MB` : "Unsupported"}
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                {performanceMonitor.memorySupported && perf.heapLimitMB > 0 ? `of ${perf.heapLimitMB} MB` : "performance.memory unavailable"}
+              </div>
+            </div>
+
+            <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>CPU / Render</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>{perf.fps} FPS</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                {perf.avgFrameMs} ms/frame
+              </div>
+            </div>
+
+            <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Open Socket Count</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>{websocketCount}</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                OBS {obsConnected ? "connected" : "disconnected"} · Speech Sync {snapshot.status !== "idle" ? "active" : "idle"}
+              </div>
+            </div>
+
+            <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Audio Context Count</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>0</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                Mic capture runs in Rust, not the browser
+              </div>
+            </div>
+
+            <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Recognition Sessions</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>{snapshot.status !== "idle" ? 1 : 0}</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                Session token {diagnostics.sessionToken}
+              </div>
+            </div>
+
+            <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Active Timers</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>{diagnostics.activeTimers}</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                poll, pause, quote search, interim search
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, fontSize: "0.75rem", color: "var(--text-muted)" }}>
+            <span>Entries: {diagnostics.entryCount}</span>
+            <span>Queue: {diagnostics.queueCount}</span>
+            <span>Suggestions: {diagnostics.suggestionCount}</span>
+            <span>Finalized chunks: {diagnostics.finalizedChunkCount}</span>
+          </div>
+        </section>
       )}
 
       {/* ── Main Layout ── */}
@@ -1043,8 +1152,20 @@ export default function SpeechToScripturePage() {
               )}
 
               {/* Transcript entries */}
-              {filteredEntries.map((entry) => {
-                const isActive = entry === filteredEntries[filteredEntries.length - 1] && entry.finalized;
+              {hiddenEntryCount > 0 && (
+                <div className="sts3-transcript-item sts3-transcript-item--placeholder">
+                  <div className="sts3-transcript-time"></div>
+                  <div className="sts3-transcript-text-wrap">
+                    <div className="sts3-t-dot" />
+                    <div className="sts3-transcript-text sts3-transcript-text--muted">
+                      Showing latest {visibleEntries.length} of {filteredEntries.length} transcript lines
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {visibleEntries.map((entry) => {
+                const isActive = entry === visibleEntries[visibleEntries.length - 1] && entry.finalized;
                 const isCopied = copiedId === entry.id;
                 return (
                   <div
@@ -1339,59 +1460,26 @@ export default function SpeechToScripturePage() {
         </div>
       )}
 
-      {/* ── Leave Page Confirmation ── */}
-      {showLeaveConfirm && (
-        <div className="sts3-modal-overlay" onClick={cancelLeave}>
-          <div className="sts3-modal sts3-modal--small" onClick={(e) => e.stopPropagation()}>
-            <div className="sts3-modal-header">
-              <h3 className="sts3-modal-title">{t("verseAi.transcriptionStillActive")}</h3>
-            </div>
-            <div className="sts3-modal-body">
-              <p className="sts3-modal-text">
-                {t("verseAi.leaveConfirmDesc")}
-              </p>
-            </div>
-            <div className="sts3-modal-footer">
-              <button className="sts3-modal-btn sts3-modal-btn--ghost" onClick={cancelLeave} title={t("verseAi.stayOnPage")}>{t("verseAi.stayOnPage")}</button>
-              <button className="sts3-modal-btn sts3-modal-btn--danger" onClick={confirmLeave} title={t("verseAi.stopAndLeave")}>
-                <StopCircle size={14} /> {t("verseAi.stopAndLeave")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Access Denied Modal ── */}
       {accessDenied && (
         <div className="sts3-lock-overlay">
           <div className="sts3-lock-card">
-            {accessDenied.reason === "subscription_expired" && (
-              <>
-                <CreditCard size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">{t("verseAi.subscriptionRequired")}</h2>
-                <p className="sts3-lock-desc">
-                  {t("verseAi.subscriptionExpiredDesc")}
-                </p>
-                <button
-                  className="sts3-btn sts3-btn--primary"
-                  onClick={() => navigate("/pricing")}
-                  title={t("verseAi.manageSubscription")}>
-                  {t("verseAi.manageSubscription")}
-                </button>
-              </>
-            )}
-            {accessDenied.reason === "trial_expired" && (
+            {(accessDenied.reason === "subscription_expired" || accessDenied.reason === "trial_expired") && (
               <>
                 <Zap size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">{t("verseAi.freeTrialEnded")}</h2>
+                <h2 className="sts3-lock-title">
+                  {t(accessDenied.reason === "trial_expired" ? "verseAi.freeTrialEnded" : "verseAi.subscriptionRequired")}
+                </h2>
                 <p className="sts3-lock-desc">
-                  {t("verseAi.trialExpiredDesc")}
+                  {t(accessDenied.reason === "trial_expired" ? "verseAi.freeTrialEndedDesc" : "verseAi.subscriptionRequiredDesc")}
+                  {" "}
+                  {t("common.upgradePlansStartToday", { amount: "3,500" })}
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
-                  onClick={() => navigate("/pricing")}
-                  title={t("verseAi.choosePlan")}>
-                  {t("verseAi.choosePlan")}
+                  onClick={() => navigate("/subscription/plans")}
+                  title={t(accessDenied.reason === "trial_expired" ? "verseAi.chooseAPlan" : "verseAi.manageSubscription")}>
+                  {t(accessDenied.reason === "trial_expired" ? "verseAi.chooseAPlan" : "verseAi.manageSubscription")}
                 </button>
               </>
             )}
@@ -1438,7 +1526,7 @@ export default function SpeechToScripturePage() {
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
                     className="sts3-btn sts3-btn--primary"
-                    onClick={() => navigate("/pricing")}
+                    onClick={() => navigate("/subscription/plans")}
                     title={t("verseAi.upgradePlan")}>
                     {t("verseAi.upgradePlan")}
                   </button>
@@ -1465,7 +1553,7 @@ export default function SpeechToScripturePage() {
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
-                  onClick={() => navigate("/pricing")}
+                  onClick={() => navigate("/subscription/plans")}
                   title={t("verseAi.viewPlans")}>
                   {t("verseAi.viewPlans")}
                 </button>

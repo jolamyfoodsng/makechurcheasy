@@ -97,7 +97,7 @@ function checkEntitlement(
 
 function getEffectivePlan(userPlan: string, trialEndsAt?: string | null): string {
   if (userPlan === "free" && trialEndsAt && new Date(trialEndsAt).getTime() > Date.now()) {
-    return "basic";
+    return "growth";
   }
   return userPlan;
 }
@@ -276,9 +276,9 @@ describe("Plan enforcement — boolean feature gating", () => {
 });
 
 describe("Plan enforcement — trial users", () => {
-  it("free user with active trial gets basic entitlements", () => {
+  it("free user with active trial gets growth entitlements", () => {
     const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    expect(getEffectivePlan("free", futureDate)).toBe("basic");
+    expect(getEffectivePlan("free", futureDate)).toBe("growth");
   });
 
   it("free user with expired trial stays free", () => {
@@ -291,16 +291,16 @@ describe("Plan enforcement — trial users", () => {
     expect(getEffectivePlan("growth", futureDate)).toBe("growth");
   });
 
-  it("trial user can use multiview (basic entitlement)", () => {
+  it("trial user can use multiview", () => {
     const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const effectivePlan = getEffectivePlan("free", futureDate);
     expect(checkEntitlement(effectivePlan, "multiview").allowed).toBe(true);
   });
 
-  it("trial user cannot use AI features (basic doesn't have them)", () => {
+  it("trial user can use AI features", () => {
     const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const effectivePlan = getEffectivePlan("free", futureDate);
-    expect(checkEntitlement(effectivePlan, "aiFeatures").allowed).toBe(false);
+    expect(checkEntitlement(effectivePlan, "aiFeatures").allowed).toBe(true);
   });
 });
 

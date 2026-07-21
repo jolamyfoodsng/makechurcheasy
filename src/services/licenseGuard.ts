@@ -9,34 +9,36 @@
  *
  * Validation checks:
  *   - Account status (active vs suspended)
- *   - Subscription status (active vs cancelled vs expired)
- *   - Trial status (active vs expired)
- *   - Payment status (paid vs expired)
+ *   - Security/admin flags (device_removed, chargeback, etc.)
  *   - Device internet verification (max 14 days offline)
+ *
+ * Billing expiry (subscription_expired, trial_expired, payment_expired) does
+ * NOT lock the application. Instead the user is downgraded to the Free plan
+ * and premium features are gated via hasRequiredPlan() / canUseFeature().
  *
  * Architecture:
  *   - Backend returns a signed license payload during verification
- *   - Payload is cached in localStorage (user-scoped, signed)
- *   - On startup: verify internet → verify with backend → cache → continue
+ *   - Payload is normalized (expired paid → free) before caching
+ *   - On startup: verify internet → verify with backend → normalize → cache → continue
  *   - Every 6 hours: re-verify while running
  *   - If offline > 14 days: immediately lock
  *
- * No page should contain logic like `if (trialExpired)`.
- * Instead: `if (!licenseGuard.isUnlocked()) { showLockScreen(); }`
+ * Feature gating:
+ *   Use hasRequiredPlan("pro") or canUseFeature("multiview") — never isUnlocked()
+ *   for premium feature checks.
  */
 
 import { getUserScopedKey } from "./userScopedStorage";
 import { getDeviceId, getDeviceSecret, getSession } from "./authService";
+import { checkEntitlementSync, type FeatureKey } from "./entitlementClient";
+import { normalizePlanId } from "../lib/subscriptionSourceOfTruth";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type LockReason =
-  | "subscription_expired"
-  | "trial_expired"
   | "internet_required"
-  | "payment_expired"
   | "account_suspended"
   | "license_revoked"
   | "maintenance"
@@ -45,6 +47,16 @@ export type LockReason =
   | "device_removed"
   | "chargeback"
   | "too_many_devices"
+  | "subscription_expired"
+  | "trial_expired"
+  | "payment_expired"
+  | null;
+
+// Billing states — these downgrade to Free, never lock the app
+export type BillingState =
+  | "subscription_expired"
+  | "trial_expired"
+  | "payment_expired"
   | null;
 
 export type AccountStatus = "active" | "suspended" | "banned";
@@ -92,7 +104,25 @@ export interface LicenseGuardState {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "ocs-license-cache";
-const DEFAULT_MAX_OFFLINE_DAYS = 14;
+const DOWNGRADE_NOTIFIED_KEY = "ocs-downgrade-notified";
+const VISIBILITY_REVERIFY_MIN_INTERVAL_MS = 15 * 60 * 1000;
+
+const FEATURE_ALIAS_MAP: Record<string, FeatureKey> = {
+  multiview: "multiview",
+  ai_translation: "translation",
+  remote_presentation: "mobileControl",
+  advanced_themes: "themes",
+  ticker: "tickers",
+  countdown: "countdowns",
+  bible_overlay: "lowerThirds",
+};
+
+const PLAN_HIERARCHY: Record<string, number> = {
+  free: 0,
+  basic: 1,
+  growth: 2,
+  pro: 3,
+};
 const APP_VERSION: string =
   typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
 
@@ -104,6 +134,7 @@ let _verifying = false;
 let _initialized = false;
 let _revalidationTimer: ReturnType<typeof setInterval> | null = null;
 let _listeners: Array<(state: LicenseGuardState) => void> = [];
+let _lastVisibilityVerificationAt = 0;
 
 // ── Cache Read/Write ─────────────────────────────────────────────────────────
 
@@ -111,7 +142,10 @@ function readCache(): LicenseCache | null {
   try {
     const raw = localStorage.getItem(getUserScopedKey(STORAGE_KEY));
     if (!raw) return null;
-    return JSON.parse(raw) as LicenseCache;
+    const cache = JSON.parse(raw) as LicenseCache;
+    // Always normalize on read — safety net against stale billing lock states
+    cache.payload = normalizeLicensePayload(cache.payload);
+    return cache;
   } catch {
     return null;
   }
@@ -198,21 +232,72 @@ async function fetchLicenseFromBackend(): Promise<LicensePayload | null> {
   }
 }
 
+// ── License Normalization ────────────────────────────────────────────────────
+
+/**
+ * Convert expired paid subscriptions into Free plan payloads.
+ * This is the safety net — the backend should already return plan=free
+ * for expired users, but this ensures the frontend never locks for billing.
+ *
+ * Only modifies the payload when a billing expiry is detected.
+ * Security/admin states (suspended, device_removed, etc.) are untouched.
+ */
+export function normalizeLicensePayload(payload: LicensePayload): LicensePayload {
+  const now = payload.serverTime ? new Date(payload.serverTime).getTime() : Date.now();
+  const plan = payload.plan || "free";
+
+  // Already free — nothing to normalize
+  if (plan === "free") return payload;
+
+  const isBillingExpiry =
+    payload.lockReason === "subscription_expired" ||
+    payload.lockReason === "trial_expired" ||
+    payload.lockReason === "payment_expired" ||
+    payload.paymentStatus === "expired" ||
+    payload.paymentStatus === "failed" ||
+    payload.paymentStatus === "refunded" ||
+    payload.subscriptionStatus === "cancelled" ||
+    payload.subscriptionStatus === "expired" ||
+    (payload.subscriptionStatus === "active" &&
+      !!payload.subscriptionEndsAt &&
+      new Date(payload.subscriptionEndsAt).getTime() < now) ||
+    (payload.trialActive &&
+      !!payload.trialEndsAt &&
+      new Date(payload.trialEndsAt).getTime() < now);
+
+  if (!isBillingExpiry) return payload;
+
+  // Mark that a downgrade notification should be shown (once per downgrade event)
+  try {
+    const key = getUserScopedKey(DOWNGRADE_NOTIFIED_KEY);
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, "pending");
+    }
+  } catch { /* ignore */ }
+
+  return {
+    ...payload,
+    plan: "free",
+    subscriptionStatus: "none",
+    lockReason: null,
+    trialActive: false,
+    trialEndsAt: null,
+    subscriptionEndsAt: null,
+    renewalDate: null,
+  };
+}
+
 // ── License Evaluation ───────────────────────────────────────────────────────
 
 /**
- * Evaluate a license payload and determine the lock reason.
+ * Evaluate a normalized license payload and determine the lock reason.
  * Returns null if the license is valid (unlocked).
  *
- * Checks are ordered by severity — the first failure wins.
- * The backend can also force a lock via lockReason.
+ * Only security/admin states lock the app.
+ * Billing expiry is handled by normalizeLicensePayload() before this runs.
  */
 function evaluateLicense(payload: LicensePayload): LockReason {
-  // Use serverTime to prevent client clock manipulation bypass.
-  // Falls back to Date.now() if serverTime is missing (backward compat).
-  const now = payload.serverTime ? new Date(payload.serverTime).getTime() : Date.now();
-
-  // 1. Extensibility flags (highest severity — always lock regardless of plan)
+  // 1. Security/admin flags — always lock regardless of plan
   if (payload.maintenanceMode) return "maintenance";
   if (payload.forceUpgradeRequired) return "forced_upgrade";
   if (payload.organizationDisabled) return "organization_disabled";
@@ -220,77 +305,21 @@ function evaluateLicense(payload: LicensePayload): LockReason {
   if (payload.chargeback) return "chargeback";
   if (payload.tooManyDevices) return "too_many_devices";
 
-  // 2. Account status (always lock — security/compliance)
+  // 2. Account status — security/compliance
   if (payload.accountStatus === "suspended" || payload.accountStatus === "banned") {
     return "account_suspended";
   }
 
-  // 3. Resolve effective plan — this gates all payment/subscription/trial enforcement
-  //    Free plan users have no payment obligation and are never locked for
-  //    payment, subscription, or trial reasons.
-  const effectivePlan = payload.plan || "free";
-
-  // 4. Backend-forced lock — override payment/trial locks for free plan users
+  // 3. Backend-forced lock — only honour non-billing lock reasons
   if (payload.lockReason) {
-    if (effectivePlan === "free" &&
-      (payload.lockReason === "payment_expired" ||
-        payload.lockReason === "trial_expired" ||
-        payload.lockReason === "subscription_expired")) {
-      // Free plan: fall through — these lock reasons don't apply
-    } else {
-      return payload.lockReason;
-    }
+    return payload.lockReason as LockReason;
   }
 
-  // 5. Free plan users are always usable
-  if (effectivePlan === "free") {
-    return null;
-  }
-
-  // ── Below this point: paid plan users only ──
-
-  // 6. Payment status
-  if (payload.paymentStatus === "expired" || payload.paymentStatus === "failed" || payload.paymentStatus === "refunded") {
-    return "payment_expired";
-  }
-
-  // 7. Subscription status
-  if (payload.subscriptionStatus === "cancelled") {
-    return "subscription_expired";
-  }
-  if (payload.subscriptionStatus === "active" && payload.subscriptionEndsAt) {
-    if (new Date(payload.subscriptionEndsAt).getTime() < now) {
-      return "subscription_expired";
-    }
-  }
-
-  // 8. Trial status
-  if (payload.trialActive && payload.trialEndsAt) {
-    if (new Date(payload.trialEndsAt).getTime() < now) {
-      return "trial_expired";
-    }
-  }
-
+  // 4. All billing states have been normalized to free by this point — always unlocked
   return null;
 }
 
-/**
- * Evaluate offline validity based on the cached payload.
- * Returns "internet_required" if offline window expired, null otherwise.
- *
- * Uses cachedAt (local wall-clock when cache was written) plus the server
- * time from the payload to avoid relying solely on the client clock for
- * the offline-day calculation.
- */
-function evaluateOfflineValidity(cached: LicenseCache): LockReason {
-  const elapsed = Date.now() - cached.cachedAt;
-  const daysOffline = Math.floor(elapsed / (1000 * 60 * 60 * 24));
-  const maxOfflineDays = cached.payload.internetVerificationDays || DEFAULT_MAX_OFFLINE_DAYS;
-
-  if (daysOffline >= maxOfflineDays) {
-    return "internet_required";
-  }
-
+function evaluateOfflineValidity(_cached: LicenseCache): LockReason {
   return null;
 }
 
@@ -334,11 +363,61 @@ export function getState(): LicenseGuardState {
   };
 }
 
+// ── Feature Gating ───────────────────────────────────────────────────────────
+
+/**
+ * Returns true if the current plan meets or exceeds the required plan.
+ * Use this for premium feature checks — never isUnlocked().
+ *
+ * Example: hasRequiredPlan("pro")
+ */
+export function hasRequiredPlan(requiredPlan: string): boolean {
+  const currentPlan = _cache?.payload?.plan || "free";
+  const current = PLAN_HIERARCHY[currentPlan] ?? 0;
+  const required = PLAN_HIERARCHY[requiredPlan] ?? 0;
+  return current >= required;
+}
+
+/**
+ * Returns true if the current plan can use the given feature.
+ * Use this for all premium feature gates.
+ *
+ * Example: canUseFeature("multiview")
+ */
+export function canUseFeature(feature: string): boolean {
+  const mappedFeature = FEATURE_ALIAS_MAP[feature];
+  if (!mappedFeature) return true;
+  const currentPlan = normalizePlanId(_cache?.payload?.plan || "free");
+  return checkEntitlementSync(mappedFeature, currentPlan).allowed;
+}
+
+/**
+ * Returns true if a downgrade notification is pending (shown once per downgrade).
+ * Call markDowngradeNotified() after showing the notification.
+ */
+export function hasPendingDowngradeNotification(): boolean {
+  try {
+    return localStorage.getItem(getUserScopedKey(DOWNGRADE_NOTIFIED_KEY)) === "pending";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Mark the downgrade notification as shown so it doesn't appear again.
+ */
+export function markDowngradeNotified(): void {
+  try {
+    localStorage.setItem(getUserScopedKey(DOWNGRADE_NOTIFIED_KEY), "shown");
+  } catch { /* ignore */ }
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
  * Whether the application is currently allowed to run.
- * Every protected feature should check this.
+ * Only returns false for security/admin lock states.
+ * Billing expiry does NOT lock the app — use canUseFeature() for premium gates.
  */
 export function isUnlocked(): boolean {
   return _lockReason === null;
@@ -395,7 +474,7 @@ export function subscribe(listener: (state: LicenseGuardState) => void): Unsubsc
  *
  * Returns true if verification succeeded, false otherwise.
  */
-export async function verify(allowOffline: boolean = false): Promise<boolean> {
+export async function verify(): Promise<boolean> {
   if (_verifying) return false;
   _verifying = true;
   emit();
@@ -404,23 +483,15 @@ export async function verify(allowOffline: boolean = false): Promise<boolean> {
     const online = await checkInternet();
 
     if (!online) {
-      if (allowOffline) {
-        // Offline but within grace period — keep existing cache
-        if (_cache) {
-          const offlineReason = evaluateOfflineValidity(_cache);
-          _lockReason = offlineReason;
-          emit();
-          return _lockReason === null;
-        }
-        // No cache at all — must be online for first verification
-        _lockReason = "internet_required";
-        emit();
-        return false;
+      // Offline — never lock. Use cached license if available, otherwise
+      // allow the app to proceed unlocked (offline usage is always permitted).
+      if (_cache) {
+        _lockReason = evaluateOfflineValidity(_cache);
+      } else {
+        _lockReason = null;
       }
-      // Not allowing offline — lock immediately
-      _lockReason = "internet_required";
       emit();
-      return false;
+      return _lockReason === null;
     }
 
     // Online — fetch from backend
@@ -440,14 +511,15 @@ export async function verify(allowOffline: boolean = false): Promise<boolean> {
       return true;
     }
 
-    // Success — cache and evaluate
+    // Normalize before caching — convert billing expiry to free plan
+    const normalizedPayload = normalizeLicensePayload(payload);
     _cache = {
-      payload,
+      payload: normalizedPayload,
       cachedAt: Date.now(),
     };
     writeCache(_cache);
 
-    _lockReason = evaluateLicense(payload);
+    _lockReason = evaluateLicense(normalizedPayload);
     emit();
     return _lockReason === null;
   } catch (err) {
@@ -464,7 +536,7 @@ export async function verify(allowOffline: boolean = false): Promise<boolean> {
  * Retry verification (called from lock screen "Retry" button).
  */
 export async function retryVerification(): Promise<boolean> {
-  return verify(false);
+  return verify();
 }
 
 /**
@@ -475,7 +547,7 @@ export async function retryVerification(): Promise<boolean> {
 export async function reverifyOnAuth(): Promise<boolean> {
   // Reset initialized flag so initLicenseGuard can run again if needed
   // but the main purpose here is to force a fresh backend check.
-  return verify(false);
+  return verify();
 }
 
 // ── Initialization ───────────────────────────────────────────────────────────
@@ -506,17 +578,10 @@ export async function initLicenseGuard(): Promise<void> {
 
   if (isOnline) {
     // Online — verify with backend
-    await verify(true);
+    await verify();
   } else {
-    // Offline — check if within grace period
-    if (_cache) {
-      const offlineReason = evaluateOfflineValidity(_cache);
-      _lockReason = offlineReason;
-    } else {
-      // No cache and offline — can't verify, but don't lock
-      // (first launch without internet is handled by AuthGate)
-      _lockReason = null;
-    }
+    // Offline — never lock the app
+    _lockReason = null;
     emit();
   }
 
@@ -538,7 +603,7 @@ function startPeriodicVerification(): void {
   _revalidationTimer = setInterval(async () => {
     const online = await checkInternet();
     if (online) {
-      await verify(true);
+      await verify();
     } else {
       // Check offline validity
       if (_cache) {
@@ -559,9 +624,15 @@ function startPeriodicVerification(): void {
  * Visibility change handler — re-verifies when tab becomes visible.
  */
 function _onVisibilityChange(): void {
-  if (document.visibilityState === "visible" && _initialized && !_verifying) {
-    void verify(true);
+  if (document.visibilityState !== "visible" || !_initialized || _verifying) return;
+
+  const now = Date.now();
+  if (now - _lastVisibilityVerificationAt < VISIBILITY_REVERIFY_MIN_INTERVAL_MS) {
+    return;
   }
+
+  _lastVisibilityVerificationAt = now;
+  void verify();
 }
 
 /**
@@ -585,6 +656,7 @@ export function resetLicenseGuard(): void {
   _lockReason = null;
   _verifying = false;
   _initialized = false;
+  _lastVisibilityVerificationAt = 0;
   clearCache();
   emit();
 }
@@ -619,26 +691,6 @@ export interface LockScreenConfig {
 
 export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload | null): LockScreenConfig {
   switch (reason) {
-    case "subscription_expired":
-      return {
-        icon: "credit_card_off",
-        title: "Subscription Required",
-        description:
-          "Your MakeChurchEasy subscription is no longer active. Renew your subscription to continue using the application.",
-        primaryAction: "subscribe",
-        primaryLabel: "Manage Subscription",
-      };
-
-    case "trial_expired":
-      return {
-        icon: "timer_off",
-        title: "Free Trial Ended",
-        description:
-          "Your 14-day trial has expired. Subscribe to continue using MakeChurchEasy.",
-        primaryAction: "subscribe",
-        primaryLabel: "Choose a Plan",
-      };
-
     case "internet_required":
       return {
         icon: "wifi_off",
@@ -647,16 +699,6 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
           "Your license could not be verified recently. Please ensure you have an internet connection and try again.",
         primaryAction: "retry",
         primaryLabel: "Retry Verification",
-      };
-
-    case "payment_expired":
-      return {
-        icon: "payment",
-        title: "Payment Required",
-        description:
-          "Your payment method is no longer valid. Please update your payment information to continue using MakeChurchEasy.",
-        primaryAction: "subscribe",
-        primaryLabel: "Update Payment",
       };
 
     case "account_suspended":
@@ -712,11 +754,11 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
     case "device_removed":
       return {
         icon: "devices_other",
-        title: "Device Removed",
+        title: "Device Verification Needed",
         description:
-          "This device has been removed from your account. Please re-pair this device to continue.",
-        primaryAction: "contact_support",
-        primaryLabel: "Contact Support",
+          "We could not verify this device registration. Retry verification first; reconnect the device only if it was intentionally removed from your account.",
+        primaryAction: "retry",
+        primaryLabel: "Retry Verification",
       };
 
     case "chargeback":

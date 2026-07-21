@@ -29,18 +29,28 @@ import { checkEntitlementSync } from "../services/entitlementClient";
 import { PremiumContentGate } from "../components/PremiumContentGate";
 import { UpgradeModal } from "../components/UpgradeModal";
 import { BulkImportModal } from "../worship/BulkImportModal";
-import { OnlineLyricsImportModal, type OnlineLyricsImportDraft } from "../worship/OnlineLyricsImportModal";
 import {
   formatOnlineLyricsSearchError,
   isSpotifyTrackLyricsQuery,
   searchOnlineSongLyrics,
   type OnlineLyricsSearchResult,
 } from "../worship/onlineLyricsService";
-import { unicodeSearchNormalize, unicodeStripDiacritics } from "../worship/unicodeUtils";
 import { generateSlides } from "../worship/slideEngine";
+import {
+  OnlineLyricsImportModal,
+  type OnlineLyricsImportDraft,
+} from "../worship/OnlineLyricsImportModal";
+import { unicodeSearchNormalize, unicodeStripDiacritics } from "../worship/unicodeUtils";
 import type { Song } from "../worship/types";
-import { archiveSong, getAllSongs, getArchivedSongs, restoreSong, saveSong } from "../worship/worshipDb";
+import {
+  archiveSong,
+  getAllSongs,
+  getArchivedSongs,
+  restoreSong,
+  saveSong,
+} from "../worship/worshipDb";
 import WorshipSongModal from "../worship/WorshipSongModal";
+import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 
 /* ---------- helpers ---------- */
 
@@ -70,6 +80,10 @@ function normalizeSongLookupPart(value: string): string {
   return unicodeSearchNormalize(value);
 }
 
+function normalizeCompactSearch(value: string): string {
+  return unicodeStripDiacritics(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function buildSongLookupKeys(title: string, artist: string): string[] {
   const normalizedTitle = normalizeSongLookupPart(title);
   const normalizedArtist = normalizeSongLookupPart(artist);
@@ -83,6 +97,10 @@ function buildSongLookupKeys(title: string, artist: string): string[] {
     : [normalizedTitle];
 }
 
+function createSongId(prefix = "song"): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 /* ========================================================================= */
 /* SongsTab                                                                  */
 /* ========================================================================= */
@@ -94,7 +112,6 @@ export function SongsTab() {
   const [onlineSearchResults, setOnlineSearchResults] = useState<OnlineLyricsSearchResult[]>([]);
   const [onlineSearchState, setOnlineSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [onlineSearchMessage, setOnlineSearchMessage] = useState("");
-  const [importingOnlineId, setImportingOnlineId] = useState<string | null>(null);
   const [pendingOnlineImport, setPendingOnlineImport] = useState<OnlineLyricsSearchResult | null>(null);
   const [showOnlineSearchModal, setShowOnlineSearchModal] = useState(false);
   const [onlineSearchQuery, setOnlineSearchQuery] = useState("");
@@ -107,8 +124,7 @@ export function SongsTab() {
   const [showSongLimitModal, setShowSongLimitModal] = useState(false);
   const [songLimitModalType, setSongLimitModalType] = useState<"songs" | "import">("songs");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
-  const overflowMenuRef = useRef<HTMLDivElement>(null);
+  const [savingOnlineImport, setSavingOnlineImport] = useState(false);
   const onlineSearchRequestRef = useRef(0);
   const spotifyAutoImportRef = useRef<string | null>(null);
 
@@ -120,7 +136,6 @@ export function SongsTab() {
   const [songCount, setSongCount] = useState<number>(0);
   const isSongUnlimited = songLimit === -1;
   const hasReachedSongLimit = !isSongUnlimited && songCount >= songLimit;
-  const showSongUsage = !isSongUnlimited; // Show usage counter for free/basic
 
   const computeSongLimits = useCallback(async () => {
     try {
@@ -166,36 +181,70 @@ export function SongsTab() {
     return () => window.removeEventListener("keydown", handler);
   }, [showAddModal, editSong, deleteConfirmId, showOnlineSearchModal, showArchiveModal, bulkImportOpen]);
 
-  // Close overflow menu on outside click
-  useEffect(() => {
-    if (!overflowMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (overflowMenuRef.current && !overflowMenuRef.current.contains(e.target as Node)) {
-        setOverflowMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [overflowMenuOpen]);
+  // ── Accessible songs: only the songs the current plan allows ──
+  const accessibleSongs = useMemo(() => {
+    if (isSongUnlimited) return songs;
+    return songs.slice(0, songLimit);
+  }, [songs, isSongUnlimited, songLimit]);
 
   const visible = useMemo(() => {
-    const filtered = songs.filter((s) => {
-      if (languageFilter !== "all" && s.metadata.language !== languageFilter) return false;
-      if (!search) return true;
-      const words = search.trim().split(/\s+/);
-      const fields = [s.metadata.title, s.metadata.artist, s.lyrics];
-      return words.every((w) => fields.some((f) => fuzzyMatch(w, f)));
-    });
-    return filtered;
-  }, [search, songs, languageFilter]);
+    const languageFiltered = languageFilter !== "all"
+      ? accessibleSongs.filter((s) => s.metadata.language === languageFilter)
+      : accessibleSongs;
 
-  const availableLanguages = useMemo(() => {
-    const langs = new Set<string>();
-    for (const song of songs) {
-      if (song.metadata.language) langs.add(song.metadata.language);
+    if (!search.trim()) return languageFiltered;
+
+    const q = search.trim();
+    const qLower = q.toLowerCase();
+    const qCompact = normalizeCompactSearch(q);
+    const numMatch = qLower.match(/(\d+)/);
+    const searchNumber = numMatch ? numMatch[1] : null;
+
+    const scored = languageFiltered
+      .map((song) => {
+        const title = song.metadata.title.toLowerCase();
+        const hymnNumber = song.metadata.hymnNumber?.trim() ?? "";
+        const hymnNumberCompact = normalizeCompactSearch(hymnNumber);
+        const hymnLabelCompact = hymnNumberCompact ? `hymn${hymnNumberCompact}` : "";
+        const searchText = `${song.metadata.title}\n${song.metadata.artist}\n${song.lyrics}\n${hymnNumber}\nHymn ${hymnNumber}`.toLowerCase();
+        let score = 0;
+
+        if (searchNumber) {
+          const exactTitleRe = new RegExp(`^hymn\\s+${searchNumber}$`);
+          const numDotRe = new RegExp(`^${searchNumber}[.\\s]`);
+          const bareNumRe = new RegExp(`^${searchNumber}$`);
+          if (hymnNumberCompact === searchNumber) score += 12000;
+          else if (hymnNumberCompact.includes(searchNumber)) score += 7000;
+          else if (exactTitleRe.test(title)) score += 10000;
+          else if (bareNumRe.test(title)) score += 10000;
+          else if (numDotRe.test(title)) score += 10000;
+          else if (title.includes(`hymn ${searchNumber}`)) score += 5000;
+          else if (title.includes(searchNumber)) score += 2000;
+        }
+
+        if (score === 0 && hymnLabelCompact && hymnLabelCompact.includes(qCompact)) score += 9000;
+
+        if (score === 0 && title.startsWith(qLower)) score += 3000;
+        if (score === 0 && title.includes(qLower)) score += 1000;
+        if (score === 0 && searchText.includes(qLower)) score += 500;
+        if (score === 0 && fuzzyMatch(q, searchText)) score += 100;
+
+        return { song, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    const bestScore = scored.length > 0 ? scored[0].score : 0;
+    if (bestScore >= 500) {
+      return scored.filter((item) => item.score >= 500).map((item) => item.song);
     }
-    return Array.from(langs).sort();
-  }, [songs]);
+    return scored.map((item) => item.song);
+  }, [search, accessibleSongs, languageFilter]);
+
+  const hasActiveFilters = search.trim().length > 0 || languageFilter !== "all";
+  const languageFilterLabel = languageFilter === "all"
+    ? "All languages"
+    : languageFilter.charAt(0).toUpperCase() + languageFilter.slice(1);
 
   const importedSongsLookup = useMemo(() => {
     const lookup = new Map<string, Song>();
@@ -321,49 +370,45 @@ export function SongsTab() {
     setShowOnlineSearchModal(true);
   }, [search]);
 
-  const handleConfirmOnlineImport = useCallback(
-    async (result: OnlineLyricsSearchResult, draft: OnlineLyricsImportDraft) => {
-      const existingSong = findImportedSong(result);
-      if (existingSong) {
-        setEditSong(existingSong);
-        setPendingOnlineImport(null);
-        return;
-      }
+  const handleImportOnlineSong = useCallback(async (draft: OnlineLyricsImportDraft) => {
+    if (!pendingOnlineImport) {
+      return;
+    }
 
-      const lyrics = draft.lyrics.trim();
-      if (!lyrics) {
-        return;
-      }
+    setSavingOnlineImport(true);
 
+    try {
       const now = new Date().toISOString();
+      const lyrics = draft.lyrics.trim();
       const newSong: Song = {
-        id: `song-online-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: createSongId("song-online"),
         metadata: {
-          title: draft.title.trim() || onlineSearchQuery.trim() || "Imported Song",
+          title: draft.title.trim(),
           artist: draft.artist.trim(),
         },
         lyrics,
         slides: generateSlides(lyrics, 2, true),
         createdAt: now,
         updatedAt: now,
-        importSourceName: result.sourceName,
         importSourceType: "online",
-        importSourceUrl: result.url,
+        importSourceName: pendingOnlineImport.sourceName,
+        importSourceUrl: pendingOnlineImport.url,
+        autoSplit: true,
+        linesPerSlide: 2,
       };
 
-      setImportingOnlineId(result.id);
-      try {
-        await saveSong(newSong);
-        await reload();
-        setPendingOnlineImport(null);
-        setShowOnlineSearchModal(false);
-        setSearch(newSong.metadata.title);
-      } finally {
-        setImportingOnlineId(null);
-      }
-    },
-    [findImportedSong, onlineSearchQuery, reload],
-  );
+      await saveSong(newSong);
+      await reload();
+      setShowOnlineSearchModal(false);
+      setSearch(newSong.metadata.title);
+      setPendingOnlineImport(null);
+    } catch (error) {
+      console.error("[SongsTab] Failed to import online lyrics:", error);
+      setOnlineSearchMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingOnlineImport(false);
+    }
+  }, [pendingOnlineImport, reload]);
 
   useEffect(() => {
     const trimmedSearch = onlineSearchQuery.trim();
@@ -394,11 +439,10 @@ export function SongsTab() {
       <div className="lib-toolbar">
         <div className="lib-toolbar-left">
           <div className="lib-search-wrap">
-            {/* <Icon name="search" size={18} className="lib-search-icon" /> */}
             <input
               className="lib-search-input"
               type="text"
-              placeholder="Search songs..."
+              placeholder="Search songs or hymn number..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               aria-label="Search songs"
@@ -415,107 +459,129 @@ export function SongsTab() {
               </button>
             )}
           </div>
-          {showSongUsage && (
-            <span className="lib-song-usage-badge">
-              Songs {songCount} / {songLimit}
-            </span>
-          )}
-          {availableLanguages.length > 0 && (
-            <select
-              className="lib-lang-filter"
-              value={languageFilter}
-              onChange={(e) => setLanguageFilter(e.target.value)}
-              aria-label="Filter songs by language"
-            >
-              <option value="all">All languages</option>
-              {availableLanguages.map((lang) => (
-                <option key={lang} value={lang}>
-                  {lang.charAt(0).toUpperCase() + lang.slice(1)}
-                </option>
-              ))}
-            </select>
-          )}
+
+        </div>
+        <div className="lib-toolbar-actions">
+          <button
+            type="button"
+            className="lib-toolbar-btn lib-toolbar-btn--secondary"
+            onClick={handleOpenOnlineSearch}
+            title="Search lyrics online"
+          >
+            <Icon name="travel_explore" size={18} />
+            Search Online
+          </button>
+          <button
+            type="button"
+            className="lib-toolbar-btn lib-toolbar-btn--secondary"
+            onClick={() => setShowArchiveModal(true)}
+            title="View archive"
+          >
+            <Icon name="archive" size={18} />
+            Archive
+            {archivedSongs.length > 0 && (
+              <span className="lib-toolbar-btn-badge">{archivedSongs.length}</span>
+            )}
+          </button>
+          <button
+            type="button"
+            className="lib-toolbar-btn lib-toolbar-btn--secondary"
+            onClick={handleBulkImport}
+            title="Import DOCX, PDF, or TXT"
+          >
+            <Icon name="upload_file" size={18} />
+            Import File
+          </button>
           <button
             type="button"
             className={`lib-add-btn ${hasReachedSongLimit ? "lib-add-btn--at-limit" : ""}`}
             onClick={handleAddSong}
-            title="Add">
+            title="Add"
+          >
             <Icon name="add" size={20} />
             Add Song
           </button>
-          <div className="lib-overflow-wrapper" ref={overflowMenuRef}>
-            <button
-              type="button"
-              className="lib-overflow-btn"
-              onClick={() => setOverflowMenuOpen(!overflowMenuOpen)}
-              title="More actions"
-              aria-label="More actions"
-              aria-expanded={overflowMenuOpen}>
-              <Icon name="more_vert" size={20} />
-            </button>
-            {overflowMenuOpen && (
-              <div className="lib-overflow-menu">
-                <button
-                  type="button"
-                  className="lib-overflow-item"
-                  onClick={() => {
-                    setOverflowMenuOpen(false);
-                    handleBulkImport();
-                  }}>
-                  <Icon name="upload_file" size={18} />
-                  <span>Bulk Import</span>
-                </button>
-                <button
-                  type="button"
-                  className="lib-overflow-item"
-                  onClick={() => {
-                    setOverflowMenuOpen(false);
-                    setShowArchiveModal(true);
-                  }}>
-                  <Icon name="archive" size={18} />
-                  <span>View Archive</span>
-                  {archivedSongs.length > 0 && (
-                    <span className="lib-overflow-badge">{archivedSongs.length}</span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="lib-overflow-item"
-                  onClick={() => {
-                    setOverflowMenuOpen(false);
-                    handleOpenOnlineSearch();
-                  }}>
-                  <Icon name="travel_explore" size={18} />
-                  <span>Search Online</span>
-                </button>
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
       {/* Songs list */}
       <div className="lib-songs-list">
-        {search.trim() && (
-          <div className="lib-song-section-head">
-            <span className="lib-song-section-label">Library</span>
-            <span className="lib-song-section-note">
-              {visible.length} result{visible.length === 1 ? "" : "s"}
-            </span>
+        {hasActiveFilters && (
+          <div className="lib-song-section-head lib-song-section-head--active">
+            <div className="lib-song-section-summary">
+              <span className="lib-song-section-label">Library</span>
+              <span className="lib-song-section-note">
+                {visible.length} result{visible.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <div className="lib-song-section-chips">
+              {search.trim() && (
+                <span className="lib-song-section-chip">
+                  <Icon name="search" size={12} />
+                  {search.trim()}
+                </span>
+              )}
+              {languageFilter !== "all" && (
+                <span className="lib-song-section-chip">
+                  <Icon name="translate" size={12} />
+                  {languageFilterLabel}
+                </span>
+              )}
+            </div>
           </div>
         )}
 
         {visible.length === 0 &&
-          (search.trim() ? (
-            <div className="lib-online-status">No library matches for this search.</div>
+          (hasActiveFilters ? (
+            <div className="lib-empty lib-empty--search">
+              <div className="lib-empty-icon">
+                <Icon name="travel_explore" size={30} />
+              </div>
+              <h3 className="lib-empty-title">No songs match this view</h3>
+              <p className="lib-empty-copy">
+                Try a different title, hymn number, or language filter. You can also search online lyrics and import directly.
+              </p>
+              <div className="lib-empty-actions">
+                <button
+                  type="button"
+                  className="lib-toolbar-btn lib-toolbar-btn--secondary"
+                  onClick={() => {
+                    setSearch("");
+                    setLanguageFilter("all");
+                  }}
+                >
+                  <Icon name="filter_alt_off" size={18} />
+                  Clear Filters
+                </button>
+                <button type="button" className="lib-add-btn" onClick={handleOpenOnlineSearch}>
+                  <Icon name="travel_explore" size={18} />
+                  Search Online
+                </button>
+              </div>
+            </div>
           ) : (
-            <div className="lib-empty">
-              <Icon name="music_note" size={48} style={{ opacity: 0.3 }} />
-              <p>No songs found</p>
-              <button type="button" className="lib-add-btn" onClick={() => setShowAddModal(true)} title="Add">
-                <Icon name="add" size={20} />
-                Add Song
-              </button>
+            <div className="lib-empty lib-empty--rich">
+              <div className="lib-empty-icon">
+                <Icon name="library_music" size={34} />
+              </div>
+              <h3 className="lib-empty-title">Build your worship library</h3>
+              <p className="lib-empty-copy">
+                Add a single song, import a document, or pull lyrics from online sources. Songs added here become available across the app and dock.
+              </p>
+              <div className="lib-empty-actions">
+                <button type="button" className="lib-add-btn" onClick={handleAddSong} title="Add">
+                  <Icon name="add" size={20} />
+                  Add Song
+                </button>
+                <button type="button" className="lib-toolbar-btn lib-toolbar-btn--secondary" onClick={handleBulkImport} title="Import DOCX, PDF, or TXT">
+                  <Icon name="upload_file" size={18} />
+                  Import File
+                </button>
+                <button type="button" className="lib-toolbar-btn lib-toolbar-btn--secondary" onClick={handleOpenOnlineSearch} title="Search lyrics online">
+                  <Icon name="travel_explore" size={18} />
+                  Search Online
+                </button>
+              </div>
             </div>
           ))}
 
@@ -550,6 +616,9 @@ export function SongsTab() {
                         <div className="lib-song-content">
                           <div className="lib-song-title-row">
                             <h3 className="lib-song-title">{s.metadata.title}</h3>
+                            {s.metadata.hymnNumber && (
+                              <span className="lib-song-artist-badge">Hymn {s.metadata.hymnNumber}</span>
+                            )}
                             {s.metadata.artist && (
                               <span className="lib-song-artist-badge">{s.metadata.artist}</span>
                             )}
@@ -667,7 +736,6 @@ export function SongsTab() {
 
             <div className="lib-song-modal-body lib-online-search-modal-body">
               <div className="lib-search-wrap lib-online-search-wrap">
-                <Icon name="search" size={18} className="lib-search-icon" />
                 <input
                   className="lib-search-input"
                   type="text"
@@ -708,7 +776,6 @@ export function SongsTab() {
                 {onlineSearchResults.map((result) => {
                   const importedSong = findImportedSong(result);
                   const actionLabel = importedSong ? "Open" : "Import";
-                  const isImporting = importingOnlineId === result.id;
 
                   return (
                     <div key={result.id} className="lib-online-result-row">
@@ -731,10 +798,9 @@ export function SongsTab() {
                       <button
                         type="button"
                         className="lib-online-action"
-                        disabled={isImporting}
                         onClick={() => handleOpenOnlineImport(result)}
-                        title="Saving…">
-                        {isImporting ? "Saving…" : actionLabel}
+                        title={actionLabel}>
+                        {actionLabel}
                       </button>
                     </div>
                   );
@@ -840,9 +906,9 @@ export function SongsTab() {
       {pendingOnlineImport && (
         <OnlineLyricsImportModal
           result={pendingOnlineImport}
-          saving={importingOnlineId === pendingOnlineImport.id}
+          saving={savingOnlineImport}
           onClose={() => setPendingOnlineImport(null)}
-          onImport={(draft) => handleConfirmOnlineImport(pendingOnlineImport, draft)}
+          onImport={(draft) => void handleImportOnlineSong(draft)}
         />
       )}
 
@@ -857,7 +923,6 @@ export function SongsTab() {
           onClose={() => setBulkImportOpen(false)}
           onImported={() => {
             void reload();
-            setBulkImportOpen(false);
           }}
         />
       )}
@@ -865,58 +930,61 @@ export function SongsTab() {
       {/* Song limit / import restriction modal */}
       {showSongLimitModal && (
         <div className="ssm-backdrop" onClick={() => setShowSongLimitModal(false)}>
-          <div className="ssm-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="ssm-modal ssm-modal--prompt lib-upgrade-prompt" onClick={(e) => e.stopPropagation()}>
             <button
-              className="um-close"
+              className="ssm-close"
               onClick={() => setShowSongLimitModal(false)}
-              aria-label="Close"
+              aria-label="Close upgrade prompt"
               title="Close">
               <Icon name="close" size={18} />
             </button>
-            <div className="dock-upgrade">
-              <div className="dock-upgrade__icon">
-                <Icon name="lock" size={28} />
-              </div>
-              <h2 className="dock-upgrade__title">
-                {songLimitModalType === "import" ? "Mass Import Restricted" : "Song Limit Reached"}
-              </h2>
-              <p className="dock-upgrade__message">
-                {songLimitModalType === "import" ? (
-                  <>
-                    Mass Import is available on <strong>Basic</strong> and above.
-                    Upgrade to unlock bulk import, translation, and more.
-                  </>
-                ) : (
-                  <>
-                    Your <strong>{effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)}</strong> plan
-                    allows up to <strong>{songLimit} songs</strong>.
-                    {songLimitModalType === "songs" && effectivePlan === "free"
-                      ? " You currently have " + songCount + " song" + (songCount !== 1 ? "s" : "") + "."
-                      : songLimitModalType === "songs" && songCount >= songLimit
-                        ? " You've reached your limit."
-                        : ""}
-                    <br />
-                    Upgrade to <strong>Growth</strong> for unlimited songs and mass import.
-                  </>
-                )}
-              </p>
-              <div className="dock-upgrade__actions">
-                <button
-                  className="dock-upgrade__btn dock-upgrade__btn--secondary"
-                  onClick={() => setShowSongLimitModal(false)}
-                  title="Maybe Later">
-                  Maybe Later
-                </button>
-                <button
-                  className="dock-upgrade__btn dock-upgrade__btn--primary"
-                  onClick={() => {
-                    window.open("https://makechurcheasy.creatorstudioslabs.stream/pricing", "_blank");
-                    setShowSongLimitModal(false);
-                  }}
-                  title="Upgrade">
-                  Upgrade
-                </button>
-              </div>
+            <div className="ssm-icon lib-upgrade-prompt__icon">
+              <Icon name={songLimitModalType === "import" ? "upload_file" : "library_music"} size={28} />
+            </div>
+            <h2 className="ssm-title">
+              {songLimitModalType === "import" ? "Bulk Import Requires Growth" : "Song Limit Reached"}
+            </h2>
+            {songLimitModalType === "import" ? (
+              <>
+                <p className="ssm-desc">
+                  Bulk import is available on <strong>Growth</strong> and above.
+                </p>
+                <p className="ssm-hint">
+                  Free trial users can use it during the trial. Upgrade to Growth to import multiple worship songs at once.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="ssm-desc">
+                  Your <strong>{effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)}</strong> plan
+                  allows up to <strong>{songLimit} songs</strong>.
+                  {songLimitModalType === "songs" && effectivePlan === "free"
+                    ? " You currently have " + songCount + " song" + (songCount !== 1 ? "s" : "") + "."
+                    : songLimitModalType === "songs" && songCount >= songLimit
+                      ? " You've reached your limit."
+                      : ""}
+                </p>
+                <p className="ssm-hint">
+                  Upgrade to <strong>Growth</strong> for unlimited songs and mass import. {UPGRADE_PROMO_FALLBACK}
+                </p>
+              </>
+            )}
+            <div className="ssm-actions lib-upgrade-prompt__actions">
+              <button
+                className="ssm-btn-cancel"
+                onClick={() => setShowSongLimitModal(false)}
+                title="Maybe Later">
+                Maybe Later
+              </button>
+              <button
+                className="ssm-btn-upgrade"
+                onClick={() => {
+                  window.open("https://makechurcheasy.creatorstudioslabs.stream/subscription/plans", "_blank");
+                  setShowSongLimitModal(false);
+                }}
+                title="Upgrade to Growth">
+                Upgrade to Growth
+              </button>
             </div>
           </div>
         </div>

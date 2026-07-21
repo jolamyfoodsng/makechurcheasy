@@ -442,6 +442,7 @@ function getSettingsStorageKey(): string {
 export interface SpeakerProfileSetting {
   name: string;
   role: string;
+  imageUrl?: string;
   isMain?: boolean;
 }
 

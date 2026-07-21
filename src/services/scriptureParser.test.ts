@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseScriptureReference } from "./scriptureParser";
+import { createScriptureSpeechState, parseScriptureIntent, parseScriptureReference, resolveScriptureSpeech } from "./scriptureParser";
 
 /**
  * Helper: convert ParsedReference to a display string for easy assertion.
@@ -262,6 +262,199 @@ describe("Nigerian speech patterns", () => {
     it("prover 3 5 → Proverbs 3:5", () => {
       expect(fmt(parseScriptureReference("prover 3 5"))).toBe("Proverbs 3:5");
     });
+  });
+});
+
+describe("Speech context resolver", () => {
+  it("keeps book-only and chapter-only references without guessing verse 1", () => {
+    const state = createScriptureSpeechState();
+
+    const bookOnly = resolveScriptureSpeech("John", state, 1000);
+    expect(bookOnly?.kind).toBe("book_reference");
+    expect(bookOnly?.book).toBe("John");
+    expect(bookOnly?.chapter).toBeNull();
+    expect(bookOnly?.verse).toBeNull();
+    expect(bookOnly?.shouldProject).toBe(false);
+
+    const chapterOnly = resolveScriptureSpeech("chapter 3", state, 1500);
+    expect(chapterOnly?.kind).toBe("chapter_reference");
+    expect(chapterOnly?.book).toBe("John");
+    expect(chapterOnly?.chapter).toBe(3);
+    expect(chapterOnly?.verse).toBeNull();
+    expect(chapterOnly?.shouldProject).toBe(false);
+  });
+
+  it("resolves verse continuations and correction numbers from context", () => {
+    const state = createScriptureSpeechState();
+
+    const initial = resolveScriptureSpeech("John 3:14", state, 1000);
+    expect(initial?.book).toBe("John");
+    expect(initial?.chapter).toBe(3);
+    expect(initial?.verse).toBe(14);
+    expect(initial?.shouldProject).toBe(true);
+
+    const continuation = resolveScriptureSpeech("verse 16", state, 1500);
+    expect(continuation?.book).toBe("John");
+    expect(continuation?.chapter).toBe(3);
+    expect(continuation?.verse).toBe(16);
+
+    const correction = resolveScriptureSpeech("sorry 17", state, 2000);
+    expect(correction?.book).toBe("John");
+    expect(correction?.chapter).toBe(3);
+    expect(correction?.verse).toBe(17);
+  });
+
+  it("preserves verse when a chapter correction is spoken", () => {
+    const state = createScriptureSpeechState();
+    resolveScriptureSpeech("John 2:14", state, 1000);
+
+    const correction = resolveScriptureSpeech("sorry chapter 3", state, 1500);
+    expect(correction?.book).toBe("John");
+    expect(correction?.chapter).toBe(3);
+    expect(correction?.verse).toBe(14);
+  });
+
+  it("treats a bare number as the next verse when chapter context exists", () => {
+    const state = createScriptureSpeechState();
+    resolveScriptureSpeech("Genesis 1:2", state, 1000);
+
+    const continuation = resolveScriptureSpeech("3", state, 1500);
+    expect(continuation?.book).toBe("Genesis");
+    expect(continuation?.chapter).toBe(1);
+    expect(continuation?.verse).toBe(3);
+    expect(continuation?.kind).toBe("verse_reference");
+  });
+
+  it("supports misspelled numbered books quickly", () => {
+    expect(parseScriptureReference("firstpetter 5 7")).toMatchObject({
+      book: "1 Peter",
+      chapter: 5,
+      verse: 7,
+    });
+    expect(parseScriptureReference("second timoty 1 7")).toMatchObject({
+      book: "2 Timothy",
+      chapter: 1,
+      verse: 7,
+    });
+    expect(parseScriptureReference("first cors 13 4")).toMatchObject({
+      book: "1 Corinthians",
+      chapter: 13,
+      verse: 4,
+    });
+  });
+});
+
+describe("Speech command matrix", () => {
+  it("recognizes verse navigation commands", () => {
+    expect(parseScriptureIntent("next verse")).toMatchObject({ type: "next-verse", count: 1 });
+    expect(parseScriptureIntent("go to next verse")).toMatchObject({ type: "next-verse", count: 1 });
+    expect(parseScriptureIntent("next two verses")).toMatchObject({ type: "next-verse", count: 2 });
+    expect(parseScriptureIntent("previous verse")).toMatchObject({ type: "prev-verse", count: 1 });
+    expect(parseScriptureIntent("go back two verses")).toMatchObject({ type: "prev-verse", count: 2 });
+  });
+
+  it("recognizes direct chapter and verse commands", () => {
+    expect(parseScriptureIntent("verse 3")).toMatchObject({ type: "set-verse", verse: 3 });
+    expect(parseScriptureIntent("go to verse 5")).toMatchObject({ type: "set-verse", verse: 5 });
+    expect(parseScriptureIntent("chapter 4")).toMatchObject({ type: "set-chapter", chapter: 4 });
+    expect(parseScriptureIntent("go to chapter 7")).toMatchObject({ type: "set-chapter", chapter: 7 });
+  });
+
+  it("recognizes open references without inventing verse 1", () => {
+    expect(parseScriptureIntent("John 3")).toMatchObject({
+      type: "open",
+      book: "John",
+      chapter: 3,
+      navigationOnly: true,
+    });
+    expect(parseScriptureIntent("Romans 8:28")).toMatchObject({
+      type: "open",
+      book: "Romans",
+      chapter: 8,
+      verse: 28,
+    });
+  });
+});
+
+describe("Speech state matrix", () => {
+  it("handles common sermon continuation and correction flows", () => {
+    const state = createScriptureSpeechState();
+
+    const cases = [
+      {
+        input: "Genesis 1",
+        time: 1000,
+        expected: { kind: "chapter_reference", book: "Genesis", chapter: 1, verse: null, shouldProject: false },
+      },
+      {
+        input: "verse 2",
+        time: 1500,
+        expected: { kind: "verse_reference", book: "Genesis", chapter: 1, verse: 2, shouldProject: true },
+      },
+      {
+        input: "next verse",
+        time: 2000,
+        expected: null,
+      },
+      {
+        input: "Genesis 1:2",
+        time: 2500,
+        expected: { kind: "verse_reference", book: "Genesis", chapter: 1, verse: 2, shouldProject: true },
+      },
+      {
+        input: "3",
+        time: 3000,
+        expected: { kind: "verse_reference", book: "Genesis", chapter: 1, verse: 3, shouldProject: true },
+      },
+      {
+        input: "sorry 4",
+        time: 3500,
+        expected: { kind: "verse_reference", book: "Genesis", chapter: 1, verse: 4, shouldProject: true },
+      },
+      {
+        input: "make that 5",
+        time: 4000,
+        expected: { kind: "verse_reference", book: "Genesis", chapter: 1, verse: 5, shouldProject: true },
+      },
+      {
+        input: "John 2:14",
+        time: 4500,
+        expected: { kind: "verse_reference", book: "John", chapter: 2, verse: 14, shouldProject: true },
+      },
+      {
+        input: "sorry chapter 3",
+        time: 5000,
+        expected: { kind: "verse_reference", book: "John", chapter: 3, verse: 14, shouldProject: true },
+      },
+      {
+        input: "change that to Luke 5:5",
+        time: 5500,
+        expected: { kind: "verse_reference", book: "Luke", chapter: 5, verse: 5, shouldProject: true },
+      },
+      {
+        input: "John 3:16-18",
+        time: 6000,
+        expected: { kind: "range_reference", book: "John", chapter: 3, verse: 16, endVerse: 18, shouldProject: true },
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const result = resolveScriptureSpeech(testCase.input, state, testCase.time);
+      if (testCase.expected === null) {
+        expect(result).toBeNull();
+        continue;
+      }
+
+      expect(result).not.toBeNull();
+      expect(result).toMatchObject(testCase.expected);
+    }
+  });
+
+  it("does not treat stale bare numbers as verse continuations", () => {
+    const state = createScriptureSpeechState();
+    resolveScriptureSpeech("Genesis 1:2", state, 1000);
+
+    expect(resolveScriptureSpeech("3", state, 10_500)).toBeNull();
   });
 });
 

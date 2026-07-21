@@ -38,11 +38,12 @@ export default function ImagePicker({
       if (!files?.length) return;
       setUploading(true);
       try {
-        const { uploadFileToDock } = await import("../dockUploadService");
+        const { registerDockMediaItem, uploadFileToDock } = await import("../dockUploadService");
         for (const file of Array.from(files)) {
           if (!file.type.startsWith("image/")) continue;
           const result = await uploadFileToDock(file);
           if (result.item) {
+            await registerDockMediaItem(result.item);
             onChange(result.item.url);
             setUrlInput(result.item.url);
           }

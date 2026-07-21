@@ -6,27 +6,32 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import i18n from "../../i18n";
-import { dockBridge } from "../../services/dockBridge";
+import { useSearchParams } from "react-router-dom";
 import { getBibleSettings, getInstalledTranslations, saveBibleSettings } from "../../bible/bibleDb";
 import { useBible } from "../../bible/bibleStore";
 import type { BibleTranslation } from "../../bible/types";
 import { AppLogo } from "../../components/AppLogo";
+import { UpgradeModal } from "../../components/UpgradeModal";
 import { useAuth } from "../../contexts/AuthContext";
-import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
-import { createAudioProcessor } from "../../services/audio/audioProcessor";
-import { voiceBibleService } from "../../services/voiceBibleService";
-import { lmDockService } from "../../services/lmDockService";
+import {
+  INTERFACE_LOCALES,
+} from "../../i18n/localeCatalog";
 import { ltDurationStore } from "../../lowerthirds/ltDurationStore";
 import { applyBrandingSettingsToDom } from "../../services/branding";
 import { fetchCreditDetails, fetchCreditTransactions, onCreditChange, type CreditTransaction } from "../../services/credits";
+import {
+  applyInterfaceLanguagePreference,
+  getInterfaceLanguageLabel,
+  getResolvedInterfaceLanguage,
+} from "../../services/interfaceLanguage";
+import { canUseMobileControl, getEffectivePlan, getTrialDaysRemaining, getUserPlan, isInTrial } from "../../services/licenseService";
+import { lmDockService } from "../../services/lmDockService";
 import { obsService } from "../../services/obsService";
+import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
 import { formatCredits, getPlanConfig, getPlanCredits, getPlanLabel, type PlanConfig } from "../../services/planConfig";
 import { isProUnlocked } from "../../services/proLicense";
-import { getUserPlan, isInTrial, getTrialDaysRemaining, getEffectivePlan, canUseMobileControl } from "../../services/licenseService";
-import { UpgradeModal } from "../../components/UpgradeModal";
+import { voiceBibleService } from "../../services/voiceBibleService";
 import { clearAllSongs } from "../../worship/worshipDb";
 import { refreshTheme } from "../components/MVThemeProvider";
 import * as db from "../mvStore";
@@ -36,21 +41,24 @@ import {
   type SpeakerProfileSetting
 } from "../mvStore";
 
+import { invoke } from "@tauri-apps/api/core";
 import {
-  Book,
+  Bell,
   Calendar,
   Check,
   CheckCircle,
-  ChevronDown, ExternalLink,
+  ChevronDown,
+  Copy,
+  ExternalLink,
   FileText,
   Globe,
   History,
-  Mic,
   Monitor,
   Moon,
   Music,
   Paintbrush,
   Palette,
+  Printer,
   Radio,
   RefreshCw,
   RotateCcw,
@@ -59,12 +67,9 @@ import {
   Sun,
   Trash2,
   Users,
-  Bell,
-  Copy,
-  Printer,
   Zap,
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { refreshAccountBootstrapFromServer } from "../../services/authService";
 
 import "./MVSettings.css";
 
@@ -86,7 +91,7 @@ const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
 
 type SettingsTab = "general" | "obs" | "mobile" | "appearance" | "branding" | "bible" | "usage" | "audio";
 
-const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "" };
+const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "", imageUrl: "" };
 
 /* ── Helpers ── */
 function resolveLogoPreviewSrc(path: string): string {
@@ -102,8 +107,9 @@ function sanitizeSpeakerProfiles(value: unknown): SpeakerProfileSetting[] {
     const raw = item as Partial<Record<string, unknown>>;
     const name = typeof raw.name === "string" ? raw.name.trim() : "";
     const role = typeof raw.role === "string" ? raw.role.trim() : "";
+    const imageUrl = typeof raw.imageUrl === "string" ? raw.imageUrl.trim() : "";
     if (!name) continue;
-    const profile: SpeakerProfileSetting = { name, role };
+    const profile: SpeakerProfileSetting = { name, role, imageUrl };
     if (typeof raw.isMain === "boolean") profile.isMain = raw.isMain;
     result.push(profile);
   }
@@ -148,23 +154,6 @@ export function MVSettings() {
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
-  // ── Audio settings state ──
-  const [inputGain, setInputGain] = useState(() => db.getSettings().inputGain ?? 100);
-  const [testMicActive, setTestMicActive] = useState(false);
-  const [testMicLevel, setTestMicLevel] = useState(0);
-  const [testMicClipping, setTestMicClipping] = useState(false);
-  const testMicProcessorRef = useRef<import("../../services/audio/audioProcessor").AudioProcessor | null>(null);
-  const testMicRafRef = useRef<number>(0);
-
-  // Clean up test mic on unmount
-  useEffect(() => {
-    return () => {
-      testMicProcessorRef.current?.destroy();
-      testMicProcessorRef.current = null;
-      cancelAnimationFrame(testMicRafRef.current);
-    };
-  }, []);
-
   // ── Bible settings state ──
   const { state: bibleState, dispatch: bibleDispatch, setTheme: bibleSetTheme } = useBible();
   const [bDefaultTranslation, setBDefaultTranslation] = useState<BibleTranslation>("KJV");
@@ -183,17 +172,17 @@ export function MVSettings() {
   const [proUnlocked] = useState(() => isProUnlocked());
 
   // ── Credits state (fetched from backend) ──
-  const { user: authUser } = useAuth();
+  const { user: authUser, refreshUser } = useAuth();
   const effectivePlan = getEffectivePlan(authUser);
   const hasMobileAccess = canUseMobileControl(authUser);
   const [showMobileUpgrade, setShowMobileUpgrade] = useState(false);
-  const [creditBalance, setCreditBalance] = useState<number>(0);
+  const [, setCreditBalance] = useState<number>(0);
   const [creditsUsedThisMonth, setCreditsUsedThisMonth] = useState<number>(0);
   const [planConfig, setPlanConfig] = useState<PlanConfig | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<CreditTransaction[]>([]);
   const userPlan = proUnlocked ? "pro" as const : getUserPlan(authUser);
   const trialActive = !proUnlocked && isInTrial(authUser);
-  // During trial, user gets pro-level credits — use effective plan for credit lookup
+  // During trial, user gets Growth-level credits — use the trial config tier for lookup
   const effectivePlanForCredits = trialActive ? "trial" as const : userPlan;
   const planCredits = planConfig ? getPlanCredits(planConfig, effectivePlanForCredits) : (proUnlocked ? -1 : 1000);
   const trialDaysLeft = trialActive ? getTrialDaysRemaining(authUser) : 0;
@@ -245,14 +234,44 @@ export function MVSettings() {
   // Re-fetch credits and transactions every time the Usage tab is opened
   useEffect(() => {
     if (activeTab !== "usage" || !authUser?.id) return;
-    fetchCreditDetails().then((details) => {
-      if (details) {
-        setCreditBalance(details.credits);
-        setCreditsUsedThisMonth(details.totalConsumed);
+    let cancelled = false;
+
+    const loadUsageState = async () => {
+      try {
+        await refreshAccountBootstrapFromServer();
+        if (!cancelled) {
+          refreshUser();
+        }
+      } catch {
+        // Keep the settings screen usable even if bootstrap refresh fails.
       }
-    }).catch(() => { });
-    fetchCreditTransactions(10).then(setRecentTransactions);
-  }, [activeTab, authUser?.id]);
+
+      try {
+        const details = await fetchCreditDetails();
+        if (!cancelled && details) {
+          setCreditBalance(details.credits);
+          setCreditsUsedThisMonth(details.totalConsumed);
+        }
+      } catch {
+        // noop
+      }
+
+      try {
+        const transactions = await fetchCreditTransactions(10);
+        if (!cancelled) {
+          setRecentTransactions(transactions);
+        }
+      } catch {
+        // noop
+      }
+    };
+
+    void loadUsageState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, authUser?.id, refreshUser]);
 
   // ── Appearance customization state ──
   const [theme, setTheme] = useState<"light" | "dark" | "system">(
@@ -264,9 +283,7 @@ export function MVSettings() {
   const [highContrastUI, setHighContrastUI] = useState<boolean>(settings.highContrast ?? false);
   const [reduceMotion, setReduceMotion] = useState<boolean>(false);
   const [roundedCorners, setRoundedCorners] = useState<boolean>(true);
-  const ALL_LANGUAGES: string[] = ["English", "French", "Spanish", "Portuguese", "Yoruba", "Igbo", "Hausa", "Ghanaian"];
-  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => localStorage.getItem("mce_interface_language") || "English");
-  const [allLanguages] = useState<string[]>(ALL_LANGUAGES);
+  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => getResolvedInterfaceLanguage());
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
 
@@ -538,13 +555,11 @@ export function MVSettings() {
     setHighContrastUI(false);
     setReduceMotion(false);
     setRoundedCorners(true);
-    setInterfaceLanguage("English");
-    localStorage.setItem("mce_interface_language", "English");
-    i18n.changeLanguage("en");
-    dockBridge.sendLanguageChanged("English", "en");
+    setInterfaceLanguage("en-US");
+    void applyInterfaceLanguagePreference("en-US", { broadcast: true });
     update({ theme: "dark", highContrast: false });
     triggerToast(t("mvSettings.toast.appearanceResetToDefaults"), "success");
-  }, [update, triggerToast]);
+  }, [update, triggerToast, t]);
 
   const handleReconnectNow = useCallback(() => {
     triggerToast(t("mvSettings.toast.reconnectingToObs"), "accent");
@@ -718,7 +733,6 @@ export function MVSettings() {
             else if (activeTab === "appearance") handleResetAppearance();
             else if (activeTab === "bible") handleSaveBible();
             else if (activeTab === "audio") {
-              setInputGain(100);
               db.updateSettings({ inputGain: 100 });
               voiceBibleService.setInputGain(100);
               lmDockService.setInputGain(100);
@@ -747,12 +761,12 @@ export function MVSettings() {
         <div className="tabs-navigation">
           {([
             ["general", Settings, t("mvSettings.tabs.general")],
-            ["obs", Radio, t("mvSettings.tabs.obs")],
-            ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
-            ["appearance", Palette, t("mvSettings.tabs.appearance")],
             ["branding", Paintbrush, t("mvSettings.tabs.branding")],
-            ["audio", Mic, t("mvSettings.tabs.audio")],
+            ["appearance", Palette, t("mvSettings.tabs.appearance")],
             ["usage", History, t("mvSettings.tabs.usage")],
+            ["obs", Radio, t("mvSettings.tabs.obs")],
+            // ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
+            // ["audio", Mic, t("mvSettings.tabs.audio")],
             // ["pro", ShieldCheck, "Pro License"],
             // ["developer", Key, "Developer"],
           ] as const).map(([id, IconComp, label]) => (
@@ -784,8 +798,8 @@ export function MVSettings() {
                       </div>
                       <div className="form-select-container" style={{ width: "180px" }}>
                         <select className="custom-select" value={interfaceLanguage} onChange={(e) => { setPendingLanguage(e.target.value); setShowLanguageModal(true); }}>
-                          {allLanguages.map((lang) => (
-                            <option key={lang} value={lang}>{lang}</option>
+                          {INTERFACE_LOCALES.map((lang) => (
+                            <option key={lang.code} value={lang.code}>{lang.nativeName}</option>
                           ))}
                         </select>
                         <span className="select-arrow"><ChevronDown size={14} /></span>
@@ -1382,23 +1396,6 @@ export function MVSettings() {
 
                     <hr className="settings-divider" />
 
-                    {/* Font size */}
-                    <div className="form-group">
-                      <label className="form-label">{t("mvSettings.appearance.fontScale")}</label>
-                      <div className="grid-3-col" style={{ marginTop: "4px" }}>
-                        {([1, 2, 3] as const).map((v) => (
-                          <label key={v} className="option-select-card">
-                            <input type="radio" name="font_size" checked={fontSizeRange === v} onChange={() => setFontSizeRange(v)} />
-                            <div className="option-select-inner" style={{ padding: "12px", textAlign: "center" }}>
-                              <div className="checked-indicator"><Check size={10} /></div>
-                              <span className="option-title">{v === 1 ? t("mvSettings.appearance.small") : v === 2 ? t("mvSettings.appearance.medium") : t("mvSettings.appearance.large")}</span>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-
 
                     {/* Toggles */}
                     <div className="switch-row">
@@ -1462,11 +1459,20 @@ export function MVSettings() {
                     <div className="form-group">
                       <label className="form-label">Pastors / Speakers</label>
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr auto", gap: 8, alignItems: "center", fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" as const }}>
-                          <span>Name</span><span>Position</span><span />
+                        <div style={{ display: "grid", gridTemplateColumns: "44px 1.1fr 1fr auto", gap: 8, alignItems: "center", fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" as const }}>
+                          <span>Photo</span><span>Name</span><span>Position</span><span />
                         </div>
                         {speakerProfiles.filter((p) => p.name.trim()).map((profile, index) => (
-                          <div key={`sp-${index}`} style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr auto", gap: 8, alignItems: "center" }}>
+                          <div key={`sp-${index}`} style={{ display: "grid", gridTemplateColumns: "44px 1.1fr 1fr auto", gap: 8, alignItems: "center" }}>
+                            {profile.imageUrl ? (
+                              <img
+                                src={resolveLogoPreviewSrc(profile.imageUrl)}
+                                alt={profile.name}
+                                style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", border: "1px solid var(--border-color)" }}
+                              />
+                            ) : (
+                              <div style={{ width: 36, height: 36, borderRadius: 8, background: "var(--bg-tertiary)", border: "1px solid var(--border-color)" }} />
+                            )}
                             <input className="custom-textbox" type="text" value={profile.name} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                             <input className="custom-textbox" type="text" value={profile.role} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                             {profile.isMain && (
@@ -1590,11 +1596,11 @@ export function MVSettings() {
                             Growth Trial — {trialDaysLeft} Day{trialDaysLeft !== 1 ? "s" : ""} Remaining
                           </div>
                           <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                            Ends {trialEndDate} · All premium features are active
+                            Ends {trialEndDate} · All premium features are active · {t("common.upgradePlansStartToday", { amount: "3,500" })}
                           </div>
                         </div>
                       </div>
-                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to upgrade", "accent")} title="Upgrade">
+                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/subscription/plans to upgrade", "accent")} title="Upgrade">
                         <ExternalLink size={12} /> Upgrade
                       </button>
                     </div>
@@ -1617,7 +1623,7 @@ export function MVSettings() {
                       </div>
                       <div className="credits-stat">
                         <span className="credits-stat-label">Credits Remaining</span>
-                        <span className="credits-stat-value credits-accent">{isUnlimited ? "Unlimited" : formatCredits(creditBalance)}</span>
+                        <span className="credits-stat-value credits-accent">{isUnlimited ? "Unlimited" : formatCredits(planCredits)}</span>
                       </div>
                       <div className="credits-stat">
                         <span className="credits-stat-label">This Month</span>
@@ -1694,96 +1700,11 @@ export function MVSettings() {
                   </div>
 
                   {/* ── Credit Consumption Rates ── */}
-                  <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <h4 className="section-title">Credit Consumption</h4>
-                    <div className="credit-rates-grid" style={{ marginTop: "16px" }}>
-                      {(planConfig?.creditCosts ?? []).map((rate, i) => {
-                        const icons = [Mic, Globe, FileText, Book, Paintbrush];
-                        const IconComp = icons[i] || Mic;
-                        return (
-                          <div key={i} className="credit-rate-row">
-                            <div className="credit-rate-icon">
-                              <IconComp size={16} />
-                            </div>
-                            <div className="credit-rate-content">
-                              <div className="credit-rate-header">
-                                <span className="credit-rate-title">{rate.name}</span>
-                                <span className="credit-rate-cost">{rate.cost} Credit{rate.cost !== 1 ? "s" : ""} / {rate.unit.replace("flat", "use")}</span>
-                              </div>
-                              <p className="credit-rate-desc">{rate.description}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+
 
 
                   {/* ── Plan Features ── */}
-                  <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <h4 className="section-title">{proUnlocked ? "Pro Plan Features" : trialActive ? "Growth Trial Features" : "Free Plan Features"}</h4>
-                    <div className="plan-features-columns" style={{ marginTop: "16px" }}>
-                      {/* Included */}
-                      <div className="plan-features-col">
-                        <span className="plan-features-col-title plan-features-col-included">Included</span>
-                        <ul className="plan-features-list">
-                          {[
-                            "Unlimited Songs",
-                            "Unlimited Media",
-                            "10,000+ Bible Translations",
-                            "OBS Integration",
-                            "Custom Themes",
-                            "Lower Thirds",
-                            "Speaker Profiles",
-                            "EasyWorship Import",
-                            "ProPresenter Import",
-                            "Offline Bible Access",
-                          ].map((f, i) => (
-                            <li key={i} className="plan-features-list-item plan-features-list-included">
-                              <Check size={13} />
-                              <span>{f}</span>
-                            </li>
-                          ))}
-                          {proUnlocked && [
-                            "Speech-to-Scripture",
-                            "Live Translation",
-                            "Multiview",
-                            "Mobile Control",
-                            "Team Members",
-                            "Cloud Backup",
-                            "Priority Support",
-                          ].map((f, i) => (
-                            <li key={`pro-${i}`} className="plan-features-list-item plan-features-list-included">
-                              <Check size={13} />
-                              <span>{f}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      {/* Not Included */}
-                      {!proUnlocked && (
-                        <div className="plan-features-col">
-                          <span className="plan-features-col-title plan-features-col-excluded">Not Included</span>
-                          <ul className="plan-features-list">
-                            {[
-                              "Speech-to-Scripture",
-                              "Live Translation",
-                              "Multiview",
-                              "Mobile Control",
-                              "Team Members",
-                              "Cloud Backup",
-                              "Priority Support",
-                            ].map((f, i) => (
-                              <li key={i} className="plan-features-list-item plan-features-list-excluded">
-                                <span className="plan-feature-x">✗</span>
-                                <span>{f}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+
                 </div>
               )}
             </div>
@@ -1925,7 +1846,7 @@ export function MVSettings() {
                             </li>
                           ))}
                         </ul>
-                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to view plans", "accent")} title="Open in new tab">
+                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/subscription/plans to view plans", "accent")} title="Open in new tab">
                           <ExternalLink size={14} />
                           <span>View Plans</span>
                         </button>
@@ -1953,7 +1874,7 @@ export function MVSettings() {
                             </li>
                           ))}
                         </ul>
-                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/pricing to view plans", "accent")} title="Open in new tab">
+                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/subscription/plans to view plans", "accent")} title="Open in new tab">
                           <ExternalLink size={14} />
                           <span>View Plans</span>
                         </button>
@@ -1964,138 +1885,7 @@ export function MVSettings() {
               )}
 
               {/* ══════════════ AUDIO TAB ══════════════ */}
-              {activeTab === "audio" && (
-                <div className="settings-section">
-                  <div className="section-header">
-                    <h3 className="section-title">Microphone Input</h3>
-                    <p className="section-desc">Configure input gain and monitor audio levels.</p>
-                  </div>
 
-                  <div className="settings-card fields-rows-stack">
-                    {/* ── Gain Slider ── */}
-                    <div className="setting-item">
-                      <label className="setting-label">Input Gain</label>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%" }}>
-                        <input
-                          type="range"
-                          min={0}
-                          max={300}
-                          step={1}
-                          value={inputGain}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setInputGain(val);
-                            db.updateSettings({ inputGain: val });
-                            voiceBibleService.setInputGain(val);
-                            lmDockService.setInputGain(val);
-                          }}
-                          style={{ flex: 1 }}
-                        />
-                        <span style={{ minWidth: 56, textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.88rem", color: "var(--text-primary)" }}>
-                          {inputGain}%
-                        </span>
-                        <button
-                          className="action-btn"
-                          style={{ fontSize: "0.75rem", padding: "4px 10px" }}
-                          onClick={() => {
-                            setInputGain(100);
-                            db.updateSettings({ inputGain: 100 });
-                            voiceBibleService.setInputGain(100);
-                            lmDockService.setInputGain(100);
-                          }}
-                          title="Reset">
-                          Reset
-                        </button>
-                      </div>
-                      <p className="setting-hint" style={{ color: "var(--text-muted)", fontSize: "0.75rem", marginTop: 4 }}>
-                        0% = muted · 100% = unity · 300% = max boost
-                      </p>
-                    </div>
-
-                    {/* ── Live Level Meter ── */}
-                    <div className="setting-item">
-                      <label className="setting-label">Input Level</label>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
-                        <div style={{
-                          flex: 1, height: 10, borderRadius: 5,
-                          background: "var(--surface-2, rgba(255,255,255,0.06))",
-                          overflow: "hidden", position: "relative",
-                        }}>
-                          <div style={{
-                            width: `${Math.min(100, (testMicActive ? testMicLevel : 0) * 100)}%`,
-                            height: "100%", borderRadius: 5,
-                            background: testMicClipping
-                              ? "#ef4444"
-                              : (testMicActive ? testMicLevel : 0) >= 0.7
-                                ? "#ef4444"
-                                : (testMicActive ? testMicLevel : 0) >= 0.25
-                                  ? "#eab308"
-                                  : "#22c55e",
-                            transition: "width 0.05s linear",
-                          }} />
-                        </div>
-                        {testMicActive && testMicClipping && (
-                          <span style={{ color: "#ef4444", fontWeight: 700, fontSize: "0.75rem", letterSpacing: "0.05em" }}>
-                            CLIPPING
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* ── Test Mic Button ── */}
-                    <div className="setting-item">
-                      <label className="setting-label">Test Microphone</label>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <button
-                          className={`action-btn ${testMicActive ? "btn-danger" : "btn-primary"}`}
-                          style={{ fontSize: "0.82rem", padding: "6px 16px" }}
-                          onClick={async () => {
-                            if (testMicActive) {
-                              // Stop test
-                              testMicProcessorRef.current?.destroy();
-                              testMicProcessorRef.current = null;
-                              cancelAnimationFrame(testMicRafRef.current);
-                              setTestMicActive(false);
-                              setTestMicLevel(0);
-                              setTestMicClipping(false);
-                              return;
-                            }
-                            try {
-                              const stream = await navigator.mediaDevices.getUserMedia({
-                                audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-                              });
-                              const gainMultiplier = (db.getSettings().inputGain ?? 100) / 100;
-                              const processor = createAudioProcessor(stream, gainMultiplier);
-                              testMicProcessorRef.current = processor;
-                              setTestMicActive(true);
-
-                              const tick = () => {
-                                if (!testMicProcessorRef.current) return;
-                                const level = processor.getLevel();
-                                const clipping = processor.isClipping();
-                                setTestMicLevel(level);
-                                setTestMicClipping(clipping);
-                                testMicRafRef.current = requestAnimationFrame(tick);
-                              };
-                              testMicRafRef.current = requestAnimationFrame(tick);
-                            } catch (err) {
-                              console.warn("[Audio Settings] Mic test failed:", err);
-                              triggerToast("Could not access microphone", "accent");
-                            }
-                          }}
-                        >
-                          {testMicActive ? "Stop Test" : "Start Test"}
-                        </button>
-                        {testMicActive && (
-                          <span style={{ color: "var(--success-color, #22c55e)", fontSize: "0.8rem", fontWeight: 500 }}>
-                            Listening…
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Tips card */}
 
@@ -2109,36 +1899,29 @@ export function MVSettings() {
         showLanguageModal && pendingLanguage && (
           <div className="mv-modal-backdrop" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
             <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
-              <h3 className="mv-modal-title">Change Language</h3>
+              <h3 className="mv-modal-title">{t("mvSettings.modal.language.changeLanguage")}</h3>
               <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.85rem", lineHeight: 1.5, margin: "0 0 4px" }}>
-                Switch interface language to <strong>{pendingLanguage}</strong>?
+                {t("mvSettings.modal.language.switchLanguagePrompt", {
+                  language: getInterfaceLanguageLabel(pendingLanguage),
+                })}
               </p>
               <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.8rem", lineHeight: 1.5 }}>
-                The interface will update immediately.
+                {t("mvSettings.modal.language.interfaceUpdateImmediately")}
               </p>
               <div className="mv-modal-actions" style={{ marginTop: 12 }}>
-                <button className="mv-btn mv-btn--ghost" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>Cancel</button>
+                <button className="mv-btn mv-btn--ghost" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
+                  {t("mvSettings.modal.language.cancel")}
+                </button>
                 <button
                   className="mv-btn mv-btn--primary"
                   onClick={() => {
-                    const lang = pendingLanguage!;
-                    const langToCode: Record<string, string> = {
-                      English: "en", French: "fr", Spanish: "es", Portuguese: "pt",
-                      Yoruba: "yo", Igbo: "ig", Hausa: "ha", Ghanaian: "gh",
-                    };
-                    const code = langToCode[lang] || "en";
-                    console.log(`[MCE-i18n] User clicked Change Language → "${lang}" → code="${code}", current lng=${i18n.language}`);
-                    localStorage.setItem("mce_interface_language", lang);
-                    i18n.changeLanguage(code).then(() => {
-                      console.log(`[MCE-i18n] changeLanguage resolved. New lng=${i18n.language}`);
-                    });
-                    dockBridge.sendLanguageChanged(lang, code);
-                    setInterfaceLanguage(lang);
+                    const code = pendingLanguage!;
+                    void applyInterfaceLanguagePreference(code, { broadcast: true }).then(setInterfaceLanguage);
                     setShowLanguageModal(false);
                     setPendingLanguage(null);
                   }}
                 >
-                  Change Language
+                  {t("mvSettings.modal.language.change")}
                 </button>
               </div>
             </div>

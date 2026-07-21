@@ -7,6 +7,7 @@
 
 import { useTranslation } from "react-i18next";
 import { Lock, Zap } from "lucide-react";
+import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from "../../lib/upgradePromo";
 
 interface DockUpgradeModalProps {
   open: boolean;
@@ -16,6 +17,10 @@ interface DockUpgradeModalProps {
 
 export function DockUpgradeModal({ open, onClose, message }: DockUpgradeModalProps) {
   const { t } = useTranslation();
+  const promoText = t("common.upgradePlansStartToday", {
+    amount: UPGRADE_ENTRY_PRICE_NGN.toLocaleString("en-US"),
+    defaultValue: UPGRADE_PROMO_FALLBACK,
+  });
   if (!open) return null;
 
   return (
@@ -33,6 +38,7 @@ export function DockUpgradeModal({ open, onClose, message }: DockUpgradeModalPro
           <p className="dock-upgrade__message">
             {message || t('upgrade.featureLimited')}
           </p>
+          <p className="dock-upgrade__promo">{promoText}</p>
 
           <div className="dock-upgrade__actions">
             <button className="dock-upgrade__btn dock-upgrade__btn--secondary" onClick={onClose} title={t('common.cancel')}>
@@ -40,7 +46,7 @@ export function DockUpgradeModal({ open, onClose, message }: DockUpgradeModalPro
             </button>
             <button
               className="dock-upgrade__btn dock-upgrade__btn--primary"
-              onClick={() => window.open("https://makechurcheasy.creatorstudioslabs.stream/pricing", "_blank")}
+              onClick={() => window.open("https://makechurcheasy.creatorstudioslabs.stream/subscription/plans", "_blank")}
               title={t('upgrade.upgrade')}>
               <Zap size={15} />
               <span>{t('upgrade.upgrade')}</span>

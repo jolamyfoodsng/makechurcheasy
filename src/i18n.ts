@@ -7,36 +7,51 @@
 
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import appEn from "./locales/app-en.json";
+import { getInterfaceLocaleCandidates, resolveInterfaceLocale } from "./i18n/localeCatalog";
+import appEnUS from "./locales/app-en-US.json";
 import appFr from "./locales/app-fr.json";
 import appEs from "./locales/app-es.json";
 import appPt from "./locales/app-pt.json";
 import appYo from "./locales/app-yo.json";
 import appIg from "./locales/app-ig.json";
 import appHa from "./locales/app-ha.json";
-import appGh from "./locales/app-gh.json";
-import dockEn from "./locales/dock-en.json";
+import appAk from "./locales/app-ak.json";
+import dockEnUS from "./locales/dock-en-US.json";
+import dockFr from "./locales/dock-fr.json";
+import dockEs from "./locales/dock-es.json";
+import dockPt from "./locales/dock-pt.json";
+import dockYo from "./locales/dock-yo.json";
+import dockIg from "./locales/dock-ig.json";
+import dockHa from "./locales/dock-ha.json";
+import dockAk from "./locales/dock-ak.json";
 
-const SAVED_LANGUAGE = localStorage.getItem("mce_interface_language") || "English";
-const LANG_MAP: Record<string, string> = {
-  English: "en", French: "fr", Spanish: "es", Portuguese: "pt",
-  Yoruba: "yo", Igbo: "ig", Hausa: "ha", Ghanaian: "gh",
+const SAVED_LANGUAGE = localStorage.getItem("mce_interface_language") || "";
+const BROWSER_LANGUAGE = typeof navigator !== "undefined" ? navigator.language : "";
+const RESOLVED_LANGUAGE = resolveInterfaceLocale(SAVED_LANGUAGE, undefined, BROWSER_LANGUAGE);
+
+function mergeLocale(appLocale: Record<string, unknown>, dockLocale: Record<string, unknown>) {
+  return { ...dockLocale, ...appLocale };
+}
+
+const resources = {
+  en: { translation: mergeLocale(appEnUS, dockEnUS) },
+  fr: { translation: mergeLocale(appFr, dockFr) },
+  es: { translation: mergeLocale(appEs, dockEs) },
+  pt: { translation: mergeLocale(appPt, dockPt) },
+  yo: { translation: mergeLocale(appYo, dockYo) },
+  ig: { translation: mergeLocale(appIg, dockIg) },
+  ha: { translation: mergeLocale(appHa, dockHa) },
+  ak: { translation: mergeLocale(appAk, dockAk) },
+  "en-US": { translation: mergeLocale(appEnUS, dockEnUS) },
 };
-const resolvedLng = LANG_MAP[SAVED_LANGUAGE] || "en";
 
 i18n.use(initReactI18next).init({
-  resources: {
-    en: { translation: { ...dockEn, ...appEn } },
-    fr: { translation: { ...dockEn, ...appFr } },
-    es: { translation: { ...dockEn, ...appEs } },
-    pt: { translation: { ...dockEn, ...appPt } },
-    yo: { translation: { ...dockEn, ...appYo } },
-    ig: { translation: { ...dockEn, ...appIg } },
-    ha: { translation: { ...dockEn, ...appHa } },
-    gh: { translation: { ...dockEn, ...appGh } },
+  resources,
+  lng: RESOLVED_LANGUAGE,
+  fallbackLng: (code) => {
+    const locale = typeof code === "string" && code ? code : RESOLVED_LANGUAGE;
+    return getInterfaceLocaleCandidates(locale);
   },
-  lng: resolvedLng,
-  fallbackLng: "en",
   keySeparator: false,
   interpolation: {
     escapeValue: false,
@@ -44,7 +59,7 @@ i18n.use(initReactI18next).init({
 });
 
 console.log(
-  `%c[MCE-i18n] init OK — lng=${i18n.language}, keys=${Object.keys(i18n.getResourceBundle("en", "translation")).length}, saved="${SAVED_LANGUAGE}", resolved="${resolvedLng}"`,
+  `%c[MCE-i18n] init OK — lng=${i18n.language}, keys=${Object.keys(i18n.getResourceBundle("en-US", "translation")).length}, saved="${SAVED_LANGUAGE || "(empty)"}, resolved="${RESOLVED_LANGUAGE}"`,
   "color: #0f0; font-weight: bold"
 );
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { BibleThemeSettings } from "../../bible/types";
+import type { CompareThemeSettings } from "../compareThemeConfig";
 import Icon from "../DockIcon";
 
 export type DockFullscreenQuickThemeSettings = Pick<
@@ -29,6 +30,7 @@ export type DockFullscreenQuickThemeSettings = Pick<
   | "animationDuration"
   | "backgroundImage"
   | "backgroundImageFilePath"
+  | "backgroundPattern"
   | "backgroundVideo"
   | "backgroundVideoFilePath"
   | "backgroundOpacity"
@@ -44,9 +46,13 @@ export type DockFullscreenQuickThemeSettings = Pick<
   | "lowerThirdSize"
   | "lowerThirdWidthPreset"
   | "lowerThirdOffsetX"
-> & {
-  /** Dock-only: persisted background mode (off/theme/color/image/video) */
-  backgroundType?: "off" | "theme" | "color" | "image" | "video";
+  | "lowerThirdCaptionPosition"
+  // Compare Translation layout
+  | "compareTranslationWidth"
+  | "compareTranslationGap"
+> & Partial<CompareThemeSettings> & {
+  /** Dock-only: persisted background mode (off/theme/color/image/pattern/video) */
+  backgroundType?: "off" | "theme" | "color" | "image" | "pattern" | "video";
 };
 
 interface Props {
@@ -93,6 +99,7 @@ const PRESETS: ThemePreset[] = [
       animationDuration: 400,
       backgroundImage: "",
       backgroundImageFilePath: "",
+      backgroundPattern: "",
       backgroundVideo: "",
       backgroundVideoFilePath: "",
       backgroundOpacity: 1,
@@ -105,8 +112,11 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundRadius: 12,
       lowerThirdPosition: "left",
       lowerThirdSize: "medium",
-      lowerThirdWidthPreset: "full",
+      lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,
+      lowerThirdCaptionPosition: "bottom",
+      compareTranslationWidth: 40,
+      compareTranslationGap: 40,
     },
   },
   {
@@ -136,6 +146,7 @@ const PRESETS: ThemePreset[] = [
       animationDuration: 300,
       backgroundImage: "",
       backgroundImageFilePath: "",
+      backgroundPattern: "",
       backgroundVideo: "",
       backgroundVideoFilePath: "",
       backgroundOpacity: 1,
@@ -148,8 +159,11 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundRadius: 12,
       lowerThirdPosition: "left",
       lowerThirdSize: "medium",
-      lowerThirdWidthPreset: "full",
+      lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,
+      lowerThirdCaptionPosition: "bottom",
+      compareTranslationWidth: 40,
+      compareTranslationGap: 40,
     },
   },
   {
@@ -179,6 +193,7 @@ const PRESETS: ThemePreset[] = [
       animationDuration: 400,
       backgroundImage: "",
       backgroundImageFilePath: "",
+      backgroundPattern: "",
       backgroundVideo: "",
       backgroundVideoFilePath: "",
       backgroundOpacity: 1,
@@ -191,8 +206,11 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundRadius: 20,
       lowerThirdPosition: "left",
       lowerThirdSize: "medium",
-      lowerThirdWidthPreset: "full",
+      lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,
+      lowerThirdCaptionPosition: "bottom",
+      compareTranslationWidth: 40,
+      compareTranslationGap: 40,
     },
   },
   {
@@ -222,6 +240,7 @@ const PRESETS: ThemePreset[] = [
       animationDuration: 400,
       backgroundImage: "",
       backgroundImageFilePath: "",
+      backgroundPattern: "",
       backgroundVideo: "",
       backgroundVideoFilePath: "",
       backgroundOpacity: 1,
@@ -234,8 +253,11 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundRadius: 4,
       lowerThirdPosition: "left",
       lowerThirdSize: "medium",
-      lowerThirdWidthPreset: "full",
+      lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,
+      lowerThirdCaptionPosition: "bottom",
+      compareTranslationWidth: 40,
+      compareTranslationGap: 40,
     },
   },
 ];
@@ -441,9 +463,9 @@ export default function DockFullscreenThemeQuickSettings({
                   <input
                     className="dock-theme-quick__range"
                     type="range"
-                    min={14}
-                    max={150}
-                    step={1}
+                    min={10}
+                    max={14}
+                    step={0.5}
                     value={settings.refFontSize}
                     onChange={(event) =>
                       onChange(withPatch(settings, { refFontSize: Number(event.target.value) }))

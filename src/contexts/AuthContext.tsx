@@ -4,16 +4,13 @@ import {
   isAuthenticated,
   getSession,
   logout as authLogout,
-  refreshPlanFromServer,
+  refreshAccountBootstrapFromServer,
   syncSessionToOverlay,
   type AuthUser,
 } from "@/services/authService";
-import { syncCreditsWithBackend } from "@/services/credits";
 import { resetFavoriteThemeCaches } from "@/services/favoriteThemes";
 import { clearAllUserScopedStorage } from "@/services/userScopedStorage";
 import { resetLicenseGuard } from "@/services/licenseGuard";
-
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -76,107 +73,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authenticated) return;
 
-    const APP_VERSION: string =
-      typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
-
     // ── Grace period & retry constants ──────────────────────────────────────
-    // On first connect the device may not have fully replicated in MongoDB yet,
-    // or the server may still be cold.  Give it time before we treat
-    // `exists: false` as a hard logout.
-    const STARTUP_GRACE_MS = 15_000;          // 15 s — no logout during this window
-    const CHECK_RETRY_ATTEMPTS = 3;           // retries on exists:false before logout
-    const CHECK_RETRY_DELAY_MS = 3_000;      // 3 s between retries
-    const REQUIRED_FAILURES_TO_LOGOUT = 2;    // require 2+ consecutive failed cycles
-    const VISIBILITY_DEBOUNCE_MS = 5_000;     // 5 s debounce on visibility change
+    // Keep local auth non-destructive. App updates, cold deploys, and temporary
+    // device lookup drift must not force users to log out and back in.
+    const STARTUP_GRACE_MS = 15_000;
+    const DEVICE_STATE_WARNING_THRESHOLD = 4;
+    const VISIBILITY_DEBOUNCE_MS = 5_000;
+    const HEARTBEAT_MS = 5 * 60 * 1000;
     const mountTimestamp = Date.now();
 
-    async function checkDevice(): Promise<boolean> {
+    async function refreshAccountState(): Promise<boolean> {
       const session = getSession();
       if (!session?.deviceId) {
-        console.debug("[AuthContext] checkDevice: no session/deviceId — skipping");
+        console.debug("[AuthContext] refreshAccountState: no session/deviceId — skipping");
         return false;
       }
       if (session.deviceId === "dev-browser") return false;
 
       const duringGracePeriod = Date.now() - mountTimestamp < STARTUP_GRACE_MS;
+      const result = await refreshAccountBootstrapFromServer();
 
-      for (let attempt = 1; attempt <= CHECK_RETRY_ATTEMPTS; attempt++) {
-        try {
-          const res = await fetch(
-            `${API_BASE}/api/device/check?deviceId=${encodeURIComponent(session.deviceId)}`,
-            { headers: { "X-App-Version": APP_VERSION } }
-          );
-
-          // Server rejected this version — only force logout after grace period
-          if (res.status === 403) {
-            const body = await res.json().catch(() => ({}));
-            if (body.error === "VERSION_TOO_OLD") {
-              if (duringGracePeriod) {
-                console.warn(
-                  "[AuthContext] checkDevice: VERSION_TOO_OLD during startup grace — deferring logout",
-                );
-                return true; // treat as OK during grace
-              }
-              console.warn("[AuthContext] checkDevice: VERSION_TOO_OLD — forcing logout");
-              logout();
-              return false;
-            }
-          }
-
-          if (res.ok) {
-            const { exists } = await res.json();
-            if (exists) {
-              consecutiveFailuresRef.current = 0; // reset on success
-              return true;
-            }
-
-            // exists === false — retry unless this is the last attempt
-            console.warn(
-              `[AuthContext] checkDevice: device exists=false (attempt ${attempt}/${CHECK_RETRY_ATTEMPTS}, grace=${duringGracePeriod})`,
-            );
-            if (attempt < CHECK_RETRY_ATTEMPTS) {
-              await new Promise((r) => setTimeout(r, CHECK_RETRY_DELAY_MS));
-              continue;
-            }
-
-            // Final attempt failed — only logout after grace period AND consecutive failures
-            if (duringGracePeriod) {
-              console.warn(
-                "[AuthContext] checkDevice: exists=false during startup grace — skipping logout this cycle",
-              );
-              return true; // don't kill the session during grace
-            }
-
-            consecutiveFailuresRef.current += 1;
-            if (consecutiveFailuresRef.current < REQUIRED_FAILURES_TO_LOGOUT) {
-              console.warn(
-                `[AuthContext] checkDevice: exists=false — failure ${consecutiveFailuresRef.current}/${REQUIRED_FAILURES_TO_LOGOUT} (will retry next cycle)`,
-              );
-              return true; // don't logout yet
-            }
-
-            console.warn("[AuthContext] checkDevice: exists=false after retries — forcing logout");
-            logout();
-            return false;
-          }
-        } catch (err) {
-          // Network error — skip (don't retry network failures, just skip this cycle)
-          console.debug("[AuthContext] checkDevice: network error — skipping", err);
-          return true;
-        }
+      if (result.status === "ok") {
+        consecutiveFailuresRef.current = 0;
+        refreshUser();
+        return true;
       }
+
+      if (result.status === "network_error" || result.status === "unauthenticated") {
+        consecutiveFailuresRef.current = 0;
+        return true;
+      }
+
+      if (duringGracePeriod) {
+        console.warn(
+          `[AuthContext] refreshAccountState: ${result.status} during startup grace — preserving local session`,
+        );
+        return true;
+      }
+
+      consecutiveFailuresRef.current += 1;
+      if (consecutiveFailuresRef.current < DEVICE_STATE_WARNING_THRESHOLD) {
+        console.warn(
+          `[AuthContext] refreshAccountState: ${result.status} — preserving local session, failure ${consecutiveFailuresRef.current}/${DEVICE_STATE_WARNING_THRESHOLD}`,
+        );
+        return true;
+      }
+
+      console.warn(
+        `[AuthContext] refreshAccountState: ${result.status} — preserving local session after repeated failures`,
+      );
       return true;
     }
 
-    // Heartbeat: ping every 2 minutes to keep lastSeen fresh
-    const HEARTBEAT_MS = 2 * 60 * 1000;
     const heartbeatId = setInterval(() => {
-      void checkDevice().then((ok) => {
-        if (ok) {
-          // Refresh plan from server so web upgrades are reflected
-          void refreshPlanFromServer().then(() => refreshUser());
-        }
-      });
+      if (document.visibilityState !== "visible") return;
+      void refreshAccountState();
     }, HEARTBEAT_MS);
 
     // Also check when app regains focus, debounced to avoid rapid-fire checks
@@ -184,28 +135,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (document.visibilityState === "visible") {
         if (visibilityDebounceRef.current) clearTimeout(visibilityDebounceRef.current);
         visibilityDebounceRef.current = setTimeout(() => {
-          void checkDevice().then((ok) => {
-            if (ok) {
-              void refreshPlanFromServer().then(() => refreshUser());
-            }
-          });
+          void refreshAccountState();
         }, VISIBILITY_DEBOUNCE_MS);
       }
     }
 
+    void refreshAccountState();
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("online", onVisibilityChange);
     return () => {
       clearInterval(heartbeatId);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("online", onVisibilityChange);
       if (visibilityDebounceRef.current) clearTimeout(visibilityDebounceRef.current);
     };
-  }, [authenticated]);
-
-  // Initial credit sync on login
-  useEffect(() => {
-    if (!authenticated || !user?.id) return;
-    syncCreditsWithBackend().catch(() => { });
-  }, [authenticated, user?.id]);
+  }, [authenticated, refreshUser]);
 
   return (
     <AuthContext.Provider

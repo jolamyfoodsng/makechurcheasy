@@ -13,36 +13,31 @@
  */
 
 import {
-  DEFAULT_PLAN_CONFIG,
   FEATURE_LABELS,
-  deriveFeatureRequiredPlan,
-  type PlanConfig,
   type PlanTier,
   type EntitlementResult,
   type FeatureKey,
 } from "./planConfigTypes";
 import { getUserScopedKey } from "./userScopedStorage";
+import {
+  buildLegacyCompatiblePlanConfig,
+  findRequiredPlanForLegacyFeature,
+  getLegacyCompatibleEntitlementsForPlan,
+  getEffectivePlan as resolveCanonicalPlan,
+  normalizePlanId,
+} from "../lib/subscriptionSourceOfTruth";
 
-export type { EntitlementResult, FeatureKey };
+export type { EntitlementResult, FeatureKey, PlanTier };
 
-// ── Cache for derived feature→tier mapping ───────────────────────────────────
-
-let _cachedConfig: PlanConfig | null = null;
-let _featureRequiredPlan: Record<string, PlanTier> | null = null;
-
-function getFeatureRequiredPlan(config: PlanConfig): Record<string, PlanTier> {
-  if (_cachedConfig === config && _featureRequiredPlan) return _featureRequiredPlan;
-  _cachedConfig = config;
-  _featureRequiredPlan = deriveFeatureRequiredPlan(config);
-  return _featureRequiredPlan;
-}
+const LEGACY_PLAN_CONFIG = buildLegacyCompatiblePlanConfig({
+  updatedAt: "2026-07-11T00:00:00.000Z",
+});
 
 /**
  * Clear cached derived plan. Call after config refresh.
  */
 export function clearEntitlementCache(): void {
-  _cachedConfig = null;
-  _featureRequiredPlan = null;
+  // No-op: desktop gating now reads directly from sourceOfTruth helpers.
 }
 
 // ── Core API ─────────────────────────────────────────────────────────────────
@@ -57,18 +52,19 @@ export async function fetchPlanFromOverlayServer(): Promise<string> {
     const res = await fetch("/api/auth/status", { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
+      if (data.authenticated === false) {
+        return "free";
+      }
       if (data.user?.plan) {
-        // Trial users get pro-tier regardless of their base plan.
-        const trialActive = data.user.trial?.active
-          && data.user.trial?.endsAt
-          && Date.now() < new Date(data.user.trial.endsAt).getTime();
-        const effectivePlan = trialActive ? "pro" : data.user.plan;
+        const effectivePlan = normalizePlanId(
+          data.user.effectivePlan || resolveCanonicalPlan(data.user as any)
+        );
         try { localStorage.setItem(getUserScopedKey("ocs-dock-plan"), effectivePlan); } catch { }
         return effectivePlan;
       }
     }
   } catch { /* overlay server not reachable */ }
-  try { return localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free"; } catch { return "free"; }
+  try { return normalizePlanId(localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free"); } catch { return "free"; }
 }
 
 /**
@@ -101,13 +97,11 @@ export function checkEntitlementSync(
   plan?: PlanTier | string,
   currentCount: number = 0,
 ): EntitlementResult {
-  const planKey = (plan || "free").toLowerCase() as PlanTier;
-  const config = DEFAULT_PLAN_CONFIG;
-  const planTier = config.plans[planKey] || config.plans.free;
-  const limit = planTier.entitlements[feature];
+  const planKey = normalizePlanId(plan || "free");
+  const entitlements = getLegacyCompatibleEntitlementsForPlan(planKey);
+  const limit = entitlements[feature];
   const label = FEATURE_LABELS[feature] || feature;
-  const featureRequiredPlan = getFeatureRequiredPlan(config);
-  const requiredPlan = featureRequiredPlan[feature] || "basic";
+  const requiredPlan = findRequiredPlanForLegacyFeature(feature);
 
   // Boolean feature
   if (typeof limit === "boolean") {
@@ -146,9 +140,8 @@ export function checkEntitlementSync(
  * Get the full entitlement config as a record of tier → entitlements.
  */
 export async function getEntitlementConfig(): Promise<Record<string, Record<string, number | boolean>>> {
-  const config = DEFAULT_PLAN_CONFIG;
   const result: Record<string, Record<string, number | boolean>> = {};
-  for (const [tier, tierConfig] of Object.entries(config.plans)) {
+  for (const [tier, tierConfig] of Object.entries(LEGACY_PLAN_CONFIG.plans)) {
     result[tier] = tierConfig.entitlements as unknown as Record<string, number | boolean>;
   }
   return result;
@@ -164,10 +157,8 @@ export function getFeatureLimit(
   feature: FeatureKey,
   plan?: PlanTier | string,
 ): number {
-  const planKey = (plan || "free").toLowerCase() as PlanTier;
-  const config = DEFAULT_PLAN_CONFIG;
-  const planTier = config.plans[planKey] || config.plans.free;
-  const val = planTier.entitlements[feature];
+  const planKey = normalizePlanId(plan || "free");
+  const val = getLegacyCompatibleEntitlementsForPlan(planKey)[feature];
   if (typeof val === "number") return val;
   if (typeof val === "boolean") return val ? -1 : 0;
   return 0;

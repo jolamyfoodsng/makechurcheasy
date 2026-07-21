@@ -7,10 +7,11 @@
 import { useState, useEffect, useCallback } from "react";
 import CountryPicker from "./CountryPicker";
 import { getDeviceId } from "../services/authService";
+import { isConfirmedAppClose } from "../services/appCloseGuard";
 import "./CountryPicker.css";
 import "./ProfileCompletionModal.css";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
 /** List of required profile fields. Add more fields here in the future. */
 const requiredProfileFields = ["country"];
@@ -49,6 +50,9 @@ export default function ProfileCompletionModal({ user, onComplete }: ProfileComp
   // Prevent navigation away
   useEffect(() => {
     function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (isConfirmedAppClose()) {
+        return;
+      }
       e.preventDefault();
       e.returnValue = "";
     }

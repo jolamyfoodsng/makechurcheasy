@@ -1,8 +1,8 @@
 /**
  * DockBottomToolbar.css
  *
- * Default (>250px): single row + clear button full-width below
- * ≤250px: two-row compact (toggle + collapse | action icons incl. delete)
+ * Compact one-row layout at every width.
+ * [ Full | LT ] ... [ visibility ] [ inline action ] [ ⋯ ]
  */
 
 /* ── Container ── */
@@ -14,23 +14,27 @@
   background: var(--dock-surface, #111827);
   padding: 8px 10px;
   min-height: 35px;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 /* ── Main row ── */
 .dock-btm-toolbar__row {
   display: flex;
   align-items: center;
-  /* flex-wrap: wrap; */
+  flex-wrap: nowrap;
   gap: 10px;
+  min-width: 0;
 }
 
 /* ── Segmented control ── */
 .dock-btm-segmented {
   display: flex;
-  /* border: 1px solid var(--border, #334155); */
+  border: 1px solid var(--border, #334155);
   border-radius: var(--radius, 4px);
   overflow: hidden;
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .dock-btm-segmented__item {
@@ -80,8 +84,12 @@
   }
 }
 
+.dock-btm-segmented--morphing {
+  pointer-events: none;
+}
+
 .dock-btm-segmented--morphing .dock-btm-segmented__item--active {
-  animation: dock-btm-morph-pulse 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: dock-btm-morph-pulse 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ── Divider ── */
@@ -97,6 +105,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 /* ── Spacer ── */
@@ -130,17 +139,16 @@
   background: var(--surface-active, #2E2E34);
 }
 
-/* ── Clear button — full-width bar below row at default width ── */
-.dock-btm-toolbar__clear {
-  grid-column: span 4;
+/* ── Clear button — only visible in collapsed mode ── */
+.dock-btm-toolbar--collapsed .dock-btm-toolbar__clear {
+  flex: 1;
+  order: 0;
+  margin-top: 0;
   min-width: 50px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  /* Force full-width break to second line */
-
-  order: 10;
-  margin-top: 8px;
   padding: 6px;
   border: 1px solid var(--error-border, #991B1B);
   border-radius: var(--radius, 4px);
@@ -153,16 +161,16 @@
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.dock-btm-toolbar__clear:hover {
+.dock-btm-toolbar--collapsed .dock-btm-toolbar__clear:hover {
   background: rgba(220, 38, 38, 0.1);
   border-color: var(--error, #DC2626);
 }
 
-.dock-btm-toolbar__clear:active {
+.dock-btm-toolbar--collapsed .dock-btm-toolbar__clear:active {
   background: rgba(220, 38, 38, 0.15);
 }
 
-.dock-btm-toolbar__clear:disabled {
+.dock-btm-toolbar--collapsed .dock-btm-toolbar__clear:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
@@ -181,98 +189,47 @@
 }
 
 
-.dock-btm-toolbar--collapsed .dock-btm-toolbar__clear {
-  flex: 1;
-  order: 0;
-  margin-top: 0;
-}
-
 .dock-btm-toolbar--collapsed .dock-btm-toolbar__icon-btn {
   flex: 0 0 28px;
 }
 
 /* ══════════════════════════════════════════════════
-   ≤250px: Compact two-row layout
-   Row 1: Full | LT (flex:1) + collapse button
-   Row 2: action icons inline including delete
-   ══════════════════════════════════════════════════ */
-@media screen and (max-width: 250px) {
-  .dock-btm-toolbar {
-    gap: 6px;
-    padding: 6px 8px;
-    min-height: auto;
-  }
-
-  .dock-btm-toolbar__row {
-    gap: 6px;
-  }
-
-  /* Toggle takes ~90% width */
-  .dock-btm-segmented {
-    flex: 1;
-  }
-
-  .dock-btm-segmented__item {
-    flex: 1;
-    padding: 0;
-    height: 26px;
-  }
-
-  /* Hide divider, spacer — not needed in compact mode */
-  .dock-btm-divider,
-  .dock-btm-spacer {
-    display: none;
-  }
-
-  /* Action icons compact */
-  .dock-btm-toolbar__icon-btn,
-  .dock-btm-toolbar__row .dock-line-popover {
-    width: 26px;
-    height: 26px;
-  }
-
-  /* Clear button becomes inline icon — same size as other action buttons */
-  .dock-btm-toolbar__clear {
-    flex: 0 0 26px;
-    width: 26px;
-    height: 26px;
-    min-width: 26px;
-    padding: 0;
-    margin-top: 0;
-    order: 0;
-    border-radius: var(--radius, 4px);
-    gap: 0;
-  }
-
-  .dock-btm-toolbar__clear span {
-    display: none;
-  }
-
-  .dock-btm-toolbar__clear svg {
-    flex-shrink: 0;
-  }
-}
-
-/* ══════════════════════════════════════════════════
-   Compact mode (panel ≤350px)
-   Layout: [ Full | LT ] ... [ Delete ] [ ⋯ ]
+   Compact mode (always-on layout)
+   Layout: [ Full | LT ] ... [ visibility ] [ inline action ] [ ⋯ ]
    ══════════════════════════════════════════════════ */
 .dock-btm-toolbar--compact {
-  padding: 6px 10px;
+  padding: 6px 8px;
   min-height: auto;
 }
 
 .dock-btm-toolbar--compact .dock-btm-toolbar__row {
-  gap: 8px;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
 }
 
 .dock-btm-toolbar--compact .dock-btm-segmented {
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  width: auto;
+  max-width: none;
 }
 
 .dock-btm-toolbar--compact .dock-btm-segmented__item {
-  padding: 0 10px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 8px;
   height: 26px;
+}
+
+.dock-btm-toolbar--compact .dock-btm-spacer {
+  display: block;
+  min-width: 0;
+}
+
+.dock-btm-toolbar--compact .dock-btm-toolbar__clear,
+.dock-btm-toolbar--compact .dock-btm-toolbar__clear--full,
+.dock-btm-toolbar--compact .dock-btm-toolbar__clear--bible {
+  display: none !important;
 }
 
 /* ── Inline delete/clear button ── */
@@ -282,22 +239,40 @@
   justify-content: center;
   min-width: 32px;
   min-height: 32px;
-  border: 1px solid var(--error-border, #991B1B);
+  border: 1px solid var(--border, #334155);
   border-radius: var(--radius, 4px);
-  background: var(--error-bg, #7F1D1D);
-  color: var(--error, #DC2626);
+  background: var(--surface-raised, #242428);
+  color: var(--text-muted, #94A3B8);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   flex-shrink: 0;
 }
 
+.dock-btm-toolbar--compact .dock-btm-toolbar__clear--inline {
+  display: inline-flex !important;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  font-size: 0;
+  line-height: 0;
+}
+
+.dock-btm-toolbar--compact .dock-btm-toolbar__clear--inline svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
 .dock-btm-toolbar__clear--inline:hover {
-  background: rgba(220, 38, 38, 0.1);
-  border-color: var(--error, #DC2626);
+  background: var(--surface-hover, #2A2A2E);
+  border-color: var(--border-strong, #64748B);
+  color: var(--text-primary, #F8FAFC);
 }
 
 .dock-btm-toolbar__clear--inline:active {
-  background: rgba(220, 38, 38, 0.15);
+  background: var(--surface-active, #2E2E34);
 }
 
 .dock-btm-toolbar__clear--inline:disabled {
@@ -309,6 +284,10 @@
 .dock-btm-overflow {
   position: relative;
   flex-shrink: 0;
+}
+
+.dock-btm-toolbar--compact .dock-btm-overflow {
+  display: inline-flex;
 }
 
 /* ── Overflow dropdown ── */
@@ -357,4 +336,88 @@
   bottom: calc(100% + 6px);
   right: 0;
   left: auto;
+}
+
+/* ══════════════════════════════════════════════════
+   Display Mode Dropdown (on Full button)
+   ══════════════════════════════════════════════════ */
+
+/* Anchor wrapper — position: relative so the menu can be absolutely positioned */
+.dock-btm-display-mode-anchor {
+  position: relative;
+}
+
+/* The ▼ arrow inside the Full button */
+.dock-btm-display-mode-arrow {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 9px;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+  line-height: 1;
+}
+
+/* Dropdown menu — appears below the Full button */
+.dock-btm-display-mode-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  background: var(--dock-surface, #111827);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 100;
+  animation: dock-btm-display-mode-open 0.15s ease;
+}
+
+@keyframes dock-btm-display-mode-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Individual menu item */
+.dock-btm-display-mode-menu__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary, #F8FAFC);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+  white-space: nowrap;
+}
+
+.dock-btm-display-mode-menu__item:hover {
+  background: var(--surface-hover, #2A2A2E);
+}
+
+/* Active/selected item */
+.dock-btm-display-mode-menu__item--active {
+  color: var(--primary, #1D4ED8);
+  font-weight: 600;
+}
+
+.dock-btm-display-mode-menu__item--active::before {
+  content: "✓";
+  margin-right: 6px;
+  font-size: 11px;
 }

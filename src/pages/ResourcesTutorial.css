@@ -11,7 +11,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
-  z-index: 9998;
+  z-index: 100100;
   animation: rt-fade-in 200ms ease-out;
   pointer-events: none;
 }
@@ -46,7 +46,7 @@
 /* ── Panel ── */
 .rt-panel {
   position: fixed;
-  z-index: 10000;
+  z-index: 100110;
   pointer-events: auto;
   width: 340px;
   background: var(--surface-dark);

@@ -20,6 +20,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan } from "../services/licenseService";
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { isSupportedMediaFile } from "../services/mediaValidation";
+import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 
 type FilterType = "all" | "image" | "video";
 
@@ -506,7 +507,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
         <div className="lib-toolbar-left">
           {/* Search */}
           <div className="lib-search-wrap">
-            <Icon name="search" size={20} className="lib-search-icon" />
+
             <input
               className="lib-search-input"
               type="text"
@@ -533,7 +534,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
             <button
               className="lib-filter-btn"
               onClick={() => setShowFilter((v) => !v)}
-             title="Filter">
+              title="Filter">
               <Icon name="filter_list" size={18} />
               <span>Filter: {filterLabel}</span>
               <Icon name="arrow_drop_down" size={18} />
@@ -545,7 +546,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                     key={f}
                     className={`lib-filter-option${filter === f ? " is-active" : ""}`}
                     onClick={() => { setFilter(f); setShowFilter(false); }}
-                   title="Images">
+                    title="Images">
                     {f === "all" ? "All" : f === "image" ? "Images" : "Videos"}
                   </button>
                 ))}
@@ -568,7 +569,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
             // Always open file picker — per-file quota is enforced after file selection
             fileInputRef.current?.click();
           }}
-         title="Upload">
+          title="Upload">
           <Icon name="add" size={20} />
           {pageUploading ? "Uploading..." : "Add Media"}
         </button>
@@ -712,7 +713,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                     setPreviewItem(m);
                   }}
                   aria-label={`View ${m.name}`}
-                 title="Show">
+                  title="Show">
                   <Icon name="visibility" size={16} />
                   View
                 </button>
@@ -724,7 +725,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                       e.stopPropagation();
                       setMenuOpenId(menuOpenId === m.id ? null : m.id);
                     }}
-                   title="More options">
+                    title="More options">
                     <Icon name="more_vert" size={20} />
                   </button>
                   {menuOpenId === m.id && (
@@ -737,7 +738,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                           setRenameValue(m.name);
                           setMenuOpenId(null);
                         }}
-                       title="Edit">
+                        title="Edit">
                         <Icon name="edit" size={16} />
                         Rename
                       </button>
@@ -748,7 +749,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                           setDeleteConfirmId(m.id);
                           setMenuOpenId(null);
                         }}
-                       title="Delete">
+                        title="Delete">
                         <Icon name="delete" size={16} />
                         Delete
                       </button>
@@ -802,10 +803,10 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
               {hasReachedImageLimit && ` You've reached the image limit (${imageCount}/${imageLimit}).`}
               {hasReachedVideoLimit && ` You've reached the video limit (${videoCount}/${videoLimit}).`}
             </p>
-            <p>Upgrade your plan to upload more media.</p>
+            <p>Upgrade your plan to upload more media. {UPGRADE_PROMO_FALLBACK}</p>
             <div className="lib-confirm-actions">
               <button className="lib-confirm-cancel" onClick={() => setShowMediaLimitModal(false)} title="Close">Close</button>
-              <a href="https://makechurcheasy.creatorstudioslabs.stream/pricing" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
+              <a href="https://makechurcheasy.creatorstudioslabs.stream/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
                 Upgrade Plan
               </a>
             </div>
@@ -1118,7 +1119,7 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
             className="lib-modal-save-btn"
             disabled={!file || !fileName.trim() || saving}
             onClick={handleSave}
-           title="Save">
+            title="Save">
             {saving ? "Saving…" : "Save to Library"}
           </button>
         </div>

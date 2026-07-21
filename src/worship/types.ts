@@ -24,6 +24,7 @@ export interface SongMetadata {
   title: string;
   artist: string;
   language?: string;
+  hymnNumber?: string;
   key?: string;
   tags?: string[];
 }
@@ -36,7 +37,7 @@ export interface Song {
   createdAt: string;
   updatedAt: string;
   importSourceName?: string;
-  importSourceType?: "manual" | "online";
+  importSourceType?: "manual" | "online" | "document";
   importSourceUrl?: string;
   archived?: boolean;
   archivedAt?: string | null;

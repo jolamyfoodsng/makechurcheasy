@@ -22,28 +22,13 @@ import {
   deriveFeatureRequiredPlan,
 } from "../services/planConfigTypes";
 import { getUserScopedKey } from "../services/userScopedStorage";
+import {
+  getEffectivePlan as resolveCanonicalPlan,
+  normalizePlanId,
+} from "../lib/subscriptionSourceOfTruth";
 
 const PLAN_KEY = "ocs-dock-plan";
 const ENTITLEMENTS_KEY = "ocs-dock-entitlements";
-
-/**
- * If the user has an active trial, return pro-tier entitlements
- * and plan regardless of what the server sent. Trial = unlimited access.
- */
-function resolveTrialUpgrade(
-  plan: string,
-  entitlements: Record<string, number | boolean> | null,
-  trial?: { active?: boolean; endsAt?: string },
-): { plan: string; entitlements: Record<string, number | boolean> | null } {
-  if (trial?.active && trial?.endsAt && Date.now() < new Date(trial.endsAt).getTime()) {
-    const proTier = DEFAULT_PLAN_CONFIG.plans.pro;
-    return {
-      plan: "pro",
-      entitlements: (proTier?.entitlements as unknown as Record<string, number | boolean>) || entitlements,
-    };
-  }
-  return { plan, entitlements };
-}
 
 /** Module-level callback set by DockPage to show the upgrade modal. */
 let _showUpgrade: ((message: string) => void) | null = null;
@@ -63,7 +48,7 @@ export function registerUpgradeModal(trigger: (message: string) => void): void {
  */
 export function getDockPlan(): string {
   try {
-    return localStorage.getItem(getUserScopedKey(PLAN_KEY)) || "free";
+    return normalizePlanId(localStorage.getItem(getUserScopedKey(PLAN_KEY)) || "free");
   } catch {
     return "free";
   }
@@ -165,12 +150,17 @@ async function refreshPlanFromOverlayServer(): Promise<void> {
     const res = await fetch("/api/auth/status", { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
+      if (data.authenticated === false) {
+        _serverEntitlements = null;
+        return;
+      }
       if (data.user?.plan) {
-        const { plan: effectivePlan, entitlements: effectiveEntitlements } = resolveTrialUpgrade(
-          data.user.plan,
-          data.user?.entitlements ?? null,
-          data.user?.trial,
+        const effectivePlan = normalizePlanId(
+          data.user.effectivePlan || resolveCanonicalPlan(data.user as any)
         );
+        const effectiveEntitlements =
+          data.user?.entitlements
+          || (DEFAULT_PLAN_CONFIG.plans[effectivePlan]?.entitlements as unknown as Record<string, number | boolean> | null);
         const current = getDockPlan();
         if (effectivePlan !== current) {
           localStorage.setItem(getUserScopedKey(PLAN_KEY), effectivePlan);

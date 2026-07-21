@@ -96,6 +96,7 @@ export default function DockServiceTab() {
     return (
       <div className="dock-service-tab">
         <div className="dock-section-label">{t("service.loadPlan")}</div>
+        <div className="dock-section-desc">{t("service.loadPlanDesc")}</div>
 
         {loading && (
           <div className="dock-service-empty">

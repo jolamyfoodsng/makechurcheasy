@@ -15,8 +15,12 @@ import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 import { getTextTheme, loadTextThemeFont } from "../../countdowns/textThemes";
 import { validateMediaFile, backgroundFileAccept } from "../../countdowns/mediaValidation";
 import { saveCountdownAsset, deleteCountdownAsset } from "../../countdowns/countdownStore";
-import { BUILTIN_CATEGORIES, getBuiltinsByCategory } from "../../countdowns/builtinBackgrounds";
 import type { MediaItem } from "../../library/libraryTypes";
+import {
+  DOCK_COUNTDOWN_BG_SOURCE_NAME,
+  DOCK_COUNTDOWN_SOURCE_NAME,
+  resolveCountdownTargetScene,
+} from "./dockCountdownScene";
 
 // ── Hardcoded countdowns ───────────────────────────────────────────────────
 
@@ -159,8 +163,6 @@ function useCountdownTimer(cd: CountdownConfig | null) {
 
   return { remaining, isRunning, isComplete, formatted, start, pause, reset, adjustTime, setRemainingDirect };
 }
-
-const PRESENTATION_SCENE = "MCE Presentation";
 
 // ── Simplified Countdown Card ──────────────────────────────────────────────
 
@@ -357,17 +359,8 @@ function CountdownCard({
       </div>
 
       {/* Push to separate scene toggle */}
-      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: isLive ? "not-allowed" : "pointer", opacity: isLive ? 0.5 : 1 }} onClick={(e) => e.stopPropagation()}>
-        <input
-          type="checkbox"
-          checked={!!cd.obs.sceneName}
-          disabled={isLive}
-          onChange={(e) => onUpdateObs({ sceneName: e.target.checked ? "MCE Countdown" : "" })}
-          style={{ accentColor: "var(--dock-accent, #3b82f6)", width: 12, height: 12 }}
-        />
-        <span style={{ fontSize: 9, color: "var(--dock-text)" }}>{t("countdowns.pushToScene", "Use a separate scene")}</span>
-      </label>
-      <span style={{ fontSize: 7, color: "var(--dock-text-dim)", lineHeight: 1.2, marginTop: -2 }}>{t("countdowns.pushToSceneDesc", "When on, the overlay goes to a new scene instead of MCE Presentation.")}</span>
+
+
 
       {/* Push & Start / Pause / Stop + Message */}
       <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
@@ -507,56 +500,6 @@ function CountdownCard({
   );
 }
 
-// ── Built-in Background Picker (for Edit Modal) ──────────────────────────────
-
-function EditBuiltinPicker({ editBg, setEditBg }: { editBg: BackgroundSettings; setEditBg: React.Dispatch<React.SetStateAction<BackgroundSettings>> }) {
-  const [showBuiltins, setShowBuiltins] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>("nature");
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <button type="button" onClick={() => setShowBuiltins(!showBuiltins)}
-        style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 11, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span>🖼️ Built-in Backgrounds</span>
-        <span style={{ fontSize: 9 }}>{showBuiltins ? "▲" : "▼"}</span>
-      </button>
-      {showBuiltins && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {BUILTIN_CATEGORIES.map((cat) => (
-              <button key={cat.id} type="button"
-                onClick={() => setSelectedCategory(selectedCategory === cat.id ? "" : cat.id)}
-                style={{ padding: "3px 8px", borderRadius: 12, fontSize: 10, fontWeight: 500, border: `1px solid ${selectedCategory === cat.id ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: selectedCategory === cat.id ? "rgba(99,102,241,0.2)" : "transparent", color: selectedCategory === cat.id ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer" }}>
-                {cat.icon} {cat.label}
-              </button>
-            ))}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, maxHeight: 120, overflowY: "auto" }}>
-            {getBuiltinsByCategory(selectedCategory).map((b) => (
-              <button key={b.id} type="button"
-                onClick={() => setEditBg((p) => ({
-                  ...p,
-                  type: b.type,
-                  source: "builtin",
-                  builtinId: b.id,
-                  imageUrl: b.type === "image" ? b.source : p.imageUrl,
-                  videoUrl: b.type === "video" ? b.source : p.videoUrl,
-                  assetId: "",
-                  gradientStart: b.type === "gradient" ? b.source.split(",")[0]?.replace(/.*\(/, "").trim() || p.gradientStart : p.gradientStart,
-                  gradientEnd: b.type === "gradient" ? b.source.split(",")[1]?.replace(/.*\(/, "").replace(/\).*/, "").trim() || p.gradientEnd : p.gradientEnd,
-                }))}
-                title={b.label}
-                style={{ borderRadius: 4, overflow: "hidden", border: editBg.builtinId === b.id ? "2px solid #6366f1" : "2px solid transparent", cursor: "pointer", background: "none", padding: 0 }}>
-                <div style={{ width: "100%", height: 36, background: b.thumbnail }} />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main Tab ───────────────────────────────────────────────────────────────
 
 export default function DockCountdownsTab() {
@@ -566,6 +509,7 @@ export default function DockCountdownsTab() {
   const livePersistRef = useRef<LivePersistState | null>(readLivePersistState());
   const restoredRef = useRef(false);
   const autoSwitchTriggeredRef = useRef(false);
+  const obsControlArmedRef = useRef(false);
 
   // Edit modal state
   const [editingCd, setEditingCd] = useState<CountdownConfig | null>(null);
@@ -585,6 +529,8 @@ export default function DockCountdownsTab() {
   const [editMediaItems, setEditMediaItems] = useState<MediaItem[]>([]);
   const [editMediaLoading, setEditMediaLoading] = useState(false);
   const editBgFileRef = useRef<HTMLInputElement | null>(null);
+  const [editBgUploading, setEditBgUploading] = useState(false);
+  const [editBgUploadError, setEditBgUploadError] = useState("");
 
   // Per-card timer state
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -616,13 +562,10 @@ export default function DockCountdownsTab() {
 
     timer.setRemainingDirect(remaining);
 
+    setPlaybackState(persist.running && remaining > 0 ? "running" : "paused");
+
     if (persist.running && remaining > 0) {
       timer.start();
-      const sync: OverlaySyncState = { paused: false, remaining: Math.floor(remaining) };
-      pushToObs(activeCd, sync);
-    } else {
-      const sync: OverlaySyncState = { paused: true, remaining: Math.floor(remaining) };
-      pushToObs(activeCd, sync);
     }
   }, [activeCd]);
 
@@ -667,6 +610,7 @@ export default function DockCountdownsTab() {
     const triggerTime = activeCd.obs.autoSwitchAtSeconds ?? 0;
     const targetScene = activeCd.obs.autoSwitchScene;
     if (
+      obsControlArmedRef.current &&
       autoEnabled &&
       targetScene &&
       !autoSwitchTriggeredRef.current &&
@@ -690,8 +634,8 @@ export default function DockCountdownsTab() {
 
   // ── OBS ─────────────────────────────────────────────────────────────────
 
-  const COUNTDOWN_SOURCE = "MCE Countdown";
-  const BG_SOURCE = "MCE Countdown BG";
+  const COUNTDOWN_SOURCE = DOCK_COUNTDOWN_SOURCE_NAME;
+  const BG_SOURCE = DOCK_COUNTDOWN_BG_SOURCE_NAME;
 
   async function loadObsScenes(): Promise<string[]> {
     try {
@@ -726,14 +670,14 @@ export default function DockCountdownsTab() {
     if (existing) {
       await dockObsClient.call("SetInputSettings", {
         inputName: sourceName,
-        inputSettings: { url, width: 1920, height: 1080, shutdown: false },
+        inputSettings: { url, width: 1920, height: 1080, shutdown: false, restart_when_active: false },
       });
     } else {
       await dockObsClient.call("CreateInput", {
         sceneName,
         inputName: sourceName,
         inputKind: "browser_source",
-        inputSettings: { url, width: 1920, height: 1080, shutdown: false },
+        inputSettings: { url, width: 1920, height: 1080, shutdown: false, restart_when_active: false },
       });
     }
 
@@ -741,7 +685,11 @@ export default function DockCountdownsTab() {
     let item = sceneItems.sceneItems.find((i) => i.sourceName === sourceName);
 
     if (!item && existing) {
-      const addResult = await dockObsClient.call("AddSceneItem", { sceneName, sourceName }) as { sceneItemId: number };
+      const addResult = await dockObsClient.call("CreateSceneItem", {
+        sceneName,
+        sourceName,
+        sceneItemEnabled: true,
+      }) as { sceneItemId: number };
       item = { sceneItemId: addResult.sceneItemId, sourceName };
     }
 
@@ -753,14 +701,6 @@ export default function DockCountdownsTab() {
       });
 
       if (opts?.setTransform) {
-        const allItems = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sceneItemId: number }> };
-        const topIndex = Math.max(0, allItems.sceneItems.length - 1);
-        await dockObsClient.call("SetSceneItemIndex", {
-          sceneName,
-          sceneItemId: item.sceneItemId,
-          sceneItemIndex: topIndex,
-        });
-
         const vs = await dockObsClient.call("GetVideoSettings", {}) as any;
         await dockObsClient.call("SetSceneItemTransform", {
           sceneName,
@@ -773,11 +713,13 @@ export default function DockCountdownsTab() {
           },
         });
       }
+
+      await dockObsClient.ensureTickerAboveSource(sceneName, sourceName).catch(() => { });
     }
   }
 
   async function hideObsSource(sourceName: string, sceneName?: string): Promise<void> {
-    const target = sceneName || PRESENTATION_SCENE;
+    const target = resolveCountdownTargetScene(sceneName);
     const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName: target }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
     const item = sceneItems.sceneItems.find((i) => i.sourceName === sourceName);
     if (item) {
@@ -797,7 +739,7 @@ export default function DockCountdownsTab() {
       const baseUrl = getOverlayBaseUrlSync();
       const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
       const url = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
-      const targetScene = cd.obs.sceneName || PRESENTATION_SCENE;
+      const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
 
       await ensureObsSource(COUNTDOWN_SOURCE, url, targetScene);
     } catch (err) {
@@ -805,50 +747,47 @@ export default function DockCountdownsTab() {
     }
   }, []);
 
-  const showInObs = useCallback(async (cd: CountdownConfig) => {
+  // ── Actions ─────────────────────────────────────────────────────────────
+
+  const handleShowInObs = useCallback(async (cd: CountdownConfig) => {
     await ensureObsConnected();
     if (!dockObsClient.isConnected) return;
 
     try {
+      // 1. Push BG first, then countdown overlay ONCE with running state
       const baseUrl = getOverlayBaseUrlSync();
-      const targetScene = cd.obs.sceneName || PRESENTATION_SCENE;
+      const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
 
       const bgPayload = { config: cd, baseUrl, timestamp: Date.now() };
       const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
       await ensureObsSource(BG_SOURCE, bgUrl, targetScene, { setTransform: true });
 
-      const sync: OverlaySyncState = { paused: true, remaining: cd.timer.durationSeconds };
-      const contentPayload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
-      const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(contentPayload))}`;
+      setActiveId(cd.id);
+      setPlaybackState("running");
+      obsControlArmedRef.current = true;
+      autoSwitchTriggeredRef.current = false;
+
+      // Use config's durationSeconds (reflects any inline edits via handleSetTime)
+      const remaining = Math.floor(cd.timer.durationSeconds);
+      writeLivePersistState({ id: cd.id, remaining, running: true, savedAt: Date.now() });
+      setLiveCountdownId(cd.id);
+
+      const sync: OverlaySyncState = { paused: false, remaining };
+      const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
+      const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
       await ensureObsSource(COUNTDOWN_SOURCE, contentUrl, targetScene, { setTransform: true });
 
-      setLiveCountdownId(cd.id);
+      timer.start();
     } catch (err) {
       console.warn("[DockCountdowns] Failed to show in OBS:", err);
     }
-  }, []);
-
-  // ── Actions ─────────────────────────────────────────────────────────────
-
-  const handleShowInObs = useCallback(async (cd: CountdownConfig) => {
-    await showInObs(cd);
-    setActiveId(cd.id);
-    setPlaybackState("running");
-    autoSwitchTriggeredRef.current = false;
-    setTimeout(async () => {
-      timer.start();
-      const duration = cd.timer.durationSeconds;
-      writeLivePersistState({ id: cd.id, remaining: duration, running: true, savedAt: Date.now() });
-      setLiveCountdownId(cd.id);
-      const sync: OverlaySyncState = { paused: false, remaining: Math.floor(duration) };
-      await pushToObs(cd, sync);
-    }, 50);
-  }, [showInObs, timer, pushToObs]);
+  }, [timer, pushToObs]);
 
   const handlePause = useCallback(async (cd: CountdownConfig) => {
     const currentRemaining = timer.pause();
     const remaining = Math.floor(currentRemaining);
     setPlaybackState("paused");
+    obsControlArmedRef.current = true;
     writeLivePersistState({ id: cd.id, remaining: currentRemaining, running: false, savedAt: Date.now() });
     const sync: OverlaySyncState = { paused: true, remaining };
     await pushToObs(cd, sync);
@@ -859,6 +798,7 @@ export default function DockCountdownsTab() {
     if (persist && persist.id === cd.id) {
       timer.setRemainingDirect(persist.remaining);
     }
+    obsControlArmedRef.current = true;
     autoSwitchTriggeredRef.current = false;
     timer.start();
     setPlaybackState("running");
@@ -871,9 +811,10 @@ export default function DockCountdownsTab() {
   const handleStopAndRemove = useCallback(async (cd: CountdownConfig) => {
     timer.reset();
     autoSwitchTriggeredRef.current = false;
+    obsControlArmedRef.current = true;
     setActiveId(null);
     setPlaybackState("running");
-    const targetScene = cd.obs.sceneName || PRESENTATION_SCENE;
+    const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
     try {
       await ensureObsConnected();
       if (dockObsClient.isConnected) {
@@ -888,23 +829,34 @@ export default function DockCountdownsTab() {
   }, [timer]);
 
   const handleAdjustTime = useCallback(async (cd: CountdownConfig, deltaSeconds: number) => {
-    timer.adjustTime(deltaSeconds);
-    const newRemaining = Math.max(0, timer.remaining + deltaSeconds);
-    if (liveCountdownId === cd.id) {
-      writeLivePersistState({ id: cd.id, remaining: newRemaining, running: timer.isRunning, savedAt: Date.now() });
+    const oldRemaining = timer.remaining;
+    const newRemaining = Math.max(0, oldRemaining + deltaSeconds);
+    setCountdowns((prev) => prev.map((c) =>
+      c.id === cd.id ? { ...c, timer: { ...c.timer, durationSeconds: newRemaining } } : c,
+    ));
+    if (activeId === cd.id) {
+      timer.adjustTime(deltaSeconds);
+      if (liveCountdownId === cd.id) {
+        writeLivePersistState({ id: cd.id, remaining: newRemaining, running: timer.isRunning, savedAt: Date.now() });
+      }
+      const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(newRemaining) };
+      await pushToObs(cd, sync);
     }
-    const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(newRemaining) };
-    await pushToObs(cd, sync);
-  }, [timer, pushToObs, liveCountdownId]);
+  }, [timer, pushToObs, liveCountdownId, activeId]);
 
   const handleSetTime = useCallback(async (cd: CountdownConfig, seconds: number) => {
-    timer.setRemainingDirect(seconds);
-    if (liveCountdownId === cd.id) {
-      writeLivePersistState({ id: cd.id, remaining: seconds, running: timer.isRunning, savedAt: Date.now() });
+    setCountdowns((prev) => prev.map((c) =>
+      c.id === cd.id ? { ...c, timer: { ...c.timer, durationSeconds: seconds } } : c,
+    ));
+    if (activeId === cd.id) {
+      timer.setRemainingDirect(seconds);
+      if (liveCountdownId === cd.id) {
+        writeLivePersistState({ id: cd.id, remaining: seconds, running: timer.isRunning, savedAt: Date.now() });
+      }
+      const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(seconds) };
+      await pushToObs(cd, sync);
     }
-    const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(seconds) };
-    await pushToObs(cd, sync);
-  }, [timer, pushToObs, liveCountdownId]);
+  }, [timer, pushToObs, liveCountdownId, activeId]);
 
   // ── Render ──────────────────────────────────────────────────────────────
 
@@ -936,8 +888,8 @@ export default function DockCountdownsTab() {
                 formattedTime={timeDisplay}
                 obsScenes={obsScenes}
                 onSelect={() => setActiveId(cd.id)}
-                onAdjustTime={isThisActive ? (delta) => handleAdjustTime(cd, delta) : () => { }}
-                onSetTime={isThisActive ? (secs) => handleSetTime(cd, secs) : () => { }}
+                onAdjustTime={(delta) => handleAdjustTime(cd, delta)}
+                onSetTime={(secs) => handleSetTime(cd, secs)}
                 onShowObs={() => handleShowInObs(cd)}
                 onPause={() => handlePause(cd)}
                 onResume={() => handleResume(cd)}
@@ -950,6 +902,8 @@ export default function DockCountdownsTab() {
                   setEditMessage(cd.message ? { ...cd.message } : { text: "", color: "#ffffff", position: "below" });
                   setShowBgSection(false);
                   setShowMsgSection(false);
+                  setEditBgUploadError("");
+                  setEditBgUploading(false);
                   const scenes = await loadObsScenes();
                   setObsScenes(scenes);
                 }}
@@ -957,6 +911,7 @@ export default function DockCountdownsTab() {
                   if (liveCountdownId === cd.id) {
                     timer.reset();
                     autoSwitchTriggeredRef.current = false;
+                    obsControlArmedRef.current = true;
                     const sync: OverlaySyncState = { paused: true, remaining: cd.timer.durationSeconds };
                     pushToObs(cd, sync);
                     writeLivePersistState(null);
@@ -1022,8 +977,8 @@ export default function DockCountdownsTab() {
                 <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
                   {/* Type selector */}
                   <div style={{ display: "flex", gap: 4 }}>
-                    {(["solid", "gradient", "image", "video"] as BackgroundType[]).map((bgType) => (
-                      <button key={bgType} type="button" onClick={() => setEditBg((prev) => ({ ...prev, type: bgType }))}
+                    {(["solid", "gradient", "image", "video", "transparent"] as BackgroundType[]).map((bgType) => (
+                      <button key={bgType} type="button" onClick={() => { setEditBgUploadError(""); setEditBg((prev) => ({ ...prev, type: bgType })); }}
                         style={{ flex: 1, padding: "5px 0", borderRadius: 6, fontSize: 11, fontWeight: 500, border: `1px solid ${editBg.type === bgType ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: editBg.type === bgType ? "rgba(99,102,241,0.2)" : "transparent", color: editBg.type === bgType ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer", textTransform: "capitalize" }}>
                         {bgType}
                       </button>
@@ -1089,25 +1044,36 @@ export default function DockCountdownsTab() {
                           </div>
                         </div>
                       ) : (
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button type="button" onClick={() => editBgFileRef.current?.click()}
-                            style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                            <Upload size={14} /> Upload
-                          </button>
-                          <button type="button" onClick={async () => {
-                            setEditBgMediaModal(true);
-                            setEditMediaLoading(true);
-                            try {
-                              const { getAllMedia } = await import("../../library/libraryDb");
-                              const all = await getAllMedia();
-                              setEditMediaItems(all.filter((m) => m.type === "image"));
-                            } catch { setEditMediaItems([]); }
-                            setEditMediaLoading(false);
-                          }}
-                            style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                            📁 Library
-                          </button>
-                        </div>
+                        <>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            {editBgUploading ? (
+                              <div style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                Uploading…
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => { setEditBgUploadError(""); editBgFileRef.current?.click(); }}
+                                style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                <Upload size={14} /> Upload
+                              </button>
+                            )}
+                            <button type="button" onClick={async () => {
+                              setEditBgMediaModal(true);
+                              setEditMediaLoading(true);
+                              try {
+                                const { getAllMedia } = await import("../../library/libraryDb");
+                                const all = await getAllMedia();
+                                setEditMediaItems(all.filter((m) => m.type === "image"));
+                              } catch { setEditMediaItems([]); }
+                              setEditMediaLoading(false);
+                            }}
+                              style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                              📁 Library
+                            </button>
+                          </div>
+                          {editBgUploadError && (
+                            <div style={{ fontSize: 10, color: "#ef4444", lineHeight: 1.3 }}>{editBgUploadError}</div>
+                          )}
+                        </>
                       )}
                       {/* Image fit */}
                       <div style={{ display: "flex", gap: 4 }}>
@@ -1144,25 +1110,36 @@ export default function DockCountdownsTab() {
                           </div>
                         </div>
                       ) : (
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button type="button" onClick={() => editBgFileRef.current?.click()}
-                            style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                            <Upload size={14} /> Upload
-                          </button>
-                          <button type="button" onClick={async () => {
-                            setEditBgMediaModal(true);
-                            setEditMediaLoading(true);
-                            try {
-                              const { getAllMedia } = await import("../../library/libraryDb");
-                              const all = await getAllMedia();
-                              setEditMediaItems(all.filter((m) => m.type === "video"));
-                            } catch { setEditMediaItems([]); }
-                            setEditMediaLoading(false);
-                          }}
-                            style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                            📁 Library
-                          </button>
-                        </div>
+                        <>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            {editBgUploading ? (
+                              <div style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                Uploading…
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => { setEditBgUploadError(""); editBgFileRef.current?.click(); }}
+                                style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                <Upload size={14} /> Upload
+                              </button>
+                            )}
+                            <button type="button" onClick={async () => {
+                              setEditBgMediaModal(true);
+                              setEditMediaLoading(true);
+                              try {
+                                const { getAllMedia } = await import("../../library/libraryDb");
+                                const all = await getAllMedia();
+                                setEditMediaItems(all.filter((m) => m.type === "video"));
+                              } catch { setEditMediaItems([]); }
+                              setEditMediaLoading(false);
+                            }}
+                              style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                              📁 Library
+                            </button>
+                          </div>
+                          {editBgUploadError && (
+                            <div style={{ fontSize: 10, color: "#ef4444", lineHeight: 1.3 }}>{editBgUploadError}</div>
+                          )}
+                        </>
                       )}
                       <div style={{ display: "flex", gap: 10, marginBottom: 4 }}>
                         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--dock-text-dim)", cursor: "pointer" }}>
@@ -1175,8 +1152,8 @@ export default function DockCountdownsTab() {
                     </>
                   )}
 
-                  {/* Built-in backgrounds */}
-                  <EditBuiltinPicker editBg={editBg} setEditBg={setEditBg} />
+
+
 
                   {/* Hidden file input */}
                   <input ref={editBgFileRef} type="file" accept={backgroundFileAccept()} style={{ display: "none" }}
@@ -1185,7 +1162,13 @@ export default function DockCountdownsTab() {
                       if (!files?.length) return;
                       const file = files[0];
                       const result = validateMediaFile(file);
-                      if (!result.valid) return;
+                      if (!result.valid) {
+                        setEditBgUploadError(result.error || "Unsupported file type");
+                        if (editBgFileRef.current) editBgFileRef.current.value = "";
+                        return;
+                      }
+                      setEditBgUploadError("");
+                      setEditBgUploading(true);
                       try {
                         if (editBg.assetId) await deleteCountdownAsset(editBg.assetId).catch(() => { });
                         const { assetId, overlayUrl } = await saveCountdownAsset(file);
@@ -1199,8 +1182,14 @@ export default function DockCountdownsTab() {
                           imageUrl: isImage ? overlayUrl : p.imageUrl,
                           videoUrl: !isImage ? overlayUrl : p.videoUrl,
                         }));
-                      } catch { /* upload failed silently */ }
-                      if (editBgFileRef.current) editBgFileRef.current.value = "";
+                      } catch (err) {
+                        const msg = err instanceof Error ? err.message : String(err);
+                        console.warn("[DockCountdowns] Upload failed:", msg);
+                        setEditBgUploadError(msg);
+                      } finally {
+                        setEditBgUploading(false);
+                        if (editBgFileRef.current) editBgFileRef.current.value = "";
+                      }
                     }} />
 
                   {/* Media library modal */}
@@ -1303,18 +1292,34 @@ export default function DockCountdownsTab() {
               <button type="button" className="dock-btn dock-btn--small dock-btn--success" onClick={async () => {
                 const mins = parseFloat(editMinutes) || 0;
                 const secs = Math.round(mins * 60);
-                setCountdowns((prev) => prev.map((c) =>
-                  c.id === editingCd.id
-                    ? {
-                      ...c,
-                      title: editTitle.trim() || c.title,
-                      timer: { ...c.timer, durationSeconds: secs },
-                      background: { ...editBg },
-                      message: editMessage.text.trim() ? { ...editMessage } : undefined,
-                    }
-                    : c,
-                ));
+                const updatedCd: CountdownConfig = {
+                  ...editingCd,
+                  title: editTitle.trim() || editingCd.title,
+                  timer: { ...editingCd.timer, durationSeconds: secs },
+                  background: { ...editBg },
+                  message: editMessage.text.trim() ? { ...editMessage } : undefined,
+                };
+                setCountdowns((prev) => prev.map((c) => c.id === editingCd.id ? updatedCd : c));
                 setEditingCd(null);
+
+                if (liveCountdownId === updatedCd.id) {
+                  try {
+                    await ensureObsConnected();
+                    if (dockObsClient.isConnected) {
+                      const baseUrl = getOverlayBaseUrlSync();
+                      const targetScene = resolveCountdownTargetScene(updatedCd.obs.sceneName);
+                      const bgPayload = { config: updatedCd, baseUrl, timestamp: Date.now() };
+                      const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
+                      await ensureObsSource(BG_SOURCE, bgUrl, targetScene, { setTransform: true });
+                      const sync: OverlaySyncState = { paused: playbackState === "paused", remaining: Math.floor(timer.remaining) };
+                      const payload: CountdownOverlayPayload = { config: updatedCd, baseUrl, timestamp: Date.now(), sync };
+                      const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
+                      await ensureObsSource(COUNTDOWN_SOURCE, contentUrl, targetScene, { setTransform: true });
+                    }
+                  } catch (err) {
+                    console.warn("[DockCountdowns] Failed to update OBS after edit:", err);
+                  }
+                }
               }} style={{ fontSize: 11 }}>
                 {t("common.save", "Save")}
               </button>

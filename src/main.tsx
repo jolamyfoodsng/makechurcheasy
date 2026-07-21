@@ -1,11 +1,12 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { HashRouter } from "react-router-dom";
+import { createHashRouter, RouterProvider } from "react-router-dom";
 import "./fonts.css";
 import "./i18n";
 import App from "./App";
 import { LayoutStoreProvider } from "./hooks/useLayoutStore";
 import { AuthProvider } from "./contexts/AuthContext";
+import DesktopBrowserGate from "./components/DesktopBrowserGate";
 import { initOverlayUrl } from "./services/overlayUrl";
 import { initAuthStore } from "./services/authService";
 import { initAnalytics, captureException } from "./services/analytics";
@@ -34,7 +35,24 @@ window.addEventListener("unhandledrejection", (event) => {
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 void initOverlayUrl();
 
-// Await auth store so the session is in memory before any component reads it
+const appRouter = createHashRouter([
+  {
+    path: "*",
+    element: (
+      <DesktopBrowserGate>
+        <AuthProvider>
+          <LayoutStoreProvider>
+            <App />
+          </LayoutStoreProvider>
+        </AuthProvider>
+      </DesktopBrowserGate>
+    ),
+  },
+]);
+
+// Await auth store so the session is in memory before any component reads it.
+// initAuthStore no longer blocks on network (plan refresh is fire-and-forget),
+// so this resolves immediately from local storage.
 void initAuthStore().then(async () => {
   // Sync church profile from web API on startup (ensures speakers, branding, etc. are in localStorage)
   try {
@@ -57,29 +75,28 @@ void initAuthStore().then(async () => {
   // Load desktop config from API (with cache/fallback) and apply theme overrides
   try {
     const { getDesktopConfig, refreshDesktopConfig } = await import("./services/desktopConfig");
-    await getDesktopConfig();
+    await refreshDesktopConfig().catch(() => getDesktopConfig());
 
     // Apply admin-configured theme overrides to DEFAULT_THEME_SETTINGS
     const { applyThemeConfigOverrides } = await import("./bible/types");
     applyThemeConfigOverrides();
 
-    // Background refresh every 5 minutes
-    setInterval(() => {
+    const refreshDesktopSettings = () => {
       void refreshDesktopConfig().then(() => {
         applyThemeConfigOverrides();
       });
+    };
+
+    // Background refresh every 5 minutes
+    setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      refreshDesktopSettings();
     }, 5 * 60 * 1000);
 
     // Refresh on window focus and connectivity change
-    window.addEventListener("focus", () => {
-      void refreshDesktopConfig().then(() => {
-        applyThemeConfigOverrides();
-      });
-    });
+    window.addEventListener("focus", refreshDesktopSettings);
     window.addEventListener("online", () => {
-      void refreshDesktopConfig().then(() => {
-        applyThemeConfigOverrides();
-      });
+      refreshDesktopSettings();
       // Sync pending offline credit transactions when connectivity returns
       import("./services/credits").then(({ syncPendingTransactions }) => {
         void syncPendingTransactions();
@@ -109,13 +126,7 @@ void initAuthStore().then(async () => {
   } else {
     root.render(
       <React.StrictMode>
-        <HashRouter>
-          <AuthProvider>
-            <LayoutStoreProvider>
-              <App />
-            </LayoutStoreProvider>
-          </AuthProvider>
-        </HashRouter>
+        <RouterProvider router={appRouter} />
       </React.StrictMode>
     );
   }

@@ -99,9 +99,14 @@ export default function VerificationGate({ children }: Props) {
     );
   }
 
-  // Locked tier — render lock screen ONLY (no children accessible)
+  // Locked tier — show lock screen over the app, don't block the dashboard
   if (state.tier === "locked") {
-    return <VerificationLockScreen daysOffline={state.daysOffline} />;
+    return (
+      <>
+        {children}
+        <VerificationLockScreen daysOffline={state.daysOffline} />
+      </>
+    );
   }
 
   // Fallback — render children

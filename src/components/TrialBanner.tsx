@@ -1,12 +1,13 @@
 /**
  * TrialBanner.tsx — Persistent notification when trial expires
  *
- * Shown on the dashboard after the 14-day trial ends.
+ * Shown on the dashboard after the Growth trial ends.
  * Informs the user they're now on Free plan and prompts upgrade.
  */
 
 import { getCurrentUser } from "../services/authService";
 import { isTrialExpired, getTrialDaysRemaining } from "../services/licenseService";
+import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 
 interface TrialBannerProps {
   onUpgrade?: () => void;
@@ -41,6 +42,9 @@ export function TrialBanner({ onUpgrade }: TrialBannerProps) {
         </span>
         <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
           {daysLeft} day{daysLeft !== 1 ? "s" : ""} remaining
+        </span>
+        <span style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 600 }}>
+          {UPGRADE_PROMO_FALLBACK}
         </span>
         <button
           onClick={onUpgrade}
@@ -85,6 +89,9 @@ export function TrialBanner({ onUpgrade }: TrialBannerProps) {
       </span>
       <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
         You're now on the Free plan
+      </span>
+      <span style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 600 }}>
+        {UPGRADE_PROMO_FALLBACK}
       </span>
       <button
         onClick={onUpgrade}

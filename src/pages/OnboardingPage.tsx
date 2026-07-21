@@ -15,8 +15,6 @@ import {
   Rocket,
   Mic,
   BookOpen,
-  Music,
-  Images,
   ArrowRight,
   ExternalLink,
   Copy,
@@ -48,7 +46,7 @@ const TOTAL_STEPS = 6;
 const YOUTUBE_URL = "https://www.youtube.com/watch?v=08UjSYtjmLU";
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.makechurcheasy.creatorstudioslabs.stream";
+  "https://api.creatorstudioslabs.stream";
 
 const STEP_NAMES = [
   "Welcome",
@@ -304,37 +302,6 @@ function StepWelcome({
         </p>
       </div>
 
-      <div className="ob-features">
-        <div className="ob-feature-card">
-          <div className="ob-feature-icon ob-feature-icon--purple">
-            <Mic size={16} />
-          </div>
-          <h3>Voice Bible</h3>
-          <p>Detect scriptures while preaching</p>
-        </div>
-        <div className="ob-feature-card">
-          <div className="ob-feature-icon ob-feature-icon--green">
-            <BookOpen size={16} />
-          </div>
-          <h3>Bible Presentation</h3>
-          <p>Display verses instantly</p>
-        </div>
-        <div className="ob-feature-card">
-          <div className="ob-feature-icon ob-feature-icon--orange">
-            <Music size={16} />
-          </div>
-          <h3>Worship Lyrics</h3>
-          <p>Manage worship slides</p>
-        </div>
-        <div className="ob-feature-card">
-          <div className="ob-feature-icon ob-feature-icon--blue">
-            <Images size={16} />
-          </div>
-          <h3>Media</h3>
-          <p>Images, videos and announcements</p>
-        </div>
-      </div>
-
       <div className="ob-actions">
         <button className="ob-btn ob-btn--primary" onClick={onNext} title="Get started">
           Get Started
@@ -393,42 +360,38 @@ function StepConnectOBS({
 
   return (
     <div className="ob-card">
-      <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
+      <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left", position: "relative" }}>
         <h1>Connect OBS</h1>
         <p>
           Verify that OBS Studio is running with WebSocket support enabled.
         </p>
-      </div>
 
-      {/* Status */}
-      <div className="ob-obs-status">
-        <div
-          className={`ob-obs-dot${status === "connected" ? " ob-obs-dot--connected" : ""}${status === "error" ? " ob-obs-dot--disconnected" : ""}${status === "checking" ? " ob-obs-dot--checking" : ""}${status === "idle" ? " ob-obs-dot--disconnected" : ""}`}
-        />
-        <span className="ob-obs-status-text">
-          {status === "connected"
-            ? "Connected"
-            : status === "checking"
-              ? "Checking..."
-              : "Not Connected"}
-        </span>
-        {status === "error" && (
-          <span className="ob-obs-status-sub">{errorMsg}</span>
-        )}
+        {/* Status — top right */}
+        <div className="ob-obs-status" style={{ position: "absolute", top: 0, right: 0 }}>
+          <div
+            className={`ob-obs-dot${status === "connected" ? " ob-obs-dot--connected" : ""}${status === "error" ? " ob-obs-dot--disconnected" : ""}${status === "checking" ? " ob-obs-dot--checking" : ""}${status === "idle" ? " ob-obs-dot--disconnected" : ""}`}
+          />
+          <span className="ob-obs-status-text">
+            {status === "connected"
+              ? "Connected"
+              : status === "checking"
+                ? "Checking..."
+                : "Not Connected"}
+          </span>
+          {status === "error" && (
+            <span className="ob-obs-status-sub">{errorMsg}</span>
+          )}
+        </div>
       </div>
 
       {/* Instructions */}
       <div className="ob-instructions">
         <h4>If OBS is not connected</h4>
-        <ol>
-          <li>Open OBS Studio</li>
-          <li>
-            Go to <strong>Tools → WebSocket Server Settings</strong>
-          </li>
-          <li>Enable WebSocket Server</li>
-          <li>
-            Note the <strong>Port</strong> (default: <code>4455</code>)
-          </li>
+        <ol style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px", padding: 0, margin: 0, listStyle: "none", counterReset: "step" }}>
+          <li style={{ counterIncrement: "step" }}><strong>1.</strong> Open OBS Studio</li>
+          <li style={{ counterIncrement: "step" }}><strong>2.</strong> Go to <strong>Tools → WebSocket Server Settings</strong></li>
+          <li style={{ counterIncrement: "step" }}><strong>3.</strong> Enable WebSocket Server</li>
+          <li style={{ counterIncrement: "step" }}><strong>4.</strong> Note the <strong>Port</strong> (default: <code>4455</code>)</li>
         </ol>
       </div>
 
@@ -566,9 +529,10 @@ function StepInstallDock({
     window.location.protocol === "http:" && window.location.port === "1420";
   const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
   const deviceId = getDeviceId();
+  const versionParam = `_v=${__APP_VERSION__}`;
   const deviceIdParam = deviceId
-    ? `?deviceId=${encodeURIComponent(deviceId)}`
-    : "";
+    ? `?deviceId=${encodeURIComponent(deviceId)}&${versionParam}`
+    : `?${versionParam}`;
   const dockUrl =
     (isDev ? `${base}/dock` : `${base}/dock.html`) + deviceIdParam;
   const aiUrl =

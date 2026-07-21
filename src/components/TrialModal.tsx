@@ -105,8 +105,8 @@ export default function TrialModal({
           }}
         >
           {isExistingUser
-            ? `As an early adopter of MakeChurchEasy, we've unlocked a complimentary ${trialDays}-day Premium Trial for your church.`
-            : `Welcome to MakeChurchEasy. You now have full access to Pro features for the next ${trialDays} days.`}
+            ? `As an early adopter of MakeChurchEasy, we've unlocked a complimentary ${trialDays}-day Growth Trial for your church.`
+            : `Welcome to MakeChurchEasy. You now have full access to Growth features for the next ${trialDays} days.`}
         </p>
 
         {/* Features list */}

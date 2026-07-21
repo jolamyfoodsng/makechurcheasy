@@ -29,6 +29,8 @@ import {
   OnlineLyricsImportModal,
   type OnlineLyricsImportDraft,
 } from "../../worship/OnlineLyricsImportModal";
+import { BulkImportModal } from "../../worship/BulkImportModal";
+import WorshipSongModal from "../../worship/WorshipSongModal";
 import { lowerThirdObsService } from "../../lowerthirds/lowerThirdObsService";
 import { dockObsClient } from "../../dock/dockObsClient";
 import { ensureDockObsClientConnected } from "../../services/dockObsInterop";
@@ -64,6 +66,7 @@ import type { Song, SongMetadata, SplitConfig, Slide } from "../../worship/types
 import "../../worship/worship.css";
 import Icon from "../Icon";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
+import { UPGRADE_PROMO_FALLBACK } from "../../lib/upgradePromo";
 
 const WORSHIP_THEME_KEYWORDS = ["worship", "prayer", "lyric", "lyrics", "song", "hymn", "choir"];
 
@@ -97,6 +100,10 @@ const WORSHIP_FULLSCREEN_THEME_FALLBACKS: BibleTheme[] = BUILTIN_THEMES.filter(
 );
 const MIN_ONLINE_LYRICS_QUERY_LENGTH = 3;
 const ONLINE_LYRICS_SEARCH_DELAY_MS = 40;
+
+function createSongId(prefix = "song"): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 // ── Worship layout persistence ──
 const WORSHIP_LAYOUT_PREFS_KEY = "ocs-worship-layout-prefs";
@@ -180,18 +187,25 @@ As long as life endures.`,
 export interface WorshipModuleProps {
   isActive?: boolean;
   homePath?: string;
+  presentationMode?: boolean;
   /** Deep-link: auto-select this song when set */
   initialSelectSongId?: string | null;
   /** Called after the deep-link selection has been consumed */
   onConsumeInitialSelect?: () => void;
+  onPresentToScreen?: (payload: { song: Song; slide: Slide; slideIndex: number }) => void;
+  onClearScreen?: () => void;
 }
 
 export function WorshipModule({
   isActive = true,
+  presentationMode = false,
   initialSelectSongId,
   onConsumeInitialSelect,
+  onPresentToScreen,
+  onClearScreen,
 }: WorshipModuleProps) {
   const [view, setView] = useState<"dashboard" | "import">("dashboard");
+  const presentationTabWasActiveRef = useRef(isActive);
 
   // ── Song library state ──
   const [songs, setSongs] = useState<Song[]>([]);
@@ -203,17 +217,21 @@ export function WorshipModule({
   const [onlineSearchResults, setOnlineSearchResults] = useState<OnlineLyricsSearchResult[]>([]);
   const [onlineSearchState, setOnlineSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [onlineSearchMessage, setOnlineSearchMessage] = useState("");
-  const [importingOnlineId, setImportingOnlineId] = useState<string | null>(null);
   const [pendingOnlineImport, setPendingOnlineImport] = useState<OnlineLyricsSearchResult | null>(null);
+  const [manualImportOpen, setManualImportOpen] = useState(false);
+  const [savingOnlineImport, setSavingOnlineImport] = useState(false);
 
   // ── Plan enforcement ──
   const { user: authUser } = useAuth();
   const effectivePlan = getEffectivePlan(authUser);
   const { limit: songLimit } = checkEntitlementSync("songs", effectivePlan);
+  const { allowed: canImport } = checkEntitlementSync("massImport", effectivePlan);
   const [songCount, setSongCount] = useState<number>(0);
   const isSongUnlimited = songLimit === -1;
   const hasReachedSongLimit = !isSongUnlimited && songCount >= songLimit;
   const [showSongLimitModal, setShowSongLimitModal] = useState(false);
+  const [songLimitModalType, setSongLimitModalType] = useState<"songs" | "import">("songs");
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
   const computeSongCount = useCallback(async () => {
     const slots = await getRemainingSongSlots(authUser);
@@ -435,7 +453,7 @@ export function WorshipModule({
   }, []);
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || bulkImportOpen) return;
 
     if (!obsConnected) {
       setLtScenes([]);
@@ -459,9 +477,18 @@ export function WorshipModule({
   }, [isActive, obsConnected, loadLtScenes]);
 
   // ── Selected song + slides ──
+
+  // Accessible songs: only the first N songs the user's plan allows.
+  // All downstream operations (search, sort, display, count) MUST use this
+  // instead of the raw `songs` array to enforce plan limits.
+  const accessibleSongs = useMemo(() => {
+    if (isSongUnlimited) return songs;
+    return songs.slice(0, songLimit);
+  }, [songs, isSongUnlimited, songLimit]);
+
   const selectedSong = useMemo(
-    () => songs.find((s) => s.id === selectedSongId) ?? songs[0],
-    [songs, selectedSongId]
+    () => accessibleSongs.find((s) => s.id === selectedSongId) ?? accessibleSongs[0],
+    [accessibleSongs, selectedSongId]
   );
 
   // Auto-select the song's saved theme when a song is loaded
@@ -475,6 +502,22 @@ export function WorshipModule({
     () => (selectedSong ? generateSlides(selectedSong.lyrics, 2, false) : []),
     [selectedSong]
   );
+
+  useEffect(() => {
+    const becameActive = !presentationTabWasActiveRef.current && isActive;
+    presentationTabWasActiveRef.current = isActive;
+
+    if (becameActive) return;
+    if (!presentationMode || !isActive || !selectedSong) return;
+    const slide = songSlides[liveSlideIndex];
+    if (!slide) return;
+    onPresentToScreen?.({
+      song: selectedSong,
+      slide,
+      slideIndex: liveSlideIndex,
+    });
+  }, [presentationMode, isActive, selectedSong, songSlides, liveSlideIndex, onPresentToScreen]);
+
   const songLyricSections = useMemo(
     () => (selectedSong ? parseWorshipLyricSections(selectedSong.lyrics, 2) : []),
     [selectedSong]
@@ -488,31 +531,69 @@ export function WorshipModule({
 
   const searchableSongs = useMemo(
     () =>
-      songs.map((song) => ({
+      accessibleSongs.map((song) => ({
         song,
         searchText: `${song.metadata.title}\n${song.metadata.artist}\n${song.lyrics}`.toLowerCase(),
       })),
-    [songs],
+    [accessibleSongs],
   );
 
   const filteredSongs = useMemo(() => {
-    let result = songs;
-    if (songSearch.trim()) {
-      const q = songSearch;
-      result = searchableSongs
-        .filter((entry) => fuzzyMatch(q, entry.searchText))
-        .map((entry) => entry.song);
+    if (!songSearch.trim()) {
+      return accessibleSongs;
     }
-    if (!isSongUnlimited && result.length > songLimit) {
-      result = result.slice(0, songLimit);
+    const q = songSearch.trim();
+    const qLower = q.toLowerCase();
+    const numMatch = qLower.match(/(\d+)/);
+    const searchNumber = numMatch ? numMatch[1] : null;
+
+    let scored = searchableSongs
+      .map((entry) => {
+        const title = entry.song.metadata.title.toLowerCase();
+        let score = 0;
+
+        // Priority 1 — exact hymn number match
+        if (searchNumber) {
+          const exactTitleRe = new RegExp(`^hymn\\s+${searchNumber}$`);
+          const numDotRe = new RegExp(`^${searchNumber}[.\\s]`);
+          const bareNumRe = new RegExp(`^${searchNumber}$`);
+          if (exactTitleRe.test(title)) score += 10000;
+          else if (bareNumRe.test(title)) score += 10000;
+          else if (numDotRe.test(title)) score += 10000;
+          else if (title.includes(`hymn ${searchNumber}`)) score += 5000;
+          else if (title.includes(searchNumber)) score += 2000;
+        }
+
+        // Priority 2 — title starts with full search query
+        if (score === 0 && title.startsWith(qLower)) score += 3000;
+
+        // Priority 3 — title contains full search query
+        if (score === 0 && title.includes(qLower)) score += 1000;
+
+        // Priority 4 — lyrics/artist contain full search query
+        if (score === 0 && entry.searchText.includes(qLower)) score += 500;
+
+        // Priority 5 — fuzzy subsequence match (only if nothing else matched)
+        if (score === 0 && fuzzyMatch(q, entry.searchText)) score += 100;
+
+        return { entry, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    // When real matches exist, suppress low-confidence fuzzy-only results
+    const bestScore = scored.length > 0 ? scored[0].score : 0;
+    if (bestScore >= 500) {
+      scored = scored.filter((item) => item.score >= 500);
     }
-    return result;
-  }, [songSearch, searchableSongs, songs, isSongUnlimited, songLimit]);
+
+    return scored.map((item) => item.entry.song);
+  }, [songSearch, searchableSongs, accessibleSongs]);
 
   const importedSongsLookup = useMemo(() => {
     const lookup = new Map<string, Song>();
 
-    for (const song of songs) {
+    for (const song of accessibleSongs) {
       for (const key of buildSongLookupKeys(song.metadata.title, song.metadata.artist)) {
         if (!lookup.has(key)) {
           lookup.set(key, song);
@@ -521,7 +602,7 @@ export function WorshipModule({
     }
 
     return lookup;
-  }, [songs]);
+  }, [accessibleSongs]);
 
   const findImportedSong = useCallback((result: OnlineLyricsSearchResult): Song | undefined => {
     for (const key of buildSongLookupKeys(result.title, result.artist)) {
@@ -630,7 +711,9 @@ export function WorshipModule({
 
     const line1 = lines[0] ?? (slideText || "Worship");
     const line2 = lines.slice(1).join(" ").trim();
-    const sectionLabel = normalizeWorshipObsLabel(songSlides[liveSlideIndex]?.label ?? "");
+    // Section labels stay in the operator UI, but should not be injected into
+    // lower-third or preview output.
+    const sectionLabel = "";
     const songInfo = sectionLabel || "";
     const quote = slideText || line1;
     const subtitle = line2 || "Worship";
@@ -830,6 +913,7 @@ export function WorshipModule({
 
   const pushToObs = useCallback(
     async (slideIdx: number, live: boolean, blanked: boolean) => {
+      if (presentationMode) return;
       if (!obsConnected) return;
       const slide = songSlides[slideIdx];
       if (!slide && live) return;
@@ -880,6 +964,7 @@ export function WorshipModule({
       getDefaultFullScenes,
       getDefaultLtScenes,
       pushWorshipLowerThirdToScene,
+      presentationMode,
     ]
   );
 
@@ -930,12 +1015,21 @@ export function WorshipModule({
 
   const handleBlackout = useCallback(async () => {
     setIsBlanked(true);
+    if (presentationMode) {
+      onClearScreen?.();
+      return;
+    }
     await pushToObs(liveSlideIndex, isLive, true);
-  }, [liveSlideIndex, isLive, pushToObs]);
+  }, [liveSlideIndex, isLive, pushToObs, presentationMode, onClearScreen]);
 
   const handleClear = useCallback(async () => {
     setIsLive(false);
     setIsBlanked(false);
+
+    if (presentationMode) {
+      onClearScreen?.();
+      return;
+    }
 
     if (layoutMode === "fullscreen") {
       const fullTargets = fullLiveScenes.length > 0 ? fullLiveScenes : getDefaultFullScenes();
@@ -976,6 +1070,8 @@ export function WorshipModule({
     getDefaultFullScenes,
     getDefaultLtScenes,
     pushWorshipLowerThirdToScene,
+    presentationMode,
+    onClearScreen,
   ]);
 
   // ── Theme change ──
@@ -1070,6 +1166,7 @@ export function WorshipModule({
   const handleSaveImport = useCallback(async () => {
     if (!importMetadata.title.trim()) return;
     if (hasReachedSongLimit) {
+      setSongLimitModalType("songs");
       setShowSongLimitModal(true);
       return;
     }
@@ -1077,10 +1174,12 @@ export function WorshipModule({
       id: `song-${Date.now()}`,
       metadata: { ...importMetadata },
       lyrics: importLyrics,
-      slides: [],
+      slides: generateSlides(importLyrics, splitConfig.linesPerSlide, splitConfig.identifyChorus),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       importSourceType: "manual",
+      autoSplit: splitConfig.identifyChorus,
+      linesPerSlide: splitConfig.linesPerSlide,
     };
     await saveSong(newSong);
     await reloadSongs();
@@ -1101,56 +1200,47 @@ export function WorshipModule({
     setPendingOnlineImport(result);
   }, [findImportedSong, selectSongById]);
 
-  const handleConfirmOnlineImport = useCallback(async (
-    result: OnlineLyricsSearchResult,
-    draft: OnlineLyricsImportDraft,
-  ) => {
-    const existingSong = findImportedSong(result);
-    if (existingSong) {
-      selectSongById(existingSong.id);
-      setPendingOnlineImport(null);
+  const handleImportOnlineSong = useCallback(async (draft: OnlineLyricsImportDraft) => {
+    if (!pendingOnlineImport) {
       return;
     }
 
-    if (hasReachedSongLimit) {
-      setPendingOnlineImport(null);
-      setShowSongLimitModal(true);
-      return;
-    }
+    setSavingOnlineImport(true);
 
-    const lyrics = draft.lyrics.trim();
-    if (!lyrics) {
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const newSong: Song = {
-      id: `song-online-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      metadata: {
-        title: draft.title.trim() || songSearch.trim() || "Imported Song",
-        artist: draft.artist.trim(),
-      },
-      lyrics,
-      slides: [],
-      createdAt: now,
-      updatedAt: now,
-      importSourceName: result.sourceName,
-      importSourceType: "online",
-      importSourceUrl: result.url,
-    };
-
-    setImportingOnlineId(result.id);
     try {
+      const now = new Date().toISOString();
+      const lyrics = draft.lyrics.trim();
+      const newSong: Song = {
+        id: createSongId("song-online"),
+        metadata: {
+          title: draft.title.trim(),
+          artist: draft.artist.trim(),
+        },
+        lyrics,
+        slides: generateSlides(lyrics, 2, true),
+        createdAt: now,
+        updatedAt: now,
+        importSourceType: "online",
+        importSourceName: pendingOnlineImport.sourceName,
+        importSourceUrl: pendingOnlineImport.url,
+        autoSplit: true,
+        linesPerSlide: 2,
+      };
+
       await saveSong(newSong);
       await reloadSongs();
-      selectSongById(newSong.id);
+      setSongSearch(newSong.metadata.title);
       setPendingOnlineImport(null);
-      track("song_created", { autoSplit: false });
-      track("song_imported", { source: "online" });
+      setSelectedSongId(newSong.id);
+    } catch (error) {
+      console.error("[WorshipModule] Failed to import online lyrics:", error);
+      setOnlineSearchMessage(
+        error instanceof Error ? error.message : String(error),
+      );
     } finally {
-      setImportingOnlineId(null);
+      setSavingOnlineImport(false);
     }
-  }, [findImportedSong, hasReachedSongLimit, reloadSongs, selectSongById, songSearch]);
+  }, [pendingOnlineImport, reloadSongs]);
 
   useEffect(() => {
     const trimmedSearch = songSearch.trim();
@@ -1214,7 +1304,7 @@ export function WorshipModule({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isActive, view, layoutMode, handlePrevSlide, handleNextSlide, handleBlackout, handleClear, handleThemeChange, themes, sendSlideToObs, liveSlideIndex]);
+  }, [isActive, bulkImportOpen, view, layoutMode, handlePrevSlide, handleNextSlide, handleBlackout, handleClear, handleThemeChange, themes, sendSlideToObs, liveSlideIndex]);
 
   const themePreviewStyle = useMemo(() => (
     activeTheme.backgroundImage
@@ -1407,7 +1497,7 @@ export function WorshipModule({
   // ═══════════════════════════════════════════════════════
   return (
     <>
-      <div className="worship-home">
+      <div className={`worship-home${presentationMode ? " worship-home--presentation" : ""}`}>
         {/* ── Header ── */}
 
 
@@ -1488,12 +1578,16 @@ export function WorshipModule({
                       <div className="worship-song-item-info">
                         <h3>{song.metadata.title}</h3>
                         <div className="worship-song-item-meta-row">
+                          {song.metadata.hymnNumber && (
+                            <span className="worship-imported-badge">Hymn {song.metadata.hymnNumber}</span>
+                          )}
                           <span className="worship-song-item-artist">{song.metadata.artist}</span>
                           {song.importSourceType === "online" && (
                             <span className="worship-imported-badge">
                               Imported{song.importSourceName ? ` from ${song.importSourceName}` : ""}
                             </span>
                           )}
+
                         </div>
                       </div>
                       <div className="worship-song-item-actions">
@@ -1536,7 +1630,6 @@ export function WorshipModule({
                   {onlineSearchResults.map((result) => {
                     const importedSong = findImportedSong(result);
                     const actionLabel = importedSong ? "Open" : "Import";
-                    const isImporting = importingOnlineId === result.id;
                     return (
                       <div key={result.id} className="worship-online-item">
                         <div className="worship-online-item-head">
@@ -1550,20 +1643,21 @@ export function WorshipModule({
                           </div>
                           <button
                             className={`worship-online-action${hasReachedSongLimit && !importedSong ? " at-limit" : ""}`}
-                            disabled={isImporting || (hasReachedSongLimit && !importedSong)}
+                            disabled={hasReachedSongLimit && !importedSong}
                             onClick={() => {
                               if (importedSong) {
                                 selectSongById(importedSong.id);
                                 return;
                               }
                               if (hasReachedSongLimit) {
+                                setSongLimitModalType("songs");
                                 setShowSongLimitModal(true);
                                 return;
                               }
                               handleOpenOnlineImport(result);
                             }}
                             title="Limit Reached">
-                            {isImporting ? "Saving…" : (hasReachedSongLimit && !importedSong ? "Limit Reached" : actionLabel)}
+                            {hasReachedSongLimit && !importedSong ? "Limit Reached" : actionLabel}
                           </button>
                         </div>
                         <p className="worship-online-preview">{result.preview}</p>
@@ -1576,16 +1670,30 @@ export function WorshipModule({
 
             <div className="worship-sidebar-footer">
               <button
+                className="worship-sidebar-action"
+                onClick={() => {
+                  if (!canImport) {
+                    setSongLimitModalType("import");
+                    setShowSongLimitModal(true);
+                    return;
+                  }
+                  setBulkImportOpen(true);
+                }}
+                title="Smart Import"
+              >
+                <Icon name="upload_file" size={20} />
+                Smart Import
+              </button>
+              <button
                 className={`worship-sidebar-action primary${hasReachedSongLimit ? " at-limit" : ""}`}
                 disabled={hasReachedSongLimit}
                 onClick={() => {
                   if (hasReachedSongLimit) {
+                    setSongLimitModalType("songs");
                     setShowSongLimitModal(true);
                     return;
                   }
-                  setImportLyrics("");
-                  setImportMetadata({ title: "", artist: "" });
-                  setView("import");
+                  setManualImportOpen(true);
                 }}
                 title="Add">
                 {hasReachedSongLimit ? <Icon name="lock" size={20} /> : <Icon name="add" size={20} />}
@@ -1649,19 +1757,19 @@ export function WorshipModule({
                     const isSelected = index === liveSlideIndex;
                     return (
                       <div key={slide.id} className="worship-slide-row">
-                        <div className="worship-slide-row-label">
-                          {!slide.isContinuation && (
-                            <span className={`worship-slide-tag${isLiveSlide ? " live" : ""}`}>
-                              {slide.label}
-                            </span>
-                          )}
-                        </div>
                         <div
                           className={`worship-slide-block${isLiveSlide ? " live" : ""}${isSelected && !isLive ? " selected" : ""}`}
                           onClick={() => setLiveSlideIndex(index)}
                           onDoubleClick={() => sendSlideToObs(index)}
                           title="Double-click to send to OBS"
                         >
+                          {!slide.isContinuation && (
+                            <div className="worship-slide-row-label">
+                              <span className={`worship-slide-tag${isLiveSlide ? " live" : ""}`}>
+                                {slide.label}
+                              </span>
+                            </div>
+                          )}
                           {isLiveSlide && <div className="worship-slide-live-badge">LIVE</div>}
                           <button
                             className="worship-slide-send-btn"
@@ -1751,15 +1859,15 @@ export function WorshipModule({
               <button
                 className="worship-control-btn danger"
                 onClick={handleClear}
-                title="Remove from OBS (C)"
+                title={presentationMode ? "Clear presentation screen (C)" : "Remove from OBS (C)"}
               >
                 <Icon name="cancel_presentation" size={20} />
-                <span>Remove From OBS</span>
+                <span>{presentationMode ? "Clear Screen" : "Remove From OBS"}</span>
               </button>
             </div>
 
             {/* Layout & Motion */}
-            <div className="worship-right-section">
+            <div className="worship-right-section worship-right-section--layout">
               <div className="worship-layout-header">
                 <Icon name="view_quilt" size={20} />
                 <span className="worship-layout-header-label">Layout &amp; Motion</span>
@@ -1889,7 +1997,7 @@ export function WorshipModule({
               )}
             </div>
 
-            <div className="worship-right-section">
+            <div className="worship-right-section worship-right-section--obs">
               <ObsScenesPanel
                 title="OBS Scenes (Full & Lower)"
                 contentLabel={layoutMode === "fullscreen" ? "full worship overlay" : "worship lower-third"}
@@ -1969,12 +2077,31 @@ export function WorshipModule({
         )}
       </div>
 
+      {manualImportOpen && (
+        <WorshipSongModal
+          onClose={() => setManualImportOpen(false)}
+          onSave={() => {
+            void reloadSongs();
+            setManualImportOpen(false);
+          }}
+        />
+      )}
+
       {pendingOnlineImport && (
         <OnlineLyricsImportModal
           result={pendingOnlineImport}
-          saving={importingOnlineId === pendingOnlineImport.id}
+          saving={savingOnlineImport}
           onClose={() => setPendingOnlineImport(null)}
-          onImport={(draft) => handleConfirmOnlineImport(pendingOnlineImport, draft)}
+          onImport={(draft) => void handleImportOnlineSong(draft)}
+        />
+      )}
+
+      {bulkImportOpen && (
+        <BulkImportModal
+          onClose={() => setBulkImportOpen(false)}
+          onImported={() => {
+            void reloadSongs();
+          }}
         />
       )}
 
@@ -2006,7 +2133,7 @@ export function WorshipModule({
       {/* ── Song limit modal ── */}
       {showSongLimitModal && (
         <div className="ssm-backdrop" onClick={() => setShowSongLimitModal(false)}>
-          <div className="ssm-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="ssm-modal ssm-modal--prompt" onClick={(e) => e.stopPropagation()}>
             <button
               className="ssm-close"
               onClick={() => setShowSongLimitModal(false)}
@@ -2015,16 +2142,29 @@ export function WorshipModule({
               <Icon name="close" size={18} />
             </button>
             <div className="ssm-icon">
-              <Icon name="library_music" size={28} />
+              <Icon name={songLimitModalType === "import" ? "upload_file" : "library_music"} size={28} />
             </div>
-            <h2 className="ssm-title">Song Limit Reached</h2>
-            <p className="ssm-desc">
-              Your <strong>{effectivePlan}</strong> plan allows up to <strong>{songLimit} songs</strong>.
-              You currently have {songCount} song{songCount !== 1 ? "s" : ""}.
-            </p>
-            <p className="ssm-hint">
-              Upgrade your plan to add more songs to your library.
-            </p>
+            <h2 className="ssm-title">{songLimitModalType === "import" ? "Smart Import Requires Growth" : "Song Limit Reached"}</h2>
+            {songLimitModalType === "import" ? (
+              <>
+                <p className="ssm-desc">
+                  Smart worship import is available on <strong>Growth</strong> and above.
+                </p>
+                <p className="ssm-hint">
+                  Free trial users can use it during the trial. Upgrade to Growth to unlock document import, review, and AI-assisted worship parsing. {UPGRADE_PROMO_FALLBACK}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="ssm-desc">
+                  Your <strong>{effectivePlan}</strong> plan allows up to <strong>{songLimit} songs</strong>.
+                  You currently have {songCount} song{songCount !== 1 ? "s" : ""}.
+                </p>
+                <p className="ssm-hint">
+                  Upgrade your plan to add more songs to your library. {UPGRADE_PROMO_FALLBACK}
+                </p>
+              </>
+            )}
             <div className="ssm-actions">
               <button
                 className="ssm-btn-cancel"
@@ -2034,7 +2174,7 @@ export function WorshipModule({
               </button>
               <a
                 className="ssm-btn-upgrade"
-                href="https://makechurcheasy.creatorstudioslabs.stream/pricing"
+                href="https://makechurcheasy.creatorstudioslabs.stream/subscription/plans"
                 target="_blank"
                 rel="noopener noreferrer"
               >

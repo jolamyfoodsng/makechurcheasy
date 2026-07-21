@@ -1,8 +1,9 @@
 /**
  * CreditsDisplay — Reusable inline badge showing the user's credit balance.
  *
- * When a userId is provided, polls the backend every 5 seconds so admin
- * credit additions reflect live without a page refresh.
+ * When a userId is provided, refreshes on mount, on visibility restore,
+ * and on a low-frequency background interval. Local credit mutations still
+ * update immediately through the shared event bus.
  */
 
 import { Zap, CloudOff } from "lucide-react";
@@ -18,10 +19,32 @@ import {
 interface CreditsDisplayProps {
   /** Force a re-render when external state changes (e.g. after deduction). */
   refreshKey?: number;
-  /** User ID for backend sync. When provided, polls every 5s. */
+  /** User ID for backend sync. When provided, enables authenticated refreshes. */
   userId?: string;
   /** Credits being consumed right now (e.g. during a live session). Subtracted from displayed balance. */
   sessionCreditsUsed?: number;
+}
+
+const BACKGROUND_REFRESH_MS = 10 * 60 * 1000;
+
+function PendingBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        fontSize: 10,
+        color: "var(--text-muted, #94a3b8)",
+        marginLeft: 4,
+      }}
+      title={`${count} transaction(s) pending sync`}
+    >
+      <CloudOff size={10} />
+      {count} pending
+    </span>
+  );
 }
 
 export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed = 0 }: CreditsDisplayProps) {
@@ -34,15 +57,15 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
   // responses (initiated before the deduction) are discarded.
   const genRef = useRef(0);
 
-  // Sync from backend on mount and every 5 seconds
+  // Sync from backend on mount, on visibility restore, and on a low-frequency timer.
   useEffect(() => {
     if (!userId) return;
 
     let cancelled = false;
 
-    async function sync() {
+    async function sync(force = false) {
       const genBefore = genRef.current;
-      const result = await syncCreditsWithBackend();
+      const result = await syncCreditsWithBackend({ force });
       // If a deduction happened while the fetch was in flight, discard
       // the stale response — the deduction already set the correct balance.
       if (!cancelled && genBefore === genRef.current) {
@@ -55,17 +78,29 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
           setSynced(true);
         }
       }
+      // Refresh pending count — sync may have flushed offline queue
+      setPendingCount(getPendingCount());
     }
 
     // Initial sync
-    sync();
+    void sync();
 
-    // Poll every 5 seconds
-    pollingRef.current = setInterval(sync, 5000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void sync(true);
+      }
+    };
+
+    pollingRef.current = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void sync(true);
+    }, BACKGROUND_REFRESH_MS);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       cancelled = true;
       if (pollingRef.current) clearInterval(pollingRef.current);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [userId]);
 
@@ -98,6 +133,7 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
         <span className="sts3-usage-value" style={{ color: "var(--gold)" }}>
           Unlimited
         </span>
+        <PendingBadge count={pendingCount} />
       </div>
     );
   }
@@ -110,29 +146,24 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
     <div
       className={`sts3-usage-pill sts3-usage-pill--${tier}`}
       style={{ gap: 6 }}
-      title={synced ? "Synced with server" : "Using local credits"}
+      title={
+        synced
+          ? "Synced with server"
+          : userId
+            ? "Loading…"
+            : "Using local credits"
+      }
     >
       <Zap size={12} />
       <span className="sts3-usage-label">CREDITS</span>
       <span className="sts3-usage-value">
-        {effectiveBalance <= 0 ? "0 — Buy Credits" : `${effectiveBalance} remaining`}
+        {!synced && userId
+          ? "…"
+          : effectiveBalance <= 0
+            ? "0 — Buy Credits"
+            : `${effectiveBalance} remaining`}
       </span>
-      {pendingCount > 0 && (
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 3,
-            fontSize: 10,
-            color: "var(--text-muted, #94a3b8)",
-            marginLeft: 4,
-          }}
-          title={`${pendingCount} transaction(s) pending sync`}
-        >
-          <CloudOff size={10} />
-          {pendingCount} pending
-        </span>
-      )}
+      <PendingBadge count={pendingCount} />
     </div>
   );
 }

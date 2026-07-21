@@ -24,17 +24,19 @@ import {
   fetchTemplateVideos,
   type TemplateVideoAsset,
 } from "../../services/templateVideos";
-import { uploadFileToDock } from "../dockUploadService";
+import { registerDockMediaItem, uploadFileToDock } from "../dockUploadService";
 import { requireEntitlement, showUpgradeModal } from "../dockEntitlement";
 import { isSupportedMediaFile } from "../../services/mediaValidation";
 import { getFeatureLimit } from "../../services/entitlementClient";
 import Icon from "../DockIcon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { isUserSelectableObsScene } from "../../services/dockSceneNames";
 import { useTranslation } from "react-i18next";
 
 interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
+  isActive?: boolean;
 }
 
 type DockMediaKind = "video" | "image";
@@ -171,6 +173,17 @@ function isMediaFile(name: string): boolean {
 
 function isInternalUploadFile(name: string): boolean {
   return INTERNAL_UPLOAD_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
+/** Extract createdAt ISO string from "media_<timestamp>_<safeName>" filename. */
+function extractUploadTimestamp(filename: string): string {
+  const match = filename.match(/^media_(\d{10,13})_/);
+  if (!match) return "";
+  const ts = Number(match[1]);
+  // Accept both seconds (10 digits) and milliseconds (13 digits)
+  const ms = match[1].length <= 10 ? ts * 1000 : ts;
+  const d = new Date(ms);
+  return Number.isFinite(d.getTime()) ? d.toISOString() : "";
 }
 
 function loadMediaPreferences(): DockMediaPreferences {
@@ -359,6 +372,19 @@ function formatFitMode(value: DockMediaFitMode, t: (key: string) => string): str
   }
 }
 
+function buildSceneMediaSourceName(entry: DockMediaEntry): string {
+  const baseName = entry.name.replace(/\.[^.]+$/, "");
+  const defaultLabel = entry.kind === "video" ? "Video" : "Image";
+  const sanitizedBase = baseName.replace(/[^a-z0-9]+/gi, " ").trim().slice(0, 40) || defaultLabel;
+  const suffix = entry.prefKey.replace(/[^a-z0-9]+/gi, "").slice(-10) || "media";
+  const sourceType = entry.kind === "video" ? "Video" : "Image";
+  return `MCE Scene ${sourceType} - ${sanitizedBase} - ${suffix}`;
+}
+
+function canSendEntryToScene(entry: DockMediaEntry): boolean {
+  return Boolean(entry.uploadFile || entry.libraryItem);
+}
+
 function createLibraryEntry(item: MediaItem, overlayBaseUrl: string, originLabel: string): DockMediaEntry {
   const prefKey = `media:${item.filePath || item.diskFileName || item.id}`;
   return {
@@ -474,11 +500,14 @@ function TemplateVideoPreview({ src, label }: { src: string; label: string }) {
   );
 }
 
-export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Props) {
+export default function DockMediaTab({ staged: _staged, onStage: _onStage, isActive = true }: Props) {
   const { t } = useTranslation();
   const overlayBaseUrl = getOverlayBaseUrlSync();
   const tabsRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [compactTabs, setCompactTabs] = useState(false);
+  const [isCompactHeight, setIsCompactHeight] = useState(false);
+  const [isUltraCompactHeight, setIsUltraCompactHeight] = useState(false);
   const [mediaSession] = useState<DockMediaSessionState>(() => loadMediaSessionState());
   const [browserTab, setBrowserTab] = useState<DockMediaBrowserTab>(() => mediaSession.browserTab);
   const [activeKind, setActiveKind] = useState<DockMediaFilter>(() => mediaSession.activeKind);
@@ -496,6 +525,12 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
   const [uploading, setUploading] = useState(false);
   const [openOptionsKey, setOpenOptionsKey] = useState<string | null>(null);
   const [previewEntry, setPreviewEntry] = useState<DockMediaEntry | null>(null);
+  const [sceneSendEntry, setSceneSendEntry] = useState<DockMediaEntry | null>(null);
+  const [sceneSendChoices, setSceneSendChoices] = useState<string[]>([]);
+  const [sceneSendSelection, setSceneSendSelection] = useState("");
+  const [sceneSendLoading, setSceneSendLoading] = useState(false);
+  const [sceneSendSubmitting, setSceneSendSubmitting] = useState(false);
+  const [sceneSendError, setSceneSendError] = useState<string | null>(null);
   const [activeTargets, setActiveTargets] = useState<ActiveMediaTargets>({
     active: null,
   });
@@ -542,6 +577,19 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
       setCompactTabs(entry.contentRect.width < 290);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Compact mode based on container height
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const h = entry.contentRect.height;
+      setIsCompactHeight(h <= 600);
+      setIsUltraCompactHeight(h <= 400);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -707,13 +755,15 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
   // Fallback polling: refresh media every 30s in case event-based sync fails
   useEffect(() => {
+    if (!isActive) return;
+
     const interval = setInterval(() => {
       if (mediaPollBusyRef.current) return;
       mediaPollBusyRef.current = true;
       void loadLibraryMedia().finally(() => { mediaPollBusyRef.current = false; });
     }, 30_000);
     return () => clearInterval(interval);
-  }, [loadLibraryMedia]);
+  }, [isActive, loadLibraryMedia]);
 
   // ── Fetch uploaded files from overlay server ──
 
@@ -805,6 +855,54 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
   // ── Play uploaded media via OBS — send to Preview or Go Live ──
 
+  const resolveUploadFilePath = useCallback(async (fileName: string): Promise<string> => {
+    let dir = uploadsDir;
+    if (!dir) {
+      const res = await fetch("/api/uploads-dir");
+      if (res.ok) {
+        const data = await res.json();
+        dir = data.path || null;
+        if (dir) setUploadsDir(dir);
+      }
+    }
+    if (!dir) {
+      throw new Error("Could not resolve uploads directory");
+    }
+
+    const sep = dir.includes("\\") ? "\\" : "/";
+    return `${dir}${sep}${fileName}`;
+  }, [uploadsDir]);
+
+  const resolveLibraryMediaFilePath = useCallback(async (item: MediaItem): Promise<string> => {
+    if (item.filePath) {
+      return item.filePath;
+    }
+
+    if (item.url.startsWith("data:")) {
+      const res = await fetch("/api/save-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: item.name, dataUrl: item.url }),
+      });
+      if (!res.ok) throw new Error(`save-media failed: ${res.status}`);
+      const data = await res.json();
+      if (!data.path) throw new Error("No path returned from save-media");
+      return data.path;
+    }
+
+    if (uploadsDir && !item.url.startsWith("http") && !item.url.startsWith("blob:")) {
+      return item.url;
+    }
+
+    if (uploadsDir) {
+      const fileName = item.url.split("/").pop() || item.name;
+      const sep = uploadsDir.includes("\\") ? "\\" : "/";
+      return `${uploadsDir}${sep}${decodeURIComponent(fileName)}`;
+    }
+
+    throw new Error("Cannot resolve media to a local file path");
+  }, [uploadsDir]);
+
   const playMedia = useCallback(
     async (fileName: string, options?: DockMediaSendOptions): Promise<boolean> => {
       try {
@@ -816,25 +914,17 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
       setSendingFile(`upload:${fileName}`);
       try {
-        let dir = uploadsDir;
-        if (!dir) {
-          try {
-            const res = await fetch("/api/uploads-dir");
-            if (res.ok) {
-              const data = await res.json();
-              dir = data.path || null;
-              if (dir) setUploadsDir(dir);
-            }
-          } catch { /* ignore */ }
+        const filePath = await resolveUploadFilePath(fileName);
+        try {
+          await dockObsClient.pushMedia(filePath, fileName, options);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (!/scene item|create.*input|create.*scene|failed to create/i.test(message)) {
+            throw err;
+          }
+          await ensureObsConnected();
+          await dockObsClient.pushMedia(filePath, fileName, options);
         }
-        if (!dir) {
-          console.warn("[DockMediaTab] Could not resolve uploads directory");
-          return false;
-        }
-
-        const sep = dir.includes("\\") ? "\\" : "/";
-        const filePath = `${dir}${sep}${fileName}`;
-        await dockObsClient.pushMedia(filePath, fileName, options);
         setSendError(null);
         track("media_presented");
         trackMediaPresented("uploaded");
@@ -848,7 +938,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         setSendingFile(null);
       }
     },
-    [uploadsDir]
+    [resolveUploadFilePath, t]
   );
 
   // ── Play library media item via OBS ──
@@ -863,31 +953,17 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
       setSendingFile(`library:${item.id}`);
       try {
-        let filePath: string;
-
-        if (item.filePath) {
-          filePath = item.filePath;
-        } else if (item.url.startsWith("data:")) {
-          const res = await fetch("/api/save-media", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fileName: item.name, dataUrl: item.url }),
-          });
-          if (!res.ok) throw new Error(`save-media failed: ${res.status}`);
-          const data = await res.json();
-          if (!data.path) throw new Error("No path returned from save-media");
-          filePath = data.path;
-        } else if (uploadsDir && !item.url.startsWith("http") && !item.url.startsWith("blob:")) {
-          filePath = item.url;
-        } else if (uploadsDir) {
-          const fileName = item.url.split("/").pop() || item.name;
-          const sep = uploadsDir.includes("\\") ? "\\" : "/";
-          filePath = `${uploadsDir}${sep}${decodeURIComponent(fileName)}`;
-        } else {
-          throw new Error("Cannot resolve media to a local file path");
+        const filePath = await resolveLibraryMediaFilePath(item);
+        try {
+          await dockObsClient.pushMedia(filePath, item.name, options);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (!/scene item|create.*input|create.*scene|failed to create/i.test(message)) {
+            throw err;
+          }
+          await ensureObsConnected();
+          await dockObsClient.pushMedia(filePath, item.name, options);
         }
-
-        await dockObsClient.pushMedia(filePath, item.name, options);
         setSendError(null);
         track("media_presented");
         trackMediaPresented("library");
@@ -901,8 +977,148 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         setSendingFile(null);
       }
     },
-    [uploadsDir]
+    [resolveLibraryMediaFilePath, t]
   );
+
+  const loadSceneSendChoices = useCallback(async () => {
+    setSceneSendChoices([]);
+    setSceneSendSelection("");
+    setSceneSendError(null);
+    setSceneSendLoading(true);
+
+    try {
+      await ensureObsConnected();
+      const [sceneListResp, currentSceneResp] = await Promise.all([
+        dockObsClient.call("GetSceneList") as Promise<{ scenes?: Array<{ sceneName?: string | null }> }>,
+        dockObsClient.call("GetCurrentProgramScene") as Promise<{ currentProgramSceneName?: string; sceneName?: string }>,
+      ]);
+
+      const currentSceneName = String(
+        currentSceneResp.currentProgramSceneName || currentSceneResp.sceneName || "",
+      ).trim();
+
+      const choices = (sceneListResp.scenes ?? [])
+        .map((scene) => String(scene.sceneName ?? "").trim())
+        .filter(isUserSelectableObsScene)
+        .sort((a, b) => {
+          if (a === currentSceneName) return -1;
+          if (b === currentSceneName) return 1;
+          return a.localeCompare(b);
+        });
+
+      setSceneSendChoices(choices);
+      setSceneSendSelection(choices.includes(currentSceneName) ? currentSceneName : (choices[0] ?? ""));
+      if (choices.length === 0) {
+        setSceneSendError(t('media.noObsScenesAvailable'));
+      }
+    } catch (err) {
+      setSceneSendError(err instanceof Error ? err.message : t('media.unableToLoadScenes'));
+    } finally {
+      setSceneSendLoading(false);
+    }
+  }, [t]);
+
+  const openSceneSendDialog = useCallback(async (entry: DockMediaEntry) => {
+    setOpenOptionsKey(null);
+    setSceneSendEntry(entry);
+    await loadSceneSendChoices();
+  }, [loadSceneSendChoices]);
+
+  const resetSceneSendDialog = useCallback(() => {
+    setSceneSendEntry(null);
+    setSceneSendChoices([]);
+    setSceneSendSelection("");
+    setSceneSendError(null);
+    setSceneSendLoading(false);
+  }, []);
+
+  const closeSceneSendDialog = useCallback(() => {
+    if (sceneSendSubmitting) return;
+    resetSceneSendDialog();
+  }, [resetSceneSendDialog, sceneSendSubmitting]);
+
+  const getEntryPrefs = useCallback(
+    (entry: DockMediaEntry): DockMediaPreference => mediaPrefs[entry.prefKey] ?? {},
+    [mediaPrefs],
+  );
+
+  const getEntrySendOptions = useCallback(
+    (entry: DockMediaEntry): DockMediaSendOptions => {
+      const prefs = getEntryPrefs(entry);
+      if (entry.kind === "video") {
+        return {
+          muted: prefs.videoMuted ?? true,
+          looping: prefs.loop ?? true,
+          fitMode: prefs.fitMode ?? "cover",
+        };
+      }
+      return {
+        imageAudioInputName: prefs.imageAudioInputName || null,
+        fitMode: prefs.fitMode ?? "cover",
+      };
+    },
+    [getEntryPrefs],
+  );
+
+  const sendEntryToSelectedScene = useCallback(async (entry: DockMediaEntry): Promise<boolean> => {
+    if (!sceneSendSelection) return false;
+
+    setSceneSendSubmitting(true);
+    setSceneSendError(null);
+    try {
+      let filePath = "";
+      if (entry.uploadFile) {
+        filePath = await resolveUploadFilePath(entry.uploadFile);
+      } else if (entry.libraryItem) {
+        filePath = await resolveLibraryMediaFilePath(entry.libraryItem);
+      } else {
+        throw new Error(t('media.thisMediaCannotBeSentToScene'));
+      }
+
+      const entryPrefs = mediaPrefs[entry.prefKey] ?? {};
+      await ensureObsConnected();
+      if (entry.kind === "video") {
+        await dockObsClient.addVideoSourceToScene({
+          sceneName: sceneSendSelection,
+          sourceName: buildSceneMediaSourceName(entry),
+          filePath,
+          fitMode: entryPrefs.fitMode ?? "cover",
+          muted: entryPrefs.videoMuted ?? true,
+          looping: entryPrefs.loop ?? true,
+        });
+      } else {
+        await dockObsClient.addImageSourceToScene({
+          sceneName: sceneSendSelection,
+          sourceName: buildSceneMediaSourceName(entry),
+          filePath,
+          fitMode: entryPrefs.fitMode ?? "cover",
+        });
+      }
+
+      updateMediaPreference(entry.prefKey, { lastUsedAt: new Date().toISOString() });
+      return true;
+    } catch (err) {
+      setSceneSendError(err instanceof Error ? err.message : t('media.failedToSendToScene'));
+      return false;
+    } finally {
+      setSceneSendSubmitting(false);
+    }
+  }, [
+    mediaPrefs,
+    resolveLibraryMediaFilePath,
+    resolveUploadFilePath,
+    sceneSendSelection,
+    t,
+    updateMediaPreference,
+  ]);
+
+  const handleSendMediaToSelectedScene = useCallback(async () => {
+    if (!sceneSendEntry) return;
+    const success = await sendEntryToSelectedScene(sceneSendEntry);
+    if (success) {
+      resetSceneSendDialog();
+    }
+  }, [resetSceneSendDialog, sceneSendEntry, sendEntryToSelectedScene]);
 
   const refreshMedia = useCallback(async () => {
     await Promise.all([fetchUploads(), loadLibraryMedia()]);
@@ -933,7 +1149,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         prefKey,
         name: file,
         kind,
-        createdAt: "",
+        createdAt: extractUploadTimestamp(file),
         originLabel: t('media.uploads'),
         mimeLabel: file.split(".").pop()?.toUpperCase(),
         uploadFile: file,
@@ -977,16 +1193,16 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         // Both unused — fall back to createdAt DESC
         const aCreatedAt = a.createdAt ?? "";
         const bCreatedAt = b.createdAt ?? "";
-        if (aCreatedAt === "" && bCreatedAt !== "") return -1;
-        if (aCreatedAt !== "" && bCreatedAt === "") return 1;
+        if (aCreatedAt === "" && bCreatedAt !== "") return 1;
+        if (aCreatedAt !== "" && bCreatedAt === "") return -1;
         return bCreatedAt.localeCompare(aCreatedAt);
       }
       // Newly Uploaded (default): sort by createdAt DESC, lastUsedAt as tiebreaker
       const aCreatedAt = a.createdAt ?? "";
       const bCreatedAt = b.createdAt ?? "";
-      // Empty createdAt (uploads without timestamps) should sort first
-      if (aCreatedAt === "" && bCreatedAt !== "") return -1;
-      if (aCreatedAt !== "" && bCreatedAt === "") return 1;
+      // Items without timestamps go to the bottom
+      if (aCreatedAt === "" && bCreatedAt !== "") return 1;
+      if (aCreatedAt !== "" && bCreatedAt === "") return -1;
       if (aCreatedAt !== bCreatedAt) {
         return bCreatedAt.localeCompare(aCreatedAt);
       }
@@ -1000,23 +1216,16 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
   const videoEntries = useMemo(() => mediaEntries.filter((entry) => entry.kind === "video"), [mediaEntries]);
   const imageEntries = useMemo(() => mediaEntries.filter((entry) => entry.kind === "image"), [mediaEntries]);
   const patternEntries = useMemo(() => BACKGROUND_PATTERNS.map((p) => createPatternEntry(p, t('media.pattern'))), []);
-  const filteredUploadEntries = useMemo(() => {
-    const pool = activeKind === "all" ? mediaEntries : activeKind === "video" ? videoEntries : imageEntries;
-    const query = assetSearch.trim().toLowerCase();
-    if (!query) return pool;
-    return pool.filter((entry) => entry.name.toLowerCase().includes(query));
-  }, [activeKind, assetSearch, imageEntries, mediaEntries, videoEntries]);
-
   // ── Plan-locked items: items beyond the plan limit get a blur + padlock ──
   const lockedKeys = useMemo(() => {
     const locked = new Set<string>();
     let plan = "free";
-    try { plan = localStorage.getItem("ocs-dock-plan") || "free"; } catch { /* */ }
+    try { plan = localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free"; } catch { /* */ }
 
     // Try server-provided entitlements first, then FALLBACK_LIMITS
     let serverEntitlements: Record<string, number | boolean> | null = null;
     try {
-      const raw = localStorage.getItem("ocs-dock-entitlements");
+      const raw = localStorage.getItem(getUserScopedKey("ocs-dock-entitlements"));
       if (raw) serverEntitlements = JSON.parse(raw);
     } catch { /* */ }
 
@@ -1056,6 +1265,27 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
     return locked;
   }, [mediaEntries]);
+
+  // Free-plan gating: restrict visible uploads to the allowed count only
+  const isFreePlan = useMemo(() => {
+    try {
+      return (localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free").toLowerCase() === "free";
+    } catch {
+      return true;
+    }
+  }, []);
+
+  const filteredUploadEntries = useMemo(() => {
+    const pool = activeKind === "all" ? mediaEntries : activeKind === "video" ? videoEntries : imageEntries;
+    const query = assetSearch.trim().toLowerCase();
+    let result = !query ? pool : pool.filter((entry) => entry.name.toLowerCase().includes(query));
+    // Free plan: only show the allowed items so search never reveals locked media
+    if (isFreePlan) {
+      result = result.filter((entry) => !lockedKeys.has(entry.key));
+    }
+    return result;
+  }, [activeKind, assetSearch, imageEntries, isFreePlan, lockedKeys, mediaEntries, videoEntries]);
+
   const filteredPatternEntries = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
     if (!query) return patternEntries;
@@ -1082,6 +1312,16 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     () => managedEntries.find((entry) => entry.key === openOptionsKey) ?? null,
     [managedEntries, openOptionsKey],
   );
+  useEffect(() => {
+    if (!activeOptionsEntry || !canSendEntryToScene(activeOptionsEntry)) {
+      setSceneSendChoices([]);
+      setSceneSendSelection("");
+      setSceneSendError(null);
+      setSceneSendLoading(false);
+      return;
+    }
+    void loadSceneSendChoices();
+  }, [activeOptionsEntry, loadSceneSendChoices]);
   const previewBaseEntry = activeTargets.active;
 
   // ── Selection helpers ──
@@ -1238,29 +1478,6 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     }
   }, [activeKind, imageEntries.length, mediaEntries.length, videoEntries.length]);
 
-  const getEntryPrefs = useCallback(
-    (entry: DockMediaEntry): DockMediaPreference => mediaPrefs[entry.prefKey] ?? {},
-    [mediaPrefs],
-  );
-
-  const getEntrySendOptions = useCallback(
-    (entry: DockMediaEntry): DockMediaSendOptions => {
-      const prefs = getEntryPrefs(entry);
-      if (entry.kind === "video") {
-        return {
-          muted: prefs.videoMuted ?? true,
-          looping: prefs.loop ?? true,
-          fitMode: prefs.fitMode ?? "cover",
-        };
-      }
-      return {
-        imageAudioInputName: prefs.imageAudioInputName || null,
-        fitMode: prefs.fitMode ?? "cover",
-      };
-    },
-    [getEntryPrefs],
-  );
-
   const toggleVideoMute = useCallback(
     async (entry: DockMediaEntry) => {
       const currentMuted = getEntryPrefs(entry).videoMuted ?? true;
@@ -1317,16 +1534,6 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     setOpenOptionsKey(null);
   }, []);
 
-  const saveMediaToAppLibrary = useCallback((item: MediaItem) => {
-    dockClient.sendCommand({
-      type: "media:save",
-      payload: item,
-      timestamp: Date.now(),
-      commandId: `dock-media-save-${item.id}`,
-    });
-    dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
-  }, []);
-
   const removeMediaFromAppLibrary = useCallback((id: string) => {
     dockClient.sendCommand({
       type: "media:delete",
@@ -1362,10 +1569,10 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     // ── Per-file-type quota enforcement ──
     // Resolve limits from server entitlements → localStorage → fallback
     let plan = "free";
-    try { plan = localStorage.getItem("ocs-dock-plan") || "free"; } catch { /* */ }
+    try { plan = localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free"; } catch { /* */ }
     let serverEntitlements: Record<string, number | boolean> | null = null;
     try {
-      const raw = localStorage.getItem("ocs-dock-entitlements");
+      const raw = localStorage.getItem(getUserScopedKey("ocs-dock-entitlements"));
       if (raw) serverEntitlements = JSON.parse(raw);
     } catch { /* */ }
     const getLimit = (feature: string): number => {
@@ -1438,8 +1645,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         }
         console.log("[UPLOAD] ✓ Upload OK:", file.name, { id: item.id, filePath: item.filePath, uploadMs });
         nextItems.push(item);
-        console.log("[UPLOAD] Saving to app library:", item.id);
-        saveMediaToAppLibrary(item);
+        console.log("[UPLOAD] Registering shared dock media item:", item.id);
+        await registerDockMediaItem(item);
       }
       if (nextItems.length > 0) {
         // Mark excess items with old createdAt so lockedKeys puts them at the bottom
@@ -1481,7 +1688,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       setUploading(false);
       if (uploadInputRef.current) uploadInputRef.current.value = "";
     }
-  }, [libraryMedia, persistLocalLibrary, refreshMedia, saveMediaToAppLibrary]);
+  }, [libraryMedia, persistLocalLibrary, refreshMedia]);
 
   const deleteEntry = useCallback(
     async (entry: DockMediaEntry) => {
@@ -1644,6 +1851,13 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
     if (!hasContent && !hasBg) return;
 
     const snapshot = JSON.stringify(textOverlay);
+
+    // Skip initial mount to avoid pushing to OBS when merely switching to the text tab
+    if (lastAppliedRef.current === "") {
+      lastAppliedRef.current = snapshot;
+      return;
+    }
+
     if (snapshot === lastAppliedRef.current) return;
 
     const timer = setTimeout(() => {
@@ -1741,7 +1955,10 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
       const handleCardClick = () => {
         if (isLocked) {
-          void requireEntitlement(entry.kind === "video" ? "videos" : "images", 0);
+          void requireEntitlement(
+            entry.kind === "video" ? "videos" : "images",
+            entry.kind === "video" ? videoEntries.length : imageEntries.length,
+          );
           return;
         }
         if (canSelect) toggleSelectKey(entry.key);
@@ -1828,10 +2045,20 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   type="button"
                   className="dock-media-gallery-card__context-item"
                   onClick={() => { setPreviewEntry(entry); setOpenOptionsKey(null); }}
-                  title={t('media.toPreview')}>
+                  title={t('common.preview')}>
                   <Icon name="open_in_full" size={13} />
-                  {t('media.toPreview')}
+                  {t('common.preview')}
                 </button>
+                {canSendEntryToScene(entry) && (
+                  <button
+                    type="button"
+                    className="dock-media-gallery-card__context-item"
+                    onClick={() => { void openSceneSendDialog(entry); }}
+                    title={t('media.sendToScene')}>
+                    <Icon name="send" size={13} />
+                    {t('media.sendToScene')}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="dock-media-gallery-card__context-item dock-media-gallery-card__context-item--danger"
@@ -1868,12 +2095,14 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       deleteEntry,
       getEntryPrefs,
       handleSendEntry,
+      imageEntries.length,
       lockedKeys,
       openOptionsKey,
       pausedTargets.active,
       selectionMode,
       selectedKeys,
       toggleSelectKey,
+      videoEntries.length,
     ]
   );
 
@@ -1888,50 +2117,60 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
 
   return (
-    <div ref={tabsRef} className="dock-media-console">
-      {/* ── Header ── */}
-      <div className="dock-media-header">
-        <div className="dock-media-header__left">
-          <span className="dock-media-header__label">{t('media.title')}</span>
-
-        </div>
-        <div className="dock-media-header__actions">
-          <button
-            type="button"
-            className="dock-btn dock-btn--compact dock-btn--primary"
-            onClick={() => {
-              console.log("[UPLOAD] Add button clicked", { uploading, browserTab });
-              console.log("[UPLOAD] Input ref:", uploadInputRef.current);
-              // Always open the file picker — per-file quota is enforced inside handleUploadFiles
-              uploadInputRef.current?.click();
-            }}
-            disabled={uploading || browserTab !== "uploads"}
-            title={browserTab !== "uploads" ? t('media.uploadRestricted') : (uploading ? t('media.preparing') : t('media.addMedia'))}
-          >
-            <Icon name="add" size={12} />
-            {uploading ? t('media.preparing') : t('media.addMedia')}
-          </button>
-          <button
-            type="button"
-            className={`dock-btn dock-btn--compact${selectionMode ? " dock-btn--ghost" : " dock-btn--secondary"}`}
-            onClick={async () => {
-              // Allow cancelling selection mode without entitlement check
-              if (selectionMode) {
-                toggleSelectionMode();
-                return;
+    <div ref={(node) => { tabsRef.current = node; containerRef.current = node; }} className={`dock-media-console${isCompactHeight ? " dock-media-console--compact" : ""}${isUltraCompactHeight ? " dock-media-console--ultra-compact" : ""}`}>
+      {/* ── Header (normal mode only) ── */}
+      {!isCompactHeight && (
+        <div className="dock-media-header">
+          <div className="dock-media-header__left">
+            <span className="dock-media-header__label">{t('media.title')}</span>
+          </div>
+          <div className="dock-media-header__actions">
+            <button
+              type="button"
+              className="dock-btn dock-btn--compact dock-btn--primary"
+              onClick={() => {
+                if (browserTab === "animations") {
+                  openAddMediaModal("template-videos");
+                } else {
+                  uploadInputRef.current?.click();
+                }
+              }}
+              disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations")}
+              title={
+                browserTab === "animations"
+                  ? t('media.addAnimation')
+                  : browserTab !== "uploads"
+                    ? t('media.uploadRestricted')
+                    : uploading ? t('media.preparing') : t('media.addMedia')
               }
-              if (!(await requireEntitlement("slideshow", 0))) return;
-              toggleSelectionMode();
-            }}
-            disabled={browserTab !== "uploads"}
-            title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
-          >
-            {/* {selectionMode ? "Cancel" : "Create Slideshow"} */}
-            <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
-          </button>
-
+            >
+              <Icon name="add" size={12} />
+              {uploading
+                ? t('media.preparing')
+                : browserTab === "animations"
+                  ? t('media.addAnimation')
+                  : t('media.addMedia')}
+            </button>
+            <button
+              type="button"
+              className={`dock-btn dock-btn--compact${selectionMode ? " dock-btn--ghost" : " dock-btn--secondary"}`}
+              onClick={async () => {
+                // Allow cancelling selection mode without entitlement check
+                if (selectionMode) {
+                  toggleSelectionMode();
+                  return;
+                }
+                if (!(await requireEntitlement("slideshow", 0))) return;
+                toggleSelectionMode();
+              }}
+              disabled={browserTab !== "uploads"}
+              title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
+            >
+              <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <input
         ref={uploadInputRef}
@@ -1951,47 +2190,92 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
         }}
       />
 
-      {/* ── Category Tabs ── */}
-      <div className={`dock-media-tabs${compactTabs ? " dock-media-tabs--compact" : ""}`} role="tablist" aria-label={t('media.mediaBrowserViews')}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={browserTab === "uploads"}
-          className={`dock-media-tab ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
-          onClick={() => setBrowserTab("uploads")}
-          title={t('media.upload')}>
-          {compactTabs ? <Icon name="upload" size={12} /> : t('media.tabImages')}
-          {!compactTabs && <span className="dock-media-tab__count">{mediaEntries.length}</span>}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={browserTab === "animations"}
-          className={`dock-media-tab ${browserTab === "animations" ? "dock-media-tab--active" : ""}`}
-          onClick={() => setBrowserTab("animations")}
-        >
-          {compactTabs ? <Icon name="animation" size={12} /> : t('media.tabAnimations')}
-          {!compactTabs && <span className="dock-media-tab__count">{animationEntries.length}</span>}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={browserTab === "patterns"}
-          className={`dock-media-tab ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
-          onClick={() => setBrowserTab("patterns")}
-          title={t('media.gridView')}>
-          {compactTabs ? <Icon name="grid_view" size={12} /> : t('media.patterns')}
-          {!compactTabs && <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={browserTab === "text"}
-          className={`dock-media-tab ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
-          onClick={() => setBrowserTab("text")}
-          title={t('media.tabText')}>
-          {compactTabs ? <Icon name="text_fields" size={12} /> : t('media.tabText')}
-        </button>
+      {/* ── Category Tabs (with inline actions in compact mode) ── */}
+      <div className={`dock-media-tabs-row${isCompactHeight ? " dock-media-tabs-row--compact" : ""}`}>
+        <div className={`dock-media-tabs${compactTabs || isCompactHeight ? " dock-media-tabs--compact" : ""}`} role="tablist" aria-label={t('media.mediaBrowserViews')}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={browserTab === "uploads"}
+            className={`dock-media-tab ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
+            onClick={() => setBrowserTab("uploads")}
+            title={t('media.upload')}>
+            {compactTabs ? <Icon name="upload" size={12} /> : t('media.tabImages')}
+            {!compactTabs && <span className="dock-media-tab__count">{mediaEntries.length}</span>}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={browserTab === "animations"}
+            className={`dock-media-tab ${browserTab === "animations" ? "dock-media-tab--active" : ""}`}
+            onClick={() => setBrowserTab("animations")}
+          >
+            {compactTabs ? <Icon name="animation" size={12} /> : t('media.tabAnimations')}
+            {!compactTabs && <span className="dock-media-tab__count">{animationEntries.length}</span>}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={browserTab === "patterns"}
+            className={`dock-media-tab ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
+            onClick={() => setBrowserTab("patterns")}
+            title={t('media.gridView')}>
+            {compactTabs ? <Icon name="grid_view" size={12} /> : t('media.patterns')}
+            {!compactTabs && <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={browserTab === "text"}
+            className={`dock-media-tab ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
+            onClick={() => setBrowserTab("text")}
+            title={t('media.tabText')}>
+            {compactTabs ? <Icon name="text_fields" size={12} /> : t('media.tabText')}
+          </button>
+        </div>
+        {isCompactHeight && (
+          <div className="dock-media-tabs-row__actions">
+            <button
+              type="button"
+              className="dock-btn dock-btn--compact dock-btn--primary"
+              onClick={() => {
+                if (browserTab === "animations") {
+                  openAddMediaModal("template-videos");
+                } else {
+                  uploadInputRef.current?.click();
+                }
+              }}
+              disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations")}
+              title={
+                browserTab === "animations"
+                  ? t('media.addAnimation')
+                  : browserTab !== "uploads"
+                    ? t('media.uploadRestricted')
+                    : uploading ? t('media.preparing') : t('media.addMedia')
+              }
+            >
+              <Icon name="add" size={12} />
+            </button>
+            {!isUltraCompactHeight && (
+              <button
+                type="button"
+                className={`dock-btn dock-btn--compact${selectionMode ? " dock-btn--ghost" : " dock-btn--secondary"}`}
+                onClick={async () => {
+                  if (selectionMode) {
+                    toggleSelectionMode();
+                    return;
+                  }
+                  if (!(await requireEntitlement("slideshow", 0))) return;
+                  toggleSelectionMode();
+                }}
+                disabled={browserTab !== "uploads"}
+                title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
+              >
+                <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Search Bar ── */}
@@ -2082,27 +2366,29 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                   </button>
                 </div>
 
-                {/* View mode toggle */}
-                <div className="dock-media-pills dock-media-pills--secondary" role="tablist" aria-label={t('media.sortOrder')}>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={viewMode === "recent"}
-                    className={`dock-media-pill dock-media-pill--small${viewMode === "recent" ? " dock-media-pill--active" : ""}`}
-                    onClick={() => setViewMode("recent")}
-                    title={t('media.recentlyUsed')}>
-                    {t('media.recentlyUsed')}
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={viewMode === "uploaded"}
-                    className={`dock-media-pill dock-media-pill--small${viewMode === "uploaded" ? " dock-media-pill--active" : ""}`}
-                    onClick={() => setViewMode("uploaded")}
-                    title={t('media.newlyUploaded')}>
-                    {t('media.newlyUploaded')}
-                  </button>
-                </div>
+                {/* View mode toggle — hidden for free plan users */}
+                {!isFreePlan && (
+                  <div className="dock-media-pills dock-media-pills--secondary" role="tablist" aria-label={t('media.sortOrder')}>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={viewMode === "recent"}
+                      className={`dock-media-pill dock-media-pill--small${viewMode === "recent" ? " dock-media-pill--active" : ""}`}
+                      onClick={() => setViewMode("recent")}
+                      title={t('media.recentlyUsed')}>
+                      {t('media.recentlyUsed')}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={viewMode === "uploaded"}
+                      className={`dock-media-pill dock-media-pill--small${viewMode === "uploaded" ? " dock-media-pill--active" : ""}`}
+                      onClick={() => setViewMode("uploaded")}
+                      title={t('media.newlyUploaded')}>
+                      {t('media.newlyUploaded')}
+                    </button>
+                  </div>
+                )}
 
                 {/* Error banner */}
                 {sendError && (
@@ -2871,7 +3157,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
             <div className="dock-dialog__header">
               <div>
                 <div className="dock-dialog__eyebrow">{t('media.addMedia')}</div>
-                <h2 id="dock-media-add-title" className="dock-dialog__title">{t('media.chooseWhatToAdd')}</h2>
+                {/* <h2 id="dock-media-add-title" className="dock-dialog__title">{t('media.chooseWhatToAdd')}</h2> */}
               </div>
               <button type="button" className="dock-dialog__close" onClick={closeAddMediaModal} aria-label={t('media.closeAddMediaDialog')} title={t('common.close')}>
                 <Icon name="close" size={14} />
@@ -3009,10 +3295,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
                               ) : (
                                 <TemplateVideoPreview src={asset.videoUrl} label={asset.fileName} />
                               )}
-                              <div className="dock-media-card__badges">
-                                <span className="dock-media-card__badge">{t('media.badgeTemplate')}</span>
-                                <span className="dock-media-card__badge">{downloadedItem ? t('media.badgeSaved') : t('media.badgeRemote')}</span>
-                              </div>
+
                             </div>
                             <div className="dock-media-card__body">
                               <div className="dock-media-card__title" title={asset.fileName}>{asset.fileName}</div>
@@ -3103,14 +3386,9 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
       {activeOptionsEntry && (() => {
         const entry = activeOptionsEntry;
         const entryPrefs = mediaPrefs[entry.prefKey] ?? {};
-        const isActive = activeTargets.active?.key === entry.key;
-        const isPaused = isActive && pausedTargets.active;
-        const statusLabel = isActive ? (isPaused ? t('media.inPreview') : t('media.live')) : t('media.notActive');
-        const statusVariant = isActive ? (isPaused ? "preview" : "live") : "idle";
         const thumbUrl = entry.thumbnailUrl || (entry.previewUrl && entry.kind === "image" ? entry.previewUrl : null);
         const cleanName = entryPrefs.label?.trim()
           || entry.name.replace(/^media_\d+_/, "").replace(/\.[^.]+$/, "");
-        const fileExt = (entry.name.split(".").pop() || entry.mimeLabel || (entry.kind === "video" ? "MP4" : "IMG")).toUpperCase();
         // const addedDate = entry.createdAt ? new Date(entry.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
         // const usedDate = entryPrefs.lastUsedAt ? new Date(entryPrefs.lastUsedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
 
@@ -3162,11 +3440,6 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
               {/* ── Title + Status ── */}
               <div className="dock-media-inspector__title-block">
                 <h2 id="dock-media-inspector-title" className="dock-media-inspector__title">{cleanName}</h2>
-                <div className="dock-media-inspector__subtitle">
-                  <span className={`dock-media-inspector__badge dock-media-inspector__badge--${statusVariant}`}>{statusLabel}</span>
-                  <span className="dock-media-inspector__meta-chip">{fileExt}</span>
-                  {entry.originLabel && <span className="dock-media-inspector__meta-chip">{t(`media.${entry.originLabel.toLowerCase()}`, entry.originLabel)}</span>}
-                </div>
               </div>
 
               {/* ── Quick Rename ── */}
@@ -3183,15 +3456,38 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
 
               {/* ── Actions ── */}
               <div className="dock-media-inspector__actions">
-                <button
-                  type="button"
-                  className="dock-media-inspector__action-btn dock-media-inspector__action-btn--primary"
-                  onClick={() => { void handleSendEntry(entry); closeEntryOptions(); }}
-                  title={t('media.sendToPreview')}>
-                  <Icon name="play_arrow" size={14} />
-                  {t('media.sendToPreview')}
-                </button>
-
+                <div className="dock-media-inspector__send-row">
+                  <select
+                    className="dock-input dock-media-inspector__scene-select"
+                    value={sceneSendSelection}
+                    onChange={(event) => setSceneSendSelection(event.target.value)}
+                    disabled={sceneSendLoading || sceneSendSubmitting || sceneSendChoices.length === 0}
+                    aria-label={t('media.scene')}
+                  >
+                    {sceneSendChoices.length === 0 ? (
+                      <option value="">{sceneSendLoading ? t('media.loadingScenes') : t('media.noScenesAvailable')}</option>
+                    ) : (
+                      sceneSendChoices.map((sceneName) => (
+                        <option key={sceneName} value={sceneName}>{sceneName}</option>
+                      ))
+                    )}
+                  </select>
+                  <button
+                    type="button"
+                    className="dock-media-inspector__action-btn dock-media-inspector__action-btn--primary"
+                    onClick={() => {
+                      void (async () => {
+                        const success = await sendEntryToSelectedScene(entry);
+                        if (success) closeEntryOptions();
+                      })();
+                    }}
+                    disabled={sceneSendLoading || sceneSendSubmitting || !sceneSendSelection}
+                    title={t('media.sendToScene')}>
+                    <Icon name="send" size={14} />
+                    {sceneSendSubmitting ? t('media.sending') : t('media.sendToScene')}
+                  </button>
+                </div>
+                {sceneSendError ? <p className="dock-dialog__error">{sceneSendError}</p> : null}
               </div>
 
               {/* ── Display ── */}
@@ -3432,6 +3728,78 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage }: Pro
           </div>
         )
       }
+
+      {sceneSendEntry && (
+        <div className="dock-dialog-backdrop" role="presentation" onClick={closeSceneSendDialog}>
+          <div
+            className="dock-dialog dock-dialog--compact"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dock-media-send-scene-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="dock-dialog__header">
+              <h2 id="dock-media-send-scene-title" className="dock-dialog__title">{t('media.sendToScene')}</h2>
+              <button
+                type="button"
+                className="dock-dialog__close"
+                onClick={closeSceneSendDialog}
+                aria-label={t('common.close')}
+                title={t('common.close')}
+              >
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+            <div className="dock-dialog__body">
+              <div className="dock-dialog-field">
+                <label className="dock-dialog-field__label" htmlFor="dock-media-send-scene-select">{t('media.scene')}</label>
+                <select
+                  id="dock-media-send-scene-select"
+                  className="dock-input"
+                  value={sceneSendSelection}
+                  onChange={(event) => setSceneSendSelection(event.target.value)}
+                  disabled={sceneSendLoading || sceneSendSubmitting || sceneSendChoices.length === 0}
+                >
+                  {sceneSendChoices.length === 0 ? (
+                    <option value="">{sceneSendLoading ? t('media.loadingScenes') : t('media.noScenesAvailable')}</option>
+                  ) : (
+                    sceneSendChoices.map((sceneName) => (
+                      <option key={sceneName} value={sceneName}>{sceneName}</option>
+                    ))
+                  )}
+                </select>
+              </div>
+              {sceneSendEntry ? (
+                <p className="dock-media-clear-confirm__summary" style={{ marginTop: 12 }}>
+                  {sceneSendEntry.name}
+                </p>
+              ) : null}
+              {sceneSendError ? <p className="dock-dialog__error">{sceneSendError}</p> : null}
+            </div>
+            <div className="dock-dialog__footer">
+              <button
+                type="button"
+                className="dock-btn dock-btn--compact"
+                onClick={closeSceneSendDialog}
+                disabled={sceneSendSubmitting}
+                title={t('common.cancel')}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="dock-btn dock-btn--primary dock-btn--compact"
+                onClick={() => void handleSendMediaToSelectedScene()}
+                disabled={sceneSendLoading || sceneSendSubmitting || !sceneSendSelection}
+                title={t('media.sendToScene')}
+              >
+                <Icon name="send" size={12} />
+                {sceneSendSubmitting ? t('media.sending') : t('media.sendToScene')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Clear All Confirmation Dialog ── */}
       {showClearAllConfirm && (() => {

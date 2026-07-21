@@ -24,7 +24,9 @@ let inFlightPromise: Promise<void> | null = null;
  */
 export async function ensureObsConnected(url?: string, password?: string): Promise<void> {
   // Already connected — nothing to do
-  if (dockObsClient.isConnected) return;
+  if (dockObsClient.isConnected) {
+    return;
+  }
 
   // If a connection attempt is already in flight and we don't need a specific
   // URL, just wait for it. If a specific URL is requested, force a new attempt.
@@ -32,10 +34,10 @@ export async function ensureObsConnected(url?: string, password?: string): Promi
 
   inFlightPromise = (async () => {
     try {
-      // Kick off connection (with the user-supplied URL/password if any)
-      void dockObsClient.connect(url, password);
+      // Start or join the client's deduped connection attempt.
+      await dockObsClient.connect(url, password);
 
-      // Poll until connected or failed — max 15s
+      // Poll until connected or failed — max 15s.
       const deadline = Date.now() + 15000;
       while (Date.now() < deadline) {
         if (dockObsClient.isConnected) return;
@@ -57,6 +59,7 @@ export async function ensureObsConnected(url?: string, password?: string): Promi
       if (!dockObsClient.isConnected) {
         throw new Error("OBS connection timed out");
       }
+
     } finally {
       inFlightPromise = null;
     }

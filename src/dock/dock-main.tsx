@@ -12,9 +12,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "../i18n";
 import i18n from "../i18n";
+import { resolveInterfaceLocale } from "../i18n/localeCatalog";
 import DockPage from "./DockPage";
 import DockAuthGate from "./DockAuthGate";
 import { dockClient } from "../services/dockBridge";
+import { getDesktopConfig } from "../services/desktopConfig";
+import { initOverlayUrl } from "../services/overlayUrl";
 import "./dock.css";
 import "./dock-auth.css";
 
@@ -25,16 +28,30 @@ dockClient.init();
 // Listen for language changes from the main app
 dockClient.onState((msg) => {
   if (msg.type === "state:language-changed") {
-    const payload = msg.payload as { language: string; code: string } | null;
+    const payload = msg.payload as { code: string } | null;
     if (payload?.code) {
-      void i18n.changeLanguage(payload.code);
-      localStorage.setItem("mce_interface_language", payload.language);
+      const code = resolveInterfaceLocale(payload.code);
+      void i18n.changeLanguage(code);
+      localStorage.setItem("mce_interface_language", code);
     }
   }
 });
 
-const el = document.getElementById("dock-root");
-if (el) {
+async function bootstrapDock() {
+  // The dock runs outside the main app bootstrap, so seed the shared
+  // config/overlay caches here before DockPage starts auto-connecting.
+  try {
+    await Promise.all([
+      getDesktopConfig(),
+      initOverlayUrl(),
+    ]);
+  } catch {
+    // Fall back to defaults; DockPage will still render and retry.
+  }
+
+  const el = document.getElementById("dock-root");
+  if (!el) return;
+
   ReactDOM.createRoot(el).render(
     <React.StrictMode>
       <DockAuthGate>
@@ -43,3 +60,5 @@ if (el) {
     </React.StrictMode>
   );
 }
+
+void bootstrapDock();

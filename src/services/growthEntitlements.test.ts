@@ -73,7 +73,7 @@ const TIERS = ["free", "basic", "growth", "pro"];
 
 function getEffectivePlan(userPlan: string, trialEndsAt?: string | null): string {
   if (userPlan === "free" && trialEndsAt && new Date(trialEndsAt).getTime() > Date.now()) {
-    return "basic";
+    return "growth";
   }
   return userPlan;
 }
@@ -195,11 +195,11 @@ describe("Growth Plan entitlements", () => {
     }
   });
 
-  describe("Trial users get basic entitlements", () => {
-    it("free user with active trial is treated as basic", () => {
+  describe("Trial users get Growth entitlements", () => {
+    it("free user with active trial is treated as growth", () => {
       const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       const effectivePlan = getEffectivePlan("free", futureDate);
-      expect(effectivePlan).toBe("basic");
+      expect(effectivePlan).toBe("growth");
     });
 
     it("free user with expired trial stays free", () => {

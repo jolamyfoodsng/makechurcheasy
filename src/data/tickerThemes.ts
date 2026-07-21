@@ -97,7 +97,7 @@ body { font-family: "Montserrat", sans-serif; }
   animation: tickerMove var(--speed, 20s) linear infinite;
 }`,
     fontImports: [
-      "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap",
+      "/fonts/google/google-fonts.css",
     ],
     variables: [
       {
@@ -196,7 +196,7 @@ body { font-family: "Montserrat", sans-serif; }
   animation: tickerMove var(--speed, 20s) linear infinite;
 }`,
     fontImports: [
-      "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap",
+      "/fonts/google/google-fonts.css",
     ],
     variables: [
       {
@@ -321,8 +321,8 @@ body { font-family: "Montserrat", sans-serif; }
 .s5-instagram i { color: #E1306C; }
 .s5-youtube i { color: #FF0000; }`,
     fontImports: [
-      "https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap",
-      "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css",
+      "/fonts/google/google-fonts.css",
+      "/fonts/fontawesome/all.min.css",
     ],
     variables: [
       {

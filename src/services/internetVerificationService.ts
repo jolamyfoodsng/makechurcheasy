@@ -11,8 +11,8 @@
  *   >maxOfflineDays → full lock screen
  *
  * Settings are consumed from the desktop config (platform settings → Security section)
- * and cached locally for offline fallback. The verification itself hits an existing
- * authenticated endpoint (/api/device/profile).
+ * and cached locally for offline fallback. The verification itself hits the
+ * desktop bootstrap endpoint (/api/device/bootstrap).
  */
 
 import { getUserScopedKey } from "./userScopedStorage";
@@ -56,7 +56,7 @@ export type Listener = (state: GracePeriodState) => void;
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.makechurcheasy.creatorstudioslabs.stream";
+  "https://api.creatorstudioslabs.stream";
 
 const SETTINGS_KEY = "ocs-internet-verification-settings";
 const SETTINGS_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
@@ -198,11 +198,7 @@ function computeDaysOffline(): number {
   return Math.floor(msOffline / (1000 * 60 * 60 * 24));
 }
 
-function computeTier(daysOffline: number, settings: VerificationSettings): GracePeriodTier {
-  if (!settings.enabled) return "normal";
-  if (daysOffline >= settings.maxOfflineDays) return "locked";
-  if (daysOffline >= settings.criticalDays) return "critical";
-  if (daysOffline >= settings.warningDays) return "warning";
+function computeTier(_daysOffline: number, _settings: VerificationSettings): GracePeriodTier {
   return "normal";
 }
 
@@ -302,7 +298,7 @@ export async function verify(): Promise<boolean> {
   try {
     const deviceId = getDeviceId();
     const deviceSecret = getDeviceSecret();
-    const url = `${API_BASE}/api/device/profile${deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : ""}`;
+    const url = `${API_BASE}/api/device/bootstrap${deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : ""}`;
     const res = await fetch(url, {
       headers: {
         "X-App-Version": APP_VERSION,

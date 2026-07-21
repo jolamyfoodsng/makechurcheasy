@@ -21,6 +21,15 @@ const SESSION_FILE = resolve(root, "makechurcheasy-session.json");
 // The overlay server (Rust) reads from ~/Documents/MakeChurchEasy/makechurcheasy-session.json.
 // On logout we must delete from BOTH locations so the dock can't still see a stale session.
 const OVERLAY_SESSION_FILE = resolve(homedir(), "Documents", "MakeChurchEasy", "makechurcheasy-session.json");
+const PUBLIC_DIR = resolve(root, "public");
+const ALLOWED_APP_DOCUMENTS = new Set([
+  "/",
+  "/index.html",
+  "/dock",
+  "/dock.html",
+  "/lm-dock",
+  "/lm-dock.html",
+]);
 
 // ── Entitlement Server Config ─────────────────────────────────────────────────
 // Default plan entitlements — derived from src/services/planConfigTypes.ts (single source of truth).
@@ -33,6 +42,167 @@ for (const [tier, config] of Object.entries(DEFAULT_PLAN_CONFIG.plans)) {
 // Minimum plan tier required for each feature — derived at runtime, NOT hardcoded.
 const FEATURE_REQUIRED_PLAN: Record<string, string> = deriveFeatureRequiredPlan(DEFAULT_PLAN_CONFIG);
 
+function readStoredOverlaySession(): unknown | null {
+  if (!existsSync(SESSION_FILE)) {
+    return null;
+  }
+
+  try {
+    const data = JSON.parse(readFileSync(SESSION_FILE, "utf-8"));
+    if (typeof data?.expiresAt === "number" && Date.now() >= data.expiresAt) {
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function hasStoredOverlaySession(): boolean {
+  return readStoredOverlaySession() !== null;
+}
+
+function resolveStandaloneHtmlCandidate(pathname: string): string | null {
+  if (ALLOWED_APP_DOCUMENTS.has(pathname)) {
+    return null;
+  }
+
+  const relativePath = pathname.replace(/^\/+/, "");
+  if (!relativePath) {
+    return null;
+  }
+
+  const candidates = relativePath.endsWith(".html")
+    ? [
+      resolve(PUBLIC_DIR, relativePath),
+      resolve(root, relativePath),
+    ]
+    : [
+      resolve(PUBLIC_DIR, `${relativePath}.html`),
+      resolve(root, `${relativePath}.html`),
+    ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+function shouldBlockStandaloneHtmlRequest(url: string | undefined, acceptHeader: string | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+
+  const pathname = new URL(url, "http://localhost").pathname;
+  if (pathname.startsWith("/api/") || pathname.startsWith("/@")) {
+    return false;
+  }
+
+  const wantsHtml = pathname.endsWith(".html") || (acceptHeader?.includes("text/html") ?? false);
+  if (!wantsHtml) {
+    return false;
+  }
+
+  return resolveStandaloneHtmlCandidate(pathname) !== null;
+}
+
+function renderBlockedHtmlPage(): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Authentication Required</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        font-family: Inter, "Open Sans", system-ui, sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+      .panel {
+        width: min(420px, 100%);
+        padding: 28px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.92);
+        box-shadow: 0 28px 80px rgba(2, 6, 23, 0.45);
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 1.4rem;
+        line-height: 1.2;
+      }
+      p {
+        margin: 0 0 16px;
+        color: #cbd5e1;
+        line-height: 1.5;
+      }
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 11px 16px;
+        font: inherit;
+        font-weight: 600;
+        color: #eff6ff;
+        background: #2563eb;
+        cursor: pointer;
+      }
+      .hint {
+        margin-top: 14px;
+        margin-bottom: 0;
+        font-size: 0.92rem;
+        color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <h1>Authentication Required</h1>
+      <p>Please open the MakeChurchEasy desktop app and log in first.</p>
+      <button type="button" onclick="window.location.reload()">Refresh</button>
+      <p class="hint">This page will start working again after the desktop app restores the local session.</p>
+    </main>
+  </body>
+</html>`;
+}
+
+function standaloneHtmlGuardPlugin(): Plugin {
+  return {
+    name: "standalone-html-guard",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const method = req.method?.toUpperCase();
+        if (method !== "GET" && method !== "HEAD") {
+          next();
+          return;
+        }
+
+        if (!shouldBlockStandaloneHtmlRequest(req.url, req.headers.accept)) {
+          next();
+          return;
+        }
+
+        if (hasStoredOverlaySession()) {
+          next();
+          return;
+        }
+
+        res.statusCode = 401;
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+        res.end(renderBlockedHtmlPage());
+      });
+    },
+  };
+}
+
 function authSessionPlugin(): Plugin {
   return {
     name: "auth-session",
@@ -44,15 +214,15 @@ function authSessionPlugin(): Plugin {
           try {
             const data = JSON.parse(readFileSync(SESSION_FILE, "utf-8"));
             if (data.expiresAt && Date.now() < data.expiresAt) {
-              res.end(JSON.stringify({ authenticated: true, ...data }));
+              res.end(JSON.stringify({ ...data, authenticated: true }));
             } else {
-              res.end('{"authenticated":false}');
+              res.end('{"authenticated":false,"deviceId":null}');
             }
           } catch {
-            res.end('{"authenticated":false}');
+            res.end('{"authenticated":false,"deviceId":null}');
           }
         } else {
-          res.end('{"authenticated":false}');
+          res.end('{"authenticated":false,"deviceId":null}');
         }
       });
 
@@ -206,7 +376,7 @@ function capitalize(s: string): string {
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react(), authSessionPlugin(), entitlementServerPlugin()],
+  plugins: [standaloneHtmlGuardPlugin(), react(), authSessionPlugin(), entitlementServerPlugin()],
 
   resolve: {
     alias: {

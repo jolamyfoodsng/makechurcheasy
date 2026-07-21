@@ -178,7 +178,7 @@ export default function DashboardTutorial({
 
   const currentStep = steps[stepIndex];
   const totalSteps = steps.length;
-  const isFinalStep = stepIndex === totalSteps;
+  const isFinalStep = stepIndex === totalSteps - 1;
 
   const needsInteraction = currentStep?.trigger !== "none";
 
@@ -239,7 +239,7 @@ export default function DashboardTutorial({
 
     top = Math.max(20, Math.min(top, window.innerHeight - panelH - 20));
 
-    setPanelRect({ top, left });
+    setPanelRect({ top: (top - 50), left });
   }, [targetRect, isFinalStep]);
 
   // ── Trigger Event Listeners ───────────────────────────────────────────
@@ -437,8 +437,8 @@ export default function DashboardTutorial({
               className={`dt-btn dt-btn-primary ${!stepCompleted && currentStep.trigger !== "none" ? "dt-btn--waiting" : ""}`}
               disabled={!stepCompleted && currentStep.trigger !== "none"}
               onClick={goNext}
-              title="Next step">
-              {t("dt.common.next")} <ChevronRight size={14} />
+              title={isFinalStep ? "Finish tutorial" : "Next step"}>
+              {isFinalStep ? t("dt.common.finish") : t("dt.common.next")} {isFinalStep ? <CheckCircle2 size={14} /> : <ChevronRight size={14} />}
             </button>
           </div>
         </div>

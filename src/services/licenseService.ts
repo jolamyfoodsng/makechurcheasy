@@ -36,6 +36,11 @@ import {
   type PlanConfig,
   type PlanEntitlements,
 } from "./planConfigTypes";
+import {
+  getEffectivePlan as resolveCanonicalPlan,
+  isActiveTrial as isCanonicalTrialActive,
+  normalizePlanId,
+} from "../lib/subscriptionSourceOfTruth";
 
 export type { PlanTier } from "./planConfigTypes";
 
@@ -64,6 +69,7 @@ export interface PlanLimits {
   advancedAnalytics: boolean;
   customReports: boolean;
   apiAccess: boolean;
+  presentationMode: boolean;
   teamManagement: boolean;
   campusManagement: boolean;
   unlimitedDevices: boolean;
@@ -107,6 +113,7 @@ function entitlementsToPlanLimits(
     cloudSync: ent.cloudSync,
     advancedAnalytics: ent.advancedAnalytics,
     customReports: ent.customReports,
+    presentationMode: ent.presentationMode,
     apiAccess: ent.apiAccess,
     teamManagement: ent.teamManagement,
     campusManagement: ent.campusManagement,
@@ -134,7 +141,7 @@ function buildAllLimits(config: PlanConfig): Record<PlanTier, PlanLimits> {
         multiview: false, tickers: false, massImport: false, easyWorshipImport: false,
         proPresenterImport: false, translation: false, speechToScripture: false,
         sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
-        customReports: false, mobileControl: false, apiAccess: false,
+        customReports: false, mobileControl: false, presentationMode: false, apiAccess: false,
         teamManagement: false, campusManagement: false, slideshow: false,
         countdowns: false,
       });
@@ -227,7 +234,7 @@ function getFeatureRequiredPlan(config: PlanConfig): Record<string, PlanTier> {
  * Uses the cached limits config if available, otherwise builds from defaults.
  */
 function getCurrentFeatureRequiredPlan(): Record<string, PlanTier> {
-  const config = cachedLimits ? DEFAULT_PLAN_CONFIG : DEFAULT_PLAN_CONFIG;
+  const config = readPlanConfigCache() || DEFAULT_PLAN_CONFIG;
   return getFeatureRequiredPlan(config);
 }
 
@@ -242,41 +249,27 @@ function getCurrentFeatureRequiredPlan(): Record<string, PlanTier> {
  */
 export function getUserPlan(user: AuthUser | null): PlanTier {
   if (!user) return "free";
+  const normalizedUserPlan = normalizePlanId(user.plan);
 
   const cached = getCachedPlan();
   if (cached && cached !== "free") {
     if (isOfflineValid()) {
-      // Safety net: if the cached plan is "pro" but the user's trial is not
-      // active (expired/stopped), don't serve the stale "pro" from cache.
-      // The trial check in isInTrial() already returned false to reach us.
-      if (cached === "pro" && user.plan !== "pro") {
-        // Cached "pro" likely came from a trial that has since expired.
-        // Trust the server's plan field instead.
-        return (user.plan || "free") as PlanTier;
+      const normalizedCachedPlan = normalizePlanId(cached);
+      if (!isInTrial(user) && normalizedUserPlan === "free" && normalizedCachedPlan !== "free") {
+        return normalizedUserPlan as PlanTier;
       }
-      return cached as PlanTier;
+      return normalizedCachedPlan as PlanTier;
     }
   }
 
-  return user.plan || "free";
+  return normalizedUserPlan as PlanTier;
 }
 
 /** Whether the user's trial is currently active. */
 export function isInTrial(user: AuthUser | null): boolean {
-  if (!user?.trial) return false;
-  // Check status first — the server derives active from status
-  const status = user.trial.status;
-  if (status && status !== "active") {
-    console.debug("[licenseService] isInTrial=false (status=%s)", status);
-    return false;
-  }
-  // Fallback: check the boolean active flag
-  if (!user.trial.active) return false;
-  // Must have a future end date
-  if (!user.trial.endsAt) return false;
-  const trialActive = Date.now() < new Date(user.trial.endsAt).getTime();
+  const trialActive = isCanonicalTrialActive(user as any);
   if (!trialActive) {
-    console.debug("[licenseService] isInTrial=false (endsAt=%s, now=%s)", user.trial.endsAt, new Date().toISOString());
+    console.debug("[licenseService] isInTrial=false (endsAt=%s, now=%s)", user?.trial?.endsAt, new Date().toISOString());
   }
   return trialActive;
 }
@@ -296,16 +289,14 @@ export function getTrialDaysRemaining(user: AuthUser | null): number {
 }
 
 /**
- * Returns the effective plan considering trial status, pro key, and subscription cache.
- * During trial, user behaves like Pro.
+ * Returns the effective plan considering trial status and subscription cache.
+ * During trial, user behaves like Growth.
  * If offline window expired, reverts to free regardless of cached plan.
  */
 export function getEffectivePlan(user: AuthUser | null): PlanTier {
   if (!user) return "free";
-  if (isInTrial(user)) {
-    return "pro";
-  }
-  const plan = getUserPlan(user);
+  const userPlan = getUserPlan(user);
+  const plan = userPlan !== "free" ? normalizePlanId(userPlan) : resolveCanonicalPlan({ ...user, plan: userPlan });
   console.debug(
     "[licenseService] getEffectivePlan=%s (user.plan=%s, trial.active=%s, trial.status=%s, trial.endsAt=%s)",
     plan, user.plan, user.trial?.active, user.trial?.status, user.trial?.endsAt,
@@ -360,6 +351,10 @@ export function canUseMultiview(user: AuthUser | null): boolean {
 
 export function canUseMobileControl(user: AuthUser | null): boolean {
   return getUserPlanLimits(user).mobileControl;
+}
+
+export function canUsePresentationMode(user: AuthUser | null): boolean {
+  return getUserPlanLimits(user).presentationMode;
 }
 
 export function canUseTickers(user: AuthUser | null): boolean {
@@ -514,7 +509,7 @@ export function getRemainingDeviceSlots(user: AuthUser | null, currentDeviceCoun
 /**
  * Downgrade protection: returns warnings when the user's current usage
  * exceeds their plan limits. Used when a user downgrades from a higher plan
- * (e.g. Growth → Starter) and has more resources than the lower plan allows.
+ * (e.g. Growth → Basic) and has more resources than the lower plan allows.
  *
  * Does NOT delete data. Only blocks adding new resources.
  */
@@ -606,7 +601,10 @@ export async function getRemainingLTThemeSlots(user: AuthUser | null): Promise<n
 // ── Restriction Info (for upgrade modal) ─────────────────────────────────────
 
 const PLAN_ORDER: Record<string, number> = {
-  free: 0, basic: 1, growth: 2, pro: 3, trial: 3,
+  free: 0,
+  basic: 1,
+  growth: 2,
+  pro: 3,
 };
 
 function planAtLeast(plan: PlanTier, minimum: PlanTier): boolean {
@@ -644,7 +642,7 @@ export function getRestrictionInfo(
   // Safety net: if the user's effective plan already meets or exceeds
   // the required plan, never lock — regardless of what the config says.
   // This prevents misconfigured plan_config documents from locking out
-  // entitled users (trial → pro, pro, growth, etc.).
+  // entitled users after plan refresh or trial resolution.
   if (locked && planAtLeast(effectivePlan, required)) {
     console.info(
       `[access] ${label}: plan "${effectivePlan}" >= required "${required}" — overriding lock`,
@@ -652,9 +650,9 @@ export function getRestrictionInfo(
     locked = false;
   }
 
-  const inTrial = effectivePlan === "pro" && isInTrial(user);
+  const inTrial = isInTrial(user);
   console.info(
-    `[access] ${label}: plan=${effectivePlan}${inTrial ? " (trial→pro)" : ""} required=${required} locked=${locked} limit=${typeof limitValue === "boolean" ? limitValue : limitValue}`,
+    `[access] ${label}: plan=${effectivePlan}${inTrial ? " (trial active)" : ""} required=${required} locked=${locked} limit=${typeof limitValue === "boolean" ? limitValue : limitValue}`,
   );
 
   return {

@@ -16,6 +16,8 @@ import { open } from "@tauri-apps/plugin-shell";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { tempDir, join } from "@tauri-apps/api/path";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { getDesktopConfig, readDesktopConfigCache } from "./desktopConfig";
+import { coerce, lt } from "semver";
 
 // ── Private-repo auth ──
 // For private GitHub repos, a fine-grained PAT with contents:read is injected
@@ -71,22 +73,16 @@ export interface VersionAgeInfo {
 // The minimum version is fetched from the server (admin-configured in MongoDB).
 // No hardcoded constants — the server is the single source of truth.
 
-const API_BASE =
-  import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.makechurcheasy.creatorstudioslabs.stream";
-
-function parseVersionParts(v: string): [number, number, number] {
-  const parts = v.split(".").map(Number);
-  return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+function normalizeVersion(v: string): string | null {
+  return coerce(v)?.version ?? null;
 }
 
 function isBelowVersionFloor(version: string, floor: string): boolean {
   if (!floor) return false; // Empty string = no floor enforced
-  const [a, b, c] = parseVersionParts(version);
-  const [fA, fB, fC] = parseVersionParts(floor);
-  if (a !== fA) return a < fA;
-  if (b !== fB) return b < fB;
-  return c < fC;
+  const normalizedVersion = normalizeVersion(version);
+  const normalizedFloor = normalizeVersion(floor);
+  if (!normalizedVersion || !normalizedFloor) return false;
+  return lt(normalizedVersion, normalizedFloor);
 }
 
 /**
@@ -100,10 +96,10 @@ export async function fetchVersionFloor(): Promise<{
   gracePeriodHours: number;
 } | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/app/version`);
-    if (!res.ok) return null;
-    const data = await res.json() as { minimumSupportedVersion?: string; gracePeriodHours?: number };
-    const floor = data.minimumSupportedVersion || "";
+    const config = await getDesktopConfig().catch(() => readDesktopConfigCache());
+    if (!config?.appUpdates.forceUpdatesEnabled) return null;
+
+    const floor = config.appUpdates.minimumSupportedVersion || "";
     if (!floor) return null; // No floor configured
 
     const currentVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
@@ -112,7 +108,7 @@ export async function fetchVersionFloor(): Promise<{
         blocked: true,
         currentVersion,
         minimumVersion: floor,
-        gracePeriodHours: data.gracePeriodHours ?? 0,
+        gracePeriodHours: config.appUpdates.gracePeriodHours ?? 0,
       };
     }
     return null;

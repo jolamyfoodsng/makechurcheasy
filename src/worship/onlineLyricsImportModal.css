@@ -23,13 +23,6 @@
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
 }
 
-.online-lyrics-modal__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
 .online-lyrics-modal__eyebrow {
   margin: 0 0 4px;
   color: var(--primary);
@@ -53,6 +46,13 @@
   line-height: 1.45;
 }
 
+.online-lyrics-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .online-lyrics-modal__close {
   width: 32px;
   height: 32px;
@@ -71,6 +71,15 @@
   border-color: rgba(var(--primary-rgb), 0.52);
   color: var(--text-primary);
   outline: none;
+}
+
+.online-lyrics-modal__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
 }
 
 .online-lyrics-modal__source-row {

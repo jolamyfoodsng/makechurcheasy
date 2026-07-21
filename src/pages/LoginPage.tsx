@@ -2,6 +2,7 @@ import { AppLogo } from "@/components/AppLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   createPairingCode,
+  getDashboardBaseForAuth,
   redeemPairingCode,
   watchPairingStatus
 } from "@/services/authService";
@@ -10,10 +11,6 @@ import { trackDevicePaired, trackLogin } from "@/services/tracking";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-
-const AUTH_API = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
-console.log('AUTH_API :', AUTH_API);
-
 
 function detectOS(): string {
   const ua = navigator.userAgent;
@@ -29,7 +26,7 @@ type View = "initial" | "pairing" | "manual" | "qr";
 
 export default function LoginPage() {
   const { t } = useTranslation();
-  const { setUser } = useAuth();
+  const { setUser, user, authenticated } = useAuth();
   const [view, setView] = useState<View>("initial");
   const [code, setCode] = useState("");
   const [manualCode, setManualCode] = useState("");
@@ -49,17 +46,12 @@ export default function LoginPage() {
   const [checkStatus, setCheckStatus] = useState<"idle" | "checking" | "verified" | "not_verified" | "error">("idle");
 
   const cleanupRef = useRef<(() => void) | null>(null);
+  const welcomeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const PAIRING_BASE = AUTH_API.startsWith("http://localhost")
-    ? "http://localhost:4000"
-    : "https://makechurcheasy.creatorstudioslabs.stream";
-
-  const DASHBOARD_URL = AUTH_API.startsWith("http://localhost")
-    ? "http://localhost:4000"
-    : "https://makechurcheasy.creatorstudioslabs.stream";
+  if (authenticated && user) return null;
 
   async function generateQrDataUrl(pairCode: string): Promise<string> {
-    const pairUrl = `${DASHBOARD_URL}/pair/mobile?code=${pairCode}`;
+    const pairUrl = `${getDashboardBaseForAuth()}/pair/mobile?code=${pairCode}`;
     return QRCode.toDataURL(pairUrl, {
       width: 240,
       margin: 2,
@@ -87,7 +79,7 @@ export default function LoginPage() {
     const params = new URLSearchParams();
     if (targetCode) params.set("code", targetCode);
     params.set("os", os);
-    const url = `${PAIRING_BASE}/device?${params.toString()}`;
+    const url = `${getDashboardBaseForAuth()}/device?${params.toString()}`;
     try {
       const { openUrl } = await import("@tauri-apps/plugin-opener");
       await openUrl(url);
@@ -96,10 +88,11 @@ export default function LoginPage() {
     }
   }
 
-  // Cleanup SSE on unmount
+  // Cleanup SSE and timeouts on unmount
   useEffect(() => {
     return () => {
       cleanupRef.current?.();
+      if (welcomeTimeoutRef.current) clearTimeout(welcomeTimeoutRef.current);
     };
   }, []);
 
@@ -124,7 +117,7 @@ export default function LoginPage() {
         const hasVisited = localStorage.getItem("mce_has_visited");
         if (hasVisited) {
           setWelcomeBack(true);
-          setTimeout(() => setWelcomeBack(false), 3000);
+          welcomeTimeoutRef.current = setTimeout(() => setWelcomeBack(false), 3000);
         }
         localStorage.setItem("mce_has_visited", "1");
         setUser(user);
@@ -171,7 +164,7 @@ export default function LoginPage() {
         const hasVisited = localStorage.getItem("mce_has_visited");
         if (hasVisited) {
           setWelcomeBack(true);
-          setTimeout(() => setWelcomeBack(false), 3000);
+          welcomeTimeoutRef.current = setTimeout(() => setWelcomeBack(false), 3000);
         }
         localStorage.setItem("mce_has_visited", "1");
         setUser(result.user);
@@ -272,52 +265,7 @@ export default function LoginPage() {
               </div>
             )}
 
-            <button
-              onClick={async () => {
-                setError("");
-                const result = await createPairingCode("MakeChurchEasy");
-                if ("error" in result) {
-                  setError(result.error);
-                  return;
-                }
-                setCode(result.code);
-                setCountdown(300);
-                setView("pairing");
 
-                const os = detectOS();
-                const googlePairUrl = `${PAIRING_BASE}/pair/google?code=${result.code}&os=${encodeURIComponent(os)}`;
-                startWatching(result.code);
-                try {
-                  const { openUrl } = await import("@tauri-apps/plugin-opener");
-                  await openUrl(googlePairUrl);
-                } catch {
-                  window.open(googlePairUrl, "_blank");
-                }
-              }}
-              style={{
-                width: "100%",
-                height: "42px",
-                borderRadius: "4px",
-                border: "none",
-                background: "#fff",
-                fontSize: "13px",
-                fontWeight: 600,
-                color: "#1f1f1f",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-              </svg>
-              {t("login.btn.google")}
-            </button>
 
             <button
               onClick={startQrLogin}
@@ -508,7 +456,7 @@ export default function LoginPage() {
                 </button>
                 <button
                   onClick={() => {
-                    const url = `https://makechurcheasy.creatorstudioslabs.stream/device?code=${code}`;
+                    const url = `${getDashboardBaseForAuth()}/device?code=${code}`;
                     navigator.clipboard.writeText(url).then(() => {
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);

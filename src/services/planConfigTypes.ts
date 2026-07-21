@@ -9,12 +9,14 @@
  * for each feature at runtime from the entitlements data — never hardcoded.
  */
 
+import { buildLegacyCompatiblePlanConfig } from "../lib/subscriptionSourceOfTruth";
+
 // ── Core Types ───────────────────────────────────────────────────────────────
 
-export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador";
+export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador" | "unlimited";
 
 /** Ordered list of tiers from lowest to highest (excludes "trial" — it's a temporary state, not a purchasable tier). */
-export const ALL_TIERS: PlanTier[] = ["free", "basic", "growth", "pro", "ambassador"];
+export const ALL_TIERS: PlanTier[] = ["free", "basic", "growth", "pro", "ambassador", "unlimited"];
 
 /**
  * Entitlements define what a plan tier can access.
@@ -49,6 +51,7 @@ export interface PlanEntitlements {
   advancedAnalytics: boolean;
   customReports: boolean;
   mobileControl: boolean;
+  presentationMode: boolean;
   apiAccess: boolean;
   teamManagement: boolean;
   campusManagement: boolean;
@@ -118,7 +121,7 @@ export type FeatureKey =
   | "multiview" | "tickers" | "massImport" | "easyWorshipImport"
   | "proPresenterImport" | "translation" | "speechToScripture"
   | "sermonExport" | "aiFeatures" | "cloudSync" | "advancedAnalytics"
-  | "customReports" | "mobileControl" | "apiAccess"
+  | "customReports" | "mobileControl" | "presentationMode" | "apiAccess"
   | "teamManagement" | "campusManagement"
   | "slideshow"
   | "countdowns";
@@ -150,6 +153,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   advancedAnalytics: "Advanced Analytics",
   customReports: "Custom Reports",
   mobileControl: "Mobile Control",
+  presentationMode: "Presentation Mode",
   apiAccess: "API Access",
   teamManagement: "Team Management",
   campusManagement: "Multi-Campus",
@@ -164,7 +168,7 @@ export const FEATURE_LABELS: Record<string, string> = {
  * Derived at runtime from the entitlements — NOT hardcoded.
  *
  * For boolean features: the first tier where the feature is `true`.
- * For numeric features: the first tier where the value is not 0.
+ * For numeric quota features: the first paid tier that increases the free limit.
  */
 export function deriveFeatureRequiredPlan(
   config: PlanConfig,
@@ -174,6 +178,9 @@ export function deriveFeatureRequiredPlan(
 
   for (const key of allKeys) {
     let found: PlanTier = "pro"; // default to highest if nothing found
+    const freeEnt = config.plans.free?.entitlements;
+    const freeVal = freeEnt?.[key];
+
     for (const tier of ALL_TIERS) {
       const ent = config.plans[tier]?.entitlements;
       if (!ent) continue;
@@ -181,9 +188,22 @@ export function deriveFeatureRequiredPlan(
       if (typeof val === "boolean") {
         if (val) { found = tier; break; }
       } else if (typeof val === "number") {
-        if (val !== 0) { found = tier; break; }
+        if (typeof freeVal === "number") {
+          if (tier !== "free" && (val === -1 || val > freeVal)) {
+            found = tier;
+            break;
+          }
+        } else if (val !== 0) {
+          found = tier;
+          break;
+        }
       }
     }
+
+    if (typeof freeVal === "number" && found === "pro" && freeVal !== 0) {
+      found = "free";
+    }
+
     result[key] = found;
   }
   return result;
@@ -197,144 +217,6 @@ export function deriveFeatureRequiredPlan(
  * The desktop app fetches fresh config from /api/plan-config on startup
  * and caches it in localStorage with a 5-minute TTL.
  */
-export const DEFAULT_PLAN_CONFIG: PlanConfig = {
-  version: 3,
-  plans: {
-    free: {
-      label: "Free",
-      pricing: {
-        NGN: { monthly: 0, yearly: 0 },
-        USD: { monthly: 0, yearly: 0 },
-      },
-      paystack: { monthlyPlanCode: "", yearlyPlanCode: "" },
-      credits: 20,
-      entitlements: {
-        songs: 3, images: 3, videos: 3, themes: 2, lowerThirds: 1, devices: 1,
-        bibleVersions: 3, multiviewTemplates: 0, tickerThemes: 0, themePresets: 0,
-        cloudStorageGB: 0,
-        multiview: false, tickers: false, massImport: false, easyWorshipImport: false,
-        proPresenterImport: false, translation: false, speechToScripture: false,
-        sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
-        customReports: false, mobileControl: false, apiAccess: false,
-        teamManagement: false, campusManagement: false, slideshow: false,
-        countdowns: false,
-      },
-    },
-    trial: {
-      label: "Trial",
-      pricing: {
-        NGN: { monthly: 0, yearly: 0 },
-        USD: { monthly: 0, yearly: 0 },
-      },
-      paystack: { monthlyPlanCode: "", yearlyPlanCode: "" },
-      credits: 500,
-      entitlements: {
-        songs: -1, images: -1, videos: -1, themes: -1, lowerThirds: -1, devices: -1,
-        bibleVersions: -1, multiviewTemplates: -1, tickerThemes: -1, themePresets: -1,
-        cloudStorageGB: 200,
-        multiview: true, tickers: true, massImport: true, easyWorshipImport: true,
-        proPresenterImport: true, translation: true, speechToScripture: true,
-        sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,
-        customReports: true, mobileControl: true, apiAccess: true,
-        teamManagement: true, campusManagement: true, slideshow: true,
-        countdowns: true,
-      },
-    },
-    basic: {
-      label: "Basic",
-      pricing: {
-        NGN: { monthly: 3500, yearly: 42000 },
-        USD: { monthly: 5, yearly: 60 },
-      },
-      paystack: {
-        monthlyPlanCode: "mce_basic_monthly",
-        yearlyPlanCode: "mce_basic_yearly",
-      },
-      credits: 250,
-      entitlements: {
-        songs: 70, images: 70, videos: 70, themes: 3, lowerThirds: 2, devices: 5,
-        bibleVersions: 10, multiviewTemplates: 0, tickerThemes: 0, themePresets: 3,
-        cloudStorageGB: 1,
-        multiview: false, tickers: true, massImport: false, easyWorshipImport: false,
-        proPresenterImport: false, translation: true, speechToScripture: false,
-        sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
-        customReports: false, mobileControl: false, apiAccess: false,
-        teamManagement: false, campusManagement: false, slideshow: true,
-        countdowns: true,
-      },
-    },
-    growth: {
-      label: "Growth",
-      pricing: {
-        NGN: { monthly: 15000, yearly: 180000 },
-        USD: { monthly: 15, yearly: 180 },
-      },
-      paystack: {
-        monthlyPlanCode: "mce_growth_monthly",
-        yearlyPlanCode: "mce_growth_yearly",
-      },
-      credits: 500,
-      entitlements: {
-        songs: -1, images: -1, videos: -1, themes: -1, lowerThirds: -1, devices: -1,
-        bibleVersions: -1, multiviewTemplates: -1, tickerThemes: -1, themePresets: -1,
-        cloudStorageGB: 20,
-        multiview: true, tickers: true, massImport: true, easyWorshipImport: true,
-        proPresenterImport: true, translation: true, speechToScripture: true,
-        sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,
-        customReports: false, mobileControl: true, apiAccess: false,
-        teamManagement: true, campusManagement: false, slideshow: true,
-        countdowns: true,
-      },
-    },
-    pro: {
-      label: "Pro",
-      pricing: {
-        NGN: { monthly: 34000, yearly: 408000 },
-        USD: { monthly: 30, yearly: 360 },
-      },
-      paystack: {
-        monthlyPlanCode: "mce_pro_monthly",
-        yearlyPlanCode: "mce_pro_yearly",
-      },
-      credits: -1,
-      entitlements: {
-        songs: -1, images: -1, videos: -1, themes: -1, lowerThirds: -1, devices: -1,
-        bibleVersions: -1, multiviewTemplates: -1, tickerThemes: -1, themePresets: -1,
-        cloudStorageGB: 200,
-        multiview: true, tickers: true, massImport: true, easyWorshipImport: true,
-        proPresenterImport: true, translation: true, speechToScripture: true,
-        sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,
-        customReports: true, mobileControl: true, apiAccess: true,
-        teamManagement: true, campusManagement: true, slideshow: true,
-        countdowns: true,
-      },
-    },
-    ambassador: {
-      label: "Ambassador",
-      pricing: {
-        NGN: { monthly: 0, yearly: 0 },
-        USD: { monthly: 0, yearly: 0 },
-      },
-      paystack: { monthlyPlanCode: "", yearlyPlanCode: "" },
-      credits: 2000,
-      entitlements: {
-        songs: -1, images: -1, videos: -1, themes: -1, lowerThirds: -1, devices: -1,
-        bibleVersions: -1, multiviewTemplates: -1, tickerThemes: -1, themePresets: -1,
-        cloudStorageGB: 200,
-        multiview: true, tickers: true, massImport: true, easyWorshipImport: true,
-        proPresenterImport: true, translation: true, speechToScripture: true,
-        sermonExport: true, aiFeatures: true, cloudSync: true, advancedAnalytics: true,
-        customReports: true, mobileControl: true, apiAccess: true,
-        teamManagement: true, campusManagement: true, slideshow: true,
-        countdowns: true,
-      },
-    },
-  },
-  creditCosts: [
-    { name: "Speech-to-Scripture", cost: 1, unit: "per minute", description: "Automatically transcribe live audio and detect scripture references." },
-    { name: "Live Translation", cost: 2, unit: "per minute", description: "Translate live speech into another language." },
-    { name: "AI Summary", cost: 5, unit: "flat", description: "Generate a sermon summary." },
-  ],
-  translationWordsPerCredit: 150,
-  updatedAt: "2026-06-20T00:00:00.000Z",
-};
+export const DEFAULT_PLAN_CONFIG: PlanConfig = buildLegacyCompatiblePlanConfig({
+  updatedAt: "2026-07-10T00:00:00.000Z",
+});

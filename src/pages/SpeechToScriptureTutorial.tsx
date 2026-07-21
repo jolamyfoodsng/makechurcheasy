@@ -45,6 +45,8 @@ interface TutorialStep {
   skipIf?: () => boolean;
   /** Position of the assistant panel relative to target */
   panelPosition: "right" | "left" | "top" | "bottom";
+  /** Optional fixed left offset for the panel */
+  panelLeftOverride?: number;
 }
 
 const STORAGE_KEY = "mce.speech-to-scripture.tutorial.completed";
@@ -153,6 +155,7 @@ export default function SpeechToScriptureTutorial({
       actionKey: "stt.step4.action",
       trigger: "none",
       panelPosition: "right",
+      panelLeftOverride: 10,
     },
     {
       target: "[data-stt-tutorial='top-match']",
@@ -181,6 +184,7 @@ export default function SpeechToScriptureTutorial({
   const currentStep = steps[stepIndex];
   const totalSteps = steps.length;
   const isFinalStep = stepIndex === totalSteps;
+  const isLastActionStep = stepIndex === totalSteps - 1;
 
   const needsInteraction = currentStep?.trigger !== "none";
 
@@ -240,9 +244,12 @@ export default function SpeechToScriptureTutorial({
       const panelH = 300;
 
       const placement = calculatePanelPlacement(rect, panelW, panelH, viewport);
-      setPanelRect({ top: placement.top, left: placement.left });
+      setPanelRect({
+        top: placement.top,
+        left: currentStep?.panelLeftOverride ?? placement.left,
+      });
     },
-    [isFinalStep],
+    [currentStep?.panelLeftOverride, isFinalStep],
   );
 
   useEffect(() => {
@@ -504,8 +511,9 @@ export default function SpeechToScriptureTutorial({
               className={`stt-btn stt-btn-primary ${!stepCompleted && currentStep.trigger !== "none" ? "stt-btn--waiting" : ""}`}
               disabled={!stepCompleted && currentStep.trigger !== "none"}
               onClick={goNext}
-              title="Next step">
-              {t("stt.common.next")} <ChevronRight size={14} />
+              title={isLastActionStep ? "Complete tutorial" : "Next step"}>
+              {isLastActionStep ? t("stt.common.completed") : t("stt.common.next")}{" "}
+              {isLastActionStep ? <CheckCircle2 size={14} /> : <ChevronRight size={14} />}
             </button>
           </div>
         </div>

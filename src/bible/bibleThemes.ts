@@ -56,7 +56,7 @@ const BIBLE_LT_THEMES: RawLowerThirdTheme[] = [
     <p class="quote-ref">{{reference}}</p>
   </div>
 </div>`,
-    fontImports: ["https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Source+Serif+4:wght@400;600;700&display=swap"],
+    fontImports: ["/fonts/google/google-fonts.css"],
     animation: { name: "fadeInUp", duration: 600, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
     exitAnimation: { name: "fadeOutDown", duration: 400, easing: "cubic-bezier(.4,0,1,1)" },
     css: `
@@ -146,7 +146,7 @@ body { font-family: "Montserrat", sans-serif; }
     <p class="glow-ref">{{reference}}</p>
   </div>
 </div>`,
-    fontImports: ["https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:wght@400;600;700&display=swap"],
+    fontImports: ["/fonts/google/google-fonts.css"],
     animation: { name: "glowIn", duration: 700, easing: "cubic-bezier(0.16,1,0.3,1)" },
     exitAnimation: { name: "glowOut", duration: 450, easing: "cubic-bezier(.4,0,1,1)" },
     css: `
@@ -252,7 +252,7 @@ body { font-family: "Inter", sans-serif; }
     </div>
   </div>
 </div>`,
-    fontImports: ["https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap"],
+    fontImports: ["/fonts/google/google-fonts.css"],
     animation: { name: "ribbonIn", duration: 650, easing: "cubic-bezier(0.16,1,0.3,1)" },
     exitAnimation: { name: "ribbonOut", duration: 400, easing: "cubic-bezier(.4,0,1,1)" },
     css: `

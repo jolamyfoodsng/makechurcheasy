@@ -16,14 +16,18 @@
 // https://tauri.localhost) is NOT reachable by OBS/CEF, so we need a real
 // localhost server.
 
+mod assemblyai_stream;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod audio_capture;
-mod assemblyai_stream;
+mod device_fingerprint;
+#[cfg(target_os = "macos")]
 mod local_llm;
-mod mobile_companion;
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[cfg(not(target_os = "macos"))]
 mod local_llm_stub;
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+mod mobile_companion;
+mod overlay_relay;
+mod presentation_remote;
+#[cfg(not(target_os = "macos"))]
 use local_llm_stub as local_llm;
 
 use chrono::Utc;
@@ -33,11 +37,12 @@ use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use std::fs;
+use std::fs::{self, File};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Component, Path};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
 /// The port the overlay server is running on (set at startup).
@@ -58,8 +63,7 @@ mod app_nap {
 
     // IOKit power management constants — names match Apple's API
     #[allow(non_upper_case_globals)]
-    const kIOPMAssertionTypePreventUserIdleSystemSleep: &str =
-        "PreventUserIdleSystemSleep";
+    const kIOPMAssertionTypePreventUserIdleSystemSleep: &str = "PreventUserIdleSystemSleep";
 
     #[link(name = "IOKit", kind = "framework")]
     extern "C" {
@@ -114,7 +118,9 @@ mod app_nap {
     pub fn allow_app_nap() {
         let id = ASSERTION_ID.swap(0, Ordering::Relaxed);
         if id != 0 {
-            unsafe { IOPMAssertionRelease(id); }
+            unsafe {
+                IOPMAssertionRelease(id);
+            }
             println!("[AppNap] Power assertion released (id={id}) — App Nap re-enabled");
         }
     }
@@ -139,13 +145,7 @@ mod app_nap {
 
     fn cf_string_from_str(s: &str) -> CFStringRef {
         let cstr = std::ffi::CString::new(s).unwrap();
-        unsafe {
-            CFStringCreateWithCString(
-                std::ptr::null(),
-                cstr.as_ptr(),
-                kCFStringEncodingUTF8,
-            )
-        }
+        unsafe { CFStringCreateWithCString(std::ptr::null(), cstr.as_ptr(), kCFStringEncodingUTF8) }
     }
 
     unsafe fn cf_release(cf: CFTypeRef) {
@@ -157,6 +157,10 @@ mod app_nap {
 
 static LM_STATE: OnceLock<Mutex<String>> = OnceLock::new();
 static LM_COMMAND_QUEUE: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+pub(crate) static PRESENTATION_STATE: OnceLock<Mutex<BTreeMap<String, PresentationStateEnvelope>>> =
+    OnceLock::new();
+pub(crate) static PRESENTATION_VIEWERS: OnceLock<Mutex<BTreeMap<String, BTreeMap<String, u64>>>> =
+    OnceLock::new();
 const ONLINE_LYRICS_RESULT_LIMIT: usize = 18;
 const ONLINE_LYRICS_USER_AGENT: &str =
     "MakeChurchEasy/1.0 (+https://localhost; worship-online-lyrics)";
@@ -166,9 +170,54 @@ const TEMPLATE_VIDEO_LIST_TTL_SECONDS: u32 = 300;
 
 type HmacSha256 = Hmac<Sha256>;
 
+const PRESENTATION_VIEWER_TTL_MS: u64 = 15_000;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PresentationStateEnvelope {
+    pub(crate) session_id: String,
+    pub(crate) fullscreen: Option<serde_json::Value>,
+    pub(crate) lower_third: Option<serde_json::Value>,
+    pub(crate) updated_at: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PresentationViewerHeartbeat {
+    pub(crate) session_id: String,
+    pub(crate) viewer_id: String,
+}
+
+pub(crate) fn now_unix_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+pub(crate) fn presentation_viewer_count(session_id: &str) -> usize {
+    let registry = PRESENTATION_VIEWERS.get_or_init(|| Mutex::new(BTreeMap::new()));
+    let now = now_unix_millis();
+    let mut guard = match registry.lock() {
+        Ok(guard) => guard,
+        Err(_) => return 0,
+    };
+
+    if let Some(viewers) = guard.get_mut(session_id) {
+        viewers.retain(|_, seen_at| now.saturating_sub(*seen_at) <= PRESENTATION_VIEWER_TTL_MS);
+        let count = viewers.len();
+        if count == 0 {
+            guard.remove(session_id);
+        }
+        return count;
+    }
+
+    0
+}
+
 /// True if the directory contains the overlay HTML entrypoint(s).
 fn has_overlay_assets(dir: &std::path::Path) -> bool {
-    dir.join("bible-overlay-fullscreen.html").is_file()
+    dir.join("mce-bible-overlay.html").is_file() || dir.join("mce-worship-overlay.html").is_file()
 }
 
 /// Resolve where bundled overlay HTML files were placed.
@@ -416,7 +465,10 @@ fn build_r2_presigned_get_url(
     for (key, value) in extra_query {
         query.insert(key.clone(), value.clone());
     }
-    query.insert("X-Amz-Algorithm".to_string(), "AWS4-HMAC-SHA256".to_string());
+    query.insert(
+        "X-Amz-Algorithm".to_string(),
+        "AWS4-HMAC-SHA256".to_string(),
+    );
     query.insert(
         "X-Amz-Credential".to_string(),
         format!("{}/{}", config.access_key_id, credential_scope),
@@ -494,8 +546,8 @@ fn list_template_video_assets_internal() -> Result<Vec<TemplateVideoAsset>, Stri
     let xml = response
         .text()
         .map_err(|e| format!("Failed to read template video listing: {}", e))?;
-    let parsed: R2ListBucketResult =
-        from_xml_str(&xml).map_err(|e| format!("Failed to parse template video listing XML: {}", e))?;
+    let parsed: R2ListBucketResult = from_xml_str(&xml)
+        .map_err(|e| format!("Failed to parse template video listing XML: {}", e))?;
 
     let mut assets = Vec::new();
     for object in parsed.contents {
@@ -532,7 +584,11 @@ fn list_template_video_assets_internal() -> Result<Vec<TemplateVideoAsset>, Stri
         });
     }
 
-    assets.sort_by(|left, right| left.file_name.to_lowercase().cmp(&right.file_name.to_lowercase()));
+    assets.sort_by(|left, right| {
+        left.file_name
+            .to_lowercase()
+            .cmp(&right.file_name.to_lowercase())
+    });
     Ok(assets)
 }
 
@@ -544,6 +600,333 @@ fn is_safe_relative_path(path: &Path) -> bool {
             Component::ParentDir | Component::RootDir | Component::Prefix(_)
         )
     })
+}
+
+fn overlay_content_type_for_extension(extension: Option<&str>) -> &'static str {
+    match extension {
+        Some("html") => "text/html; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") => "application/javascript; charset=utf-8",
+        Some("json") => "application/json; charset=utf-8",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("svg") => "image/svg+xml",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("mp4") => "video/mp4",
+        Some("webm") => "video/webm",
+        Some("mov") => "video/quicktime",
+        Some("mp3") => "audio/mpeg",
+        Some("wav") => "audio/wav",
+        Some("ogg") => "audio/ogg",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        Some("ttf") => "font/ttf",
+        Some("otf") => "font/otf",
+        _ => "application/octet-stream",
+    }
+}
+
+fn overlay_header(name: &str, value: &str) -> tiny_http::Header {
+    tiny_http::Header::from_bytes(name, value).unwrap()
+}
+
+fn overlay_header_value(request: &tiny_http::Request, name: &'static str) -> Option<String> {
+    request
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv(name))
+        .map(|header| header.value.as_str().to_string())
+}
+
+fn overlay_session_value() -> Option<serde_json::Value> {
+    let mem_store = AUTH_SESSION.get_or_init(|| Mutex::new(None));
+    let raw = {
+        let guard = mem_store.lock().unwrap();
+        guard.clone()
+    }?;
+
+    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    if let Some(expires_at) = value.get("expiresAt").and_then(|v| v.as_i64()) {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        if now_ms >= expires_at {
+            return None;
+        }
+    }
+
+    Some(value)
+}
+
+fn overlay_auth_status_json() -> String {
+    match overlay_session_value() {
+        Some(mut value) => {
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("authenticated".to_string(), serde_json::Value::Bool(true));
+            }
+            serde_json::to_string(&value).unwrap_or_else(|_| r#"{"authenticated":true}"#.to_string())
+        }
+        None => r#"{"authenticated":false,"deviceId":null}"#.to_string(),
+    }
+}
+
+fn overlay_has_active_auth_session() -> bool {
+    overlay_session_value().is_some()
+}
+
+fn overlay_is_allowed_app_document(clean_path: &str) -> bool {
+    matches!(
+        clean_path,
+        "" | "index.html" | "dock" | "dock.html" | "lm-dock" | "lm-dock.html"
+    )
+}
+
+fn overlay_blocked_html_page() -> &'static str {
+    r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Authentication Required</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        font-family: Inter, "Open Sans", system-ui, sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+      .panel {
+        width: min(420px, 100%);
+        padding: 28px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.92);
+        box-shadow: 0 28px 80px rgba(2, 6, 23, 0.45);
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 1.4rem;
+        line-height: 1.2;
+      }
+      p {
+        margin: 0 0 16px;
+        color: #cbd5e1;
+        line-height: 1.5;
+      }
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 11px 16px;
+        font: inherit;
+        font-weight: 600;
+        color: #eff6ff;
+        background: #2563eb;
+        cursor: pointer;
+      }
+      .hint {
+        margin-top: 14px;
+        margin-bottom: 0;
+        font-size: 0.92rem;
+        color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <h1>Authentication Required</h1>
+      <p>Please open the MakeChurchEasy desktop app and log in first.</p>
+      <button type="button" onclick="window.location.reload()">Refresh</button>
+      <p class="hint">This page will start working again after the desktop app restores the local session.</p>
+    </main>
+  </body>
+</html>"#
+}
+
+fn respond_overlay_auth_blocked(request: tiny_http::Request) {
+    let resp = tiny_http::Response::from_string(overlay_blocked_html_page())
+        .with_status_code(401)
+        .with_header(overlay_header("Content-Type", "text/html; charset=utf-8"))
+        .with_header(overlay_header("Access-Control-Allow-Origin", "*"))
+        .with_header(overlay_header(
+            "Cache-Control",
+            "no-store, no-cache, must-revalidate, max-age=0",
+        ))
+        .with_header(overlay_header("Pragma", "no-cache"))
+        .with_header(overlay_header("Expires", "0"));
+    let _ = request.respond(resp);
+}
+
+fn parse_byte_range(range_header: &str, file_size: u64) -> Result<(u64, u64), ()> {
+    if file_size == 0 {
+        return Err(());
+    }
+
+    let range_value = range_header.trim().strip_prefix("bytes=").ok_or(())?;
+    if range_value.contains(',') {
+        return Err(());
+    }
+
+    let (start_raw, end_raw) = range_value.split_once('-').ok_or(())?;
+
+    if start_raw.is_empty() {
+        let suffix_len = end_raw.parse::<u64>().map_err(|_| ())?;
+        if suffix_len == 0 {
+            return Err(());
+        }
+
+        let length = suffix_len.min(file_size);
+        return Ok((file_size - length, file_size - 1));
+    }
+
+    let start = start_raw.parse::<u64>().map_err(|_| ())?;
+    if start >= file_size {
+        return Err(());
+    }
+
+    let end = if end_raw.is_empty() {
+        file_size - 1
+    } else {
+        end_raw.parse::<u64>().map_err(|_| ())?.min(file_size - 1)
+    };
+
+    if end < start {
+        return Err(());
+    }
+
+    Ok((start, end))
+}
+
+fn respond_overlay_file_request(request: tiny_http::Request, file_path: &Path, content_type: &str) {
+    let range_header = overlay_header_value(&request, "Range");
+    let file = match File::open(file_path) {
+        Ok(file) => file,
+        Err(_) => {
+            let _ = request.respond(
+                tiny_http::Response::from_string("Internal Server Error")
+                    .with_status_code(500)
+                    .with_header(
+                        tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap(),
+                    ),
+            );
+            return;
+        }
+    };
+
+    let file_size = match file.metadata() {
+        Ok(metadata) => metadata.len(),
+        Err(_) => {
+            let _ = request.respond(
+                tiny_http::Response::from_string("Internal Server Error")
+                    .with_status_code(500)
+                    .with_header(
+                        tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap(),
+                    ),
+            );
+            return;
+        }
+    };
+
+    if let Some(range_header) = range_header {
+        match parse_byte_range(&range_header, file_size) {
+            Ok((start, end)) => {
+                let mut file = file;
+                let content_length = end - start + 1;
+                let Some(content_length_usize) = usize::try_from(content_length).ok() else {
+                    let _ = request.respond(
+                        tiny_http::Response::from_string("Internal Server Error")
+                            .with_status_code(500)
+                            .with_header(
+                                tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                    .unwrap(),
+                            ),
+                    );
+                    return;
+                };
+
+                if file.seek(SeekFrom::Start(start)).is_err() {
+                    let _ = request.respond(
+                        tiny_http::Response::from_string("Internal Server Error")
+                            .with_status_code(500)
+                            .with_header(
+                                tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                    .unwrap(),
+                            ),
+                    );
+                    return;
+                }
+
+                let response = tiny_http::Response::new(
+                    tiny_http::StatusCode(206),
+                    Vec::new(),
+                    file.take(content_length),
+                    Some(content_length_usize),
+                    None,
+                )
+                .with_header(overlay_header("Content-Type", content_type))
+                .with_header(
+                    tiny_http::Header::from_bytes(
+                        "Content-Range",
+                        format!("bytes {}-{}/{}", start, end, file_size),
+                    )
+                    .unwrap(),
+                )
+                .with_header(
+                    tiny_http::Header::from_bytes("Content-Length", content_length.to_string())
+                        .unwrap(),
+                )
+                .with_header(overlay_header("Accept-Ranges", "bytes"))
+                .with_header(overlay_header("Access-Control-Allow-Origin", "*"))
+                .with_header(overlay_header(
+                    "Cache-Control",
+                    "no-store, no-cache, must-revalidate, max-age=0",
+                ))
+                .with_header(overlay_header("Pragma", "no-cache"))
+                .with_header(overlay_header("Expires", "0"));
+                let _ = request.respond(response);
+            }
+            Err(_) => {
+                let response = tiny_http::Response::empty(416)
+                    .with_header(
+                        tiny_http::Header::from_bytes(
+                            "Content-Range",
+                            format!("bytes */{}", file_size),
+                        )
+                        .unwrap(),
+                    )
+                    .with_header(overlay_header("Accept-Ranges", "bytes"))
+                    .with_header(overlay_header("Access-Control-Allow-Origin", "*"))
+                    .with_header(overlay_header(
+                        "Cache-Control",
+                        "no-store, no-cache, must-revalidate, max-age=0",
+                    ))
+                    .with_header(overlay_header("Pragma", "no-cache"))
+                    .with_header(overlay_header("Expires", "0"));
+                let _ = request.respond(response);
+            }
+        }
+        return;
+    }
+
+    let response = tiny_http::Response::from_file(file)
+        .with_header(overlay_header("Content-Type", content_type))
+        .with_header(overlay_header("Accept-Ranges", "bytes"))
+        .with_header(overlay_header("Access-Control-Allow-Origin", "*"))
+        .with_header(overlay_header(
+            "Cache-Control",
+            "no-store, no-cache, must-revalidate, max-age=0",
+        ))
+        .with_header(overlay_header("Pragma", "no-cache"))
+        .with_header(overlay_header("Expires", "0"));
+    let _ = request.respond(response);
 }
 
 /// Save a background image to ~/Documents/MakeChurchEasy/backgrounds/
@@ -706,20 +1089,30 @@ fn save_background_video_file(
     file_name: String,
     file_data: Vec<u8>,
 ) -> Result<SavedBackgroundVideoFile, String> {
-    let videos_dir = app_dir()?.join("uploads").join("backgrounds").join("videos");
+    let videos_dir = app_dir()?
+        .join("uploads")
+        .join("backgrounds")
+        .join("videos");
     fs::create_dir_all(&videos_dir)
         .map_err(|e| format!("Failed to create background videos directory: {}", e))?;
 
     let safe_file_name = sanitize_filename_for_storage(&file_name)?;
     let file_path = videos_dir.join(&safe_file_name);
-    fs::write(&file_path, &file_data)
-        .map_err(|e| format!("Failed to write background video '{}': {}", safe_file_name, e))?;
+    fs::write(&file_path, &file_data).map_err(|e| {
+        format!(
+            "Failed to write background video '{}': {}",
+            safe_file_name, e
+        )
+    })?;
 
     let abs_path = file_path
         .to_str()
         .ok_or("Background video path contains invalid UTF-8")?
         .to_string();
-    let relative_url = format!("/uploads/backgrounds/videos/{}", encode_path_segments(&safe_file_name));
+    let relative_url = format!(
+        "/uploads/backgrounds/videos/{}",
+        encode_path_segments(&safe_file_name)
+    );
 
     println!(
         "[Tauri] Saved background video: {} ({} bytes)",
@@ -791,7 +1184,9 @@ fn get_system_hardware_info() -> Result<serde_json::Value, String> {
     sys.refresh_all();
 
     // CPU
-    let cpu_model = sys.cpus().first()
+    let cpu_model = sys
+        .cpus()
+        .first()
         .map(|c| c.brand().to_string())
         .unwrap_or_else(|| "Unknown CPU".to_string());
     let cpu_cores = sys.cpus().len() as u32;
@@ -1297,13 +1692,7 @@ fn should_break_lyrics(line: &str) -> bool {
     let lower = line.to_ascii_lowercase();
     matches!(
         lower.as_str(),
-        "the video"
-            | "video"
-            | "watch the video"
-            | "watch video"
-            | "related"
-            | "more"
-            | "print"
+        "the video" | "video" | "watch the video" | "watch video" | "related" | "more" | "print"
     ) || lower.contains("thanks for visiting")
         || lower.contains("have a blessed week")
         || lower.contains("property and copyright")
@@ -2110,7 +2499,8 @@ mod tests {
 
 fn transcripts_dir() -> Result<std::path::PathBuf, String> {
     let dir = app_dir()?.join("transcripts");
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create transcripts directory: {}", e))?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create transcripts directory: {}", e))?;
     Ok(dir)
 }
 
@@ -2140,19 +2530,28 @@ fn load_transcripts() -> Result<String, String> {
         b_date.cmp(a_date)
     });
 
-    serde_json::to_string(&transcripts).map_err(|e| format!("Failed to serialize transcripts: {}", e))
+    serde_json::to_string(&transcripts)
+        .map_err(|e| format!("Failed to serialize transcripts: {}", e))
 }
 
 #[tauri::command]
 fn save_transcript(transcript: serde_json::Value) -> Result<(), String> {
     let dir = transcripts_dir()?;
-    let id = transcript.get("id")
+    let id = transcript
+        .get("id")
         .and_then(|v| v.as_str())
         .ok_or("Transcript missing id")?;
 
-    let safe_name = id.chars().map(|ch| {
-        if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' { ch } else { '_' }
-    }).collect::<String>();
+    let safe_name = id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
 
     let path = dir.join(format!("{}.json", safe_name));
     let json = serde_json::to_string_pretty(&transcript)
@@ -2167,9 +2566,16 @@ fn save_transcript(transcript: serde_json::Value) -> Result<(), String> {
 #[tauri::command]
 fn delete_transcript(id: String) -> Result<(), String> {
     let dir = transcripts_dir()?;
-    let safe_name = id.chars().map(|ch| {
-        if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' { ch } else { '_' }
-    }).collect::<String>();
+    let safe_name = id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
 
     let path = dir.join(format!("{}.json", safe_name));
     if path.exists() {
@@ -2194,10 +2600,15 @@ fn get_transcript_stats() -> Result<String, String> {
                     if let Ok(contents) = fs::read_to_string(&path) {
                         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&contents) {
                             total_sessions += 1;
-                            total_duration += val.get("durationSeconds")
-                                .and_then(|v| v.as_u64()).unwrap_or(0);
-                            total_scriptures += val.get("scriptures")
-                                .and_then(|v| v.as_array()).map(|a| a.len() as u64).unwrap_or(0);
+                            total_duration += val
+                                .get("durationSeconds")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(0);
+                            total_scriptures += val
+                                .get("scriptures")
+                                .and_then(|v| v.as_array())
+                                .map(|a| a.len() as u64)
+                                .unwrap_or(0);
                         }
                     }
                 }
@@ -2226,16 +2637,523 @@ fn get_transcript_stats() -> Result<String, String> {
 const OPENCODE_BASE_URL: &str = "https://opencode.ai/zen/v1";
 const OPENCODE_MODEL: &str = "mimo-v2.5-free";
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportAiStatus {
+    ai_configured: bool,
+    model: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportReviewRequest {
+    songs: Vec<WorshipImportReviewSongInput>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportReviewSongInput {
+    id: String,
+    title: String,
+    hymn_number: Option<String>,
+    language: Option<String>,
+    confidence: f64,
+    raw_text: String,
+    warnings: Vec<String>,
+    section_hints: Vec<WorshipImportReviewSectionHint>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportReviewSectionHint {
+    label: String,
+    #[serde(rename = "type")]
+    section_type: String,
+    content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportReviewResponse {
+    songs: Vec<WorshipImportReviewSongOutput>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportReviewSongOutput {
+    id: String,
+    title: Option<String>,
+    hymn_number: Option<String>,
+    confidence: Option<f64>,
+    warnings: Option<Vec<String>>,
+    review_notes: Option<Vec<String>>,
+    sections: Option<Vec<WorshipImportReviewSectionOutput>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportReviewSectionOutput {
+    #[serde(rename = "type")]
+    section_type: Option<String>,
+    label: Option<String>,
+    number: Option<String>,
+    content: Option<String>,
+    warnings: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportStructureRequest {
+    chunk_index: usize,
+    total_chunks: usize,
+    text: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportStructureResponse {
+    songs: Vec<WorshipImportStructureSong>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportStructureSong {
+    title: String,
+    hymn_number: Option<String>,
+    warnings: Option<Vec<String>>,
+    sections: Vec<WorshipImportStructureSection>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorshipImportStructureSection {
+    #[serde(rename = "type")]
+    section_type: String,
+    label: Option<String>,
+    number: Option<String>,
+    content: String,
+}
+
 fn get_opencode_api_key() -> Result<String, String> {
-    std::env::var("OPENCODE_API_KEY").map_err(|_| {
-        "OPENCODE_API_KEY environment variable not set. \
-         Set it in your shell or .env before running the app."
-            .to_string()
-    })
+    if let Ok(value) = std::env::var("OPENCODE_API_KEY") {
+        if !value.trim().is_empty() {
+            return Ok(value);
+        }
+    }
+
+    for candidate in opencode_dotenv_candidates() {
+        if let Some(value) = read_env_file_value(&candidate, "OPENCODE_API_KEY") {
+            return Ok(value);
+        }
+    }
+
+    if let Some(value) = option_env!("OPENCODE_API_KEY") {
+        if !value.trim().is_empty() {
+            return Ok(value.to_string());
+        }
+    }
+
+    Err("OPENCODE_API_KEY environment variable not set. \
+         Set it in your shell, .env, or GitHub Actions release secret."
+        .to_string())
+}
+
+fn opencode_dotenv_candidates() -> Vec<std::path::PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        candidates.push(current_dir.join(".env"));
+        candidates.push(current_dir.join("../.env"));
+        candidates.push(current_dir.join("../../.env"));
+    }
+
+    candidates
+}
+
+fn read_env_file_value(path: &std::path::Path, key: &str) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        let (name, value) = trimmed.split_once('=')?;
+        if name.trim() != key {
+            continue;
+        }
+
+        let normalized = value
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .trim()
+            .to_string();
+
+        if !normalized.is_empty() {
+            return Some(normalized);
+        }
+    }
+
+    None
+}
+
+fn build_opencode_client(timeout_secs: u64) -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))
+}
+
+fn extract_json_payload(text: &str) -> &str {
+    let trimmed = text.trim();
+    if trimmed.starts_with('{') && trimmed.ends_with('}') {
+        return trimmed;
+    }
+
+    let start = trimmed.find('{');
+    let end = trimmed.rfind('}');
+    match (start, end) {
+        (Some(s), Some(e)) if s < e => &trimmed[s..=e],
+        _ => trimmed,
+    }
+}
+
+fn build_worship_import_review_prompt(
+    request: &WorshipImportReviewRequest,
+) -> Result<String, String> {
+    let payload = serde_json::to_string_pretty(request)
+        .map_err(|e| format!("Failed to serialize review request: {}", e))?;
+
+    Ok(format!(
+        "You are a worship document review assistant.\n\
+         Your job is to structure already-extracted worship songs for import.\n\
+         HARD RULES:\n\
+         - Do NOT write new lyrics.\n\
+         - Do NOT translate.\n\
+         - Do NOT summarize.\n\
+         - Do NOT paraphrase.\n\
+         - Do NOT normalize spelling.\n\
+         - Do NOT fix OCR errors by changing words. If you suspect OCR issues, keep the original text and mention them in warnings.\n\
+         - Use ONLY text that already exists in each song's rawText or sectionHints.\n\
+         - Keep section content verbatim except for grouping existing lines into the right section.\n\
+         - Never move lines from one song into another song.\n\
+         - If uncertain, preserve the local structure and lower confidence.\n\n\
+         TASK:\n\
+         For each input song, identify title, hymnNumber, and sections such as verse, chorus, refrain, bridge, pre-chorus, tag, intro, outro, or other.\n\
+         Detect broken stanza boundaries, repeated choruses, page continuations, and likely OCR mistakes.\n\
+         Return structured JSON only.\n\n\
+         RESPONSE SCHEMA:\n\
+         {{\n\
+           \"songs\": [\n\
+             {{\n\
+               \"id\": \"same as input\",\n\
+               \"title\": \"string\",\n\
+               \"hymnNumber\": \"string or omitted\",\n\
+               \"confidence\": 0.0,\n\
+               \"warnings\": [\"string\"],\n\
+               \"reviewNotes\": [\"string\"],\n\
+               \"sections\": [\n\
+                 {{\n\
+                   \"type\": \"verse|chorus|refrain|bridge|pre-chorus|tag|intro|outro|other\",\n\
+                   \"label\": \"display label\",\n\
+                   \"number\": \"optional section number\",\n\
+                   \"content\": \"exact lyric text from the input only\",\n\
+                   \"warnings\": [\"string\"]\n\
+                 }}\n\
+               ]\n\
+             }}\n\
+           ]\n\
+         }}\n\n\
+         INPUT SONGS:\n{payload}"
+    ))
+}
+
+fn build_worship_import_system_prompt() -> &'static str {
+    r#"You are a worship document parser.
+
+ABSOLUTE RULES - VIOLATION WILL TERMINATE THE SESSION:
+- Output EXACTLY ONE valid JSON object. Nothing before. Nothing after. No code fences. No markdown. No ``` . Just raw JSON.
+- Do NOT write new lyrics.
+- Do NOT translate.
+- Do NOT summarize.
+- Do NOT paraphrase.
+- Do NOT normalize spelling.
+- Do NOT fix OCR errors by changing words. If you suspect OCR issues, keep the original text and mention them in warnings.
+- Use ONLY text that already exists in the input.
+- Keep section content verbatim.
+- Escape all JSON string content correctly, including quotes, backslashes, and lyric line breaks.
+- Put lyric line breaks inside JSON strings as \n, not as literal unescaped newlines.
+- If a title is unclear, use the first line as title and add a warning.
+- If no hymn number is present, omit it.
+- One object per song.
+- Identify sections as: verse, chorus, refrain, bridge, pre-chorus, tag, intro, outro, other, stanza, response, solo, congregation, men, women, all, leader, choir.
+
+RESPONSE MUST BE EXACTLY THIS FORMAT:
+{"songs":[{"title":"Song title","hymnNumber":"optional","warnings":[],"sections":[{"type":"verse","label":"Verse 1","number":"1","content":"exact lyric text"}]}]}
+
+Return valid JSON only. No markdown. No code fences. No explanation. Just JSON."#
+}
+
+fn build_worship_import_user_prompt(request: &WorshipImportStructureRequest) -> String {
+    let chunk_context = if request.total_chunks > 1 {
+        format!(
+            "\nThis is chunk {} of {}. Songs may be split across chunks. Only extract songs that appear complete in this chunk.",
+            request.chunk_index + 1,
+            request.total_chunks
+        )
+    } else {
+        String::new()
+    };
+
+    format!(
+        "You are processing church worship documents.\n\
+These documents may originate from:\n\
+- Hymn books\n\
+- Worship sheets\n\
+- Choir documents\n\
+- Sunday service song lists\n\
+- CCC hymn books\n\
+- Anglican hymn books\n\
+- Methodist hymn books\n\
+- Catholic hymn books\n\
+- Redeemed Christian Church hymn books\n\
+- Assemblies of God hymn books\n\
+- Hand-typed church documents\n\
+- OCR-scanned PDFs\n\
+- Historical church publications\n\
+The formatting may be inconsistent.\n\
+Do not assume modern song formatting.\n\
+Many documents use:\n\
+- Stanza\n\
+- Verse\n\
+- Chorus\n\
+- Refrain\n\
+- Response\n\
+- Solo\n\
+- Congregation\n\
+- Men\n\
+- Women\n\
+- All\n\
+- Leader\n\
+- Choir\n\
+These should be preserved whenever possible.\n\
+Some hymn books use numbering formats such as:\n\
+1.\n\
+2.\n\
+3.\n\
+or\n\
+I.\n\
+II.\n\
+III.\n\
+or\n\
+(1)\n\
+(2)\n\
+(3)\n\
+These often indicate verses.\n\
+Do not automatically treat every numbered section as a new song.\n\
+A song may span multiple pages.\n\
+A hymn number often appears near the title.\n\
+Examples:\n\
+101 Amazing Grace\n\
+Hymn 101\n\
+No. 101\n\
+101.\n\
+101\n\
+However page numbers may appear similarly.\n\
+Be conservative.\n\
+When uncertain, preserve rather than guess.\n\
+Documents may contain:\n\
+- Page numbers\n\
+- Running headers\n\
+- Running footers\n\
+- Copyright notices\n\
+- Publisher information\n\
+- Index pages\n\
+- Table of contents pages\n\
+These are not songs.\n\
+Exclude them only when confidence is very high.\n\
+If confidence is low, preserve the text and add a warning.\n\
+Many scanned hymn books contain OCR mistakes.\n\
+Examples:\n\
+G0D instead of GOD\n\
+L0RD instead of LORD\n\
+rn instead of m\n\
+l instead of I\n\
+Only correct errors when the intended text is obvious.\n\
+Otherwise preserve the original.\n\
+Church documents frequently repeat choruses.\n\
+Repeated text does not necessarily mean duplication.\n\
+Do not remove repeated sections.\n\
+Preserve all meaningful content.\n\n\
+Since many Nigerian churches use CCC books:\n\
+Documents may contain bilingual content.\n\
+Examples:\n\
+English + Yoruba\n\
+English + Twi\n\
+English + French\n\
+Do not separate bilingual sections into different songs.\n\
+Keep them together when they clearly belong to the same hymn.\n\
+Examples:\n\
+Verse 1 (English)\n\
+Verse 1 (Yoruba)\n\
+should remain inside the same song.\n\
+Do not translate.\n\
+Do not merge languages.\n\
+Preserve original ordering.{}\n\n\
+INPUT TEXT:\n{}",
+        chunk_context, request.text
+    )
 }
 
 #[tauri::command]
-fn translate_transcript(transcript_text: String, target_language: String) -> Result<String, String> {
+fn get_worship_import_ai_status() -> WorshipImportAiStatus {
+    WorshipImportAiStatus {
+        ai_configured: get_opencode_api_key()
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false),
+        model: OPENCODE_MODEL.to_string(),
+    }
+}
+
+#[tauri::command]
+fn structure_worship_import_chunk(
+    request: WorshipImportStructureRequest,
+) -> Result<WorshipImportStructureResponse, String> {
+    let api_key = get_opencode_api_key()?;
+    let client = build_opencode_client(120)?;
+    let system_prompt = build_worship_import_system_prompt();
+    let user_prompt = build_worship_import_user_prompt(&request);
+
+    let request_body = serde_json::json!({
+        "model": OPENCODE_MODEL,
+        "messages": [
+            { "role": "system", "content": system_prompt },
+            { "role": "user", "content": user_prompt }
+        ],
+        "temperature": 0.0,
+        "max_tokens": 32768,
+        "response_format": { "type": "json_object" }
+    });
+
+    let mut resp = client
+        .post(format!("{}/chat/completions", OPENCODE_BASE_URL))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&request_body)
+        .send()
+        .map_err(|e| format!("Worship import structure request failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().unwrap_or_default();
+
+        if status.as_u16() == 400 && text.to_lowercase().contains("response_format") {
+            let fallback_body = serde_json::json!({
+                "model": OPENCODE_MODEL,
+                "messages": [
+                    { "role": "system", "content": system_prompt },
+                    { "role": "user", "content": user_prompt }
+                ],
+                "temperature": 0.0,
+                "max_tokens": 32768
+            });
+
+            resp = client
+                .post(format!("{}/chat/completions", OPENCODE_BASE_URL))
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .json(&fallback_body)
+                .send()
+                .map_err(|e| format!("Worship import structure retry failed: {}", e))?;
+
+            if !resp.status().is_success() {
+                let retry_status = resp.status();
+                let retry_text = resp.text().unwrap_or_default();
+                return Err(format!(
+                    "OpenCode API returned {}: {}",
+                    retry_status, retry_text
+                ));
+            }
+        } else {
+            return Err(format!("OpenCode API returned {}: {}", status, text));
+        }
+    }
+
+    let data: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("Failed to parse worship structure response: {}", e))?;
+
+    let content = data
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .ok_or("Worship import structure returned empty content")?;
+
+    let payload = extract_json_payload(content);
+    serde_json::from_str::<WorshipImportStructureResponse>(payload)
+        .map_err(|e| format!("Failed to parse worship import structure JSON: {}", e))
+}
+
+#[tauri::command]
+fn review_worship_import_batch(
+    request: WorshipImportReviewRequest,
+) -> Result<WorshipImportReviewResponse, String> {
+    let api_key = get_opencode_api_key()?;
+    let prompt = build_worship_import_review_prompt(&request)?;
+    let client = build_opencode_client(120)?;
+
+    let body = serde_json::json!({
+        "model": OPENCODE_MODEL,
+        "messages": [
+            { "role": "system", "content": "Return valid JSON only. Never generate or rewrite lyrics." },
+            { "role": "user", "content": prompt }
+        ],
+        "temperature": 0.0
+    });
+
+    let resp = client
+        .post(format!("{}/chat/completions", OPENCODE_BASE_URL))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .send()
+        .map_err(|e| format!("Worship import review request failed: {}", e))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().unwrap_or_default();
+        return Err(format!(
+            "Worship import review API returned {}: {}",
+            status, text
+        ));
+    }
+
+    let data: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("Failed to parse worship review response: {}", e))?;
+
+    let content = data
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .ok_or("Worship import review returned empty content")?;
+
+    let payload = extract_json_payload(content);
+    serde_json::from_str::<WorshipImportReviewResponse>(payload)
+        .map_err(|e| format!("Failed to parse worship import review JSON: {}", e))
+}
+
+#[tauri::command]
+fn translate_transcript(
+    transcript_text: String,
+    target_language: String,
+) -> Result<String, String> {
     let api_key = get_opencode_api_key()?;
 
     let prompt = format!(
@@ -2272,10 +3190,7 @@ fn translate_transcript(transcript_text: String, target_language: String) -> Res
          Transcript:\n{transcript_text}"
     );
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let client = build_opencode_client(120)?;
 
     let body = serde_json::json!({
         "model": OPENCODE_MODEL,
@@ -2364,8 +3279,8 @@ fn fix_winansi_twi(text: String) -> String {
 #[tauri::command]
 fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
     use std::io::Write;
-    let mut tmp = tempfile::NamedTempFile::new()
-        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    let mut tmp =
+        tempfile::NamedTempFile::new().map_err(|e| format!("Failed to create temp file: {}", e))?;
     tmp.write_all(&file_data)
         .map_err(|e| format!("Failed to write temp file: {}", e))?;
     let path = tmp.into_temp_path();
@@ -2377,12 +3292,12 @@ fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
     // Tauri-packaged apps have a minimal PATH, so we probe known install
     // locations on macOS and Linux before relying on bare PATH lookup.
     let pdftotext_candidates: &[&str] = &[
-        "pdftotext",                                       // PATH lookup (dev mode)
-        "/opt/homebrew/bin/pdftotext",                     // Homebrew — Apple Silicon
-        "/usr/local/bin/pdftotext",                        // Homebrew — Intel Mac
-        "/usr/bin/pdftotext",                              // system / apt install
-        "/usr/bin/pdftotext",                              // Linux package manager
-        "/snap/bin/pdftotext",                             // Linux snap
+        "pdftotext",                   // PATH lookup (dev mode)
+        "/opt/homebrew/bin/pdftotext", // Homebrew — Apple Silicon
+        "/usr/local/bin/pdftotext",    // Homebrew — Intel Mac
+        "/usr/bin/pdftotext",          // system / apt install
+        "/usr/bin/pdftotext",          // Linux package manager
+        "/snap/bin/pdftotext",         // Linux snap
     ];
 
     let mut last_error = String::new();
@@ -2391,7 +3306,9 @@ fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
         for candidate in pdftotext_candidates {
             eprintln!("[pdf-extract] trying: {} on file {}", candidate, path_str);
             match std::process::Command::new(candidate)
-                .arg("-layout").arg("-enc").arg("UTF-8")
+                .arg("-layout")
+                .arg("-enc")
+                .arg("UTF-8")
                 .arg(path_str)
                 .arg("-")
                 .output()
@@ -2400,14 +3317,23 @@ fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
                     if output.status.success() {
                         let text = String::from_utf8_lossy(&output.stdout).to_string();
                         if !text.trim().is_empty() {
-                            eprintln!("[pdf-extract] SUCCESS with {} — {} bytes", candidate, text.len());
+                            eprintln!(
+                                "[pdf-extract] SUCCESS with {} — {} bytes",
+                                candidate,
+                                text.len()
+                            );
                             return Ok(fix_winansi_twi(text));
                         }
                         last_error = format!("{} produced empty output", candidate);
                         eprintln!("[pdf-extract] {} produced empty output", candidate);
                     } else {
                         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-                        last_error = format!("{} failed (exit {:?}): {}", candidate, output.status.code(), stderr);
+                        last_error = format!(
+                            "{} failed (exit {:?}): {}",
+                            candidate,
+                            output.status.code(),
+                            stderr
+                        );
                         eprintln!("[pdf-extract] {} failed: {}", candidate, stderr);
                     }
                 }
@@ -2419,13 +3345,611 @@ fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
         }
     }
 
-    eprintln!("[pdf-extract] all pdftotext candidates failed ({}), falling back to pdf-extract crate", last_error);
+    eprintln!(
+        "[pdf-extract] all pdftotext candidates failed ({}), falling back to pdf-extract crate",
+        last_error
+    );
 
     // pdf-extract fallback — known to corrupt non-Latin Unicode characters
     // when PDF fonts use non-standard glyph names. Last resort only.
     pdf_extract::extract_text(&path)
         .map(fix_winansi_twi)
         .map_err(|e| format!("PDF extraction failed: {}", e))
+}
+
+// ── Layout-aware PDF extraction (lopdf) ────────────────────────────────────
+
+/// Minimal PDF content stream parser — produces lopdf Operations from raw bytes.
+/// Handles only the operators needed for text extraction (BT, ET, Tf, Tm, Td, TD, Tj, TJ, T*)
+/// plus enough of the operand grammar to reach them.
+fn parse_content_stream(raw: &[u8]) -> Vec<lopdf::content::Operation> {
+    let mut ops = Vec::new();
+    let mut operands: Vec<lopdf::Object> = Vec::new();
+    let bytes = raw;
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        let b = bytes[i];
+        match b {
+            // Skip whitespace
+            b' ' | b'\t' | b'\r' | b'\n' | b'\x0C' => {
+                i += 1;
+            }
+            // Skip comments (% to end of line)
+            b'%' => {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            // Integer or real number
+            b'0'..=b'9' | b'-' | b'+' | b'.' => {
+                let start = i;
+                i += 1;
+                while i < len && matches!(bytes[i], b'0'..=b'9' | b'.' | b'-' | b'+') {
+                    i += 1;
+                }
+                let s = std::str::from_utf8(&bytes[start..i]).unwrap_or("0");
+                if s.contains('.') {
+                    if let Ok(v) = s.parse::<f64>() {
+                        operands.push(lopdf::Object::Real(v as f32));
+                    }
+                } else if let Ok(v) = s.parse::<i64>() {
+                    operands.push(lopdf::Object::Integer(v));
+                }
+            }
+            // Name object (/Something)
+            b'/' => {
+                i += 1;
+                let start = i;
+                while i < len {
+                    match bytes[i] {
+                        b' ' | b'\t' | b'\r' | b'\n' | b'/' | b'(' | b')' | b'<' | b'>' | b'['
+                        | b']' | b'{' | b'}' => break,
+                        _ => {
+                            i += 1;
+                        }
+                    }
+                }
+                let name = bytes[start..i].to_vec();
+                operands.push(lopdf::Object::Name(name));
+            }
+            // Literal string (text in parentheses)
+            b'(' => {
+                i += 1;
+                let mut s = Vec::new();
+                let mut depth = 0i32;
+                while i < len {
+                    match bytes[i] {
+                        b'(' => {
+                            depth += 1;
+                            s.push(b'(');
+                            i += 1;
+                        }
+                        b')' => {
+                            if depth > 0 {
+                                depth -= 1;
+                                s.push(b')');
+                                i += 1;
+                            } else {
+                                i += 1;
+                                break;
+                            }
+                        }
+                        b'\\' => {
+                            i += 1;
+                            if i < len {
+                                match bytes[i] {
+                                    b'n' => s.push(b'\n'),
+                                    b'r' => s.push(b'\r'),
+                                    b't' => s.push(b'\t'),
+                                    b'\\' => s.push(b'\\'),
+                                    b'(' => s.push(b'('),
+                                    b')' => s.push(b')'),
+                                    d @ b'0'..=b'7' => {
+                                        let mut oct = (d - b'0') as u32;
+                                        i += 1;
+                                        for _ in 0..2 {
+                                            if i < len && matches!(bytes[i], b'0'..=b'7') {
+                                                oct = oct * 8 + (bytes[i] - b'0') as u32;
+                                                i += 1;
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                        s.push(oct as u8);
+                                        continue; // already advanced i
+                                    }
+                                    other => s.push(other),
+                                }
+                                i += 1;
+                            }
+                        }
+                        _ => {
+                            s.push(bytes[i]);
+                            i += 1;
+                        }
+                    }
+                }
+                operands.push(lopdf::Object::String(s, lopdf::StringFormat::Literal));
+            }
+            // Hex string <AABB>
+            b'<' => {
+                i += 1;
+                let mut hex = Vec::new();
+                while i < len && bytes[i] != b'>' {
+                    hex.push(bytes[i]);
+                    i += 1;
+                }
+                if i < len {
+                    i += 1;
+                } // skip >
+                  // Pad to even length
+                if hex.len() % 2 != 0 {
+                    hex.push(b'0');
+                }
+                let mut bytes_out = Vec::new();
+                for chunk in hex.chunks(2) {
+                    if let Ok(h) = std::str::from_utf8(chunk) {
+                        if let Ok(b) = u8::from_str_radix(h, 16) {
+                            bytes_out.push(b);
+                        }
+                    }
+                }
+                operands.push(lopdf::Object::String(
+                    bytes_out,
+                    lopdf::StringFormat::Hexadecimal,
+                ));
+            }
+            // Array [...]
+            b'[' => {
+                i += 1;
+                let mut arr = Vec::new();
+                // Parse array elements recursively (simplified — only strings and numbers)
+                while i < len && bytes[i] != b']' {
+                    match bytes[i] {
+                        b' ' | b'\t' | b'\r' | b'\n' => {
+                            i += 1;
+                        }
+                        b'(' => {
+                            // literal string inside array
+                            i += 1;
+                            let mut s = Vec::new();
+                            while i < len && bytes[i] != b')' {
+                                if bytes[i] == b'\\' && i + 1 < len {
+                                    i += 1;
+                                    match bytes[i] {
+                                        b'n' => s.push(b'\n'),
+                                        b'r' => s.push(b'\r'),
+                                        b'\\' => s.push(b'\\'),
+                                        b'(' => s.push(b'('),
+                                        b')' => s.push(b')'),
+                                        other => s.push(other),
+                                    }
+                                } else {
+                                    s.push(bytes[i]);
+                                }
+                                i += 1;
+                            }
+                            if i < len {
+                                i += 1;
+                            }
+                            arr.push(lopdf::Object::String(s, lopdf::StringFormat::Literal));
+                        }
+                        b'0'..=b'9' | b'-' | b'+' | b'.' => {
+                            let start = i;
+                            i += 1;
+                            while i < len && matches!(bytes[i], b'0'..=b'9' | b'.' | b'-' | b'+') {
+                                i += 1;
+                            }
+                            let s = std::str::from_utf8(&bytes[start..i]).unwrap_or("0");
+                            if s.contains('.') {
+                                if let Ok(v) = s.parse::<f64>() {
+                                    arr.push(lopdf::Object::Real(v as f32));
+                                }
+                            } else if let Ok(v) = s.parse::<i64>() {
+                                arr.push(lopdf::Object::Integer(v));
+                            }
+                        }
+                        _ => {
+                            i += 1;
+                        } // skip unknown in arrays
+                    }
+                }
+                if i < len {
+                    i += 1;
+                } // skip ]
+                operands.push(lopdf::Object::Array(arr));
+            }
+            // Boolean true / false
+            b't' if i + 3 < len && &bytes[i..i + 4] == b"true" => {
+                operands.push(lopdf::Object::Boolean(true));
+                i += 4;
+            }
+            b'f' if i + 4 < len && &bytes[i..i + 5] == b"false" => {
+                operands.push(lopdf::Object::Boolean(false));
+                i += 5;
+            }
+            // Operator (keyword)
+            b'A'..=b'Z' | b'a'..=b'z' => {
+                let start = i;
+                while i < len && matches!(bytes[i], b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'*')
+                {
+                    i += 1;
+                }
+                let op = std::str::from_utf8(&bytes[start..i]).unwrap_or("");
+                ops.push(lopdf::content::Operation {
+                    operator: op.to_string(),
+                    operands: operands.drain(..).collect(),
+                });
+            }
+            // Object reference (obj gen R) — skip
+            _ => {
+                i += 1;
+            }
+        }
+    }
+    ops
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PdfTextElement {
+    text: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    font_size: f64,
+    is_bold: bool,
+    page: u32,
+}
+
+/// Decode a PDF string object to UTF-8, trying raw bytes first then Latin-1 fallback.
+fn decode_pdf_string(obj: &lopdf::Object) -> Option<String> {
+    if let lopdf::Object::String(bytes, _format) = obj {
+        if let Ok(s) = String::from_utf8(bytes.clone()) {
+            return Some(s);
+        }
+        // Latin-1 fallback — every byte maps to a valid codepoint
+        Some(bytes.iter().map(|&b| b as char).collect())
+    } else {
+        None
+    }
+}
+
+/// Build a map of font_name → is_bold from a page's resource dictionary.
+fn build_page_font_map(
+    doc: &lopdf::Document,
+    page_id: lopdf::ObjectId,
+) -> std::collections::HashMap<String, bool> {
+    let mut font_map = std::collections::HashMap::new();
+    let Ok(page) = doc.get_object(page_id) else {
+        return font_map;
+    };
+    let Ok(page_dict) = page.as_dict() else {
+        return font_map;
+    };
+    let Ok(resources) = page_dict.get(b"Resources") else {
+        return font_map;
+    };
+    let Ok(resources_dict) = resources.as_dict() else {
+        return font_map;
+    };
+    let Ok(fonts) = resources_dict.get(b"Font") else {
+        return font_map;
+    };
+    let Ok(font_dict) = fonts.as_dict() else {
+        return font_map;
+    };
+
+    for (name, font_ref) in font_dict.iter() {
+        let name_str = String::from_utf8_lossy(name).to_string();
+        // Font dict values can be direct dicts or references — resolve either way
+        let font_obj_result = match font_ref {
+            lopdf::Object::Reference(id) => doc.get_object(*id),
+            other => Ok(other),
+        };
+        if let Ok(font_obj) = font_obj_result {
+            if let Ok(font) = font_obj.as_dict() {
+                let is_bold = font
+                    .get(b"BaseFont")
+                    .and_then(|bf| bf.as_name())
+                    .map(|n| {
+                        let lower = String::from_utf8_lossy(n).to_lowercase();
+                        lower.contains("bold")
+                    })
+                    .unwrap_or(false);
+                font_map.insert(name_str, is_bold);
+            }
+        }
+    }
+    font_map
+}
+
+/// Extract text elements with position metadata from a page's content stream.
+fn extract_page_text_elements(
+    operations: &[lopdf::content::Operation],
+    font_map: &std::collections::HashMap<String, bool>,
+    page_num: u32,
+    page_height: f64,
+) -> Vec<PdfTextElement> {
+    let mut elements = Vec::new();
+    // Current text matrix [a, b, c, d, e, f]
+    let mut tm = [1.0f64, 0.0, 0.0, 1.0, 0.0, 0.0];
+    let mut font_size = 12.0f64;
+    let mut is_bold = false;
+    let mut buf = String::new();
+    let mut line_x = 0.0f64;
+    let mut line_y = 0.0f64;
+
+    let flush = |buf: &mut String,
+                 elements: &mut Vec<PdfTextElement>,
+                 line_x: f64,
+                 line_y: f64,
+                 font_size: f64,
+                 is_bold: bool,
+                 page_num: u32,
+                 page_height: f64| {
+        if !buf.is_empty() {
+            let text = fix_winansi_twi(buf.clone());
+            let char_count = text.chars().count() as f64;
+            elements.push(PdfTextElement {
+                text,
+                x: line_x,
+                y: page_height - line_y, // flip to top-down coordinates
+                width: char_count * font_size * 0.6,
+                height: font_size * 1.2,
+                font_size,
+                is_bold,
+                page: page_num,
+            });
+            buf.clear();
+        }
+    };
+
+    for op in operations {
+        match op.operator.as_str() {
+            "BT" => {
+                // Begin text — flush any pending text
+                flush(
+                    &mut buf,
+                    &mut elements,
+                    line_x,
+                    line_y,
+                    font_size,
+                    is_bold,
+                    page_num,
+                    page_height,
+                );
+                tm = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+                line_x = 0.0;
+                line_y = 0.0;
+            }
+            "ET" => {
+                flush(
+                    &mut buf,
+                    &mut elements,
+                    line_x,
+                    line_y,
+                    font_size,
+                    is_bold,
+                    page_num,
+                    page_height,
+                );
+            }
+            "Tf" => {
+                // Set font: [name, size]
+                if let Some(lopdf::Object::Name(name)) = op.operands.first() {
+                    let name_str = String::from_utf8_lossy(name).to_string();
+                    if let Some(&bold) = font_map.get(&name_str) {
+                        is_bold = bold;
+                    }
+                }
+                if let Some(size_obj) = op.operands.get(1) {
+                    font_size = match size_obj {
+                        lopdf::Object::Integer(i) => *i as f64,
+                        lopdf::Object::Real(r) => *r as f64,
+                        _ => font_size,
+                    };
+                }
+            }
+            "Tm" => {
+                // Set text matrix: [a, b, c, d, e, f]
+                if op.operands.len() >= 6 {
+                    for i in 0..6 {
+                        if let Some(obj) = op.operands.get(i) {
+                            tm[i] = match obj {
+                                lopdf::Object::Integer(v) => *v as f64,
+                                lopdf::Object::Real(v) => *v as f64,
+                                _ => tm[i],
+                            };
+                        }
+                    }
+                    flush(
+                        &mut buf,
+                        &mut elements,
+                        line_x,
+                        line_y,
+                        font_size,
+                        is_bold,
+                        page_num,
+                        page_height,
+                    );
+                    line_x = tm[4];
+                    line_y = tm[5];
+                }
+            }
+            "Td" | "TD" => {
+                // Relative text move: [tx, ty]
+                if op.operands.len() >= 2 {
+                    let tx = match &op.operands[0] {
+                        lopdf::Object::Integer(v) => *v as f64,
+                        lopdf::Object::Real(v) => *v as f64,
+                        _ => 0.0,
+                    };
+                    let ty = match &op.operands[1] {
+                        lopdf::Object::Integer(v) => *v as f64,
+                        lopdf::Object::Real(v) => *v as f64,
+                        _ => 0.0,
+                    };
+                    // For non-rotated text (b=c=0, a=d=1), Td adds directly
+                    line_x += tx * tm[0] + ty * tm[2];
+                    line_y += tx * tm[1] + ty * tm[3];
+                    flush(
+                        &mut buf,
+                        &mut elements,
+                        line_x,
+                        line_y,
+                        font_size,
+                        is_bold,
+                        page_num,
+                        page_height,
+                    );
+                }
+            }
+            "Tj" => {
+                // Show text string
+                if let Some(text_obj) = op.operands.first() {
+                    if let Some(text) = decode_pdf_string(text_obj) {
+                        if buf.is_empty() {
+                            line_x = tm[4];
+                            line_y = tm[5];
+                        }
+                        buf.push_str(&text);
+                    }
+                }
+            }
+            "TJ" => {
+                // Show text with individual glyph positioning: array of strings and numbers
+                if let Some(lopdf::Object::Array(items)) = op.operands.first() {
+                    for item in items {
+                        match item {
+                            lopdf::Object::String(..) => {
+                                if let Some(text) = decode_pdf_string(item) {
+                                    if buf.is_empty() {
+                                        line_x = tm[4];
+                                        line_y = tm[5];
+                                    }
+                                    buf.push_str(&text);
+                                }
+                            }
+                            lopdf::Object::Integer(offset) => {
+                                // Large negative offset → kerning gap, flush segment
+                                if *offset < -100 && !buf.is_empty() {
+                                    flush(
+                                        &mut buf,
+                                        &mut elements,
+                                        line_x,
+                                        line_y,
+                                        font_size,
+                                        is_bold,
+                                        page_num,
+                                        page_height,
+                                    );
+                                }
+                            }
+                            lopdf::Object::Real(offset) => {
+                                if (*offset as f64) < -100.0 && !buf.is_empty() {
+                                    flush(
+                                        &mut buf,
+                                        &mut elements,
+                                        line_x,
+                                        line_y,
+                                        font_size,
+                                        is_bold,
+                                        page_num,
+                                        page_height,
+                                    );
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            "T*" => {
+                // Move to next line (vertical tab) — default leading = font_size
+                if !buf.is_empty() {
+                    flush(
+                        &mut buf,
+                        &mut elements,
+                        line_x,
+                        line_y,
+                        font_size,
+                        is_bold,
+                        page_num,
+                        page_height,
+                    );
+                }
+                line_y -= font_size;
+            }
+            _ => {}
+        }
+    }
+
+    // Flush any remaining text
+    flush(
+        &mut buf,
+        &mut elements,
+        line_x,
+        line_y,
+        font_size,
+        is_bold,
+        page_num,
+        page_height,
+    );
+    elements
+}
+
+/// Extract text elements with full position and font metadata from a PDF.
+///
+/// Returns a JSON-serializable array of `{ text, x, y, width, height, fontSize, isBold, page }`.
+/// Coordinates use top-down y (y=0 at top of page). Font sizes are in PDF points (1/72 inch).
+#[tauri::command]
+fn extract_text_elements_from_pdf(file_data: Vec<u8>) -> Result<Vec<PdfTextElement>, String> {
+    let doc = lopdf::Document::load_mem(&file_data)
+        .map_err(|e| format!("Failed to parse PDF with lopdf: {}", e))?;
+
+    let pages = doc.get_pages();
+    let mut all_elements = Vec::new();
+
+    for (&page_num, &page_id) in pages.iter() {
+        // Get page height from MediaBox
+        let page_height = {
+            let mut h = 792.0; // default letter size
+            if let Ok(page) = doc.get_object(page_id) {
+                if let Ok(dict) = page.as_dict() {
+                    if let Ok(mb) = dict.get(b"MediaBox") {
+                        if let Ok(arr) = mb.as_array() {
+                            if arr.len() >= 4 {
+                                h = match &arr[3] {
+                                    lopdf::Object::Integer(v) => *v as f64,
+                                    lopdf::Object::Real(v) => *v as f64,
+                                    _ => h,
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+            h
+        };
+
+        let font_map = build_page_font_map(&doc, page_id);
+
+        // Decode content stream using our custom parser
+        let raw_content = match doc.get_page_content(page_id) {
+            Ok(bytes) => bytes,
+            Err(_) => continue,
+        };
+        let operations = parse_content_stream(&raw_content);
+
+        let elements = extract_page_text_elements(&operations, &font_map, page_num, page_height);
+        all_elements.extend(elements);
+    }
+
+    Ok(all_elements)
 }
 
 /// Start a tiny HTTP server that serves files from the frontend dist folder.
@@ -2444,9 +3968,8 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
         parent.filter(|p| p.join("dock.html").is_file())
     };
 
-    // Try port 45678 first, then fall back to any available port
+    // Use a fixed port so the OBS dock / overlay URL never changes
     let server = match tiny_http::Server::http("127.0.0.1:45678")
-        .or_else(|_| tiny_http::Server::http("127.0.0.1:0"))
     {
         Ok(s) => s,
         Err(e) => {
@@ -2551,9 +4074,12 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
             if clean == "api/file-exists" {
                 let file_path = url_path
                     .find('?')
-                    .and_then(|i| url_path[i + 1..].split('&')
-                        .find(|p| p.starts_with("path="))
-                        .map(|p| &p[5..]))
+                    .and_then(|i| {
+                        url_path[i + 1..]
+                            .split('&')
+                            .find(|p| p.starts_with("path="))
+                            .map(|p| &p[5..])
+                    })
                     .map(|v| urlencoding::decode(v).unwrap_or_default().into_owned())
                     .unwrap_or_default();
                 let exists = !file_path.is_empty() && std::path::Path::new(&file_path).is_file();
@@ -2583,11 +4109,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                             "application/json; charset=utf-8",
                         )
                         .unwrap();
-                        let cors = tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Origin",
-                            "*",
-                        )
-                        .unwrap();
+                        let cors =
+                            tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                .unwrap();
                         let resp = tiny_http::Response::from_string(json)
                             .with_header(header)
                             .with_header(cors);
@@ -2600,11 +4124,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                             "application/json; charset=utf-8",
                         )
                         .unwrap();
-                        let cors = tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Origin",
-                            "*",
-                        )
-                        .unwrap();
+                        let cors =
+                            tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                .unwrap();
                         let resp = tiny_http::Response::from_string(json)
                             .with_status_code(500)
                             .with_header(header)
@@ -2853,16 +4375,20 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Methods",
-                            "GET, POST, OPTIONS",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Headers",
-                            "Content-Type",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
                         .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
@@ -2912,16 +4438,20 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Methods",
-                            "GET, POST, OPTIONS",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Headers",
-                            "Content-Type",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
                         .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
@@ -2962,6 +4492,274 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 continue;
             }
 
+            // API: Presentation state relay — GET returns current session state,
+            // POST updates it. Used by Presentation Console + presentation.html.
+            if clean == "api/presentation-state" {
+                let header = tiny_http::Header::from_bytes(
+                    "Content-Type",
+                    "application/json; charset=utf-8",
+                )
+                .unwrap();
+                let cors =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
+
+                if request.method() == &tiny_http::Method::Options {
+                    let resp = tiny_http::Response::from_string("")
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                if request.method() == &tiny_http::Method::Post {
+                    let mut body = String::new();
+                    if request.as_reader().read_to_string(&mut body).is_err() {
+                        let resp =
+                            tiny_http::Response::from_string("Bad Request").with_status_code(400);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+
+                    match serde_json::from_str::<PresentationStateEnvelope>(&body) {
+                        Ok(mut payload) => {
+                            if payload.session_id.trim().is_empty() {
+                                let resp = tiny_http::Response::from_string(
+                                    r#"{"error":"sessionId is required"}"#,
+                                )
+                                .with_status_code(400)
+                                .with_header(header)
+                                .with_header(cors);
+                                let _ = request.respond(resp);
+                                continue;
+                            }
+
+                            if payload.updated_at == 0 {
+                                payload.updated_at = now_unix_millis();
+                            }
+                            let session_id = payload.session_id.clone();
+
+                            let state_store =
+                                PRESENTATION_STATE.get_or_init(|| Mutex::new(BTreeMap::new()));
+                            if let Ok(mut state) = state_store.lock() {
+                                state.insert(session_id.clone(), payload.clone());
+                            }
+                            presentation_remote::broadcast_presentation_state(&payload);
+
+                            let viewer_count = presentation_viewer_count(&session_id);
+                            let resp = tiny_http::Response::from_string(
+                                serde_json::json!({
+                                    "ok": true,
+                                    "viewerCount": viewer_count,
+                                })
+                                .to_string(),
+                            )
+                            .with_header(header)
+                            .with_header(cors);
+                            let _ = request.respond(resp);
+                        }
+                        Err(err) => {
+                            let resp = tiny_http::Response::from_string(
+                                serde_json::json!({
+                                    "error": format!("Invalid presentation state: {}", err),
+                                })
+                                .to_string(),
+                            )
+                            .with_status_code(400)
+                            .with_header(header)
+                            .with_header(cors);
+                            let _ = request.respond(resp);
+                        }
+                    }
+                    continue;
+                }
+
+                let session_id = if let Some(qpos) = url_path.find('?') {
+                    let qs = &url_path[qpos + 1..];
+                    qs.split('&')
+                        .find_map(|pair| {
+                            let (key, value) = pair.split_once('=')?;
+                            if key == "sessionId" {
+                                Some(urlencoding::decode(value).unwrap_or_default().into_owned())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_default()
+                } else {
+                    String::new()
+                };
+
+                if session_id.trim().is_empty() {
+                    let resp =
+                        tiny_http::Response::from_string(r#"{"error":"sessionId is required"}"#)
+                            .with_status_code(400)
+                            .with_header(header)
+                            .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                let state_store = PRESENTATION_STATE.get_or_init(|| Mutex::new(BTreeMap::new()));
+                let state = state_store
+                    .lock()
+                    .ok()
+                    .and_then(|store| store.get(&session_id).cloned());
+                let viewer_count = presentation_viewer_count(&session_id);
+                let resp = tiny_http::Response::from_string(
+                    serde_json::json!({
+                        "state": state,
+                        "viewerCount": viewer_count,
+                    })
+                    .to_string(),
+                )
+                .with_header(header)
+                .with_header(cors);
+                let _ = request.respond(resp);
+                continue;
+            }
+
+            // API: Presentation viewer heartbeat — POST updates last-seen,
+            // GET returns current viewer count for a session.
+            if clean == "api/presentation-viewer" {
+                let header = tiny_http::Header::from_bytes(
+                    "Content-Type",
+                    "application/json; charset=utf-8",
+                )
+                .unwrap();
+                let cors =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
+
+                if request.method() == &tiny_http::Method::Options {
+                    let resp = tiny_http::Response::from_string("")
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                if request.method() == &tiny_http::Method::Post {
+                    let mut body = String::new();
+                    if request.as_reader().read_to_string(&mut body).is_err() {
+                        let resp =
+                            tiny_http::Response::from_string("Bad Request").with_status_code(400);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+
+                    match serde_json::from_str::<PresentationViewerHeartbeat>(&body) {
+                        Ok(payload) => {
+                            if payload.session_id.trim().is_empty()
+                                || payload.viewer_id.trim().is_empty()
+                            {
+                                let resp = tiny_http::Response::from_string(
+                                    r#"{"error":"sessionId and viewerId are required"}"#,
+                                )
+                                .with_status_code(400)
+                                .with_header(header)
+                                .with_header(cors);
+                                let _ = request.respond(resp);
+                                continue;
+                            }
+
+                            let registry =
+                                PRESENTATION_VIEWERS.get_or_init(|| Mutex::new(BTreeMap::new()));
+                            if let Ok(mut viewers) = registry.lock() {
+                                let session = viewers
+                                    .entry(payload.session_id.clone())
+                                    .or_insert_with(BTreeMap::new);
+                                session.insert(payload.viewer_id, now_unix_millis());
+                            }
+
+                            let viewer_count = presentation_viewer_count(&payload.session_id);
+                            let resp = tiny_http::Response::from_string(
+                                serde_json::json!({
+                                    "ok": true,
+                                    "viewerCount": viewer_count,
+                                })
+                                .to_string(),
+                            )
+                            .with_header(header)
+                            .with_header(cors);
+                            let _ = request.respond(resp);
+                        }
+                        Err(err) => {
+                            let resp = tiny_http::Response::from_string(
+                                serde_json::json!({
+                                    "error": format!("Invalid viewer heartbeat: {}", err),
+                                })
+                                .to_string(),
+                            )
+                            .with_status_code(400)
+                            .with_header(header)
+                            .with_header(cors);
+                            let _ = request.respond(resp);
+                        }
+                    }
+                    continue;
+                }
+
+                let session_id = if let Some(qpos) = url_path.find('?') {
+                    let qs = &url_path[qpos + 1..];
+                    qs.split('&')
+                        .find_map(|pair| {
+                            let (key, value) = pair.split_once('=')?;
+                            if key == "sessionId" {
+                                Some(urlencoding::decode(value).unwrap_or_default().into_owned())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_default()
+                } else {
+                    String::new()
+                };
+
+                if session_id.trim().is_empty() {
+                    let resp =
+                        tiny_http::Response::from_string(r#"{"error":"sessionId is required"}"#)
+                            .with_status_code(400)
+                            .with_header(header)
+                            .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                let viewer_count = presentation_viewer_count(&session_id);
+                let resp = tiny_http::Response::from_string(
+                    serde_json::json!({ "viewerCount": viewer_count }).to_string(),
+                )
+                .with_header(header)
+                .with_header(cors);
+                let _ = request.respond(resp);
+                continue;
+            }
+
             // API: Open URL in system default browser
             // POST /api/open-url  { "url": "https://..." }
             // Used by the OBS dock (CEF) to open links in the real browser.
@@ -2976,11 +4774,13 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Methods",
-                            "POST, OPTIONS",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "POST, OPTIONS",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
                         .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
@@ -3001,11 +4801,23 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                     let ok = if url.starts_with("http://") || url.starts_with("https://") {
                         #[cfg(target_os = "macos")]
-                        { std::process::Command::new("open").arg(&url).spawn().is_ok() }
+                        {
+                            std::process::Command::new("open").arg(&url).spawn().is_ok()
+                        }
                         #[cfg(target_os = "windows")]
-                        { std::process::Command::new("cmd").args(["/c", "start", &url]).spawn().is_ok() }
+                        {
+                            std::process::Command::new("cmd")
+                                .args(["/c", "start", &url])
+                                .spawn()
+                                .is_ok()
+                        }
                         #[cfg(target_os = "linux")]
-                        { std::process::Command::new("xdg-open").arg(&url).spawn().is_ok() }
+                        {
+                            std::process::Command::new("xdg-open")
+                                .arg(&url)
+                                .spawn()
+                                .is_ok()
+                        }
                     } else {
                         false
                     };
@@ -3040,23 +4852,29 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Methods",
-                            "GET, OPTIONS",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, OPTIONS",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
                         .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
                 }
 
-                // Extract ?url= parameter
-                let url = if let Some(qpos) = clean.find('?') {
-                    let qs = &clean[qpos + 1..];
+                // Extract ?url= parameter (use url_path which retains the query string — clean already had it stripped)
+                let url = if let Some(qpos) = url_path.find('?') {
+                    let qs = &url_path[qpos + 1..];
                     qs.split('&')
                         .find_map(|p| {
                             let (k, v) = p.split_once('=')?;
-                            if k == "url" { Some(v.to_string()) } else { None }
+                            if k == "url" {
+                                Some(urlencoding::decode(v).unwrap_or_default().into_owned())
+                            } else {
+                                None
+                            }
                         })
                         .unwrap_or_default()
                 } else {
@@ -3074,21 +4892,25 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 // Fetch the remote URL server-side (no CORS) and stream back
                 match reqwest::blocking::get(&url) {
                     Ok(resp) => {
-                        let ct = resp.headers().get("content-type")
+                        let ct = resp
+                            .headers()
+                            .get("content-type")
                             .and_then(|v| v.to_str().ok())
                             .unwrap_or("application/octet-stream")
                             .to_string();
                         let bytes = resp.bytes().unwrap_or_default();
-                        let ct_header = tiny_http::Header::from_bytes("Content-Type", ct.as_str()).unwrap();
+                        let ct_header =
+                            tiny_http::Header::from_bytes("Content-Type", ct.as_str()).unwrap();
                         let resp = tiny_http::Response::from_data(bytes.to_vec())
                             .with_header(ct_header)
                             .with_header(cors);
                         let _ = request.respond(resp);
                     }
                     Err(_) => {
-                        let resp = tiny_http::Response::from_string(r#"{"error":"Proxy fetch failed"}"#)
-                            .with_status_code(502)
-                            .with_header(cors);
+                        let resp =
+                            tiny_http::Response::from_string(r#"{"error":"Proxy fetch failed"}"#)
+                                .with_status_code(502)
+                                .with_header(cors);
                         let _ = request.respond(resp);
                     }
                 }
@@ -3106,15 +4928,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 .unwrap();
                 let cors =
                     tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
-
-                let mem_store = AUTH_SESSION.get_or_init(|| Mutex::new(None));
-                let json: String = {
-                    let guard = mem_store.lock().unwrap();
-                    match guard.as_ref() {
-                        Some(session) => session.clone(),
-                        None => r#"{"deviceId":null}"#.to_string(),
-                    }
-                };
+                let json = overlay_auth_status_json();
 
                 let resp = tiny_http::Response::from_string(json)
                     .with_header(header)
@@ -3138,23 +4952,28 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Methods",
-                            "POST, OPTIONS",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "POST, OPTIONS",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
-                        .with_header(tiny_http::Header::from_bytes(
-                            "Access-Control-Allow-Headers",
-                            "Content-Type",
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
                         )
-                        .unwrap())
                         .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
                 }
 
                 let mut body = String::new();
-                let has_body = request.as_reader().read_to_string(&mut body).is_ok() && !body.trim().is_empty();
+                let has_body = request.as_reader().read_to_string(&mut body).is_ok()
+                    && !body.trim().is_empty();
                 let is_clear = body.contains(r#""clear""#);
 
                 let mem_store = AUTH_SESSION.get_or_init(|| Mutex::new(None));
@@ -3182,8 +5001,12 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     let rel = clean.strip_prefix("uploads/").unwrap_or(clean);
                     let rel_path = Path::new(rel);
                     if !is_safe_relative_path(rel_path) {
-                        let resp =
-                            tiny_http::Response::from_string("Forbidden").with_status_code(403);
+                        let resp = tiny_http::Response::from_string("Forbidden")
+                            .with_status_code(403)
+                            .with_header(
+                                tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                    .unwrap(),
+                            );
                         let _ = request.respond(resp);
                         continue;
                     }
@@ -3218,20 +5041,35 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                         }
                     }
                     if root_candidate.exists() && root_candidate.is_file() {
+                        let is_html_entry = root_candidate
+                            .extension()
+                            .and_then(|ext| ext.to_str())
+                            .map(|ext| ext.eq_ignore_ascii_case("html"))
+                            .unwrap_or(false);
+                        if is_html_entry
+                            && !overlay_is_allowed_app_document(clean)
+                            && !overlay_has_active_auth_session()
+                        {
+                            respond_overlay_auth_blocked(request);
+                            continue;
+                        }
+
                         // Redirect to Vite dev server (localhost:1420) so it handles
                         // module transforms, HMR, etc.
                         let redirect_url = format!("http://localhost:1420/{}", clean);
-                        let header =
-                            tiny_http::Header::from_bytes("Location", redirect_url.as_str())
-                                .unwrap();
-                        let cors =
-                            tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
-                                .unwrap();
+                        let header = overlay_header("Location", redirect_url.as_str());
+                        let cors = overlay_header("Access-Control-Allow-Origin", "*");
                         let resp =
                             tiny_http::Response::from_string("Redirecting to Vite dev server")
                                 .with_status_code(302)
                                 .with_header(header)
-                                .with_header(cors);
+                                .with_header(cors)
+                                .with_header(overlay_header(
+                                    "Cache-Control",
+                                    "no-store, no-cache, must-revalidate, max-age=0",
+                                ))
+                                .with_header(overlay_header("Pragma", "no-cache"))
+                                .with_header(overlay_header("Expires", "0"));
                         let _ = request.respond(resp);
                         continue;
                     }
@@ -3239,76 +5077,69 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
             }
 
             if file_path.exists() && file_path.is_file() {
-                match fs::read(&file_path) {
-                    Ok(data) => {
-                        let content_type = match file_path.extension().and_then(|e| e.to_str()) {
-                            Some("html") => "text/html; charset=utf-8",
-                            Some("css") => "text/css; charset=utf-8",
-                            Some("js") => "application/javascript; charset=utf-8",
-                            Some("json") => "application/json; charset=utf-8",
-                            Some("png") => "image/png",
-                            Some("jpg") | Some("jpeg") => "image/jpeg",
-                            Some("svg") => "image/svg+xml",
-                            Some("gif") => "image/gif",
-                            Some("webp") => "image/webp",
-                            Some("mp4") => "video/mp4",
-                            Some("webm") => "video/webm",
-                            Some("mov") => "video/quicktime",
-                            Some("mp3") => "audio/mpeg",
-                            Some("wav") => "audio/wav",
-                            Some("ogg") => "audio/ogg",
-                            Some("woff") => "font/woff",
-                            Some("woff2") => "font/woff2",
-                            Some("ttf") => "font/ttf",
-                            Some("otf") => "font/otf",
-                            _ => "application/octet-stream",
-                        };
-                        let header =
-                            tiny_http::Header::from_bytes("Content-Type", content_type).unwrap();
-                        let cors =
-                            tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
-                                .unwrap();
-                        let resp = tiny_http::Response::from_data(data)
-                            .with_header(header)
-                            .with_header(cors);
-                        let _ = request.respond(resp);
-                    }
-                    Err(_) => {
-                        let resp = tiny_http::Response::from_string("Internal Server Error")
-                            .with_status_code(500);
-                        let _ = request.respond(resp);
-                    }
+                let content_type = overlay_content_type_for_extension(
+                    file_path.extension().and_then(|e| e.to_str()),
+                );
+                if content_type.starts_with("text/html")
+                    && !overlay_is_allowed_app_document(clean)
+                    && !overlay_has_active_auth_session()
+                {
+                    respond_overlay_auth_blocked(request);
+                    continue;
                 }
+                respond_overlay_file_request(request, &file_path, content_type);
+            } else if Path::new(clean).extension().is_some() {
+                // Request has a file extension (e.g. .json, .png) but the
+                // file doesn't exist — return 404 instead of SPA fallback.
+                let resp = tiny_http::Response::from_string("Not Found")
+                    .with_status_code(404)
+                    .with_header(
+                        tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                            .unwrap(),
+                    );
+                let _ = request.respond(resp);
             } else {
-                // SPA fallback: for client-side routes, serve index.html
-                // so React Router can handle them. Note: dedicated HTML files
-                // (like dock.html) are resolved above via the .html extension
-                // fallback, so this only triggers for true SPA routes.
+                // SPA fallback: for client-side routes (no extension), serve
+                // index.html so React Router can handle them. Note: dedicated
+                // HTML files (like dock.html) are resolved above via the .html
+                // extension fallback, so this only triggers for true SPA routes.
                 let index_path = resource_dir.join("index.html");
                 if index_path.exists() && index_path.is_file() {
                     match fs::read(&index_path) {
                         Ok(data) => {
-                            let header = tiny_http::Header::from_bytes(
-                                "Content-Type",
-                                "text/html; charset=utf-8",
-                            )
-                            .unwrap();
-                            let cors =
-                                tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
-                                    .unwrap();
+                            let header = overlay_header("Content-Type", "text/html; charset=utf-8");
+                            let cors = overlay_header("Access-Control-Allow-Origin", "*");
                             let resp = tiny_http::Response::from_data(data)
                                 .with_header(header)
-                                .with_header(cors);
+                                .with_header(cors)
+                                .with_header(overlay_header(
+                                    "Cache-Control",
+                                    "no-store, no-cache, must-revalidate, max-age=0",
+                                ))
+                                .with_header(overlay_header("Pragma", "no-cache"))
+                                .with_header(overlay_header("Expires", "0"));
                             let _ = request.respond(resp);
                         }
                         Err(_) => {
                             let resp = tiny_http::Response::from_string("Internal Server Error")
-                                .with_status_code(500);
+                                .with_status_code(500)
+                                .with_header(
+                                    tiny_http::Header::from_bytes(
+                                        "Access-Control-Allow-Origin",
+                                        "*",
+                                    )
+                                    .unwrap(),
+                                );
                             let _ = request.respond(resp);
                         }
                     }
                 } else {
-                    let resp = tiny_http::Response::from_string("Not Found").with_status_code(404);
+                    let resp = tiny_http::Response::from_string("Not Found")
+                        .with_status_code(404)
+                        .with_header(
+                            tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
+                                .unwrap(),
+                        );
                     let _ = request.respond(resp);
                 }
             }
@@ -3347,7 +5178,11 @@ mod app_icon {
         // Bundled production path
         if let Ok(resource_dir) = app.path().resource_dir() {
             let path = resource_dir.join("app_icons").join(filename);
-            println!("[AppIcon] Checking bundled path: {:?} exists={}", path, path.exists());
+            println!(
+                "[AppIcon] Checking bundled path: {:?} exists={}",
+                path,
+                path.exists()
+            );
             if path.exists() {
                 return Some(path);
             }
@@ -3359,10 +5194,15 @@ mod app_icon {
                 .parent() // target/{debug|release}
                 .and_then(|p| p.parent()) // target
                 .and_then(|p| p.parent()) // src-tauri
-                .and_then(|p| p.parent()) // project root
+                .and_then(|p| p.parent())
+            // project root
             {
                 let path = project_root.join("public").join("app_icons").join(filename);
-                println!("[AppIcon] Checking dev fallback: {:?} exists={}", path, path.exists());
+                println!(
+                    "[AppIcon] Checking dev fallback: {:?} exists={}",
+                    path,
+                    path.exists()
+                );
                 if path.exists() {
                     return Some(path);
                 }
@@ -3380,7 +5220,10 @@ mod app_icon {
     /// or `Err(...)` if the native API call failed.
     #[tauri::command]
     pub async fn set_app_icon(app: tauri::AppHandle, icon_name: String) -> Result<bool, String> {
-        println!("[AppIcon] set_app_icon called with icon_name: {}", icon_name);
+        println!(
+            "[AppIcon] set_app_icon called with icon_name: {}",
+            icon_name
+        );
 
         let path = resolve_icon_path(&app, &icon_name)
             .ok_or_else(|| format!("Icon file not found: {}", icon_name))?;
@@ -3401,7 +5244,10 @@ mod app_icon {
             println!("[AppIcon] Icon set successfully: {}", icon_name);
             Ok(true)
         } else {
-            println!("[AppIcon] mce_set_app_icon returned false for: {}", icon_name);
+            println!(
+                "[AppIcon] mce_set_app_icon returned false for: {}",
+                icon_name
+            );
             Ok(false)
         }
     }
@@ -3436,7 +5282,8 @@ async fn get_mobile_pairing_info() -> Result<serde_json::Value, String> {
 /// so the mobile companion server can also connect to OBS.
 #[tauri::command]
 async fn save_obs_connection_for_mobile(url: String, password: String) -> Result<(), String> {
-    mobile_companion::set_obs_connection(mobile_companion::ObsConnectionInfo { url, password }).await;
+    mobile_companion::set_obs_connection(mobile_companion::ObsConnectionInfo { url, password })
+        .await;
     Ok(())
 }
 
@@ -3454,6 +5301,35 @@ async fn get_mobile_server_status() -> Result<serde_json::Value, String> {
         "obsConnected": state.obs_connected,
         "currentSong": state.current_song,
         "currentScripture": state.current_scripture,
+    }))
+}
+
+/// Get the LAN-accessible presentation viewer URL and transport details.
+#[tauri::command]
+async fn get_presentation_remote_info(session_id: String) -> Result<serde_json::Value, String> {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return Err("sessionId is required".to_string());
+    }
+
+    let http_port = presentation_remote::http_port();
+    let ws_port = presentation_remote::ws_port();
+    if http_port == 0 {
+        return Err("Presentation viewer server is not running".to_string());
+    }
+
+    let encoded_session = urlencoding::encode(session_id);
+    let local_ip = get_local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
+    let local_link = format!("http://127.0.0.1:{}/p/{}", http_port, encoded_session);
+    let link = format!("http://{}:{}/p/{}", local_ip, http_port, encoded_session);
+
+    Ok(serde_json::json!({
+        "running": http_port > 0 && ws_port > 0,
+        "ip": local_ip,
+        "httpPort": http_port,
+        "wsPort": ws_port,
+        "link": link,
+        "localLink": local_link,
     }))
 }
 
@@ -3532,6 +5408,14 @@ pub fn run() {
             let port = start_overlay_server(serve_dir);
             println!("[Tauri] Overlay server started on port {}", port);
 
+            let presentation_uploads_dir = app_dir().ok().map(|dir| dir.join("uploads"));
+            let presentation_http_port =
+                presentation_remote::start_presentation_http_server(presentation_uploads_dir);
+            println!(
+                "[Tauri] Presentation viewer server started on port {}",
+                presentation_http_port
+            );
+
             app.manage(audio_capture::AudioCaptureState::default());
             app.manage(assemblyai_stream::AssemblyAiStreamState::default());
 
@@ -3547,7 +5431,27 @@ pub fn run() {
                     eprintln!("[MobileCompanion] Server failed: {}", e);
                 }
             });
-            println!("[Tauri] Mobile companion server starting on port {}", mobile_port);
+            println!(
+                "[Tauri] Mobile companion server starting on port {}",
+                mobile_port
+            );
+
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) =
+                    presentation_remote::start_presentation_ws_server(Some(8766)).await
+                {
+                    eprintln!("[PresentationRemote] WebSocket server failed: {}", error);
+                }
+            });
+            println!("[Tauri] Presentation WebSocket server starting on port 8766");
+
+            // Start the overlay relay for instant dock-to-overlay communication
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = overlay_relay::start_overlay_relay(17891).await {
+                    eprintln!("[OverlayRelay] Server failed: {}", error);
+                }
+            });
+            println!("[Tauri] Overlay relay starting on port 17891");
 
             Ok(())
         })
@@ -3571,20 +5475,27 @@ pub fn run() {
             save_transcript,
             delete_transcript,
             get_transcript_stats,
+            get_worship_import_ai_status,
+            structure_worship_import_chunk,
+            review_worship_import_batch,
             translate_transcript,
             extract_text_from_pdf,
+            extract_text_elements_from_pdf,
+            device_fingerprint::get_device_fingerprint,
             audio_capture::list_audio_devices,
             audio_capture::start_audio_capture,
             audio_capture::stop_audio_capture,
             assemblyai_stream::start_assemblyai_stream,
             assemblyai_stream::stop_assemblyai_stream,
             assemblyai_stream::set_microphone_gain,
+            assemblyai_stream::set_assemblyai_stream_speed,
             local_llm::get_local_llm_runtime_status,
             local_llm::install_local_llm_model,
             local_llm::generate_local_llm_text,
             get_mobile_pairing_info,
             save_obs_connection_for_mobile,
             get_mobile_server_status,
+            get_presentation_remote_info,
             #[cfg(target_os = "macos")]
             app_icon::set_app_icon
         ])

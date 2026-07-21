@@ -13,9 +13,11 @@ import { useState, useCallback, useEffect } from "react";
 import {
   checkForUpdate,
   downloadAndInstallUpdate,
+  downloadAndInstallFromGitHub,
   type DownloadProgress,
 } from "../services/updateService";
 import type { Update } from "@tauri-apps/plugin-updater";
+import { exit } from "@tauri-apps/plugin-process";
 import type { ForcedUpdateState, LockType } from "../services/forcedUpdateService";
 import Icon from "./Icon";
 
@@ -104,33 +106,45 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
     try {
       setStatus("downloading");
       setProgress({ contentLength: 0, downloaded: 0 });
+      setErrorMsg("");
 
       const result = await checkForUpdate();
       const update = (result as any).update as Update | undefined;
 
-      if (!update) {
-        const isOffline = /network|fetch|failed to fetch|internet|ENOTFOUND|ECONNREFUSED/i.test(
-          (result as any).error || ""
+      if (update) {
+        await downloadAndInstallUpdate(
+          update,
+          (p) => setProgress(p),
+          (s) => setStatus(s)
         );
-        setErrorMsg(
-          isOffline
-            ? "No internet connection. Please connect to the internet and try again."
-            : "No update available. Please download the latest version from the website."
-        );
-        setStatus("error");
         return;
       }
 
-      await downloadAndInstallUpdate(
-        update,
+      await downloadAndInstallFromGitHub(
         (p) => setProgress(p),
         (s) => setStatus(s)
       );
     } catch (err: any) {
+      if (state.downloadUrl) {
+        window.open(state.downloadUrl, "_blank", "noopener,noreferrer");
+        setStatus("prompt");
+        return;
+      }
       console.error("[ForcedUpdate] Update failed:", err);
       setErrorMsg(err?.message || "Update failed. Please try again.");
       setStatus("error");
     }
+  }, [state.downloadUrl]);
+
+  const handleQuit = useCallback(async () => {
+    await exit(0);
+  }, []);
+
+  const handleSupport = useCallback(() => {
+    const base =
+      import.meta.env.VITE_AUTH_API_URL ||
+      "https://api.creatorstudioslabs.stream";
+    window.open(`${base}/support`, "_blank", "noopener,noreferrer");
   }, []);
 
   const handleRetry = useCallback(() => {
@@ -231,9 +245,11 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
             >
               {isBlocked
                 ? isEmergency
-                  ? "Emergency Update Required"
+                  ? "Emergency Lock Active"
                   : "App Locked"
-                : statusLabel}
+                : isEmergency
+                  ? "Emergency Maintenance Scheduled"
+                  : statusLabel}
             </h2>
             {state.requiredVersion && (
               <p
@@ -259,12 +275,28 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
                   color: "var(--text-secondary)",
                 }}
               >
-                {isBlocked
-                  ? state.updateMessage ||
-                  `This version of MakeChurchEasy has expired. You must update to v${state.requiredVersion} to continue.`
+                {isEmergency
+                  ? state.updateMessage
                   : state.updateMessage ||
-                  `A new version of MakeChurchEasy (v${state.requiredVersion}) is available. Please update to continue.`}
+                    `A new version of MakeChurchEasy is required. Your version is v${state.currentVersion}. Update to v${state.requiredVersion} or later to continue.`}
               </p>
+
+              {!isEmergency && state.requiredVersion && (
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 6,
+                    background: "var(--surface-hover, rgba(255,255,255,0.05))",
+                    marginBottom: 16,
+                    fontSize: 13,
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  Your Version: v{state.currentVersion}
+                  <br />
+                  Required Version: v{state.requiredVersion}
+                </div>
+              )}
 
               {showCountdown && (
                 <div
@@ -305,7 +337,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
                   <Icon name="error_outline" size={14} />
                   <span>
                     {isEmergency
-                      ? "Emergency lock is active. Only updating the app will restore access."
+                      ? "Emergency lock is active. Access will remain restricted until your administrator disables it."
                       : "Grace period has expired. You must update to continue using the app."}
                   </span>
                 </div>
@@ -401,8 +433,8 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
             gap: 8,
           }}
         >
-          {/* Update Now — always present */}
-          {status === "prompt" && (
+          {/* Forced update actions */}
+          {status === "prompt" && !isEmergency && (
             <button
               className="force-update-btn force-update-btn--primary"
               onClick={handleUpdate}
@@ -424,6 +456,32 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
              title="Update now">
               <Icon name="system_update" size={14} />
               <span>Update Now</span>
+            </button>
+          )}
+
+          {status === "prompt" && isEmergency && (
+            <button
+              className="force-update-btn force-update-btn--primary"
+              onClick={handleSupport}
+              style={{
+                flex: 1,
+                padding: "10px 16px",
+                borderRadius: 6,
+                border: "none",
+                background: "var(--primary, #8b5cf6)",
+                color: "#fff",
+                fontWeight: 600,
+                fontSize: 14,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+              title="Support"
+            >
+              <Icon name="support_agent" size={14} />
+              <span>Support</span>
             </button>
           )}
 
@@ -453,6 +511,27 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
             </button>
           )}
 
+          {/* Quit app in blocked modes */}
+          {status === "prompt" && isBlocked && (
+            <button
+              className="force-update-btn force-update-btn--secondary"
+              onClick={handleQuit}
+              style={{
+                padding: "10px 16px",
+                borderRadius: 6,
+                border: "1px solid var(--border, rgba(255,255,255,0.1))",
+                background: "transparent",
+                color: "var(--text-secondary)",
+                fontWeight: 500,
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+              title="Quit App"
+            >
+              Quit App
+            </button>
+          )}
+
           {/* Close — only in countdown mode (not blocked) */}
           {status === "prompt" && showCountdown && onDismiss && (
             <button
@@ -469,7 +548,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
                 cursor: "pointer",
               }}
              title="Close">
-              Close
+              {isEmergency ? "Learn More Later" : "Remind Me Later"}
             </button>
           )}
         </div>

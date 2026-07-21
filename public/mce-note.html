@@ -1,0 +1,1630 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, initial-scale=1">
+  <title>MCE Notes Overlay</title>
+  <style>
+    /* ── Shared: Font-face ── */
+    @font-face {
+      font-family: 'Charis SIL';
+      src: url('/fonts/charis-sil/CharisSIL-Regular.ttf') format('truetype');
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    @font-face {
+      font-family: 'Charis SIL';
+      src: url('/fonts/charis-sil/CharisSIL-Bold.ttf') format('truetype');
+      font-weight: 700;
+      font-style: normal;
+    }
+
+    /* ── Shared: Reset ── */
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      background: transparent !important;
+      color: #ffffff;
+    }
+
+    :root {
+      --font-size: 48px;
+      --font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      --font-color: #ffffff;
+      --font-weight: 400;
+      --font-style: normal;
+      --line-height: 1.6;
+      --letter-spacing: 0px;
+      --text-align: center;
+      --text-shadow: none;
+      --outline-width: 0px;
+      --outline-color: transparent;
+      --ref-font-size: 24px;
+      --ref-font-family: var(--font-family);
+      --ref-font-weight: 400;
+      --ref-font-style: normal;
+      --ref-font-color: #ffffff;
+      --ref-text-transform: none;
+      --ref-letter-spacing: 0px;
+      --ref-opacity: 1;
+      --ref-spacing: 24px;
+      --ref-text-align: center;
+      --ref-width: 100%;
+      --ref-bg-color: transparent;
+      --ref-bg-padding: 0;
+      --ref-bg-radius: 0;
+      --ref-bg-border: none;
+      --bg-color: transparent;
+      --bg-image: none;
+      --bg-opacity: 1;
+      --bg-shade-gradient: linear-gradient(180deg, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.42));
+      --bg-shade-display: block;
+      --padding: 60px;
+      --safe-area: 40px;
+      --anim-duration: 152ms;
+      --bg-enter-duration: 64ms;
+      --text-enter-duration: 82ms;
+      --text-enter-delay: 12ms;
+      --text-transform: none;
+      --logo-size: 80px;
+      --compare-left-width: 40fr;
+      --compare-right-width: 40fr;
+      --compare-gap: 40px;
+      --compare-outer-padding-top: var(--padding);
+      --compare-outer-padding-right: var(--padding);
+      --compare-outer-padding-bottom: var(--padding);
+      --compare-outer-padding-left: var(--padding);
+      --compare-panel-inner-padding: 38px;
+      --compare-reference-verse-spacing: 10px;
+      --compare-reference-align: var(--ref-text-align, center);
+      --compare-reference-transform: var(--ref-text-transform, none);
+    }
+
+    html {
+      background: transparent !important;
+    }
+
+    /* ── Shared: Background layers ── */
+    #background {
+      position: absolute;
+      inset: 0;
+      background-color: var(--bg-color);
+      background-image: var(--bg-image);
+      background-size: cover;
+      background-position: center;
+      opacity: var(--bg-opacity);
+      z-index: 0;
+    }
+
+    #bg-crossfade {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    #background-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+      z-index: 0;
+    }
+
+    /* ── Shared: Logo ── */
+    #logo {
+      position: absolute;
+      width: var(--logo-size);
+      height: var(--logo-size);
+      object-fit: contain;
+      z-index: 10;
+      display: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #logo.visible {
+      display: block;
+      opacity: 1;
+    }
+
+    #logo.bottom-right {
+      bottom: var(--safe-area);
+      right: var(--safe-area);
+    }
+
+    #logo.bottom-left {
+      bottom: var(--safe-area);
+      left: var(--safe-area);
+    }
+
+    #logo.top-right {
+      top: var(--safe-area);
+      right: var(--safe-area);
+    }
+
+    #logo.top-left {
+      top: var(--safe-area);
+      left: var(--safe-area);
+    }
+
+    /* ── Shared: Verse container ── */
+    #verse-container {
+      display: flex;
+      flex-direction: column;
+      align-items: var(--text-align, center);
+      justify-content: center;
+      width: 100%;
+    }
+
+    #verse-text {
+      font-size: var(--font-size);
+      font-family: var(--font-family);
+      color: var(--font-color, #ffffff);
+      font-weight: var(--font-weight, 400);
+      font-style: var(--font-style, normal);
+      line-height: var(--line-height);
+      letter-spacing: var(--letter-spacing, 0px);
+      text-align: var(--text-align);
+      text-shadow: var(--text-shadow);
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
+      text-transform: var(--text-transform);
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    #reference {
+      font-size: var(--ref-font-size);
+      font-family: var(--ref-font-family);
+      font-weight: var(--ref-font-weight);
+      font-style: var(--ref-font-style, normal);
+      color: var(--ref-font-color);
+      text-align: var(--ref-text-align, var(--text-align));
+      margin-top: var(--ref-spacing);
+      width: var(--ref-width);
+      padding: var(--ref-bg-padding);
+      background: var(--ref-bg-color);
+      border-radius: var(--ref-bg-radius);
+      border: var(--ref-bg-border);
+      opacity: var(--ref-opacity);
+      text-transform: var(--ref-text-transform);
+      letter-spacing: var(--ref-letter-spacing);
+    }
+
+    #reference.top {
+      margin-top: 0;
+      margin-bottom: var(--ref-spacing);
+    }
+
+    #reference:empty {
+      display: none;
+    }
+
+    /* ══════════════════════════════════════════════════════
+       FULLSCREEN LAYER (always inset:0, crossfades via opacity)
+       ══════════════════════════════════════════════════════ */
+    #background-shade {
+      position: absolute;
+      inset: 0;
+      background: var(--bg-shade-gradient);
+      display: var(--bg-shade-display);
+      opacity: 1;
+      transition: opacity var(--anim-duration, 152ms) ease;
+      z-index: 2;
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      padding: var(--padding, 64px);
+      opacity: 1;
+      transition: opacity var(--anim-duration, 152ms) ease;
+    }
+
+    #overlay.hidden,
+    #overlay.blank {
+      opacity: 0;
+    }
+
+    #verse-container {
+      transition: opacity var(--anim-duration, 152ms) ease;
+    }
+
+    #verse-container.is-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Compare layout (fullscreen only) */
+    #compare-layout {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: minmax(0, var(--compare-left-width, 40fr)) minmax(0, var(--compare-right-width, 40fr));
+      gap: var(--compare-gap, 40px);
+      width: 100%;
+      height: 100%;
+      padding: var(--compare-outer-padding-top, var(--padding)) var(--compare-outer-padding-right, var(--padding)) var(--compare-outer-padding-bottom, var(--padding)) var(--compare-outer-padding-left, var(--padding));
+      align-content: center;
+      align-items: stretch;
+      z-index: 3;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--anim-duration, 152ms) ease;
+    }
+
+    #compare-layout.is-visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .compare-column {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      padding: var(--compare-panel-inner-padding, 38px);
+    }
+
+    .compare-column__text-wrap {
+      flex: 0 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .compare-column__verse {
+      font-size: var(--compare-font-size, 36px);
+      font-family: var(--compare-font-family, var(--font-family));
+      color: var(--font-color, #ffffff);
+      font-weight: var(--compare-font-weight, var(--font-weight, 400));
+      font-style: var(--font-style, normal);
+      line-height: var(--compare-line-height, 1.4);
+      letter-spacing: var(--letter-spacing, 0px);
+      text-align: var(--compare-text-align, var(--text-align));
+      text-shadow: var(--text-shadow);
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
+      text-transform: var(--text-transform);
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    .compare-column__reference {
+      font-size: var(--compare-ref-font-size, 20px);
+      font-family: var(--compare-font-family, var(--ref-font-family));
+      font-weight: var(--ref-font-weight);
+      font-style: var(--ref-font-style, normal);
+      color: var(--ref-font-color);
+      text-align: var(--compare-reference-align, var(--ref-text-align, var(--compare-text-align, var(--text-align))));
+      margin-top: var(--compare-reference-verse-spacing, 10px);
+      width: var(--ref-width);
+      padding: var(--ref-bg-padding);
+      background: var(--ref-bg-color);
+      border-radius: var(--ref-bg-radius);
+      border: var(--ref-bg-border);
+      opacity: var(--ref-opacity);
+      text-transform: var(--compare-reference-transform, var(--ref-text-transform));
+      letter-spacing: var(--ref-letter-spacing);
+    }
+
+    .compare-column__reference.is-above {
+      order: -1;
+      margin-top: 0;
+      margin-bottom: var(--compare-reference-verse-spacing, 10px);
+    }
+
+    .compare-column__reference.is-hidden,
+    .compare-column__reference:empty {
+      display: none;
+    }
+
+    .compare-column__translation {
+      display: none;
+      font-size: var(--compare-ref-meta-size, 12px);
+      color: rgba(255, 255, 255, 0.5);
+      text-align: var(--text-align);
+      margin-top: 4px;
+    }
+
+    /* ══════════════════════════════════════════════════════
+       LOWER-THIRD LAYER (always bottom, crossfades via opacity)
+       ══════════════════════════════════════════════════════ */
+
+
+    #lt-bar {
+      display: flex;
+      opacity: 1;
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      z-index: 3;
+      width: calc(100vw - var(--lt-h-margin, 120px));
+      max-width: var(--lt-max-width, 1680px);
+      max-height: var(--lt-max-height, 600px);
+      padding: var(--lt-card-padding, 28px 48px);
+      border-radius: var(--lt-card-radius, 18px);
+      overflow: hidden;
+      isolation: isolate;
+      flex-direction: column;
+      align-items: var(--text-align, center);
+      justify-content: center;
+      transition: opacity var(--anim-duration, 152ms) ease;
+    }
+
+    /* ══════════════════════════════════════════════════════
+       OVERLAY STAGE: fixed full-canvas parent container
+       ══════════════════════════════════════════════════════ */
+    #overlay-stage {
+      position: absolute;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: transparent;
+      z-index: 0;
+    }
+
+    .mode-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 200ms ease;
+      z-index: 0;
+    }
+
+    .mode-layer.is-active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #lt-bar.hidden,
+    #lt-bar.blank {
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+
+    #lt-bar::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--box-background, rgba(0, 0, 0, 0.65));
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: inherit;
+      z-index: 0;
+    }
+
+    #lt-bar > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    #lt-verse-text {
+      font-size: var(--font-size);
+      font-family: var(--font-family);
+      color: var(--font-color, #ffffff);
+      font-weight: var(--font-weight, 400);
+      font-style: var(--font-style, normal);
+      line-height: var(--line-height);
+      letter-spacing: var(--letter-spacing, 0px);
+      text-align: var(--text-align);
+      text-shadow: var(--text-shadow);
+      text-transform: var(--text-transform);
+    }
+
+    #lt-bar #ref-text {
+      font-size: var(--ref-font-size);
+      font-weight: var(--ref-font-weight);
+      font-style: var(--ref-font-style, normal);
+      color: var(--ref-font-color);
+      text-align: var(--ref-text-align, var(--text-align));
+      opacity: var(--ref-opacity);
+      text-transform: var(--ref-text-transform);
+      letter-spacing: var(--ref-letter-spacing);
+    }
+
+    #lt-bar #ref-text.top {
+      margin-top: 0;
+      margin-bottom: 12px;
+    }
+
+    #bar-background-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: inherit;
+      display: none;
+      z-index: 0;
+    }
+
+    #bar-background-video.visible {
+      display: block;
+    }
+
+    #lt-bar-bg {
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      z-index: 0;
+    }
+
+  </style>
+</head>
+
+<body data-mode="fullscreen">
+
+  <!-- ══════════════════════════════════════
+       OVERLAY STAGE — fixed full-canvas parent
+       ══════════════════════════════════════ -->
+  <div id="overlay-stage">
+
+    <!-- ─── Fullscreen Layer ─── -->
+    <div id="fullscreen-layer" class="mode-layer">
+      <div id="background"></div>
+      <div id="bg-crossfade"></div>
+      <video id="background-video" muted playsinline></video>
+      <div id="background-shade"></div>
+      <div id="overlay" class="hidden">
+        <div id="verse-container">
+          <div id="verse-text"></div>
+          <div id="reference"></div>
+        </div>
+      </div>
+      <div id="compare-layout">
+        <div class="compare-column">
+          <div class="compare-column__text-wrap">
+            <div class="compare-column__verse" id="compare-text-left"></div>
+          </div>
+          <div class="compare-column__reference" id="compare-reference-left"></div>
+          <div class="compare-column__translation" id="compare-translation-left"></div>
+        </div>
+        <div class="compare-column">
+          <div class="compare-column__text-wrap">
+            <div class="compare-column__verse" id="compare-text-right"></div>
+          </div>
+          <div class="compare-column__reference" id="compare-reference-right"></div>
+          <div class="compare-column__translation" id="compare-translation-right"></div>
+        </div>
+      </div>
+      <img id="logo" alt="">
+    </div>
+
+    <!-- ─── Lower-Third Layer ─── -->
+    <div id="lower-third-layer" class="mode-layer">
+      <div id="lt-bar">
+        <video id="bar-background-video" muted playsinline></video>
+        <div id="lt-bar-bg"></div>
+        <div id="lt-verse-text"></div>
+        <div id="ref-text"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      let currentBibleState = null;
+      let currentBibleRevision = 0;
+      let hasReceivedLiveOverlayUpdate = false;
+
+      const FONT_SIZE_MIN = 12;
+      const REF_FONT_SIZE_MIN = 10;
+      const COMPARE_TEXT_MIN = 16;
+      const COMPARE_REF_MIN = 12;
+      const COMPARE_META_MIN = 10;
+      const COMPARE_PADDING_MIN = 16;
+      const COMPARE_LAYOUT_PADDING_MIN = 20;
+      const CONTENT_PADDING_MIN = 16;
+      const CONTENT_LINE_HEIGHT_MIN = 1.1;
+      const BAR_PADDING_MIN = 12;
+      const BAR_LINE_HEIGHT_MIN = 1.2;
+
+      const SIZE_PRESETS = {
+        'smallest': { fontSize: 24, refFontSize: 10, lineHeight: 1.25 },
+        'smaller': { fontSize: 28, refFontSize: 10, lineHeight: 1.26 },
+        'small': { fontSize: 32, refFontSize: 11, lineHeight: 1.27 },
+        'medium': { fontSize: 36, refFontSize: 12, lineHeight: 1.28 },
+        'big': { fontSize: 42, refFontSize: 12, lineHeight: 1.29 },
+        'bigger': { fontSize: 48, refFontSize: 13, lineHeight: 1.3 },
+        'biggest': { fontSize: 56, refFontSize: 14, lineHeight: 1.32 },
+      };
+      const WIDTH_PRESETS = {
+        'sm': { maxWidth: 1000, hMargin: 460 },
+        'md': { maxWidth: 1200, hMargin: 360 },
+        'lg': { maxWidth: 1440, hMargin: 240 },
+        'xl': { maxWidth: 1680, hMargin: 120 },
+        'xxl': { maxWidth: 1800, hMargin: 60 },
+        'full': { maxWidth: 1920, hMargin: 0 },
+      };
+
+      function escapeHtml(s) { const d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
+      function safeSupText(h) {
+        if (typeof h !== 'string') return '';
+        return h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      const PATTERN_CSS = {
+        'dots': 'url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Ccircle cx=\'2\' cy=\'2\' r=\'1.5\' fill=\'rgba(255,255,255,0.15)\'/%3E%3C/svg%3E")',
+        'lines': 'url("data:image/svg+xml,%3Csvg width=\'40\' height=\'40\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cline x1=\'0\' y1=\'20\' x2=\'40\' y2=\'20\' stroke=\'rgba(255,255,255,0.08)\' stroke-width=\'1\'/%3E%3C/svg%3E")',
+        'grid': 'url("data:image/svg+xml,%3Csvg width=\'40\' height=\'40\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Crect width=\'40\' height=\'40\' fill=\'none\' stroke=\'rgba(255,255,255,0.07)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        'crosshatch': 'url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 0L20 20M20 0L0 20\' stroke=\'rgba(255,255,255,0.06)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        'diagonal': 'url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 20L20 0\' stroke=\'rgba(255,255,255,0.1)\' stroke-width=\'1\'/%3E%3C/svg%3E")',
+        'hexagons': 'url("data:image/svg+xml,%3Csvg width=\'28\' height=\'49\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M14 0l14 8v16l-14 8-14-8V8z\' fill=\'none\' stroke=\'rgba(255,255,255,0.07)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        'waves': 'url("data:image/svg+xml,%3Csvg width=\'80\' height=\'20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 10q20-10 40 0t40 0\' fill=\'none\' stroke=\'rgba(255,255,255,0.08)\' stroke-width=\'1\'/%3E%3C/svg%3E")',
+        'plus': 'url("data:image/svg+xml,%3Csvg width=\'24\' height=\'24\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M11 4h2v16h-2zM4 11h16v2H4z\' fill=\'rgba(255,255,255,0.07)\'/%3E%3C/svg%3E")',
+        'diamonds': 'url("data:image/svg+xml,%3Csvg width=\'24\' height=\'24\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M12 0l12 12-12 12L0 12z\' fill=\'none\' stroke=\'rgba(255,255,255,0.06)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        'circles': 'url("data:image/svg+xml,%3Csvg width=\'30\' height=\'30\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Ccircle cx=\'15\' cy=\'15\' r=\'12\' fill=\'none\' stroke=\'rgba(255,255,255,0.06)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        'triangle': 'url("data:image/svg+xml,%3Csvg width=\'24\' height=\'24\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M12 2l10 18H2z\' fill=\'none\' stroke=\'rgba(255,255,255,0.07)\' stroke-width=\'0.5\'/%3E%3C/svg%3E")',
+        'diagonal-lines': 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.15) 4px, rgba(255,255,255,0.15) 5px)',
+        'horizontal-lines': 'repeating-linear-gradient(0deg, transparent, transparent 6px, rgba(255,255,255,0.12) 6px, rgba(255,255,255,0.12) 7px)',
+        'vertical-lines': 'repeating-linear-gradient(90deg, transparent, transparent 6px, rgba(255,255,255,0.12) 6px, rgba(255,255,255,0.12) 7px)',
+        'chevrons': 'linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%), linear-gradient(225deg, rgba(255,255,255,0.15) 25%, transparent 25%) 0 0 / 12px 12px',
+        'cross-hatch': 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 5px), repeating-linear-gradient(-45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 5px)',
+        'diagonal-checker': 'linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%), linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%) 0 0 / 16px 16px',
+        'zigzag': 'linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%) -6px 0, linear-gradient(225deg, rgba(255,255,255,0.15) 25%, transparent 25%) -6px 0, linear-gradient(315deg, rgba(255,255,255,0.15) 25%, transparent 25%), linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%) 0 0 / 12px 12px',
+        'subtle-noise': "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E\")",
+        'star-field': "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.3) 1px, transparent 1px), radial-gradient(circle at 80% 70%, rgba(255,255,255,0.2) 1px, transparent 1px), radial-gradient(circle at 50% 10%, rgba(255,255,255,0.25) 0.5px, transparent 0.5px) 0 0 / 20px 20px, 30px 30px, 15px 15px",
+      };
+
+      const root = document.documentElement;
+      const body = document.body;
+      const background = document.getElementById('background');
+      const bgCrossfade = document.getElementById('bg-crossfade');
+      const backgroundVideoEl = document.getElementById('background-video');
+      const backgroundShade = document.getElementById('background-shade');
+      const overlay = document.getElementById('overlay');
+      const verseContainer = document.getElementById('verse-container');
+      const verseText = document.getElementById('verse-text');
+      const reference = document.getElementById('reference');
+      const compareLayout = document.getElementById('compare-layout');
+      const compareTextLeft = document.getElementById('compare-text-left');
+      const compareTextRight = document.getElementById('compare-text-right');
+      const compareReferenceLeft = document.getElementById('compare-reference-left');
+      const compareReferenceRight = document.getElementById('compare-reference-right');
+      const compareTranslationLeft = document.getElementById('compare-translation-left');
+      const compareTranslationRight = document.getElementById('compare-translation-right');
+      const ltBar = document.getElementById('lt-bar');
+      const ltBarBg = document.getElementById('lt-bar-bg');
+      const barBackgroundVideoEl = document.getElementById('bar-background-video');
+      const ltRefText = document.getElementById('ref-text');
+      const ltVerseText = document.getElementById('lt-verse-text');
+      const logo = document.getElementById('logo');
+      const overlayStage = document.getElementById('overlay-stage');
+      const fullscreenLayer = document.getElementById('fullscreen-layer');
+      const lowerThirdLayer = document.getElementById('lower-third-layer');
+
+      const _tabParam = 'notes';
+      const _storageKey = 'notes-overlay-data';
+      const _ackStorageKey = 'notes-overlay-render-ack';
+      const _channelName = 'obs-church-studio-notes-overlay';
+
+      function readInitialMode() {
+        try {
+          const raw = localStorage.getItem(_storageKey);
+          const parsed = raw ? JSON.parse(raw) : null;
+          if (parsed?.mode === 'fullscreen' || parsed?.mode === 'lower-third') return parsed.mode;
+        } catch { }
+        try {
+          const hash = window.location.hash;
+          if (hash.startsWith('#data=')) {
+            const parsed = JSON.parse(decodeURIComponent(hash.slice(6)));
+            if (parsed?.mode === 'fullscreen' || parsed?.mode === 'lower-third') return parsed.mode;
+          }
+        } catch { }
+        return 'fullscreen';
+      }
+
+      const initialMode = readInitialMode();
+      body.dataset.mode = initialMode;
+      let activeMode = '';
+      let initialStorageSyncPending = true;
+      let currentOverlayData = null;
+      let lastTimestamp = 0;
+      let currentSlideId = null;
+      let hasShownOnce = false;
+      let bgClearToken = 0;
+      let lastCssOverlayData = '';
+      let lastAppliedThemeKey = '';
+      let fitRafId = 0;
+      let lastBgFingerprint = '';
+      let lastBgType = 'none';
+      let bgTransitionSuppressed = false;
+      let contentFadeLock = false;
+      let baseFontSize = 48;
+      let baseRefFontSize = 24;
+      let baseCompareFontSize = 36;
+      let baseCompareRefFontSize = 20;
+      let basePadding = 60;
+      let baseComparePanelInnerPadding = 38;
+      let baseCompareLayoutPadding = { top: 60, right: 60, bottom: 60, left: 60 };
+      let baseBarPadding = 28;
+      let barMaxHeight = 600;
+      function toCssFontWeight(w, fb) {
+        const n = Number(w); if (!n || isNaN(n)) return fb || '400';
+        if (n <= 100) return '100'; if (n <= 200) return '200'; if (n <= 300) return '300';
+        if (n <= 400) return '400'; if (n <= 500) return '500'; if (n <= 600) return '600';
+        if (n <= 700) return '700'; if (n <= 800) return '800'; return '900';
+      }
+
+      function mapFontWeight(w) {
+        if (typeof w === 'number') return String(Math.min(900, Math.max(100, Math.round(w))));
+        if (!w) return '400';
+        var m = { 'thin': '100', 'extralight': '200', 'light': '300', 'regular': '400', 'normal': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800', 'black': '900' };
+        return m[w.toLowerCase()] || '400';
+      }
+      function mapCompareFontWeight(w) {
+        if (!w) return '';
+        var m = { 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800' };
+        return m[w.toLowerCase()] || '';
+      }
+
+      function mapTextTransform(t) {
+        if (!t || t === 'none') return 'none';
+        var m = { 'uppercase': 'uppercase', 'upper': 'uppercase', 'lowercase': 'lowercase', 'lower': 'lowercase', 'capitalize': 'capitalize', 'title': 'capitalize' };
+        return m[t.toLowerCase()] || 'none';
+      }
+
+      function ensureCmgSansFont() {
+        body.style.fontFamily = '"CMG Sans","Noto Sans","Charis SIL",Arial,sans-serif';
+      }
+
+      function parseColorToRgb(c) {
+        if (!c) return null;
+        const ctx = document.createElement('canvas').getContext('2d');
+        ctx.fillStyle = c; const v = ctx.fillStyle;
+        if (v && v.startsWith('#')) {
+          const h = v.slice(1);
+          return { r: parseInt(h.substring(0, 2), 16), g: parseInt(h.substring(2, 4), 16), b: parseInt(h.substring(4, 6), 16) };
+        }
+        return null;
+      }
+
+      function invertColorForBg(bg) {
+        const rgb = parseColorToRgb(bg); if (!rgb) return '#fff';
+        return (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255 > 0.55 ? '#000' : '#fff';
+      }
+
+      function buildShadeGradient(color, opacity) {
+        const rgb = parseColorToRgb(color);
+        if (!rgb) return `linear-gradient(180deg,rgba(0,0,0,${opacity}),rgba(0,0,0,${opacity}))`;
+        return `linear-gradient(180deg,rgba(${rgb.r},${rgb.g},${rgb.b},${opacity}),rgba(${rgb.r},${rgb.g},${rgb.b},${opacity}))`;
+      }
+
+      function clampSetting(value, fallback, min, max) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.min(max, Math.max(min, n));
+      }
+
+      function compareMetaPosition(value) {
+        return value === 'above-verse' || value === 'same-row' || value === 'below-verse' || value === 'hidden'
+          ? value
+          : 'above-verse';
+      }
+
+      function compareMetaAlign(value, fallback) {
+        return value === 'left' || value === 'center' || value === 'right' ? value : fallback;
+      }
+
+      function applyCompareReferencePlacement(node, position, alignment) {
+        if (!node) return;
+        node.classList.toggle('is-above', position === 'above-verse' || position === 'same-row');
+        node.classList.toggle('is-hidden', position === 'hidden');
+        node.style.textAlign = alignment;
+      }
+
+      function formatCompareReference(referenceValue, translationValue) {
+        const ref = String(referenceValue || '').trim();
+        const version = String(translationValue || '').trim();
+        if (ref && version) return `${ref} (${version})`;
+        return ref || version;
+      }
+
+      function isTransparentBackgroundColor(color) {
+        const value = String(color || '').trim().toLowerCase();
+        return !value ||
+          value === 'transparent' ||
+          value === '#0000' ||
+          value === '#00000000' ||
+          value === 'rgba(0,0,0,0)' ||
+          value === 'rgba(0, 0, 0, 0)';
+      }
+
+      function readObsCssOverrideText() {
+        const direct = document.getElementById('obs-cssoverride');
+        if (direct && typeof direct.textContent === 'string' && direct.textContent.includes('--')) {
+          return direct.textContent;
+        }
+        const styles = document.querySelectorAll('style');
+        for (const styleEl of styles) {
+          const cssText = typeof styleEl.textContent === 'string' ? styleEl.textContent : '';
+          if (cssText && cssText.includes('--overlay-data')) return cssText;
+        }
+        return '';
+      }
+
+      function extractCssCustomPropertyValue(cssText, name) {
+        if (!cssText || !name) return '';
+        const propertyIndex = cssText.indexOf(name);
+        if (propertyIndex === -1) return '';
+        const colonIndex = cssText.indexOf(':', propertyIndex + name.length);
+        if (colonIndex === -1) return '';
+        let i = colonIndex + 1;
+        let quote = '';
+        let parenDepth = 0;
+        for (; i < cssText.length; i += 1) {
+          const ch = cssText[i];
+          const prev = i > 0 ? cssText[i - 1] : '';
+          if (quote) {
+            if (ch === quote && prev !== '\\') quote = '';
+            continue;
+          }
+          if (ch === '"' || ch === "'") {
+            quote = ch;
+            continue;
+          }
+          if (ch === '(') {
+            parenDepth += 1;
+            continue;
+          }
+          if (ch === ')') {
+            parenDepth = Math.max(0, parenDepth - 1);
+            continue;
+          }
+          if (ch === ';' && parenDepth === 0) break;
+        }
+        return cssText.slice(colonIndex + 1, i).trim();
+      }
+
+      function readComputedCssVar(name) {
+        const inlineValue = root.style.getPropertyValue(name);
+        root.style.removeProperty(name);
+        const cssValue = getComputedStyle(root).getPropertyValue(name).trim();
+        if (!cssValue && inlineValue) root.style.setProperty(name, inlineValue);
+        return cssValue;
+      }
+
+      function readInjectedCssVar(name) {
+        const cssOverrideValue = extractCssCustomPropertyValue(readObsCssOverrideText(), name);
+        if (cssOverrideValue) return cssOverrideValue;
+        return readComputedCssVar(name);
+      }
+
+      function resolvePatternCss(pattern) {
+        const value = String(pattern || '').trim();
+        if (!value) return '';
+        if (value.startsWith('data:')) return `url("${value.replace(/"/g, '\\"')}")`;
+        if (value === '__FROM_CSS__') return readInjectedCssVar('--bg-pattern-data');
+        return PATTERN_CSS[value] || '';
+      }
+
+      function clearVideoElement(videoEl) {
+        if (!videoEl) return;
+        try { videoEl.pause(); } catch { }
+        if (videoEl.getAttribute('src')) {
+          videoEl.removeAttribute('src');
+          try { videoEl.load(); } catch { }
+        }
+        videoEl.style.display = 'none';
+        videoEl.style.opacity = '';
+        videoEl.style.transition = '';
+      }
+
+      function clearFullscreenBackgroundVideo() {
+        const controller = seamlessLoopControllers.get(backgroundVideoEl);
+        if (controller) {
+          stopSeamlessLoop(controller, { clearSrc: true, resetActiveToPrimary: true });
+          clearVideoElement(controller.secondary);
+        }
+        clearVideoElement(backgroundVideoEl);
+      }
+
+      function hideBackgroundCrossfade() {
+        if (!bgCrossfade) return;
+        bgCrossfade.style.transition = 'none';
+        bgCrossfade.style.opacity = '0';
+        bgCrossfade.style.background = 'transparent';
+        bgCrossfade.style.backgroundImage = 'none';
+        bgCrossfade.style.backgroundColor = 'transparent';
+      }
+
+      function applyFullscreenBackground(theme) {
+        const bgOpacity = String(theme.backgroundOpacity ?? 1);
+        const bgColor = String(theme.backgroundColor || 'transparent');
+        const bgColorEnd = String(theme.backgroundColorEnd || '').trim();
+        const bgGradientAngle = theme.bgGradientAngle ?? 135;
+        const hasGradient = !isTransparentBackgroundColor(bgColor) && Boolean(bgColorEnd) && bgColorEnd !== bgColor;
+        const bgColorFinal = hasGradient
+          ? `linear-gradient(${bgGradientAngle}deg, ${bgColor}, ${bgColorEnd})`
+          : bgColor;
+
+        root.style.setProperty('--bg-opacity', bgOpacity);
+        hideBackgroundCrossfade();
+
+        const bgVideoUrl = String(theme.backgroundVideo || '').trim();
+        if (bgVideoUrl) {
+          const controller = seamlessLoopControllers.get(backgroundVideoEl);
+          if (controller) {
+            stopSeamlessLoop(controller, { clearSrc: true, resetActiveToPrimary: true });
+            clearVideoElement(controller.secondary);
+          }
+          root.style.setProperty('--bg-image', 'none');
+          root.style.setProperty('--bg-color', 'transparent');
+          backgroundVideoEl.style.display = 'block';
+          backgroundVideoEl.style.opacity = bgOpacity;
+          backgroundVideoEl.loop = true;
+          if (backgroundVideoEl.getAttribute('src') !== bgVideoUrl) {
+            backgroundVideoEl.src = bgVideoUrl;
+            try { backgroundVideoEl.load(); } catch { }
+          }
+          const playPromise = backgroundVideoEl.play();
+          if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => { });
+          }
+          return;
+        }
+
+        clearFullscreenBackgroundVideo();
+
+        const patternCss = resolvePatternCss(theme.backgroundPattern);
+        if (patternCss) {
+          root.style.setProperty('--bg-image', patternCss);
+          root.style.setProperty('--bg-color', 'transparent');
+          return;
+        }
+
+        if (hasGradient) {
+          root.style.setProperty('--bg-color', 'transparent');
+          root.style.setProperty('--bg-image', bgColorFinal);
+          return;
+        }
+
+        const rawBgImage = String(theme.backgroundImage || '').trim();
+        if (rawBgImage) {
+          let bgUrl = rawBgImage;
+          if (bgUrl === '__BG_SOURCE__') {
+            root.style.setProperty('--bg-image', 'none');
+            root.style.setProperty('--bg-color', 'transparent');
+            root.style.setProperty('--bg-opacity', '1');
+            return;
+          }
+          if (bgUrl === '__FROM_CSS__') {
+            const cssValue = readInjectedCssVar('--bg-image');
+            const hasCssImage = Boolean(cssValue && cssValue !== 'none');
+            root.style.setProperty('--bg-image', cssValue || 'none');
+            root.style.setProperty('--bg-color', hasCssImage ? 'transparent' : bgColor);
+            if (hasCssImage) root.style.setProperty('--bg-opacity', bgOpacity);
+            return;
+          }
+          if (bgUrl === '__FROM_LOCALSTORAGE__') {
+            bgUrl = localStorage.getItem('bible-overlay-bg-image') || '';
+          }
+          root.style.setProperty('--bg-image', bgUrl ? `url(${bgUrl})` : 'none');
+          root.style.setProperty('--bg-color', bgUrl ? 'transparent' : bgColor);
+          return;
+        }
+
+        root.style.setProperty('--bg-image', 'none');
+        root.style.setProperty('--bg-color', bgColor);
+      }
+
+      function resolveSafeArea() {
+        return Number(getComputedStyle(root).getPropertyValue('--safe-area').trim().replace('px', '')) || 40;
+      }
+
+      function isOverflowing(node, w, h) {
+        if (!node) return false;
+        return Math.max(node.scrollWidth, node.getBoundingClientRect().width) > w + 1 ||
+          Math.max(node.scrollHeight, node.getBoundingClientRect().height) > h + 1;
+      }
+
+      /* ── Seamless video loop ── */
+      const seamlessLoopControllers = new WeakMap();
+      function getSeamlessLoopController(el) {
+        let c = seamlessLoopControllers.get(el);
+        if (!c) {
+          const sec = document.createElement('video');
+          sec.muted = true; sec.playsInline = true;
+          sec.style.cssText = el.style.cssText; sec.className = el.className; sec.id = el.id + '-secondary';
+          el.parentElement.insertBefore(sec, el.nextSibling);
+          c = { primary: el, secondary: sec, active: el, inactive: sec, enabled: false, src: '', timerId: null };
+          seamlessLoopControllers.set(el, c);
+        }
+        return c;
+      }
+      function hideVideoEl(el, hide) {
+        el.style.opacity = hide ? '0' : '';
+        el.style.pointerEvents = hide ? 'none' : '';
+      }
+      function startSeamlessLoopMonitor(c) {
+        if (c.timerId) clearInterval(c.timerId);
+        c.timerId = setInterval(() => {
+          if (!c.enabled) return;
+          const a = c.active;
+          if (a.ended || (a.duration > 0 && a.currentTime >= a.duration - 0.5)) {
+            const b = c.inactive; b.src = c.src; b.load(); b.play().catch(() => { });
+            b.style.opacity = c.active.style.opacity || '1'; c.active.style.opacity = '0';
+            const old = c.active; c.active = c.inactive; c.inactive = old;
+          }
+        }, 250);
+      }
+      function stopSeamlessLoop(c, opts) {
+        if (c.timerId) { clearInterval(c.timerId); c.timerId = null; }
+        c.enabled = false;
+        if (opts?.clearSrc) { c.primary.src = ''; c.secondary.src = ''; }
+        if (opts?.resetActiveToPrimary) { c.active = c.primary; c.inactive = c.secondary; }
+      }
+
+      /* ══════════════════════════════════════════════════════
+         MODE SWITCHING: opacity-only toggle
+         ══════════════════════════════════════════════════════ */
+      function setActiveLayer(mode) {
+        if (mode === activeMode) return;
+        fullscreenLayer.classList.toggle('is-active', mode === 'fullscreen');
+        lowerThirdLayer.classList.toggle('is-active', mode === 'lower-third');
+        activeMode = mode;
+        body.dataset.mode = mode;
+        console.log('[Mode] ' + mode);
+      }
+
+      /* ═══ FULLSCREEN: Auto-scaling ═══ */
+      function isSingleLayoutOverflowing(tw, th) {
+        return isOverflowing(verseContainer, tw, th) ||
+          isOverflowing(verseText, verseText.clientWidth || tw, th) ||
+          (reference.style.display !== 'none' && isOverflowing(reference, reference.clientWidth || tw, th));
+      }
+
+      function autoScaleContent() {
+        if (!verseContainer) return;
+        const isWin = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
+        if (!isWin) {
+          verseText.style.fontSize = Math.round(baseFontSize) + 'px';
+          reference.style.fontSize = Math.round(baseRefFontSize) + 'px';
+          verseText.style.lineHeight = String(Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.6);
+          return;
+        }
+        let vs = Math.max(FONT_SIZE_MIN, Math.round(baseFontSize));
+        let rs = Math.max(REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
+        let pd = Math.max(CONTENT_PADDING_MIN, Math.round(basePadding));
+        let lh = Math.max(CONTENT_LINE_HEIGHT_MIN, Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.6);
+        let sp = reference.classList.contains('top') ? 24 : 24;
+        const ratio = baseFontSize > 0 ? Math.max(0.6, baseRefFontSize / baseFontSize) : 0.6;
+        const sa = resolveSafeArea();
+        const vw = document.body?.clientWidth || 1920, vh = document.body?.clientHeight || 1080;
+        const tw = Math.max(420, vw - sa * 2), th = Math.max(260, vh - sa * 2);
+        const apply = () => {
+          verseText.style.fontSize = vs + 'px'; reference.style.fontSize = rs + 'px';
+          verseText.style.lineHeight = String(lh); verseContainer.style.padding = pd + 'px';
+          reference.style.marginTop = reference.classList.contains('top') ? '0px' : sp + 'px';
+          reference.style.marginBottom = reference.classList.contains('top') ? sp + 'px' : '0px';
+        };
+        apply();
+        let g = 0;
+        while (isSingleLayoutOverflowing(tw, th) && (vs > FONT_SIZE_MIN || rs > REF_FONT_SIZE_MIN || pd > CONTENT_PADDING_MIN || lh > CONTENT_LINE_HEIGHT_MIN || sp > 8) && g < 220) {
+          if (vs > FONT_SIZE_MIN) vs -= 1;
+          rs = Math.max(REF_FONT_SIZE_MIN, Math.round(vs * ratio));
+          if (isSingleLayoutOverflowing(tw, th) && pd > CONTENT_PADDING_MIN) pd = Math.max(CONTENT_PADDING_MIN, pd - 2);
+          if (isSingleLayoutOverflowing(tw, th) && lh > CONTENT_LINE_HEIGHT_MIN) lh = Math.max(CONTENT_LINE_HEIGHT_MIN, +(lh - 0.02).toFixed(2));
+          if (isSingleLayoutOverflowing(tw, th) && sp > 8) sp = Math.max(8, sp - 2);
+          apply(); g++;
+        }
+      }
+
+      function autoScaleCompareContent() {
+        if (!compareLayout || !compareTextLeft || !compareTextRight) return;
+        const isWin = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
+        if (!isWin) return;
+        const tn = [compareTextLeft, compareTextRight], rn = [compareReferenceLeft, compareReferenceRight], trn = [compareTranslationLeft, compareTranslationRight];
+        const wr = Array.from(compareLayout.querySelectorAll('.compare-column__text-wrap'));
+        const bT = Math.max(22, Math.round(baseCompareFontSize)), bR = Math.max(14, Math.round(baseCompareRefFontSize));
+        const bM = Math.max(12, Math.round(bR * 0.62));
+        let ts = bT, rs2 = bR, ms = bM;
+        let cp = Math.max(COMPARE_PADDING_MIN, Math.round(baseComparePanelInnerPadding));
+        let lpTop = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.top));
+        let lpRight = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.right));
+        let lpBottom = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.bottom));
+        let lpLeft = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.left));
+        let lh = Math.max(1.08, Number(getComputedStyle(root).getPropertyValue('--compare-line-height')) || 1.4);
+        const sa = resolveSafeArea(), vw = document.body?.clientWidth || 1920, vh = document.body?.clientHeight || 1080;
+        const tw = Math.max(600, vw - sa * 2), th = Math.max(320, vh - sa * 2);
+        const cols = Array.from(compareLayout.querySelectorAll('.compare-column'));
+        const hasLayoutPaddingRoom = () => lpTop > COMPARE_LAYOUT_PADDING_MIN || lpRight > COMPARE_LAYOUT_PADDING_MIN || lpBottom > COMPARE_LAYOUT_PADDING_MIN || lpLeft > COMPARE_LAYOUT_PADDING_MIN;
+        const shrinkLayoutPadding = () => {
+          lpTop = Math.max(COMPARE_LAYOUT_PADDING_MIN, lpTop - 2);
+          lpRight = Math.max(COMPARE_LAYOUT_PADDING_MIN, lpRight - 2);
+          lpBottom = Math.max(COMPARE_LAYOUT_PADDING_MIN, lpBottom - 2);
+          lpLeft = Math.max(COMPARE_LAYOUT_PADDING_MIN, lpLeft - 2);
+        };
+        const apply = () => {
+          compareLayout.style.padding = `${lpTop}px ${lpRight}px ${lpBottom}px ${lpLeft}px`;
+          cols.forEach(c => c.style.padding = cp + 'px');
+          tn.forEach(n => { n.style.fontSize = ts + 'px'; n.style.lineHeight = String(lh) });
+          rn.forEach(n => n.style.fontSize = rs2 + 'px');
+          trn.forEach(n => n.style.fontSize = ms + 'px');
+        };
+        const ov = () => { if (isOverflowing(compareLayout, tw, th)) return true; return cols.some((c, i) => { const w = wr[i]; return isOverflowing(c, c.clientWidth || tw, c.clientHeight || th) || (w && isOverflowing(w, w.clientWidth || tw, w.clientHeight || th)) || isOverflowing(tn[i], tn[i].clientWidth || tw, th); }); };
+        apply(); let g = 0;
+        while (ov() && (ts > COMPARE_TEXT_MIN || rs2 > COMPARE_REF_MIN || ms > COMPARE_META_MIN || cp > COMPARE_PADDING_MIN || hasLayoutPaddingRoom() || lh > 1.08) && g < 240) {
+          if (ts > COMPARE_TEXT_MIN) ts--; if (rs2 > COMPARE_REF_MIN) rs2 = Math.max(COMPARE_REF_MIN, rs2 - 1); if (ms > COMPARE_META_MIN) ms = Math.max(COMPARE_META_MIN, ms - 1);
+          if (ov() && cp > COMPARE_PADDING_MIN) cp = Math.max(COMPARE_PADDING_MIN, cp - 1);
+          if (ov() && hasLayoutPaddingRoom()) shrinkLayoutPadding();
+          if (ov() && lh > 1.08) lh = Math.max(1.08, +((lh - 0.02).toFixed(2)));
+          apply(); g++;
+        }
+      }
+
+      function resetFullscreenInlineLayoutStyles() {
+        verseText.style.fontSize = '';
+        verseText.style.lineHeight = '';
+        reference.style.fontSize = '';
+        reference.style.marginTop = '';
+        reference.style.marginBottom = '';
+        verseContainer.style.padding = '';
+        if (compareLayout) {
+          compareLayout.style.gridTemplateColumns = '';
+          compareLayout.style.gap = '';
+          compareLayout.style.padding = '';
+          compareLayout.style.alignContent = '';
+          compareLayout.querySelectorAll('.compare-column').forEach((column) => {
+            column.style.padding = '';
+            column.style.justifyContent = '';
+          });
+        }
+        [compareTextLeft, compareTextRight].forEach((node) => {
+          if (!node) return;
+          node.style.fontSize = '';
+          node.style.lineHeight = '';
+        });
+        [compareReferenceLeft, compareReferenceRight, compareTranslationLeft, compareTranslationRight].forEach((node) => {
+          if (!node) return;
+          node.style.fontSize = '';
+        });
+      }
+
+      /* ═══ LOWER-THIRD: Animate-out ═══ */
+      let _animateOutResolve = null;
+      let _animateOutTimer = 0;
+      function signalAnimateOutComplete() {
+        if (_animateOutTimer) { clearTimeout(_animateOutTimer); _animateOutTimer = 0; }
+        if (_animateOutResolve) { _animateOutResolve(); _animateOutResolve = null; }
+        try { const bc = new BroadcastChannel(_channelName); bc.postMessage({ type: 'lower-third-animation-complete' }); bc.close(); } catch { }
+      }
+      function writeRenderAck(packet) {
+        try {
+          const timestamp = Number(packet && packet.timestamp) || 0;
+          if (!timestamp) return;
+          localStorage.setItem(_ackStorageKey, JSON.stringify({
+            timestamp,
+            mode: packet.mode || activeMode,
+            transitionId: packet.transitionId,
+          }));
+        } catch { }
+      }
+
+      /* ═══ THEME: Shared base ═══ */
+      function applyThemeBase(s) {
+        ensureCmgSansFont();
+        const bs = Number(s.fontSize || 48); baseFontSize = bs; baseRefFontSize = Number(s.refFontSize) || Math.max(14, Math.round(bs * 0.5));
+        root.style.setProperty('--font-size', baseFontSize + 'px');
+        root.style.setProperty('--font-family', s.fontFamily || '"CMG Sans", "Noto Sans", "Charis SIL", Arial, sans-serif');
+        root.style.setProperty('--font-color', s.fontColor || '#ffffff');
+        root.style.setProperty('--font-weight', mapFontWeight(s.fontWeight));
+        root.style.setProperty('--font-style', s.fontStyle === 'italic' ? 'italic' : 'normal');
+        root.style.setProperty('--line-height', String(s.lineHeight || 1.6));
+        root.style.setProperty('--letter-spacing', (s.letterSpacing || 0) + 'px');
+        root.style.setProperty('--text-align', s.textAlign || 'center');
+        root.style.setProperty('--text-shadow', s.textShadow || 'none');
+        root.style.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
+        root.style.setProperty('--outline-color', s.textOutline ? (s.textOutlineColor || '#000') : 'transparent');
+        root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
+        root.style.setProperty('--ref-font-family', s.fontFamily || '"CMG Sans", "Noto Sans", "Charis SIL", Arial, sans-serif');
+        root.style.setProperty('--ref-font-weight', mapFontWeight(s.refFontWeight));
+        root.style.setProperty('--ref-font-style', 'normal');
+        root.style.setProperty('--ref-font-color', s.refFontColor || '#fff');
+        root.style.setProperty('--ref-text-transform', mapTextTransform(s.refTextTransform));
+        root.style.setProperty('--ref-letter-spacing', (s.refLetterSpacing || 0) + 'px');
+        root.style.setProperty('--ref-opacity', String(s.refOpacity ?? 1));
+        root.style.setProperty('--ref-spacing', (s.refSpacing ?? 24) + 'px');
+        if (s.refTextAlign && s.refTextAlign !== 'match') root.style.setProperty('--ref-text-align', s.refTextAlign); else root.style.setProperty('--ref-text-align', s.textAlign || 'center');
+
+        const rbe = s.referenceBackgroundEnabled === true, rbc = s.referenceBackgroundColor || '#F4D17B', rbs = s.referenceBackgroundStyle || 'solid', rbr = Number(s.referenceBackgroundRadius ?? 12);
+        if (rbe) {
+          root.style.setProperty('--ref-width', 'fit-content');
+          if (rbs === 'solid') { root.style.setProperty('--ref-bg-color', rbc); root.style.setProperty('--ref-bg-padding', '6px 14px'); root.style.setProperty('--ref-bg-radius', rbr + 'px'); root.style.setProperty('--ref-bg-border', 'none'); root.style.setProperty('--ref-font-color', invertColorForBg(rbc)); }
+          else if (rbs === 'pill') { root.style.setProperty('--ref-bg-color', rbc); root.style.setProperty('--ref-bg-padding', '6px 20px'); root.style.setProperty('--ref-bg-radius', '999px'); root.style.setProperty('--ref-bg-border', 'none'); root.style.setProperty('--ref-font-color', invertColorForBg(rbc)); }
+          else if (rbs === 'outline') { root.style.setProperty('--ref-bg-color', 'transparent'); root.style.setProperty('--ref-bg-padding', '5px 13px'); root.style.setProperty('--ref-bg-radius', rbr + 'px'); root.style.setProperty('--ref-bg-border', '2px solid ' + rbc); root.style.setProperty('--ref-font-color', rbc); }
+        } else { root.style.setProperty('--ref-width', '100%'); root.style.setProperty('--ref-bg-color', 'transparent'); root.style.setProperty('--ref-bg-padding', '0'); root.style.setProperty('--ref-bg-radius', '0'); root.style.setProperty('--ref-bg-border', 'none'); }
+
+        root.style.setProperty('--text-transform', mapTextTransform(s.textTransform));
+        const ead = Math.max(95, Math.min(170, Math.round((s.animationDuration || 400) * 0.38)));
+        root.style.setProperty('--anim-duration', ead + 'ms');
+        root.style.setProperty('--bg-enter-duration', Math.max(70, Math.round(ead * 0.42)) + 'ms');
+        root.style.setProperty('--text-enter-duration', Math.max(82, Math.round(ead * 0.54)) + 'ms');
+        root.style.setProperty('--text-enter-delay', Math.max(12, Math.round(ead * 0.08)) + 'ms');
+        root.style.setProperty('--bg-opacity', String(s.backgroundOpacity ?? 1));
+
+        if (s.logoUrl) { if (s.logoUrl === '__FROM_CSS__') { const cv = getComputedStyle(root).getPropertyValue('--logo-data-uri').trim(); if (cv && cv.startsWith('url(')) { logo.src = cv.slice(4, -1).replace(/^["']|["']$/g, ''); } } else { logo.src = s.logoUrl; } logo.className = 'visible ' + (s.logoPosition || 'bottom-right'); root.style.setProperty('--logo-size', (s.logoSize || 80) + 'px'); } else { logo.className = ''; }
+      }
+
+      /* ═══ THEME: Fullscreen ═══ */
+      function applyThemeFullscreen(s) {
+        applyThemeBase(s);
+        basePadding = Number(s.padding || 60);
+        root.style.setProperty('--padding', basePadding + 'px');
+        // Compare-specific font size — use the explicit setting if provided, otherwise derive from primary
+        const hasCompareSize = s.compareVerseFontSizeLeft != null && Number(s.compareVerseFontSizeLeft) > 0;
+        baseCompareFontSize = hasCompareSize ? Number(s.compareVerseFontSizeLeft) : Math.max(24, Math.round(baseFontSize * 0.76));
+        root.style.setProperty('--compare-font-size', baseCompareFontSize + 'px');
+        // Compare-specific reference font size
+        const hasCompareRefSize = s.compareReferenceFontSizeLeft != null && Number(s.compareReferenceFontSizeLeft) > 0;
+        baseCompareRefFontSize = hasCompareRefSize ? Number(s.compareReferenceFontSizeLeft) : Math.max(16, Math.round(baseRefFontSize * 0.95));
+        root.style.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
+        root.style.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
+        // Compare-specific line height
+        const hasCompareLineHeight = s.compareLineHeightLeft != null && Number(s.compareLineHeightLeft) > 0;
+        root.style.setProperty('--compare-line-height', hasCompareLineHeight ? String(Number(s.compareLineHeightLeft)) : String(Math.max(1.22, Number(s.lineHeight || 1.6) - 0.08)));
+        // Compare-specific font weight
+        const compareWeight = mapCompareFontWeight(s.compareFontWeightLeft);
+        if (compareWeight) root.style.setProperty('--compare-font-weight', compareWeight);
+        else root.style.setProperty('--compare-font-weight', '');
+        // Compare-specific text alignment
+        const compareAlign = s.compareTextAlignLeft || '';
+        if (compareAlign && compareAlign !== 'justify') root.style.setProperty('--compare-text-align', compareAlign);
+        else root.style.setProperty('--compare-text-align', '');
+        // Compare-specific font family
+        const compareFontFamily = s.compareFontFamilyLeft || '';
+        if (compareFontFamily) root.style.setProperty('--compare-font-family', compareFontFamily);
+        else root.style.setProperty('--compare-font-family', '');
+        // Compare layout fields from BackgroundPickerCard.
+        const legacyWidth = clampSetting(s.compareTranslationWidth, 40, 25, 75);
+        const leftWidth = clampSetting(s.compareLeftWidth, legacyWidth, 25, 75);
+        const rightWidth = clampSetting(s.compareRightWidth, legacyWidth, 25, 75);
+        const cg = clampSetting(s.compareTranslationGap ?? s.gap, 40, 0, 200);
+        const outerTop = clampSetting(s.compareOuterPaddingTop, basePadding, 0, 200);
+        const outerRight = clampSetting(s.compareOuterPaddingRight, basePadding, 0, 200);
+        const outerBottom = clampSetting(s.compareOuterPaddingBottom, basePadding, 0, 200);
+        const outerLeft = clampSetting(s.compareOuterPaddingLeft, basePadding, 0, 200);
+        baseComparePanelInnerPadding = clampSetting(s.comparePanelInnerPadding, 38, 0, 120);
+        baseCompareLayoutPadding = { top: outerTop, right: outerRight, bottom: outerBottom, left: outerLeft };
+        root.style.setProperty('--compare-left-width', leftWidth + 'fr');
+        root.style.setProperty('--compare-right-width', rightWidth + 'fr');
+        root.style.setProperty('--compare-panel-width', legacyWidth + '%');
+        root.style.setProperty('--compare-gap', cg + 'px');
+        root.style.setProperty('--compare-outer-padding-top', outerTop + 'px');
+        root.style.setProperty('--compare-outer-padding-right', outerRight + 'px');
+        root.style.setProperty('--compare-outer-padding-bottom', outerBottom + 'px');
+        root.style.setProperty('--compare-outer-padding-left', outerLeft + 'px');
+        root.style.setProperty('--compare-panel-inner-padding', baseComparePanelInnerPadding + 'px');
+        root.style.setProperty('--compare-reference-verse-spacing', clampSetting(s.compareReferenceVerseSpacing, 10, 0, 80) + 'px');
+        root.style.setProperty('--compare-reference-transform', mapTextTransform(s.compareReferenceTextTransformLeft || s.refTextTransform));
+        const fallbackRefAlign = s.refTextAlign && s.refTextAlign !== 'match' ? s.refTextAlign : (s.textAlign || 'center');
+        root.style.setProperty('--compare-reference-align', compareMetaAlign(s.compareReferenceAlignmentLeft, fallbackRefAlign));
+        applyCompareReferencePlacement(compareReferenceLeft, compareMetaPosition(s.compareReferencePositionLeft), compareMetaAlign(s.compareReferenceAlignmentLeft, fallbackRefAlign));
+        applyCompareReferencePlacement(compareReferenceRight, compareMetaPosition(s.compareReferencePositionRight), compareMetaAlign(s.compareReferenceAlignmentRight, fallbackRefAlign));
+        if (compareLayout) {
+          compareLayout.style.gridTemplateColumns = `minmax(0,${leftWidth}fr) minmax(0,${rightWidth}fr)`;
+          compareLayout.style.gap = cg + 'px';
+          compareLayout.style.padding = `${outerTop}px ${outerRight}px ${outerBottom}px ${outerLeft}px`;
+          compareLayout.style.alignContent = 'center';
+          const compareColumns = Array.from(compareLayout.querySelectorAll('.compare-column'));
+          compareColumns.forEach((column) => {
+            column.style.padding = baseComparePanelInnerPadding + 'px';
+            column.style.justifyContent = 'flex-start';
+          });
+        }
+        root.style.setProperty('--bg-shade-gradient', buildShadeGradient(s.fullscreenShadeColor || '#000', s.fullscreenShadeOpacity ?? 0.42));
+        root.style.setProperty('--bg-shade-display', s.fullscreenShadeEnabled === false ? 'none' : 'block');
+        root.style.setProperty('--safe-area', (s.safeArea || 40) + 'px');
+        if (s.refPosition === 'top') reference.classList.add('top'); else reference.classList.remove('top');
+        root.dataset.refBgEnabled = s.referenceBackgroundEnabled === true ? 'true' : 'false';
+
+        applyFullscreenBackground(s);
+      }
+
+      /* ═══ THEME: Lower-third ═══ */
+      function applyThemeLowerThird(s, targetMode) {
+        if (targetMode === undefined) targetMode = activeMode;
+        resetFullscreenInlineLayoutStyles();
+        applyThemeBase(s);
+        baseBarPadding = Number(s.padding || 18); root.style.setProperty('--safe-area', (s.safeArea || 40) + 'px');
+        const sp = s.lowerThirdSize || 'medium', preset = SIZE_PRESETS[sp] || SIZE_PRESETS['medium'];
+        if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.style.setProperty('--font-size', baseFontSize + 'px'); root.style.setProperty('--ref-font-size', baseRefFontSize + 'px'); }
+        root.style.setProperty('--line-height', String(s.lineHeight || preset.lineHeight));
+        root.style.setProperty('--ref-spacing', (s.refSpacing ?? 16) + 'px');
+        if (targetMode === 'lower-third') {
+          root.style.setProperty('--lt-max-width', 'none');
+        } else {
+          const wp2 = s.lowerThirdWidthPreset || 'md', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['md'];
+          root.style.setProperty('--lt-max-width', (s.lowerThirdMaxWidth || wpr.maxWidth) + 'px');
+        }
+        if (targetMode === 'lower-third') {
+          root.style.setProperty('--lt-h-margin', '0px');
+        } else {
+          root.style.setProperty('--lt-h-margin', (s.lowerThirdHMargin ?? wpr.hMargin) + 'px');
+        }
+        barMaxHeight = Math.max(120, Math.min(900, Number(s.lowerThirdBarMaxHeight) || 600));
+        root.style.setProperty('--lt-max-height', barMaxHeight + 'px');
+        root.style.setProperty('--lt-min-height', (s.lowerThirdBarMinHeight || 0) + 'px');
+        root.style.setProperty('--lt-card-padding', s.lowerThirdCardPadding || `${baseBarPadding}px`);
+        root.style.setProperty('--lt-card-radius', (s.lowerThirdCardRadius || 18) + 'px');
+        const bb = s.boxBackground || 'rgba(0,0,0,0.65)', bo = s.boxOpacity ?? 1; let fbb = bb;
+        if (bo < 1 && bb.startsWith('rgba')) fbb = bb.replace(/[\d.]+\)$/, bo + ')'); else if (bo < 1 && bb.startsWith('rgb(')) fbb = bb.replace('rgb(', 'rgba(').replace(')', ',' + bo + ')');
+        root.style.setProperty('--box-background', fbb);
+        if (s.boxBorderEnabled) { ltBar.style.border = (s.boxBorderWidth || 1) + 'px ' + (s.boxBorderStyle || 'solid') + ' ' + (s.boxBorderColor || 'rgba(255,255,255,0.2)'); } else ltBar.style.border = 'none';
+        if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
+        const barBgV = String(s.backgroundVideo || '').trim();
+        if (barBgV && targetMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
+        if (!barBgV && targetMode === 'lower-third') { const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent'; ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } else ltBarBg.style.display = 'none';
+        if (s.refPosition === 'top') { reference.classList.add('top'); ltRefText.classList.add('top'); } else { reference.classList.remove('top'); ltRefText.classList.remove('top'); }
+      }
+
+      function applyTheme(theme, modeContext) {
+        var targetMode = modeContext || activeMode;
+        if (targetMode === 'lower-third') applyThemeLowerThird(theme, targetMode); else applyThemeFullscreen(theme);
+      }
+
+      function applyThemeIfChanged(theme, force, modeContext) {
+        var targetMode = modeContext || activeMode;
+        const safeTheme = theme || {};
+        let themeKey = '';
+        try {
+          themeKey = targetMode + '|' + JSON.stringify(safeTheme);
+        } catch {
+          themeKey = targetMode + '|unserializable';
+        }
+        if (!force && themeKey === lastAppliedThemeKey) return;
+        applyTheme(safeTheme, targetMode);
+        lastAppliedThemeKey = themeKey;
+      }
+
+      /* ═══ SINGLE RENDERER ═══ */
+      var lastProcessedPacketKey = '';
+
+      function hasRenderableSlide(data) {
+        return Boolean(data && data.slide && data.blanked !== true);
+      }
+
+      function getOverlayPacketKey(data) {
+        return [
+          data.type || '',
+          data.revision ?? data.timestamp ?? 0,
+          data.mode ?? '',
+          typeof data.verseText === 'string' ? data.verseText.substring(0, 40) : '',
+          typeof data.referenceText === 'string' ? data.referenceText : (typeof data.referenceLabel === 'string' ? data.referenceLabel : ''),
+        ].join('|');
+      }
+
+      function renderBothBibleLayers(state) {
+        if (!state) return;
+        processSlideFullscreen(state);
+        processSlideLowerThird(state);
+        console.log('[BibleOverlay] both layers rendered', { revision: currentBibleRevision });
+      }
+
+      function processOverlayUpdate(packet) {
+        if (!packet) return;
+        // Apply theme even from theme-only packets (e.g., settings change without verse push)
+        if (packet.theme && (!packet.slide && !packet.blanked)) {
+          applyThemeIfChanged(packet.theme, true, packet.mode || activeMode);
+          if (packet.mode === 'fullscreen' || packet.mode === 'lower-third') {
+            setActiveLayer(packet.mode);
+          }
+          writeRenderAck(packet);
+          return;
+        }
+        if (!packet.slide && !packet.blanked) return;
+
+        var key = getOverlayPacketKey(packet);
+        if (key && key === lastProcessedPacketKey) return;
+        lastProcessedPacketKey = key;
+
+        var revision = Number(
+          packet.revision ??
+          packet.timestamp ??
+          0
+        );
+        if (revision && revision < currentBibleRevision) return;
+        currentBibleRevision = revision;
+        currentBibleState = packet;
+        currentOverlayData = packet;
+        hasReceivedLiveOverlayUpdate = true;
+
+        if (packet.mode === 'fullscreen' || packet.mode === 'lower-third') {
+          setActiveLayer(packet.mode);
+        }
+
+        renderBothBibleLayers(currentBibleState);
+        writeRenderAck(packet);
+      }
+
+      function processSlideFullscreen(data) {
+        if (!data.slide) { bgClearToken++; overlay.classList.add('blank'); ltBar.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
+        bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId, isSame = sl.id === currentSlideId && !isNew; currentSlideId = sl.id;
+        if (data.blanked) { overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
+        const cc = Array.isArray(sl.columns) ? sl.columns.slice(0, 2) : [], isCL = sl.layout === 'compare' && cc.length === 2;
+        overlay.classList.remove('hidden'); ltBar.classList.remove('hidden');
+        if (isCL) {
+          compareLayout.style.display = '';
+          compareLayout.classList.add('is-visible');
+          verseContainer.classList.add('is-hidden');
+          const [l, r] = cc;
+          compareReferenceLeft.textContent = formatCompareReference(l.reference, l.translation);
+          compareReferenceRight.textContent = formatCompareReference(r.reference, r.translation);
+          compareTranslationLeft.textContent = '';
+          compareTranslationRight.textContent = '';
+          compareTextLeft.innerHTML = safeSupText(l.text);
+          compareTextRight.innerHTML = safeSupText(r.text);
+        }
+        else {
+          compareLayout.classList.remove('is-visible');
+          compareLayout.style.display = 'none';
+          verseContainer.classList.remove('is-hidden');
+          verseText.innerHTML = safeSupText(sl.text);
+          const rt = typeof sl.reference === 'string' ? sl.reference.trim() : '';
+          reference.textContent = rt;
+          reference.style.display = rt ? 'block' : 'none';
+        }
+        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-note-overlay fullscreen theme error', error); }
+        if (isCL) autoScaleCompareContent();
+        else { autoScaleContent(); }
+        if (!hasShownOnce) hasShownOnce = true;
+      }
+
+      function processSlideLowerThird(data) {
+        if (data.action === 'animate-out') { overlay.classList.remove('hidden'); ltBar.classList.remove('hidden'); overlay.classList.add('blank'); ltBar.classList.add('blank'); _animateOutTimer = setTimeout(() => { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); signalAnimateOutComplete(); }, 400); return new Promise((r) => { _animateOutResolve = r; }); }
+        if (!data.slide) { bgClearToken++; overlay.classList.add('blank'); ltBar.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
+        bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId; currentSlideId = sl.id;
+        if (data.blanked) { overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
+        overlay.classList.remove('hidden'); ltBar.classList.remove('hidden');
+        ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
+        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-note-overlay lower-third theme error', error); }
+        if (!hasShownOnce) hasShownOnce = true;
+      }
+
+      /* ═══ EVENT-DRIVEN UPDATE PIPELINE ═══ */
+      function readFromCssVar() {
+        if (hasReceivedLiveOverlayUpdate) return false;
+        try {
+          const raw = readInjectedCssVar('--overlay-data') || readComputedCssVar('--overlay-data');
+          if (!raw || raw === lastCssOverlayData) return false;
+          lastCssOverlayData = raw;
+          const normalized = raw.replace(/^['"]|['"]$/g, '');
+          if (!normalized) return false;
+          processOverlayUpdate(JSON.parse(decodeURIComponent(normalized)));
+          return true;
+        } catch { }
+        return false;
+      }
+      function readModeFromCssVar() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = getComputedStyle(root).getPropertyValue('--display-mode').trim().replace(/^['"]|['"]$/g, ''); if (raw === 'lower-third' || raw === 'fullscreen') { setActiveLayer(raw); } } catch { } }
+      function readFromUrlHash() { if (hasReceivedLiveOverlayUpdate) return; try { const h = window.location.hash; if (h && h.startsWith('#data=')) { processOverlayUpdate(JSON.parse(decodeURIComponent(h.slice(6)))); return true; } } catch { } return false; }
+      function readFromUrlSearch() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = new URLSearchParams(window.location.search).get('overlayData'); if (raw) { processOverlayUpdate(JSON.parse(decodeURIComponent(raw))); return true; } } catch { } return false; }
+      function readFromLocalStorage() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = localStorage.getItem(_storageKey); if (raw) { processOverlayUpdate(JSON.parse(raw)); return true; } } catch { } return false; }
+      function applyObsBrowserEventCss(cssText) {
+        if (typeof cssText !== 'string') return;
+        let styleEl = document.getElementById('obs-cssoverride');
+        if (!styleEl) {
+          styleEl = document.createElement('style');
+          styleEl.id = 'obs-cssoverride';
+          document.head.appendChild(styleEl);
+        }
+        styleEl.textContent = cssText;
+        lastCssOverlayData = '';
+      }
+      function readFromObsBrowserEvent(event) {
+        try {
+          const detail = event && typeof event.detail === 'object' ? event.detail : null;
+          const data = detail && typeof detail.event_data === 'object' ? detail.event_data : detail;
+          if (!data || typeof data !== 'object') return false;
+          if (data.tab && data.tab !== _tabParam) return false;
+          const packet = data.packet || data.overlayData || data.data;
+          if (!packet || typeof packet !== 'object') return false;
+          applyObsBrowserEventCss(data.css || data.overlayCss || '');
+          processOverlayUpdate(packet);
+          return true;
+        } catch { }
+        return false;
+      }
+      function readFromOverlayRelayPacket(packet) {
+        try {
+          if (!packet || typeof packet !== 'object') return false;
+          if (packet.channel && packet.channel !== _tabParam) return false;
+          if (packet.type === 'mode-change' && packet.mode) {
+            if (packet.theme) {
+              applyThemeIfChanged(packet.theme, true, packet.mode);
+            }
+            setActiveLayer(packet.mode);
+            return true;
+          }
+          const data = packet.data || packet.packet || packet.overlayData;
+          if (!data || typeof data !== 'object') return false;
+          processOverlayUpdate(data);
+          return true;
+        } catch { }
+        return false;
+      }
+      function connectOverlayRelay() {
+        if (!('WebSocket' in window)) return;
+        try {
+          var params = new URLSearchParams(window.location.search);
+          if (params.get('mceRelay') === '0') return;
+          var host = window.location.hostname;
+          var allowed = params.get('mceRelay') === '1' || host === 'localhost' || host === '127.0.0.1' || host === 'tauri.localhost' || host === '::1';
+          if (!allowed) return;
+        } catch { return; }
+        var attempts = 0;
+        var timer = null;
+        var disabledUntil = 0;
+        function schedule() {
+          if (timer) return;
+          if (attempts >= 3) {
+            disabledUntil = Date.now() + 60000;
+            attempts = 0;
+            timer = setTimeout(function () {
+              timer = null;
+              open();
+            }, 60000);
+            return;
+          }
+          var delay = Math.min(10000, 500 * Math.pow(2, attempts++));
+          timer = setTimeout(function () {
+            timer = null;
+            open();
+          }, delay);
+        }
+        function open() {
+          if (Date.now() < disabledUntil) return;
+          try {
+            var ws = new WebSocket('ws://127.0.0.1:17891');
+            ws.onopen = function () { attempts = 0; };
+            ws.onmessage = function (event) {
+              try { readFromOverlayRelayPacket(JSON.parse(event.data)); } catch { }
+            };
+            ws.onclose = schedule;
+            ws.onerror = function () {
+              try { ws.close(); } catch { }
+            };
+          } catch {
+            schedule();
+          }
+        }
+        open();
+      }
+      function syncOverlayState() {
+        if (hasReceivedLiveOverlayUpdate) return false;
+        // Seed from the dock packet before trusting stale CSS on a reloaded OBS source.
+        if (initialStorageSyncPending) {
+          initialStorageSyncPending = false;
+          if (readFromLocalStorage()) return true;
+        }
+        if (readFromCssVar()) return true;
+        if (readFromUrlHash()) return true;
+        if (readFromUrlSearch()) return true;
+        if (readFromLocalStorage()) return true;
+        readModeFromCssVar();
+        return false;
+      }
+      function syncCssOverlayState() {
+        if (hasReceivedLiveOverlayUpdate) return false;
+        if (readFromCssVar()) return true;
+        readModeFromCssVar();
+        return false;
+      }
+
+      try {
+        var bc = new BroadcastChannel(_channelName);
+        bc.onmessage = function (e) {
+          var p = e.data;
+          if (p && p.type === 'mode-change' && p.mode) {
+            if (p.theme) {
+              applyThemeIfChanged(p.theme, true, p.mode);
+            }
+            setActiveLayer(p.mode);
+          } else if (p) {
+            processOverlayUpdate(p);
+          }
+        };
+      } catch { }
+      connectOverlayRelay();
+      window.addEventListener('mce-overlay-packet', readFromObsBrowserEvent);
+      window.addEventListener('message', (e) => { if (e.data?.action === 'animate-out') processOverlayUpdate(e.data); });
+      window.addEventListener('hashchange', () => { readFromUrlHash(); });
+
+      const _observer = new MutationObserver(() => { syncCssOverlayState(); });
+      _observer.observe(root, { attributes: true, attributeFilter: ['style'] });
+      const _cssObserverTarget = document.head || document.documentElement;
+      if (_cssObserverTarget) {
+        const _cssObserver = new MutationObserver(() => { syncCssOverlayState(); });
+        _cssObserver.observe(_cssObserverTarget, { childList: true, subtree: true, characterData: true });
+      }
+
+      if (window.ResizeObserver) { const ro = new ResizeObserver(() => { if (activeMode === 'fullscreen') requestAnimationFrame(autoScaleContent); }); ro.observe(document.body); ro.observe(verseContainer); ro.observe(compareLayout); }
+
+      /* ═══ INITIAL ═══
+         Both layers start hidden (opacity 0). Reveal the correct one.
+      */
+      syncOverlayState();
+
+      (function initialReveal(attempts) {
+        if (!currentBibleState && !currentOverlayData && attempts > 0) {
+          setTimeout(function () { initialReveal(attempts - 1); }, 50);
+          return;
+        }
+
+        setActiveLayer(initialMode);
+
+        if (initialMode === 'lower-third') {
+          clearFullscreenBackgroundVideo();
+        }
+      })(10);
+
+      // CSS --overlay-data may not be injected by OBS yet — retry with backoff
+      (function retryReadFromCssVar(attempts, delay) {
+        if (!syncCssOverlayState() && attempts > 0) {
+          setTimeout(function () { retryReadFromCssVar(attempts - 1, Math.round(delay * 1.5)); }, delay);
+        }
+      })(5, 50);
+
+      /* ═══ POLLING — detect CSS variable updates from OBS SetInputSettings ═══
+         OBS injects CSS via a <style> element (obs-cssoverride), NOT via the
+         style attribute on <html>. The MutationObserver above only fires for
+         style attribute changes, so CSS-only SetInputSettings calls are
+         invisible to it. A lightweight poll bridges that gap. */
+      setInterval(() => { syncOverlayState(); }, 75);
+
+      /* ═══ STANDALONE BROWSER SUPPORT ═══
+         Listen for localStorage changes from other tabs/windows.
+      */
+      window.addEventListener('storage', function (e) {
+        if (e.key === _storageKey && e.newValue) {
+          try {
+            hasReceivedLiveOverlayUpdate = true;
+            processOverlayUpdate(JSON.parse(e.newValue));
+          } catch (_) {}
+        }
+      });
+
+      window.__mceOverlay = {
+        setActiveLayer: setActiveLayer,
+        getState: function () {
+          return { activeMode: activeMode, currentBibleRevision: currentBibleRevision };
+        },
+      };
+    })();
+  </script>
+</body>
+
+</html>

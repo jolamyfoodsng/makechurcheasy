@@ -10,10 +10,12 @@
 
 import { getDeviceId, getDeviceSecret } from "./authService";
 import { getLicensePayload, isUnlocked } from "./licenseGuard";
+import { checkEntitlementSync } from "./entitlementClient";
+import { normalizePlanId } from "../lib/subscriptionSourceOfTruth";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.makechurcheasy.creatorstudioslabs.stream";
+  "https://api.creatorstudioslabs.stream";
 
 const APP_VERSION: string =
   typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
@@ -106,7 +108,7 @@ export async function checkPremiumAccess(
       `[premiumActionGuard] Network error checking ${feature}:`,
       err,
     );
-    return fallbackToCachedLicense();
+    return fallbackToCachedLicense(feature);
   }
 }
 
@@ -115,14 +117,27 @@ export async function checkPremiumAccess(
  * is still within the offline verification window. If so, allow the
  * action. If not, deny with internet_required.
  */
-function fallbackToCachedLicense(): AccessCheckResult {
+function fallbackToCachedLicense(feature: PremiumFeature): AccessCheckResult {
   // If the app-level license guard still considers us unlocked,
   // the cached license is within the offline grace period.
   if (isUnlocked()) {
     const payload = getLicensePayload();
+    const plan = normalizePlanId(payload?.plan || "free");
+    const mappedFeature = mapPremiumFeature(feature);
+    const entitlement = checkEntitlementSync(mappedFeature, plan);
+
+    if (!entitlement.allowed) {
+      return {
+        allowed: false,
+        reason: "feature_not_available",
+        plan,
+        requiredPlan: entitlement.requiredPlan,
+      };
+    }
+
     return {
       allowed: true,
-      plan: payload?.plan || undefined,
+      plan,
       trialActive: payload?.trialActive || undefined,
       trialEndsAt: payload?.trialEndsAt || undefined,
     };
@@ -135,12 +150,6 @@ function fallbackToCachedLicense(): AccessCheckResult {
   if (lockReason === "maintenance") {
     return { allowed: false, reason: "maintenance" };
   }
-  if (lockReason === "subscription_expired") {
-    return { allowed: false, reason: "subscription_expired" };
-  }
-  if (lockReason === "trial_expired") {
-    return { allowed: false, reason: "trial_expired" };
-  }
   if (lockReason === "account_suspended") {
     return { allowed: false, reason: "account_suspended" };
   }
@@ -149,6 +158,19 @@ function fallbackToCachedLicense(): AccessCheckResult {
   }
 
   return { allowed: false, reason: "internet_required" };
+}
+
+function mapPremiumFeature(feature: PremiumFeature) {
+  switch (feature) {
+    case "transcriptExport":
+    case "translationExport":
+      return "sermonExport" as const;
+    case "aiSummary":
+    case "sermonNotes":
+      return "aiFeatures" as const;
+    default:
+      return feature;
+  }
 }
 
 // ── UI message helper ──────────────────────────────────────────────────────

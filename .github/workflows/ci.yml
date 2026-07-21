@@ -34,13 +34,9 @@ jobs:
       - name: Typecheck and build
         run: npm run build
         env:
-          VITE_APP_ENV: ${{ vars.VITE_APP_ENV || 'development' }}
           VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
           VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
           VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
-          VITE_AUTH_API_URL: ${{ secrets.VITE_AUTH_API_URL }}
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'http://localhost:3004' }}
-          VITE_WS_URL: ${{ secrets.VITE_WS_URL || 'ws://localhost:3004' }}
 
   # ── 2) Full Windows build (catches Rust + Tauri issues) ──
   build-windows:
@@ -149,7 +145,7 @@ jobs:
           VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
           VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
           VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
-          VITE_AUTH_API_URL: ${{ secrets.VITE_AUTH_API_URL }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           LIBCLANG_PATH: ${{ steps.resolve-llvm.outputs.RESOLVED_LLVM_PATH }}/bin
         with:
           tauriScript: npx tauri

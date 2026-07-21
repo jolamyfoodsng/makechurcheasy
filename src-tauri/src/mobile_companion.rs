@@ -10,7 +10,6 @@
  *   Phone → WebSocket → This server → OBS WebSocket → OBS
  *   OBS → OBS WebSocket → This server → WebSocket → Phone
  */
-
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU16, Ordering};
@@ -197,6 +196,8 @@ pub async fn get_pairing_token() -> Option<String> {
 pub async fn set_obs_connection(info: ObsConnectionInfo) {
     let mut conn = obs_connection_store().write().await;
     *conn = Some(info);
+    drop(conn);
+    set_obs_connected(true).await;
     println!("[MobileCompanion] OBS connection details updated");
 }
 
@@ -437,6 +438,7 @@ async fn handle_mobile_client(stream: TcpStream, state_tx: broadcast::Sender<Str
                                 if let Some(ref conn) = obs_conn {
                                     match forward_command_to_obs(&cmd, &conn.url, &conn.password).await {
                                         Ok(()) => {
+                                            set_obs_connected(true).await;
                                             // Update local state based on command
                                             match &cmd {
                                                 MobileCommand::ShowScripture { reference, .. } => {
@@ -464,6 +466,7 @@ async fn handle_mobile_client(stream: TcpStream, state_tx: broadcast::Sender<Str
                                             }
                                         }
                                         Err(e) => {
+                                            set_obs_connected(false).await;
                                             let _ = write.send(Message::Text(
                                                 serde_json::to_string(&MobileResponse::Error {
                                                     message: format!("OBS command failed: {}", e),
@@ -533,7 +536,10 @@ async fn run_discovery_beacon(ws_port: u16) {
     })
     .to_string();
 
-    println!("[MobileCompanion] Discovery beacon started on UDP port {}", DISCOVERY_PORT);
+    println!(
+        "[MobileCompanion] Discovery beacon started on UDP port {}",
+        DISCOVERY_PORT
+    );
 
     loop {
         let _ = socket.send_to(payload.as_bytes(), broadcast_addr).await;

@@ -34,6 +34,7 @@ import {
   hydrateFavoriteThemes,
 } from "../services/favoriteThemes";
 import allThemesData from "../../lower_thirds/all_themes.json";
+import { localizeLowerThirdThemeAssets } from "../lowerthirds/runtimeBranding";
 import { defaultTickerThemes, type TickerTheme } from "../data/tickerThemes";
 import {
   TICKER_THEMES as DOCK_TICKER_THEMES,
@@ -275,7 +276,7 @@ export default function ProductionThemeSettingsPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const allObsThemes: ObsTheme[] = useMemo(
-    () => (allThemesData as { themes: ObsTheme[] }).themes ?? [],
+    () => ((allThemesData as { themes: ObsTheme[] }).themes ?? []).map((theme) => localizeLowerThirdThemeAssets(theme)),
     [],
   );
 

@@ -14,7 +14,7 @@ import { DEFAULT_DESKTOP_CONFIG, type DesktopConfig } from "./desktopConfigTypes
 export type { DesktopConfig };
 export { DEFAULT_DESKTOP_CONFIG };
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 const CACHE_KEY = "mce_desktop_config";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -25,16 +25,20 @@ interface CacheEntry {
   fetchedAt: number;
 }
 
-function readCache(): DesktopConfig | null {
+function readCacheEntry(): CacheEntry | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const entry: CacheEntry = JSON.parse(raw);
     if (Date.now() - entry.fetchedAt > CACHE_TTL_MS * 10) return null; // expired after 50 min
-    return entry.config;
+    return entry;
   } catch {
     return null;
   }
+}
+
+function readCache(): DesktopConfig | null {
+  return readCacheEntry()?.config ?? null;
 }
 
 /**
@@ -60,10 +64,12 @@ let inflight: Promise<DesktopConfig> | null = null;
  * Concurrent calls are deduplicated via a shared promise.
  */
 export async function getDesktopConfig(): Promise<DesktopConfig> {
-  const cached = readCache();
-  if (cached) {
-    refreshInBackground();
-    return cached;
+  const cachedEntry = readCacheEntry();
+  if (cachedEntry) {
+    if (Date.now() - cachedEntry.fetchedAt >= CACHE_TTL_MS) {
+      refreshInBackground();
+    }
+    return cachedEntry.config;
   }
   return fetchConfig();
 }

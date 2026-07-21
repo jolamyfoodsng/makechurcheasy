@@ -3,34 +3,8 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=1920, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=1920,height=1080">
   <title>Bible Overlay — Background Only</title>
-  <script>
-    (function() {
-      document.addEventListener("keydown", function(e) { var c = e.ctrlKey || e.metaKey; if (!c) return; var k = e.key; if (k === "=" || k === "-" || k === "0" || k === "Plus" || k === "Minus" || k === "NumpadAdd" || k === "NumpadSubtract" || k === "Numpad0") { e.preventDefault(); e.stopPropagation(); } }, true);
-      document.addEventListener("wheel", function(e) { if (e.ctrlKey || e.metaKey) e.preventDefault(); }, { passive: false, capture: true });
-      document.addEventListener("gesturestart", function(e) { e.preventDefault(); }, { passive: false });
-      document.addEventListener("gesturechange", function(e) { e.preventDefault(); }, { passive: false });
-      document.addEventListener("gestureend", function(e) { e.preventDefault(); }, { passive: false });
-    })();
-  </script>
-  <style>html,body,#background,#overlay-root{touch-action:pan-y;-ms-content-zooming:none;}</style>
-  <script>
-    (function() {
-      var W = 1920, H = 1080;
-      var body = document.body;
-      body.style.width = W + 'px';
-      body.style.height = H + 'px';
-      body.style.transformOrigin = '0 0';
-      body.style.position = 'relative';
-      function fit() {
-        var s = Math.min(window.innerWidth / W, window.innerHeight / H);
-        body.style.transform = 'scale(' + s + ')';
-      }
-      fit();
-      window.addEventListener('resize', fit);
-    })();
-  </script>
   <link href="/fonts/google/google-fonts.css" rel="stylesheet">
   <link href="/fonts/cmg-sans-fonts.css" rel="stylesheet">
   <style>

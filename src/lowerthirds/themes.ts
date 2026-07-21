@@ -8,14 +8,12 @@
  */
 
 import { BIBLE_THEMES } from "./bibleThemes";
+import { localizeLowerThirdThemeAssets, normalizeThemeFontImports } from "./runtimeBranding";
 
 export type ThemeCategory = "bible" | "worship" | "general" | string;
 
 
-export const GOOGLE_FONTS = [
-  "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Work+Sans:wght@300;400;500;600;700;900&display=swap",
-  "https://fonts.googleapis.com/icon?family=Material+Icons",
-];
+export const GOOGLE_FONTS: string[] = [];
 
 
 export const SHARED_CSS = `
@@ -188,7 +186,7 @@ export const MERGED_ALL_THEMES: ThemeLike[] = [{
   "html": "<div class=\"ylt y-pos-bc\" data-state=\"{{state}}\" data-mode=\"{{animMode}}\" style=\"--bg1:#2b150b;--bg2:#3a1d10;--fg:#fff8f2;--accent:#fb923c;--muted:rgba(255,232,214,.82);--border:rgba(251,146,60,.35);--glow:rgba(251,146,60,.23);\">\n  <div class=\"y-shell y-quote\">\n    <span class=\"y-kicker y-enter-3\">{{label}}</span>\n    <p class=\"y-quote-main y-enter-1\">\"{{quote}}\"</p>\n    <p class=\"y-quote-ref y-enter-2\">{{reference}}</p>\n  </div>\n</div>",
   "usesTailwind": false,
   "fontImports": [
-    "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&display=swap"
+    "/fonts/google/google-fonts.css"
   ],
   "animation": {
     "name": "fadeInUp",
@@ -240,7 +238,7 @@ export const MERGED_ALL_THEMES: ThemeLike[] = [{
   "html": "<div class=\"lt pos-br in-up\">\n  <div class=\"panel info-panel\" style=\"--bg:rgba(24,24,27,.88);--fg:#FEF2F2;--accent:#EF4444;--bd:rgba(239,68,68,.3);\">\n    <span class=\"kicker\">{{label}}</span>\n    <p class=\"headline\">{{headline}}</p>\n    <div class=\"line-list\">\n      <span>{{details}}</span>\n    </div>\n  </div>\n</div>",
   "usesTailwind": false,
   "fontImports": [
-    "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Source+Serif+4:wght@400;600;700&display=swap"
+    "/fonts/google/google-fonts.css"
   ],
   "animation": {
     "name": "fadeInUp",
@@ -341,8 +339,8 @@ export const MERGED_ALL_THEMES: ThemeLike[] = [{
   "html": "<div class=\"c-lt c-pos-bc\" data-state=\"{{state}}\" data-mode=\"{{animMode}}\" style=\"--bg:#ffffff;--fg:#3f2a18;--sub:#6b4f33;--accent:#d97706;--bd:rgba(217,119,6,.28);--glow:rgba(217,119,6,.16);\">\n  <div class=\"c-shell c-sermon c-row\">\n    <div class=\"c-bar c-e3\"></div>\n    <div class=\"c-sermon-copy\">\n      <span class=\"c-kicker c-e3\">{{label}}</span>\n      <p class=\"c-title c-e1\">{{title}}</p>\n      <p class=\"c-sub c-e2\">{{subtitle}}</p>\n      <p class=\"c-meta c-e3\">{{meta}}</p>\n    </div>\n  </div>\n</div>",
   "usesTailwind": false,
   "fontImports": [
-    "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap",
-    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+    "/fonts/google/google-fonts.css",
+    "/fonts/fontawesome/all.min.css"
   ],
   "animation": {
     "name": "fadeInUp",
@@ -464,7 +462,7 @@ export const MERGED_ALL_THEMES: ThemeLike[] = [{
   "category": "general",
   "usesTailwind": false,
   "fontImports": [
-    "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&display=swap"
+    "/fonts/google/google-fonts.css"
   ],
   "animation": {
     "name": "fadeInUp",
@@ -556,7 +554,7 @@ export const MERGED_ALL_THEMES: ThemeLike[] = [{
   "category": "general",
   "usesTailwind": false,
   "fontImports": [
-    "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&display=swap"
+    "/fonts/google/google-fonts.css"
   ],
   "animation": {
     "name": "fadeInUp",
@@ -628,7 +626,7 @@ export const MERGED_ALL_THEMES: ThemeLike[] = [{
   "html": "<div class=\"fw-lt fw-pos-full\" data-state=\"{{state}}\" data-mode=\"{{animMode}}\">\n  <div class=\"fw-shell\">\n    <div class=\"fw-top fw-e1\">{{label}}</div>\n    <div class=\"fw-bottom fw-e2\">\n      <span class=\"fw-quote\">{{quote}}</span>\n      <span class=\"fw-ref\">{{reference}}</span>\n    </div>\n  </div>\n</div>",
   "usesTailwind": false,
   "fontImports": [
-    "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+    "/fonts/google/google-fonts.css"
   ],
   "animation": {
     "name": "fadeInUp",
@@ -1333,21 +1331,20 @@ function withCanonicalThemeVariants(
 }
 
 function normalizeThemeBranding(theme: ThemeLike): ThemeLike {
-  const fontImports = Array.isArray(theme.fontImports)
-    ? theme.fontImports.filter((value): value is string => typeof value === "string")
-    : [];
+  const localizedTheme = localizeLowerThirdThemeAssets(theme);
+  const fontImports = normalizeThemeFontImports(localizedTheme.fontImports);
 
   if (!fontImports.includes(LT_BRAND_FONT_IMPORT)) {
     fontImports.unshift(LT_BRAND_FONT_IMPORT);
   }
 
-  const themeCss = typeof theme.css === "string" ? theme.css : "";
+  const themeCss = typeof localizedTheme.css === "string" ? localizedTheme.css : "";
   const css = themeCss.includes("Brand normalization: enforce one church-wide visual system")
     ? themeCss
     : `${themeCss}\n${LT_BRAND_OVERRIDE_CSS}`;
 
   return {
-    ...theme,
+    ...localizedTheme,
     accentColor: LT_BRAND_PRIMARY,
     fontImports,
     css,

@@ -71,6 +71,13 @@ class BibleObsService {
   private _lastBgImageHash: string | null = null;
   private _lastOverlayTransportSignature: string | null = null;
 
+  /**
+   * Last URL written to the OBS browser source via SetInputSettings.
+   * Used to avoid triggering a page reload when the URL hasn't changed
+   * (only CSS data updates are needed for verse-to-verse changes).
+   */
+  private _lastBrowserSourceUrl: string | null = null;
+
   /** Duplicate BG source — always solid color, never replaced, prevents flicker */
   private _dupBgSceneItemId: number | null = null;
   private _dupBgFingerprint: string | null = null;
@@ -100,9 +107,14 @@ class BibleObsService {
     }
   }
 
-  private buildOverlayDataCss(packet: Record<string, unknown>, customCss = ""): string {
+  private buildOverlayDataCss(
+    packet: Record<string, unknown>,
+    customCss = "",
+    displayMode?: "fullscreen" | "lower-third",
+  ): string {
     const encodedPacket = encodeURIComponent(JSON.stringify(packet));
-    const overlayCss = `:root { --overlay-data: "${encodedPacket}"; }`;
+    const modeVar = displayMode ? ` --display-mode: "${displayMode}";` : "";
+    const overlayCss = `:root { --overlay-data: "${encodedPacket}";${modeVar} }`;
     return customCss ? `${overlayCss}\n${customCss}` : overlayCss;
   }
 
@@ -396,12 +408,24 @@ class BibleObsService {
             blanked: this._isBlanked,
             timestamp: Date.now(),
           };
-          overlayCss = this.buildOverlayDataCss(packet as unknown as Record<string, unknown>, customCss);
+          overlayCss = this.buildOverlayDataCss(
+            packet as unknown as Record<string, unknown>,
+            customCss,
+            this.currentTemplateType as "fullscreen" | "lower-third" | undefined,
+          );
         }
+        // Only include the URL when it has actually changed — setting the URL
+        // on an OBS browser source triggers a full page reload (flicker).
+        const urlChanged = this._lastBrowserSourceUrl !== overlayUrl;
         await obsService.call("SetInputSettings", {
           inputName: existing.sourceName,
-          inputSettings: { url: overlayUrl, width: canvas.width, height: canvas.height, css: overlayCss },
+          inputSettings: urlChanged
+            ? { url: overlayUrl, width: canvas.width, height: canvas.height, css: overlayCss }
+            : { css: overlayCss },
         });
+        if (urlChanged) {
+          this._lastBrowserSourceUrl = overlayUrl;
+        }
         await this.enableSceneItemSafe(overlaySceneName, browserItemId);
       }
     } catch { /* scene might be empty */ }
@@ -507,6 +531,11 @@ class BibleObsService {
     try {
       const resp = await obsService.call("GetSceneItemList", { sceneName });
       const items = (resp as { sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number }> }).sceneItems ?? [];
+      // If the browser overlay source is already present in this scene,
+      // the overlay will render its own background via CSS. Avoid creating
+      // a separate BG input to prevent duplicate layers.
+      const overlayPresent = items.some((item) => item.sourceName === BIBLE_SOURCE_NAME);
+      if (overlayPresent) return;
       const existing = items.find((item) => item.sourceName === BIBLE_BG_SOURCE_NAME);
       if (existing) {
         this.bgSceneItemId = existing.sceneItemId;
@@ -874,7 +903,7 @@ class BibleObsService {
 
   /**
    * Push a slide to the overlay (via localStorage/BroadcastChannel)
-   * and inject data into OBS Browser Source via URL hash.
+   * and inject data into OBS Browser Source via CSS variables.
    *
    * How it works:
    * - The overlay URL is updated with slide data encoded in the hash fragment
@@ -908,7 +937,8 @@ class BibleObsService {
     // Push to overlay broadcaster (for same-origin windows / BroadcastChannel)
     overlayBroadcaster.pushSlide(slide, theme, live, blanked);
 
-    // If OBS is connected, update the browser source URL with data in the hash
+    // If OBS is connected, update the browser source content without forcing
+    // a page reload on every verse change.
     if (obsService.isConnected) {
       // Auto-create the browser source if it hasn't been set up yet
       if (this.sceneItemId === null) {
@@ -917,40 +947,13 @@ class BibleObsService {
         } catch (err) {
           console.warn("[BibleOBS] Failed to auto-create scene-based overlay:", err);
         }
-      } else {
-        // Verify the overlay scene + browser source still exist in OBS
-        // (user may have deleted them from OBS manually)
-        try {
-          // Check if the overlay scene itself still exists
-          const scenes = await obsService.getSceneList();
-          const overlaySceneExists = scenes.some((s) => s.sceneName === BIBLE_SCENE_NAME);
-          if (!overlaySceneExists) {
-            this.sceneItemId = null;
-            this.currentSceneName = null;
-            await this.ensureBrowserSource(undefined, this.currentTemplateType);
-          } else {
-            // Check if the browser source is still inside the overlay scene
-            const resp = await obsService.call("GetSceneItemList", { sceneName: BIBLE_SCENE_NAME });
-            const items = (resp as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> }).sceneItems ?? [];
-            const hasBrowserSource = items.some(
-              (item) => item.sourceName === BIBLE_SOURCE_NAME
-            );
-            if (!hasBrowserSource) {
-              this.sceneItemId = null;
-              this.currentSceneName = null;
-              await this.ensureBrowserSource(undefined, this.currentTemplateType);
-            }
-          }
-        } catch {
-          this.sceneItemId = null;
-          this.currentSceneName = null;
-          try {
-            await this.ensureBrowserSource(undefined, this.currentTemplateType);
-          } catch (err2) {
-            console.warn("[BibleOBS] Failed to recreate scene-based overlay:", err2);
-          }
-        }
       }
+      // NOTE: We intentionally skip per-call scene/source existence checks here.
+      // The old logic ran getSceneList + GetSceneItemList on every verse change,
+      // and any transient error would reset sceneItemId → trigger ensureBrowserSource
+      // → call SetInputSettings with URL → OBS reloads the page (flicker).
+      // Instead, we let the SetInputSettings call below fail naturally, and only
+      // attempt recovery if it indicates the source is missing.
       try {
         const { themeForHash, customCss } = this.buildThemePayload(theme);
 
@@ -962,16 +965,14 @@ class BibleObsService {
           timestamp: Date.now(),
         };
         const base = getOverlayBaseUrlSync();
-        const overlayFile = this.currentTemplateType === "fullscreen"
-          ? "bible-overlay-fullscreen.html"
-          : "bible-overlay-lower-third.html";
+        const overlayFile = "mce-bible-overlay.html";
         const baseUrl = `${base}/${overlayFile}`;
-        const overlayCss = this.buildOverlayDataCss(packet as unknown as Record<string, unknown>, customCss || "");
-        const sourceSignature = JSON.stringify({
-          baseUrl,
-          css: customCss || "",
-          slideData: slide ? `${slide.id}:${slide.verseRange}` : null,
-        });
+        const overlayCss = this.buildOverlayDataCss(
+          packet as unknown as Record<string, unknown>,
+          customCss || "",
+          this.currentTemplateType as "fullscreen" | "lower-third" | undefined,
+        );
+        const sourceSignature = baseUrl;
         if (this.bgSceneItemId !== null) {
           await this.enforceBgPlacement(BIBLE_SCENE_NAME, this.bgSceneItemId);
         }
@@ -985,15 +986,41 @@ class BibleObsService {
           if (found) resolvedInputName = found.inputName;
         }
 
-        if (this._lastOverlayTransportSignature !== sourceSignature || blanked || !slide) {
-          const inputSettings = this._lastOverlayTransportSignature !== sourceSignature
-            ? { url: baseUrl, css: overlayCss }
-            : { css: overlayCss };
+        const inputSettings = this._lastOverlayTransportSignature !== sourceSignature
+          ? { url: baseUrl, css: overlayCss }
+          : { css: overlayCss };
+        try {
           await obsService.call("SetInputSettings", {
             inputName: resolvedInputName,
             inputSettings,
           });
           this._lastOverlayTransportSignature = sourceSignature;
+        } catch (setErr) {
+          // If the source was deleted from OBS, the SetInputSettings call will
+          // fail. Only then do we attempt recovery by recreating the source.
+          const msg = setErr instanceof Error ? setErr.message : String(setErr);
+          const isMissingSource = msg.includes("not found") || msg.includes("invalid") || msg.includes("600");
+          if (isMissingSource && this.sceneItemId !== null) {
+            console.warn("[BibleOBS] Browser source missing, recreating:", msg);
+            this.sceneItemId = null;
+            this.currentSceneName = null;
+            this._lastOverlayTransportSignature = null;
+            this._lastBrowserSourceUrl = null;
+            try {
+              await this.ensureBrowserSource(undefined, this.currentTemplateType);
+              // Retry the push after recreation
+              await obsService.call("SetInputSettings", {
+                inputName: resolvedInputName,
+                inputSettings: { url: baseUrl, css: overlayCss },
+              });
+              this._lastOverlayTransportSignature = sourceSignature;
+              this._lastBrowserSourceUrl = baseUrl;
+            } catch (retryErr) {
+              console.warn("[BibleOBS] Failed to recover browser source:", retryErr);
+            }
+          } else {
+            console.warn("[BibleOBS] SetInputSettings failed:", msg);
+          }
         }
 
         // ── Push BG source — fingerprint-based dedup ──
@@ -1144,7 +1171,11 @@ class BibleObsService {
           const baseUrl = currentUrl.split("#")[0] || currentUrl;
 
           const baseCss = this.stripOverlayDataCss(currentSettings.css || "");
-          const overlayCss = this.buildOverlayDataCss(packet as unknown as Record<string, unknown>, baseCss);
+          const overlayCss = this.buildOverlayDataCss(
+            packet as unknown as Record<string, unknown>,
+            baseCss,
+            this.currentTemplateType as "fullscreen" | "lower-third" | undefined,
+          );
 
           const inputSettings = currentUrl.split("#")[0] === baseUrl
             ? { css: overlayCss }

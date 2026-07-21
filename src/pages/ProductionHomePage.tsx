@@ -1,34 +1,39 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
-  Mic,
-  Images,
-  BookOpen,
-  Music,
-  Monitor,
-  MonitorSmartphone,
-  ExternalLink,
-  ListMusic,
-  Video,
-  History,
   Activity,
-  Image as ImageIcon,
   AlertCircle,
-  Link,
-  Copy,
+  AlertTriangle,
+  ArrowRight,
+  BookOpen,
+  Calendar,
   Check,
-  Info,
-  Sun,
-  Moon,
-  Play,
   ChevronDown,
   ChevronRight,
+  Coins,
+  Copy,
+  Crown,
+  ExternalLink,
   HelpCircle,
+  History,
+  Image as ImageIcon,
+  Images,
+  Info,
+  Link,
+  ListMusic,
+  Mic,
+  Monitor,
+  MonitorSmartphone,
+  Moon,
+  Music,
+  Newspaper,
+  Play,
   RotateCcw,
-  AlertTriangle,
+  Sun,
+  Video
 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
 import DashboardTutorial, {
   isDashboardTutorialCompleted,
@@ -36,19 +41,25 @@ import DashboardTutorial, {
   resetDashboardTutorial,
 } from "./DashboardTutorial";
 
-import { obsService, type ConnectionStatus } from "../services/obsService";
-import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
-import { getInstalledTranslations, getBibleSettings } from "../bible/bibleDb";
-import { getAllSongs } from "../worship/worshipDb";
-import { getAllMedia } from "../library/libraryDb";
-import { useAuth } from "../contexts/AuthContext";
-import { getSettings } from "../multiview/mvStore";
-import { getOverlayBaseUrlSync } from "../services/overlayUrl";
-import { getDeviceId } from "../services/authService";
-import { track } from "../services/analytics";
+import { getBibleSettings, getInstalledTranslations } from "../bible/bibleDb";
 import { TutorialModal } from "../components/TutorialModal";
-import { OnboardingResumeBanner } from "./OnboardingPage";
+import { useAuth } from "../contexts/AuthContext";
 import { useAppTheme } from "../hooks/useAppTheme";
+import { useCountryPricing } from "../hooks/useCountryPricing";
+import { getAllMedia } from "../library/libraryDb";
+import { getSettings } from "../multiview/mvStore";
+import { track } from "../services/analytics";
+import { getDeviceId } from "../services/authService";
+import { fetchCreditDetails, getCreditsBalance } from "../services/credits";
+import { getEffectivePlan, getTrialDaysRemaining, getUserPlan, getUserPlanLimits, isInTrial } from "../services/licenseService";
+import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
+import { obsService, type ConnectionStatus } from "../services/obsService";
+import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { getPlanConfig, getPlanLabel } from "../services/planConfig";
+import { getCachedSubscription } from "../services/subscriptionCache";
+import { getAllSongs } from "../worship/worshipDb";
+import { OnboardingResumeBanner } from "./OnboardingPage";
+import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -89,6 +100,7 @@ interface DashboardHeaderProps {
   dockAvailable: boolean;
   onConnectObs: () => void;
   onOpenTutorials: () => void;
+  onOpenTutorialsWithReset: () => void;
 }
 
 function DashboardHeader({
@@ -97,6 +109,7 @@ function DashboardHeader({
   dockAvailable,
   onConnectObs,
   onOpenTutorials,
+  onOpenTutorialsWithReset,
 }: DashboardHeaderProps) {
   const { t } = useTranslation();
   const greetingKey = useMemo(() => getGreetingKey(), []);
@@ -133,6 +146,14 @@ function DashboardHeader({
         </div>
         <div className="header-right">
           <button
+            className="btn-secondary"
+            onClick={() => onOpenTutorialsWithReset()}
+            title={t("dt.button.tooltip")}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+          >
+            <HelpCircle size={16} /> {t("dt.button")}
+          </button>
+          <button
             className="header-theme-toggle"
             onClick={() => setTheme(isLight ? "dark" : "light")}
             title={isLight ? t("dashboard.header.themeToggle.dark") : t("dashboard.header.themeToggle.light")}
@@ -150,7 +171,7 @@ function DashboardHeader({
             <p className="status-title">
               {t("dashboard.status.obs")} {obsConnected ? t("dashboard.obs.connected") : t("dashboard.obs.disconnected")}{" "}
               <span
-                className="status-dot"
+                className={`status-dot ${obsConnected ? "status-dot--live" : ""}`}
                 style={{
                   backgroundColor: obsConnected
                     ? "var(--success)"
@@ -208,6 +229,243 @@ function DashboardHeader({
         </button>
       </div>
     </>
+  );
+}
+
+// ── Dashboard Summary Cards ────────────────────────────────────────────────
+
+interface SummaryCardData {
+  plan: string;
+  planLabel: string;
+  credits: number | null;
+  creditsTotal: number;
+  creditsConsumed: number | null;
+  deviceLimit: number;
+  deviceUnlimited: boolean;
+  renewalDate: string | null;
+  trialActive: boolean;
+  trialDaysLeft: number;
+}
+
+function DashboardSummaryCards() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const [data, setData] = useState<SummaryCardData | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const load = async () => {
+      try {
+        const plan = getEffectivePlan(user);
+        const actualPlan = getUserPlan(user);
+        const limits = getUserPlanLimits(user);
+        const trial = isInTrial(user);
+        const trialDays = getTrialDaysRemaining(user);
+        const creditDetails = await fetchCreditDetails();
+        const sub = getCachedSubscription();
+        const config = await getPlanConfig();
+        const planLabel = getPlanLabel(config, actualPlan);
+
+        if (!mounted) return;
+        setData({
+          plan,
+          planLabel,
+          credits: creditDetails?.credits ?? getCreditsBalance(),
+          creditsTotal: creditDetails?.planAllocation ?? 0,
+          creditsConsumed: creditDetails?.totalConsumed ?? null,
+          deviceLimit: limits.devices,
+          deviceUnlimited: limits.unlimitedDevices,
+          renewalDate: sub?.payload?.expiresAt ?? null,
+          trialActive: trial,
+          trialDaysLeft: trialDays,
+        });
+      } catch {
+        if (!mounted) return;
+        setData(null);
+      }
+    };
+
+    load();
+    return () => { mounted = false; };
+  }, [user]);
+
+  if (!data) return null;
+
+  const renewalLabel = data.trialActive
+    ? t("dashboard.summary.renewalTrial", { date: data.renewalDate ? new Date(data.renewalDate).toLocaleDateString() : `${data.trialDaysLeft}d` })
+    : data.renewalDate
+      ? t("dashboard.summary.renewalActive", { date: new Date(data.renewalDate).toLocaleDateString() })
+      : t("dashboard.summary.renewalNone");
+
+  const creditsLabel = data.credits === null
+    ? "—"
+    : data.creditsTotal <= 0
+      ? t("dashboard.summary.creditsUnlimited")
+      : `${data.credits}`;
+
+  const deviceLabel = data.deviceUnlimited
+    ? t("dashboard.summary.devicesUnlimited")
+    : `${data.deviceLimit}`;
+
+  return (
+    <div className="summary-cards" data-dt-tutorial="summary-cards">
+      <div className="summary-card summary-card--plan">
+        <div className="summary-card-icon-wrap summary-card-icon--plan">
+          <Crown size={18} />
+        </div>
+        <div className="summary-card-body">
+          <span className="summary-card-label">{t("dashboard.summary.plan")}</span>
+          <span className="summary-card-value">{data.planLabel || t("dashboard.summary.planFree")}</span>
+          <span className="summary-card-sub">
+            {data.trialActive
+              ? t("dashboard.summary.planTrial") + ` — ${data.trialDaysLeft}d`
+              : t("dashboard.summary.planSubtitle")}
+          </span>
+        </div>
+      </div>
+
+      <div className="summary-card summary-card--credits">
+        <div className="summary-card-icon-wrap summary-card-icon--credits">
+          <Coins size={18} />
+        </div>
+        <div className="summary-card-body">
+          <span className="summary-card-label">{t("dashboard.summary.credits")}</span>
+          <span className="summary-card-value">{creditsLabel}</span>
+          <span className="summary-card-sub">
+            {data.creditsTotal > 0
+              ? t("dashboard.summary.creditsOf", { used: data.creditsConsumed ?? data.creditsTotal })
+              : t("dashboard.summary.creditsSubtitle")}
+          </span>
+        </div>
+      </div>
+
+      <div className="summary-card summary-card--devices">
+        <div className="summary-card-icon-wrap summary-card-icon--devices">
+          <MonitorSmartphone size={18} />
+        </div>
+        <div className="summary-card-body">
+          <span className="summary-card-label">{t("dashboard.summary.devices")}</span>
+          <span className="summary-card-value">{deviceLabel}</span>
+          <span className="summary-card-sub">
+            {data.deviceUnlimited
+              ? t("dashboard.summary.devicesUnlimited")
+              : t("dashboard.summary.devicesSubtitle", { limit: data.deviceLimit })}
+          </span>
+        </div>
+      </div>
+
+      <div className="summary-card summary-card--renewal">
+        <div className="summary-card-icon-wrap summary-card-icon--renewal">
+          <Calendar size={18} />
+        </div>
+        <div className="summary-card-body">
+          <span className="summary-card-label">{t("dashboard.summary.renewal")}</span>
+          <span className="summary-card-value summary-card-value--renewal">{renewalLabel}</span>
+          <span className="summary-card-sub">{t("dashboard.summary.renewalSubtitle")}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Plan Upgrade Banner ────────────────────────────────────────────────────
+
+function PlanUpgradeBanner() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const { getFormattedPlanPrice, loading } = useCountryPricing();
+  const trialActive = isInTrial(user);
+  const plan = getUserPlan(user);
+  const isFree = plan === "free";
+  const promoText = t("common.upgradePlansStartToday", {
+    amount: "3,500",
+    defaultValue: UPGRADE_PROMO_FALLBACK,
+  });
+
+  if (!trialActive && !isFree) return null;
+
+  const handleUpgrade = () => {
+    openUrl("https://makechurcheasy.creatorstudioslabs.stream/subscription/plans");
+  };
+
+  if (trialActive) {
+    const days = getTrialDaysRemaining(user);
+    return (
+      <div className="plan-upgrade-banner plan-upgrade-banner--trial">
+        <div className="plan-upgrade-banner-content">
+          <Crown size={16} className="plan-upgrade-banner-icon" />
+          <div className="plan-upgrade-banner-copy">
+            <span>Free trial — {days} day{days !== 1 ? "s" : ""} remaining</span>
+            <span className="plan-upgrade-banner-promo">{promoText}</span>
+          </div>
+        </div>
+        <button className="plan-upgrade-banner-btn" onClick={handleUpgrade}>
+          Upgrade <ArrowRight size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  const monthly = loading ? "..." : getFormattedPlanPrice("basic", "monthly");
+
+  return (
+    <div className="plan-upgrade-banner">
+      <div className="plan-upgrade-banner-content">
+        <Crown size={16} className="plan-upgrade-banner-icon" />
+        <div className="plan-upgrade-banner-copy">
+          <span>Upgrade to Basic — from {monthly}/month</span>
+          <span className="plan-upgrade-banner-promo">{promoText}</span>
+        </div>
+      </div>
+      <button className="plan-upgrade-banner-btn" onClick={handleUpgrade}>
+        Subscribe <ArrowRight size={14} />
+      </button>
+    </div>
+  );
+}
+
+// ── Monthly Usage Widget ────────────────────────────────────────────────────
+
+
+
+// ── Remote Presentation Status ─────────────────────────────────────────────
+
+
+
+// ── What's New Section ─────────────────────────────────────────────────────
+
+function WhatsNewSection() {
+  const { t } = useTranslation();
+  const [dismissed, setDismissed] = useState(false);
+
+  if (dismissed) return null;
+
+  return (
+    <div className="panel whatsnew-panel" data-dt-tutorial="whats-new">
+      <div className="whatsnew-header">
+        <div className="whatsnew-header-left">
+          <Newspaper size={18} className="whatsnew-icon" />
+          <h3 className="panel-title" style={{ marginBottom: 0 }}>{t("dashboard.whatsNew.title")}</h3>
+          <span className="whatsnew-badge">{t("dashboard.whatsNew.version", { version: "2.4" })}</span>
+        </div>
+        <button className="whatsnew-dismiss" onClick={() => setDismissed(true)} title={t("dashboard.whatsNew.dismiss")}>
+          ✕
+        </button>
+      </div>
+      <div className="whatsnew-body">
+        <ul className="whatsnew-list">
+          <li>{t("dashboard.monthlyUsage.title")} — track your AI and credit usage at a glance</li>
+          <li>Remote Presentation — control slides from any device</li>
+          <li>Dashboard summary cards — plan, credits, devices, renewal at a glance</li>
+        </ul>
+        <div className="whatsnew-footer">
+          <a className="whatsnew-link" href="https://github.com/MakeChurchEasy/makechurcheasy/releases" target="_blank" rel="noreferrer" title={t("dashboard.whatsNew.readMore")}>
+            {t("dashboard.whatsNew.readMore")}
+          </a>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -362,7 +620,8 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
   const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
 
   const deviceId = getDeviceId();
-  const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : "";
+  const versionParam = `_v=${__APP_VERSION__}`;
+  const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}&${versionParam}` : `?${versionParam}`;
   const overlayUrl = (isDev ? `${base}/dock` : `${base}/dock.html`) + deviceIdParam;
   const lmDockUrl = (isDev ? `${base}/lm-dock` : `${base}/lm-dock.html`) + deviceIdParam;
 
@@ -933,24 +1192,12 @@ export default function ProductionHomePage() {
 
   const handleOpenTutorials = useCallback(() => {
     track("tutorial_modal_opened");
-    openUrl("https://www.youtube.com/watch?v=08UjSYtjmLU");
+    openUrl("https://www.youtube.com/playlist?list=PLRua6gJfgC0o");
   }, []);
 
   return (
     <div className="app-page__inner">
       <OnboardingResumeBanner />
-
-      {/* ── Tutorial button ── */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-        <button
-          className="btn-secondary"
-          onClick={() => { resetDashboardTutorial(); setTourActive(true); setBannerDismissed(false); }}
-          title={t("dt.button.tooltip")}
-          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-        >
-          <HelpCircle size={16} /> {t("dt.button")}
-        </button>
-      </div>
 
       {/* ── Incomplete tutorial banner ── */}
       {!tourActive && !isDashboardTutorialCompleted() && !bannerDismissed && (
@@ -978,7 +1225,14 @@ export default function ProductionHomePage() {
         dockAvailable={dockAvailable}
         onConnectObs={handleConnectObs}
         onOpenTutorials={handleOpenTutorials}
+        onOpenTutorialsWithReset={() => {
+          resetDashboardTutorial();
+          setTourActive(true);
+          setBannerDismissed(false);
+        }}
       />
+      <DashboardSummaryCards />
+      <PlanUpgradeBanner />
       <FeatureGrid
         voiceBibleStatus={voiceBible.status}
         voiceBibleConnected={voiceBible.status !== "error"}
@@ -994,6 +1248,7 @@ export default function ProductionHomePage() {
       <div data-dt-tutorial="connection-urls">
         <ConnectionUrls obsStatus={obsStatus} />
       </div>
+      {/* <RemotePresentationStatus /> */}
       <div data-dt-tutorial="activity-log">
         <ActivityAndStatus
           activities={activities}
@@ -1006,6 +1261,7 @@ export default function ProductionHomePage() {
           onNavigate={handleNavigate}
         />
       </div>
+      <WhatsNewSection />
       <TutorialModal
         open={tutorialOpen}
         onClose={() => setTutorialOpen(false)}
