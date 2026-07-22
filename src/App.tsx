@@ -30,6 +30,7 @@ import ForceUpdateModal from "./components/ForceUpdateModal";
 import ForcedUpdateOverlay from "./components/ForcedUpdateOverlay";
 import VersionFloorWarningBanner from "./components/VersionFloorWarningBanner";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
+import TrialExpiredUpgradeModal from "./components/TrialExpiredUpgradeModal";
 import VerificationGate from "./components/VerificationGate";
 import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
@@ -1295,6 +1296,8 @@ function App() {
           onDismiss={handleTrialModalDismiss}
         />
       )}
+
+      {!splashVisible && <TrialExpiredUpgradeModal />}
 
       {globalMediaDragging && !splashVisible && (
         <div className="app-global-media-drop-overlay" aria-hidden="true">

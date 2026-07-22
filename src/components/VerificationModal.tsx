@@ -8,17 +8,41 @@
 
 import { useState, useCallback } from "react";
 import { retryVerification } from "../services/internetVerificationService";
+import type { VerificationPlanScope } from "../services/internetVerificationService";
 import Icon from "./Icon";
 
 interface Props {
   daysOffline: number;
   daysUntilNextTier: number | null;
+  planScope: VerificationPlanScope;
+  modalDismissible: boolean;
+  requiredDays: number | null;
   onDismiss: () => void;
 }
 
 type VerifyStatus = "idle" | "verifying" | "success" | "error";
 
-export default function VerificationModal({ daysOffline, daysUntilNextTier, onDismiss }: Props) {
+function getPlanLabel(planScope: VerificationPlanScope): string {
+  switch (planScope) {
+    case "trial":
+      return "free trial";
+    case "basic":
+      return "Basic plan";
+    case "free":
+      return "Free plan";
+    default:
+      return "account";
+  }
+}
+
+export default function VerificationModal({
+  daysOffline,
+  daysUntilNextTier,
+  planScope,
+  modalDismissible,
+  requiredDays,
+  onDismiss,
+}: Props) {
   const [status, setStatus] = useState<VerifyStatus>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -29,7 +53,9 @@ export default function VerificationModal({ daysOffline, daysUntilNextTier, onDi
       const success = await retryVerification();
       if (success) {
         setStatus("success");
-        setTimeout(() => onDismiss(), 1200);
+        if (modalDismissible) {
+          setTimeout(() => onDismiss(), 1200);
+        }
       } else {
         setStatus("error");
         setErrorMsg("Verification failed. Please check your internet connection and try again.");
@@ -38,16 +64,29 @@ export default function VerificationModal({ daysOffline, daysUntilNextTier, onDi
       setStatus("error");
       setErrorMsg("Verification failed. Please try again later.");
     }
-  }, [onDismiss]);
+  }, [modalDismissible, onDismiss]);
 
   const handleRetry = useCallback(() => {
     setStatus("idle");
     setErrorMsg(null);
   }, []);
 
-  const lockWarning = daysUntilNextTier !== null
-    ? `Access will be restricted in ${daysUntilNextTier} day${daysUntilNextTier === 1 ? "" : "s"} if not verified.`
-    : "Please verify your account to continue using the app.";
+  const planLabel = getPlanLabel(planScope);
+  const lockWarning = modalDismissible
+    ? (
+      daysUntilNextTier !== null
+        ? `Internet connection will become required in ${daysUntilNextTier} day${daysUntilNextTier === 1 ? "" : "s"}.`
+        : "Please connect soon to avoid losing offline access."
+    )
+    : (
+      requiredDays !== null
+        ? `${planLabel} devices must reconnect at least every ${requiredDays} day${requiredDays === 1 ? "" : "s"}.`
+        : "An internet connection is required before you can continue."
+    );
+  const title = modalDismissible ? "Account Verification Needed" : "Internet Connection Required";
+  const message = modalDismissible
+    ? `Your ${planLabel} has been offline for ${daysOffline} day${daysOffline === 1 ? "" : "s"}. Connect now so the app can refresh your account and keep working offline.`
+    : `Your ${planLabel} has reached its offline limit. Connect to the internet and refresh your account before you continue using the app.`;
 
   return (
     <div className="verification-overlay">
@@ -60,9 +99,9 @@ export default function VerificationModal({ daysOffline, daysUntilNextTier, onDi
 
         {/* Header */}
         <div className="verification-modal__header">
-          <Icon name="verified_user" size={24} />
+          <Icon name={modalDismissible ? "verified_user" : "wifi_off"} size={24} />
           <div>
-            <h2 className="verification-modal__title">Account Verification Needed</h2>
+            <h2 className="verification-modal__title">{title}</h2>
             <p className="verification-modal__subtitle">
               Your device has been offline for {daysOffline} day{daysOffline === 1 ? "" : "s"}
             </p>
@@ -71,10 +110,7 @@ export default function VerificationModal({ daysOffline, daysUntilNextTier, onDi
 
         {/* Body */}
         <div className="verification-modal__body">
-          <p className="verification-modal__message">
-            MakeChurchEasy needs to verify your account periodically to ensure continued access.
-            Please connect to the internet and verify your account.
-          </p>
+          <p className="verification-modal__message">{message}</p>
 
           <div className="verification-modal__warning">
             <Icon name="schedule" size={14} />
@@ -98,12 +134,12 @@ export default function VerificationModal({ daysOffline, daysUntilNextTier, onDi
 
         {/* Actions */}
         <div className="verification-modal__actions">
-          {status !== "success" && (
+          {status !== "success" && modalDismissible && (
             <button
               type="button"
               className="verification-modal__btn verification-modal__btn--secondary"
               onClick={onDismiss}
-             title="Continue">
+              title="Continue">
               Continue Offline
             </button>
           )}
@@ -113,16 +149,16 @@ export default function VerificationModal({ daysOffline, daysUntilNextTier, onDi
               type="button"
               className="verification-modal__btn verification-modal__btn--primary"
               onClick={status === "error" ? handleRetry : handleVerify}
-             title="Verify Now">
+              title={modalDismissible ? "Verify Now" : "Reconnect"}>
               <Icon name={status === "error" ? "refresh" : "wifi"} size={14} />
-              {status === "error" ? "Try Again" : "Verify Now"}
+              {status === "error" ? "Try Again" : modalDismissible ? "Verify Now" : "Reconnect"}
             </button>
           ) : status === "verifying" ? (
             <button
               type="button"
               className="verification-modal__btn verification-modal__btn--primary"
               disabled
-             title="Sync">
+              title="Sync">
               <Icon name="sync" size={14} className="verification-modal__icon--spin" />
               Verifying...
             </button>

@@ -21,11 +21,39 @@
 }
 
 .trial-expired-upgrade__header {
+  position: relative;
   padding: 26px 28px 22px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.2);
   background:
     radial-gradient(circle at top right, rgba(37, 99, 235, 0.2), transparent 34%),
     #111827;
+}
+
+.trial-expired-upgrade__close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.trial-expired-upgrade__close:hover {
+  background: rgba(148, 163, 184, 0.22);
+  color: #ffffff;
+}
+
+.trial-expired-upgrade__close:focus-visible {
+  outline: 3px solid rgba(96, 165, 250, 0.48);
+  outline-offset: 3px;
 }
 
 .trial-expired-upgrade__badge {

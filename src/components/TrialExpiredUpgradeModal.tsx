@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Icon from "./Icon";
 import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan, isTrialExpired } from "../services/licenseService";
@@ -18,11 +18,42 @@ async function openCheckout() {
 
 export default function TrialExpiredUpgradeModal() {
   const { user, authenticated, loading, isAdmin } = useAuth();
+  const [dismissed, setDismissed] = useState(false);
+
+  const dismissKey = useMemo(() => {
+    if (!user?.id || !user?.trial?.endsAt) return null;
+    return `mce-trial-expired-dismissed:${user.id}:${user.trial.endsAt}`;
+  }, [user?.id, user?.trial?.endsAt]);
 
   const shouldShow = useMemo(() => {
     if (loading || !authenticated || !user || isAdmin) return false;
+    if (dismissed) return false;
     return getEffectivePlan(user) === "free" && isTrialExpired(user);
-  }, [authenticated, isAdmin, loading, user]);
+  }, [authenticated, dismissed, isAdmin, loading, user]);
+
+  useEffect(() => {
+    if (!dismissKey) {
+      setDismissed(false);
+      return;
+    }
+
+    try {
+      setDismissed(sessionStorage.getItem(dismissKey) === "1");
+    } catch {
+      setDismissed(false);
+    }
+  }, [dismissKey]);
+
+  const handleDismiss = () => {
+    if (dismissKey) {
+      try {
+        sessionStorage.setItem(dismissKey, "1");
+      } catch {
+        // ignore session storage failures
+      }
+    }
+    setDismissed(true);
+  };
 
   if (!shouldShow) return null;
 
@@ -30,11 +61,19 @@ export default function TrialExpiredUpgradeModal() {
     <div
       className="trial-expired-upgrade"
       role="dialog"
-      aria-modal="true"
+      aria-modal="false"
       aria-labelledby="trial-expired-upgrade-title"
     >
       <div className="trial-expired-upgrade__card">
         <div className="trial-expired-upgrade__header">
+          <button
+            type="button"
+            className="trial-expired-upgrade__close"
+            onClick={handleDismiss}
+            aria-label="Close trial ended notice"
+          >
+            <Icon name="close" size={16} />
+          </button>
           <div className="trial-expired-upgrade__badge">
             <Icon name="lock" size={14} />
             Free trial ended
@@ -46,8 +85,8 @@ export default function TrialExpiredUpgradeModal() {
             Upgrade to continue using MakeChurchEasy
           </h2>
           <p className="trial-expired-upgrade__copy">
-            Your free trial has ended. Upgrade to Growth to keep presentation,
-            broadcast, library, and team tools active for your church.
+            Your account has already fallen back to Free. Upgrade to Growth if you
+            want your premium presentation, broadcast, library, and team tools back.
           </p>
         </div>
 
@@ -60,7 +99,7 @@ export default function TrialExpiredUpgradeModal() {
               <p className="trial-expired-upgrade__plan-title">Growth plan</p>
               <p className="trial-expired-upgrade__plan-copy">
                 The dashboard will open and start the secure Paystack checkout.
-                Your desktop access updates after payment is confirmed.
+                Your desktop access stays on Free until payment is confirmed.
               </p>
             </div>
           </div>

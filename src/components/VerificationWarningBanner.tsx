@@ -8,14 +8,29 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { retryVerification, dismissWarningBanner, isWarningBannerDismissed } from "../services/internetVerificationService";
+import type { VerificationPlanScope } from "../services/internetVerificationService";
 import Icon from "./Icon";
 
 interface Props {
   daysOffline: number;
   daysUntilNextTier: number | null;
+  planScope?: VerificationPlanScope;
 }
 
-export default function VerificationWarningBanner({ daysOffline, daysUntilNextTier }: Props) {
+function getWarningLabel(planScope?: VerificationPlanScope): string {
+  switch (planScope) {
+    case "trial":
+      return "Your free trial needs an internet check-in soon.";
+    case "basic":
+      return "Your Basic plan has been offline for a while.";
+    case "free":
+      return "Your Free plan needs an internet check-in soon.";
+    default:
+      return "Your device has been offline for a while.";
+  }
+}
+
+export default function VerificationWarningBanner({ daysOffline, daysUntilNextTier, planScope }: Props) {
   const [visible, setVisible] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +71,7 @@ export default function VerificationWarningBanner({ daysOffline, daysUntilNextTi
   const urgencyMessage = daysUntilNextTier !== null && daysUntilNextTier <= 7
     ? `Access restrictions begin in ${daysUntilNextTier} day${daysUntilNextTier === 1 ? "" : "s"}.`
     : "Connect to the internet to verify your account.";
+  const introMessage = getWarningLabel(planScope);
 
   return (
     <div className="verification-banner verification-banner--visible">
@@ -77,7 +93,7 @@ export default function VerificationWarningBanner({ daysOffline, daysUntilNextTi
 
         <div className="verification-banner__body">
           <p className="verification-banner__message">
-            Your device has been offline for {daysOffline} day{daysOffline === 1 ? "" : "s"}.
+            {introMessage} Your device has been offline for {daysOffline} day{daysOffline === 1 ? "" : "s"}.
             {" "}{urgencyMessage}
           </p>
 

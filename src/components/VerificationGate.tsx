@@ -78,20 +78,24 @@ export default function VerificationGate({ children }: Props) {
         <VerificationWarningBanner
           daysOffline={state.daysOffline}
           daysUntilNextTier={state.daysUntilNextTier}
+          planScope={state.planScope}
         />
       </>
     );
   }
 
   // Critical tier — render children with modal (once per launch)
-  if (state.tier === "critical") {
+  if (state.tier === "critical" || state.tier === "required") {
     return (
       <>
         {children}
-        {!modalDismissedThisSession && (
+        {(!modalDismissedThisSession || !state.modalDismissible) && (
           <VerificationModal
             daysOffline={state.daysOffline}
             daysUntilNextTier={state.daysUntilNextTier}
+            planScope={state.planScope}
+            modalDismissible={state.modalDismissible}
+            requiredDays={state.requiredDays}
             onDismiss={handleModalDismiss}
           />
         )}

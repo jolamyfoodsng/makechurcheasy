@@ -17,7 +17,8 @@
 
 import { getUserScopedKey } from "./userScopedStorage";
 import { getDesktopConfig } from "./desktopConfig";
-import { getDeviceId, getDeviceSecret } from "./authService";
+import { getDeviceId, getDeviceSecret, getStoredUser } from "./authService";
+import { getEffectivePlan, isInTrial } from "./licenseService";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,10 +35,12 @@ export interface VerificationSettings {
   verificationIntervalHours: number;
 }
 
-export type GracePeriodTier = "normal" | "warning" | "critical" | "locked";
+export type GracePeriodTier = "normal" | "warning" | "critical" | "required" | "locked";
+export type VerificationPlanScope = "trial" | "free" | "basic" | "premium";
 
 export interface GracePeriodState {
   tier: GracePeriodTier;
+  planScope: VerificationPlanScope;
   /** Full days since last successful verification */
   daysOffline: number;
   /** Days remaining before next tier threshold (null if already at max) */
@@ -48,6 +51,10 @@ export interface GracePeriodState {
   lastError: string | null;
   /** Whether the system is enabled */
   enabled: boolean;
+  /** Whether the current modal can be dismissed */
+  modalDismissible: boolean;
+  /** Day threshold when internet becomes required */
+  requiredDays: number | null;
 }
 
 export type Listener = (state: GracePeriodState) => void;
@@ -73,6 +80,13 @@ const DEFAULT_SETTINGS: VerificationSettings = {
   maxOfflineDays: 28,
   verificationIntervalHours: 4,
 };
+
+interface VerificationPolicy extends VerificationSettings {
+  criticalDays: number;
+  requiredDays: number;
+  lockDays: number | null;
+  planScope: VerificationPlanScope;
+}
 
 // ── Storage helpers ──────────────────────────────────────────────────────────
 
@@ -181,15 +195,20 @@ async function doFetchSettings(): Promise<VerificationSettings> {
 let _settings: VerificationSettings = DEFAULT_SETTINGS;
 let _state: GracePeriodState = {
   tier: "normal",
+  planScope: "premium",
   daysOffline: 0,
   daysUntilNextTier: null,
   verifying: false,
   lastError: null,
   enabled: true,
+  modalDismissible: true,
+  requiredDays: null,
 };
 let _listeners: Set<Listener> = new Set();
 let _periodicTimer: number | null = null;
 let _initialized = false;
+let _onlineHandler: (() => void) | null = null;
+let _visibilityHandler: (() => void) | null = null;
 
 function computeDaysOffline(): number {
   const lastVerified = readTimestamp(VERIFICATIONTimestamp_KEY);
@@ -198,28 +217,92 @@ function computeDaysOffline(): number {
   return Math.floor(msOffline / (1000 * 60 * 60 * 24));
 }
 
-function computeTier(_daysOffline: number, _settings: VerificationSettings): GracePeriodTier {
-  return "normal";
+function getVerificationPolicy(settings: VerificationSettings): VerificationPolicy {
+  const user = getStoredUser();
+
+  if (user && isInTrial(user)) {
+    return {
+      ...settings,
+      planScope: "trial",
+      warningDays: 10,
+      criticalDays: 13,
+      requiredDays: 14,
+      maxOfflineDays: 15,
+      lockDays: null,
+    };
+  }
+
+  const plan = user ? getEffectivePlan(user) : "free";
+  switch (plan) {
+    case "free":
+      return {
+        ...settings,
+        planScope: "free",
+        warningDays: 5,
+        criticalDays: 6,
+        requiredDays: 7,
+        maxOfflineDays: 7,
+        lockDays: null,
+      };
+    case "basic":
+      return {
+        ...settings,
+        planScope: "basic",
+        warningDays: 14,
+        criticalDays: 18,
+        requiredDays: 21,
+        maxOfflineDays: 21,
+        lockDays: null,
+      };
+    default:
+      return {
+        ...settings,
+        planScope: "premium",
+        warningDays: Math.max(1, settings.warningDays),
+        criticalDays: Math.max(settings.warningDays + 1, settings.criticalDays),
+        requiredDays: Math.max(settings.criticalDays + 1, settings.maxOfflineDays),
+        maxOfflineDays: settings.maxOfflineDays,
+        lockDays: null,
+      };
+  }
 }
 
-function computeDaysUntilNextTier(daysOffline: number, settings: VerificationSettings): number | null {
-  if (!settings.enabled) return null;
-  if (daysOffline < settings.warningDays) return settings.warningDays - daysOffline;
-  if (daysOffline < settings.criticalDays) return settings.criticalDays - daysOffline;
-  if (daysOffline < settings.maxOfflineDays) return settings.maxOfflineDays - daysOffline;
-  return null; // already at max
+function computeTier(daysOffline: number, policy: VerificationPolicy): GracePeriodTier {
+  if (!policy.enabled) return "normal";
+  if (daysOffline < policy.warningDays) return "normal";
+  if (daysOffline < policy.criticalDays) return "warning";
+  if (daysOffline < policy.requiredDays) return "critical";
+  if (policy.lockDays !== null && daysOffline >= policy.lockDays) return "locked";
+  return "required";
+}
+
+function computeDaysUntilNextTier(daysOffline: number, policy: VerificationPolicy): number | null {
+  if (!policy.enabled) return null;
+  if (daysOffline < policy.warningDays) return policy.warningDays - daysOffline;
+  if (daysOffline < policy.criticalDays) return policy.criticalDays - daysOffline;
+  if (daysOffline < policy.requiredDays) return policy.requiredDays - daysOffline;
+  if (policy.lockDays !== null && daysOffline < policy.lockDays) return policy.lockDays - daysOffline;
+  return null;
+}
+
+function isModalDismissible(tier: GracePeriodTier): boolean {
+  return tier === "critical";
 }
 
 function recomputeState(): GracePeriodState {
   const daysOffline = computeDaysOffline();
-  const tier = computeTier(daysOffline, _settings);
-  const daysUntilNextTier = computeDaysUntilNextTier(daysOffline, _settings);
+  const policy = getVerificationPolicy(_settings);
+  const tier = computeTier(daysOffline, policy);
+  const daysUntilNextTier = computeDaysUntilNextTier(daysOffline, policy);
 
   _state = {
     ..._state,
     tier,
+    planScope: policy.planScope,
     daysOffline,
     daysUntilNextTier,
+    modalDismissible: isModalDismissible(tier),
+    requiredDays: policy.requiredDays,
     enabled: _settings.enabled,
   };
   return _state;
@@ -263,6 +346,7 @@ export async function initVerification(): Promise<GracePeriodState> {
 
   // Start periodic verification
   startPeriodicVerification();
+  startConnectivityListeners();
 
   return _state;
 }
@@ -365,6 +449,33 @@ function startPeriodicVerification(): void {
   }, intervalMs);
 }
 
+function startConnectivityListeners(): void {
+  if (_onlineHandler || _visibilityHandler) return;
+
+  _onlineHandler = () => {
+    void verify();
+  };
+  _visibilityHandler = () => {
+    if (document.visibilityState === "visible" && navigator.onLine) {
+      void verify();
+    }
+  };
+
+  window.addEventListener("online", _onlineHandler);
+  document.addEventListener("visibilitychange", _visibilityHandler);
+}
+
+function stopConnectivityListeners(): void {
+  if (_onlineHandler) {
+    window.removeEventListener("online", _onlineHandler);
+    _onlineHandler = null;
+  }
+  if (_visibilityHandler) {
+    document.removeEventListener("visibilitychange", _visibilityHandler);
+    _visibilityHandler = null;
+  }
+}
+
 function stopPeriodicVerification(): void {
   if (_periodicTimer !== null) {
     window.clearInterval(_periodicTimer);
@@ -377,6 +488,7 @@ function stopPeriodicVerification(): void {
  */
 export function destroyVerification(): void {
   stopPeriodicVerification();
+  stopConnectivityListeners();
   _listeners.clear();
   _initialized = false;
 }
