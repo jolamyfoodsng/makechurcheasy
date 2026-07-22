@@ -469,9 +469,7 @@ function StepInstallDock({
   onTutorial: () => void;
 }) {
   const [copied, setCopied] = useState<"dock" | "ai" | null>(null);
-  const isDev = getEnvConfig().isTest &&
-    window.location.protocol === "http:" && window.location.port === "1501";
-  const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
+  const base = getEnvConfig().isTest ? "http://localhost:1420" : getOverlayBaseUrlSync();
   const dockUrl = `${base}/dock`;
   const aiUrl = `${base}/lm-dock`;
 
@@ -602,9 +600,8 @@ function StepTest({
   const runDiagnostics = useCallback(async () => {
     setRunning(true);
     const results: DiagItem[] = [];
-    const isDev = getEnvConfig().isTest &&
-      window.location.protocol === "http:" && window.location.port === "1501";
-    const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
+    const isDev = getEnvConfig().isTest;
+    const base = isDev ? "http://localhost:1420" : getOverlayBaseUrlSync();
 
     // 1. OBS
     results.push({

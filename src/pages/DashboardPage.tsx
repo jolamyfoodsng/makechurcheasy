@@ -44,16 +44,12 @@ export default function DashboardPage() {
   // Keep OBS dock URLs stable. The dock reads the active device session from
   // the local overlay server instead of requiring a deviceId query string.
   const dockUrl = useMemo(() => {
-    const isDev = getEnvConfig().isTest &&
-      window.location.protocol === "http:" && window.location.port === "1501";
-    const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
+    const base = getEnvConfig().isTest ? "http://localhost:1420" : getOverlayBaseUrlSync();
     return `${base}/dock`;
   }, []);
 
   const lmDockUrl = useMemo(() => {
-    const isDev = getEnvConfig().isTest &&
-      window.location.protocol === "http:" && window.location.port === "1501";
-    const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
+    const base = getEnvConfig().isTest ? "http://localhost:1420" : getOverlayBaseUrlSync();
     return `${base}/lm-dock`;
   }, []);
 

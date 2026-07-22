@@ -619,9 +619,7 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showInstructions, setShowInstructions] = useState(false);
 
-  const isDev = getEnvConfig().isTest &&
-    window.location.protocol === "http:" && window.location.port === "1501";
-  const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
+  const base = getEnvConfig().isTest ? "http://localhost:1420" : getOverlayBaseUrlSync();
 
   const overlayUrl = `${base}/dock`;
   const lmDockUrl = `${base}/lm-dock`;
