@@ -16,7 +16,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "./MultiViewGalleryTutorial.css";
 
@@ -39,9 +39,14 @@ interface TutorialStep {
   skipIf?: () => boolean;
   /** Position of the assistant panel relative to target */
   panelPosition: "right" | "left" | "top" | "bottom";
+  /** For large content targets, place the panel inside the highlighted region. */
+  panelStrategy?: "inside-top" | "viewport-center" | "target-center";
 }
 
 const TUTORIAL_STORAGE_KEY = "mce.multiview-gallery.tutorial.completed";
+const MGT_OVERLAY_Z_INDEX = 100100;
+const MGT_TARGET_ANCESTOR_Z_INDEX = MGT_OVERLAY_Z_INDEX + 5;
+const MGT_TARGET_Z_INDEX = MGT_OVERLAY_Z_INDEX + 6;
 
 // ── Target Elevation ───────────────────────────────────────────────────────
 
@@ -61,7 +66,7 @@ function elevateTarget(el: HTMLElement, interactive: boolean): () => void {
   while (parent && parent !== document.documentElement) {
     if (getComputedStyle(parent).position !== "static") {
       ancestors.push([parent, parent.style.zIndex]);
-      parent.style.zIndex = "10005";
+      parent.style.zIndex = String(MGT_TARGET_ANCESTOR_Z_INDEX);
     }
     parent = parent.parentElement;
   }
@@ -71,7 +76,7 @@ function elevateTarget(el: HTMLElement, interactive: boolean): () => void {
     el.style.position = "relative";
   }
   const origZ = el.style.zIndex;
-  el.style.zIndex = "10006";
+  el.style.zIndex = String(MGT_TARGET_Z_INDEX);
 
   // ── visual effects ───────────────────────────────────────────────────
   const glow = interactive
@@ -133,7 +138,7 @@ export default function MultiViewGalleryTutorial({
   const [stepIndex, setStepIndex] = useState(0);
   const [stepCompleted, setStepCompleted] = useState(false);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
-  const [panelRect, setPanelRect] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [panelRect, setPanelRect] = useState<{ top: number; left: number; width?: number }>({ top: 0, left: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
 
   // ── Step Definitions ───────────────────────────────────────────────────
@@ -146,6 +151,7 @@ export default function MultiViewGalleryTutorial({
       actionKey: "mgt.step1.action",
       trigger: "none",
       panelPosition: "right",
+      panelStrategy: "target-center",
     },
     {
       target: "[data-mgt-tutorial='search']",
@@ -154,6 +160,7 @@ export default function MultiViewGalleryTutorial({
       actionKey: "mgt.step2.action",
       trigger: "none",
       panelPosition: "right",
+      panelStrategy: "target-center",
     },
     {
       target: "[data-mgt-tutorial='filters']",
@@ -162,6 +169,7 @@ export default function MultiViewGalleryTutorial({
       actionKey: "mgt.step3.action",
       trigger: "none",
       panelPosition: "right",
+      panelStrategy: "target-center",
     },
     {
       target: "[data-mgt-tutorial='grid']",
@@ -169,7 +177,8 @@ export default function MultiViewGalleryTutorial({
       descKey: "mgt.step4.desc",
       actionKey: "mgt.step4.action",
       trigger: "none",
-      panelPosition: "right",
+      panelPosition: "top",
+      panelStrategy: "target-center",
     },
     {
       target: "[data-mgt-tutorial='card-actions']",
@@ -178,6 +187,7 @@ export default function MultiViewGalleryTutorial({
       actionKey: "mgt.step5.action",
       trigger: "none",
       panelPosition: "right",
+      panelStrategy: "target-center",
     },
   ], []);
 
@@ -226,32 +236,146 @@ export default function MultiViewGalleryTutorial({
 
   // ── Panel Positioning ─────────────────────────────────────────────────
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const viewport = {
+      width: Math.min(
+        window.innerWidth,
+        document.documentElement.clientWidth || window.innerWidth,
+        window.visualViewport?.width ?? window.innerWidth,
+      ),
+      height: Math.min(
+        window.innerHeight,
+        document.documentElement.clientHeight || window.innerHeight,
+        window.visualViewport?.height ?? window.innerHeight,
+      ),
+    };
+    const clamp = (value: number, min: number, max: number) => {
+      if (max < min) return min;
+      return Math.max(min, Math.min(value, max));
+    };
+    const fits = (
+      pos: { top: number; left: number },
+      panelW: number,
+      panelH: number,
+      margin: number,
+    ) => (
+      pos.left >= margin &&
+      pos.top >= margin &&
+      pos.left + panelW <= viewport.width - margin &&
+      pos.top + panelH <= viewport.height - margin
+    );
+    const positionFor = (
+      rect: DOMRect,
+      panelW: number,
+      panelH: number,
+      placement: TutorialStep["panelPosition"],
+      gap: number,
+    ) => {
+      switch (placement) {
+        case "left":
+          return {
+            top: rect.top + rect.height / 2 - panelH / 2,
+            left: rect.left - gap - panelW,
+          };
+        case "top":
+          return {
+            top: rect.top - gap - panelH,
+            left: rect.left + rect.width / 2 - panelW / 2,
+          };
+        case "bottom":
+          return {
+            top: rect.bottom + gap,
+            left: rect.left + rect.width / 2 - panelW / 2,
+          };
+        case "right":
+        default:
+          return {
+            top: rect.top + rect.height / 2 - panelH / 2,
+            left: rect.right + gap,
+          };
+      }
+    };
+
     if (isFinalStep || !targetRect) {
-      setPanelRect({ top: window.innerHeight / 2 - 180, left: window.innerWidth / 2 - 180 });
+      const panelW = Math.min(panelRef.current?.offsetWidth ?? (isFinalStep ? 400 : 340), viewport.width - 40);
+      const panelH = Math.min(panelRef.current?.offsetHeight ?? 360, viewport.height - 40);
+      setPanelRect({
+        top: clamp(viewport.height / 2 - panelH / 2, 20, viewport.height - panelH - 20),
+        left: clamp(viewport.width / 2 - panelW / 2, 20, viewport.width - panelW - 20),
+        width: panelW,
+      });
       return;
     }
 
-    const panelW = 340;
-    const panelH = 300;
+    const panelW = Math.min(panelRef.current?.offsetWidth ?? 340, viewport.width - 40);
+    const panelH = Math.min(panelRef.current?.offsetHeight ?? 300, viewport.height - 40);
     const gap = 20;
+    const margin = 20;
 
-    let top = targetRect.top + targetRect.height / 2 - panelH / 2;
-    let left = targetRect.right + gap;
-
-    if (left + panelW > window.innerWidth - 20) {
-      left = targetRect.left - gap - panelW;
+    if (currentStep?.panelStrategy === "target-center") {
+      const visibleLeft = Math.max(targetRect.left, margin);
+      const visibleRight = Math.min(targetRect.right, viewport.width - margin);
+      const visibleWidth = Math.max(0, visibleRight - visibleLeft);
+      const effectivePanelW = Math.min(
+        panelW,
+        Math.max(260, Math.floor(visibleWidth * 0.46)),
+        viewport.width - margin * 2,
+      );
+      const targetCenterX = visibleLeft + visibleWidth / 2;
+      setPanelRect({
+        top: clamp(viewport.height / 2 - panelH / 2, margin, viewport.height - panelH - margin),
+        left: clamp(targetCenterX - effectivePanelW / 2, margin, viewport.width - effectivePanelW - margin),
+        width: effectivePanelW,
+      });
+      return;
     }
 
-    if (left < 20) {
-      left = Math.max(20, (window.innerWidth - panelW) / 2);
-      top = targetRect.bottom + gap;
+    if (currentStep?.panelStrategy === "viewport-center") {
+      const maxPanelW = Math.min(panelW, Math.floor(viewport.width * 0.46));
+      const effectivePanelW = Math.max(260, maxPanelW);
+      setPanelRect({
+        top: clamp(viewport.height / 2 - panelH / 2, margin, viewport.height - panelH - margin),
+        left: clamp(viewport.width / 2 - effectivePanelW / 2, margin, viewport.width - effectivePanelW - margin),
+        width: effectivePanelW,
+      });
+      return;
     }
 
-    top = Math.max(20, Math.min(top, window.innerHeight - panelH - 20));
+    if (currentStep?.panelStrategy === "inside-top") {
+      const visibleLeft = Math.max(targetRect.left, margin);
+      const visibleRight = Math.min(targetRect.right, viewport.width - margin);
+      const visibleTop = Math.max(targetRect.top, margin);
+      setPanelRect({
+        top: clamp(visibleTop + 24, margin, viewport.height - panelH - margin),
+        left: clamp(visibleRight - panelW - 24, visibleLeft + 24, viewport.width - panelW - margin),
+        width: panelW,
+      });
+      return;
+    }
 
-    setPanelRect({ top, left });
-  }, [targetRect, isFinalStep]);
+    const placements = Array.from(new Set<TutorialStep["panelPosition"]>([
+      currentStep?.panelPosition ?? "right",
+      "right",
+      "left",
+      "bottom",
+      "top",
+    ]));
+
+    for (const placement of placements) {
+      const pos = positionFor(targetRect, panelW, panelH, placement, gap);
+      if (fits(pos, panelW, panelH, margin)) {
+        setPanelRect(pos);
+        return;
+      }
+    }
+
+    const preferred = positionFor(targetRect, panelW, panelH, currentStep?.panelPosition ?? "right", gap);
+    setPanelRect({
+      top: clamp(preferred.top, margin, viewport.height - panelH - margin),
+      left: clamp(preferred.left, margin, viewport.width - panelW - margin),
+      width: panelW,
+    });
+  }, [targetRect, isFinalStep, currentStep?.panelPosition, currentStep?.panelStrategy, stepCompleted]);
 
   // ── Trigger Event Listeners ───────────────────────────────────────────
 
@@ -335,7 +459,7 @@ export default function MultiViewGalleryTutorial({
       onFinish();
       return;
     }
-    if (stepIndex < totalSteps - 1) {
+    if (stepIndex < totalSteps) {
       setStepCompleted(false);
       setStepIndex((i) => i + 1);
     }
@@ -371,14 +495,14 @@ export default function MultiViewGalleryTutorial({
 
   // ── Nothing to render ─────────────────────────────────────────────────
 
-  if (!isActive || !currentStep) return null;
+  if (!isActive || (!currentStep && !isFinalStep)) return null;
 
   // ── Final Step ────────────────────────────────────────────────────────
 
   if (isFinalStep) {
     return (
       <div className="mgt-overlay" style={{ pointerEvents: "auto" }} onClick={onClose}>
-        <div className="mgt-panel mgt-panel--final" style={{ top: panelRect.top, left: panelRect.left }}>
+        <div className="mgt-panel mgt-panel--final" style={{ top: panelRect.top, left: panelRect.left, width: panelRect.width }}>
           <button className="mgt-close" onClick={onClose} title="Close">
             <X size={16} />
           </button>
@@ -424,7 +548,7 @@ export default function MultiViewGalleryTutorial({
       <div
         ref={panelRef}
         className="mgt-panel"
-        style={{ top: panelRect.top, left: panelRect.left }}
+        style={{ top: panelRect.top, left: panelRect.left, width: panelRect.width }}
       >
         {/* Progress bar */}
         <div className="mgt-progress-bar">

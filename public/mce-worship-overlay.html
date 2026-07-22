@@ -3,8 +3,42 @@
 
 <head>
   <meta charset="UTF-8">
+<<<<<<< HEAD
+  <meta name="viewport" content="width=1920, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>MCE Worship Overlay</title>
+  <script>
+    (function() {
+      document.addEventListener("keydown", function(e) { var c = e.ctrlKey || e.metaKey; if (!c) return; var k = e.key; if (k === "=" || k === "-" || k === "0" || k === "Plus" || k === "Minus" || k === "NumpadAdd" || k === "NumpadSubtract" || k === "Numpad0") { e.preventDefault(); e.stopPropagation(); } }, true);
+      document.addEventListener("wheel", function(e) { if (e.ctrlKey || e.metaKey) e.preventDefault(); }, { passive: false, capture: true });
+      document.addEventListener("gesturestart", function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gesturechange", function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gestureend", function(e) { e.preventDefault(); }, { passive: false });
+    })();
+  </script>
+  <style>html,body,#overlay-root,#overlay-bg-buffer{touch-action:pan-y;-ms-content-zooming:none;}</style>
+  <script>
+    (function() {
+      var W = 1920, H = 1080;
+      var stage = document.getElementById('overlay-stage');
+      if (!stage) return;
+      stage.style.width = W + 'px';
+      stage.style.height = H + 'px';
+      stage.style.transformOrigin = '0 0';
+      stage.style.position = 'absolute';
+      stage.style.top = '0';
+      stage.style.left = '0';
+      function fit() {
+        var s = Math.min(window.innerWidth / W, window.innerHeight / H);
+        stage.style.transform = 'scale(' + s + ')';
+      }
+      fit();
+      window.addEventListener('resize', fit);
+    })();
+  </script>
+=======
   <meta name="viewport" content="width=1920, initial-scale=1">
   <title>MCE Worship Overlay</title>
+>>>>>>> origin/main
   <style>
     /* ── Shared: Font-face ── */
     @font-face {

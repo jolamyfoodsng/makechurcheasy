@@ -43,7 +43,7 @@ use std::path::{Component, Path};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::Manager;
+use tauri::{image::Image, Manager};
 
 /// The port the overlay server is running on (set at startup).
 static OVERLAY_PORT: AtomicU16 = AtomicU16::new(0);
@@ -52,6 +52,22 @@ static OVERLAY_PORT: AtomicU16 = AtomicU16::new(0);
 /// Written by POST /api/auth/session, read by GET /api/auth/status.
 /// Avoids file-sync race conditions on app startup.
 static AUTH_SESSION: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn dev_window_icon() -> Option<Image<'static>> {
+    #[cfg(debug_assertions)]
+    {
+        Some(Image::new_owned(
+            include_bytes!("../icons/icon-dev.rgba").to_vec(),
+            512,
+            512,
+        ))
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        None
+    }
+}
 
 // ── macOS App Nap prevention ─────────────────────────────────────────────────
 // When MakeChurchEasy is transcribing in the background, macOS may throttle the app
@@ -3022,7 +3038,7 @@ fn structure_worship_import_chunk(
     request: WorshipImportStructureRequest,
 ) -> Result<WorshipImportStructureResponse, String> {
     let api_key = get_opencode_api_key()?;
-    let client = build_opencode_client(120)?;
+    let client = build_opencode_client(45)?;
     let system_prompt = build_worship_import_system_prompt();
     let user_prompt = build_worship_import_user_prompt(&request);
 
@@ -5054,9 +5070,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                             continue;
                         }
 
-                        // Redirect to Vite dev server (localhost:1420) so it handles
+                        // Redirect to Vite dev server (localhost:1501) so it handles
                         // module transforms, HMR, etc.
-                        let redirect_url = format!("http://localhost:1420/{}", clean);
+                        let redirect_url = format!("http://localhost:1501/{}", clean);
                         let header = overlay_header("Location", redirect_url.as_str());
                         let cors = overlay_header("Access-Control-Allow-Origin", "*");
                         let resp =
@@ -5169,22 +5185,38 @@ mod app_icon {
         fn mce_set_app_icon(data: *const u8, len: usize) -> bool;
     }
 
+    fn candidate_icon_names(filename: &str) -> Vec<String> {
+        let mut names = Vec::new();
+
+        #[cfg(debug_assertions)]
+        if let Some((stem, ext)) = filename.rsplit_once('.') {
+            names.push(format!("{stem}-dev.{ext}"));
+        }
+
+        names.push(filename.to_string());
+        names
+    }
+
     /// Resolve the absolute path to an icon file inside `app_icons/`.
     ///
     /// Resolution order:
     ///   1. `<resource_dir>/app_icons/<filename>`   (bundled production app)
     ///   2. `<project>/public/app_icons/<filename>`  (Vite dev server)
     fn resolve_icon_path(app: &tauri::AppHandle, filename: &str) -> Option<PathBuf> {
+        let icon_names = candidate_icon_names(filename);
+
         // Bundled production path
         if let Ok(resource_dir) = app.path().resource_dir() {
-            let path = resource_dir.join("app_icons").join(filename);
-            println!(
-                "[AppIcon] Checking bundled path: {:?} exists={}",
-                path,
-                path.exists()
-            );
-            if path.exists() {
-                return Some(path);
+            for icon_name in &icon_names {
+                let path = resource_dir.join("app_icons").join(icon_name);
+                println!(
+                    "[AppIcon] Checking bundled path: {:?} exists={}",
+                    path,
+                    path.exists()
+                );
+                if path.exists() {
+                    return Some(path);
+                }
             }
         }
 
@@ -5197,19 +5229,24 @@ mod app_icon {
                 .and_then(|p| p.parent())
             // project root
             {
-                let path = project_root.join("public").join("app_icons").join(filename);
-                println!(
-                    "[AppIcon] Checking dev fallback: {:?} exists={}",
-                    path,
-                    path.exists()
-                );
-                if path.exists() {
-                    return Some(path);
+                for icon_name in &icon_names {
+                    let path = project_root.join("public").join("app_icons").join(icon_name);
+                    println!(
+                        "[AppIcon] Checking dev fallback: {:?} exists={}",
+                        path,
+                        path.exists()
+                    );
+                    if path.exists() {
+                        return Some(path);
+                    }
                 }
             }
         }
 
-        println!("[AppIcon] Icon not found: {}", filename);
+        println!(
+            "[AppIcon] Icon not found: {} (candidates: {:?})",
+            filename, icon_names
+        );
         None
     }
 
@@ -5418,6 +5455,25 @@ pub fn run() {
 
             app.manage(audio_capture::AudioCaptureState::default());
             app.manage(assemblyai_stream::AssemblyAiStreamState::default());
+
+            if let Some(window) = app.get_webview_window("main") {
+                if let Some(icon) = dev_window_icon() {
+                    let _ = window.set_icon(icon);
+                }
+            }
+
+            #[cfg(all(target_os = "macos", debug_assertions))]
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) =
+                        app_icon::set_app_icon(app_handle, "app_icon_general.png".to_string())
+                            .await
+                    {
+                        eprintln!("[AppIcon] Failed to apply dev startup icon: {}", error);
+                    }
+                });
+            }
 
             // Prevent macOS App Nap — keeps audio capture and transcription
             // running reliably when the app is in the background.

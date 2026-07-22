@@ -11,6 +11,7 @@
 
 import OBSWebSocket from "obs-websocket-js";
 import { getDefaultOBSUrl } from "./desktopConfig";
+import { resolveOBSWebSocketConfig } from "./obsConnectionSettings";
 import * as connTracker from "./obsConnectionTracker";
 import * as obsQueue from "./obsRequestQueue";
 import {
@@ -245,7 +246,7 @@ class OBSService {
    * 3. 5s timeout prevents hangs
    */
   async connect(
-    url: string = getDefaultOBSUrl(),
+    url?: string,
     password?: string
   ): Promise<void> {
     // Guard: prevent concurrent connect attempts
@@ -264,9 +265,11 @@ class OBSService {
       await this.safeDisconnect();
     }
 
+    const resolved = await resolveOBSWebSocketConfig(url, password);
+
     // Save connection params for auto-reconnect
-    this.lastUrl = url;
-    this.lastPassword = password;
+    this.lastUrl = resolved.url;
+    this.lastPassword = resolved.password;
     this.autoReconnect = true;
 
     this.connectLock = true;
@@ -274,7 +277,7 @@ class OBSService {
 
     try {
       // Race between connect and 5s timeout
-      const connectPromise = this.obs.connect(url, password, {
+      const connectPromise = this.obs.connect(resolved.url, resolved.password, {
         rpcVersion: 1,
       });
 
@@ -285,7 +288,7 @@ class OBSService {
       await Promise.race([connectPromise, timeoutPromise]);
       this.reconnectAttempts = 0;
       this.setStatus("connected");
-      connTracker.register("main-app", url);
+      connTracker.register("main-app", resolved.url);
 
       // Safety: ensure OBS has at least one scene to prevent crashes
       await this.ensureSafeState();

@@ -49,7 +49,6 @@ import { useCountryPricing } from "../hooks/useCountryPricing";
 import { getAllMedia } from "../library/libraryDb";
 import { getSettings } from "../multiview/mvStore";
 import { track } from "../services/analytics";
-import { getDeviceId } from "../services/authService";
 import { fetchCreditDetails, getCreditsBalance } from "../services/credits";
 import { getEffectivePlan, getTrialDaysRemaining, getUserPlan, getUserPlanLimits, isInTrial } from "../services/licenseService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
@@ -60,6 +59,7 @@ import { getCachedSubscription } from "../services/subscriptionCache";
 import { getAllSongs } from "../worship/worshipDb";
 import { OnboardingResumeBanner } from "./OnboardingPage";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
+import { getEnvConfig } from "../services/envConfig";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -248,6 +248,8 @@ interface SummaryCardData {
 }
 
 function DashboardSummaryCards() {
+  if (getEnvConfig().isTest) return null;
+
   const { t } = useTranslation();
   const { user } = useAuth();
   const [data, setData] = useState<SummaryCardData | null>(null);
@@ -436,6 +438,8 @@ function PlanUpgradeBanner() {
 // ── What's New Section ─────────────────────────────────────────────────────
 
 function WhatsNewSection() {
+  if (getEnvConfig().isTest) return null;
+
   const { t } = useTranslation();
   const [dismissed, setDismissed] = useState(false);
 
@@ -616,14 +620,11 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
   const [showInstructions, setShowInstructions] = useState(false);
 
   const isDev =
-    window.location.protocol === "http:" && window.location.port === "1420";
+    window.location.protocol === "http:" && window.location.port === "1501";
   const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
 
-  const deviceId = getDeviceId();
-  const versionParam = `_v=${__APP_VERSION__}`;
-  const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}&${versionParam}` : `?${versionParam}`;
-  const overlayUrl = (isDev ? `${base}/dock` : `${base}/dock.html`) + deviceIdParam;
-  const lmDockUrl = (isDev ? `${base}/lm-dock` : `${base}/lm-dock.html`) + deviceIdParam;
+  const overlayUrl = `${base}/dock`;
+  const lmDockUrl = `${base}/lm-dock`;
 
   const obsConnected = obsStatus === "connected";
 

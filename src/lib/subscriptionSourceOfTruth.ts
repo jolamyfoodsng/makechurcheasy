@@ -37,6 +37,15 @@ export interface EffectivePlanUserLike {
   ambassador?: {
     active?: boolean;
   } | null;
+  adminTemporaryPlan?: {
+    active?: boolean;
+    expiresAt?: string | null;
+  } | null;
+  adminManagedSubscription?: {
+    active?: boolean;
+    expiresAt?: string | null;
+  } | null;
+  subscriptionExpiresAt?: string | null;
 }
 
 export interface PlanPrice {
@@ -300,6 +309,29 @@ function normalizeBooleanFlag(value: unknown): boolean {
   return value === true;
 }
 
+function isExpiredAdminTemporaryPlan(
+  user: EffectivePlanUserLike | null | undefined,
+  nowMs: number,
+): boolean {
+  const temp = user?.adminTemporaryPlan;
+  if (!normalizeBooleanFlag(temp?.active)) return false;
+  if (!temp?.expiresAt) return false;
+  const expiresAtMs = new Date(temp.expiresAt).getTime();
+  return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
+}
+
+function isExpiredAdminManagedSubscription(
+  user: EffectivePlanUserLike | null | undefined,
+  nowMs: number,
+): boolean {
+  const managed = user?.adminManagedSubscription;
+  const expiresAt = managed?.expiresAt || user?.subscriptionExpiresAt;
+  if (!normalizeBooleanFlag(managed?.active)) return false;
+  if (!expiresAt) return false;
+  const expiresAtMs = new Date(expiresAt).getTime();
+  return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
+}
+
 export function normalizePlanId(plan?: string | null): CanonicalPlanId {
   const normalized = String(plan || "free").trim().toLowerCase();
   if ((CANONICAL_PLAN_IDS as readonly string[]).includes(normalized)) {
@@ -331,6 +363,8 @@ export function getEffectivePlan(
 ): CanonicalPlanId {
   if (!user) return "free";
   if (String(user.role || "").toLowerCase() === "admin") return "pro";
+  if (isExpiredAdminTemporaryPlan(user, nowMs)) return "free";
+  if (isExpiredAdminManagedSubscription(user, nowMs)) return "free";
   if (normalizeBooleanFlag(user.ambassador?.active)) return "pro";
   if (isActiveTrial(user, nowMs)) return "growth";
   return normalizePlanId(user.plan);

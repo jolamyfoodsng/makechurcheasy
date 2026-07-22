@@ -4,6 +4,7 @@
  * Sub-tabs:
  *   1. Lower Thirds — send/blank lower-third overlays via OBS
  *   2. Countdowns — countdown timers
+ *   3. Tickers — push scrolling ticker announcements to OBS
  *
  * Uses dockObsClient for OBS communication (same WebSocket
  * connection shared across all dock tabs).
@@ -15,8 +16,12 @@ import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import type { DockStagedItem } from "../dockTypes";
 import Icon from "../DockIcon";
+import {
+  TICKER_THEMES,
+  generateTickerHTML,
+} from "../../components/modules/tickerThemes";
 import { LT_ALL_THEMES } from "../../lowerthirds/themes";
-import { loadDockLTFavorites, loadDockFavoriteBibleThemes } from "../dockThemeData";
+import { loadDockLTFavorites, loadDockFavoriteBibleThemes, loadDockTickerFavorites } from "../dockThemeData";
 import type { LowerThirdTheme } from "../../lowerthirds/types";
 import type { LTSize } from "../../lowerthirds/types";
 import { LT_SIZE_LABELS, LT_SIZE_SCALE } from "../../lowerthirds/types";
@@ -24,14 +29,16 @@ import type { BibleTheme } from "../../bible/types";
 import allThemesData from "../../../lower_thirds/all_themes.json";
 import DockLowerThirdEditor from "./DockLowerThirdEditor";
 import DockCountdownsTab from "./DockCountdownsTab";
-import { requireEntitlement, getDockPlan } from "../dockEntitlement";
+import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitlement";
+import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
-import { localizeLowerThirdThemeAssets } from "../../lowerthirds/runtimeBranding";
+import { normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
+import { loadProjectionSettings, saveProjectionSettings } from "../dockProjectionSettings";
 
 const ALL_LT_THEMES: LowerThirdTheme[] = [
   ...LT_ALL_THEMES,
   ...((allThemesData.themes as unknown as LowerThirdTheme[]) || [])
-    .map((t) => localizeLowerThirdThemeAssets(t))
+    .map((t) => t)
     .filter(
       (t) => !LT_ALL_THEMES.some((lt) => lt.id === t.id),
     ),
@@ -50,34 +57,97 @@ interface BibleThemeEntry {
 }
 type MixedLTThemeEntry = LTThemeEntry | BibleThemeEntry;
 
+interface TickerMessage {
+  id: string;
+  text: string;
+  active: boolean;
+}
+
+interface TickerSettings {
+  speed: number;
+  position: "top" | "bottom";
+  loop: boolean;
+  themeId: string;
+  heading: string;
+}
+
 interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
+  tickerOutputMode?: "source" | "scene";
 }
 
+const STORAGE_KEY = "dock-ticker-messages";
+const SETTINGS_KEY = "dock-ticker-settings";
+const MAX_CHARS = 140;
+const TICKER_HEIGHT = 80;
 
+function genId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
 
-type MinistrySubTab = "lower-thirds" | "countdowns";
+function loadMessages(): TickerMessage[] {
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(STORAGE_KEY));
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return [];
+}
+
+function saveMessages(msgs: TickerMessage[]) {
+  try { localStorage.setItem(getUserScopedKey(STORAGE_KEY), JSON.stringify(msgs)); } catch { /* ignore */ }
+}
+
+function loadSettings(): TickerSettings {
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(SETTINGS_KEY));
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return {
+    speed: 50,
+    position: "bottom",
+    loop: true,
+    themeId: TICKER_THEMES[0]?.id ?? "",
+    heading: TICKER_THEMES[0]?.defaultHeading ?? "LIVE",
+  };
+}
+
+function saveSettings(s: TickerSettings) {
+  try { localStorage.setItem(getUserScopedKey(SETTINGS_KEY), JSON.stringify(s)); } catch { /* ignore */ }
+}
+
+type MinistrySubTab = "ticker" | "lower-thirds" | "countdowns";
 
 const MINISTRY_TAB_KEY = "dock-ministry-active-tab";
 
 function loadMinistryTab(): MinistrySubTab {
   try {
     const raw = localStorage.getItem(MINISTRY_TAB_KEY);
-    if (raw === "lower-thirds" || raw === "countdowns") return raw;
+    if (raw === "ticker" || raw === "lower-thirds" || raw === "countdowns") return raw;
   } catch { /* ignore */ }
-  return "lower-thirds";
+  return "ticker";
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export default function DockMinistryTab({ staged: _staged, onStage: _onStage }: Props) {
+export default function DockMinistryTab({ staged: _staged, onStage: _onStage, tickerOutputMode }: Props) {
   const { t } = useTranslation();
   const [subTab, setSubTab] = useState<MinistrySubTab>(loadMinistryTab);
+  const [messages, setMessages] = useState<TickerMessage[]>(loadMessages);
+  const [newText, setNewText] = useState("");
+  const [settings, setSettings] = useState<TickerSettings>(loadSettings);
+  const [running, setRunning] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [obsConnected, setObsConnected] = useState(dockObsClient.isConnected);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
   const [dockPlan, setDockPlan] = useState<string>(() => getDockPlan());
+  const [tickerFavIds, setTickerFavIds] = useState<Set<string>>(new Set());
 
   // Lower-thirds state — mixed LowerThirdTheme + BibleTheme entries
   const [ltFavorites, setLtFavorites] = useState<MixedLTThemeEntry[]>([]);
@@ -93,9 +163,12 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage }: 
   // BibleTheme lower-third text input (used when a BibleTheme is selected)
   const [bibleLtText, setBibleLtText] = useState("");
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mountedRef = useRef(true);
 
-  // Persist sub-tab preference
+  // Persist
+  useEffect(() => { saveMessages(messages); }, [messages]);
+  useEffect(() => { saveSettings(settings); }, [settings]);
   useEffect(() => { try { localStorage.setItem(MINISTRY_TAB_KEY, subTab); } catch { /* ignore */ } }, [subTab]);
 
   // OBS connection
@@ -116,6 +189,27 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage }: 
     return () => clearInterval(id);
   }, []);
 
+  // Enforce free plan: delete MCE Ticker source from OBS when user is free/downgraded
+  useEffect(() => {
+    if (dockPlan !== "free") return;
+    if (!obsConnected) return;
+
+    (async () => {
+      try {
+        // Remove "MCE Ticker" input — OBS auto-removes all scene items referencing it
+        await dockObsClient.call("RemoveInput", { inputName: "MCE Ticker" }).catch(() => { });
+        console.log("[DockMinistry] Free plan enforced: removed MCE Ticker source");
+      } catch { /* OBS may not be connected, source may not exist */ }
+    })();
+  }, [dockPlan, obsConnected]);
+
+  // Clear feedback after 3s
+  useEffect(() => {
+    if (!success && !error) return;
+    const t = setTimeout(() => { if (mountedRef.current) { setSuccess(null); setError(null); } }, 3000);
+    return () => clearTimeout(t);
+  }, [success, error]);
+
   // Clear LT feedback after 3s
   useEffect(() => {
     if (!ltFeedback) return;
@@ -133,9 +227,9 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage }: 
       if (cancelled) return;
       const entries: MixedLTThemeEntry[] = [];
 
-      // LowerThirdTheme favorites
+      // LowerThirdTheme favorites — only show themes favorited/added to OBS
       const ltThemes = ALL_LT_THEMES.filter((t) => ltIdSet.has(t.id));
-      for (const t of ltThemes.length > 0 ? ltThemes : LT_ALL_THEMES.slice(0, 6)) {
+      for (const t of ltThemes) {
         entries.push({ kind: "lt", theme: t, label: t.name });
       }
 
@@ -148,11 +242,40 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage }: 
     }).catch((err) => {
       console.warn("[DockMinistry] Failed to load LT favorites:", err);
       if (!cancelled) {
-        setLtFavorites(LT_ALL_THEMES.slice(0, 6).map((t) => ({ kind: "lt" as const, theme: t, label: t.name })));
+        setLtFavorites([]);
       }
     });
     return () => { cancelled = true; };
   }, []);
+
+  // Load ticker favorites
+  useEffect(() => {
+    let cancelled = false;
+    loadDockTickerFavorites().then((favIds) => {
+      if (cancelled) return;
+      setTickerFavIds(favIds);
+      const available = TICKER_THEMES.filter((t) => favIds.has(t.id));
+      const currentInList = available.some((t) => t.id === settings.themeId);
+      if (!currentInList && available.length > 0) {
+        setSettings((s) => ({ ...s, themeId: available[0].id, heading: available[0].defaultHeading }));
+      }
+    }).catch(() => { });
+    return () => { cancelled = true; };
+  }, []);
+
+  const tickerThemeList = TICKER_THEMES.filter((t) => tickerFavIds.has(t.id));
+  const theme = tickerThemeList.find((t) => t.id === settings.themeId) ?? tickerThemeList[0] ?? null;
+  const activeMessages = messages.filter((m) => m.active);
+
+  // Derive branded ticker colors from the app's brand color
+  const brandedColors = (() => {
+    const brandColor = normalizeBrandColor(getSettings().brandColor);
+    return {
+      ...theme?.defaultColors ?? {},
+      accent: brandColor,
+      separator: brandColor,
+    };
+  })();
 
   const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? null;
 
@@ -163,13 +286,274 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage }: 
     if (entryIdx >= 0 && entryIdx < ltFavorites.length) setLtSelectedIdx(entryIdx);
   }, [ltFavorites]);
 
+  // ── Add message ──
+  const handleAdd = useCallback(async () => {
+    if (!(await requireEntitlement("tickers", 0))) return;
+    const text = newText.trim();
+    if (!text) return;
+    if (text.length > MAX_CHARS) return;
+    setMessages((prev) => [...prev, { id: genId(), text, active: true }]);
+    setNewText("");
+    textareaRef.current?.focus();
+  }, [newText]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleAdd();
+    }
+  }, [handleAdd]);
+
+  // ── Toggle message active ──
+  const handleToggleMessage = useCallback((id: string) => {
+    setMessages((prev) => prev.map((m) => m.id === id ? { ...m, active: !m.active } : m));
+  }, []);
+
+  // ── Delete message ──
+  const handleDelete = useCallback((id: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
+  // ── Edit message ──
+  const handleStartEdit = useCallback((id: string, text: string) => {
+    setEditingId(id);
+    setEditText(text);
+  }, []);
+
+  const handleSaveEdit = useCallback(() => {
+    if (!editingId) return;
+    const text = editText.trim();
+    if (!text || text.length > MAX_CHARS) return;
+    setMessages((prev) => prev.map((m) => m.id === editingId ? { ...m, text } : m));
+    setEditingId(null);
+    setEditText("");
+  }, [editingId, editText]);
+
+  // ── Push ticker to OBS ──
+  const handlePush = useCallback(async () => {
+    if (!(await requireEntitlement("tickers", 0))) return;
+    if (activeMessages.length === 0) {
+      setError(t("ministry.addAtLeastOne"));
+      return;
+    }
+    if (!theme) return;
+    setSending(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await ensureObsConnected();
+      const html = generateTickerHTML(
+        theme,
+        brandedColors,
+        settings.heading,
+        activeMessages.map((m) => m.text),
+        settings.speed,
+        settings.position,
+        settings.loop,
+        false,
+      );
+
+      const video = await dockObsClient.call("GetVideoSettings") as { baseWidth: number; baseHeight: number };
+      const canvasW = video.baseWidth;
+      const canvasH = video.baseHeight;
+      const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
+      const sourceName = "MCE Ticker";
+      const presentationSceneName = "MCE Presentation";
+
+      // Always route MCE Ticker to MCE Presentation scene
+      const targetScene = presentationSceneName;
+
+      // Ensure MCE Presentation scene exists
+      const scenes = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
+      const sceneExists = scenes.scenes.some((s) => s.sceneName === presentationSceneName);
+      if (!sceneExists) {
+        await dockObsClient.call("CreateScene", { sceneName: presentationSceneName });
+        await new Promise((r) => setTimeout(r, 100));
+      }
+
+      // In scene mode, switch preview to MCE Presentation for user to transition
+      const currentProgramScene = (await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string }).currentProgramSceneName;
+      if (tickerOutputMode === "scene") {
+        try { localStorage.setItem("dock-ticker-original-scene", currentProgramScene); } catch { /* ignore */ }
+        await dockObsClient.call("SetCurrentPreviewScene", { sceneName: presentationSceneName });
+      }
+
+      // Create or update MCE Ticker browser source in target scene
+      const inputs = await dockObsClient.call("GetInputList") as { inputs: Array<{ inputName: string }> };
+      const inputExists = inputs.inputs.some((i) => i.inputName === sourceName);
+
+      let sceneItemId: number;
+      if (inputExists) {
+        await dockObsClient.call("SetInputSettings", {
+          inputName: sourceName,
+          inputSettings: { url: dataUrl, width: canvasW, height: TICKER_HEIGHT, shutdown: false, restart_when_active: false },
+        });
+        const items = await dockObsClient.call("GetSceneItemList", { sceneName: targetScene }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
+        const existing = items.sceneItems.find((i) => i.sourceName === sourceName);
+        if (existing) {
+          sceneItemId = existing.sceneItemId;
+          await dockObsClient.call("SetSceneItemEnabled", { sceneName: targetScene, sceneItemId, sceneItemEnabled: true });
+        } else {
+          const created = await dockObsClient.call("CreateSceneItem", { sceneName: targetScene, sourceName, sceneItemEnabled: true }) as { sceneItemId: number };
+          sceneItemId = created.sceneItemId;
+        }
+      } else {
+        const created = await dockObsClient.call("CreateInput", {
+          sceneName: targetScene,
+          inputName: sourceName,
+          inputKind: "browser_source",
+          inputSettings: { url: dataUrl, width: canvasW, height: TICKER_HEIGHT, css: "", shutdown: false, restart_when_active: false },
+          sceneItemEnabled: true,
+        }) as { sceneItemId: number };
+        sceneItemId = created.sceneItemId;
+      }
+
+      // Position ticker
+      const posY = settings.position === "top" ? 0 : canvasH - TICKER_HEIGHT;
+      await dockObsClient.call("SetSceneItemTransform", {
+        sceneName: targetScene,
+        sceneItemId,
+        sceneItemTransform: {
+          positionX: 0,
+          positionY: posY,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
+          boundsType: "OBS_BOUNDS_STRETCH",
+          boundsWidth: canvasW,
+          boundsHeight: TICKER_HEIGHT,
+          boundsAlignment: 0,
+          cropLeft: 0,
+          cropTop: 0,
+          cropRight: 0,
+          cropBottom: 0,
+        },
+      });
+      await dockObsClient.ensureTickerAboveSource(targetScene, sourceName).catch(() => { });
+      await dockObsClient.syncLowerThirdTickerClearance(targetScene).catch(() => { });
+
+      const projectionSettings = loadProjectionSettings();
+      if (projectionSettings.tickerLayerPriority !== "ticker-above") {
+        saveProjectionSettings({
+          ...projectionSettings,
+          tickerLayerPriority: "ticker-above",
+        });
+      }
+
+      await dockObsClient.applyProjectionSettings({ allowSceneMutation: true }).catch(() => { });
+
+      setRunning(true);
+      setIsPaused(false);
+      setSuccess(tickerOutputMode === "scene" ? t("ministry.tickerLiveScene") : t("ministry.tickerLive"));
+    } catch (err) {
+      console.warn("[DockMinistry] Push failed:", err);
+      setError(err instanceof Error ? err.message : t("ministry.pushFailed"));
+    } finally {
+      setSending(false);
+    }
+  }, [activeMessages, theme, settings, tickerOutputMode]);
+
+  // ── Pause ticker (stops scroll in OBS) ──
+  const handlePause = useCallback(async () => {
+    if (!theme) return;
+    setSending(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const html = generateTickerHTML(
+        theme,
+        brandedColors,
+        settings.heading,
+        activeMessages.map((m) => m.text),
+        settings.speed,
+        settings.position,
+        settings.loop,
+        !isPaused,
+      );
+      const video = await dockObsClient.call("GetVideoSettings") as { baseWidth: number; baseHeight: number };
+      const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
+      await dockObsClient.call("SetInputSettings", {
+        inputName: "MCE Ticker",
+        inputSettings: { url: dataUrl, width: video.baseWidth, height: TICKER_HEIGHT },
+      });
+      setIsPaused((p) => !p);
+      setSuccess(isPaused ? t("ministry.resumed") : t("ministry.paused"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("ministry.pauseFailed"));
+    } finally {
+      setSending(false);
+    }
+  }, [theme, settings, activeMessages, isPaused]);
+
+  // ── Clear ticker (hide in OBS) ──
+  const handleClear = useCallback(async () => {
+    setSending(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      // Turn off MCE Ticker wherever it lives — MCE Presentation + current program scene
+      const scenesToCheck = new Set<string>();
+      scenesToCheck.add("MCE Presentation");
+      try {
+        const cur = await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string };
+        scenesToCheck.add(cur.currentProgramSceneName);
+      } catch { /* ignore */ }
+
+      for (const sceneName of scenesToCheck) {
+        const items = await dockObsClient.call("GetSceneItemList", { sceneName }) as {
+          sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
+        };
+        const tickerItem = items.sceneItems.find((i) => i.sourceName === "MCE Ticker");
+        if (tickerItem) {
+          await dockObsClient.call("SetSceneItemEnabled", {
+            sceneName,
+            sceneItemId: tickerItem.sceneItemId,
+            sceneItemEnabled: false,
+          });
+        }
+      }
+      await dockObsClient.syncLowerThirdTickerClearance("MCE Presentation").catch(() => { });
+
+      // Restore original scene in preview if we had switched away
+      if (tickerOutputMode === "scene") {
+        let originalScene = "";
+        try { originalScene = localStorage.getItem("dock-ticker-original-scene") || ""; } catch { /* ignore */ }
+        if (originalScene) {
+          await dockObsClient.call("SetCurrentPreviewScene", { sceneName: originalScene }).catch(() => { });
+        }
+        try { localStorage.removeItem("dock-ticker-original-scene"); } catch { /* ignore */ }
+      }
+
+      setRunning(false);
+      setIsPaused(false);
+      setSuccess(t("ministry.tickerCleared"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("ministry.clearFailed"));
+    } finally {
+      setSending(false);
+    }
+  }, [tickerOutputMode]);
+
   return (
     <div className="dock-mv-tab">
       {/* ── Header ── */}
-
+      <div className="dock-mv-tab__header">
+        <div className="dock-mv-tab__title-row">
+          <Icon name="campaign" size={16} />
+          <span className="dock-mv-tab__title">{t('ministry.title')}</span>
+        </div>
+      </div>
 
       {/* ── Sub-Tab Switcher ── */}
       <div className="dock-ministry-tabs">
+        <button
+          type="button"
+          className={`dock-ministry-tab${subTab === "ticker" ? " dock-ministry-tab--active" : ""}`}
+          onClick={() => setSubTab("ticker")}
+          title={t("ministry.ticker")}>
+          <Icon name="campaign" size={12} />
+          <span>{t("ministry.ticker")}</span>
+        </button>
         <button
           type="button"
           className={`dock-ministry-tab${subTab === "lower-thirds" ? " dock-ministry-tab--active" : ""}`}
@@ -189,6 +573,367 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage }: 
           </button>
         )}
       </div>
+
+      {/* ── Ticker Tab ── */}
+      {subTab === "ticker" && dockPlan === "free" && (
+        <div style={{ padding: "24px 16px", textAlign: "center" }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+            {t("upgrade.tickerRequired", "Ticker requires Basic plan or higher")}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--dock-text-dim)", marginBottom: 16, lineHeight: 1.5 }}>
+            {t("upgrade.tickerDescription", "Live-updating scripture, prayer points, and announcements for your congregation.")}
+          </div>
+          <button
+            type="button"
+            className="dock-btn dock-btn--primary dock-btn--sm"
+            onClick={() => showUpgradeModal("Upgrade to Basic or higher to enable the Ticker feature.")}
+          >
+            <Icon name="upgrade" size={14} />
+            <span>{t("upgrade.upgradePlan", "Upgrade Plan")}</span>
+          </button>
+        </div>
+      )}
+      {subTab === "ticker" && dockPlan !== "free" && (
+        <>
+          {/* Feedback */}
+          {error && (
+            <div className="dock-mv-tab__feedback dock-mv-tab__feedback--error">
+              <Icon name="error" size={14} />
+              <span>{error}</span>
+              <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setError(null)} title={t("common.close")}>
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+          )}
+          {success && (
+            <div className="dock-mv-tab__feedback dock-mv-tab__feedback--success">
+              <Icon name="check_circle" size={14} />
+              <span>{success}</span>
+            </div>
+          )}
+
+          <div className="dock-mv-tab__list">
+            {/* Theme Picker */}
+            <div className="dock-mv-tab__section">
+              <div style={{ padding: "4px 0" }}>
+                <select
+                  value={theme.id}
+                  onChange={(e) => {
+                    const t = TICKER_THEMES.find((x) => x.id === e.target.value);
+                    setSettings((s) => ({ ...s, themeId: e.target.value, heading: t?.defaultHeading ?? s.heading }));
+                  }}
+                  style={{
+                    width: "100%",
+                    background: "var(--dock-surface)",
+                    border: "1px solid var(--dock-border)",
+                    borderRadius: 3,
+                    padding: "4px 6px",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "var(--dock-text)",
+                    fontFamily: "inherit",
+                    cursor: "pointer",
+                  }}
+                >
+                  {tickerThemeList.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Settings */}
+            <div className="dock-mv-tab__section">
+              <div className="dock-mv-tab__section-label">{t("ministry.settings")}</div>
+              <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "block", alignItems: "center", gap: 6 }}>
+                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.heading")}</label>
+                  <div>
+                    <input
+                      type="text"
+                      value={settings.heading}
+                      onChange={(e) => setSettings((s) => ({ ...s, heading: e.target.value.slice(0, 20) }))}
+                      placeholder={t("ministry.typeHeading")}
+                      maxLength={20}
+                      style={{
+                        minHeight: '30px',
+                        width: "90%",
+                        flex: 1,
+                        background: "var(--dock-surface)",
+                        border: "1px solid var(--dock-border)",
+                        borderRadius: 3,
+                        padding: "3px 6px",
+                        fontSize: 11,
+                        color: "var(--dock-text)",
+                      }}
+                    />
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.speed")}</label>
+                  <input
+                    type="range"
+                    min={1}
+                    max={100}
+                    value={settings.speed}
+                    onChange={(e) => setSettings((s) => ({ ...s, speed: Number(e.target.value) }))}
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 24, textAlign: "right" }}>{settings.speed}</span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 20 }}>
+                  <div style={{ display: "block", alignItems: "center", gap: 6 }}>
+                    <label style={{ fontSize: 10, display: "block", color: "var(--dock-text-dim)", minWidth: 50, }}>{t("ministry.position")}</label>
+                    <div className="dock-console-segmented dock-console-segmented--compact">
+                      <button
+                        type="button"
+                        className={`dock-console-segmented__item${settings.position === "top" ? " dock-console-segmented__item--active" : ""}`}
+                        onClick={() => setSettings((s) => ({ ...s, position: "top" }))}
+                        title={t("ministry.top")}>
+                        {t("ministry.top")}
+                      </button>
+                      <button
+                        type="button"
+                        className={`dock-console-segmented__item${settings.position === "bottom" ? " dock-console-segmented__item--active" : ""}`}
+                        onClick={() => setSettings((s) => ({ ...s, position: "bottom" }))}
+                        title={t("ministry.bottom")}>
+                        {t("ministry.bottom")}
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ display: "block", alignItems: "center", gap: 6, }}>
+                    <label style={{ display: "block", fontSize: 10, color: "var(--dock-text-dim)" }}>{t("ministry.loop")}</label>
+                    <div className="dock-console-segmented dock-console-segmented--compact">
+                      <button
+                        type="button"
+                        className={`dock-console-segmented__item${!settings.loop ? " dock-console-segmented__item--active" : ""}`}
+                        onClick={() => setSettings((s) => ({ ...s, loop: false }))}
+                        title={t("ministry.once")}>
+                        {t("ministry.once")}
+                      </button>
+                      <button
+                        type="button"
+                        className={`dock-console-segmented__item${settings.loop ? " dock-console-segmented__item--active" : ""}`}
+                        onClick={() => setSettings((s) => ({ ...s, loop: true }))}
+                        title={t("ministry.looping")}>
+                        {t("ministry.looping")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Compose */}
+            <div className="dock-mv-tab__section">
+              <div className="dock-mv-tab__section-label">{t("ministry.messages")}</div>
+              <div className="dock-mv-tab__section-desc">{t("ministry.messagesDesc")}</div>
+              <div style={{ padding: "4px 0" }}>
+                <div style={{ display: "flex", gap: 4, alignItems: "flex-end" }}>
+                  <textarea
+                    ref={textareaRef}
+                    value={newText}
+                    onChange={(e) => setNewText(e.target.value.slice(0, MAX_CHARS))}
+                    onKeyDown={handleKeyDown}
+                    placeholder={t("ministry.typeMessage")}
+                    rows={4}
+                    style={{
+                      flex: 1,
+                      minHeight: '80px',
+                      background: "var(--dock-surface)",
+                      border: "1px solid var(--dock-border)",
+                      borderRadius: 3,
+                      padding: "4px 6px",
+                      fontSize: 11,
+                      color: "var(--dock-text)",
+                      resize: "none",
+                      fontFamily: "inherit",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="dock-btn dock-btn--accent dock-btn--sm"
+                    onClick={handleAdd}
+                    disabled={!newText.trim()}
+                    style={{ height: 30, whiteSpace: "nowrap" }}
+                    title={t("common.add")}>
+                    Add Message
+                    <Icon name="add" size={14} />
+                  </button>
+                </div>
+                <div style={{ fontSize: 9, color: "var(--dock-text-dim)", textAlign: "right", marginTop: 2 }}>
+                  {newText.length}/{MAX_CHARS}
+                </div>
+              </div>
+
+              {/* Message list */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 200, overflowY: "auto" }}>
+                {messages.length === 0 && (
+                  <div style={{ fontSize: 11, color: "var(--dock-text-dim)", padding: "8px 0", textAlign: "center" }}>
+                    {t("ministry.noMessages")}
+                  </div>
+                )}
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "3px 4px",
+                      borderRadius: 3,
+                      background: msg.active ? "var(--dock-surface)" : "transparent",
+                      opacity: msg.active ? 1 : 0.5,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleToggleMessage(msg.id)}
+                      title={msg.active ? t("ministry.deactivate") : t("ministry.activate")}
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: 3,
+                        border: `1.5px solid ${msg.active ? "var(--dock-accent)" : "var(--dock-border)"}`,
+                        background: msg.active ? "var(--dock-accent)" : "transparent",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 0,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {msg.active && <Icon name="check" size={9} style={{ color: "#fff" }} />}
+
+                    </button>
+
+                    {editingId === msg.id ? (
+                      <input
+                        type="text"
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value.slice(0, MAX_CHARS))}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleSaveEdit(); if (e.key === "Escape") { setEditingId(null); setEditText(""); } }}
+                        onBlur={handleSaveEdit}
+                        autoFocus
+                        style={{
+                          flex: 1,
+                          background: "var(--dock-surface)",
+                          border: "1px solid var(--dock-accent)",
+                          borderRadius: 3,
+                          padding: "1px 4px",
+                          fontSize: 11,
+                          color: "var(--dock-text)",
+                          fontFamily: "inherit",
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{ flex: 1, fontSize: 11, color: "var(--dock-text)", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        onDoubleClick={() => handleStartEdit(msg.id, msg.text)}
+                        title={t("ministry.doubleClickToEdit")}
+                      >
+                        {msg.text}
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleStartEdit(msg.id, msg.text)}
+                      title={t("ministry.doubleClickToEdit")}
+                      style={{
+                        width: 16,
+                        height: 16,
+                        border: "none",
+                        background: "transparent",
+                        color: "var(--dock-text-dim)",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 0,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Icon name="edit" size={10} />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(msg.id)}
+                      title={t("common.delete")}
+                      style={{
+                        width: 16,
+                        height: 16,
+                        border: "none",
+                        background: "transparent",
+                        color: "var(--dock-text-dim)",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 0,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Icon name="close" size={10} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Live Control */}
+            <div className="dock-mv-tab__section">
+              <div style={{ display: "flex", gap: 6, padding: "4px 0" }}>
+                {/* Go Live — always shown */}
+                <button
+                  type="button"
+                  className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--primary"}`}
+                  onClick={handlePush}
+                  disabled={sending || activeMessages.length === 0 || !obsConnected}
+                  style={{ flex: 1 }}
+                  title={t("ministry.goLive")}>
+                  <Icon name="play_arrow" size={14} />
+                  <span>{t("ministry.goLive")}</span>
+                </button>
+
+                {/* Pause / Resume — only when running */}
+                {running && (
+                  <button
+                    type="button"
+                    className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--secondary"}`}
+                    onClick={handlePause}
+                    disabled={sending}
+                    title={isPaused ? t("ministry.resume") : t("ministry.pause")}>
+                    <Icon name={isPaused ? "play_arrow" : "pause"} size={14} />
+                    <span>{isPaused ? t("ministry.resume") : t("ministry.pause")}</span>
+                  </button>
+                )}
+
+                {/* Clear — only when running */}
+                {running && (
+                  <button
+                    type="button"
+                    className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--danger"}`}
+                    onClick={handleClear}
+                    disabled={sending}
+                    title={t("common.clear")}>
+                    <Icon name="visibility_off" size={14} />
+                    <span>{t("common.clear")}</span>
+                  </button>
+                )}
+              </div>
+              {!obsConnected && (
+                <div style={{ fontSize: 10, color: "var(--dock-red)", textAlign: "center" }}>
+                  {t("ministry.connectToObs")}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── Lower Thirds Tab ── */}
       {subTab === "lower-thirds" && (
@@ -518,6 +1263,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage }: 
       {subTab === "countdowns" && dockPlan !== "free" && (
         <DockCountdownsTab />
       )}
+
     </div>
   );
 }

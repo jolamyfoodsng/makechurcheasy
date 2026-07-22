@@ -6,13 +6,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { dockClient, type DockStateMessage } from "../services/dockBridge";
-import { INTERFACE_LOCALES } from "../i18n/localeCatalog";
-import {
-  applyInterfaceLanguagePreference,
-  getInterfaceLanguageLabel,
-  getResolvedInterfaceLanguage,
-} from "../services/interfaceLanguage";
+import i18n from "../i18n";
+import { dockClient, dockBridge, type DockStateMessage } from "../services/dockBridge";
 import { dockObsClient, type DockObsStatus } from "./dockObsClient";
 import { DOCK_TABS, type DockTab, type DockStagedItem } from "./dockTypes";
 import DockBibleTab from "./tabs/DockBibleTab";
@@ -31,37 +26,13 @@ import type { ServicePlannerSnapshot } from "../service-planner/types";
 import { installDockTextShortcuts } from "./dockTextShortcuts";
 import { useKeyboardShortcuts, type ShortcutDefinition, type ShortcutCategory, formatShortcut } from "./useKeyboardShortcuts";
 import BibleCommandPalette from "../components/BibleCommandPalette";
-import { InterfaceLanguagePrompt } from "../components/InterfaceLanguagePrompt";
 import { BibleProvider } from "../bible/bibleStore";
 import { useDockDragDrop } from "./useDockDragDrop";
 import { useDockUpload } from "./useDockUpload";
 import { ensureObsConnected } from "./obsConnectionGuard";
 import { getRecommendedPollingInterval } from "../services/performanceManager";
 import { getDefaultOBSUrl, readDesktopConfigCache, DEFAULT_DESKTOP_CONFIG } from "../services/desktopConfig";
-import { coerce, lt } from "semver";
-import {
-  type ProjectionSettings,
-  loadProjectionSettings,
-  saveProjectionSettings,
-} from "./dockProjectionSettings";
-
-function isOlderVersion(currentVersion: string, targetVersion: string): boolean {
-  const current = coerce(currentVersion)?.version;
-  const target = coerce(targetVersion)?.version;
-  if (!current || !target) return false;
-  return lt(current, target);
-}
-
-function getDockDownloadUrl(
-  cfg: typeof DEFAULT_DESKTOP_CONFIG,
-): string {
-  const ua = navigator.userAgent;
-  if (ua.includes("Windows")) return cfg.appUpdates.windowsDownloadUrl || cfg.appUpdates.releaseNotesUrl;
-  if (ua.includes("Mac") || ua.includes("Macintosh")) {
-    return cfg.appUpdates.macDownloadUrl || cfg.appUpdates.releaseNotesUrl;
-  }
-  return cfg.appUpdates.linuxDownloadUrl || cfg.appUpdates.releaseNotesUrl;
-}
+import { normalizeOBSWebSocketUrl } from "../services/obsWebSocketUrl";
 import DockDropOverlay from "./DockDropOverlay";
 import DockUploadToasts from "./DockUploadToasts";
 import { DockUpgradeModal } from "./components/DockUpgradeModal";
@@ -73,14 +44,13 @@ import Icon from "./DockIcon";
 
 const DOCK_SHELL_PREFS_KEY = "ocs-dock-shell-preferences";
 const DOCK_STAGED_ITEM_KEY = "ocs-dock-staged-item";
-const DOCK_TAB_PREWARM_DELAY_MS = 250;
 
 interface DockShellPreferences {
   activeTab?: DockTab | "live";
   disabledTabs?: DockTab[];
 }
 
-const PREWARMED_DOCK_TABS: DockTab[] = [];
+import { loadProjectionSettings, saveProjectionSettings, type ProjectionSettings } from "./dockProjectionSettings";
 
 function resolveDockTab(tab?: DockTab | "live" | null): DockTab {
   if (tab === "planner" || tab === "bible" || tab === "worship" || tab === "media" || tab === "multiview" || tab === "ministry") {
@@ -175,20 +145,13 @@ export default function DockPage() {
   const { effective, setTheme } = useAppTheme();
   const [activeTab, setActiveTab] = useState<DockTab>(() => resolveDockTab(shellPreferences.activeTab));
   const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() => shellPreferences.disabledTabs ?? []);
-  const [mountedTabs, setMountedTabs] = useState<Record<DockTab, boolean>>(() => ({
-    planner: activeTab === "planner",
-    bible: PREWARMED_DOCK_TABS.includes("bible") || activeTab === "bible",
-    worship: PREWARMED_DOCK_TABS.includes("worship") || activeTab === "worship",
-    media: activeTab === "media",
-    multiview: activeTab === "multiview",
-    ministry: activeTab === "ministry",
-  }));
   const [dockHeight, setDockHeight] = useState(0);
   const verticalTabs = dockHeight > 0 && dockHeight < 550;
-
+  const [tickerOutputMode, setTickerOutputMode] = useState<"source" | "scene">(() => {
+    try { return (localStorage.getItem("dock-ticker-output-mode") as "source" | "scene") || "scene"; } catch { return "scene"; }
+  });
   const [obsConnected, setObsConnected] = useState(false);
   const [obsError, setObsError] = useState("");
-  const [isReloadingDock, setIsReloadingDock] = useState(false);
   const [staged, setStaged] = useState<DockStagedItem | null>(() => loadDockStagedItem());
   const [appConnected, setAppConnected] = useState(false);
   const [obsUrlInput, setObsUrlInput] = useState(getDefaultOBSUrl());
@@ -197,6 +160,9 @@ export default function DockPage() {
     getDefaultDockProductionSettings(),
   );
   const [servicePlanner, setServicePlanner] = useState<ServicePlannerSnapshot | null>(null);
+  const [movePluginInstalled, setMovePluginInstalled] = useState<boolean | null>(null);
+  const [moveNoticeDismissed, setMoveNoticeDismissed] = useState(false);
+  const [moveUrlCopied, setMoveUrlCopied] = useState(false);
   const [projectionSettings, setProjectionSettings] = useState<ProjectionSettings>(() => loadProjectionSettings());
   const [upgradeModalMsg, setUpgradeModalMsg] = useState("");
 
@@ -241,28 +207,6 @@ export default function DockPage() {
     void fetchPlanFromOverlayServer();
   }, [activeTab]);
 
-  useEffect(() => {
-    setMountedTabs((current) => (
-      current[activeTab]
-        ? current
-        : { ...current, [activeTab]: true }
-    ));
-  }, [activeTab]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setMountedTabs((current) => {
-        if (current.bible && current.worship) return current;
-        return {
-          ...current,
-          bible: true,
-          worship: true,
-        };
-      });
-    }, DOCK_TAB_PREWARM_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, []);
-
   // Refresh plan from overlay server on any click in the dock (debounced)
   useEffect(() => {
     let lastRefresh = 0;
@@ -304,38 +248,76 @@ export default function DockPage() {
     void loadDockProductionSettings().then(setProductionSettings).catch(() => { });
   }, []);
 
-  // ── Version policy: show latest-version notice without locking the dock ──
+  // Check Move plugin status when OBS connects
   useEffect(() => {
-    const currentVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined;
-    const latestVersion = cfg.appUpdates.latestVersion;
-    if (!currentVersion || !latestVersion || !isOlderVersion(currentVersion, latestVersion)) {
-      setVersionAge({ daysOld: 0, forceUpdate: false });
-      return;
-    }
-    setVersionAge({ daysOld: 0, forceUpdate: true, currentVersion, latestVersion });
-  }, [cfg.appUpdates.latestVersion]);
+    if (!obsConnected) return;
+    void dockObsClient.isMovePluginInstalled().then(setMovePluginInstalled).catch(() => setMovePluginInstalled(false));
+  }, [obsConnected]);
 
-  const waitForDockObsConnected = useCallback(async (timeoutMs = 4000) => {
-    const startedAt = Date.now();
-    while (!dockObsClient.isConnected && Date.now() - startedAt < timeoutMs) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    return dockObsClient.isConnected;
+  // ── Force update: fetch latest release info and check pub_date ──
+  useEffect(() => {
+    const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-releases/releases/latest";
+    const CACHE_KEY = "ocs-dock-update-cache-v1";
+
+    // Use config for force-update settings (fallback: 21 days, enabled)
+    const FORCE_UPDATE_DAYS = Math.round((cfg.appUpdates.gracePeriodHours || 24 * 21) / 24);
+    const forceEnabled = cfg.appUpdates.forceUpdatesEnabled;
+
+    const currentVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined;
+
+    if (!forceEnabled) return;
+
+    fetch(RELEASES_API)
+      .then((r) => r.json())
+      .then((release: { published_at?: string; tag_name?: string }) => {
+        if (!release.published_at) return;
+        const releaseDate = new Date(release.published_at);
+        const now = new Date();
+        const daysOld = Math.floor((now.getTime() - releaseDate.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Cache for offline fallback
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ date: release.published_at, version: release.tag_name }));
+        } catch { /* non-critical */ }
+
+        if (daysOld >= FORCE_UPDATE_DAYS) {
+          setVersionAge({ daysOld, forceUpdate: true, currentVersion, latestVersion: release.tag_name });
+        }
+      })
+      .catch(() => {
+        // Offline fallback: use cached release date to still enforce 21-day lockout
+        try {
+          const raw = localStorage.getItem(CACHE_KEY);
+          if (raw) {
+            const cached = JSON.parse(raw) as { date: string; version: string };
+            const releaseDate = new Date(cached.date);
+            const now = new Date();
+            const daysOld = Math.floor((now.getTime() - releaseDate.getTime()) / (1000 * 60 * 60 * 24));
+            if (daysOld >= FORCE_UPDATE_DAYS) {
+              setVersionAge({ daysOld, forceUpdate: true, currentVersion, latestVersion: cached.version });
+            }
+          }
+        } catch { /* non-critical */ }
+      });
   }, []);
 
-  const handleReloadDock = useCallback(async () => {
-    if (isReloadingDock) return;
-    setIsReloadingDock(true);
-    try {
-      await dockObsClient.connect(undefined, undefined, true);
-      const reconnected = await waitForDockObsConnected();
-      if (!reconnected) {
-        console.warn("[DockPage] OBS reconnect did not complete before reload; reloading anyway.");
-      }
-    } finally {
-      window.location.reload();
-    }
-  }, [isReloadingDock, waitForDockObsConnected]);
+  const handleOpenMovePlugin = useCallback(() => {
+    const url = dockObsClient.getMovePluginDownloadInfo().url;
+    // The dock runs in OBS's embedded CEF browser — window.open() stays
+    // inside CEF. Route through the overlay server which runs in the
+    // native Tauri process and can open the system default browser.
+    fetch(`http://127.0.0.1:45678/api/open-url`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    }).catch(() => {
+      // Fallback: copy URL to clipboard
+      navigator.clipboard.writeText(url).then(() => {
+        setMoveUrlCopied(true);
+        setTimeout(() => setMoveUrlCopied(false), 3000);
+      }).catch(() => { });
+    });
+  }, []);
 
   useEffect(() => {
     dockClient.init();
@@ -369,58 +351,56 @@ export default function DockPage() {
         // Stop auto-reconnect — we're connected
         if (autoReconnectTimer) { clearInterval(autoReconnectTimer); autoReconnectTimer = null; }
 
-        dockObsClient.waitUntilReady().then(() =>
-          dockObsClient.recoverLiveState().then((recovered) => {
-            setStaged((current) => {
-              if (current) return current;
-              if (recovered.bible) {
-                setActiveTab("bible");
-                const compare = recovered.bible.compare;
-                const leftColumn = compare?.columns?.[0] ?? null;
-                const compareLabel =
-                  compare?.columns?.map((column) => column.referenceLabel).filter(Boolean).join(" | ") || "";
-                const compareSubtitle =
-                  compare?.columns?.map((column) => column.translation).filter(Boolean).join(" · ") || "";
-                return {
-                  type: "bible",
-                  label: compareLabel || recovered.bible.reference || t('dock.bibleVerseFallback'),
-                  subtitle: compareSubtitle || recovered.bible.text || "",
-                  data: {
-                    book: leftColumn?.book ?? "",
-                    chapter: leftColumn?.chapter ?? 0,
-                    verse: leftColumn?.verse ?? 0,
-                    verseEnd: leftColumn?.verseEnd ?? leftColumn?.verse ?? 0,
-                    verseRange: leftColumn?.verseRange ?? "",
-                    translation: leftColumn?.translation ?? "",
-                    referenceLabel: compareLabel || recovered.bible.reference,
-                    verseText: recovered.bible.text,
-                    overlayMode: recovered.bible.overlayMode,
-                    compare,
-                    _recovered: true,
-                    _dockLive: true,
-                  },
-                };
-              }
-              if (recovered.worship) {
-                setActiveTab("worship");
-                return {
-                  type: "worship",
-                  label: recovered.worship.sectionLabel || t('dock.worshipFallback'),
-                  subtitle: recovered.worship.songTitle || "",
-                  data: {
-                    sectionText: recovered.worship.sectionText,
-                    sectionLabel: recovered.worship.sectionLabel,
-                    song: { title: recovered.worship.songTitle, artist: recovered.worship.artist },
-                    overlayMode: recovered.worship.overlayMode,
-                    _recovered: true,
-                    _dockLive: true,
-                  },
-                };
-              }
-              return null;
-            });
-          }),
-        ).catch((error) => {
+        dockObsClient.recoverLiveState().then((recovered) => {
+          setStaged((current) => {
+            if (current) return current;
+            if (recovered.bible) {
+              setActiveTab("bible");
+              const compare = recovered.bible.compare;
+              const leftColumn = compare?.columns?.[0] ?? null;
+              const compareLabel =
+                compare?.columns?.map((column) => column.referenceLabel).filter(Boolean).join(" | ") || "";
+              const compareSubtitle =
+                compare?.columns?.map((column) => column.translation).filter(Boolean).join(" · ") || "";
+              return {
+                type: "bible",
+                label: compareLabel || recovered.bible.reference || t('dock.bibleVerseFallback'),
+                subtitle: compareSubtitle || recovered.bible.text || "",
+                data: {
+                  book: leftColumn?.book ?? "",
+                  chapter: leftColumn?.chapter ?? 0,
+                  verse: leftColumn?.verse ?? 0,
+                  verseEnd: leftColumn?.verseEnd ?? leftColumn?.verse ?? 0,
+                  verseRange: leftColumn?.verseRange ?? "",
+                  translation: leftColumn?.translation ?? "",
+                  referenceLabel: compareLabel || recovered.bible.reference,
+                  verseText: recovered.bible.text,
+                  overlayMode: recovered.bible.overlayMode,
+                  compare,
+                  _recovered: true,
+                  _dockLive: true,
+                },
+              };
+            }
+            if (recovered.worship) {
+              setActiveTab("worship");
+              return {
+                type: "worship",
+                label: recovered.worship.sectionLabel || t('dock.worshipFallback'),
+                subtitle: recovered.worship.songTitle || "",
+                data: {
+                  sectionText: recovered.worship.sectionText,
+                  sectionLabel: recovered.worship.sectionLabel,
+                  song: { title: recovered.worship.songTitle, artist: recovered.worship.artist },
+                  overlayMode: recovered.worship.overlayMode,
+                  _recovered: true,
+                  _dockLive: true,
+                },
+              };
+            }
+            return null;
+          });
+        }).catch((error) => {
           console.warn("[Dock] Failed to recover live state:", error);
         });
       }
@@ -486,13 +466,14 @@ export default function DockPage() {
   const handleManualConnect = useCallback(async () => {
     setObsError("");
     try {
-      await ensureObsConnected(obsUrlInput, obsPwInput || undefined);
+      const obsUrl = normalizeOBSWebSocketUrl(obsUrlInput);
+      setObsUrlInput(obsUrl);
+      await ensureObsConnected(obsUrl, obsPwInput || undefined);
     } catch (err) {
       setObsError(err instanceof Error ? err.message : t('dock.connectionFailed'));
     }
   }, [obsPwInput, obsUrlInput]);
 
-  const activeTabDef = DOCK_TABS.find((tab) => tab.id === activeTab) ?? DOCK_TABS[0];
   const nextTheme = effective === "dark" ? "light" : "dark";
   const themeToggleLabel = nextTheme === "dark" ? t('dock.switchToDarkMode') : t('dock.switchToLightMode');
   const themeToggleIcon = nextTheme === "dark" ? "moon" : "sun";
@@ -518,6 +499,28 @@ export default function DockPage() {
     setShowCommandPalette(false);
   }, []);
 
+  // ── Global input handler to open command palette on text input ──
+  useEffect(() => {
+    const handleInput = (e: Event) => {
+      const target = e.target as HTMLElement;
+      // Only trigger on text inputs and textareas — skip file, checkbox, etc.
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement
+      ) {
+        if (target instanceof HTMLInputElement && target.type !== "text" && target.type !== "search") return;
+        const value = target.value?.trim() || "";
+        // Open palette if user types a meaningful query (3+ chars)
+        if (value.length >= 3 && /[a-zA-Z0-9]/.test(value)) {
+          openCommandPalette(value);
+        }
+      }
+    };
+
+    document.addEventListener("input", handleInput);
+    return () => document.removeEventListener("input", handleInput);
+  }, [openCommandPalette]);
+
   const shortcuts: ShortcutDefinition[] = [
     { key: "2", handler: () => setActiveTab("bible"), label: t('page.shortcutTabBible'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
     { key: "3", handler: () => setActiveTab("worship"), label: t('page.shortcutTabWorship'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
@@ -542,20 +545,13 @@ export default function DockPage() {
   const [clearScenesLoading, setClearScenesLoading] = useState(false);
 
   // ── Language Selector ──
-  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => getResolvedInterfaceLanguage());
+  const ALL_LANGUAGES: string[] = ["English", "French", "Spanish", "Portuguese", "Yoruba", "Igbo", "Hausa", "Ghanaian"];
+  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => localStorage.getItem("mce_interface_language") || "English");
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
 
-  // Listen for compact-mode menu button from Bible tab
-  useEffect(() => {
-    const handler = () => setShowSettingsMenu(true);
-    window.addEventListener("dock-open-menu", handler);
-    return () => window.removeEventListener("dock-open-menu", handler);
-  }, []);
-
   return (
     <div className={`dock-root${verticalTabs ? " dock-root--vertical-tabs" : ""}`} ref={dockRootRef}>
-      <InterfaceLanguagePrompt />
       {/* ═══ VERTICAL NAV (left side when dock is short) ═══ */}
       {verticalTabs && (
         <nav className="dock-vertical-nav" aria-label={t('page.dockSections')}>
@@ -581,13 +577,13 @@ export default function DockPage() {
           <div className="dock-force-update-banner">
             <Icon name="warning" size={14} />
             <span>
-              {t('page.forceUpdate')}
+              {t('page.forceUpdate')} — {t('page.updateReady', { days: versionAge.daysOld })}
               {versionAge.currentVersion && versionAge.latestVersion && (
                 <> v{versionAge.currentVersion} → v{versionAge.latestVersion}</>
               )}
             </span>
             <a
-              href={getDockDownloadUrl(cfg) || "https://makechurcheasy.creatorstudioslabs.stream/downloads"}
+              href="https://github.com/nicholasracisz/makechurcheasy/releases/latest"
               target="_blank"
               rel="noopener noreferrer"
               className="dock-force-update-banner__link"
@@ -604,44 +600,6 @@ export default function DockPage() {
             <span>{t('page.maintenance')}</span>
           </div>
         )}
-
-        <div className="dock-shell-header">
-          <div className="dock-shell-status">
-            <div className="dock-shell-status__left">
-              <button
-                type="button"
-                className="dock-shell-icon-btn"
-                onClick={() => setShowSettingsMenu(true)}
-                aria-label={t('dock.menu')}
-                title={t('dock.menu')}
-              >
-                <Icon name="menu" size={14} />
-              </button>
-              <div className="dock-shell-status__center">
-                <div className="dock-shell-titleline">
-                  <span className="dock-shell-titleline__app">{t('dock.mceStudio')}</span>
-                  <span className="dock-shell-titleline__divider">/</span>
-                  <span className="dock-shell-titleline__section">{activeTabDef.label}</span>
-                </div>
-              </div>
-            </div>
-
-
-
-            <div className="dock-shell-status__right">
-              <button
-                type="button"
-                className="dock-shell-icon-btn"
-                onClick={() => void handleReloadDock()}
-                aria-label={t('page.reloadDock')}
-                title={isReloadingDock ? t('page.connecting') : t('page.reloadDock')}
-                disabled={isReloadingDock}
-              >
-                <Icon name="refresh" size={14} />
-              </button>
-            </div>
-          </div>
-        </div>
 
         {/* ── Sidebar ── */}
         {showSettingsMenu && (
@@ -696,8 +654,8 @@ export default function DockPage() {
                       padding: 0,
                     }}
                   >
-                    {INTERFACE_LOCALES.map((lang) => (
-                      <option key={lang.code} value={lang.code}>{lang.nativeName}</option>
+                    {ALL_LANGUAGES.map((lang) => (
+                      <option key={lang} value={lang}>{lang}</option>
                     ))}
                   </select>
                 </div>
@@ -759,6 +717,52 @@ export default function DockPage() {
 
                 <div className="dock-sidebar__divider" />
 
+                {/* Ticker Output */}
+                <div className="dock-sidebar__item" style={{ cursor: "default" }}>
+                  <Icon name="campaign" size={16} />
+                  <span>{t('dock.tickerOutput')}</span>
+                </div>
+                <div className="dock-sidebar__subpanel">
+                  {([
+                    { mode: "source" as const, icon: "view_module", label: t('dock.source'), desc: t('dock.insideCurrentScene') },
+                    { mode: "scene" as const, icon: "dashboard", label: t('dock.scene'), desc: t('dock.dedicatedSceneWithProgramBehind') },
+                  ]).map(({ mode, icon, label, desc }) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className="dock-sidebar__radio"
+                      onClick={() => {
+                        setTickerOutputMode(mode);
+                        try { localStorage.setItem("dock-ticker-output-mode", mode); } catch { /* ignore */ }
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        width: "100%",
+                        padding: "6px 8px",
+                        border: "none",
+                        borderRadius: 3,
+                        background: tickerOutputMode === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
+                        color: tickerOutputMode === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        fontSize: 11,
+                        transition: "background 0.15s",
+                      }}
+                      title={t('common.confirm')}>
+                      <Icon name={icon} size={14} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600 }}>{label}</div>
+                        <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
+                      </div>
+                      {tickerOutputMode === mode && <Icon name="check" size={12} />}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="dock-sidebar__divider" />
+
                 {/* Projection Settings */}
                 <button
                   type="button"
@@ -813,27 +817,39 @@ export default function DockPage() {
                     {/* Ticker Layer Priority */}
                     <div className="dock-sidebar__section-label" style={{ marginTop: 8 }}>{t('dock.tickerLayerPriority')}</div>
                     <div className="dock-sidebar__radio-group">
-                      <div
-                        className="dock-sidebar__radio"
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          width: "100%",
-                          padding: "6px 8px",
-                          borderRadius: 3,
-                          background: "var(--dock-accent-bg, rgba(99,102,241,0.12))",
-                          color: "var(--dock-accent, #3B82F6)",
-                          textAlign: "left",
-                          fontSize: 11,
-                        }}>
-                        <Icon name="flip_to_front" size={14} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600 }}>{t('ministry.tickerAboveContent')}</div>
-                          <div style={{ fontSize: 10, opacity: 0.6 }}>{t('dock.tickerRemainsVisibleOnTop')}</div>
-                        </div>
-                        <Icon name="check" size={12} />
-                      </div>
+                      {([
+                        { mode: "content-above" as const, icon: "flip_to_back", label: t('ministry.contentAboveTicker'), desc: t('ministry.mceContentPriority') },
+                        { mode: "ticker-above" as const, icon: "flip_to_front", label: t('ministry.tickerAboveContent'), desc: t('dock.tickerRemainsVisibleOnTop') },
+                      ]).map(({ mode, icon, label, desc }) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          className="dock-sidebar__radio"
+                          onClick={() => setProjectionSettings((s) => ({ ...s, tickerLayerPriority: mode }))}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            width: "100%",
+                            padding: "6px 8px",
+                            border: "none",
+                            borderRadius: 3,
+                            background: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
+                            color: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            fontSize: 11,
+                            transition: "background 0.15s",
+                          }}
+                          title={t('common.confirm')}>
+                          <Icon name={icon} size={14} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600 }}>{label}</div>
+                            <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
+                          </div>
+                          {projectionSettings.tickerLayerPriority === mode && <Icon name="check" size={12} />}
+                        </button>
+                      ))}
                     </div>
 
                     {/* Restore Original Scene */}
@@ -852,24 +868,6 @@ export default function DockPage() {
                       {t('page.returnsObsToPreviousState')}
                     </div>
 
-                    <label
-                      className="dock-sidebar__check"
-                      style={{ marginTop: 8, cursor: "pointer" }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={projectionSettings.hideOtherMceSourcesOnSend}
-                        onChange={(e) => setProjectionSettings((s) => ({ ...s, hideOtherMceSourcesOnSend: e.target.checked }))}
-                      />
-                      <span>{t('page.hideOtherMceSourcesOnSend', 'Hide Other MCE Sources on Send')}</span>
-                    </label>
-                    <div style={{ fontSize: 10, opacity: 0.5, padding: "2px 8px 0 22px", lineHeight: 1.4 }}>
-                      {t(
-                        'page.hideOtherMceSourcesOnSendDesc',
-                        'When off, sending Bible, Worship, media, or lower thirds keeps other MCE Presentation sources visible.',
-                      )}
-                    </div>
-
                     {/* Lower Thirds → Presentation Only */}
                     <label
                       className="dock-sidebar__check"
@@ -877,9 +875,8 @@ export default function DockPage() {
                     >
                       <input
                         type="checkbox"
-                        checked
-
-
+                        checked={projectionSettings.presentationOnly}
+                        onChange={(e) => setProjectionSettings((s) => ({ ...s, presentationOnly: e.target.checked }))}
                       />
                       <span>{t('page.presentationOnly', 'Lower Thirds in Presentation')}</span>
                     </label>
@@ -1063,102 +1060,85 @@ export default function DockPage() {
           </div>
         )}
 
+        {/* Move Plugin Notice */}
+        {obsConnected && movePluginInstalled === false && !moveNoticeDismissed && (
+          <div className="dock-settings-panel" style={{ background: "var(--dock-yellow-soft, rgba(255, 193, 7, 0.1))", borderBottom: "1px solid var(--dock-yellow, #ffc107)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
+              <Icon name="info" size={14} style={{ color: "var(--dock-yellow, #ffc107)" }} />
+              <span style={{ color: "var(--dock-text)" }}>
+                <strong>{t('dock.moveTransition')}</strong> {t('dock.movePluginNotDetected')}
+              </span>
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); handleOpenMovePlugin(); }}
+                className="dock-btn dock-btn--preview"
+                style={{ marginLeft: "auto", padding: "2px 6px", fontSize: 10, whiteSpace: "nowrap" }}
+              >
+                <Icon name="download" size={12} />
+                {moveUrlCopied ? t('common.done') : t('page.movePlugin')}
+              </a>
+              <button
+                type="button"
+                className="dock-toolbar__btn"
+                onClick={() => setMoveNoticeDismissed(true)}
+                title={t('common.close')}
+                style={{ width: 20, height: 20, padding: 0, border: "none", flexShrink: 0 }}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+            <div className="dock-settings-panel__hint" style={{ color: "var(--dock-text-dim)" }}>
+              {dockObsClient.getMovePluginDownloadInfo().instructions}
+            </div>
+          </div>
+        )}
+
         <div className="dock-content">
 
           <div className="dock-content-main">
-            {mountedTabs.planner && (
-              <div
-                key="planner-pane"
-                className="dock-content-pane"
-                hidden={activeTab !== "planner"}
-                aria-hidden={activeTab !== "planner"}
-                style={activeTab === "planner" ? undefined : { display: "none" }}
-              >
-                <DockPlannerTab
-                  staged={staged}
-                  onStage={handleStage}
-                  initialSnapshot={servicePlanner}
-                />
-              </div>
+            {activeTab === "planner" && (
+              <DockPlannerTab
+                staged={staged}
+                onStage={handleStage}
+                initialSnapshot={servicePlanner}
+              />
             )}
-            {mountedTabs.bible && (
-              <div
-                key="bible-pane"
-                className="dock-content-pane"
-                hidden={activeTab !== "bible"}
-                aria-hidden={activeTab !== "bible"}
-                style={activeTab === "bible" ? undefined : { display: "none" }}
-              >
-                <DockBibleTab
-                  staged={staged}
-                  onStage={handleStage}
-                  productionDefaults={productionSettings.bible}
-                  appConnected={appConnected}
-                  isActive={activeTab === "bible"}
-                  showHistory={showHistory}
-                  onHistoryClose={() => setShowHistory(false)}
-                />
-              </div>
+            {activeTab === "bible" && (
+              <DockBibleTab
+                staged={staged}
+                onStage={handleStage}
+                productionDefaults={productionSettings.bible}
+                appConnected={appConnected}
+                showHistory={showHistory}
+                onHistoryClose={() => setShowHistory(false)}
+              />
             )}
-            {mountedTabs.worship && (
-              <div
-                key="worship-pane"
-                className="dock-content-pane"
-                hidden={activeTab !== "worship"}
-                aria-hidden={activeTab !== "worship"}
-                style={activeTab === "worship" ? undefined : { display: "none" }}
-              >
-                <DockWorshipTab
-                  staged={staged}
-                  onStage={handleStage}
-                  productionDefaults={productionSettings.worship}
-                  isActive={activeTab === "worship"}
-                />
-              </div>
+            {activeTab === "worship" && (
+              <DockWorshipTab
+                staged={staged}
+                onStage={handleStage}
+                productionDefaults={productionSettings.worship}
+              />
             )}
-            {mountedTabs.media && (
-              <div
-                key="media-pane"
-                className="dock-content-pane"
-                hidden={activeTab !== "media"}
-                aria-hidden={activeTab !== "media"}
-                style={activeTab === "media" ? undefined : { display: "none" }}
-              >
-                <DockMediaTab
-                  staged={staged}
-                  onStage={handleStage}
-                  isActive={activeTab === "media"}
-                />
-              </div>
+            {activeTab === "media" && (
+              <DockMediaTab
+                staged={staged}
+                onStage={handleStage}
+              />
             )}
-            {mountedTabs.multiview && (
-              <div
-                key="multiview-pane"
-                className="dock-content-pane"
-                hidden={activeTab !== "multiview"}
-                aria-hidden={activeTab !== "multiview"}
-                style={activeTab === "multiview" ? undefined : { display: "none" }}
-              >
-                <DockMultiviewTab />
-              </div>
+            {activeTab === "multiview" && (
+              <DockMultiviewTab />
             )}
-            {mountedTabs.ministry && (
-              <div
-                key="ministry-pane"
-                className="dock-content-pane"
-                hidden={activeTab !== "ministry"}
-                aria-hidden={activeTab !== "ministry"}
-                style={activeTab === "ministry" ? undefined : { display: "none" }}
-              >
-                <DockMinistryTab
-                  staged={staged}
-                  onStage={handleStage}
-                />
-              </div>
+            {activeTab === "ministry" && (
+              <DockMinistryTab
+                staged={staged}
+                onStage={handleStage}
+                tickerOutputMode={tickerOutputMode}
+              />
             )}
           </div>
         </div>
-      </div>{/* end dock-main-column */}
+      </div>
 
       {/* ═══ HORIZONTAL TAB NAVIGATION (bottom, hidden when vertical) ═══ */}
       {!verticalTabs && (
@@ -1298,7 +1278,7 @@ export default function DockPage() {
               <h3>{t('dock.changeLanguage') || 'Change Language'}</h3>
             </div>
             <div className="dock-modal__body">
-              <p>{t('dock.changeLanguageConfirm', { language: getInterfaceLanguageLabel(pendingLanguage) }) || `Change interface language to ${getInterfaceLanguageLabel(pendingLanguage)}?`}</p>
+              <p>{t('dock.changeLanguageConfirm', { language: pendingLanguage }) || `Change interface language to ${pendingLanguage}?`}</p>
             </div>
             <div className="dock-modal__footer">
               <button
@@ -1312,8 +1292,16 @@ export default function DockPage() {
                 type="button"
                 className="dock-btn dock-btn--primary"
                 onClick={() => {
-                  const code = pendingLanguage!;
-                  void applyInterfaceLanguagePreference(code, { broadcast: true }).then(setInterfaceLanguage);
+                  const lang = pendingLanguage!;
+                  const langToCode: Record<string, string> = {
+                    English: "en", French: "fr", Spanish: "es", Portuguese: "pt",
+                    Yoruba: "yo", Igbo: "ig", Hausa: "ha", Ghanaian: "gh",
+                  };
+                  const code = langToCode[lang] || "en";
+                  localStorage.setItem("mce_interface_language", lang);
+                  i18n.changeLanguage(code);
+                  dockBridge.sendLanguageChanged(code);
+                  setInterfaceLanguage(lang);
                   setShowLanguageModal(false);
                   setPendingLanguage(null);
                 }}

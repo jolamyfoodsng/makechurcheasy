@@ -13,8 +13,6 @@ import { useNavigate } from "react-router-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Rocket,
-  Mic,
-  BookOpen,
   ArrowRight,
   ExternalLink,
   Copy,
@@ -36,13 +34,13 @@ import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { getDeviceId } from "../services/authService";
 import { track } from "../services/analytics";
 import { getDefaultOBSPort } from "../services/desktopConfig";
-import { getInstalledTranslations } from "../bible/bibleDb";
+import { persistOBSWebSocketConfig } from "../services/obsConnectionSettings";
 import "./OnboardingPage.css";
 
 /* ── Constants ── */
 const STORAGE_KEY = "mce-onboarding-complete";
 const STEP_KEY = "mce-onboarding-step";
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 5;
 const YOUTUBE_URL = "https://www.youtube.com/watch?v=08UjSYtjmLU";
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
@@ -51,7 +49,6 @@ const API_BASE =
 const STEP_NAMES = [
   "Welcome",
   "OBS",
-  "Features",
   "Dock",
   "Test",
   "Ready",
@@ -66,7 +63,7 @@ function getSavedStep(): number {
   const raw = localStorage.getItem(STEP_KEY);
   if (raw != null) {
     const n = parseInt(raw, 10);
-    if (n >= 1 && n <= TOTAL_STEPS) return n;
+    if (n >= 1) return Math.min(n, TOTAL_STEPS);
   }
   return 1;
 }
@@ -232,19 +229,16 @@ export default function OnboardingPage() {
           <StepConnectOBS onNext={goNext} onBack={goPrev} />
         )}
         {step === 3 && (
-          <StepFeatures onNext={goNext} onBack={goPrev} />
-        )}
-        {step === 4 && (
           <StepInstallDock
             onNext={goNext}
             onBack={goPrev}
             onTutorial={openTutorial}
           />
         )}
-        {step === 5 && (
+        {step === 4 && (
           <StepTest onFinish={finish} onBack={goPrev} />
         )}
-        {step === 6 && <StepReady onFinish={finish} />}
+        {step === 5 && <StepReady onFinish={finish} />}
       </div>
 
       {/* Skip modal */}
@@ -289,7 +283,7 @@ function StepWelcome({
   onTutorial: () => void;
 }) {
   return (
-    <div className="ob-card">
+    <div className="ob-card ob-card--dock-install">
       <div className="ob-hero">
         <div className="ob-hero-icon">
           <Rocket size={28} />
@@ -344,6 +338,7 @@ function StepConnectOBS({
       await obsService.connect(url, password || undefined);
       await new Promise((r) => setTimeout(r, 500));
       if (obsService.isConnected) {
+        await persistOBSWebSocketConfig(url, password || undefined, true);
         setStatus("connected");
         fireMilestone("firstDesktopLoginAt");
       } else {
@@ -460,59 +455,7 @@ function StepConnectOBS({
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Step 3 — Features Showcase (display only)
-   ══════════════════════════════════════════════════════════════ */
-
-function StepFeatures({
-  onNext,
-  onBack,
-}: {
-  onNext: () => void;
-  onBack: () => void;
-}) {
-  return (
-    <div className="ob-card">
-      <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
-        <h1>Powerful Features</h1>
-        <p>
-          MakeChurchEasy comes with everything you need for a modern church service.
-        </p>
-      </div>
-
-      <div className="ob-features">
-        <div className="ob-feature-card">
-          <div className="ob-feature-icon ob-feature-icon--green">
-            <BookOpen size={16} />
-          </div>
-          <h3>Bible Presentation</h3>
-          <p>Display scripture verses live in OBS with beautiful themes</p>
-        </div>
-        <div className="ob-feature-card">
-          <div className="ob-feature-icon ob-feature-icon--purple">
-            <Mic size={16} />
-          </div>
-          <h3>Speech to Scripture</h3>
-          <p>AI detects Bible references as you preach and auto-displays them</p>
-        </div>
-      </div>
-
-      <div className="ob-actions">
-        <div className="ob-actions-row">
-          <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
-            Back
-          </button>
-        </div>
-        <button className="ob-btn ob-btn--primary" onClick={onNext} title="Continue">
-          Continue
-          <ArrowRight size={16} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════
-   Step 4 — Install Dock
+   Step 3 — Install Dock
    ══════════════════════════════════════════════════════════════ */
 
 function StepInstallDock({
@@ -526,17 +469,10 @@ function StepInstallDock({
 }) {
   const [copied, setCopied] = useState<"dock" | "ai" | null>(null);
   const isDev =
-    window.location.protocol === "http:" && window.location.port === "1420";
+    window.location.protocol === "http:" && window.location.port === "1501";
   const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
-  const deviceId = getDeviceId();
-  const versionParam = `_v=${__APP_VERSION__}`;
-  const deviceIdParam = deviceId
-    ? `?deviceId=${encodeURIComponent(deviceId)}&${versionParam}`
-    : `?${versionParam}`;
-  const dockUrl =
-    (isDev ? `${base}/dock` : `${base}/dock.html`) + deviceIdParam;
-  const aiUrl =
-    (isDev ? `${base}/lm-dock` : `${base}/lm-dock.html`) + deviceIdParam;
+  const dockUrl = `${base}/dock`;
+  const aiUrl = `${base}/lm-dock`;
 
   const copyUrl = async (url: string, which: "dock" | "ai") => {
     try {
@@ -560,54 +496,54 @@ function StepInstallDock({
 
       <p className="ob-section-title">OBS Custom Browser Docks</p>
 
-      {/* Bible Overlay Dock */}
-      <div className="ob-url-card">
-        <div className="ob-url-card-header">
-          <span className="ob-url-card-title">Bible Overlay Dock</span>
-          {copied === "dock" && (
-            <Check size={14} style={{ color: "var(--success)" }} />
-          )}
+      <div className="ob-url-cards-row">
+        {/* Bible Overlay Dock */}
+        <div className="ob-url-card">
+          <div className="ob-url-card-header">
+            <span className="ob-url-card-title">Bible Overlay Dock</span>
+            {copied === "dock" && (
+              <Check size={14} style={{ color: "var(--success)" }} />
+            )}
+          </div>
+          <div className="ob-url-input-row">
+            <input className="ob-url-input" readOnly value={dockUrl} />
+            <button
+              className="ob-btn ob-btn--primary ob-url-copy-btn"
+              onClick={() => copyUrl(dockUrl, "dock")}
+              title="Copy">
+              <Copy size={14} />
+              {copied === "dock" ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <p className="ob-url-desc">
+            Scripture presentation and Bible controls inside OBS.
+          </p>
         </div>
-        <div className="ob-url-input-row">
-          <input className="ob-url-input" readOnly value={dockUrl} />
-          <button
-            className="ob-btn ob-btn--primary"
-            style={{ flex: "none", padding: "0 16px" }}
-            onClick={() => copyUrl(dockUrl, "dock")}
-            title="Copy">
-            <Copy size={14} />
-            {copied === "dock" ? "Copied" : "Copy"}
-          </button>
-        </div>
-        <p className="ob-url-desc">
-          Scripture presentation and Bible controls inside OBS.
-        </p>
-      </div>
 
-      {/* MakeChurchEasy Control Dock */}
-      <div className="ob-url-card">
-        <div className="ob-url-card-header">
-          <span className="ob-url-card-title">
-            Scripture Assistant
-          </span>
-          {copied === "ai" && (
-            <Check size={14} style={{ color: "var(--success)" }} />
-          )}
+        {/* MakeChurchEasy Control Dock */}
+        <div className="ob-url-card">
+          <div className="ob-url-card-header">
+            <span className="ob-url-card-title">
+              Scripture Assistant
+            </span>
+            {copied === "ai" && (
+              <Check size={14} style={{ color: "var(--success)" }} />
+            )}
+          </div>
+          <div className="ob-url-input-row">
+            <input className="ob-url-input" readOnly value={aiUrl} />
+            <button
+              className="ob-btn ob-btn--primary ob-url-copy-btn"
+              onClick={() => copyUrl(aiUrl, "ai")}
+              title="Copy">
+              <Copy size={14} />
+              {copied === "ai" ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <p className="ob-url-desc">
+            Automatically detects and displays Bible references as the preacher speaks.
+          </p>
         </div>
-        <div className="ob-url-input-row">
-          <input className="ob-url-input" readOnly value={aiUrl} />
-          <button
-            className="ob-btn ob-btn--primary"
-            style={{ flex: "none", padding: "0 16px" }}
-            onClick={() => copyUrl(aiUrl, "ai")}
-            title="Copy">
-            <Copy size={14} />
-            {copied === "ai" ? "Copied" : "Copy"}
-          </button>
-        </div>
-        <p className="ob-url-desc">
-          Automatically detects and displays Bible references as the preacher speaks.
-        </p>
       </div>
 
       <div className="ob-info-banner">
@@ -627,11 +563,11 @@ function StepInstallDock({
             <Play size={14} />
             Watch Tutorial
           </button>
+          <button className="ob-btn ob-btn--primary" onClick={onNext} title="Continue">
+            Continue
+            <ArrowRight size={16} />
+          </button>
         </div>
-        <button className="ob-btn ob-btn--primary" onClick={onNext} title="Continue">
-          Continue
-          <ArrowRight size={16} />
-        </button>
       </div>
     </div>
   );
@@ -656,7 +592,6 @@ function StepTest({
 }) {
   const [diags, setDiags] = useState<DiagItem[]>([
     { label: "OBS Connected", status: "pending", detail: "" },
-    { label: "Bible Resources", status: "pending", detail: "" },
     { label: "MakeChurchEasy Dock", status: "pending", detail: "" },
     { label: "AI Dock", status: "pending", detail: "" },
     { label: "Voice Bible", status: "pending", detail: "" },
@@ -667,7 +602,7 @@ function StepTest({
     setRunning(true);
     const results: DiagItem[] = [];
     const isDev =
-      window.location.protocol === "http:" && window.location.port === "1420";
+      window.location.protocol === "http:" && window.location.port === "1501";
     const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
 
     // 1. OBS
@@ -678,27 +613,7 @@ function StepTest({
     });
     setDiags([...results]);
 
-    // 2. Bible Resources
-    try {
-      const installed = await getInstalledTranslations();
-      results.push({
-        label: "Bible Resources",
-        status: installed.length > 0 ? "ok" : "warn",
-        detail:
-          installed.length > 0
-            ? `${installed.length} translation${installed.length !== 1 ? "s" : ""} installed`
-            : "No translations downloaded",
-      });
-    } catch {
-      results.push({
-        label: "Bible Resources",
-        status: "warn",
-        detail: "Could not verify",
-      });
-    }
-    setDiags([...results]);
-
-    // 3. MakeChurchEasy Dock
+    // 2. MakeChurchEasy Dock
     try {
       const dockUrl = isDev ? `${base}/dock` : `${base}/dock.html`;
       await fetch(dockUrl, { method: "HEAD", mode: "no-cors" });
@@ -716,7 +631,7 @@ function StepTest({
     }
     setDiags([...results]);
 
-    // 4. AI Dock
+    // 3. AI Dock
     try {
       const aiUrl = `${base}/lm-dock.html`;
       await fetch(aiUrl, { method: "HEAD", mode: "no-cors" });
@@ -730,7 +645,7 @@ function StepTest({
     }
     setDiags([...results]);
 
-    // 5. Voice Bible (check if mic permission is available)
+    // 4. Voice Bible (check if mic permission is available)
     try {
       if (navigator.mediaDevices) {
         results.push({

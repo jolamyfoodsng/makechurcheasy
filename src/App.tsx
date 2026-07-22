@@ -4,7 +4,7 @@
  * Root component with React Router.
  *
  * Startup sequence:
- *   1. Splash screen shown (introductory_loading_image.png)
+ *   1. Splash screen shown (environment-specific onboarding splash)
  *   2. Resources pre-loaded + GitHub update check runs in parallel
  *   3. If update available → non-blocking floating notification (bottom-right)
  *   4. App continues polling for updates while running
@@ -13,14 +13,10 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Navigate, useParams, useNavigate } from "react-router-dom";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
-import { exit } from "@tauri-apps/plugin-process";
 import { OBSConnectGate } from "./components/OBSConnectGate";
 import AuthGate from "./components/AuthGate";
 import LicenseGuard from "./components/LicenseGuard";
 import FeatureGuard from "./components/FeatureGuard";
-import PresentationPlanGate from "./components/PresentationPlanGate";
 import { useAuth } from "./contexts/AuthContext";
 import { initLicenseGuard, reverifyOnAuth } from "./services/licenseGuard";
 import { AppShell } from "./AppShell";
@@ -30,24 +26,20 @@ import { BibleProvider } from "./bible/bibleStore";
 import { LowerThirdProvider } from "./lowerthirds/lowerThirdStore";
 import SplashScreen from "./components/SplashScreen";
 import UpdateNotification from "./components/UpdateNotification";
+import ForceUpdateModal from "./components/ForceUpdateModal";
 import ForcedUpdateOverlay from "./components/ForcedUpdateOverlay";
-import { AnnouncementModalHost } from "./components/AnnouncementModalHost";
-import { InterfaceLanguagePrompt } from "./components/InterfaceLanguagePrompt";
 import VersionFloorWarningBanner from "./components/VersionFloorWarningBanner";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
 import TrialExpiredUpgradeModal from "./components/TrialExpiredUpgradeModal";
 import VerificationGate from "./components/VerificationGate";
 import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
-import { checkForUpdate, downloadAndInstallUpdate, downloadAndInstallFromGitHub, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
+import { checkForUpdate, downloadAndInstallUpdate, downloadAndInstallFromGitHub, getVersionAge, fetchVersionFloor, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
 import {
   fetchAppSettings,
   getForcedUpdateState,
-  getPolicyUpdateNotice,
-  recordOverlayDismiss,
-  refreshAppSettings,
   shouldReshowOverlay,
-  type PolicyUpdateNotice,
+  recordOverlayDismiss,
   type ForcedUpdateState,
 } from "./services/forcedUpdateService";
 import { initOverlayUrl } from "./services/overlayUrl";
@@ -56,7 +48,7 @@ import { getSettings, MV_SETTINGS_UPDATED_EVENT, seedTemplates, syncLayoutsToDoc
 import { STARTER_TEMPLATES } from "./multiview/templates";
 import { applyBrandingSettingsToDom } from "./services/branding";
 import { useAppTheme } from "./hooks/useAppTheme";
-import { UpgradeModalBridge } from "./hooks/useFeatureGate";
+import { getAppTitle, getSplashImageSrc } from "./services/envConfig";
 import DevDashboard from "./pages/DevDashboard";
 
 import { dockBridge } from "./services/dockBridge";
@@ -78,16 +70,12 @@ import ResourcesPage from "./pages/ResourcesPage";
 import ProductionHomePage from "./pages/ProductionHomePage";
 import MultiViewGalleryPage from "./pages/MultiViewGalleryPage";
 import CountdownsPage from "./pages/CountdownsPage";
-import PresentationSetupPage from "./pages/PresentationSetupPage";
-import PresentationConsolePage from "./pages/PresentationConsolePage";
 import ProductionThemeSettingsPage from "./pages/ProductionThemeSettingsPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import ServicePlannerPage from "./pages/ServicePlannerPage";
 import SpeechToScripturePage from "./pages/SpeechToScripturePage";
 import TranscriptLibraryPage from "./pages/TranscriptLibraryPage";
 import TranscriptDetailPage from "./pages/TranscriptDetailPage";
-import ServiceHubPage from "./pages/ServiceHubPage";
-import QuickMergePage from "./pages/QuickMergePage";
 import CreditsGuard from "./components/CreditsGuard";
 import {
   getServicePlannerSnapshot,
@@ -124,14 +112,10 @@ import "./App.css";
 import "./NewDashboard.css";
 import "./compat-mode.css";
 import { getRecommendedPollingInterval } from "./services/performanceManager";
-import { armConfirmedAppClose, clearConfirmedAppClose, isConfirmedAppClose } from "./services/appCloseGuard";
 
 const UPDATE_POLL_INTERVAL_MS = 30_000;
-const FORCED_UPDATE_POLL_INTERVAL_MS = 5 * 60 * 1000;
 const WORSHIP_DOCK_SAVE_POLL_INTERVAL_MS = 500;
 const DOCK_WORSHIP_PREFS_APP_KEY = "dock-worship-preferences";
-const SUBSCRIPTION_PLANS_URL =
-  "https://makechurcheasy.creatorstudioslabs.stream/subscription/plans";
 
 async function saveWorshipSongFromDockPayload(payload: WorshipDockSongSavePayload): Promise<{
   song: Song;
@@ -198,37 +182,6 @@ function TranscriptDetailPageWrapper() {
   );
 }
 
-function SubscriptionPlansRedirect() {
-  const navigate = useNavigate();
-  const openedRef = useRef(false);
-
-  useEffect(() => {
-    if (openedRef.current) return;
-    openedRef.current = true;
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const { openUrl } = await import("@tauri-apps/plugin-opener");
-        await openUrl(SUBSCRIPTION_PLANS_URL);
-      } catch {
-        window.open(SUBSCRIPTION_PLANS_URL, "_blank", "noopener,noreferrer");
-      } finally {
-        if (!cancelled) {
-          navigate("/", { replace: true });
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [navigate]);
-
-  return null;
-}
-
 function App() {
   // ── Global theme (dark/light) ──
   useAppTheme();
@@ -289,6 +242,9 @@ function App() {
   useEffect(() => {
     const s = getSettings();
     applyBrandingSettingsToDom({ brandColor: s.brandColor, churchName: s.churchName });
+
+    // Set document title based on environment
+    document.title = getAppTitle();
 
     // Initialize dock bridge so the OBS Browser Dock can communicate
     dockBridge.init();
@@ -608,7 +564,7 @@ function App() {
 
   // ── Update state ──
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
-  const [policyUpdateNotice, setPolicyUpdateNotice] = useState<PolicyUpdateNotice | null>(null);
+  const [versionAge, setVersionAge] = useState<{ daysOld: number; forceUpdate: boolean; persistent: boolean }>({ daysOld: 0, forceUpdate: false, persistent: false });
 
   // ── Version floor check (fetched from server — admin-controlled) ──
   const [versionFloorBlocked, setVersionFloorBlocked] = useState<{
@@ -640,7 +596,7 @@ function App() {
     startedAt: null,
     lockAt: null,
     updateMessage: "",
-    currentVersion: typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0",
+    currentVersion: "",
     downloadUrl: "",
     releaseNotesUrl: "",
     loading: true,
@@ -690,9 +646,11 @@ function App() {
       .then((result) => {
         if (result.available && result.update) {
           setUpdateResult(result);
+          setVersionAge(getVersionAge(result, result.currentVersion ?? (typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined)));
         } else if (result.date) {
           // Offline fallback: check returned a cached date but no update available
           setUpdateResult(result);
+          setVersionAge(getVersionAge(result, typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined));
         }
       })
       .catch(() => {
@@ -703,10 +661,62 @@ function App() {
     const forcedUpdateCheck = fetchAppSettings()
       .then((settings) => {
         setForcedUpdateState(getForcedUpdateState(settings));
-        setPolicyUpdateNotice(getPolicyUpdateNotice(settings));
       })
       .catch(() => {
         // If fetch fails, proceed without server-driven forced update
+      });
+
+    // Fetch version floor from server (admin-configured minimum)
+    const FLOOR_GRACE_KEY = "ocs-version-floor-grace-v1";
+    fetchVersionFloor()
+      .then((result) => {
+        if (!result) return;
+
+        if (result.gracePeriodHours > 0) {
+          // Grace period configured — track it in localStorage
+          let startedAt: string;
+          try {
+            const existing = localStorage.getItem(FLOOR_GRACE_KEY);
+            if (existing) {
+              const rec = JSON.parse(existing) as { startedAt: string; minimumVersion: string };
+              // If the minimum version changed, reset the grace period
+              if (rec.minimumVersion === result.minimumVersion) {
+                startedAt = rec.startedAt;
+              } else {
+                startedAt = new Date().toISOString();
+              }
+            } else {
+              startedAt = new Date().toISOString();
+            }
+          } catch {
+            startedAt = new Date().toISOString();
+          }
+
+          // Persist the grace record
+          try {
+            localStorage.setItem(
+              FLOOR_GRACE_KEY,
+              JSON.stringify({ startedAt, minimumVersion: result.minimumVersion })
+            );
+          } catch { /* non-critical */ }
+
+          // Check if grace period has already expired
+          const endMs = new Date(startedAt).getTime() + result.gracePeriodHours * 60 * 60 * 1000;
+          if (Date.now() >= endMs) {
+            // Grace period expired — show hard lock
+            setVersionFloorBlocked(result);
+          } else {
+            // Still in grace — show warning banner
+            setVersionFloorBlocked({ ...result, blocked: false });
+            setVersionFloorGraceStartedAt(startedAt);
+          }
+        } else {
+          // No grace period — immediate hard lock (original behavior)
+          setVersionFloorBlocked(result);
+        }
+      })
+      .catch(() => {
+        // If fetch fails, don't block — proceed normally
       });
 
     // Initialize the overlay URL (queries Tauri for the local server port)
@@ -733,7 +743,7 @@ function App() {
       }),
     );
 
-    // Seed default multiview templates into IndexedDB (non-blocking, skips existing)
+    // Seed starter multiview templates into IndexedDB (non-blocking, skips existing)
     seedTemplates(STARTER_TEMPLATES).then(() => {
       // Sync layouts to dock after seeding completes
       syncLayoutsToDock().catch(() => { });
@@ -769,7 +779,7 @@ function App() {
     // Preload the splash image itself + any critical resources
     const preload = new Promise<void>((resolve) => {
       const img = new Image();
-      img.src = "/introductory_loading_image.png";
+      img.src = getSplashImageSrc();
       img.onload = () => resolve();
       img.onerror = () => resolve(); // proceed even if image fails
     });
@@ -807,81 +817,6 @@ function App() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);
 
-  // ── Native app close confirmation ──
-  useEffect(() => {
-    if (!(window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-      return;
-    }
-
-    clearConfirmedAppClose();
-
-    let unlisten: (() => void) | null = null;
-    let promptInFlight = false;
-
-    const setup = async () => {
-      try {
-        const currentWindow = getCurrentWindow();
-
-        unlisten = await currentWindow.onCloseRequested(async (event) => {
-          if (isConfirmedAppClose()) {
-            return;
-          }
-
-          event.preventDefault();
-
-          if (promptInFlight) {
-            return;
-          }
-
-          promptInFlight = true;
-
-          try {
-            const lmStatus = lmDockService.getSnapshot().status;
-            const speechActive =
-              lmStatus === "listening" ||
-              lmStatus === "connecting" ||
-              lmStatus === "requesting-mic";
-
-            const confirmed = await confirmDialog(
-              speechActive
-                ? "Close MakeChurchEasy?\n\nSpeech-to-Scripture is still active. Closing now will stop the session and may discard transcript progress."
-                : "Close MakeChurchEasy?\n\nAny active live operation will stop when the app closes.",
-              {
-                title: "Close MakeChurchEasy",
-                kind: "warning",
-                okLabel: "Close App",
-                cancelLabel: "Stay",
-              },
-            );
-
-            if (!confirmed) {
-              clearConfirmedAppClose();
-              return;
-            }
-
-            armConfirmedAppClose();
-            await exit(0);
-          } catch (error) {
-            clearConfirmedAppClose();
-            console.warn("[App] Failed to show close confirmation:", error);
-          } finally {
-            promptInFlight = false;
-          }
-        });
-      } catch (error) {
-        console.warn("[App] Failed to register native close confirmation:", error);
-      }
-    };
-
-    void setup();
-
-    return () => {
-      clearConfirmedAppClose();
-      unlisten?.();
-      unlisten = null;
-    };
-  }, []);
-
   // ── Track OBS connection status ──
   useEffect(() => {
     let prevConnected = false;
@@ -902,6 +837,8 @@ function App() {
   useEffect(() => {
     if (splashVisible) return;
     if (updateResult?.available && updateResult.update) return;
+    // Stop polling when force update is already shown (e.g. from cached offline data)
+    if (versionAge.forceUpdate && updateResult) return;
 
     let cancelled = false;
 
@@ -911,6 +848,7 @@ function App() {
       try {
         const result = await checkForUpdate();
         if (cancelled) return;
+        const curVer = result.currentVersion ?? (typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined);
         if (result.available && result.update) {
           setUpdateResult((prev) => {
             if (prev?.available && prev.version === result.version) {
@@ -918,6 +856,7 @@ function App() {
             }
             return result;
           });
+          setVersionAge(getVersionAge(result, curVer));
         } else if (result.date) {
           // Offline fallback: cached date returned, check if version is stale
           setUpdateResult((prev) => {
@@ -926,6 +865,7 @@ function App() {
             }
             return result;
           });
+          setVersionAge(getVersionAge(result, curVer));
         }
       } catch {
         // Keep polling.
@@ -943,39 +883,32 @@ function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [splashVisible, updateResult?.available, updateResult?.update, updateResult?.version, updateResult]);
+  }, [splashVisible, updateResult?.available, updateResult?.update, updateResult?.version, versionAge.forceUpdate, updateResult]);
 
   // ── Update: dismiss (hide notification, app continues) ──
   const handleDismissUpdate = useCallback(() => {
     setUpdateResult(null);
-    setPolicyUpdateNotice(null);
   }, []);
 
   // ── Update: remind later (hide temporarily, app continues) ──
   const handleRemindLaterUpdate = useCallback(() => {
     setUpdateResult(null);
-    setPolicyUpdateNotice(null);
   }, []);
 
   // ── Server-driven forced update / emergency lock check ──
   const refetchForcedUpdate = useCallback(() => {
-    refreshAppSettings()
+    fetchAppSettings()
       .then((settings) => {
         setForcedUpdateState(getForcedUpdateState(settings));
-        setPolicyUpdateNotice(getPolicyUpdateNotice(settings));
       })
       .catch(() => { /* non-critical */ });
   }, []);
 
-  // Poll every 5 minutes while visible; focus/visibility resumes trigger
-  // immediate refreshes so admin-configured locks still propagate promptly.
+  // Poll every 60 seconds (emergency lock needs to take effect quickly)
   useEffect(() => {
     if (splashVisible) return;
 
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      refetchForcedUpdate();
-    }, FORCED_UPDATE_POLL_INTERVAL_MS);
+    const intervalId = window.setInterval(refetchForcedUpdate, 60 * 1000);
     return () => window.clearInterval(intervalId);
   }, [splashVisible, refetchForcedUpdate]);
 
@@ -986,11 +919,9 @@ function App() {
     const handleFocus = () => refetchForcedUpdate();
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleFocus);
-    window.addEventListener("online", handleFocus);
     return () => {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleFocus);
-      window.removeEventListener("online", handleFocus);
     };
   }, [splashVisible, refetchForcedUpdate]);
 
@@ -1013,7 +944,7 @@ function App() {
     setShowTrialModal(false);
     if (user) {
       try {
-        const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+        const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
         const deviceId = getDeviceId();
         await fetch(`${API_BASE}/api/auth/trial-welcome`, {
           method: "POST",
@@ -1130,17 +1061,6 @@ function App() {
     }
   }, []);
 
-  const updateNotificationResult =
-    updateResult ??
-    (policyUpdateNotice
-      ? {
-        available: true,
-        version: policyUpdateNotice.latestVersion,
-        currentVersion: policyUpdateNotice.currentVersion,
-        notes: policyUpdateNotice.message,
-      }
-      : null);
-
   return (
     <div className="app">
       <input
@@ -1160,8 +1080,6 @@ function App() {
       {splashVisible && (
         <SplashScreen ready={resourcesReady} onDone={handleSplashDone} />
       )}
-
-      {!splashVisible && <InterfaceLanguagePrompt />}
 
       {/* 2a. Version floor block — server-configured minimum, no self-update possible */}
       {!splashVisible && versionFloorBlocked?.blocked && (
@@ -1285,15 +1203,21 @@ function App() {
           />
         )}
 
+      {/* 2b. Force update modal — blocks app when version is too old (age-based) */}
+      {!splashVisible && !versionFloorBlocked && updateResult && versionAge.forceUpdate && (
+        <ForceUpdateModal
+          result={updateResult}
+          daysOld={versionAge.daysOld}
+          locked={true}
+        />
+      )}
+
       {/* 3. Non-blocking update notification — floats in bottom-right (only when not forced) */}
-      {!splashVisible && !versionFloorBlocked && !forcedUpdateState.active && updateNotificationResult && (
+      {!splashVisible && !versionFloorBlocked && updateResult && !versionAge.forceUpdate && (
         <UpdateNotification
-          result={updateNotificationResult}
+          result={updateResult}
           onDismiss={handleDismissUpdate}
           onRemindLater={handleRemindLaterUpdate}
-          manualDownloadUrl={policyUpdateNotice?.downloadUrl}
-          releaseNotesUrl={policyUpdateNotice?.releaseNotesUrl}
-          message={policyUpdateNotice?.message}
         />
       )}
 
@@ -1327,34 +1251,27 @@ function App() {
                       <Route path="bible/translations" element={<Navigate to="/resources?tab=bible" replace />} />
                       <Route path="production/themes" element={<ProductionThemeSettingsPage />} />
                       <Route path="settings" element={<BibleProvider><MVSettings /></BibleProvider>} />
-                      <Route path="pricing" element={<Navigate to="/subscription/plans" replace />} />
-                      <Route path="subscription/plans" element={<SubscriptionPlansRedirect />} />
-                      <Route path="subscriptions/plans" element={<Navigate to="/subscription/plans" replace />} />
                       <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
                       <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
                       <Route path="countdowns" element={<CountdownsPage />} />
-                      <Route path="presentation" element={<PresentationPlanGate><PresentationSetupPage /></PresentationPlanGate>} />
-                      <Route path="presentation/setup" element={<PresentationPlanGate><PresentationSetupPage /></PresentationPlanGate>} />
-                      <Route path="presentation/console" element={<PresentationPlanGate><PresentationConsolePage /></PresentationPlanGate>} />
                       <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
                       <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />
                       <Route path="library" element={<Navigate to="/resources" replace />} />
                       <Route path="templates" element={<Navigate to="/production/themes" replace />} />
                       <Route path="templates/*" element={<Navigate to="/production/themes" replace />} />
-                      <Route path="hub" element={<PresentationPlanGate><ServiceHubPage /></PresentationPlanGate>} />
-                      <Route path="hub/quick-merge" element={<QuickMergePage />} />
-                      <Route path="hub/*" element={<Navigate to="/presentation/console" replace />} />
-                      <Route path="service-hub" element={<Navigate to="/presentation/console" replace />} />
-                      <Route path="service-control-hub" element={<Navigate to="/presentation/console" replace />} />
-                      <Route path="quick-merge" element={<Navigate to="/hub/quick-merge" replace />} />
+                      <Route path="hub" element={<Navigate to="/" replace />} />
+                      <Route path="hub/*" element={<Navigate to="/" replace />} />
+                      <Route path="service-hub" element={<Navigate to="/" replace />} />
+                      <Route path="service-control-hub" element={<Navigate to="/" replace />} />
+                      <Route path="quick-merge" element={<Navigate to="/" replace />} />
                       <Route path="broadcast" element={<Navigate to="/" replace />} />
                       <Route path="bible" element={<Navigate to="/settings" replace />} />
                       <Route path="bible/*" element={<Navigate to="/settings" replace />} />
                       <Route path="worship" element={<Navigate to="/resources" replace />} />
                       <Route path="lower-thirds" element={<Navigate to="/production/themes" replace />} />
                       <Route path="scenes" element={<Navigate to="/settings" replace />} />
-                      <Route path="multiview" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
-                      <Route path="multiview/*" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
+                      <Route path="multiview" element={<MVShell />} />
+                      <Route path="multiview/*" element={<MVShell />} />
                       <Route path="new" element={<Navigate to="/" replace />} />
 
                       {/* Developer Tools */}
@@ -1373,21 +1290,14 @@ function App() {
       {/* 5. Trial welcome modal — overlays app after auth */}
       {showTrialModal && user?.trial?.endsAt && (
         <TrialModal
-          trialDays={user.trial?.durationDays || 20}
+          trialDays={user.trial?.durationDays || 14}
           trialEndsAt={user.trial.endsAt}
           isExistingUser={(user.trial?.durationDays || 0) >= 10}
           onDismiss={handleTrialModalDismiss}
         />
       )}
 
-      {/* Global upgrade modal — triggered by useFeatureGate.checkFeature() */}
-      <UpgradeModalBridge />
-      {!splashVisible && !versionFloorBlocked?.blocked && !forcedUpdateState.blocked && (
-        <TrialExpiredUpgradeModal />
-      )}
-      {!splashVisible && user && !versionFloorBlocked?.blocked && !forcedUpdateState.blocked && (
-        <AnnouncementModalHost />
-      )}
+      {!splashVisible && <TrialExpiredUpgradeModal />}
 
       {globalMediaDragging && !splashVisible && (
         <div className="app-global-media-drop-overlay" aria-hidden="true">

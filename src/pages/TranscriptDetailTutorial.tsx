@@ -377,7 +377,7 @@ export default function TranscriptDetailTutorial({
       onFinish();
       return;
     }
-    if (stepIndex < totalSteps - 1) {
+    if (stepIndex < totalSteps) {
       setStepCompleted(false);
       setStepIndex((i) => i + 1);
     }
@@ -410,7 +410,7 @@ export default function TranscriptDetailTutorial({
 
   // ── Render ────────────────────────────────────────────────────────────
 
-  if (!isActive || !currentStep) return null;
+  if (!isActive || (!currentStep && !isFinalStep)) return null;
 
   // ── Final Step ────────────────────────────────────────────────────────
 

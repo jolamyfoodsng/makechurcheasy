@@ -16,7 +16,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "./ResourcesTutorial.css";
 
@@ -39,6 +39,8 @@ interface TutorialStep {
   skipIf?: () => boolean;
   /** Position of the assistant panel relative to target */
   panelPosition: "right" | "left" | "top" | "bottom";
+  /** For large content targets, place the panel inside the highlighted region. */
+  panelStrategy?: "inside-top";
 }
 
 const STORAGE_KEY = "mce.resources.tutorial.completed";
@@ -164,7 +166,8 @@ export default function ResourcesTutorial({
       descKey: "rt.step3.desc",
       actionKey: "rt.step3.action",
       trigger: "none",
-      panelPosition: "right",
+      panelPosition: "top",
+      panelStrategy: "inside-top",
     },
   ], []);
 
@@ -213,32 +216,99 @@ export default function ResourcesTutorial({
 
   // ── Panel Positioning ─────────────────────────────────────────────────
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max));
+    const fits = (
+      pos: { top: number; left: number },
+      panelW: number,
+      panelH: number,
+      margin: number,
+    ) => (
+      pos.left >= margin &&
+      pos.top >= margin &&
+      pos.left + panelW <= window.innerWidth - margin &&
+      pos.top + panelH <= window.innerHeight - margin
+    );
+    const positionFor = (
+      rect: DOMRect,
+      panelW: number,
+      panelH: number,
+      placement: TutorialStep["panelPosition"],
+      gap: number,
+    ) => {
+      switch (placement) {
+        case "left":
+          return {
+            top: rect.top + rect.height / 2 - panelH / 2,
+            left: rect.left - gap - panelW,
+          };
+        case "top":
+          return {
+            top: rect.top - gap - panelH,
+            left: rect.left + rect.width / 2 - panelW / 2,
+          };
+        case "bottom":
+          return {
+            top: rect.bottom + gap,
+            left: rect.left + rect.width / 2 - panelW / 2,
+          };
+        case "right":
+        default:
+          return {
+            top: rect.top + rect.height / 2 - panelH / 2,
+            left: rect.right + gap,
+          };
+      }
+    };
+
     if (isFinalStep || !targetRect) {
-      setPanelRect({ top: window.innerHeight / 2 - 180, left: window.innerWidth / 2 - 180 });
+      const panelW = panelRef.current?.offsetWidth ?? (isFinalStep ? 400 : 340);
+      const panelH = panelRef.current?.offsetHeight ?? 360;
+      setPanelRect({
+        top: clamp(window.innerHeight / 2 - panelH / 2, 20, window.innerHeight - panelH - 20),
+        left: clamp(window.innerWidth / 2 - panelW / 2, 20, window.innerWidth - panelW - 20),
+      });
       return;
     }
 
-    const panelW = 340;
-    const panelH = 300;
+    const panelW = panelRef.current?.offsetWidth ?? 340;
+    const panelH = panelRef.current?.offsetHeight ?? 300;
     const gap = 20;
+    const margin = 20;
 
-    let top = targetRect.top + targetRect.height / 2 - panelH / 2;
-    let left = targetRect.right + gap;
-
-    if (left + panelW > window.innerWidth - 20) {
-      left = targetRect.left - gap - panelW;
+    if (currentStep?.panelStrategy === "inside-top") {
+      const visibleLeft = Math.max(targetRect.left, margin);
+      const visibleRight = Math.min(targetRect.right, window.innerWidth - margin);
+      const visibleTop = Math.max(targetRect.top, margin);
+      setPanelRect({
+        top: clamp(visibleTop + 24, margin, window.innerHeight - panelH - margin),
+        left: clamp(visibleRight - panelW - 24, visibleLeft + 24, window.innerWidth - panelW - margin),
+      });
+      return;
     }
 
-    if (left < 20) {
-      left = Math.max(20, (window.innerWidth - panelW) / 2);
-      top = targetRect.bottom + gap;
+    const placements = Array.from(new Set<TutorialStep["panelPosition"]>([
+      currentStep?.panelPosition ?? "right",
+      "right",
+      "left",
+      "bottom",
+      "top",
+    ]));
+
+    for (const placement of placements) {
+      const pos = positionFor(targetRect, panelW, panelH, placement, gap);
+      if (fits(pos, panelW, panelH, margin)) {
+        setPanelRect(pos);
+        return;
+      }
     }
 
-    top = Math.max(20, Math.min(top, window.innerHeight - panelH - 20));
-
-    setPanelRect({ top, left });
-  }, [targetRect, isFinalStep]);
+    const preferred = positionFor(targetRect, panelW, panelH, currentStep?.panelPosition ?? "right", gap);
+    setPanelRect({
+      top: clamp(preferred.top, margin, window.innerHeight - panelH - margin),
+      left: clamp(preferred.left, margin, window.innerWidth - panelW - margin),
+    });
+  }, [targetRect, isFinalStep, currentStep?.panelPosition, currentStep?.panelStrategy, stepCompleted]);
 
   // ── Trigger Event Listeners ───────────────────────────────────────────
 
@@ -322,7 +392,7 @@ export default function ResourcesTutorial({
       onFinish();
       return;
     }
-    if (stepIndex < totalSteps - 1) {
+    if (stepIndex < totalSteps) {
       setStepCompleted(false);
       setStepIndex((i) => i + 1);
     }
@@ -358,7 +428,7 @@ export default function ResourcesTutorial({
 
   // ── Nothing to render ─────────────────────────────────────────────────
 
-  if (!isActive || !currentStep) return null;
+  if (!isActive || (!currentStep && !isFinalStep)) return null;
 
   // ── Final Step ────────────────────────────────────────────────────────
 

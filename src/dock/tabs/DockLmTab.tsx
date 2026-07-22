@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, Edit2, MonitorUp, Check, StickyNote } from "lucide-react";
+import { Copy, Edit2, MonitorUp, Check, StickyNote, HelpCircle } from "lucide-react";
 import { dockObsClient, type DockObsStatus } from "../dockObsClient";
 import { dockClient, type DockStateMessage, type DockCommandType } from "../../services/dockBridge";
 import type { VoiceBibleCandidate, TranscriptEntry } from "../../services/voiceBibleTypes";
-import { MATCH_SOURCE_LABEL } from "../../services/voiceBibleTypes";
+
 import { parseScriptureReference } from "../../services/scriptureParser";
 import { onCreditChange, isProUnlocked } from "../../services/credits";
 import Icon from "../DockIcon";
@@ -12,6 +12,11 @@ import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
+import { getEnvConfig } from "../../services/envConfig";
+import BibleAiOnboarding, {
+  isBibleAiOnboardingCompleted,
+  resetBibleAiOnboarding,
+} from "../../../others/BibleAiOnboarding";
 
 type LmStatus = "idle" | "requesting-mic" | "connecting" | "listening" | "error";
 
@@ -20,7 +25,7 @@ const DOCK_BIBLE_PREFS_KEY = "ocs-dock-bible-preferences";
 const HISTORY_STORAGE_KEY = "ocs-lm-dock-history";
 const MAX_HISTORY = 50;
 const MAX_TRANSCRIPT_LINES = 40;
-const MAX_QUEUE_SIZE = 5;
+const MAX_QUEUE_SIZE = 3;
 const SUGGESTION_EXPIRY_MS = 20_000;
 const SUGGESTION_COOLDOWN_MS = 60_000;
 const NOTES_STORAGE_KEY = "ocs-dock-notes-v1";
@@ -114,6 +119,10 @@ function saveHistory(history: string[]): void {
 
 export default function DockLmTab() {
   const { t } = useTranslation();
+  const isTestEnv = getEnvConfig().isTest;
+  const openAppToStartText = isTestEnv
+    ? "Open Speech to Scripture in MakeChurchEasy Test on this computer to start listening."
+    : t("lm.openAppToStart");
 
   const [settings, setSettings] = useState<LmDockSettings>(() => loadSettings());
   const [showSettings, setShowSettings] = useState(false);
@@ -174,6 +183,45 @@ export default function DockLmTab() {
   const detectedAtRef = useRef<Map<string, number>>(new Map());
   const locallyRemovedRef = useRef<Set<string>>(new Set());
   const suggestionCooldownRef = useRef<Map<string, number>>(new Map());
+
+  // ── Pinned verses ──
+  const PINNED_STORAGE_KEY = "ocs-lm-dock-pinned";
+  const [pinnedVerses, setPinnedVerses] = useState<VoiceBibleCandidate[]>(() => {
+    try {
+      const raw = localStorage.getItem(getUserScopedKey(PINNED_STORAGE_KEY));
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  const savePinned = useCallback((verses: VoiceBibleCandidate[]) => {
+    try { localStorage.setItem(getUserScopedKey(PINNED_STORAGE_KEY), JSON.stringify(verses)); } catch { }
+  }, []);
+
+  const handlePinVerse = useCallback((c: VoiceBibleCandidate) => {
+    setPinnedVerses((prev) => {
+      const key = `${c.book}:${c.chapter}:${c.verse}`;
+      const exists = prev.some((p) => `${p.book}:${p.chapter}:${p.verse}` === key);
+      if (exists) return prev;
+      const next = [...prev, c];
+      savePinned(next);
+      return next;
+    });
+  }, [savePinned]);
+
+  const handleUnpinVerse = useCallback((key: string) => {
+    setPinnedVerses((prev) => {
+      const next = prev.filter((p) => `${p.book}:${p.chapter}:${p.verse}` !== key);
+      savePinned(next);
+      return next;
+    });
+  }, [savePinned]);
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    if (!isBibleAiOnboardingCompleted()) {
+      setShowOnboarding(true);
+    }
+  }, []);
 
   const [creditBalance, setCreditBalance] = useState<number>(0);
   const [proUnlocked] = useState(() => isProUnlocked());
@@ -473,16 +521,26 @@ export default function DockLmTab() {
   }, [sendLmCommand]);
 
   const processedQueue = useMemo(() => {
+    const seen = new Set<string>();
     const result: VoiceBibleCandidate[] = [];
-    for (const item of queue) {
+    for (let i = queue.length - 1; i >= 0; i--) {
+      const item = queue[i];
       const key = `${item.book}:${item.chapter}:${item.verse}`;
       if (locallyRemovedRef.current.has(key)) continue;
-      const existingIdx = result.findIndex((r) => `${r.book}:${r.chapter}:${r.verse}` === key);
-      if (existingIdx >= 0) result.splice(existingIdx, 1);
-      result.unshift(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(item);
     }
+    result.sort((a, b) => {
+      const ka = `${a.book}:${a.chapter}:${a.verse}`;
+      const kb = `${b.book}:${b.chapter}:${b.verse}`;
+      return (detectedAtRef.current.get(kb) ?? 0) - (detectedAtRef.current.get(ka) ?? 0);
+    });
     return result.slice(0, MAX_QUEUE_SIZE);
   }, [queue]);
+
+  const currentVerse = processedQueue[0] ?? null;
+  const queueVerses = processedQueue.slice(1);
 
   const filteredSuggestions = useMemo(() => {
     const nowMs = Date.now();
@@ -515,6 +573,26 @@ export default function DockLmTab() {
   }, [now]);
 
   const recentEntries = useMemo(() => entries.slice(-MAX_TRANSCRIPT_LINES), [entries]);
+
+  // ── Live word indicator ──
+  const liveEntryIndex = useMemo(() => {
+    for (let i = recentEntries.length - 1; i >= 0; i--) {
+      if (!recentEntries[i].finalized) return i;
+    }
+    return recentEntries.length > 0 ? recentEntries.length - 1 : -1;
+  }, [recentEntries]);
+
+  const renderText = useCallback((text: string, isLive: boolean) => {
+    if (!isLive || !text) return text;
+    const words = text.trim().split(/\s+/);
+    if (words.length <= 1) return text;
+    const lastWord = words.pop()!;
+    return (
+      <>
+        {words.join(" ")} <span style={S.liveWord}>{lastWord}</span>
+      </>
+    );
+  }, []);
 
   // ── Transcript interaction handlers ──
   const handleContextMenu = useCallback((e: React.MouseEvent, index: number) => {
@@ -627,6 +705,40 @@ export default function DockLmTab() {
 
   return (
     <div style={S.root} ref={rootRef}>
+      <style>{`@keyframes lm-pulse{0%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.6)}100%{opacity:1;transform:scale(1)}}`}</style>
+      {isTestEnv && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 10px",
+            background: "rgba(127, 29, 29, 0.92)",
+            borderBottom: "1px solid rgba(245, 158, 11, 0.65)",
+            color: "#fff7ed",
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+          }}
+        >
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minWidth: 42,
+              padding: "2px 6px",
+              borderRadius: 999,
+              background: "#f59e0b",
+              color: "#7f1d1d",
+            }}
+          >
+            Test
+          </span>
+          <span>Testing environment only. Start Speech to Scripture from the test desktop app on this machine.</span>
+        </div>
+      )}
       <div style={S.statusBar}>
         <div style={S.statusBarLeft}>
           <div
@@ -655,9 +767,21 @@ export default function DockLmTab() {
             </span>
           )}
           <button
+            style={S.helpBtn}
+            onClick={() => {
+              resetBibleAiOnboarding();
+              setShowOnboarding(true);
+            }}
+            title="Bible AI Tour"
+            data-onboarding="help-btn"
+          >
+            <HelpCircle size={14} />
+          </button>
+          <button
             style={S.gearBtn}
             onClick={() => setShowSettings(!showSettings)}
             title={t("lm.settings")}
+            data-onboarding="settings-btn"
           >
             <Icon name="settings" size={14} />
           </button>
@@ -683,22 +807,94 @@ export default function DockLmTab() {
 
       {activeTab === "up-next" && (
         <div style={S.tabContent}>
-          <div style={S.queueSection}>
+          {/* ── CURRENT / LIVE VERSE ── */}
+          {currentVerse && (
+            <div style={S.currentSection} data-onboarding="live-card">
+              <div style={S.currentCard}>
+                <div style={S.currentCardHeader}>
+                  <span style={S.currentDot} />
+                  <span style={S.currentBadge}>LIVE</span>
+                </div>
+                <div style={S.currentRef}>{currentVerse.label}</div>
+                {currentVerse.snippet && (
+                  <div style={S.currentText}>{currentVerse.snippet}</div>
+                )}
+                <div style={S.currentBottom}>
+                  <span style={S.currentTime}>
+                    {(() => {
+                      const k = `${currentVerse.book}:${currentVerse.chapter}:${currentVerse.verse}`;
+                      const d = detectedAtRef.current.get(k) ?? Date.now();
+                      return getFreshness(d, now).label;
+                    })()}
+                  </span>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button
+                      style={S.pinBtn}
+                      onClick={() => handlePinVerse(currentVerse)}
+                      title="Pin verse"
+                      data-onboarding="pin-btn"
+                    >
+                      <Icon name="push_pin" size={11} />
+                    </button>
+                    <button
+                      style={S.pushBtn}
+                      onClick={() => void handlePushVerse(currentVerse, "queue")}
+                      disabled={pushing || obsStatus !== "connected"}
+                      title={t("lm.pushToObsTitle")}
+                      data-onboarding="push-btn"
+                    >
+                      <Icon name="play" size={11} />
+                      {t("lm.pushToObs")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Pinned badges inline below live card ── */}
+              {pinnedVerses.length > 0 && (
+                <div style={S.pinnedRow}>
+                  {pinnedVerses.map((c, i) => {
+                    const key = `${c.book}:${c.chapter}:${c.verse}`;
+                    return (
+                      <div
+                        key={`pin-${key}-${i}`}
+                        style={S.pinnedChip}
+                        onClick={() => void handlePushVerse(c, "queue")}
+                        title="Click to push to OBS"
+                      >
+                        📌 {c.label}
+                        <button
+                          style={S.pinnedChipClose}
+                          onClick={(e) => { e.stopPropagation(); handleUnpinVerse(key); }}
+                          title="Unpin"
+                        >
+                          <Icon name="close" size={9} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── QUEUE ── */}
+          <div style={S.queueSectionFull} data-onboarding="queue-section">
             <div style={S.sectionHeader}>
               <span style={S.sectionLabel}>{t("lm.queue")}</span>
-              {processedQueue.length > 0 && (
-                <span style={S.sectionCount}>{processedQueue.length}</span>
+              {queueVerses.length > 0 && (
+                <span style={S.sectionCount}>{queueVerses.length}</span>
               )}
             </div>
             <div style={S.queueScroll}>
-              {processedQueue.length === 0 && (
+              {!currentVerse && queueVerses.length === 0 && pinnedVerses.length === 0 && (
                 <div style={S.sectionEmpty}>
                   <span style={S.sectionEmptyText}>
-                    {appConnected ? t("lm.waitingForDetection") : t("lm.openAppToStart")}
+                    {appConnected ? t("lm.waitingForDetection") : openAppToStartText}
                   </span>
                 </div>
               )}
-              {processedQueue.map((c, i) => {
+              {queueVerses.map((c, i) => {
                 const key = `${c.book}:${c.chapter}:${c.verse}`;
                 const detectedAt = detectedAtRef.current.get(key) ?? Date.now();
                 const freshness = getFreshness(detectedAt, now);
@@ -713,63 +909,24 @@ export default function DockLmTab() {
                     )}
                     <div style={S.queueCardBottom}>
                       <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
-                      <button
-                        style={S.pushBtn}
-                        onClick={() => void handlePushVerse(c, "queue")}
-                        disabled={pushing || obsStatus !== "connected"}
-                        title={t("lm.pushToObsTitle")}
-                      >
-                        <Icon name="play" size={11} />
-                        {t("lm.pushToObs")}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={S.suggestionsSection}>
-            <div style={S.sectionHeader}>
-              <span style={S.sectionLabel}>{t("lm.suggestions")}</span>
-              {filteredSuggestions.length > 0 && (
-                <span style={S.sectionCount}>{filteredSuggestions.length}</span>
-              )}
-            </div>
-            <div style={S.suggestionsScroll}>
-              {filteredSuggestions.length === 0 && (
-                <div style={S.sectionEmpty}>
-                  <span style={S.sectionEmptyText}>{t("lm.suggestionsEmpty")}</span>
-                </div>
-              )}
-              {filteredSuggestions.map((c, i) => {
-                const key = `${c.book}:${c.chapter}:${c.verse}`;
-                const detectedAt = detectedAtRef.current.get(key) ?? Date.now();
-                const freshness = getFreshness(detectedAt, now);
-                const srcLabel = MATCH_SOURCE_LABEL[c.source ?? "fuzzy"];
-
-                return (
-                  <div key={`sug-${key}-${i}`} style={S.suggestionCard}>
-                    <div style={S.suggestionCardTop}>
-                      <span style={S.suggestionRef}>{c.label}</span>
-                      <span style={{ ...S.matchBadge, color: srcLabel.color, borderColor: srcLabel.color + "40" }}>
-                        {srcLabel.label}
-                      </span>
-                    </div>
-                    {c.snippet && (
-                      <div style={S.verseText}>{c.snippet}</div>
-                    )}
-                    <div style={S.suggestionCardBottom}>
-                      <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
-                      <button
-                        style={S.pushBtn}
-                        onClick={() => void handlePushVerse(c, "suggestion")}
-                        disabled={pushing || obsStatus !== "connected"}
-                        title={t("lm.pushToObsTitle")}
-                      >
-                        <Icon name="play" size={11} />
-                        {t("lm.pushToObs")}
-                      </button>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button
+                          style={S.pinBtnSmall}
+                          onClick={() => handlePinVerse(c)}
+                          title="Pin verse"
+                        >
+                          <Icon name="push_pin" size={10} />
+                        </button>
+                        <button
+                          style={S.pushBtn}
+                          onClick={() => void handlePushVerse(c, "queue")}
+                          disabled={pushing || obsStatus !== "connected"}
+                          title={t("lm.pushToObsTitle")}
+                        >
+                          <Icon name="play" size={11} />
+                          {t("lm.pushToObs")}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -793,6 +950,7 @@ export default function DockLmTab() {
               {recentEntries.map((entry, index) => {
                 const isSelected = selectedIndices.has(index);
                 const showActionBar = isSelectionMode && index === maxSelectedIndex;
+                const isLive = index === liveEntryIndex;
 
                 return (
                   <div
@@ -800,8 +958,9 @@ export default function DockLmTab() {
                     style={{
                       ...S.transcriptItem,
                       ...(isSelected ? S.transcriptItemSelected : {}),
-                      ...(isSelectionMode ? { paddingLeft: 4 } : {}),
+                      ...(isSelectionMode ? { paddingLeft: 2 } : {}),
                       ...(showActionBar ? { paddingBottom: 0 } : {}),
+                      ...(isLive ? S.transcriptItemLive : {}),
                     }}
                     title="Click to copy · Double-click to select · Edit or Push to OBS once selected"
                     onClick={(e) => {
@@ -830,12 +989,14 @@ export default function DockLmTab() {
                           }}
                         />
                       </div>
+                      {isLive && <span style={S.liveDot} />}
                       <span style={{
                         ...S.transcriptTextBase,
                         ...(isSelected ? S.transcriptTextSelected : {}),
                         ...(!entry.finalized ? S.transcriptTextActive : S.transcriptTextDim),
+                        ...(isLive ? S.transcriptTextLive : {}),
                       }}>
-                        {entry.text}
+                        {renderText(entry.text, isLive)}
                       </span>
 
                     </div>
@@ -857,7 +1018,7 @@ export default function DockLmTab() {
                             onClick={(e) => { e.stopPropagation(); handleCopyAll(); }}
                             title="Copy All"
                           >
-                            <Copy size={14} />
+                            <Copy size={12} />
                             <span style={S.btnText}>Copy All</span>
                           </button>
                           <button
@@ -865,7 +1026,7 @@ export default function DockLmTab() {
                             onClick={(e) => { e.stopPropagation(); handleEditAll(); }}
                             title="Edit"
                           >
-                            <Edit2 size={14} />
+                            <Edit2 size={12} />
                             <span style={S.btnText}>Edit</span>
                           </button>
                           <button
@@ -879,7 +1040,7 @@ export default function DockLmTab() {
                             }}
                             title="Save to Notes"
                           >
-                            <StickyNote size={14} />
+                            <StickyNote size={12} />
                             <span style={S.btnText}>Notes</span>
                           </button>
                           <button
@@ -894,8 +1055,8 @@ export default function DockLmTab() {
                             title="Push to OBS"
                             disabled={pushing || obsStatus !== "connected"}
                           >
-                            <MonitorUp size={14} />
-                            <span style={S.btnText}>Push to OBS</span>
+                            <MonitorUp size={12} />
+                            <span style={S.btnText}>Push OBS</span>
                           </button>
                         </div>
                       </div>
@@ -1006,7 +1167,7 @@ export default function DockLmTab() {
         <div style={S.emptyState}>
           <Icon name="mic" size={32} style={{ opacity: 0.15 }} />
           <span style={S.emptyText}>
-            {t("lm.openAppToStart")}
+            {openAppToStartText}
           </span>
           {appConnected && (
             <button
@@ -1141,6 +1302,12 @@ export default function DockLmTab() {
         </div>
       )}
 
+      <BibleAiOnboarding
+        isOpen={showOnboarding}
+        onClose={() => setShowOnboarding(false)}
+        onOpenSettings={() => setShowSettings(true)}
+      />
+
       {showSettings && (
         <>
           <div style={S.settingsOverlay} onClick={() => setShowSettings(false)} />
@@ -1155,7 +1322,7 @@ export default function DockLmTab() {
             <div style={S.settingsBody}>
               <div style={S.settingsGroup}>
                 <div style={S.settingsGroupLabel}>AUTO PUSH</div>
-                <label style={S.settingRow}>
+                <label style={S.settingRow} data-onboarding="auto-push-setting">
                   <span style={S.settingLabel}>{t("lm.autoPushQueue")}</span>
                   <input
                     type="checkbox"
@@ -1243,7 +1410,7 @@ export default function DockLmTab() {
 
               <div style={S.settingsGroup}>
                 <div style={S.settingsGroupLabel}>TRANSLATION</div>
-                <div style={S.settingRow}>
+                <div style={S.settingRow} data-onboarding="translation-setting">
                   <span style={S.settingLabel}>{t("lm.translation")}</span>
                   <select
                     style={S.settingSelect}
@@ -1347,6 +1514,19 @@ const S: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     transition: "all 0.15s",
   },
+  helpBtn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    border: "none",
+    background: "transparent",
+    color: "var(--dock-text-dim, #64748B)",
+    cursor: "pointer",
+    transition: "all 0.15s",
+  },
 
   tabBar: {
     display: "flex",
@@ -1385,13 +1565,126 @@ const S: Record<string, React.CSSProperties> = {
     minHeight: 0,
   },
 
-  queueSection: {
+  // ── Current / Live verse ──
+  currentSection: {
+    flexShrink: 0,
+    padding: "6px 12px 4px",
+  },
+  currentCard: {
+    padding: "8px 10px",
+    borderRadius: 6,
+    border: "1px solid rgba(59,130,246,0.25)",
+    background: "rgba(59,130,246,0.04)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  currentCardHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+  },
+  currentDot: {
+    width: 5,
+    height: 5,
+    borderRadius: "50%",
+    background: "#60A5FA",
+    animation: "lm-pulse 1.2s ease-in-out infinite",
+    flexShrink: 0,
+  },
+  currentBadge: {
+    fontSize: 9,
+    fontWeight: 600,
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    color: "#60A5FA",
+  },
+  currentRef: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#E2E8F0",
+  },
+  currentText: {
+    fontSize: 11,
+    lineHeight: "1.5",
+    color: "var(--dock-text-dim, #94A3B8)",
+    fontStyle: "italic",
+  },
+  currentBottom: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+  },
+  currentTime: {
+    fontSize: 10,
+    color: "var(--dock-text-dim, #64748B)",
+  },
+  pinBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 22,
+    height: 22,
+    borderRadius: 3,
+    border: "1px solid var(--dock-border, rgba(255,255,255,0.08))",
+    background: "rgba(255,255,255,0.04)",
+    color: "var(--dock-text-dim, #94A3B8)",
+    cursor: "pointer",
+  },
+  pinBtnSmall: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 18,
+    height: 18,
+    borderRadius: 3,
+    border: "none",
+    background: "rgba(255,255,255,0.04)",
+    color: "var(--dock-text-dim, #94A3B8)",
+    cursor: "pointer",
+  },
+  // ── Pinned chips ──
+  pinnedRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 6,
+  },
+  pinnedChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 3,
+    padding: "1px 8px 1px 6px",
+    borderRadius: 3,
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid var(--dock-border, rgba(255,255,255,0.06))",
+    fontSize: 10,
+    fontWeight: 500,
+    color: "var(--dock-text-dim, #94A3B8)",
+    cursor: "pointer",
+    transition: "background 0.15s",
+  },
+  pinnedChipClose: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 12,
+    height: 12,
+    borderRadius: 2,
+    border: "none",
+    background: "transparent",
+    color: "rgba(255,255,255,0.2)",
+    cursor: "pointer",
+    padding: 0,
+  },
+  // ── Queue list ──
+  queueSectionFull: {
     flex: "1 1 0",
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
     minHeight: 0,
-    borderBottom: "1px solid var(--dock-border, rgba(255,255,255,0.06))",
   },
   sectionHeader: {
     display: "flex",
@@ -1437,10 +1730,10 @@ const S: Record<string, React.CSSProperties> = {
   },
 
   queueCard: {
-    padding: "8px 10px",
-    borderRadius: 8,
-    border: "1px solid rgba(74,222,128,0.2)",
-    background: "rgba(74,222,128,0.04)",
+    padding: "6px 10px",
+    borderRadius: 6,
+    border: "1px solid var(--dock-border, rgba(255,255,255,0.06))",
+    background: "rgba(255,255,255,0.02)",
     display: "flex",
     flexDirection: "column",
     gap: 4,
@@ -1462,58 +1755,7 @@ const S: Record<string, React.CSSProperties> = {
     marginTop: 2,
   },
 
-  suggestionsSection: {
-    flex: "1 1 0",
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-    minHeight: 0,
-    borderBottom: "1px solid var(--dock-border, rgba(255,255,255,0.06))",
-  },
-  suggestionsScroll: {
-    flex: 1,
-    overflowY: "auto",
-    padding: "4px 12px 8px",
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-  },
 
-  suggestionCard: {
-    padding: "8px 10px",
-    borderRadius: 8,
-    border: "1px solid var(--dock-border, rgba(255,255,255,0.08))",
-    background: "var(--dock-card, rgba(255,255,255,0.03))",
-    display: "flex",
-    flexDirection: "column",
-    gap: 4,
-  },
-  suggestionCardTop: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 6,
-  },
-  suggestionRef: {
-    fontSize: 13,
-    fontWeight: 700,
-    color: "var(--dock-text, #E2E8F0)",
-  },
-  matchBadge: {
-    fontSize: 9,
-    fontWeight: 600,
-    padding: "1px 5px",
-    borderRadius: 3,
-    border: "1px solid",
-    lineHeight: "1.4",
-    flexShrink: 0,
-  },
-  suggestionCardBottom: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 2,
-  },
 
   verseText: {
     fontSize: 11,
@@ -1549,10 +1791,11 @@ const S: Record<string, React.CSSProperties> = {
     flex: 1,
     overflowY: "auto",
     padding: "4px 8px 8px",
+    maxHeight: "70%",
   },
   transcriptItem: {
-    padding: "6px 8px",
-    borderRadius: 6,
+    padding: "4px 6px",
+    borderRadius: 4,
     cursor: "pointer",
     transition: "background-color 0.15s",
     position: "relative",
@@ -1608,20 +1851,19 @@ const S: Record<string, React.CSSProperties> = {
 
   actionBar: {
     display: "flex",
-    justifyContent: "space-between",
+    flexWrap: "wrap",
     alignItems: "center",
-    marginTop: 6,
-    padding: "4px 4px 4px 28px",
-    gap: 6,
+    marginTop: 4,
+    padding: "2px 4px 2px 28px",
+    gap: 4,
   },
   actionBarLeft: {
     display: "flex",
     alignItems: "center",
-    gap: 8,
-    whiteSpace: "nowrap" as const,
+    gap: 6,
   },
   selectionCount: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 600,
     color: "var(--dock-text, #E2E8F0)",
   },
@@ -1629,40 +1871,43 @@ const S: Record<string, React.CSSProperties> = {
     background: "none",
     border: "none",
     color: "#64748B",
-    fontSize: 11,
+    fontSize: 10,
     cursor: "pointer",
-    padding: "4px 8px",
+    padding: "2px 6px",
     borderRadius: 4,
   },
   actionBarRight: {
     display: "flex",
+    flexWrap: "wrap",
     gap: 4,
   },
   btnAction: {
     display: "flex",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     background: "#334155",
     color: "#E2E8F0",
     border: "none",
-    padding: "4px 8px",
-    borderRadius: 4,
-    fontSize: 11,
+    padding: "3px 6px",
+    borderRadius: 3,
+    fontSize: 10,
     fontWeight: 500,
     cursor: "pointer",
+    whiteSpace: "nowrap",
   },
   btnPrimary: {
     display: "flex",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     background: "#2563eb",
     color: "#fff",
     border: "none",
-    padding: "4px 8px",
-    borderRadius: 4,
-    fontSize: 11,
+    padding: "3px 6px",
+    borderRadius: 3,
+    fontSize: 10,
     fontWeight: 500,
     cursor: "pointer",
+    whiteSpace: "nowrap",
   },
   btnText: {},
 
@@ -2103,6 +2348,34 @@ const S: Record<string, React.CSSProperties> = {
     padding: "6px 12px",
     background: "rgba(239,68,68,0.08)",
     borderTop: "1px solid rgba(239,68,68,0.15)",
+  },
+
+  // ── Live word indicator ──
+  transcriptItemLive: {
+    borderLeft: "3px solid #3B82F6",
+    paddingLeft: 4,
+    background: "rgba(59,130,246,0.04)",
+    borderRadius: "0 4px 4px 0",
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: "#3B82F6",
+    flexShrink: 0,
+    marginTop: 5,
+    animation: "lm-pulse 1.2s ease-in-out infinite",
+    boxShadow: "0 0 6px rgba(59,130,246,0.6)",
+  },
+  transcriptTextLive: {
+    color: "#ffffff",
+    fontWeight: 600,
+  },
+  liveWord: {
+    color: "#93C5FD",
+    fontWeight: 700,
+    fontSize: 13,
+    textShadow: "0 0 12px rgba(59,130,246,0.35)",
   },
 
   hintBar: {

@@ -1,6 +1,14 @@
 import './Docklmimproved.css';
 import { useState, useRef, useEffect } from 'react';
+<<<<<<< HEAD
+import { Copy, Edit2, MonitorUp, Check, HelpCircle, Settings } from 'lucide-react';
+import BibleAiOnboarding, {
+  isBibleAiOnboardingCompleted,
+  resetBibleAiOnboarding,
+} from './BibleAiOnboarding';
+=======
 import { Copy, Edit2, MonitorUp, Check } from 'lucide-react';
+>>>>>>> origin/main
 
 const initialTranscript = [
     "Create our world.",
@@ -30,7 +38,19 @@ export default function App() {
     const clickTimeout = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
+<<<<<<< HEAD
+        const [showOnboarding, setShowOnboarding] = useState(false);
+
+    useEffect(() => {
+        if (!isBibleAiOnboardingCompleted()) {
+            setShowOnboarding(true);
+        }
+    }, []);
+
+    const handleClickOutside = () => {
+=======
         const handleClickOutside = () => {
+>>>>>>> origin/main
             if (contextMenu.visible) {
                 setContextMenu(prev => ({ ...prev, visible: false }));
             }
@@ -153,7 +173,29 @@ export default function App() {
                     <span className="badge-live">Live</span>
                 </div>
                 <div className="header-right">
+<<<<<<< HEAD
+                    <button
+                        className="header-help-btn"
+                        onClick={() => {
+                            resetBibleAiOnboarding();
+                            setShowOnboarding(true);
+                        }}
+                        title="Bible AI Help & Tour"
+                    >
+                        <HelpCircle size={16} />
+                    </button>
+                    <button
+                        className="header-settings-btn"
+                        onClick={() => {
+                            /* Opens Bible AI settings – integrated later */
+                        }}
+                        title="Bible AI Settings"
+                    >
+                        <Settings size={16} />
+                    </button>
+=======
                     Double-click a line to select multiple
+>>>>>>> origin/main
                 </div>
             </header>
 
@@ -272,6 +314,14 @@ export default function App() {
                     </div>
                 </div>
             )}
+<<<<<<< HEAD
+
+            <BibleAiOnboarding
+                isOpen={showOnboarding}
+                onClose={() => setShowOnboarding(false)}
+            />
+=======
+>>>>>>> origin/main
         </div>
     );
 }

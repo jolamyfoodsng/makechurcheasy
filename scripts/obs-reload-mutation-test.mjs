@@ -3,7 +3,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import OBSWebSocket, { EventSubscription } from "obs-websocket-js";
 
 const chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const dockUrl = process.env.DOCK_URL || "http://127.0.0.1:1420/dock.html";
+const dockUrl = process.env.DOCK_URL || "http://127.0.0.1:1501/dock.html";
 const profileDir = "/tmp/mce-dock-obs-reload-test";
 const shouldDeleteMce = process.argv.includes("--delete-mce");
 const shouldLoadDock = !process.argv.includes("--no-load");

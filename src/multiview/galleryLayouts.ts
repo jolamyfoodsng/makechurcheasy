@@ -31,6 +31,7 @@ export interface GallerySlot {
   y: number;
   width: number;
   height: number;
+  zIndex: number;
 }
 
 export interface GalleryLayout {
@@ -99,6 +100,7 @@ function templateToGalleryLayout(tpl: TemplateDefinition): GalleryLayout {
       y: r.y,
       width: r.width,
       height: r.height,
+      zIndex: r.zIndex,
     })),
   };
 }
@@ -118,9 +120,9 @@ const GALLERY_EXTRA: GalleryLayout[] = [
     scenePrefix: "MultiView - Translation",
     useCases: ["Multilingual services", "International broadcasts", "Mission events"],
     slots: [
-      { id: "camera", label: "Camera", contentType: "camera", x: 0, y: 0, width: 1920, height: 702 },
-      { id: "lang-primary", label: "English", contentType: "translation", x: 0, y: 702, width: 1920, height: 189 },
-      { id: "lang-secondary", label: "Yoruba", contentType: "translation", x: 0, y: 891, width: 1920, height: 189 },
+      { id: "camera", label: "Camera", contentType: "camera", x: 0, y: 0, width: 1920, height: 702, zIndex: 1 },
+      { id: "lang-primary", label: "English", contentType: "translation", x: 0, y: 702, width: 1920, height: 189, zIndex: 2 },
+      { id: "lang-secondary", label: "Yoruba", contentType: "translation", x: 0, y: 891, width: 1920, height: 189, zIndex: 3 },
     ],
   },
   {
@@ -131,9 +133,9 @@ const GALLERY_EXTRA: GalleryLayout[] = [
     scenePrefix: "MultiView - Speaker Scripture Translation",
     useCases: ["Premium church broadcasts", "Full-service production", "Simultaneous translation services"],
     slots: [
-      { id: "camera", label: "Camera", contentType: "camera", x: 0, y: 0, width: 1056, height: 702 },
-      { id: "scripture", label: "Scripture", contentType: "scripture", x: 1056, y: 0, width: 864, height: 702 },
-      { id: "translation", label: "Translation", contentType: "translation", x: 0, y: 702, width: 1920, height: 378 },
+      { id: "camera", label: "Camera", contentType: "camera", x: 0, y: 0, width: 1056, height: 702, zIndex: 1 },
+      { id: "scripture", label: "Scripture", contentType: "scripture", x: 1056, y: 0, width: 864, height: 702, zIndex: 2 },
+      { id: "translation", label: "Translation", contentType: "translation", x: 0, y: 702, width: 1920, height: 378, zIndex: 3 },
     ],
   },
 ];

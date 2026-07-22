@@ -28,6 +28,7 @@
 
 import OBSWebSocket from "obs-websocket-js";
 import { getDefaultOBSUrl, getDefaultCanvasSize, getDefaultLowerThirdTheme } from "../services/desktopConfig";
+import { normalizeOBSWebSocketUrl } from "../services/obsWebSocketUrl";
 import { stripCompatModeCSS } from "../services/performanceManager";
 import * as connTracker from "../services/obsConnectionTracker";
 import * as obsQueue from "../services/obsRequestQueue";
@@ -579,7 +580,7 @@ class DockObsClient {
 
   private resolveParams(url?: string, password?: string) {
     if (url) {
-      this._url = url;
+      this._url = normalizeOBSWebSocketUrl(url);
       this._password = password;
       return;
     }
@@ -590,7 +591,7 @@ class DockObsClient {
       const qUrl = params.get("obsUrl");
       const qPw = params.get("obsPassword");
       if (qUrl) {
-        this._url = qUrl;
+        this._url = normalizeOBSWebSocketUrl(qUrl);
         this._password = qPw || undefined;
         return;
       }
@@ -602,7 +603,7 @@ class DockObsClient {
       if (raw) {
         const p = JSON.parse(raw);
         if (p.url) {
-          this._url = p.url;
+          this._url = normalizeOBSWebSocketUrl(p.url);
           this._password = p.password || undefined;
           return;
         }
@@ -615,7 +616,7 @@ class DockObsClient {
       if (stored) {
         const s = JSON.parse(stored);
         if (s.obsUrl) {
-          this._url = s.obsUrl;
+          this._url = normalizeOBSWebSocketUrl(s.obsUrl);
           this._password = s.obsPassword || undefined;
           return;
         }
@@ -623,7 +624,7 @@ class DockObsClient {
     } catch { /* ignore */ }
 
     // 4. Default
-    this._url = getDefaultOBSUrl();
+    this._url = normalizeOBSWebSocketUrl(getDefaultOBSUrl());
     this._password = undefined;
   }
 
@@ -2086,11 +2087,11 @@ class DockObsClient {
   }
 
   /**
-   * Route OBS output to MCE Presentation without creating a circular scene graph.
+   * Make MCE Presentation visible without replacing the user's Program scene.
    *
-   * Fullscreen dock flows render inside MCE Presentation with the prior Program
-   * scene nested behind the overlay. To make that visible, switch OBS to
-   * MCE Presentation directly instead of nesting Presentation back into Program.
+   * Studio Mode: put MCE Presentation in Preview only.
+   * Non-Studio Mode: embed MCE Presentation as a scene source inside the
+   * current Program scene so the live scene name does not change.
    */
   private async promotePresentationScene(tabId?: DockPreviewTab): Promise<void> {
     if (await this.ensurePresentationPreviewActive(tabId).catch(() => false)) {
@@ -2106,19 +2107,27 @@ class DockObsClient {
 
     if (currentProgramScene === DOCK_PRESENTATION_SCENE) return;
 
-    await this.call("SetCurrentProgramScene", { sceneName: DOCK_PRESENTATION_SCENE });
-    await this.waitForSceneMatch("program", DOCK_PRESENTATION_SCENE).catch(() => { });
+    if (currentProgramScene) {
+      await this.ensureMCEPresentationInScene(currentProgramScene).catch(() => { });
+    }
   }
 
   /**
    * Ensure the current Program scene exists as a source inside MCE Presentation,
    * positioned at the bottom of the z-order (behind all overlay sources).
-   * This makes the live broadcast content visible behind overlays.
+   * This makes the live broadcast content visible behind overlays in Studio Mode,
+   * where MCE Presentation is only placed in Preview.
+   *
+   * Non-Studio Mode embeds MCE Presentation into the user's Program scene instead,
+   * so do not also nest Program inside MCE Presentation.
    * Skips if the program scene IS MCE Presentation (circular reference).
    */
   private async ensureProgramSceneAsSourceInPresentation(force = false): Promise<void> {
     return this.runSerializedPresentationMutation(async () => {
       try {
+        const studioMode = await this.isStudioModeEnabled().catch(() => false);
+        if (!studioMode) return;
+
         // In "Don't Clone" mode, MCE Presentation is already inside the Program scene
         // (reversed direction). Adding Program inside MCE Presentation would create a
         // circular reference (Program → Presentation → Program), so skip.
@@ -2893,7 +2902,9 @@ class DockObsClient {
 
     if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
       this.rememberUserScene(currentProgramScene, tabId);
-      await this.ensureProgramSceneAsSourceInPresentation(true);
+      if (studioMode) {
+        await this.ensureProgramSceneAsSourceInPresentation(true);
+      }
     }
 
     if (!activate) {
@@ -2913,8 +2924,7 @@ class DockObsClient {
       await this.setCurrentPreviewScene(DOCK_PRESENTATION_SCENE);
       await this.waitForSceneMatch("preview", DOCK_PRESENTATION_SCENE).catch(() => { });
     } else if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
-      await this.call("SetCurrentProgramScene", { sceneName: DOCK_PRESENTATION_SCENE });
-      await this.waitForSceneMatch("program", DOCK_PRESENTATION_SCENE).catch(() => { });
+      await this.ensureMCEPresentationInScene(currentProgramScene).catch(() => { });
     }
 
     return { sceneName: DOCK_PRESENTATION_SCENE, studioMode };

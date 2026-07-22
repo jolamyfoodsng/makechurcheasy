@@ -42,7 +42,7 @@ import languageData from '../../full_langugae_list.json';
 import { checkPremiumAccess, getPremiumAccessDeniedMessage } from '../services/premiumActionGuard';
 import { useLicenseGuardState } from '../services/licenseGuard';
 import { useAuth } from '../contexts/AuthContext';
-import { calculateTranslationCredits, countWords, fetchCreditsFromBackend, isProUnlocked, reserveTranslationCredits, commitTranslationCredits, refundTranslationCredits } from '../services/credits';
+import { applyCreditSnapshotFromServer, calculateTranslationCredits, countWords, fetchCreditsFromBackend, isProUnlocked, reserveTranslationCredits, commitTranslationCredits, refundTranslationCredits } from '../services/credits';
 import { trackTranscriptExported } from '../services/tracking';
 import { translateTranscript } from '../services/translationService';
 import { addTranslationToTranscript, loadTranscripts, saveTranscript } from '../transcripts/transcriptService';
@@ -491,7 +491,10 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredit
   useEffect(() => {
     if (!userId || pro) return;
     fetchCreditsFromBackend().then((credits) => {
-      if (credits >= 0) setAvailableCredits(credits);
+      if (credits >= 0) {
+        setAvailableCredits(credits);
+        applyCreditSnapshotFromServer(credits);
+      }
     });
   }, [userId, pro]);
   const canAfford = pro || availableCredits >= estimatedCredits;
@@ -1230,7 +1233,10 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
             setCreditReservationId(null);
             if (committed) {
               const newBal = await fetchCreditsFromBackend();
-              if (newBal >= 0) setUserCredits(newBal);
+              if (newBal >= 0) {
+                setUserCredits(newBal);
+                applyCreditSnapshotFromServer(newBal);
+              }
               setTranslationStatus('success');
             } else {
               console.warn("[Credits] Translation completed but commit failed");

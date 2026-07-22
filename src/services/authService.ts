@@ -79,6 +79,25 @@ export interface AuthUser {
   plan?: PlanTier;
   effectivePlan?: PlanTier;
   entitlements?: Record<string, number | boolean>;
+  adminTemporaryPlan?: {
+    active?: boolean;
+    plan?: string;
+    previousPlan?: string;
+    returnPlan?: "free";
+    expiresAt?: string | null;
+    durationDays?: number;
+    reason?: string;
+  } | null;
+  adminManagedSubscription?: {
+    active?: boolean;
+    plan?: string;
+    billingCycle?: string;
+    expiresAt?: string | null;
+    amountCollected?: number;
+    currency?: string;
+    paymentReference?: string;
+  } | null;
+  subscriptionExpiresAt?: string | null;
   trial?: {
     active?: boolean;
     status?: string;
@@ -113,6 +132,9 @@ interface DeviceBootstrapResponse {
       plan?: string;
       effectivePlan?: string;
       entitlements?: Record<string, number | boolean>;
+      adminTemporaryPlan?: AuthUser["adminTemporaryPlan"];
+      adminManagedSubscription?: AuthUser["adminManagedSubscription"];
+      subscriptionExpiresAt?: string | null;
       trial?: AuthUser["trial"];
     };
     credits: {
@@ -308,7 +330,7 @@ export async function syncSessionToOverlay(session: AuthSession | null): Promise
     if (port > 0) {
       // Always sync to BOTH servers — the Tauri overlay server (for dock
       // running on the Tauri port) AND the Vite file-based server (for dock
-      // running on localhost:1420). Without both, the dock may hit the
+      // running on localhost:1501). Without both, the dock may hit the
       // server that doesn't have the session.
       await Promise.allSettled([
         clearSession(`http://127.0.0.1:${port}/api/auth/session`),
@@ -440,6 +462,9 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
       plan: normalizePlanId(remote.plan || current.plan || normalizedPlan) as PlanTier,
       effectivePlan: normalizedPlan,
       entitlements: remote.entitlements || current.entitlements,
+      adminTemporaryPlan: remote.adminTemporaryPlan ?? current.adminTemporaryPlan,
+      adminManagedSubscription: remote.adminManagedSubscription ?? current.adminManagedSubscription,
+      subscriptionExpiresAt: remote.subscriptionExpiresAt ?? current.subscriptionExpiresAt,
       trial: resolveBootstrappedTrial(remote, current),
     };
 

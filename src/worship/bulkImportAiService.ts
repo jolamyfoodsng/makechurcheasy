@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { deductCreditsWithSync, fetchCreditsFromBackend } from "../services/credits";
+import { parseCccHymnDrafts } from "./cccHymnImport";
 import { buildFallbackDraft } from "./smartImportService";
 import type {
   AiProcessResult,
@@ -17,13 +19,68 @@ const APP_VERSION: string =
 
 const CHUNK_SIZE = 15_000;
 const CHUNK_OVERLAP = 1_500;
+const MAX_CONCURRENT_CHUNKS = 1;
 const MAX_RETRIES = 2;
+const CCC_HYMN_FAST_PATH_MIN_DRAFTS = 20;
+const LOCAL_SETUP_TIMEOUT_MS = 5_000;
+const WORSHIP_IMPORT_CREDIT_CHECK_TIMEOUT_MS = 7_000;
+const WORSHIP_IMPORT_CREDIT_DEDUCT_TIMEOUT_MS = 7_000;
+const CHUNK_STRUCTURE_TIMEOUT_MS = 45_000;
 
 // ── Provider abstraction ──
 
 export interface DocumentStructureProvider {
   readonly name: string;
   structureChunk(request: BulkImportChunkRequest): Promise<{ songs: SmartImportSongDraft[] }>;
+}
+
+export type ImportAiProgressCallback = (progress: {
+  completed: number;
+  total: number;
+  label: string;
+}) => void;
+
+function yieldToUi(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => resolve());
+      return;
+    }
+    setTimeout(resolve, 0);
+  });
+}
+
+class NonRetryableChunkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NonRetryableChunkError";
+  }
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+  createError: (message: string) => Error = (message) => new Error(message),
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout>;
+
+  return new Promise<T>((resolve, reject) => {
+    timeout = setTimeout(() => {
+      reject(createError(timeoutMessage));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
 }
 
 // ── Chunking ──
@@ -48,6 +105,41 @@ function chunkText(text: string): TextChunk[] {
   }
 
   return chunks;
+}
+
+async function processChunksWithLimit(
+  chunks: TextChunk[],
+  provider: DocumentStructureProvider,
+  fileName: string,
+  onProgress?: ImportAiProgressCallback,
+): Promise<ChunkResult[]> {
+  const results: ChunkResult[] = new Array(chunks.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(MAX_CONCURRENT_CHUNKS, chunks.length);
+  let completed = 0;
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < chunks.length) {
+      const currentIndex = nextIndex++;
+      const chunk = chunks[currentIndex];
+      onProgress?.({
+        completed,
+        total: chunks.length,
+        label: `Structuring songs locally (${completed + 1} of ${chunks.length})...`,
+      });
+      await yieldToUi();
+      results[currentIndex] = await processChunk(chunk, provider, fileName);
+      completed += 1;
+      onProgress?.({
+        completed,
+        total: chunks.length,
+        label: `Structured ${completed} of ${chunks.length} section${chunks.length === 1 ? "" : "s"}...`,
+      });
+      await yieldToUi();
+    }
+  }));
+
+  return results;
 }
 
 // ── Simple overlap dedup ──
@@ -103,13 +195,27 @@ async function processChunk(
 ): Promise<ChunkResult> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const response = await provider.structureChunk({
-        chunkIndex: chunk.index,
-        totalChunks: chunk.total,
-        text: chunk.text,
-      });
+      const response = await withTimeout(
+        provider.structureChunk({
+          chunkIndex: chunk.index,
+          totalChunks: chunk.total,
+          text: chunk.text,
+        }),
+        CHUNK_STRUCTURE_TIMEOUT_MS,
+        `Local song structuring timed out after ${Math.round(CHUNK_STRUCTURE_TIMEOUT_MS / 1000)} seconds.`,
+        (message) => new NonRetryableChunkError(message),
+      );
       return { songs: response.songs, fallback: false };
     } catch (err) {
+      if (err instanceof NonRetryableChunkError) {
+        const fallback = buildFallbackDraft(chunk.text, `${fileName} (chunk ${chunk.index + 1})`);
+        return {
+          songs: fallback,
+          fallback: true,
+          error: err.message,
+        };
+      }
+
       if (attempt < MAX_RETRIES) {
         await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
         continue;
@@ -133,6 +239,7 @@ export async function processDocumentWithAi(
   rawText: string,
   fileName: string,
   providerOverride?: DocumentStructureProvider,
+  onProgress?: ImportAiProgressCallback,
 ): Promise<AiProcessResult> {
   const startTime = Date.now();
 
@@ -150,6 +257,14 @@ export async function processDocumentWithAi(
   }
 
   const chunks = chunkText(text);
+  onProgress?.({
+    completed: 0,
+    total: chunks.length,
+    label: chunks.length > 1
+      ? `Split document into ${chunks.length} batches.`
+      : "Preparing document batch.",
+  });
+  await yieldToUi();
 
   if (chunks.length === 0) {
     return {
@@ -161,11 +276,7 @@ export async function processDocumentWithAi(
     };
   }
 
-  const results: ChunkResult[] = [];
-  for (const chunk of chunks) {
-    const result = await processChunk(chunk, provider, fileName);
-    results.push(result);
-  }
+  const results = await processChunksWithLimit(chunks, provider, fileName, onProgress);
 
   const songs = mergeChunkResults(results);
   const aiChunks = results.filter((r) => !r.fallback).length;
@@ -270,18 +381,152 @@ class TauriOpenCodeProvider implements DocumentStructureProvider {
 }
 
 async function ensureLocalWorshipImportAiConfigured(): Promise<void> {
-  const status = await invoke<LocalWorshipImportAiStatus>("get_worship_import_ai_status");
+  const status = await withTimeout(
+    invoke<LocalWorshipImportAiStatus>("get_worship_import_ai_status"),
+    LOCAL_SETUP_TIMEOUT_MS,
+    "Local worship import setup check timed out.",
+  );
   if (!status.aiConfigured) {
     throw new Error("Local worship import AI is not configured. Set OPENCODE_API_KEY for the desktop app.");
   }
 }
 
+function estimateWorshipImportAiCredits(text: string): number {
+  return chunkText(text).length;
+}
+
+async function ensureWorshipImportCredits(creditsNeeded: number): Promise<void> {
+  if (creditsNeeded <= 0) return;
+
+  let availableCredits = -1;
+  try {
+    availableCredits = await withTimeout(
+      fetchCreditsFromBackend(),
+      WORSHIP_IMPORT_CREDIT_CHECK_TIMEOUT_MS,
+      "Credit check timed out.",
+    );
+  } catch (error) {
+    console.warn("[WorshipImport] Credit check timed out/unavailable. Continuing and allowing offline sync.", error);
+    return;
+  }
+
+  // -1 represents unlimited, but this function also returns -1 when the
+  // backend is unavailable. In that case we allow the operation and let the
+  // credit queue sync the deduction later.
+  if (availableCredits >= 0 && availableCredits < creditsNeeded) {
+    throw new Error(`Not enough AI credits for this import. Required: ${creditsNeeded}, available: ${availableCredits}.`);
+  }
+}
+
+async function deductWorshipImportCredits(
+  creditsUsed: number,
+  fileName: string,
+  stats: AiProcessResult["stats"],
+): Promise<void> {
+  if (creditsUsed <= 0) return;
+
+  let ok = true;
+  try {
+    ok = await withTimeout(
+      deductCreditsWithSync(
+        "device",
+        creditsUsed,
+        "worship_import_ai",
+        `Worship import AI: ${fileName}`,
+        {
+          fileName,
+          provider: stats.provider,
+          totalChunks: stats.totalChunks,
+          aiChunks: stats.aiChunks,
+          fallbackChunks: stats.fallbackChunks,
+        },
+      ),
+      WORSHIP_IMPORT_CREDIT_DEDUCT_TIMEOUT_MS,
+      "Credit deduction timed out.",
+    );
+  } catch (error) {
+    console.warn("[WorshipImport] Credit deduction timed out/unavailable after import. Continuing without blocking review.", error);
+    return;
+  }
+
+  if (!ok) {
+    throw new Error(`Not enough AI credits for this import. Required: ${creditsUsed}.`);
+  }
+}
+
+function looksLikeCccHymnal(text: string, fileName: string): boolean {
+  const name = fileName.toLowerCase();
+  const nameLooksSpecific = name.includes("ccc") && /hymn|orin/.test(name);
+  const markerCount = (text.match(/\b(?:Orin|Hymn)\s+\d{1,4}\b/gi) ?? []).length;
+  return nameLooksSpecific || markerCount >= CCC_HYMN_FAST_PATH_MIN_DRAFTS;
+}
+
+export function parseKnownHymnalDrafts(text: string, fileName: string): SmartImportSongDraft[] {
+  if (!looksLikeCccHymnal(text, fileName)) return [];
+
+  const drafts = parseCccHymnDrafts(text);
+  if (drafts.length >= CCC_HYMN_FAST_PATH_MIN_DRAFTS) return drafts;
+
+  const name = fileName.toLowerCase();
+  const nameLooksSpecific = name.includes("ccc") && /hymn|orin/.test(name);
+  return nameLooksSpecific && drafts.length > 0 ? drafts : [];
+}
+
 export async function processDocumentLocally(
   text: string,
   fileName: string,
+  onProgress?: ImportAiProgressCallback,
 ): Promise<AiProcessResult> {
+  const trimmed = text.trim();
+  const knownHymnalDrafts = parseKnownHymnalDrafts(text, fileName);
+  if (knownHymnalDrafts.length > 0) {
+    onProgress?.({
+      completed: knownHymnalDrafts.length,
+      total: knownHymnalDrafts.length,
+      label: `Detected ${knownHymnalDrafts.length} hymn${knownHymnalDrafts.length === 1 ? "" : "s"} locally.`,
+    });
+    return {
+      songs: knownHymnalDrafts,
+      warnings: [],
+      aiUsed: false,
+      needsReview: false,
+      stats: {
+        totalChunks: 0,
+        aiChunks: 0,
+        fallbackChunks: 0,
+        provider: "ccc-local",
+        durationMs: 0,
+      },
+    };
+  }
+
+  const creditsNeeded = estimateWorshipImportAiCredits(trimmed);
+  onProgress?.({
+    completed: 0,
+    total: Math.max(creditsNeeded, 1),
+    label: "Checking local import setup...",
+  });
+  await yieldToUi();
+
   await ensureLocalWorshipImportAiConfigured();
-  return processDocumentWithAi(text, fileName, new TauriOpenCodeProvider());
+
+  onProgress?.({
+    completed: 0,
+    total: Math.max(creditsNeeded, 1),
+    label: "Checking import credits...",
+  });
+  await yieldToUi();
+
+  await ensureWorshipImportCredits(creditsNeeded);
+  const result = await processDocumentWithAi(trimmed, fileName, new TauriOpenCodeProvider(), onProgress);
+  onProgress?.({
+    completed: result.stats.totalChunks,
+    total: result.stats.totalChunks,
+    label: "Finalizing structured songs...",
+  });
+  await yieldToUi();
+  await deductWorshipImportCredits(result.stats.aiChunks, fileName, result.stats);
+  return result;
 }
 
 // ── API-based processing (desktop → backend API → AI provider) ──

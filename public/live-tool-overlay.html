@@ -3,8 +3,18 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>MakeChurchEasy Live Tool</title>
+  <script>
+    (function() {
+      document.addEventListener("keydown", function(e) { var c = e.ctrlKey || e.metaKey; if (!c) return; var k = e.key; if (k === "=" || k === "-" || k === "0" || k === "Plus" || k === "Minus" || k === "NumpadAdd" || k === "NumpadSubtract" || k === "Numpad0") { e.preventDefault(); e.stopPropagation(); } }, true);
+      document.addEventListener("wheel", function(e) { if (e.ctrlKey || e.metaKey) e.preventDefault(); }, { passive: false, capture: true });
+      document.addEventListener("gesturestart", function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gesturechange", function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gestureend", function(e) { e.preventDefault(); }, { passive: false });
+    })();
+  </script>
+  <style>html,body,.live-tool,.live-tool__fit{touch-action:pan-y;-ms-content-zooming:none;}</style>
   <style>
     * {
       box-sizing: border-box;

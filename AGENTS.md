@@ -135,3 +135,64 @@ When asked to build a UI:
 - Minimize internal padding where possible without hurting usability
 - Avoid bulky containers
 - Keep the interface sharp, structured, and efficient
+
+# Deployment & Environment Configuration
+
+## Branch → Environment Mapping
+
+| Branch | Environment | App Name | Identifier |
+|--------|------------|----------|------------|
+| `develop` | `development` | Test MCE | `com.makechurcheasy.desktop.test` |
+| `main` | `production` | MakeChurchEasy | `com.makechurcheasy.desktop` |
+
+## GitHub Environments
+
+Two GitHub Environments exist:
+- **`development`** — used by `deploy-develop.yml` for pushes to `develop`
+- **`production`** — used by `deploy-main.yml` for pushes to `main`, with approval gate
+
+## Per-Project Env Files
+
+Each project uses its framework's env convention:
+
+| Project | Var Prefix | Framework |
+|---------|-----------|-----------|
+| `desktop/` | `VITE_APP_ENV` | Vite / Tauri |
+| `api/` | `NEXT_PUBLIC_APP_ENV` | Next.js (server) |
+| `dashboard/` | `NEXT_PUBLIC_APP_ENV` | Next.js (client) |
+| `bible_backend/` | `APP_ENV` | Fastify / Hono |
+
+Each project has:
+- `.env` — development defaults (committed, no secrets)
+- `.env.production` — production config (committed, placeholder secrets)
+- `.env.example` — documented template
+
+## Env Config Validation
+
+`desktop/src/services/envConfig.ts` validates env vars at build time:
+- In `production` mode (VITE_APP_ENV=production), missing required vars throw errors
+- In `development` mode, missing vars get fallback defaults
+
+## Workflow
+
+| Workflow | Trigger | What it does |
+|----------|---------|-------------|
+| `ci.yml` | PR to develop/main, push to develop/main | TypeScript check + build (desktop), Windows installer build |
+| `deploy-develop.yml` | Push to develop | Build desktop (development) with dev env vars |
+| `deploy-main.yml` | Push to main | Build desktop (production) with prod env vars, approval gate |
+| `release.yml` | Tag `v*` | Build + publish signed installers for all platforms |
+| `auto-tag.yml` | Push `package.json` change to main | Auto-creates version tag, triggers release |
+
+## Tauri Identity
+
+Before building, `scripts/build-env-config.mjs` rewrites `tauri.conf.json`:
+- Uses `com.makechurcheasy.desktop.test` identifier for dev builds
+- Uses `com.makechurcheasy.desktop` identifier for prod builds
+- Updates app display name to "Test MCE" or "MakeChurchEasy"
+
+## Secrets
+
+All secrets live in GitHub Environments — never in committed files.
+- `development` environment: secrets for dev/test (DEV_AUTH_API_URL, etc.)
+- `production` environment: secrets for production (PROD_AUTH_API_URL, etc.)
+- Fallback to repo-level secrets (`VITE_AUTH_API_URL`, etc.) if env-specific secret is not set

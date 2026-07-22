@@ -388,6 +388,37 @@ export default function SpeechToScripturePage() {
     trackVoiceSessionCompleted(Math.round(elapsedRef.current));
 
     const serviceFailed = snapshot.status === "error";
+    const durationSec = elapsedRef.current;
+
+    // Deduct transcription credits for the actual AI audio session. This must
+    // not depend on transcript saving or finalized rows; otherwise a real
+    // AssemblyAI session can complete with no credit transaction recorded.
+    void (async () => {
+      try {
+        const creditsNeeded = await calculateTranscriptionCredits(durationSec);
+        if (creditsNeeded > 0 && !serviceFailed) {
+          const ok = await deductCreditsWithSync(
+            user?.id || "device",
+            creditsNeeded,
+            "transcription",
+            `Transcription: ${Math.round(durationSec)}s audio`,
+            { durationSec: Math.round(durationSec), source: "speech_to_scripture" },
+          );
+          if (!ok) {
+            setSaveToast({ message: t("verseAi.creditDeductionFailed"), isError: true });
+            setTimeout(() => setSaveToast(null), 4000);
+          }
+        }
+      } catch (err) {
+        console.warn("[Credits] Transcription credit deduction error:", err);
+        setSaveToast({ message: t("verseAi.creditSyncFailed"), isError: true });
+        setTimeout(() => setSaveToast(null), 4000);
+      } finally {
+        // Backend deduction is done — clear the pending session offset so
+        // the display reflects the real balance from here on.
+        setPendingSessionCredits(0);
+      }
+    })();
 
     // ── Persist transcript to library before clearing session ──
     const finalized = snapshot.entries.filter((e) => e.finalized);
@@ -416,7 +447,6 @@ export default function SpeechToScripturePage() {
             confidence: c.confidence,
           })),
       ];
-      const durationSec = elapsedRef.current;
       const title = new Date().toLocaleDateString("en-US", {
         month: "short", day: "numeric", year: "numeric",
       }) + " — " + (durationSec >= 60
@@ -442,28 +472,6 @@ export default function SpeechToScripturePage() {
         });
         setGeneratedTranscriptId(transcript.id);
         setTimeout(() => setGeneratedTranscriptId(null), 6000);
-        // Deduct transcription credits (1 credit per minute) — synced to MongoDB
-        // Skip if the transcription service failed
-        void (async () => {
-          try {
-            const creditsNeeded = await calculateTranscriptionCredits(durationSec);
-            if (creditsNeeded > 0 && user?.id && !serviceFailed) {
-              const ok = await deductCreditsWithSync(user.id, creditsNeeded, "transcription", `Transcription: ${Math.round(durationSec)}s audio`);
-              if (!ok) {
-                setSaveToast({ message: t("verseAi.creditDeductionFailed"), isError: true });
-                setTimeout(() => setSaveToast(null), 4000);
-              }
-            }
-          } catch (err) {
-            console.warn("[Credits] Transcription credit deduction error:", err);
-            setSaveToast({ message: t("verseAi.creditSyncFailed"), isError: true });
-            setTimeout(() => setSaveToast(null), 4000);
-          } finally {
-            // Backend deduction is done — clear the pending session offset so
-            // the display reflects the real balance from here on.
-            setPendingSessionCredits(0);
-          }
-        })();
       }).catch(() => {
         // Best-effort — don't block stop on save failure
       });

@@ -181,14 +181,33 @@ async function fetchFromOverlayServer(): Promise<MinistryData | null> {
   }
 }
 
+async function getDockDeviceId(): Promise<string | null> {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("deviceId")?.trim();
+    if (fromUrl) return fromUrl;
+  } catch {
+    // ignore URL parsing failures
+  }
+
+  try {
+    const res = await fetch("/api/auth/status", { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const fromSession = data.deviceId != null ? String(data.deviceId).trim() : "";
+    return fromSession || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Fetch church profile from the web API using deviceId.
  * Used as a last resort when overlay server data isn't available.
  */
 async function fetchFromWebApi(): Promise<MinistryData | null> {
   try {
-    const params = new URLSearchParams(window.location.search);
-    const deviceId = params.get("deviceId");
+    const deviceId = await getDockDeviceId();
     if (!deviceId) return null;
 
     const res = await fetch(`${API_BASE}/api/device/church-profile`, {

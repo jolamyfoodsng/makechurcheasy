@@ -81,8 +81,39 @@ body {
 }
 
 .header-right {
+<<<<<<< HEAD
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.header-help-btn,
+.header-settings-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.header-help-btn:hover,
+.header-settings-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-white);
+}
+
+.header-settings-btn {
+    margin-right: -4px;
+=======
     font-size: 0.875rem;
     color: var(--text-secondary);
+>>>>>>> origin/main
 }
 
 .transcript-main {
