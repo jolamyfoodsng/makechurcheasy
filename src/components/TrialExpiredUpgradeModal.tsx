@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Icon from "./Icon";
 import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan, isTrialExpired } from "../services/licenseService";
@@ -6,6 +6,7 @@ import "./TrialExpiredUpgradeModal.css";
 
 const TRIAL_EXPIRED_CHECKOUT_URL =
   "https://makechurcheasy.creatorstudioslabs.stream/subscription/plans?checkout=growth&billingCycle=monthly&reason=trial_expired";
+const DISMISS_SESSION_KEY = "trial_expired_dismissed";
 
 async function openCheckout() {
   try {
@@ -18,13 +19,26 @@ async function openCheckout() {
 
 export default function TrialExpiredUpgradeModal() {
   const { user, authenticated, loading, isAdmin } = useAuth();
+  const [dismissed, setDismissed] = useState(() =>
+    typeof sessionStorage !== "undefined"
+      ? sessionStorage.getItem(DISMISS_SESSION_KEY) === "true"
+      : false
+  );
+
+  useEffect(() => {
+    if (dismissed) {
+      sessionStorage.setItem(DISMISS_SESSION_KEY, "true");
+    }
+  }, [dismissed]);
 
   const shouldShow = useMemo(() => {
-    if (loading || !authenticated || !user || isAdmin) return false;
+    if (dismissed || loading || !authenticated || !user || isAdmin) return false;
     return getEffectivePlan(user) === "free" && isTrialExpired(user);
-  }, [authenticated, isAdmin, loading, user]);
+  }, [authenticated, dismissed, isAdmin, loading, user]);
 
   if (!shouldShow) return null;
+
+  const handleDismiss = () => setDismissed(true);
 
   return (
     <div
@@ -32,8 +46,17 @@ export default function TrialExpiredUpgradeModal() {
       role="dialog"
       aria-modal="true"
       aria-labelledby="trial-expired-upgrade-title"
+      onClick={handleDismiss}
     >
-      <div className="trial-expired-upgrade__card">
+      <div className="trial-expired-upgrade__card" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="trial-expired-upgrade__close"
+          onClick={handleDismiss}
+          aria-label="Dismiss"
+        >
+          <Icon name="close" size={18} />
+        </button>
         <div className="trial-expired-upgrade__header">
           <div className="trial-expired-upgrade__badge">
             <Icon name="lock" size={14} />
@@ -72,6 +95,13 @@ export default function TrialExpiredUpgradeModal() {
           >
             Upgrade to continue
             <Icon name="arrow_forward" size={18} />
+          </button>
+          <button
+            type="button"
+            className="trial-expired-upgrade__dismiss"
+            onClick={handleDismiss}
+          >
+            Continue with Free plan
           </button>
         </div>
       </div>
