@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { getEnvConfig } from "../services/envConfig";
 import { getDeviceId } from "../services/authService";
 import { track } from "../services/analytics";
 import { getDefaultOBSPort } from "../services/desktopConfig";
@@ -468,7 +469,7 @@ function StepInstallDock({
   onTutorial: () => void;
 }) {
   const [copied, setCopied] = useState<"dock" | "ai" | null>(null);
-  const isDev =
+  const isDev = getEnvConfig().isTest &&
     window.location.protocol === "http:" && window.location.port === "1501";
   const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
   const dockUrl = `${base}/dock`;
@@ -601,7 +602,7 @@ function StepTest({
   const runDiagnostics = useCallback(async () => {
     setRunning(true);
     const results: DiagItem[] = [];
-    const isDev =
+    const isDev = getEnvConfig().isTest &&
       window.location.protocol === "http:" && window.location.port === "1501";
     const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
 
