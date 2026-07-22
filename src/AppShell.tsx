@@ -156,15 +156,16 @@ export function AppShell() {
 
   return (
     <div className="app-container">
-        <DashboardSidebar
-          currentPath={location.pathname + location.search}
-          obsStatus={obsStatus}
-          dockAvailable={dockAvailable}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={toggleSidebar}
-          onNavigate={handleNav}
-        />
+      <DashboardSidebar
+        currentPath={location.pathname + location.search}
+        obsStatus={obsStatus}
+        dockAvailable={dockAvailable}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebar}
+        onNavigate={handleNav}
+      />
 
+      <main className={`app-main${sidebarCollapsed ? " app-main--collapsed" : ""}`}>
         {getEnvConfig().isTest && (
           <div className="app-env-banner-test">
             <span className="app-env-banner-test__badge">TEST</span>
@@ -173,8 +174,6 @@ export function AppShell() {
             </span>
           </div>
         )}
-
-      <main className={`app-main${sidebarCollapsed ? " app-main--collapsed" : ""}`}>
         <LiveStatusBar />
         <div className="app-glow" />
         <div className="app-content">

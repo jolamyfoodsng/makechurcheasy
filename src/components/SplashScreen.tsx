@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { getEnvConfig, getSplashImageSrc } from "../services/envConfig";
 
 interface SplashScreenProps {
   /** When true, the splash begins its fade-out and will call onDone */
@@ -16,6 +17,7 @@ interface SplashScreenProps {
 
 export default function SplashScreen({ ready, onDone }: SplashScreenProps) {
   const [fading, setFading] = useState(false);
+  const isTest = getEnvConfig().isTest;
 
   useEffect(() => {
     if (!ready) return;
@@ -29,9 +31,9 @@ export default function SplashScreen({ ready, onDone }: SplashScreenProps) {
   }, [ready, onDone]);
 
   return (
-    <div className={`splash-screen${fading ? " splash-fade-out" : ""}`}>
+    <div className={`splash-screen${fading ? " splash-fade-out" : ""}${isTest ? " splash-screen--test" : ""}`}>
       <img
-        src="/make_church_easy_onboarding.png"
+        src={getSplashImageSrc()}
         alt="MakeChurchEasy"
         className="splash-image"
         draggable={false}

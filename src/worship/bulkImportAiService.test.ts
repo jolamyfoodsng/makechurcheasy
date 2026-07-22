@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   assessExtractedTextQuality,
@@ -7,7 +7,7 @@ import {
   reorderTwoColumnText,
 } from "./bulkImportService";
 import { parseCccHymnDrafts } from "./cccHymnImport";
-import { processDocumentWithAi } from "./bulkImportAiService";
+import { parseKnownHymnalDrafts, processDocumentWithAi } from "./bulkImportAiService";
 import type { DocumentStructureProvider } from "./bulkImportAiService";
 import type { BulkImportChunkRequest } from "./smartImportTypes";
 import {
@@ -172,6 +172,19 @@ describe("Phase 1: Core Import", () => {
     expect(drafts[0].sections[1].content).toContain("The host of Angels");
     expect(drafts.some((draft) => draft.title === "Hymn 51")).toBe(true);
     expect(drafts.some((draft) => draft.sections.some((section) => /are Reserved/i.test(section.content)))).toBe(false);
+  });
+
+  it("detects the CCC hymnal fast path before AI processing", { timeout: 30000 }, async () => {
+    const bytes = readFileSync(new URL("../CCC-Hymns.pdf", import.meta.url));
+    const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const file = new File([arrayBuffer], "CCC-Hymns.pdf", { type: "application/pdf" });
+
+    const text = await extractTextFromFile(file);
+    const drafts = parseKnownHymnalDrafts(text, "CCC-Hymns.pdf");
+
+    expect(drafts.length).toBeGreaterThanOrEqual(450);
+    expect(drafts[0].title).toBe("Hymn 1");
+    expect(drafts[0].sections.map((section) => section.label)).toEqual(["Yoruba", "English"]);
   });
 });
 
@@ -443,6 +456,36 @@ describe("Phase 5: Fallback Recovery", () => {
     expect(result.stats.aiChunks).toBe(0);
     expect(result.needsReview).toBe(true);
     expect(result.songs.length).toBeGreaterThan(0);
+  });
+
+  it("falls back instead of hanging when local structuring stalls", { timeout: 10000 }, async () => {
+    vi.useFakeTimers();
+    try {
+      const provider: DocumentStructureProvider = {
+        name: "stalled",
+        structureChunk: () => new Promise(() => {}),
+      };
+
+      const resultPromise = processDocumentWithAi(
+        "Stalled provider lyrics\n".repeat(300),
+        "stalled.txt",
+        provider,
+      );
+
+      await vi.runOnlyPendingTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(45_000);
+      await vi.runOnlyPendingTimersAsync();
+
+      const result = await resultPromise;
+      expect(result.stats.fallbackChunks).toBe(1);
+      expect(result.stats.aiChunks).toBe(0);
+      expect(result.needsReview).toBe(true);
+      expect(result.songs.length).toBeGreaterThan(0);
+      expect(result.warnings.some((warning) => warning.includes("timed out"))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

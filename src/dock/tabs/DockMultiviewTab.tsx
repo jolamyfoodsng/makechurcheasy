@@ -176,12 +176,14 @@ function ContentPicker({
   open,
   obsScenes,
   obsSources,
+  loading,
   onSelect,
   onClose,
 }: {
   open: boolean;
   obsScenes: string[];
   obsSources: string[];
+  loading: boolean;
   onSelect: (value: string, mode: "scene" | "source") => void;
   onClose: () => void;
 }) {
@@ -232,8 +234,13 @@ function ContentPicker({
             {t('multiview.sources')}
           </button>
         </div>
-        <div className="dock-mv-content-picker__list">
-          {items.length === 0 ? (
+        <div className="dock-mv-content-picker__list" aria-busy={loading}>
+          {loading ? (
+            <div className="dock-mv-content-picker__loading" role="status" aria-live="polite">
+              <Icon name="progress_activity" size={18} />
+              <span>{t('common.loading')}</span>
+            </div>
+          ) : items.length === 0 ? (
             <div className="dock-mv-content-picker__empty">{t('multiview.noContentFound')}</div>
           ) : (
             items.map(item => (
@@ -1027,6 +1034,7 @@ function MVCard({
   isActive,
   obsScenes,
   obsSources,
+  obsContentLoading,
   addedLayouts,
   pushingId,
   clearingId,
@@ -1047,6 +1055,7 @@ function MVCard({
   isActive: boolean;
   obsScenes: string[];
   obsSources: string[];
+  obsContentLoading: boolean;
   addedLayouts: GalleryLayout[];
   pushingId: string | null;
   clearingId: string | null;
@@ -1255,6 +1264,7 @@ function MVCard({
                   open
                   obsScenes={obsScenes}
                   obsSources={obsSources}
+                  loading={obsContentLoading}
                   onSelect={(v, m) => handleContentSelect(slot.id, v, m)}
                   onClose={() => setPickerSlot(null)}
                 />
@@ -1322,6 +1332,8 @@ export default function DockMultiviewTab() {
   const [hasMvScene, setHasMvScene] = useState(false);
   const [obsScenes, setObsScenes] = useState<string[]>([]);
   const [obsSources, setObsSources] = useState<string[]>([]);
+  const [obsContentLoading, setObsContentLoading] = useState(false);
+  const [obsContentLoaded, setObsContentLoaded] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [pushingId, setPushingId] = useState<string | null>(null);
   const [clearingId, setClearingId] = useState<string | null>(null);
@@ -1386,6 +1398,7 @@ export default function DockMultiviewTab() {
     if (!mountedRef.current) { console.log("[MV] refreshObsScenes bailed — not mounted"); return; }
     if (obsScanBusyRef.current) { console.log("[MV] refreshObsScenes bailed — scan busy"); return; }
     obsScanBusyRef.current = true;
+    setObsContentLoading(true);
     try {
       const result = await Promise.race([
         Promise.all([
@@ -1404,10 +1417,13 @@ export default function DockMultiviewTab() {
       setHasMvScene(scenes.some(s => /^MV: Multiview \d+$/.test(s.sceneName)));
       setObsScenes(scenes.map(s => s.sceneName));
       setObsSources(inputs.map(i => i.inputName));
+      setObsContentLoaded(true);
     } catch (err) {
       console.warn("[MV] refreshObsScenes FAILED", err);
+      if (mountedRef.current) setObsContentLoaded(true);
     } finally {
       obsScanBusyRef.current = false;
+      if (mountedRef.current) setObsContentLoading(false);
     }
   }, []);
 
@@ -1811,6 +1827,7 @@ export default function DockMultiviewTab() {
               isActive={obsScenes.includes(mv.obsSceneName)}
               obsScenes={obsScenes}
               obsSources={obsSources}
+              obsContentLoading={obsContentLoading || (!obsContentLoaded && obsReady)}
               addedLayouts={addedLayouts}
               pushingId={pushingId}
               clearingId={clearingId}

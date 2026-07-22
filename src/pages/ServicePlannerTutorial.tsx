@@ -343,7 +343,7 @@ export default function ServicePlannerTutorial({
       onFinish();
       return;
     }
-    if (stepIndex < totalSteps - 1) {
+    if (stepIndex < totalSteps) {
       setStepCompleted(false);
       setStepIndex((i) => i + 1);
     }
@@ -379,7 +379,7 @@ export default function ServicePlannerTutorial({
 
   // ── Nothing to render ─────────────────────────────────────────────────
 
-  if (!isActive || !currentStep) return null;
+  if (!isActive || (!currentStep && !isFinalStep)) return null;
 
   // ── Final Step ────────────────────────────────────────────────────────
 

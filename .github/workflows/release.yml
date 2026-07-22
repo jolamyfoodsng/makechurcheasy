@@ -147,6 +147,11 @@ jobs:
       - name: Prepare bundled assets
         run: node scripts/prepare-bundle-assets.cjs
 
+      - name: Apply production Tauri identity
+        run: node scripts/build-env-config.mjs
+        env:
+          VITE_APP_ENV: production
+
       # ── Quality gate: typecheck before packaging ──
       - name: Validate TypeScript
         run: npx tsc --noEmit
@@ -302,6 +307,11 @@ jobs:
 
       - name: Prepare bundled assets
         run: node scripts/prepare-bundle-assets.cjs
+
+      - name: Apply production Tauri identity
+        run: node scripts/build-env-config.mjs
+        env:
+          VITE_APP_ENV: production
 
       # ── Quality gate: typecheck before packaging ──
       - name: Validate TypeScript

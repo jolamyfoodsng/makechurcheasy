@@ -32,6 +32,7 @@ import { useDockUpload } from "./useDockUpload";
 import { ensureObsConnected } from "./obsConnectionGuard";
 import { getRecommendedPollingInterval } from "../services/performanceManager";
 import { getDefaultOBSUrl, readDesktopConfigCache, DEFAULT_DESKTOP_CONFIG } from "../services/desktopConfig";
+import { normalizeOBSWebSocketUrl } from "../services/obsWebSocketUrl";
 import DockDropOverlay from "./DockDropOverlay";
 import DockUploadToasts from "./DockUploadToasts";
 import { DockUpgradeModal } from "./components/DockUpgradeModal";
@@ -146,7 +147,6 @@ export default function DockPage() {
   const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() => shellPreferences.disabledTabs ?? []);
   const [dockHeight, setDockHeight] = useState(0);
   const verticalTabs = dockHeight > 0 && dockHeight < 550;
-  const compactToolbar = dockHeight > 0 && dockHeight <= 550;
   const [tickerOutputMode, setTickerOutputMode] = useState<"source" | "scene">(() => {
     try { return (localStorage.getItem("dock-ticker-output-mode") as "source" | "scene") || "scene"; } catch { return "scene"; }
   });
@@ -466,7 +466,9 @@ export default function DockPage() {
   const handleManualConnect = useCallback(async () => {
     setObsError("");
     try {
-      await ensureObsConnected(obsUrlInput, obsPwInput || undefined);
+      const obsUrl = normalizeOBSWebSocketUrl(obsUrlInput);
+      setObsUrlInput(obsUrl);
+      await ensureObsConnected(obsUrl, obsPwInput || undefined);
     } catch (err) {
       setObsError(err instanceof Error ? err.message : t('dock.connectionFailed'));
     }
@@ -1109,7 +1111,6 @@ export default function DockPage() {
                 appConnected={appConnected}
                 showHistory={showHistory}
                 onHistoryClose={() => setShowHistory(false)}
-                compactToolbar={compactToolbar}
               />
             )}
             {activeTab === "worship" && (
@@ -1117,7 +1118,6 @@ export default function DockPage() {
                 staged={staged}
                 onStage={handleStage}
                 productionDefaults={productionSettings.worship}
-                compactToolbar={compactToolbar}
               />
             )}
             {activeTab === "media" && (
@@ -1300,7 +1300,7 @@ export default function DockPage() {
                   const code = langToCode[lang] || "en";
                   localStorage.setItem("mce_interface_language", lang);
                   i18n.changeLanguage(code);
-                  dockBridge.sendLanguageChanged(lang, code);
+                  dockBridge.sendLanguageChanged(code);
                   setInterfaceLanguage(lang);
                   setShowLanguageModal(false);
                   setPendingLanguage(null);

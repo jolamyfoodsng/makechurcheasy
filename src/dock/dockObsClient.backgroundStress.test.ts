@@ -153,6 +153,11 @@ describe("dockObsClient background reflection stress", () => {
       getPresentationTargetScene: client.getPresentationTargetScene,
       fitSceneSourceToLowerThirdWindow: client.fitSceneSourceToLowerThirdWindow,
       promotePresentationScene: client.promotePresentationScene,
+      ensurePresentationPreviewActive: client.ensurePresentationPreviewActive,
+      ensureDedicatedScene: client.ensureDedicatedScene,
+      getCurrentProgramSceneName: client.getCurrentProgramSceneName,
+      ensureMCEPresentationInScene: client.ensureMCEPresentationInScene,
+      waitForSceneMatch: client.waitForSceneMatch,
     };
 
     inputs = new Map();
@@ -276,6 +281,22 @@ describe("dockObsClient background reflection stress", () => {
       variant.assertInput(activeInput!);
       expect(client._activeFullscreenBgSignature["bible"]).not.toBe("__hidden__");
     }
+  });
+
+  it("does not switch Program to MCE Presentation when promoting dock Bible output", async () => {
+    client.ensurePresentationPreviewActive = vi.fn(async () => false);
+    client.ensureDedicatedScene = vi.fn(async () => {});
+    client.getCurrentProgramSceneName = vi.fn(async () => "Pastor Camera");
+    client.ensureMCEPresentationInScene = vi.fn(async () => {});
+    client.waitForSceneMatch = vi.fn(async () => {});
+
+    await client.promotePresentationScene("bible");
+
+    expect(client.ensureMCEPresentationInScene).toHaveBeenCalledWith("Pastor Camera");
+    expect(callLog).not.toContainEqual({
+      method: "SetCurrentProgramScene",
+      payload: { sceneName: "MCE Presentation" },
+    });
   });
 
   it("reflects 50 sequential Bible lower-third background changes through the fast overlay path", async () => {

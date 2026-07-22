@@ -3,6 +3,8 @@
  * Calls /api/ai/summary, /api/ai/notes, /api/ai/points on the server.
  */
 
+import { applyCreditSnapshotFromServer } from "./credits";
+
 const API_BASE = "";
 
 export interface AiSummaryResult {
@@ -43,6 +45,9 @@ async function aiFetch<T>(endpoint: string, body: Record<string, unknown>): Prom
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.error || `AI request failed (${res.status})`);
+  }
+  if (typeof data.creditsRemaining === "number") {
+    applyCreditSnapshotFromServer(data.creditsRemaining);
   }
   return data;
 }

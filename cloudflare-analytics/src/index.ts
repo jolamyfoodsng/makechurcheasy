@@ -30,7 +30,7 @@ interface AnalyticsEvent {
 const ALLOWED_ORIGINS = [
   "https://makechurcheasy.creatorstudioslabs.stream",
   "https://www.makechurcheasy.creatorstudioslabs.stream",
-  "http://localhost:1420",
+  "http://localhost:1501",
   "http://localhost:5173",
 ];
 

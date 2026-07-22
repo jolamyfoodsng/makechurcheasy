@@ -333,7 +333,7 @@ export default function ThemeSettingsTour({
       onFinish();
       return;
     }
-    if (stepIndex < totalSteps - 1) {
+    if (stepIndex < totalSteps) {
       setStepIndex((i) => i + 1);
     }
   }, [stepIndex, totalSteps, isFinalStep, onFinish]);
@@ -367,7 +367,7 @@ export default function ThemeSettingsTour({
 
   // ── Nothing to render ─────────────────────────────────────────────────
 
-  if (!isActive || !currentStep) return null;
+  if (!isActive || (!currentStep && !isFinalStep)) return null;
 
   // ── Final Step ────────────────────────────────────────────────────────
 

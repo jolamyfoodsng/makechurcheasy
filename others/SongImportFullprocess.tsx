@@ -194,12 +194,20 @@ export default function SongImportFullprocess({
       setQuality(textQuality);
       setSourceName(resolvedSourceName);
 
-      setLoadingLabel("Structuring songs locally with OpenCode...");
+      setLoadingLabel("Structuring songs locally...");
+      setImportProgress({ saved: 0, total: 0 });
 
       let processedSongs: SmartImportSongDraft[] = [];
 
       try {
-        const localResult = await processDocumentLocally(normalizedText, resolvedSourceName);
+        const localResult = await processDocumentLocally(
+          normalizedText,
+          resolvedSourceName,
+          ({ completed, total, label }) => {
+            setLoadingLabel(label);
+            setImportProgress({ saved: completed, total });
+          },
+        );
         processedSongs = localResult.songs;
         nextWarnings.push(...localResult.warnings);
       } catch (localError) {
@@ -221,9 +229,11 @@ export default function SongImportFullprocess({
       setDrafts(editableDrafts);
       setActiveSongId(editableDrafts[0]?.id ?? null);
       setWarnings(nextWarnings);
+      setImportProgress({ saved: 0, total: 0 });
       setStep("review");
     } catch (detectError) {
       setError(detectError instanceof Error ? detectError.message : String(detectError));
+      setImportProgress({ saved: 0, total: 0 });
       setStep("pick");
     }
   };
@@ -644,7 +654,9 @@ export default function SongImportFullprocess({
             <h3>{loadingLabel}</h3>
             <p>
               {importProgress.total > 0
-                ? `${importProgress.saved} of ${importProgress.total} saved`
+                ? loadingLabel.toLowerCase().includes("saving")
+                  ? `${importProgress.saved} of ${importProgress.total} saved`
+                  : `${importProgress.saved} of ${importProgress.total} batch${importProgress.total === 1 ? "" : "es"} complete`
                 : "Please wait while the document is processed."}
             </p>
             {importProgress.total > 0 && (

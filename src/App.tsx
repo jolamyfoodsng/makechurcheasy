@@ -4,7 +4,7 @@
  * Root component with React Router.
  *
  * Startup sequence:
- *   1. Splash screen shown (introductory_loading_image.png)
+ *   1. Splash screen shown (environment-specific onboarding splash)
  *   2. Resources pre-loaded + GitHub update check runs in parallel
  *   3. If update available → non-blocking floating notification (bottom-right)
  *   4. App continues polling for updates while running
@@ -47,7 +47,7 @@ import { getSettings, MV_SETTINGS_UPDATED_EVENT, seedTemplates, syncLayoutsToDoc
 import { STARTER_TEMPLATES } from "./multiview/templates";
 import { applyBrandingSettingsToDom } from "./services/branding";
 import { useAppTheme } from "./hooks/useAppTheme";
-import { getAppTitle } from "./services/envConfig";
+import { getAppTitle, getSplashImageSrc } from "./services/envConfig";
 import DevDashboard from "./pages/DevDashboard";
 
 import { dockBridge } from "./services/dockBridge";
@@ -243,7 +243,7 @@ function App() {
     applyBrandingSettingsToDom({ brandColor: s.brandColor, churchName: s.churchName });
 
     // Set document title based on environment
-    document.title = getAppTitle("MakeChurchEasy");
+    document.title = getAppTitle();
 
     // Initialize dock bridge so the OBS Browser Dock can communicate
     dockBridge.init();
@@ -593,7 +593,11 @@ function App() {
     hoursRemaining: null,
     gracePeriodHours: null,
     startedAt: null,
+    lockAt: null,
     updateMessage: "",
+    currentVersion: "",
+    downloadUrl: "",
+    releaseNotesUrl: "",
     loading: true,
   });
 
@@ -774,7 +778,7 @@ function App() {
     // Preload the splash image itself + any critical resources
     const preload = new Promise<void>((resolve) => {
       const img = new Image();
-      img.src = "/introductory_loading_image.png";
+      img.src = getSplashImageSrc();
       img.onload = () => resolve();
       img.onerror = () => resolve(); // proceed even if image fails
     });

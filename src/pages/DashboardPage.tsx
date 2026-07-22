@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
-import { getDeviceId } from "../services/authService";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import Icon from "../components/Icon";
 
@@ -41,27 +40,18 @@ export default function DashboardPage() {
   const [dockCopied, setDockCopied] = useState(false);
   const [obsConnected, setObsConnected] = useState(() => obsService.isConnected);
 
-  // In dev, Vite serves the SPA at localhost:1420 (with SPA fallback routing)
-  // so /dock works because Vite proxies it to dock.html via the multi-page config.
-  // In production, the overlay HTTP server serves static files from dist/ —
-  // we must use /dock.html explicitly because the server doesn't have Vite's
-  // SPA-style routing for multi-page entries.
+  // Keep OBS dock URLs stable. The dock reads the active device session from
+  // the local overlay server instead of requiring a deviceId query string.
   const dockUrl = useMemo(() => {
-    const isDev = window.location.protocol === "http:" && window.location.port === "1420";
+    const isDev = window.location.protocol === "http:" && window.location.port === "1501";
     const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
-    const deviceId = getDeviceId();
-    const versionParam = `_v=${__APP_VERSION__}`;
-    const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}&${versionParam}` : `?${versionParam}`;
-    return (isDev ? `${base}/dock` : `${base}/dock.html`) + deviceIdParam;
+    return `${base}/dock`;
   }, []);
 
   const lmDockUrl = useMemo(() => {
-    const isDev = window.location.protocol === "http:" && window.location.port === "1420";
+    const isDev = window.location.protocol === "http:" && window.location.port === "1501";
     const base = isDev ? window.location.origin : getOverlayBaseUrlSync();
-    const deviceId = getDeviceId();
-    const versionParam = `_v=${__APP_VERSION__}`;
-    const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}&${versionParam}` : `?${versionParam}`;
-    return (isDev ? `${base}/lm-dock` : `${base}/lm-dock.html`) + deviceIdParam;
+    return `${base}/lm-dock`;
   }, []);
 
   const [lmDockCopied, setLmDockCopied] = useState(false);
@@ -272,4 +262,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

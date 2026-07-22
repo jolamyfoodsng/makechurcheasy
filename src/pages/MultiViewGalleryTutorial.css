@@ -11,7 +11,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
-  z-index: 9998;
+  z-index: 100100;
   animation: mgt-fade-in 200ms ease-out;
   pointer-events: none;
 }
@@ -46,9 +46,10 @@
 /* ── Panel ── */
 .mgt-panel {
   position: fixed;
-  z-index: 10000;
+  z-index: 100110;
   pointer-events: auto;
-  width: 340px;
+  width: min(320px, calc(100vw - 40px));
+  min-width: min(260px, calc(100vw - 40px));
   background: var(--surface-dark);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -56,6 +57,7 @@
     0 16px 48px rgba(0, 0, 0, 0.5),
     0 0 0 1px rgba(var(--primary-rgb), 0.08);
   overflow: hidden;
+  max-height: calc(100vh - 40px);
   animation: mgt-panel-in 250ms ease-out;
   display: flex;
   flex-direction: column;
@@ -126,6 +128,8 @@
 .mgt-panel-body {
   padding: 16px;
   flex: 1;
+  min-height: 0;
+  overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -286,7 +290,7 @@
 
 /* ── Final Step ── */
 .mgt-panel--final {
-  width: 400px;
+  width: min(400px, calc(100vw - 40px));
 }
 
 .mgt-final-header {

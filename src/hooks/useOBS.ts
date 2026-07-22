@@ -17,7 +17,7 @@ import {
     type OBSInput,
 } from "../services/obsService";
 import { loadData, updateData } from "../services/store";
-import { getDefaultOBSUrl } from "../services/desktopConfig";
+import { persistOBSWebSocketConfig, resolveOBSWebSocketConfig } from "../services/obsConnectionSettings";
 import { SUNDAY_SCENE_NAMES } from "../services/layoutService";
 
 export interface UseOBSReturn {
@@ -71,7 +71,7 @@ export function useOBS(): UseOBSReturn {
                     return;
                 }
 
-                const { url, password } = data.obsWebSocket;
+                const { url, password } = await resolveOBSWebSocketConfig();
                 lastUrlRef.current = url;
                 lastPasswordRef.current = password || undefined;
                 await new Promise((r) => setTimeout(r, 500));
@@ -152,20 +152,15 @@ export function useOBS(): UseOBSReturn {
         async (url?: string, password?: string) => {
             setError(null);
             try {
-                const connectUrl = url || getDefaultOBSUrl();
+                const { url: connectUrl, password: connectPassword } =
+                    await resolveOBSWebSocketConfig(url, password);
                 lastUrlRef.current = connectUrl;
-                lastPasswordRef.current = password;
+                lastPasswordRef.current = connectPassword;
 
-                await obsService.connect(connectUrl, password);
+                await obsService.connect(connectUrl, connectPassword);
 
                 // Save connection settings + enable auto-connect
-                await updateData({
-                    obsWebSocket: {
-                        url: connectUrl,
-                        password: password || "",
-                        autoConnect: true,
-                    },
-                });
+                await persistOBSWebSocketConfig(connectUrl, connectPassword, true);
 
                 // Stabilization delay, then fetch data
                 await new Promise((r) => setTimeout(r, 200));

@@ -7,6 +7,15 @@
   <title>MakeChurchEasy — Dock</title>
   <script>
     (() => {
+      const appEnv = "%VITE_APP_ENV%" || "development";
+      const isTestEnv = appEnv !== "production";
+      window.__MCE_DOCK_TEST_ENV__ = isTestEnv;
+
+      if (isTestEnv) {
+        document.title = "MakeChurchEasy Test — Dock";
+        document.documentElement.dataset.mceEnv = "test";
+      }
+
       try {
         const pref = localStorage.getItem("obs-church-studio.theme-preference");
         const useLightMode =
@@ -114,10 +123,50 @@
       background: #f4f5f7;
       color: #1a1d23;
     }
+
+    .dock-test-env-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: rgba(127, 29, 29, 0.96);
+      border-bottom: 1px solid #f59e0b;
+      color: #fff7ed;
+      font-family: "Inter", "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    html[data-mce-env="test"] .dock-test-env-banner {
+      display: flex;
+    }
+
+    .dock-test-env-banner__badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 42px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #f59e0b;
+      color: #7f1d1d;
+    }
   </style>
 </head>
 
 <body>
+  <div class="dock-test-env-banner" aria-hidden="true">
+    <span class="dock-test-env-banner__badge">TEST</span>
+    <span>Testing environment only. Use the local test desktop app on this machine.</span>
+  </div>
   <div id="dock-root"></div>
   <script type="module" src="/src/dock/dock-main.tsx"></script>
 </body>

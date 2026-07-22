@@ -28,7 +28,7 @@ function parseEnv(): EnvConfig {
   return {
     env,
     isTest,
-    appName: isTest ? "Test MCE" : "MakeChurchEasy",
+    appName: isTest ? "MakeChurchEasy Test" : "MakeChurchEasy",
     authApiUrl: requireEnv("VITE_AUTH_API_URL", import.meta.env.VITE_AUTH_API_URL as string | undefined, env) || "https://api.creatorstudioslabs.stream",
     apiBaseUrl: requireEnv("VITE_API_BASE_URL", import.meta.env.VITE_API_BASE_URL as string | undefined, env) || "https://api.creatorstudioslabs.stream",
     wsUrl: requireEnv("VITE_WS_URL", import.meta.env.VITE_WS_URL as string | undefined, env) || "wss://relay.makechurcheasy.com",
@@ -46,11 +46,14 @@ export function getEnvConfig(): EnvConfig {
 }
 
 export function getAppTitle(page?: string): string {
-  const { isTest, appName } = getEnvConfig();
-  if (isTest) {
-    if (page) return `[TEST] ${page} - ${appName}`;
-    return `[TEST] ${appName}`;
-  }
+  const { appName } = getEnvConfig();
+  if (page && page !== "MakeChurchEasy" && page !== appName) return `${page} - ${appName}`;
   if (page) return `${page} - ${appName}`;
   return appName;
+}
+
+export function getSplashImageSrc(): string {
+  return getEnvConfig().isTest
+    ? "/make_church_easy_onboarding-dev.png"
+    : "/make_church_easy_onboarding.png";
 }

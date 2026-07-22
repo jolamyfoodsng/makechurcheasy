@@ -28,6 +28,8 @@ import {
 import { canUseMobileControl, getEffectivePlan, getTrialDaysRemaining, getUserPlan, isInTrial } from "../../services/licenseService";
 import { lmDockService } from "../../services/lmDockService";
 import { obsService } from "../../services/obsService";
+import { persistOBSWebSocketConfig } from "../../services/obsConnectionSettings";
+import { normalizeOBSWebSocketUrl } from "../../services/obsWebSocketUrl";
 import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
 import { formatCredits, getPlanConfig, getPlanCredits, getPlanLabel, type PlanConfig } from "../../services/planConfig";
 import { isProUnlocked } from "../../services/proLicense";
@@ -135,6 +137,7 @@ export function MVSettings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>(
     initialTab && validTabs.includes(initialTab as SettingsTab) ? (initialTab as SettingsTab) : "general"
   );
+  const hasSettingsSidebar = activeTab === "obs";
   const [settings, setSettings] = useState<MVSettingsType>(db.getSettings);
   const [confirmClear, setConfirmClear] = useState(false);
   const [cleared, setCleared] = useState(false);
@@ -471,8 +474,13 @@ export function MVSettings() {
     setObsTestResult(null);
     setObsStatus("connecting");
     try {
-      if (!obsService.isConnected) await obsService.connect(settings.obsUrl, obsPasswordDraft || undefined);
+      const obsUrl = normalizeOBSWebSocketUrl(settings.obsUrl);
+      if (obsUrl !== settings.obsUrl) {
+        update({ obsUrl });
+      }
+      if (!obsService.isConnected) await obsService.connect(obsUrl, obsPasswordDraft || undefined);
       const version = await obsService.call("GetVersion");
+      await persistOBSWebSocketConfig(obsUrl, obsPasswordDraft || undefined, settings.obsAutoReconnect);
       setObsTestResult(t("mvSettings.obs.testResultConnected", { obsVersion: version.obsVersion, wsVersion: version.obsWebSocketVersion }));
       setObsStatus("connected");
       triggerToast(t("mvSettings.toast.obsConnected"), "success");
@@ -778,7 +786,7 @@ export function MVSettings() {
 
         {/* Scrollable content */}
         <div className="main-scroll-pane">
-          <div className="settings-grid">
+          <div className={`settings-grid ${hasSettingsSidebar ? "" : "settings-grid--no-sidebar"} ${activeTab === "usage" ? "settings-grid--usage" : ""}`}>
             {/* Left: main form column */}
             <div className="settings-form-column">
 
@@ -1680,23 +1688,90 @@ export function MVSettings() {
                   {/* ── About Credits ── */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <h4 className="section-title">About Credits</h4>
-                    <p className="section-desc" style={{ marginBottom: "16px" }}>Credits power AI features only.</p>
-                    <div className="about-credits-grid">
-                      {[
-                        "Bible Presentation",
-                        "Worship Presentation",
-                        "Media Management",
-                        "OBS Integration",
-                        "Themes",
-                        "Lower Thirds",
-                      ].map((item, i) => (
-                        <div key={i} className="about-credit-item">
-                          <Check size={13} />
-                          <span>{item}</span>
+                    <p className="section-desc about-credits-lead">
+                      Credits are only used when MakeChurchEasy runs AI for transcription, translation, or content generation.
+                    </p>
+
+                    <div className="about-credits-stack">
+                      <div className="about-credits-block">
+                        <div className="about-credits-block-title">Does not use credits</div>
+                        <div className="about-credits-grid">
+                          {[
+                            "Bible Presentation",
+                            "Worship Presentation",
+                            "Media Management",
+                            "OBS Integration",
+                            "Themes",
+                            "Lower Thirds",
+                          ].map((item, i) => (
+                            <div key={i} className="about-credit-item">
+                              <Check size={13} />
+                              <span>{item}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                        <p className="about-credits-note">
+                          Your normal presentation workflow stays available without reducing your credit balance.
+                        </p>
+                      </div>
+
+                      <div className="about-credits-block">
+                        <div className="about-credits-block-title">Uses credits</div>
+                        <div className="credit-rates-grid">
+                          {[
+                            {
+                              icon: Radio,
+                              title: "Speech-to-Scripture",
+                              cost: "1 credit / minute",
+                              description: "Live sermon transcription and automatic scripture detection while the app is listening.",
+                            },
+                            {
+                              icon: Globe,
+                              title: "Transcript Translation",
+                              cost: "1 credit / 150 words",
+                              description: "Translating a saved transcript into another language uses credits based on transcript length.",
+                            },
+                            {
+                              icon: FileText,
+                              title: "AI Sermon Summary",
+                              cost: "5 credits",
+                              description: "Generates a concise sermon summary with key takeaways.",
+                            },
+                            {
+                              icon: FileText,
+                              title: "AI Sermon Notes",
+                              cost: "10 credits",
+                              description: "Turns a sermon into structured notes for follow-up, study, or sharing.",
+                            },
+                            {
+                              icon: Zap,
+                              title: "AI Sermon Points",
+                              cost: "10 credits",
+                              description: "Builds key sermon points with explanations and supporting scriptures.",
+                            },
+                          ].map((item) => {
+                            const Icon = item.icon;
+                            return (
+                              <div key={item.title} className="credit-rate-row">
+                                <div className="credit-rate-icon">
+                                  <Icon size={16} />
+                                </div>
+                                <div className="credit-rate-content">
+                                  <div className="credit-rate-header">
+                                    <span className="credit-rate-title">{item.title}</span>
+                                    <span className="credit-rate-cost">{item.cost}</span>
+                                  </div>
+                                  <p className="credit-rate-desc">{item.description}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="about-credits-note">
+                          AI-assisted worship import can also use credits based on document size. Larger files are split into multiple AI batches, and each AI-processed batch adds usage. Every charge appears in Recent Transactions above.
+                        </p>
+                      </div>
                     </div>
-                    <p className="about-credits-note">do NOT consume credits.</p>
                   </div>
 
                   {/* ── Credit Consumption Rates ── */}
@@ -1710,6 +1785,7 @@ export function MVSettings() {
             </div>
 
             {/* Right: widgets column */}
+            {hasSettingsSidebar && (
             <div className="widgets-column">
               {/* Appearance preview widget */}
 
@@ -1772,124 +1848,13 @@ export function MVSettings() {
                 </div>
               )}
 
-              {/* Usage gauge widget */}
-              {activeTab === "usage" && (
-                <div className="widget-card">
-                  <div className="widget-header">
-                    <h4 className="widget-title">Credits Used This Month</h4>
-                  </div>
-                  <div className="widget-body">
-                    <div className="radial-gauge-container">
-                      <svg width="150" height="150" viewBox="0 0 100 100">
-                        <circle cx="50" cy="50" r="42" className="radial-bg-circle" />
-                        <circle
-                          cx="50" cy="50" r="42"
-                          className="radial-proc-circle"
-                          strokeDasharray="263.89"
-                          strokeDashoffset={isUnlimited ? "0" : String(263.89 * (1 - usagePct / 100))}
-                        />
-                      </svg>
-                      <div className="radial-center-text">
-                        <span className="radial-val">{isUnlimited ? "∞" : creditsUsedThisMonth}</span>
-                        <span className="radial-unit">{isUnlimited ? "Unlimited" : `of ${formatCredits(planCredits)} Credits`}</span>
-                      </div>
-                    </div>
-                    <p className="credits-sidebar-pct">{isUnlimited ? "Unlimited" : `${usagePct}%`}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Upgrade CTA / Plan features / Onboarding Checklist */}
-              {activeTab === "usage" && (
-                <div className="widget-card">
-                  {proUnlocked ? (
-                    <>
-                      <div className="widget-header">
-                        <h4 className="widget-title">Pro Features</h4>
-                      </div>
-                      <div className="widget-body">
-                        <ul className="bullet-checklist">
-                          {[
-                            "Unlimited Speech-to-Scripture",
-                            "Live Translation",
-                            "Dual Language Worship",
-                            "Multiview",
-                            "Mobile Control",
-                            "Cloud Backup",
-                          ].map((f, i) => (
-                            <li key={i} className="checklist-bullet">
-                              <CheckCircle size={15} className="bullet-icon-box" />
-                              <span>{f}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </>
-                  ) : trialActive ? (
-                    <>
-                      <div className="widget-header">
-                        <h4 className="widget-title">Getting Started</h4>
-                      </div>
-                      <div className="widget-body">
-                        <p className="widget-desc" style={{ marginBottom: "16px" }}>Complete setup to get the most from your trial.</p>
-                        <ul className="bullet-checklist">
-                          {[
-                            { label: "Pair a device", done: Boolean(authUser?.appId) },
-                            { label: "Connect OBS", done: obsStatus === "connected" },
-                            { label: "Run first presentation", done: false },
-                            { label: "Try Speech-to-Scripture", done: false },
-                            { label: "Try Live Translation", done: false },
-                          ].map((item, i) => (
-                            <li key={i} className="checklist-bullet" style={{ opacity: item.done ? 0.5 : 1 }}>
-                              <CheckCircle size={15} className="bullet-icon-box" style={{ color: item.done ? "var(--success-color)" : undefined }} />
-                              <span style={{ textDecoration: item.done ? "line-through" : "none" }}>{item.label}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/subscription/plans to view plans", "accent")} title="Open in new tab">
-                          <ExternalLink size={14} />
-                          <span>View Plans</span>
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="widget-header">
-                        <h4 className="widget-title">View Plans</h4>
-                      </div>
-                      <div className="widget-body">
-                        <p className="widget-desc" style={{ marginBottom: "16px" }}>Compare available plans and unlock more features.</p>
-                        <ul className="bullet-checklist">
-                          {[
-                            "Speech-to-Scripture",
-                            "Live Translation",
-                            "Dual Language Worship",
-                            "Multiview",
-                            "Mobile Control",
-                            "Cloud Backup",
-                          ].map((f, i) => (
-                            <li key={i} className="checklist-bullet">
-                              <CheckCircle size={15} className="bullet-icon-box" />
-                              <span>{f}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        <button className="action-btn btn-primary" style={{ marginTop: "16px", width: "100%", justifyContent: "center" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/subscription/plans to view plans", "accent")} title="Open in new tab">
-                          <ExternalLink size={14} />
-                          <span>View Plans</span>
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-
               {/* ══════════════ AUDIO TAB ══════════════ */}
 
 
               {/* Tips card */}
 
             </div>
+            )}
           </div>
         </div>
       </main >

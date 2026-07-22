@@ -5,9 +5,11 @@
  * Design follows the MakeChurchEasy design system from multiview.html.
  */
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { ConnectionStatus as ConnectionStatusType } from "../services/obsService";
 import { getDefaultOBSUrl } from "../services/desktopConfig";
+import { resolveOBSWebSocketConfig } from "../services/obsConnectionSettings";
+import { normalizeOBSWebSocketUrl } from "../services/obsWebSocketUrl";
 import Icon from "./Icon";
 
 interface Props {
@@ -27,11 +29,29 @@ export function ConnectionStatus({
     const [password, setPassword] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    useEffect(() => {
+        let mounted = true;
+        resolveOBSWebSocketConfig()
+            .then(({ url: savedUrl, password: savedPassword }) => {
+                if (!mounted) return;
+                setUrl(savedUrl);
+                setPassword(savedPassword || "");
+            })
+            .catch(() => {
+                // Keep default URL if local settings are unavailable.
+            });
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
     const handleConnect = async (e: FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            await onConnect(url, password || undefined);
+            const normalizedUrl = normalizeOBSWebSocketUrl(url);
+            setUrl(normalizedUrl);
+            await onConnect(normalizedUrl, password || undefined);
         } finally {
             setIsSubmitting(false);
         }

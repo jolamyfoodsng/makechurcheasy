@@ -5,6 +5,7 @@ export interface ProjectionSettings {
   tickerLayerPriority: "ticker-above" | "content-above";
   restoreOriginalScene: boolean;
   presentationOnly: boolean;
+  hideOtherMceSourcesOnSend: boolean;
 }
 
 const PROJECTION_SETTINGS_KEY = "ocs-dock-projection-settings";
@@ -14,6 +15,7 @@ const DEFAULT_PROJECTION_SETTINGS: ProjectionSettings = {
   tickerLayerPriority: "content-above",
   restoreOriginalScene: false,
   presentationOnly: false,
+  hideOtherMceSourcesOnSend: false,
 };
 
 export function loadProjectionSettings(): ProjectionSettings {

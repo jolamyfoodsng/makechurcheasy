@@ -307,14 +307,27 @@
     grid-template-columns: 1fr 340px;
     gap: 32px;
     max-width: 1500px;
+    width: 100%;
     margin: 0 auto;
 }
 
-@media (max-width: 1024px) {
-    .settings-grid {
-        grid-template-columns: 1fr;
-    }
+.settings-grid--no-sidebar {
+    grid-template-columns: minmax(0, 1fr);
+}
 
+@media (max-width: 1280px) {
+    .settings-grid--usage {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 999px) {
+    .settings-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 1024px) {
     .credits-dashboard-grid {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -333,6 +346,7 @@
     display: flex;
     flex-direction: column;
     gap: 40px;
+    min-width: 0;
     /* Generous negative space between cards */
 }
 
@@ -347,6 +361,7 @@
 .settings-section {
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 .section-header {
@@ -1305,7 +1320,7 @@
 
 .credits-dashboard-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 24px;
 }
 
@@ -1313,6 +1328,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    min-width: 0;
 }
 
 .credits-stat-label {
@@ -1325,6 +1341,8 @@
     font-weight: 700;
     font-size: 1.15rem;
     color: var(--text-primary);
+    overflow-wrap: normal;
+    word-break: normal;
 }
 
 .credits-stat-value.credits-accent {
@@ -1334,6 +1352,7 @@
 .credits-stat-value-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
 }
 
@@ -1419,7 +1438,9 @@
 .credit-rate-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
     margin-bottom: 4px;
 }
 
@@ -1443,6 +1464,7 @@
     font-size: 0.78rem;
     color: var(--text-secondary);
     line-height: 1.4;
+    margin: 0;
 }
 
 /* ══════════════ Plan Feature X Mark ══════════════ */
@@ -1498,6 +1520,30 @@
 }
 
 /* ══════════════ About Credits Section ══════════════ */
+.about-credits-lead {
+    margin-bottom: 16px;
+}
+
+.about-credits-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.about-credits-block {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.about-credits-block-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
 .about-credits-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -1509,7 +1555,7 @@
     align-items: center;
     gap: 8px;
     font-size: 0.82rem;
-    color: var(--success-color);
+    color: var(--text-primary);
     padding: 8px 12px;
     background-color: var(--bg-card-hover);
     border: 1px solid var(--border-color);
@@ -1518,13 +1564,14 @@
 
 .about-credit-item svg {
     flex-shrink: 0;
+    color: var(--success-color);
 }
 
 .about-credits-note {
     font-size: 0.78rem;
     color: var(--text-secondary);
-    margin-top: 12px;
-    font-style: italic;
+    margin-top: 0;
+    line-height: 1.5;
 }
 
 /* ══════════════ Plan Features Columns ══════════════ */

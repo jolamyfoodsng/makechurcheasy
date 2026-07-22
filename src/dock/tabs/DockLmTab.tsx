@@ -12,6 +12,7 @@ import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
+import { getEnvConfig } from "../../services/envConfig";
 import BibleAiOnboarding, {
   isBibleAiOnboardingCompleted,
   resetBibleAiOnboarding,
@@ -118,6 +119,10 @@ function saveHistory(history: string[]): void {
 
 export default function DockLmTab() {
   const { t } = useTranslation();
+  const isTestEnv = getEnvConfig().isTest;
+  const openAppToStartText = isTestEnv
+    ? "Open Speech to Scripture in MakeChurchEasy Test on this computer to start listening."
+    : t("lm.openAppToStart");
 
   const [settings, setSettings] = useState<LmDockSettings>(() => loadSettings());
   const [showSettings, setShowSettings] = useState(false);
@@ -701,6 +706,39 @@ export default function DockLmTab() {
   return (
     <div style={S.root} ref={rootRef}>
       <style>{`@keyframes lm-pulse{0%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.6)}100%{opacity:1;transform:scale(1)}}`}</style>
+      {isTestEnv && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 10px",
+            background: "rgba(127, 29, 29, 0.92)",
+            borderBottom: "1px solid rgba(245, 158, 11, 0.65)",
+            color: "#fff7ed",
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+          }}
+        >
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minWidth: 42,
+              padding: "2px 6px",
+              borderRadius: 999,
+              background: "#f59e0b",
+              color: "#7f1d1d",
+            }}
+          >
+            Test
+          </span>
+          <span>Testing environment only. Start Speech to Scripture from the test desktop app on this machine.</span>
+        </div>
+      )}
       <div style={S.statusBar}>
         <div style={S.statusBarLeft}>
           <div
@@ -852,7 +890,7 @@ export default function DockLmTab() {
               {!currentVerse && queueVerses.length === 0 && pinnedVerses.length === 0 && (
                 <div style={S.sectionEmpty}>
                   <span style={S.sectionEmptyText}>
-                    {appConnected ? t("lm.waitingForDetection") : t("lm.openAppToStart")}
+                    {appConnected ? t("lm.waitingForDetection") : openAppToStartText}
                   </span>
                 </div>
               )}
@@ -1129,7 +1167,7 @@ export default function DockLmTab() {
         <div style={S.emptyState}>
           <Icon name="mic" size={32} style={{ opacity: 0.15 }} />
           <span style={S.emptyText}>
-            {t("lm.openAppToStart")}
+            {openAppToStartText}
           </span>
           {appConnected && (
             <button

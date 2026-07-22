@@ -111,6 +111,11 @@ jobs:
       - name: Prepare bundled assets
         run: node scripts/prepare-bundle-assets.cjs
 
+      - name: Apply development Tauri identity
+        run: node scripts/build-env-config.mjs
+        env:
+          VITE_APP_ENV: development
+
       - name: Verify signing env vars are set
         shell: pwsh
         run: |

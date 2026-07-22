@@ -6,16 +6,18 @@ import {
   getEffectivePlan as resolveCanonicalPlan,
   normalizePlanId,
 } from "../lib/subscriptionSourceOfTruth";
+import { getEnvConfig } from "../services/envConfig";
 
 /**
  * Auth gate for the OBS Dock.
- * Reads deviceId from the URL query params (embedded by the desktop app),
- * then verifies it against the local overlay server's auth session.
+ * Reads the active device session from the local overlay server, with legacy
+ * URL query params retained only for old OBS dock URLs.
  * The Tauri app syncs its auth session to the overlay server via POST /api/auth/session,
  * so the dock can verify locally without needing internet access.
  */
 
-const ONLINE_API = "https://api.creatorstudioslabs.stream";
+const ENV_CONFIG = getEnvConfig();
+const ONLINE_API = ENV_CONFIG.authApiUrl;
 const PLAN_KEY = "ocs-dock-plan";
 const ENTITLEMENTS_KEY = "ocs-dock-entitlements";
 
@@ -135,6 +137,7 @@ async function getDeviceIdFromSession(): Promise<string | null> {
 
 export default function DockAuthGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
+  const isTestEnv = ENV_CONFIG.isTest;
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
 
@@ -164,11 +167,13 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
     }
 
     // 2) Fallback: verify against the online API (requires internet)
-    const onlineOk = await checkDeviceOnline(deviceId);
-    if (onlineOk) {
-      setAuthed(true);
-      setReady(true);
-      return;
+    if (!isTestEnv) {
+      const onlineOk = await checkDeviceOnline(deviceId);
+      if (onlineOk) {
+        setAuthed(true);
+        setReady(true);
+        return;
+      }
     }
 
     // Retry up to 3 times with backoff
@@ -225,7 +230,11 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
           <path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
         <h2>{t('auth.title')}</h2>
-        <p>{t('auth.description')}</p>
+        <p>
+          {isTestEnv
+            ? "Please open MakeChurchEasy Test on this computer and sign in there first."
+            : t('auth.description')}
+        </p>
         <button className="dock-auth-refresh" onClick={() => window.location.reload()} title={t('auth.refresh')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="23 4 23 10 17 10" />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { obsService, type ConnectionStatus } from "../services/obsService";
-import { loadData, updateData } from "../services/store";
+import { loadData } from "../services/store";
+import { persistOBSWebSocketConfig, resolveOBSWebSocketConfig } from "../services/obsConnectionSettings";
 import { getDefaultOBSUrl } from "../services/desktopConfig";
 import Icon from "./Icon";
 
@@ -56,10 +57,10 @@ export function OBSConnectGate({ children }: Props) {
           setConnecting(true);
           setError(null);
           try {
-            await obsService.connect(savedUrl, savedPw || undefined);
-            await updateData({
-              obsWebSocket: { url: savedUrl, password: savedPw, autoConnect: true },
-            });
+            const resolved = await resolveOBSWebSocketConfig();
+            setUrl(resolved.url);
+            await obsService.connect(resolved.url, resolved.password);
+            await persistOBSWebSocketConfig(resolved.url, resolved.password, true);
           } catch {
             // Failed
           } finally {
@@ -82,10 +83,10 @@ export function OBSConnectGate({ children }: Props) {
     setError(null);
 
     try {
-      await obsService.connect(url, password || undefined);
-      await updateData({
-        obsWebSocket: { url, password, autoConnect: true },
-      });
+      const resolved = await resolveOBSWebSocketConfig(url, password || undefined);
+      setUrl(resolved.url);
+      await obsService.connect(resolved.url, resolved.password);
+      await persistOBSWebSocketConfig(resolved.url, resolved.password, true);
       setShowConnectPanel(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connection failed");

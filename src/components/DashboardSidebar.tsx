@@ -26,6 +26,7 @@ import {
 import type { ConnectionStatus } from "../services/obsService";
 
 import { useAuth } from "../contexts/AuthContext";
+import { getEnvConfig } from "../services/envConfig";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ export default function DashboardSidebar({
 }: DashboardSidebarProps) {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
+  const { appName, isTest } = getEnvConfig();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
 
@@ -85,9 +87,14 @@ export default function DashboardSidebar({
   return (
     <nav className={`sidebar${collapsed ? " sidebar--collapsed" : ""}`}>
       <div className="sidebar-header">
-        <AppLogo alt="MakeChurchEasy" className="sidebar-logo" />
+        <AppLogo alt={appName} className="sidebar-logo" />
         <div className="sidebar-header-text">
-          {/* <h1 className="sidebar-title">MakeChurchEasy</h1> */}
+          <p className="sidebar-subtitle">{appName}</p>
+          {isTest ? (
+            <p className="sidebar-subtitle" style={{ color: "var(--warning)", marginTop: 2 }}>
+              Testing environment
+            </p>
+          ) : null}
         </div>
         <button
           className="sidebar-toggle"

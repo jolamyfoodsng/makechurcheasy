@@ -1,6 +1,7 @@
 import { useEffect, useState, type ImgHTMLAttributes } from "react";
 import darkLogo from "../app_logo_no_bg_for_dark_mode.png";
 import lightLogo from "../app_logo_no_bg_for_light_mode.png";
+import { getEnvConfig } from "../services/envConfig";
 
 type LogoMode = "auto" | "dark" | "light";
 
@@ -48,6 +49,7 @@ export function AppLogo({
   alt = "MakeChurchEasy",
   ...imgProps
 }: AppLogoProps) {
+  const { isTest } = getEnvConfig();
   const [resolvedMode, setResolvedMode] = useState<"light" | "dark">(() => (
     mode === "auto" ? detectThemeMode() : mode
   ));
@@ -98,5 +100,20 @@ export function AppLogo({
   }, [mode]);
 
   const fallbackLogoSrc = resolvedMode !== "light" ? lightLogo : darkLogo;
-  return <img {...imgProps} src={fallbackLogoSrc} alt={alt} />;
+  return (
+    <img
+      {...imgProps}
+      src={fallbackLogoSrc}
+      alt={alt}
+      style={{
+        ...(imgProps.style ?? {}),
+        ...(isTest
+          ? {
+            filter:
+              "sepia(1) saturate(7) hue-rotate(-18deg) brightness(1.06) drop-shadow(0 0 12px rgba(239, 68, 68, 0.26))",
+          }
+          : {}),
+      }}
+    />
+  );
 }

@@ -6114,7 +6114,7 @@
 }
 
 .dock-bible-reader {
-  flex: 0 0 82%;
+  flex: 0 0 95%;
   min-height: 0;
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--dock-border) 60%, transparent);
@@ -23043,6 +23043,7 @@
 .dock-mv-bg__browse-btn:hover {
   background: var(--dock-input-bg);
 }
+
 .dock-mv-bg__media-title {
   font-size: 12px;
   font-weight: 600;
@@ -23099,6 +23100,7 @@
 .dock-mv-bg__file-hidden {
   display: none;
 }
+
 .dock-mv-property__value--empty {
   color: var(--dock-text-dim);
   font-weight: 400;
@@ -23162,7 +23164,7 @@
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 .dock-mv-bg-editor__header {
@@ -23651,7 +23653,7 @@
   background: var(--dock-bg);
   border: 1px solid var(--dock-border);
   border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   padding: 4px;
   margin-top: 2px;
 }
@@ -23716,7 +23718,7 @@
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 .dock-mv-content-picker__header {
@@ -23828,6 +23830,20 @@
   padding: 24px 0;
 }
 
+.dock-mv-content-picker__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 0;
+  color: var(--dock-text-dim);
+  font-size: 12px;
+}
+
+.dock-mv-content-picker__loading svg {
+  animation: dock-mv-spin 0.8s linear infinite;
+}
+
 .dock-mv-content-picker__item {
   display: flex;
   align-items: center;
@@ -23848,7 +23864,7 @@
   background: var(--dock-surface);
 }
 
-.dock-mv-content-picker__item + .dock-mv-content-picker__item {
+.dock-mv-content-picker__item+.dock-mv-content-picker__item {
   border-top: 1px solid var(--dock-border);
 }
 
@@ -23878,7 +23894,7 @@
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 .dock-mv-framing-editor__header {
@@ -24007,7 +24023,7 @@
 .dock-mv-framing-editor__preview-border {
   position: absolute;
   inset: 0;
-  border: 2px solid rgba(255,255,255,0.35);
+  border: 2px solid rgba(255, 255, 255, 0.35);
   border-radius: 4px;
   pointer-events: none;
 }
@@ -24286,7 +24302,7 @@
   flex-shrink: 0;
 }
 
-.dock-mv-wizard-step + .dock-mv-wizard-step::before {
+.dock-mv-wizard-step+.dock-mv-wizard-step::before {
   content: "";
   display: block;
   width: 16px;
