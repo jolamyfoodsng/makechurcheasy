@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const env = process.env.VITE_APP_ENV || "development";
+const env = process.env.VITE_APP_ENV || "production";
 const isDev = env === "development";
 const productName = isDev ? "Test MCE" : "MakeChurchEasy";
 const identifier = isDev

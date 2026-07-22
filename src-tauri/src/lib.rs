@@ -54,19 +54,7 @@ static OVERLAY_PORT: AtomicU16 = AtomicU16::new(0);
 static AUTH_SESSION: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
 fn dev_window_icon() -> Option<Image<'static>> {
-    #[cfg(debug_assertions)]
-    {
-        Some(Image::new_owned(
-            include_bytes!("../icons/icon-dev.rgba").to_vec(),
-            512,
-            512,
-        ))
-    }
-
-    #[cfg(not(debug_assertions))]
-    {
-        None
-    }
+    None
 }
 
 // ── macOS App Nap prevention ─────────────────────────────────────────────────
