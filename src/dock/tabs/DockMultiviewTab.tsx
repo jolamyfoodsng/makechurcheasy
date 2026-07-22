@@ -26,6 +26,7 @@ import { getRecommendedPollingInterval } from "../../services/performanceManager
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = "dock-mv-saved";
+const ADDED_LAYOUTS_KEY = "mvg-added-ids";
 const CANVAS_W = 1920;
 const CANVAS_H = 1080;
 
@@ -97,6 +98,17 @@ function loadSaved(): SavedMultiView[] {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch { return []; }
+}
+
+function loadAddedLayoutIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(ADDED_LAYOUTS_KEY));
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed) : new Set();
+  } catch {
+    return new Set();
+  }
 }
 
 function saveSaved(items: SavedMultiView[]) {
@@ -1185,31 +1197,13 @@ function MVCard({
         </div>
       </div>
 
-      {/* Template — compact property row */}
+      {/* Template — always-visible select */}
       <div className="dock-mv-property">
         <span className="dock-mv-property__label">{t('multiview.template')}</span>
-        <div className="dock-mv-property__row">
-          {layout && <span className="dock-mv-property__value">{layout.name}</span>}
-          {!layout && <span className="dock-mv-property__value dock-mv-property__value--empty">{t('multiview.noTemplate')}</span>}
-          <button
-            type="button"
-            className="dock-mv-property__action"
-            onClick={(e) => {
-              const select = (e.currentTarget.parentElement?.parentElement as HTMLElement)
-                ?.querySelector<HTMLSelectElement>('.dock-mv-property__select');
-              select?.classList.toggle('dock-mv-property__select--visible');
-            }}
-          >
-            {t('multiview.change')}
-          </button>
-        </div>
         <select
-          className="dock-mv-property__select"
+          className="dock-mv-property__select dock-mv-property__select--visible"
           value={mv.layoutId}
-          onChange={(e) => {
-            onUpdateLayout(mv.id, e.target.value);
-            (e.currentTarget as HTMLElement).classList.remove('dock-mv-property__select--visible');
-          }}
+          onChange={(e) => onUpdateLayout(mv.id, e.target.value)}
         >
           <option value="">— {t('multiview.selectTemplate')} —</option>
           {addedLayouts.map(l => (
@@ -1329,7 +1323,6 @@ function MVCard({
 export default function DockMultiviewTab() {
   const { t } = useTranslation();
   const [savedList, setSavedList] = useState<SavedMultiView[]>([]);
-  const [hasMvScene, setHasMvScene] = useState(false);
   const [obsScenes, setObsScenes] = useState<string[]>([]);
   const [obsSources, setObsSources] = useState<string[]>([]);
   const [obsContentLoading, setObsContentLoading] = useState(false);
@@ -1342,8 +1335,11 @@ export default function DockMultiviewTab() {
   const feedbackTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const obsScanBusyRef = useRef(false);
 
-  // Derived: when the shared MV scene exists all gallery layouts are available
-  const addedLayouts = hasMvScene ? GALLERY_LAYOUTS : [];
+  // Show layouts that are added via gallery OR in use by saved cards
+  const addedIds = loadAddedLayoutIds();
+  const usedIds = new Set(savedList.map(m => m.layoutId).filter(Boolean));
+  const visibleIds = new Set([...addedIds, ...usedIds]);
+  const addedLayouts = GALLERY_LAYOUTS.filter(l => visibleIds.has(l.id));
 
   // ── Load saved list (auto-seed two cards if empty) ──
   useEffect(() => {
@@ -1414,7 +1410,6 @@ export default function DockMultiviewTab() {
       const inputs = inputResp.inputs ?? [];
       if (!mountedRef.current) return;
       console.log("[MV] refreshObsScenes OK", { sceneCount: scenes.length, scenes: scenes.map(s => s.sceneName), inputCount: inputs.length });
-      setHasMvScene(scenes.some(s => /^MV: Multiview \d+$/.test(s.sceneName)));
       setObsScenes(scenes.map(s => s.sceneName));
       setObsSources(inputs.map(i => i.inputName));
       setObsContentLoaded(true);

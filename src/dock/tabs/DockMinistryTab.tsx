@@ -227,9 +227,9 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       if (cancelled) return;
       const entries: MixedLTThemeEntry[] = [];
 
-      // LowerThirdTheme favorites
+      // LowerThirdTheme favorites — only show themes favorited/added to OBS
       const ltThemes = ALL_LT_THEMES.filter((t) => ltIdSet.has(t.id));
-      for (const t of ltThemes.length > 0 ? ltThemes : LT_ALL_THEMES.slice(0, 6)) {
+      for (const t of ltThemes) {
         entries.push({ kind: "lt", theme: t, label: t.name });
       }
 
@@ -242,7 +242,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     }).catch((err) => {
       console.warn("[DockMinistry] Failed to load LT favorites:", err);
       if (!cancelled) {
-        setLtFavorites(LT_ALL_THEMES.slice(0, 6).map((t) => ({ kind: "lt" as const, theme: t, label: t.name })));
+        setLtFavorites([]);
       }
     });
     return () => { cancelled = true; };
@@ -254,28 +254,24 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     loadDockTickerFavorites().then((favIds) => {
       if (cancelled) return;
       setTickerFavIds(favIds);
-      const available = favIds.size > 0
-        ? TICKER_THEMES.filter((t) => favIds.has(t.id))
-        : TICKER_THEMES.slice(0, 1);
+      const available = TICKER_THEMES.filter((t) => favIds.has(t.id));
       const currentInList = available.some((t) => t.id === settings.themeId);
       if (!currentInList && available.length > 0) {
         setSettings((s) => ({ ...s, themeId: available[0].id, heading: available[0].defaultHeading }));
       }
-    }).catch(() => {});
+    }).catch(() => { });
     return () => { cancelled = true; };
   }, []);
 
-  const tickerThemeList = tickerFavIds.size > 0
-    ? TICKER_THEMES.filter((t) => tickerFavIds.has(t.id))
-    : TICKER_THEMES.slice(0, 1);
-  const theme = tickerThemeList.find((t) => t.id === settings.themeId) ?? tickerThemeList[0] ?? TICKER_THEMES[0];
+  const tickerThemeList = TICKER_THEMES.filter((t) => tickerFavIds.has(t.id));
+  const theme = tickerThemeList.find((t) => t.id === settings.themeId) ?? tickerThemeList[0] ?? null;
   const activeMessages = messages.filter((m) => m.active);
 
   // Derive branded ticker colors from the app's brand color
   const brandedColors = (() => {
     const brandColor = normalizeBrandColor(getSettings().brandColor);
     return {
-      ...theme.defaultColors,
+      ...theme?.defaultColors ?? {},
       accent: brandColor,
       separator: brandColor,
     };
@@ -340,6 +336,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       setError(t("ministry.addAtLeastOne"));
       return;
     }
+    if (!theme) return;
     setSending(true);
     setError(null);
     setSuccess(null);
@@ -458,6 +455,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
 
   // ── Pause ticker (stops scroll in OBS) ──
   const handlePause = useCallback(async () => {
+    if (!theme) return;
     setSending(true);
     setError(null);
     setSuccess(null);
@@ -648,7 +646,6 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             {/* Settings */}
             <div className="dock-mv-tab__section">
               <div className="dock-mv-tab__section-label">{t("ministry.settings")}</div>
-              <div className="dock-mv-tab__section-desc">{t("ministry.settingsDesc")}</div>
               <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "block", alignItems: "center", gap: 6 }}>
                   <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.heading")}</label>
@@ -685,9 +682,9 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   />
                   <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 24, textAlign: "right" }}>{settings.speed}</span>
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.position")}</label>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 20 }}>
+                  <div style={{ display: "block", alignItems: "center", gap: 6 }}>
+                    <label style={{ fontSize: 10, display: "block", color: "var(--dock-text-dim)", minWidth: 50, }}>{t("ministry.position")}</label>
                     <div className="dock-console-segmented dock-console-segmented--compact">
                       <button
                         type="button"
@@ -705,8 +702,8 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       </button>
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <label style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("ministry.loop")}</label>
+                  <div style={{ display: "block", alignItems: "center", gap: 6, }}>
+                    <label style={{ display: "block", fontSize: 10, color: "var(--dock-text-dim)" }}>{t("ministry.loop")}</label>
                     <div className="dock-console-segmented dock-console-segmented--compact">
                       <button
                         type="button"
