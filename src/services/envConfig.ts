@@ -32,8 +32,8 @@ function parseEnv(): EnvConfig {
     authApiUrl: requireEnv("VITE_AUTH_API_URL", import.meta.env.VITE_AUTH_API_URL as string | undefined, env) || "https://api.creatorstudioslabs.stream",
     apiBaseUrl: requireEnv("VITE_API_BASE_URL", import.meta.env.VITE_API_BASE_URL as string | undefined, env) || "https://api.creatorstudioslabs.stream",
     wsUrl: requireEnv("VITE_WS_URL", import.meta.env.VITE_WS_URL as string | undefined, env) || "wss://relay.makechurcheasy.com",
-    analyticsEndpoint: requireEnv("VITE_ANALYTICS_ENDPOINT", import.meta.env.VITE_ANALYTICS_ENDPOINT as string | undefined, env),
-    analyticsToken: requireEnv("VITE_ANALYTICS_TOKEN", import.meta.env.VITE_ANALYTICS_TOKEN as string | undefined, env),
+    analyticsEndpoint: import.meta.env.VITE_ANALYTICS_ENDPOINT as string | undefined || "",
+    analyticsToken: import.meta.env.VITE_ANALYTICS_TOKEN as string | undefined || "",
     assemblyAiKeys: requireEnv("VITE_ASSEMBLYAI_API_KEYS", import.meta.env.VITE_ASSEMBLYAI_API_KEYS as string | undefined, env).split(",").filter(Boolean),
   };
 }
