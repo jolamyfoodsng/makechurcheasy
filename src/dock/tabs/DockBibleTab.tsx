@@ -3022,10 +3022,19 @@ export default function DockBibleTab({
 
   const handleHistoryClick = useCallback((item: BibleHistoryItem) => {
     setShowHistoryDropdown(false);
-    const result = parseBibleSearch(`${item.book} ${item.chapter}:${item.verse}`)[0];
-    if (result) {
-      void handlePickResult({ ...result, kind: "reference" });
-    }
+    focusReference(item.book, item.chapter, item.verse);
+  }, [focusReference]);
+
+  const handleHistoryDoubleClick = useCallback((item: BibleHistoryItem) => {
+    setShowHistoryDropdown(false);
+    void handlePickResult({
+      kind: "reference",
+      book: item.book,
+      chapter: item.chapter,
+      verse: item.verse,
+      label: item.reference,
+      score: 100,
+    });
   }, [handlePickResult]);
 
   const openHistoryDropdown = useCallback(() => {
@@ -4143,16 +4152,30 @@ export default function DockBibleTab({
                   {showHistoryDropdown && historyItems.length > 0 && (
                     <div className="dock-bible-reader__history-dropdown">
                       {historyItems.map((item) => (
-                        <button
-                          type="button"
-                          key={item.id}
-                          className="dock-bible-reader__history-item"
-                          onClick={() => handleHistoryClick(item)}
-                          title={item.reference}
-                        >
-                          <span className="dock-bible-reader__history-ref">{item.reference}</span>
-                          <span className="dock-bible-reader__history-text">{item.verseText}</span>
-                        </button>
+                        <div key={item.id} className="dock-bible-reader__history-item">
+                          <div className="dock-bible-reader__history-copy">
+                            <span className="dock-bible-reader__history-ref">{item.reference}</span>
+                            <span className="dock-bible-reader__history-text">{item.verseText}</span>
+                          </div>
+                          <div className="dock-bible-reader__history-actions">
+                            <button
+                              type="button"
+                              className="dock-bible-reader__history-btn"
+                              onClick={() => handleHistoryClick(item)}
+                              title={t("bible.view", "View")}
+                            >
+                              <Icon name="visibility" size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              className="dock-bible-reader__history-btn dock-bible-reader__history-btn--push"
+                              onClick={() => handleHistoryDoubleClick(item)}
+                              title={t("bible.pushToObs", "Push to OBS")}
+                            >
+                              <Icon name="open_in_new" size={12} />
+                            </button>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}

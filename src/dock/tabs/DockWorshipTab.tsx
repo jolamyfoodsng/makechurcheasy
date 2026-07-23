@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { DockStagedItem, DockWorshipSection } from "../dockTypes";
 import { dockObsClient } from "../dockObsClient";
@@ -836,6 +837,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const searchRef = useRef<HTMLDivElement>(null);
   const lineCountPopoverRef = useRef<HTMLDivElement>(null);
   const deletedSectionsPopoverRef = useRef<HTMLDivElement>(null);
+  const deletedSectionsTriggerRef = useRef<HTMLButtonElement>(null);
+  const [deletedSectionsPopoverPos, setDeletedSectionsPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const prefsReadyRef = useRef(false);
   const suppressAutoProjectionRef = useRef(true);
   const obsAutoPushArmedRef = useRef(false);
@@ -1177,7 +1180,11 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       if (lineCountPopoverRef.current && !lineCountPopoverRef.current.contains(event.target as Node)) {
         setShowLineCountPopover(false);
       }
-      if (deletedSectionsPopoverRef.current && !deletedSectionsPopoverRef.current.contains(event.target as Node)) {
+      if (
+        showDeletedSectionsPopover &&
+        deletedSectionsPopoverRef.current && !deletedSectionsPopoverRef.current.contains(event.target as Node) &&
+        deletedSectionsTriggerRef.current && !deletedSectionsTriggerRef.current.contains(event.target as Node)
+      ) {
         setShowDeletedSectionsPopover(false);
       }
       if (autoSplitPopoverRef.current && !autoSplitPopoverRef.current.contains(event.target as Node)) {
@@ -1186,7 +1193,34 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+  }, [showDeletedSectionsPopover]);
+
+  const handleToggleDeletedSectionsPopover = useCallback(() => {
+    setShowDeletedSectionsPopover((current) => {
+      if (!current && deletedSectionsTriggerRef.current) {
+        const rect = deletedSectionsTriggerRef.current.getBoundingClientRect();
+        const popoverWidth = 320;
+        const popoverHeight = 280;
+        const top = rect.bottom + 6 + popoverHeight > window.innerHeight
+          ? Math.max(8, rect.top - popoverHeight - 6)
+          : rect.bottom + 6;
+        const left = Math.max(8, Math.min(rect.right - popoverWidth, window.innerWidth - popoverWidth - 8));
+        setDeletedSectionsPopoverPos({ top, left });
+      }
+      return !current;
+    });
   }, []);
+
+  useEffect(() => {
+    if (!showDeletedSectionsPopover) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowDeletedSectionsPopover(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [showDeletedSectionsPopover]);
 
   const filteredSongs = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -2668,82 +2702,40 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
               {/* Song Summary Header */}
               <section className="dock-console-panel dock-console-panel--toolbar dock-worship-summary">
                 <div className="dock-worship-summary__header">
-                  <div className="dock-worship-summary__left">
-                    <button
-                      type="button"
-                      className="dock-worship-back-btn"
-                      onClick={handleBackToSongList}
-                      title={t('common.back')}>
-                      <Icon name="arrow_back" size={14} />
-                      {/* <span>Back to Songs</span> */}
-                    </button>
-                    <div className="dock-worship-summary__copy">
-                      <div className="dock-worship-summary__title">{selectedSong.title}</div>
-                      {selectedSong.artist && (
-                        <div className="dock-worship-summary__artist">{selectedSong.artist}</div>
-                      )}
-                      <div className="dock-worship-summary__meta">
-                        <span>{t('worship.slideCount', { count: selectedSongSections.length })}</span>
-                        <span className="dock-worship-summary__meta-dot">·</span>
-                        <span>{t('worship.linesPerSlide')} ({linesPerSlide})</span>
-                      </div>
+                  <button
+                    type="button"
+                    className="dock-worship-back-btn"
+                    onClick={handleBackToSongList}
+                    title={t('common.back')}
+                  >
+                    <Icon name="arrow_back" size={14} />
+                  </button>
+                  <div className="dock-worship-summary__copy">
+                    <div className="dock-worship-summary__title">{selectedSong.title}</div>
+                    {selectedSong.artist && (
+                      <div className="dock-worship-summary__artist">{selectedSong.artist}</div>
+                    )}
+                    <div className="dock-worship-summary__meta">
+                      <span>{t('worship.slideCount', { count: selectedSongSections.length })}</span>
+                      <span className="dock-worship-summary__meta-dot">·</span>
+                      <span>{linesPerSlide} {linesPerSlide === 1 ? t('worship.linePerSlide', { defaultValue: 'line per slide' }) : t('worship.linesPerSlide')}</span>
                     </div>
                   </div>
                   <div className="dock-worship-summary__actions">
-                    <div
-                      className={`dock-worship-history${showDeletedSectionsPopover ? " is-open" : ""}`}
-                      ref={deletedSectionsPopoverRef}
+                    <button
+                      type="button"
+                      ref={deletedSectionsTriggerRef}
+                      className={`dock-shell-icon-btn${showDeletedSectionsPopover ? " dock-shell-icon-btn--active" : ""}`}
+                      onClick={handleToggleDeletedSectionsPopover}
+                      title={t("worship.viewDeletedSlides", { defaultValue: "View deleted slides" })}
+                      aria-label={t("worship.viewDeletedSlides", { defaultValue: "View deleted slides" })}
+                      aria-expanded={showDeletedSectionsPopover}
                     >
-                      <button
-                        type="button"
-                        className={`dock-shell-icon-btn${showDeletedSectionsPopover ? " dock-shell-icon-btn--active" : ""}`}
-                        onClick={() => setShowDeletedSectionsPopover((current) => !current)}
-                        title={t("worship.deletedSlides", { defaultValue: "Deleted slides" })}
-                        aria-label={t("worship.deletedSlides", { defaultValue: "Deleted slides" })}
-                        aria-expanded={showDeletedSectionsPopover}
-                      >
-                        <Icon name="history" size={14} />
-                        {deletedSections.length > 0 && (
-                          <span className="dock-worship-history__count">{Math.min(deletedSections.length, 9)}</span>
-                        )}
-                      </button>
-                      {showDeletedSectionsPopover && (
-                        <div
-                          className="dock-worship-history__menu"
-                          role="dialog"
-                          aria-label={t("worship.deletedSlides", { defaultValue: "Deleted slides" })}
-                        >
-                          <div className="dock-worship-history__menu-title">
-                            {t("worship.deletedSlides", { defaultValue: "Deleted slides" })}
-                          </div>
-                          {deletedSections.length === 0 ? (
-                            <div className="dock-worship-history__empty">
-                              {t("worship.deletedSlidesEmpty", { defaultValue: "Deleted slides show up here until you switch songs." })}
-                            </div>
-                          ) : (
-                            <div className="dock-worship-history__list">
-                              {deletedSections.map((item) => (
-                                <div key={item.id} className="dock-worship-history__item">
-                                  <div className="dock-worship-history__copy">
-                                    <div className="dock-worship-history__item-title">{item.label}</div>
-                                    <div className="dock-worship-history__item-text">{item.text}</div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className="dock-worship-history__restore"
-                                    onClick={() => void handleRestoreDeletedSection(item)}
-                                    title={t("sermon.restoreBtn")}
-                                    disabled={savingSong}
-                                  >
-                                    <Icon name="undo" size={12} />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                      <Icon name="history" size={14} />
+                      {deletedSections.length > 0 && (
+                        <span className="dock-worship-history__count">{Math.min(deletedSections.length, 9)}</span>
                       )}
-                    </div>
+                    </button>
                     <button
                       type="button"
                       className="dock-shell-icon-btn"
@@ -3339,6 +3331,62 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
             </div>
           ))}
         </div>
+      )}
+
+      {showDeletedSectionsPopover && createPortal(
+        <div
+          ref={deletedSectionsPopoverRef}
+          className="dock-worship-history__popover"
+          role="dialog"
+          aria-label={t("worship.deletedSlides", { defaultValue: "Deleted slides" })}
+          style={{
+            position: "fixed",
+            top: deletedSectionsPopoverPos.top,
+            left: deletedSectionsPopoverPos.left,
+            zIndex: 10000,
+          }}
+        >
+          <div className="dock-worship-history__popover-header">
+            <span className="dock-worship-history__popover-title">
+              {t("worship.deletedSlides", { defaultValue: "Deleted slides" })}
+            </span>
+            <button
+              type="button"
+              className="dock-worship-history__popover-close"
+              onClick={() => setShowDeletedSectionsPopover(false)}
+              title={t("common.close")}
+              aria-label={t("common.close")}
+            >
+              <Icon name="close" size={12} />
+            </button>
+          </div>
+          {deletedSections.length === 0 ? (
+            <div className="dock-worship-history__empty">
+              {t("worship.deletedSlidesEmpty", { defaultValue: "Deleted slides will appear here until you switch songs." })}
+            </div>
+          ) : (
+            <div className="dock-worship-history__list">
+              {deletedSections.map((item) => (
+                <div key={item.id} className="dock-worship-history__item">
+                  <div className="dock-worship-history__copy">
+                    <div className="dock-worship-history__item-title">{item.label || `Slide ${item.index + 1}`}</div>
+                    <div className="dock-worship-history__item-text">{item.text}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="dock-worship-history__restore"
+                    onClick={() => void handleRestoreDeletedSection(item)}
+                    title={t("sermon.restoreBtn")}
+                    disabled={savingSong}
+                  >
+                    <Icon name="undo" size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>,
+        document.body
       )}
     </div>
   );
