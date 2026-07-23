@@ -1,5 +1,4 @@
 // Tauri Rust backend — MakeChurchEasy
-//
 // Commands:
 //   save_bg_image      — persist background image to disk (for OBS image_source)
 //   save_upload_file   — persist uploaded logo to disk

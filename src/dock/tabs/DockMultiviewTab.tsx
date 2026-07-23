@@ -1124,37 +1124,13 @@ function MVCard({
   onDelete: (id: string) => void;
 }) {
   const { t } = useTranslation();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [renaming, setRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState(mv.name);
   const [pickerSlot, setPickerSlot] = useState<string | null>(null);
   const [framingSlot, setFramingSlot] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const layout = resolveLayout(mv.layoutId);
   const assignedCount = Object.values(mv.assignments).filter(Boolean).length;
   const allSlotsFilled = !!layout && assignedCount >= layout.slots.length;
   const isPushing = pushingId === mv.id;
   const isClearing = clearingId === mv.id;
-
-  // Close menu on outside click
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [menuOpen]);
-
-  const handleRenameSubmit = () => {
-    const name = renameValue.trim();
-    if (name && name !== mv.name) {
-      onUpdateName(mv.id, name);
-    }
-    setRenaming(false);
-  };
 
   const handleContentSelect = (slotId: string, value: string, mode: "scene" | "source") => {
     onAssignSlotMode(mv.id, slotId, mode);
@@ -1172,68 +1148,11 @@ function MVCard({
       {/* Card Header */}
       <div className="dock-mv-card__header">
         <div className="dock-mv-card__title-group">
-          {renaming ? (
-            <form
-              className="dock-mv-card__rename"
-              onSubmit={(e) => { e.preventDefault(); handleRenameSubmit(); }}
-            >
-              <input
-                className="dock-mv-card__rename-input"
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                autoFocus
-                onBlur={handleRenameSubmit}
-                onClick={(e) => e.stopPropagation()}
-              />
-            </form>
-          ) : (
-            <span className="dock-mv-card__name">
-              {mv.name}
-              {isActive && <span className="dock-mv-card__badge">{t('multiview.on')}</span>}
-            </span>
-          )}
+          <span className="dock-mv-card__name">
+            {mv.name}
+            {isActive && <span className="dock-mv-card__badge">{t('multiview.on')}</span>}
+          </span>
           <span className="dock-mv-card__id">{shortId(index)}</span>
-        </div>
-
-        {/* Card Actions Menu */}
-        <div className="dock-mv-card__menu-wrap" ref={menuRef}>
-          <button
-            type="button"
-            className="dock-mv-card__menu-btn"
-            onClick={() => setMenuOpen(!menuOpen)}
-            title={t('multiview.actions')}
-          >
-            <Icon name="more_vert" size={14} />
-          </button>
-          {menuOpen && (
-            <div className="dock-mv-card__menu">
-              <button
-                type="button"
-                className="dock-mv-card__menu-item"
-                onClick={() => { setRenaming(true); setRenameValue(mv.name); setMenuOpen(false); }}
-                title={t('common.rename')}>
-                <Icon name="drive_file_rename_outline" size={13} />
-                <span>{t('multiview.rename')}</span>
-              </button>
-              <button
-                type="button"
-                className="dock-mv-card__menu-item"
-                onClick={() => { onDuplicate(mv.id); setMenuOpen(false); }}
-                title={t('common.duplicate')}>
-                <Icon name="content_copy" size={13} />
-                <span>{t('multiview.duplicate')}</span>
-              </button>
-              <div className="dock-mv-card__menu-divider" />
-              <button
-                type="button"
-                className="dock-mv-card__menu-item dock-mv-card__menu-item--danger"
-                onClick={() => { onDelete(mv.id); setMenuOpen(false); }}
-                title={t('common.delete')}>
-                <Icon name="delete" size={13} />
-                <span>{t('multiview.delete')}</span>
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1425,12 +1344,14 @@ async function loadAddedLayoutIdsFromServer(): Promise<Set<string>> {
       }
       return m;
     });
-    if (list.length === 0) {
-      const now = new Date().toISOString();
-      const defaultMv1: SavedMultiView = {
+    const now = new Date().toISOString();
+    const cards: SavedMultiView[] = [1, 2, 3].map((n) => {
+      const existing = list[n - 1];
+      if (existing) return existing;
+      return {
         id: genId(),
-        name: `${t('multiview.title')} 1`,
-        obsSceneName: "MV: Multiview 1",
+        name: `${t('multiview.title')} ${n}`,
+        obsSceneName: `MV: Multiview ${n}`,
         layoutId: GALLERY_LAYOUTS[0]?.id ?? "",
         assignments: {},
         slotModes: {},
@@ -1440,24 +1361,9 @@ async function loadAddedLayoutIdsFromServer(): Promise<Set<string>> {
         createdAt: now,
         updatedAt: now,
       };
-      const defaultMv2: SavedMultiView = {
-        id: genId(),
-        name: `${t('multiview.title')} 2`,
-        obsSceneName: "MV: Multiview 2",
-        layoutId: GALLERY_LAYOUTS[0]?.id ?? "",
-        assignments: {},
-        slotModes: {},
-        slotFraming: {},
-        slotThumbnails: {},
-        background: { ...DEFAULT_MV_BG },
-        createdAt: now,
-        updatedAt: now,
-      };
-      list = [defaultMv1, defaultMv2];
-      saveSaved(list);
-    } else if (migrated) {
-      saveSaved(list);
-    }
+    });
+    list = cards;
+    saveSaved(list);
     setSavedList(list);
   }, []);
 
@@ -1618,27 +1524,6 @@ async function loadAddedLayoutIdsFromServer(): Promise<Set<string>> {
     setSavedList(next);
     saveSaved(next);
     showFeedback("success", `"${dupe.name}" created`);
-  }, [savedList, showFeedback, t]);
-
-  const handleAddCard = useCallback(() => {
-    const now = new Date().toISOString();
-    const card: SavedMultiView = {
-      id: genId(),
-      name: `${t('multiview.title')} ${savedList.length + 1}`,
-      obsSceneName: nextObsSceneName(savedList),
-      layoutId: GALLERY_LAYOUTS[0]?.id ?? "",
-      assignments: {},
-      slotModes: {},
-      slotFraming: {},
-      slotThumbnails: {},
-      background: { ...DEFAULT_MV_BG },
-      createdAt: now,
-      updatedAt: now,
-    };
-    const next = [card, ...savedList];
-    setSavedList(next);
-    saveSaved(next);
-    showFeedback("success", `"${card.name}" added`);
   }, [savedList, showFeedback, t]);
 
   const handleDeleteConfirmed = useCallback((id: string, deleteObsScene: boolean) => {
@@ -1882,20 +1767,6 @@ async function loadAddedLayoutIdsFromServer(): Promise<Set<string>> {
 
   return (
     <div className="dock-mv-tab">
-      {/* ── Header ── */}
-      <div className="dock-mv-tab__header">
-        <div className="dock-mv-tab__title-row">
-          <Icon name="grid_view" size={16} />
-          <span className="dock-mv-tab__title">{t('multiview.title')}</span>
-          {savedList.length > 0 && (
-            <span className="dock-mv-tab__count">{savedList.length}</span>
-          )}
-          <button type="button" className="dock-btn dock-btn--sm dock-btn--ghost" onClick={handleAddCard} title={t('multiview.addView')}>
-            <Icon name="add" size={14} />
-          </button>
-        </div>
-      </div>
-
       {/* ── Feedback ── */}
       {feedback && (
         <div className={`dock-mv-tab__feedback dock-mv-tab__feedback--${feedback.type}`}>
@@ -1909,41 +1780,31 @@ async function loadAddedLayoutIdsFromServer(): Promise<Set<string>> {
 
       {/* ── Cards ── */}
       <div className="dock-mv-tab__list">
-        {savedList.length === 0 ? (
-          <div className="dock-mv-tab__empty">
-            <Icon name="grid_view" size={28} />
-            <span className="dock-mv-tab__empty-title">{t('multiview.noViews')}</span>
-            <span className="dock-mv-tab__empty-text">
-              {t('common.add')} — {t('multiview.addView')}
-            </span>
-          </div>
-        ) : (
-          savedList.map((mv, idx) => (
-            <MVCard
-              key={mv.id}
-              mv={mv}
-              index={idx}
-              isActive={obsScenes.includes(mv.obsSceneName)}
-              obsScenes={obsScenes}
-              obsSources={obsSources}
-              obsContentLoading={obsContentLoading || (!obsContentLoaded && obsReady)}
-              addedLayouts={addedLayouts}
-              pushingId={pushingId}
-              clearingId={clearingId}
-              onPush={handlePush}
-              onClear={handleClear}
-              onUpdateName={handleUpdateName}
-              onUpdateLayout={handleUpdateLayout}
-              onUpdateBackground={handleUpdateBackground}
-              onAssign={handleAssign}
-              onAssignSlotMode={handleAssignSlotMode}
-              onAssignSlotFraming={handleAssignSlotFraming}
-              onClearSlot={handleRemoveSlot}
-              onDuplicate={handleDuplicate}
-              onDelete={(id) => setDeleteTargetId(id)}
-            />
-          ))
-        )}
+        {savedList.map((mv, idx) => (
+          <MVCard
+            key={mv.id}
+            mv={mv}
+            index={idx}
+            isActive={obsScenes.includes(mv.obsSceneName)}
+            obsScenes={obsScenes}
+            obsSources={obsSources}
+            obsContentLoading={obsContentLoading || (!obsContentLoaded && obsReady)}
+            addedLayouts={addedLayouts}
+            pushingId={pushingId}
+            clearingId={clearingId}
+            onPush={handlePush}
+            onClear={handleClear}
+            onUpdateName={handleUpdateName}
+            onUpdateLayout={handleUpdateLayout}
+            onUpdateBackground={handleUpdateBackground}
+            onAssign={handleAssign}
+            onAssignSlotMode={handleAssignSlotMode}
+            onAssignSlotFraming={handleAssignSlotFraming}
+            onClearSlot={handleRemoveSlot}
+            onDuplicate={handleDuplicate}
+            onDelete={(id) => setDeleteTargetId(id)}
+          />
+        ))}
       </div>
 
       {/* ── Delete Confirmation Modal ── */}

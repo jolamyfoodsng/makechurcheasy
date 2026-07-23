@@ -264,7 +264,8 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   }, []);
 
   const tickerThemeList = TICKER_THEMES.filter((t) => tickerFavIds.has(t.id));
-  const theme = tickerThemeList.find((t) => t.id === settings.themeId) ?? tickerThemeList[0] ?? null;
+  const effectiveThemeList = tickerThemeList.length > 0 ? tickerThemeList : TICKER_THEMES;
+  const theme = effectiveThemeList.find((t) => t.id === settings.themeId) ?? effectiveThemeList[0];
   const activeMessages = messages.filter((m) => m.active);
 
   // Derive branded ticker colors from the app's brand color
@@ -277,7 +278,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     };
   })();
 
-  const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? null;
+  const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? { kind: "lt" as const, theme: ALL_LT_THEMES[0], label: ALL_LT_THEMES[0]?.name ?? "Speaker" };
 
   // Reset selected index when favorites change
   useEffect(() => { setLtSelectedIdx(0); }, [ltFavorites]);
@@ -375,7 +376,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       const currentProgramScene = (await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string }).currentProgramSceneName;
       if (tickerOutputMode === "scene") {
         try { localStorage.setItem("dock-ticker-original-scene", currentProgramScene); } catch { /* ignore */ }
-        await dockObsClient.call("SetCurrentPreviewScene", { sceneName: presentationSceneName });
+        const studioMode = await dockObsClient.call("GetStudioModeEnabled").then((r: unknown) => (r as { studioModeEnabled: boolean }).studioModeEnabled).catch(() => false);
+        if (studioMode) {
+          await dockObsClient.call("SetCurrentPreviewScene", { sceneName: presentationSceneName });
+        }
       }
 
       // Create or update MCE Ticker browser source in target scene
@@ -537,12 +541,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   return (
     <div className="dock-mv-tab">
       {/* ── Header ── */}
-      <div className="dock-mv-tab__header">
-        <div className="dock-mv-tab__title-row">
-          <Icon name="campaign" size={16} />
-          <span className="dock-mv-tab__title">{t('ministry.title')}</span>
-        </div>
-      </div>
+   
 
       {/* ── Sub-Tab Switcher ── */}
       <div className="dock-ministry-tabs">
@@ -618,7 +617,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             <div className="dock-mv-tab__section">
               <div style={{ padding: "4px 0" }}>
                 <select
-                  value={theme.id}
+                  value={theme?.id ?? ''}
                   onChange={(e) => {
                     const t = TICKER_THEMES.find((x) => x.id === e.target.value);
                     setSettings((s) => ({ ...s, themeId: e.target.value, heading: t?.defaultHeading ?? s.heading }));
@@ -636,7 +635,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     cursor: "pointer",
                   }}
                 >
-                  {tickerThemeList.map((tpl) => (
+                  {effectiveThemeList.map((tpl) => (
                     <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
                   ))}
                 </select>
@@ -728,7 +727,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             {/* Compose */}
             <div className="dock-mv-tab__section">
               <div className="dock-mv-tab__section-label">{t("ministry.messages")}</div>
-              <div className="dock-mv-tab__section-desc">{t("ministry.messagesDesc")}</div>
+              {/* <div className="dock-mv-tab__section-desc">{t("ministry.messagesDesc")}</div> */}
               <div style={{ padding: "4px 0" }}>
                 <div style={{ display: "flex", gap: 4, alignItems: "flex-end" }}>
                   <textarea
@@ -950,47 +949,49 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           )}
 
           <div className="dock-mv-tab__list">
-            {ltFavorites.length === 0 ? (
-              <div className="dock-mv-tab__section">
-                <div style={{ fontSize: 11, color: "var(--dock-text-dim)", textAlign: "center", padding: "12px 0" }}>
-                  <Icon name="subtitles" size={24} style={{ color: "var(--dock-border)", display: "block", margin: "0 auto 8px" }} />
-                  {t("ministry.starThemeHint")}
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Theme Picker Dropdown */}
-                <div className="dock-mv-tab__section">
-                  <div className="dock-mv-tab__section-label">{t("ministry.theme")}</div>
-                  <div className="dock-mv-tab__section-desc">{t("ministry.themeDesc")}</div>
-                  <div style={{ padding: "4px 0" }}>
-                    <select
-                      value={ltSelectedIdx}
-                      onChange={(e) => handleSelectLtTheme(Number(e.target.value))}
-                      style={{
-                        width: "100%",
-                        background: "var(--dock-surface)",
-                        border: "1px solid var(--dock-border)",
-                        borderRadius: 3,
-                        padding: "4px 6px",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: "var(--dock-text)",
-                        fontFamily: "inherit",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {ltFavorites.map((entry, i) => (
-                        <option key={`${entry.kind}-${entry.label}-${i}`} value={i}>
-                          {entry.label}{entry.kind === "bible" ? ` ${t("ministry.custom")}` : ""}
-                        </option>
-                      ))}
-                    </select>
+            {/* Theme Picker */}
+            <div className="dock-mv-tab__section">
+              <div className="dock-mv-tab__section-label">{t("ministry.theme")}</div>
+              <div className="dock-mv-tab__section-desc">{t("ministry.themeDesc")}</div>
+              <div style={{ padding: "4px 0" }}>
+                {ltFavorites.length > 0 ? (
+                  <select
+                    value={ltSelectedIdx}
+                    onChange={(e) => handleSelectLtTheme(Number(e.target.value))}
+                    style={{
+                      width: "100%",
+                      background: "var(--dock-surface)",
+                      border: "1px solid var(--dock-border)",
+                      borderRadius: 3,
+                      padding: "4px 6px",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: "var(--dock-text)",
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {ltFavorites.map((entry, i) => (
+                      <option key={`${entry.kind}-${entry.label}-${i}`} value={i}>
+                        {entry.label}{entry.kind === "bible" ? ` ${t("ministry.custom")}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{
+                    padding: "4px 6px",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "var(--dock-text)",
+                  }}>
+                    {ltSelectedEntry?.label ?? t("ministry.speaker")}
                   </div>
-                </div>
+                )}
+              </div>
+            </div>
 
-                {/* Size Multiplier */}
-                <div className="dock-mv-tab__section">
+            {/* Size Multiplier */}
+            <div className="dock-mv-tab__section">
                   <div className="dock-mv-tab__section-label">{t("ministry.size")}</div>
                   <div className="dock-mv-tab__section-desc">{t("ministry.sizeDesc")}</div>
                   <div style={{ padding: "4px 0", display: "flex", gap: 4 }}>
@@ -1253,8 +1254,6 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     </div>
                   </div>
                 ) : null}
-              </>
-            )}
           </div>
         </>
       )}

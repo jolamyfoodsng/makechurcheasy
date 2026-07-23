@@ -253,6 +253,8 @@ export default function DockLmTab() {
 
   const transcriptRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  const [tabBarWidth, setTabBarWidth] = useState(0);
   const [now, setNow] = useState(Date.now());
 
   const showToast = useCallback((message: string) => {
@@ -483,6 +485,19 @@ export default function DockLmTab() {
       keepalive: true,
     }).catch(() => { });
   }, [settings.translation]);
+
+  // ── Track tab bar width for responsive layout ──
+  useEffect(() => {
+    const el = tabBarRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setTabBarWidth(entry.contentRect.width);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // ── Auto-push and auto-navigate ──
   useEffect(() => {
@@ -789,18 +804,21 @@ export default function DockLmTab() {
         </div>
       </div>
 
-      <div style={S.tabBar}>
+      <div style={S.tabBar} ref={tabBarRef}>
         {(["up-next", "transcript", "history"] as const).map((tab) => (
           <button
             key={tab}
             style={{ ...S.tab, ...(activeTab === tab ? S.tabActive : undefined) }}
             onClick={() => setActiveTab(tab)}
+            title={tab === "up-next" ? t("lm.tabUpNext") : tab === "transcript" ? t("lm.tabTranscript") : t("lm.tabHistory")}
           >
             <Icon
               name={tab === "up-next" ? "queue" : tab === "transcript" ? "subtitles" : "history"}
               size={12}
             />
-            {tab === "up-next" ? t("lm.tabUpNext") : tab === "transcript" ? t("lm.tabTranscript") : t("lm.tabHistory")}
+            {tabBarWidth >= 200 && (
+              <span>{tab === "up-next" ? t("lm.tabUpNext") : tab === "transcript" ? t("lm.tabTranscript") : t("lm.tabHistory")}</span>
+            )}
           </button>
         ))}
       </div>
@@ -1169,16 +1187,7 @@ export default function DockLmTab() {
           <span style={S.emptyText}>
             {openAppToStartText}
           </span>
-          {appConnected && (
-            <button
-              style={S.startBtn}
-              onClick={() => void handleStartListening()}
-              title={t("lm.startListeningHint")}
-            >
-              <Icon name="mic" size={12} />
-              {t("lm.startListening")}
-            </button>
-          )}
+
         </div>
       )}
 
