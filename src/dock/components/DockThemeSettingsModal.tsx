@@ -324,7 +324,7 @@ export default function DockThemeSettingsModal({
                 />
 
                 {/* Lower-Third Positioning — only shown in lower-third mode */}
-               
+
                 <SectionDivider />
 
                 {/* ═══ Effects Section (collapsed by default) ═══ */}

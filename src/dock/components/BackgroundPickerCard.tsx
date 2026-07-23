@@ -308,11 +308,6 @@ export default function BackgroundPickerCard({
     setDropdownOpen(false);
     try { localStorage.setItem(storageKeys.bgType, type); } catch { /* ignore */ }
 
-    // Reset background preset so it doesn't override the picker's choice
-    if (onBackgroundPresetChange) {
-      onBackgroundPresetChange(type === "off" ? "none" : "theme");
-    }
-
     // Build the updater for the given type
     let updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings;
     if (type === "off") {
@@ -403,6 +398,11 @@ export default function BackgroundPickerCard({
     }
 
     onQuickSettingsChange(updater);
+
+    // Reset background preset AFTER settings are updated so restage uses new values
+    if (onBackgroundPresetChange) {
+      onBackgroundPresetChange(type === "off" ? "none" : "theme");
+    }
   }, [onQuickSettingsChange, onBackgroundPresetChange, storageKeys.bgType]);
 
   const persistSavedStyles = useCallback((next: SavedLocalStyle[]) => {
@@ -890,7 +890,6 @@ function ImageTab({
 
   const handleSelect = useCallback((item: MediaItem) => {
     const relUrl = toRelativeUrl(item.url);
-    onBackgroundPresetChange?.("theme");
     onQuickSettingsChange((prev) => ({
       ...prev,
       backgroundType: "image",
@@ -900,6 +899,7 @@ function ImageTab({
       backgroundVideo: "",
       backgroundVideoFilePath: "",
     }));
+    onBackgroundPresetChange?.("theme");
   }, [onBackgroundPresetChange, onQuickSettingsChange]);
 
   const handleUpload = useCallback(async (files: FileList | null) => {
@@ -914,7 +914,6 @@ function ImageTab({
           await registerDockMediaItem(result.item);
           setMedia((prev) => [result.item!, ...prev]);
           const relUrl = toRelativeUrl(result.item.url);
-          onBackgroundPresetChange?.("theme");
           onQuickSettingsChange((prev) => ({
             ...prev,
             backgroundType: "image",
@@ -924,6 +923,7 @@ function ImageTab({
             backgroundVideo: "",
             backgroundVideoFilePath: "",
           }));
+          onBackgroundPresetChange?.("theme");
         }
       } catch (err) {
         console.warn("[BackgroundPicker] Upload failed:", err);
@@ -1093,7 +1093,6 @@ function VideoTab({
 
   const handleSelect = useCallback((item: MediaItem) => {
     const relUrl = toRelativeUrl(item.url);
-    onBackgroundPresetChange?.("theme");
     onQuickSettingsChange((prev) => ({
       ...prev,
       backgroundType: "video",
@@ -1103,6 +1102,7 @@ function VideoTab({
       backgroundImage: "",
       backgroundImageFilePath: "",
     }));
+    onBackgroundPresetChange?.("theme");
   }, [onBackgroundPresetChange, onQuickSettingsChange]);
 
   const handleUpload = useCallback(async (files: FileList | null) => {
@@ -1117,7 +1117,6 @@ function VideoTab({
           await registerDockMediaItem(result.item);
           setMedia((prev) => [result.item!, ...prev]);
           const relUrl = toRelativeUrl(result.item.url);
-          onBackgroundPresetChange?.("theme");
           onQuickSettingsChange((prev) => ({
             ...prev,
             backgroundType: "video",
@@ -1127,6 +1126,7 @@ function VideoTab({
             backgroundImage: "",
             backgroundImageFilePath: "",
           }));
+          onBackgroundPresetChange?.("theme");
         }
       } catch (err) {
         console.warn("[BackgroundPicker] Upload failed:", err);
@@ -1262,7 +1262,6 @@ function PatternTab({
   const currentPattern = quickSettings.backgroundPattern || "";
 
   const selectPattern = useCallback((src: string) => {
-    onBackgroundPresetChange?.("theme");
     onQuickSettingsChange((prev) => ({
       ...prev,
       backgroundType: "pattern",
@@ -1272,6 +1271,7 @@ function PatternTab({
       backgroundImage: "",
       backgroundImageFilePath: "",
     }));
+    onBackgroundPresetChange?.("theme");
   }, [onBackgroundPresetChange, onQuickSettingsChange]);
 
   return (
@@ -1324,7 +1324,6 @@ function ColorSection({
 
   const pushChange = useCallback(
     (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => {
-      onBackgroundPresetChange?.("theme");
       onQuickSettingsChange((prev) => {
         const next = updater(prev);
         return {
@@ -1337,6 +1336,7 @@ function ColorSection({
           backgroundVideoFilePath: "",
         };
       });
+      onBackgroundPresetChange?.("theme");
     },
     [onBackgroundPresetChange, onQuickSettingsChange],
   );

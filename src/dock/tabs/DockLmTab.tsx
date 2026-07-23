@@ -8,7 +8,6 @@ import type { VoiceBibleCandidate, TranscriptEntry } from "../../services/voiceB
 import { parseScriptureReference } from "../../services/scriptureParser";
 import { onCreditChange, isProUnlocked } from "../../services/credits";
 import Icon from "../DockIcon";
-import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
@@ -521,14 +520,6 @@ export default function DockLmTab() {
       void handlePushVerse(best);
     }
   }, [candidates, settings.autoPushQueue, settings.autoPushSuggestions, settings.autoNavigate, obsStatus, pushing, handlePushVerse, navigateBibleDock, queue]);
-
-  const handleStartListening = useCallback(async () => {
-    const entitled = await requireEntitlement("speechToScripture", 0);
-    if (!entitled) return;
-    sendLmCommand("lm:start");
-  }, [sendLmCommand]);
-
-
 
   const confirmStop = useCallback(() => {
     sendLmCommand("lm:stop");

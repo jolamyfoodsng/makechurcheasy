@@ -3818,7 +3818,6 @@ export default function DockBibleTab({
                   <div className="dock-bible-compare-popover__toggle-row">
                     <div className="dock-bible-compare-popover__toggle-copy">
                       <div className="dock-bible-compare-popover__label">{t("dock.compare.enable", "Enable Compare Translations")}</div>
-                      <div className="dock-bible-compare-popover__hint">{t("dock.compare.enableHint", "Load two translations and keep the reader in compare mode.")}</div>
                     </div>
                     <button
                       type="button"
@@ -3907,7 +3906,6 @@ export default function DockBibleTab({
                 <div className="dock-bible-compare-popover__toggle-row">
                   <div className="dock-bible-compare-popover__toggle-copy">
                     <div className="dock-bible-compare-popover__label">{t("dock.compare.enable", "Enable Compare Translations")}</div>
-                    <div className="dock-bible-compare-popover__hint">{t("dock.compare.enableHint", "Load two translations and keep the reader in compare mode.")}</div>
                   </div>
                   <button
                     type="button"

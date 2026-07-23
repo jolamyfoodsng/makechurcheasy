@@ -5898,6 +5898,37 @@ class DockObsClient {
       });
     }
 
+    // Compare mode needs the full pushBible path — the fast path only handles single verses
+    if (data.compareEnabled && data.compare) {
+      const verseRange = data.verseRange ?? "1";
+      const refText = data.referenceText ?? "";
+      return this.pushBible({
+        book: "",
+        chapter: 1,
+        verse: 1,
+        verseRange,
+        referenceLabel: refText.replace(/\s\(.*\)$/, ""),
+        translation: "KJV",
+        theme: data.themeId,
+        verseText: data.verseText,
+        overlayMode: "lower-third",
+        bibleThemeSettings: data.bibleThemeSettings,
+        liveOverrides: data.liveOverrides ?? null,
+        compareEnabled: true,
+        compareLayout: (data.compareLayout || "line-by-line") as "line-by-line" | "side-by-side",
+        compare: {
+          ...data.compare,
+          layout: ((data.compare as Record<string, unknown>).layout as string || "line-by-line") as "line-by-line" | "side-by-side",
+        } as {
+          enabled?: boolean;
+          layout?: "line-by-line" | "side-by-side";
+          columns?: Array<{ book: string; chapter: number; verse: number; verseEnd?: number; verseRange?: string; referenceLabel: string; translation: string; verseText: string }>;
+        },
+        translationA: data.translationA,
+        translationB: data.translationB,
+      });
+    }
+
     const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
       data.bibleThemeSettings,
       data.liveOverrides,

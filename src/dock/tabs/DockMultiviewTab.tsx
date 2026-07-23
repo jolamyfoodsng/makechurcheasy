@@ -1092,15 +1092,12 @@ function MVCard({
   clearingId,
   onPush,
   onClear,
-  onUpdateName,
   onUpdateLayout,
   onUpdateBackground,
   onAssign,
   onAssignSlotMode,
   onAssignSlotFraming,
   onClearSlot,
-  onDuplicate,
-  onDelete,
 }: {
   mv: SavedMultiView;
   index: number;
@@ -1331,15 +1328,12 @@ async function loadAddedLayoutIdsFromServer(): Promise<Set<string>> {
   useEffect(() => {
     let list = loadSaved();
     // Migrate old data: cards without obsSceneName get one assigned
-    let migrated = false;
     list = list.map((m, i) => {
       if (!m.obsSceneName) {
-        migrated = true;
         return { ...m, obsSceneName: `MV: Multiview ${i + 1}` };
       }
       // Migrate: ensure slotThumbnails exists
       if (!m.slotThumbnails) {
-        migrated = true;
         return { ...m, slotThumbnails: {} };
       }
       return m;

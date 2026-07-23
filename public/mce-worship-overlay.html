@@ -386,6 +386,47 @@
       margin-top: 4px;
     }
 
+    /* ── Lower-third compare layout ── */
+    .lt-compare-row {
+      display: flex;
+      align-items: stretch;
+      gap: 16px;
+      width: 100%;
+    }
+    .lt-compare-row .lt-compare-col {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .lt-compare-row .lt-compare-divider {
+      width: 1px;
+      background: rgba(255,255,255,0.2);
+      flex-shrink: 0;
+      align-self: stretch;
+    }
+    .lt-compare-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+    }
+    .lt-compare-stack .lt-compare-divider {
+      height: 1px;
+      background: rgba(255,255,255,0.15);
+      width: 100%;
+    }
+    .lt-compare-ref {
+      display: block;
+      font-size: 0.65em;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .lt-compare-col {
+      display: block;
+    }
+
     /* ══════════════════════════════════════════════════════
        LOWER-THIRD LAYER (always bottom, crossfades via opacity)
        ══════════════════════════════════════════════════════ */
@@ -685,6 +726,7 @@
       const initialMode = readInitialMode();
       body.dataset.mode = initialMode;
       let activeMode = '';
+      let currentCompareLayout = 'line-by-line';
       let initialStorageSyncPending = true;
       let currentOverlayData = null;
       let lastTimestamp = 0;
@@ -1270,8 +1312,13 @@
         applyCompareReferencePlacement(compareReferenceLeft, compareMetaPosition(s.compareReferencePositionLeft), compareMetaAlign(s.compareReferenceAlignmentLeft, fallbackRefAlign));
         applyCompareReferencePlacement(compareReferenceRight, compareMetaPosition(s.compareReferencePositionRight), compareMetaAlign(s.compareReferenceAlignmentRight, fallbackRefAlign));
         if (compareLayout) {
-          compareLayout.style.gridTemplateColumns = `minmax(0,${leftWidth}fr) minmax(0,${rightWidth}fr)`;
-          compareLayout.style.gap = cg + 'px';
+          if (currentCompareLayout === 'line-by-line') {
+            compareLayout.style.gridTemplateColumns = '1fr';
+            compareLayout.style.gap = '16px';
+          } else {
+            compareLayout.style.gridTemplateColumns = `minmax(0,${leftWidth}fr) minmax(0,${rightWidth}fr)`;
+            compareLayout.style.gap = cg + 'px';
+          }
           compareLayout.style.padding = `${outerTop}px ${outerRight}px ${outerBottom}px ${outerLeft}px`;
           compareLayout.style.alignContent = 'center';
           const compareColumns = Array.from(compareLayout.querySelectorAll('.compare-column'));
@@ -1377,6 +1424,9 @@
           if (packet.mode === 'fullscreen' || packet.mode === 'lower-third') {
             setActiveLayer(packet.mode);
           }
+          // Show overlay immediately so cached background is visible on reload
+          overlay.classList.remove('hidden');
+          ltBar.classList.remove('hidden');
           writeRenderAck(packet);
           return;
         }
@@ -1422,6 +1472,12 @@
           compareTranslationRight.textContent = '';
           compareTextLeft.innerHTML = safeSupText(l.text);
           compareTextRight.innerHTML = safeSupText(r.text);
+          const clMode = sl.compareLayout || 'line-by-line';
+          currentCompareLayout = clMode;
+          if (clMode === 'line-by-line') {
+            compareLayout.style.gridTemplateColumns = '1fr';
+            compareLayout.style.gap = '16px';
+          }
         }
         else {
           compareLayout.classList.remove('is-visible');
@@ -1444,7 +1500,26 @@
         bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId; currentSlideId = sl.id;
         if (data.blanked) { overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
         overlay.classList.remove('hidden'); ltBar.classList.remove('hidden');
-        ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
+
+        const cc = Array.isArray(sl.columns) ? sl.columns.slice(0, 2) : [];
+        const isCompare = sl.layout === 'compare' && cc.length === 2;
+        if (isCompare) {
+          const [l, r] = cc;
+          const layoutMode = sl.compareLayout || 'line-by-line';
+          const lText = safeSupText(l.text || '');
+          const rText = safeSupText(r.text || '');
+          const lRef = l.reference ? `<span class="lt-compare-ref">${escapeHtml(l.reference)} (${escapeHtml(l.translation || '')})</span>` : '';
+          const rRef = r.reference ? `<span class="lt-compare-ref">${escapeHtml(r.reference)} (${escapeHtml(r.translation || '')})</span>` : '';
+          if (layoutMode === 'side-by-side') {
+            ltVerseText.innerHTML = `<div class="lt-compare-row">${lRef}${lText ? `<span class="lt-compare-col">${lText}</span>` : ''}<span class="lt-compare-divider"></span>${rRef}${rText ? `<span class="lt-compare-col">${rText}</span>` : ''}</div>`;
+          } else {
+            ltVerseText.innerHTML = `<div class="lt-compare-stack">${lRef}${lText ? `<span class="lt-compare-col">${lText}</span>` : ''}<span class="lt-compare-divider"></span>${rRef}${rText ? `<span class="lt-compare-col">${rText}</span>` : ''}</div>`;
+          }
+          ltRefText.textContent = '';
+        } else {
+          ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
+        }
+
         try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-worship-overlay lower-third theme error', error); }
         if (!hasShownOnce) hasShownOnce = true;
       }
