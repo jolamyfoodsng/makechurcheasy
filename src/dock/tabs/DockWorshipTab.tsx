@@ -2513,21 +2513,59 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
 
   return (
     <div className="dock-module dock-module--worship">
-      <div className="dock-worship-subtab-bar" style={{ display: "flex", width: "100%" }}>
+      <div className="dock-worship-subtab-bar"
+        style={{
+          display: "flex",
+          gap: 4,
+          padding: "4px 0",
+          borderBottom: "1px solid rgba(51, 65, 85, 0.3)",
+          width: "100%",
+        }}
+      >
         <button
           type="button"
-          className={`dock-worship-subtab ${worshipSubTab === "worship" ? "dock-worship-subtab--active" : ""}`}
+          className={`dock-worship-subtab${worshipSubTab === "worship" ? " dock-worship-subtab--active" : ""}`}
           onClick={() => setWorshipSubTab("worship")}
-          style={{ flex: 1 }}
+          style={{
+            flex: 1,
+            padding: "4px 10px",
+            fontSize: 11,
+            fontWeight: 600,
+            border: "none",
+            borderRadius: 4,
+            background: worshipSubTab === "worship" ? "#1F2937" : "transparent",
+            color: worshipSubTab === "worship" ? "#F8FAFC" : "#6B7280",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+          }}
         >
           <Icon name="music_note" size={13} />
           Worship
         </button>
         <button
           type="button"
-          className={`dock-worship-subtab ${worshipSubTab === "notes" ? "dock-worship-subtab--active" : ""}`}
+          className={`dock-worship-subtab${worshipSubTab === "notes" ? " dock-worship-subtab--active" : ""}`}
           onClick={() => setWorshipSubTab("notes")}
-          style={{ flex: 1 }}
+          style={{
+            flex: 1,
+            padding: "4px 10px",
+            fontSize: 11,
+            fontWeight: 600,
+            border: "none",
+            borderRadius: 4,
+            background: worshipSubTab === "notes" ? "#1F2937" : "transparent",
+            color: worshipSubTab === "notes" ? "#F8FAFC" : "#6B7280",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+          }}
         >
           <Icon name="sticky_note_2" size={13} />
           Notes

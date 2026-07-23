@@ -50,7 +50,15 @@ const ADDED_IDS_KEY = "mvg-added-ids";
 
 function loadAddedIds(): Set<string> {
   try {
-    const raw = localStorage.getItem(getUserScopedKey(ADDED_IDS_KEY));
+    // Migration: try unscoped key first, fall back to user-scoped key
+    let raw = localStorage.getItem(ADDED_IDS_KEY);
+    if (!raw) {
+      raw = localStorage.getItem(getUserScopedKey(ADDED_IDS_KEY));
+      if (raw) {
+        // Migrate from scoped to unscoped key
+        localStorage.setItem(ADDED_IDS_KEY, raw);
+      }
+    }
     if (!raw) return new Set();
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? new Set(parsed) : new Set();
@@ -61,7 +69,14 @@ function loadAddedIds(): Set<string> {
 
 function saveAddedIds(ids: Set<string>) {
   try {
-    localStorage.setItem(getUserScopedKey(ADDED_IDS_KEY), JSON.stringify([...ids]));
+    const raw = JSON.stringify([...ids]);
+    localStorage.setItem(ADDED_IDS_KEY, raw);
+    // Also persist to server so the dock (OBS CEF) can read it
+    fetch("/api/save-dock-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "mv-added-ids", data: raw }),
+    }).catch(() => {});
   } catch { /* ignore */ }
 }
 
@@ -351,6 +366,18 @@ export default function MultiViewGalleryPage() {
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Seed server file with any existing added IDs on mount ──
+  useEffect(() => {
+    const ids = loadAddedIds();
+    if (ids.size > 0) {
+      fetch("/api/save-dock-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "mv-added-ids", data: JSON.stringify([...ids]) }),
+      }).catch(() => {});
+    }
   }, []);
 
   // ── Listen to OBS status ──

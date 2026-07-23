@@ -65,6 +65,8 @@ interface SavedMultiView {
   assignments: Record<string, string>;
   slotModes: Record<string, "scene" | "source">;
   slotFraming: Record<string, { displayMode: "fill" | "fit" | "custom"; zoom: number; focalX: number; focalY: number }>;
+  /** Base64 data-URL thumbnails of assigned scenes */
+  slotThumbnails: Record<string, string>;
   background: MVBackground;
   createdAt: string;
   updatedAt: string;
@@ -102,7 +104,14 @@ function loadSaved(): SavedMultiView[] {
 
 function loadAddedLayoutIds(): Set<string> {
   try {
-    const raw = localStorage.getItem(getUserScopedKey(ADDED_LAYOUTS_KEY));
+    // Migration: try unscoped key first, fall back to user-scoped key
+    let raw = localStorage.getItem(ADDED_LAYOUTS_KEY);
+    if (!raw) {
+      raw = localStorage.getItem(getUserScopedKey(ADDED_LAYOUTS_KEY));
+      if (raw) {
+        localStorage.setItem(ADDED_LAYOUTS_KEY, raw);
+      }
+    }
     if (!raw) return new Set();
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? new Set(parsed) : new Set();
@@ -163,20 +172,48 @@ function SlotTypeIcon({ contentType }: { contentType: GallerySlot["contentType"]
   );
 }
 
-function LayoutMiniPreview({ layout }: { layout: GalleryLayout }) {
+function LayoutMiniPreview({ layout, thumbnails }: { layout: GalleryLayout; thumbnails?: Record<string, string> }) {
+  const scaleX = 100 / CANVAS_W;
+  const scaleY = 100 / CANVAS_H;
+  const hasThumbs = thumbnails && Object.keys(thumbnails).length > 0;
+
   return (
-    <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} className="dock-mv-layout-preview">
-      <rect width={CANVAS_W} height={CANVAS_H} fill="#111" />
-      {layout.slots.map((slot) => {
-        const info = CONTENT_TYPE_INFO[slot.contentType] || CONTENT_TYPE_INFO.camera;
+    <div className="dock-mv-layout-preview" style={{ position: "relative", width: "100%", aspectRatio: `${CANVAS_W}/${CANVAS_H}`, overflow: "hidden", background: "#111", borderRadius: 3 }}>
+      {/* Thumbnail images overlaid */}
+      {hasThumbs && layout.slots.map((slot) => {
+        const thumb = thumbnails?.[slot.id];
+        if (!thumb) return null;
         return (
-          <g key={slot.id}>
-            <rect x={slot.x} y={slot.y} width={slot.width} height={slot.height} fill={info.color} opacity={0.4} />
-            <rect x={slot.x} y={slot.y} width={slot.width} height={slot.height} fill="none" stroke={info.color} strokeWidth={2} opacity={0.6} />
-          </g>
+          <img
+            key={slot.id}
+            src={thumb}
+            alt=""
+            style={{
+              position: "absolute",
+              left: `${slot.x * scaleX}%`,
+              top: `${slot.y * scaleY}%`,
+              width: `${slot.width * scaleX}%`,
+              height: `${slot.height * scaleY}%`,
+              objectFit: "cover",
+              border: "1px solid rgba(255,255,255,0.2)",
+            }}
+          />
         );
       })}
-    </svg>
+      {/* SVG overlay for unassigned slot outlines */}
+      <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+        {layout.slots.map((slot) => {
+          if (thumbnails?.[slot.id]) return null;
+          const info = CONTENT_TYPE_INFO[slot.contentType] || CONTENT_TYPE_INFO.camera;
+          return (
+            <g key={slot.id}>
+              <rect x={slot.x} y={slot.y} width={slot.width} height={slot.height} fill={info.color} opacity={0.3} />
+              <rect x={slot.x} y={slot.y} width={slot.width} height={slot.height} fill="none" stroke={info.color} strokeWidth={2} opacity={0.6} />
+            </g>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 
@@ -191,6 +228,7 @@ function ContentPicker({
   loading,
   onSelect,
   onClose,
+  excludeScenes,
 }: {
   open: boolean;
   obsScenes: string[];
@@ -198,6 +236,7 @@ function ContentPicker({
   loading: boolean;
   onSelect: (value: string, mode: "scene" | "source") => void;
   onClose: () => void;
+  excludeScenes?: string[];
 }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<"scene" | "source">("scene");
@@ -205,7 +244,8 @@ function ContentPicker({
 
   if (!open) return null;
 
-  const scenes = obsScenes.filter(s => !query || s.toLowerCase().includes(query.toLowerCase()));
+  const exclude = new Set(excludeScenes ?? []);
+  const scenes = obsScenes.filter(s => (!query || s.toLowerCase().includes(query.toLowerCase())) && !exclude.has(s));
   const sources = obsSources.filter(s => !query || s.toLowerCase().includes(query.toLowerCase()));
   const items = tab === "scene" ? scenes : sources;
 
@@ -1216,7 +1256,7 @@ function MVCard({
       </div>
 
       {/* Layout Preview — shown below template */}
-      {layout && <LayoutMiniPreview layout={layout} />}
+      {layout && <LayoutMiniPreview layout={layout} thumbnails={mv.slotThumbnails} />}
 
       {/* Background — compact property row */}
       <BackgroundSection
@@ -1261,6 +1301,7 @@ function MVCard({
                   loading={obsContentLoading}
                   onSelect={(v, m) => handleContentSelect(slot.id, v, m)}
                   onClose={() => setPickerSlot(null)}
+                  excludeScenes={[mv.obsSceneName]}
                 />
               )}
               {/* Framing Editor for this slot */}
@@ -1335,11 +1376,37 @@ export default function DockMultiviewTab() {
   const feedbackTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const obsScanBusyRef = useRef(false);
 
+async function loadAddedLayoutIdsFromServer(): Promise<Set<string>> {
+  try {
+    const resp = await fetch("/uploads/mv-added-ids.json");
+    if (!resp.ok) return new Set();
+    const data = await resp.json();
+    return Array.isArray(data) ? new Set(data) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
   // Show layouts that are added via gallery OR in use by saved cards
-  const addedIds = loadAddedLayoutIds();
-  const usedIds = new Set(savedList.map(m => m.layoutId).filter(Boolean));
-  const visibleIds = new Set([...addedIds, ...usedIds]);
-  const addedLayouts = GALLERY_LAYOUTS.filter(l => visibleIds.has(l.id));
+  const [addedLayoutIds, setAddedLayoutIds] = useState<Set<string>>(() => loadAddedLayoutIds());
+
+  useEffect(() => {
+    // Initial load from server (overrides localStorage)
+    loadAddedLayoutIdsFromServer().then((ids) => {
+      if (ids.size > 0) setAddedLayoutIds(ids);
+    });
+    // Poll server every 5s
+    const interval = setInterval(() => {
+      loadAddedLayoutIdsFromServer().then((ids) => setAddedLayoutIds(ids));
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const addedLayouts = useMemo(() => {
+    const usedIds = new Set(savedList.map(m => m.layoutId).filter(Boolean));
+    const visibleIds = new Set([...addedLayoutIds, ...usedIds]);
+    return GALLERY_LAYOUTS.filter(l => visibleIds.has(l.id));
+  }, [addedLayoutIds, savedList]);
 
   // ── Load saved list (auto-seed two cards if empty) ──
   useEffect(() => {
@@ -1350,6 +1417,11 @@ export default function DockMultiviewTab() {
       if (!m.obsSceneName) {
         migrated = true;
         return { ...m, obsSceneName: `MV: Multiview ${i + 1}` };
+      }
+      // Migrate: ensure slotThumbnails exists
+      if (!m.slotThumbnails) {
+        migrated = true;
+        return { ...m, slotThumbnails: {} };
       }
       return m;
     });
@@ -1363,6 +1435,7 @@ export default function DockMultiviewTab() {
         assignments: {},
         slotModes: {},
         slotFraming: {},
+        slotThumbnails: {},
         background: { ...DEFAULT_MV_BG },
         createdAt: now,
         updatedAt: now,
@@ -1375,6 +1448,7 @@ export default function DockMultiviewTab() {
         assignments: {},
         slotModes: {},
         slotFraming: {},
+        slotThumbnails: {},
         background: { ...DEFAULT_MV_BG },
         createdAt: now,
         updatedAt: now,
@@ -1455,12 +1529,36 @@ export default function DockMultiviewTab() {
   }, [savedList]);
 
   const handleAssign = useCallback((id: string, slotId: string, val: string) => {
+    const now = new Date().toISOString();
     const next = savedList.map(m => {
       if (m.id !== id) return m;
-      return { ...m, assignments: { ...m.assignments, [slotId]: val }, updatedAt: new Date().toISOString() };
+      return { ...m, assignments: { ...m.assignments, [slotId]: val }, updatedAt: now };
     });
     setSavedList(next);
     saveSaved(next);
+    // Capture screenshot of assigned scene for thumbnail preview
+    if (dockObsClient.isConnected && val) {
+      dockObsClient.call("GetSourceScreenshot", {
+        sourceName: val,
+        imageFormat: "jpeg",
+        imageWidth: 320,
+        imageHeight: 180,
+        imageCompressionQuality: 60,
+      }).then((resp: unknown) => {
+        const data = (resp as { imageData?: string })?.imageData;
+        if (data) {
+          const url = data.startsWith("data:") ? data : `data:image/jpeg;base64,${data}`;
+          setSavedList(prev => {
+            const updated = prev.map(m => {
+              if (m.id !== id) return m;
+              return { ...m, slotThumbnails: { ...m.slotThumbnails, [slotId]: url } };
+            });
+            saveSaved(updated);
+            return updated;
+          });
+        }
+      }).catch(() => {});
+    }
   }, [savedList]);
 
   const handleAssignSlotMode = useCallback((id: string, slotId: string, mode: "scene" | "source") => {
@@ -1532,6 +1630,7 @@ export default function DockMultiviewTab() {
       assignments: {},
       slotModes: {},
       slotFraming: {},
+      slotThumbnails: {},
       background: { ...DEFAULT_MV_BG },
       createdAt: now,
       updatedAt: now,
@@ -1586,13 +1685,12 @@ export default function DockMultiviewTab() {
       await ensureScene(sceneName);
       const prefix = `${mv.id}::`;
 
-      // ── Phase 0: Remove only DeckPilot-managed items from this scene ──
+      // ── Phase 0: Remove ALL existing items from this scene before rebuilding ──
       try {
         const existing = await dockObsClient.call("GetSceneItemList", { sceneName }) as {
           sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
         };
         for (const item of existing.sceneItems ?? []) {
-          if (!item.sourceName?.startsWith(prefix)) continue;
           await dockObsClient.call("RemoveSceneItem", { sceneName, sceneItemId: item.sceneItemId }).catch(() => { });
         }
       } catch { /* scene may be empty */ }
@@ -1604,16 +1702,15 @@ export default function DockMultiviewTab() {
             sceneName, inputName, inputKind, inputSettings, sceneItemEnabled: true,
           }) as { sceneItemId: number };
           return resp.sceneItemId;
-        } catch {
+        } catch (createErr) {
+          // CreateInput may fail if the source already exists — fall back to re-adding it
+          console.warn("[DockMultiview] CreateInput failed, attempting fallback:", { inputName, inputKind }, String(createErr));
+          // Update existing source settings, then re-add to scene
           await dockObsClient.call("SetInputSettings", { inputName, inputSettings }).catch(() => { });
-          try {
-            const existing = await dockObsClient.call("GetSceneItemId", { sceneName, sourceName: inputName }) as { sceneItemId: number };
-            return existing.sceneItemId;
-          } catch {
-            await dockObsClient.call("AddSceneItem", { sceneName, sourceName: inputName }).catch(() => { });
-            const existing = await dockObsClient.call("GetSceneItemId", { sceneName, sourceName: inputName }) as { sceneItemId: number };
-            return existing.sceneItemId;
-          }
+          await dockObsClient.call("RemoveSceneItem", { sceneName, sourceName: inputName }).catch(() => { });
+          await dockObsClient.call("AddSceneItem", { sceneName, sourceName: inputName });
+          const existing = await dockObsClient.call("GetSceneItemId", { sceneName, sourceName: inputName }) as { sceneItemId: number };
+          return existing.sceneItemId;
         }
       };
 
@@ -1626,7 +1723,11 @@ export default function DockMultiviewTab() {
       try {
         let bgItemId = -1;
         if (bg.type === "scene" && bg.sceneName) {
-          bgItemId = await createManagedItem(bgSourceName, "scene_capture_source", { scene: bg.sceneName });
+          // Scene as background — CreateSceneItem adds a scene as a nested source
+          const created = await dockObsClient.call("CreateSceneItem", {
+            sceneName, sourceName: bg.sceneName, sceneItemEnabled: true,
+          }) as { sceneItemId: number };
+          bgItemId = created.sceneItemId;
         } else {
           let inputKind = "color_source_v3";
           let inputSettings: Record<string, unknown> = { color: cssColorToObsInt(bg.color || "#0F172A"), width: CANVAS_W, height: CANVAS_H };
@@ -1642,17 +1743,20 @@ export default function DockMultiviewTab() {
         if (bgItemId >= 0) entries.push({ slotId: "bg", sceneItemId: bgItemId, zIndex: 0 });
       } catch { /* non-critical */ }
 
-      // Slots — always use scene_capture_source with managed naming
+      // Slots — add assigned scenes directly as scene items (scenes are sources in OBS)
       for (const slot of layout.slots) {
         const assigned = mv.assignments[slot.id];
         if (!assigned) continue;
-        const slotSourceName = `${prefix}SLOT-${slot.id}`;
         try {
-          const itemId = await createManagedItem(slotSourceName, "scene_capture_source", { scene: assigned });
-          if (itemId >= 0) {
-            entries.push({ slotId: slot.id, sceneItemId: itemId, zIndex: slot.zIndex ?? 1 });
+          const created = await dockObsClient.call("CreateSceneItem", {
+            sceneName, sourceName: assigned, sceneItemEnabled: true,
+          }) as { sceneItemId: number };
+          if (created.sceneItemId >= 0) {
+            entries.push({ slotId: slot.id, sceneItemId: created.sceneItemId, zIndex: slot.zIndex ?? 1 });
           }
-        } catch { /* skip */ }
+        } catch (err) {
+          console.warn("[DockMultiview] slot push failed for", slot.id, assigned, err);
+        }
       }
 
       try { await dockObsClient.call("SetCurrentPreviewScene", { sceneName }); } catch { }

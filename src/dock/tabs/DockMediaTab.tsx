@@ -2007,20 +2007,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
                         <Icon name="more_vert" size={14} />
                       </button>
                     </div>
-                    <div className="dock-media-gallery-card__overlay-center">
-                      <button
-                        type="button"
-                        className="dock-media-gallery-card__preview-btn"
-                        aria-label={`${t('media.send')} ${displayName} ${t('media.toPreview')}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleSendEntry(entry);
-                        }}
-                        title={t('media.send')}>
-                        <Icon name="open_in_new" size={14} />
-                        {t('media.send')}
-                      </button>
-                    </div>
+
                   </>
                 )}
               </div>
@@ -2511,18 +2498,6 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
                         <img src={entry.previewUrl} alt={entry.name} loading="lazy" className="dock-media-gallery-card__image" />
                         <div className="dock-media-gallery-card__overlay">
                           <span className="dock-media-gallery-card__name">{entry.name}</span>
-                          <button
-                            type="button"
-                            className="dock-media-gallery-card__preview-btn"
-                            aria-label={`${t('media.show')} ${entry.name}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void handleSendPattern(entry);
-                            }}
-                            title={t('media.show')}>
-                            <Icon name="visibility" size={12} />
-                            {t('media.show')}
-                          </button>
                         </div>
                         {isActiveTarget && (
                           <span className="dock-media-gallery-card__active-badge">

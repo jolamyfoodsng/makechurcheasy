@@ -42,7 +42,14 @@ import "./OnboardingPage.css";
 const STORAGE_KEY = "mce-onboarding-complete";
 const STEP_KEY = "mce-onboarding-step";
 const TOTAL_STEPS = 5;
-const YOUTUBE_URL = "https://www.youtube.com/watch?v=08UjSYtjmLU";
+
+const TUTORIAL_URLS: Record<number, string> = {
+  1: "https://www.youtube.com/watch?v=STEP1_WELCOME",
+  2: "https://www.youtube.com/watch?v=STEP2_OBS",
+  3: "https://youtu.be/i-WnFFnuCMA",
+  4: "https://www.youtube.com/watch?v=STEP4_TEST",
+  5: "https://www.youtube.com/watch?v=STEP5_READY",
+};
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
   "https://api.creatorstudioslabs.stream";
@@ -172,8 +179,8 @@ export default function OnboardingPage() {
     window.location.href = "/";
   }, []);
 
-  const openTutorial = useCallback(() => {
-    openUrl(YOUTUBE_URL);
+  const openTutorial = useCallback((url: string) => {
+    openUrl(url);
   }, []);
 
   useEffect(() => {
@@ -224,22 +231,23 @@ export default function OnboardingPage() {
       {/* Content */}
       <div className="ob-content">
         {step === 1 && (
-          <StepWelcome onNext={goNext} onTutorial={openTutorial} />
+          <StepWelcome onNext={goNext} tutorialUrl={TUTORIAL_URLS[1]} onTutorial={openTutorial} />
         )}
         {step === 2 && (
-          <StepConnectOBS onNext={goNext} onBack={goPrev} />
+          <StepConnectOBS onNext={goNext} onBack={goPrev} tutorialUrl={TUTORIAL_URLS[2]} onTutorial={openTutorial} />
         )}
         {step === 3 && (
           <StepInstallDock
             onNext={goNext}
             onBack={goPrev}
+            tutorialUrl={TUTORIAL_URLS[3]}
             onTutorial={openTutorial}
           />
         )}
         {step === 4 && (
-          <StepTest onFinish={finish} onBack={goPrev} />
+          <StepTest onFinish={finish} onBack={goPrev} tutorialUrl={TUTORIAL_URLS[4]} onTutorial={openTutorial} />
         )}
-        {step === 5 && <StepReady onFinish={finish} />}
+        {step === 5 && <StepReady onFinish={finish} tutorialUrl={TUTORIAL_URLS[5]} />}
       </div>
 
       {/* Skip modal */}
@@ -279,9 +287,11 @@ export default function OnboardingPage() {
 function StepWelcome({
   onNext,
   onTutorial,
+  tutorialUrl,
 }: {
   onNext: () => void;
-  onTutorial: () => void;
+  onTutorial: (url: string) => void;
+  tutorialUrl: string;
 }) {
   return (
     <div className="ob-card ob-card--dock-install">
@@ -302,7 +312,7 @@ function StepWelcome({
           Get Started
           <ArrowRight size={16} />
         </button>
-        <button className="ob-btn ob-btn--secondary" onClick={onTutorial} title="Open in new tab">
+        <button className="ob-btn ob-btn--secondary" onClick={() => onTutorial(tutorialUrl)} title="Open in new tab">
           <Play size={14} />
           Watch Tutorial
           <ExternalLink size={12} style={{ marginLeft: "auto" }} />
@@ -319,9 +329,13 @@ function StepWelcome({
 function StepConnectOBS({
   onNext,
   onBack,
+  onTutorial,
+  tutorialUrl,
 }: {
   onNext: () => void;
   onBack: () => void;
+  onTutorial?: (url: string) => void;
+  tutorialUrl?: string;
 }) {
   const [host, setHost] = useState("localhost");
   const [port, setPort] = useState(getDefaultOBSPort());
@@ -422,38 +436,42 @@ function StepConnectOBS({
         </div>
       </div>
 
-      <div className="ob-actions">
-        <div className="ob-actions-row">
-          <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
-            Back
-          </button>
-          <button
-            className="ob-btn ob-btn--secondary"
-            onClick={testConnection}
-            title="Play">
-            {status === "checking" ? (
-              <Loader2
-                size={14}
-                style={{ animation: "spin 1s linear infinite" }}
-              />
-            ) : (
+        <div className="ob-actions">
+          <div className="ob-actions-row">
+            <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
+              Back
+            </button>
+            <button className="ob-btn ob-btn--secondary" onClick={() => onTutorial?.(tutorialUrl!)} title="Watch tutorial">
               <Play size={14} />
-            )}
-            Test Connection
+              Watch Tutorial
+            </button>
+            <button
+              className="ob-btn ob-btn--secondary"
+              onClick={testConnection}
+              title="Play">
+              {status === "checking" ? (
+                <Loader2
+                  size={14}
+                  style={{ animation: "spin 1s linear infinite" }}
+                />
+              ) : (
+                <Play size={14} />
+              )}
+              Test Connection
+            </button>
+          </div>
+          <button
+            className="ob-btn ob-btn--primary"
+            disabled={status !== "connected"}
+            onClick={onNext}
+            title="Continue">
+            Continue
+            <ArrowRight size={16} />
           </button>
         </div>
-        <button
-          className="ob-btn ob-btn--primary"
-          disabled={status !== "connected"}
-          onClick={onNext}
-          title="Continue">
-          Continue
-          <ArrowRight size={16} />
-        </button>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
 /* ══════════════════════════════════════════════════════════════
    Step 3 — Install Dock
@@ -463,10 +481,12 @@ function StepInstallDock({
   onNext,
   onBack,
   onTutorial,
+  tutorialUrl,
 }: {
   onNext: () => void;
   onBack: () => void;
-  onTutorial: () => void;
+  onTutorial: (url: string) => void;
+  tutorialUrl: string;
 }) {
   const [copied, setCopied] = useState<"dock" | "ai" | null>(null);
   const base = getDockBaseUrl();
@@ -558,7 +578,7 @@ function StepInstallDock({
           <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
             Back
           </button>
-          <button className="ob-btn ob-btn--secondary" onClick={onTutorial} title="Play">
+          <button className="ob-btn ob-btn--secondary" onClick={() => onTutorial(tutorialUrl)} title="Play">
             <Play size={14} />
             Watch Tutorial
           </button>
@@ -585,9 +605,13 @@ interface DiagItem {
 function StepTest({
   onFinish,
   onBack,
+  onTutorial,
+  tutorialUrl,
 }: {
   onFinish: () => void;
   onBack: () => void;
+  onTutorial?: (url: string) => void;
+  tutorialUrl?: string;
 }) {
   const [diags, setDiags] = useState<DiagItem[]>([
     { label: "OBS Connected", status: "pending", detail: "" },
@@ -701,6 +725,10 @@ function StepTest({
           <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
             Back
           </button>
+          <button className="ob-btn ob-btn--secondary" onClick={() => onTutorial?.(tutorialUrl!)} title="Watch tutorial">
+            <Play size={14} />
+            Watch Tutorial
+          </button>
           <button
             className="ob-btn ob-btn--secondary"
             onClick={runDiagnostics}
@@ -730,7 +758,7 @@ function StepTest({
    Step 7 — Ready
    ══════════════════════════════════════════════════════════════ */
 
-function StepReady({ onFinish }: { onFinish: () => void }) {
+function StepReady({ onFinish, tutorialUrl }: { onFinish: () => void; tutorialUrl: string }) {
   return (
     <div className="ob-card">
       <div className="ob-success-hero">
@@ -787,7 +815,7 @@ function StepReady({ onFinish }: { onFinish: () => void }) {
           <ListMusic size={16} />
           Open Worship
         </button>
-        <button className="ob-quick-btn" onClick={() => openUrl(YOUTUBE_URL)} title="Watch Tutorials">
+        <button className="ob-quick-btn" onClick={() => openUrl(tutorialUrl)} title="Watch Tutorials">
           <Video size={16} />
           Watch
         </button>

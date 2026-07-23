@@ -1,26 +1,25 @@
-import { createPortal } from "react-dom";
-import { HexColorPicker } from "react-colorful";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { HexColorPicker } from "react-colorful";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
 import type { BibleTheme } from "../../bible/types";
+import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
+import type { MediaItem } from "../../library/libraryTypes";
+import { getUserScopedKey } from "../../services/userScopedStorage";
+import Icon from "../DockIcon";
 import {
   COMPARE_GAP_PRESETS,
   COMPARE_LAYOUT_PRESETS,
-  DEFAULT_COMPARE_THEME_SETTINGS,
   normalizeCompareThemeSettings,
   type CompareFontWeight,
   type CompareMetadataAlign,
   type CompareMetadataPosition,
-  type CompareTextAlign,
+  type CompareTextAlign
 } from "../compareThemeConfig";
-import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
-import type { MediaItem } from "../../library/libraryTypes";
-import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
-import Icon from "../DockIcon";
 import type { DockBackgroundPreset } from "../dockConsoleTheme";
-import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
-import { getUserScopedKey } from "../../services/userScopedStorage";
+import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
 
 /* ── Types ── */
 type BackgroundType = "off" | "theme" | "color" | "image" | "pattern" | "video";
@@ -2303,14 +2302,6 @@ function CompareSettingsPanel({
     return match?.id ?? "custom";
   }, [compare]);
 
-  const resetCompare = useCallback(() => {
-    applyPatch({
-      ...DEFAULT_COMPARE_THEME_SETTINGS,
-      compareTranslationWidth: DEFAULT_COMPARE_THEME_SETTINGS.compareLeftWidth,
-      compareTranslationGap: COMPARE_GAP_PRESETS.find((preset) => preset.id === DEFAULT_COMPARE_THEME_SETTINGS.compareGapPreset)?.value ?? 24,
-    });
-  }, [applyPatch]);
-
   return (
     <div className="dtb-compare-settings">
 
@@ -2382,7 +2373,7 @@ function CompareSettingsPanel({
       {compareBackdropValue === "theme" && (
         <ThemeSection
           selectedThemeId={selectedThemeId ?? null}
-          onThemeSelect={onThemeSelect ?? (() => {})}
+          onThemeSelect={onThemeSelect ?? (() => { })}
           allowedCategories={allowedCategories}
           overlayMode={overlayMode}
         />

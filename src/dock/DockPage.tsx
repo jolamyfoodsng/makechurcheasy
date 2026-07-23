@@ -537,6 +537,13 @@ export default function DockPage() {
 
   // ── Settings Menu State ──
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+
+  // Listen for dock-open-menu custom event (fired by tab headers)
+  useEffect(() => {
+    const handler = () => setShowSettingsMenu((prev) => !prev);
+    window.addEventListener("dock-open-menu", handler);
+    return () => window.removeEventListener("dock-open-menu", handler);
+  }, []);
   const [showReconnectModal, setShowReconnectModal] = useState(false);
   const [showTabVisibility, setShowTabVisibility] = useState(false);
   const [showProjectionSettings, setShowProjectionSettings] = useState(false);
@@ -600,6 +607,53 @@ export default function DockPage() {
             <span>{t('page.maintenance')}</span>
           </div>
         )}
+
+        {/* ── Page Header (hamburger L, refresh R) ── */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "6px 8px",
+          borderBottom: "1px solid rgba(51, 65, 85, 0.3)",
+          flexShrink: 0,
+        }}>
+          <button
+            type="button"
+            onClick={() => setShowSettingsMenu((prev) => !prev)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 28, height: 28,
+              border: "none",
+              borderRadius: 3,
+              background: "transparent",
+              color: "#9CA3AF",
+              cursor: "pointer",
+            }}
+            title="Menu"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 28, height: 28,
+              border: "none",
+              borderRadius: 3,
+              background: "transparent",
+              color: "#9CA3AF",
+              cursor: "pointer",
+            }}
+            title="Refresh"
+          >
+            <Icon name="refresh" size={14} />
+          </button>
+        </div>
 
         {/* ── Sidebar ── */}
         {showSettingsMenu && (
