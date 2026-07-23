@@ -979,10 +979,16 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   </select>
                 ) : (
                   <div style={{
+                    width: "100%",
+                    background: "var(--dock-surface)",
+                    border: "1px solid var(--dock-border)",
+                    borderRadius: 3,
                     padding: "4px 6px",
                     fontSize: 11,
                     fontWeight: 600,
-                    color: "var(--dock-text)",
+                    color: "var(--dock-text-dim)",
+                    fontFamily: "inherit",
+                    opacity: 0.8,
                   }}>
                     {ltSelectedEntry?.label ?? t("ministry.speaker")}
                   </div>

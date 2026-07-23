@@ -26527,10 +26527,11 @@ button.dock-btm-toolbar__clear--inline,
    ══════════════════════════════════════════════════════════════════════════════ */
 
 /* ── 3-Zone Layout ── */
+
 .dock-lt-editor-layout {
   display: flex;
   flex-direction: column;
-  height: 520px;
+min-height:100px;
   border: 1px solid var(--dock-border);
   border-radius: 4px;
   overflow: hidden;

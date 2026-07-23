@@ -510,6 +510,7 @@ export default function DockPage() {
 
   // ── Settings Menu State ──
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
 
   // Listen for dock-open-menu custom event (fired by tab headers)
   useEffect(() => {
@@ -582,50 +583,66 @@ export default function DockPage() {
         )}
 
         {/* ── Page Header (hamburger L, refresh R) ── */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "6px 8px",
-          borderBottom: "1px solid rgba(51, 65, 85, 0.3)",
-          flexShrink: 0,
-        }}>
-          <button
-            type="button"
-            onClick={() => setShowSettingsMenu((prev) => !prev)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 28, height: 28,
-              border: "none",
-              borderRadius: 3,
-              background: "transparent",
-              color: "#9CA3AF",
-              cursor: "pointer",
-            }}
-            title="Menu"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 28, height: 28,
-              border: "none",
-              borderRadius: 3,
-              background: "transparent",
-              color: "#9CA3AF",
-              cursor: "pointer",
-            }}
-            title="Refresh"
-          >
-            <Icon name="refresh" size={14} />
-          </button>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setHeaderCollapsed((prev) => !prev)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setHeaderCollapsed((prev) => !prev); } }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: headerCollapsed ? "2px 8px" : "6px 8px",
+            borderBottom: "1px solid rgba(51, 65, 85, 0.3)",
+            flexShrink: 0,
+            cursor: "pointer",
+            userSelect: "none",
+          }}
+          title={headerCollapsed ? "Expand header" : "Collapse header"}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Icon name={headerCollapsed ? "chevron_right" : "expand_more"} size={14} style={{ color: "#9CA3AF", flexShrink: 0 }} />
+            {!headerCollapsed && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setShowSettingsMenu((prev) => !prev); }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28, height: 28,
+                  border: "none",
+                  borderRadius: 3,
+                  background: "transparent",
+                  color: "#9CA3AF",
+                  cursor: "pointer",
+                }}
+                title="Menu"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></svg>
+              </button>
+            )}
+          </div>
+          {!headerCollapsed && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); window.location.reload(); }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 28, height: 28,
+                border: "none",
+                borderRadius: 3,
+                background: "transparent",
+                color: "#9CA3AF",
+                cursor: "pointer",
+              }}
+              title="Refresh"
+            >
+              <Icon name="refresh" size={14} />
+            </button>
+          )}
         </div>
 
         {/* ── Sidebar ── */}

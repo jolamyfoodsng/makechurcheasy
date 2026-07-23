@@ -499,6 +499,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
   const [activeKind, setActiveKind] = useState<DockMediaFilter>(() => mediaSession.activeKind);
   const [viewMode, setViewMode] = useState<DockMediaViewMode>(() => mediaSession.viewMode);
   const [assetSearch, setAssetSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [showAddMediaModal, setShowAddMediaModal] = useState(false);
   const [addMediaTab, setAddMediaTab] = useState<DockAddMediaTab>("background");
   const [templateVideoSearch, setTemplateVideoSearch] = useState("");
@@ -2251,28 +2252,42 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
         )}
       </div>
 
-      {/* ── Search Bar ── */}
+      {/* ── Search Bar (collapsible) ── */}
       {browserTab !== "text" && (
-        <div className="dock-media-search">
-          <Icon name="search" size={12} className="dock-media-search__icon" />
-          <input
-            type="text"
-            className="dock-media-search__input"
-            value={assetSearch}
-            onChange={(event) => setAssetSearch(event.target.value)}
-            placeholder={searchPlaceholder}
-            aria-label={searchPlaceholder}
-          />
-          {assetSearch && (
-            <button
-              type="button"
-              className="dock-media-search__clear"
-              onClick={() => setAssetSearch("")}
-              aria-label={t('media.clearAssetSearch')}
-              title={t('media.clearAssetSearch')}
-            >
-              <Icon name="close" size={10} />
-            </button>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setSearchOpen((prev) => !prev)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSearchOpen((prev) => !prev); } }}
+          className="dock-media-search"
+          style={{ cursor: "pointer", userSelect: "none" }}
+          title={searchOpen ? "Collapse search" : "Expand search"}
+        >
+          <Icon name={searchOpen ? "search" : "search"} size={12} className="dock-media-search__icon" />
+          {searchOpen && (
+            <>
+              <input
+                type="text"
+                className="dock-media-search__input"
+                value={assetSearch}
+                onChange={(event) => { event.stopPropagation(); setAssetSearch(event.target.value); }}
+                onClick={(e) => e.stopPropagation()}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
+                autoFocus
+              />
+              {assetSearch && (
+                <button
+                  type="button"
+                  className="dock-media-search__clear"
+                  onClick={(e) => { e.stopPropagation(); setAssetSearch(""); }}
+                  aria-label={t('media.clearAssetSearch')}
+                  title={t('media.clearAssetSearch')}
+                >
+                  <Icon name="close" size={10} />
+                </button>
+              )}
+            </>
           )}
         </div>
       )}

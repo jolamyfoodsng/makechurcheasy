@@ -2567,7 +2567,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
             gap: 6,
           }}
         >
-          <Icon name="sticky_note_2" size={13} />
+          <Icon name="receipt_long" size={13} />
           Notes
         </button>
       </div>
