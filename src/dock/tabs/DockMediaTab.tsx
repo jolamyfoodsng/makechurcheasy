@@ -494,6 +494,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
   const [compactTabs, setCompactTabs] = useState(false);
   const [isCompactHeight, setIsCompactHeight] = useState(false);
   const [isUltraCompactHeight, setIsUltraCompactHeight] = useState(false);
+  const [isMicroHeight, setIsMicroHeight] = useState(false);
   const [mediaSession] = useState<DockMediaSessionState>(() => loadMediaSessionState());
   const [browserTab, setBrowserTab] = useState<DockMediaBrowserTab>(() => mediaSession.browserTab);
   const [activeKind, setActiveKind] = useState<DockMediaFilter>(() => mediaSession.activeKind);
@@ -569,17 +570,17 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     return () => ro.disconnect();
   }, []);
 
-  // Compact mode based on container height
+  // Compact mode based on dock window height
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      const h = entry.contentRect.height;
+    const check = () => {
+      const h = window.innerHeight;
       setIsCompactHeight(h <= 600);
       setIsUltraCompactHeight(h <= 400);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
+      setIsMicroHeight(h <= 360);
+    };
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   }, []);
 
   useEffect(() => {
@@ -2091,7 +2092,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
 
 
   return (
-    <div ref={(node) => { tabsRef.current = node; containerRef.current = node; }} className={`dock-media-console${isCompactHeight ? " dock-media-console--compact" : ""}${isUltraCompactHeight ? " dock-media-console--ultra-compact" : ""}`}>
+    <div ref={(node) => { tabsRef.current = node; containerRef.current = node; }} className={`dock-media-console${isCompactHeight ? " " : ""}${isUltraCompactHeight ? " dock-media-console--ultra-compact" : ""}${isMicroHeight ? " dock-media-console--micro" : ""}`}>
       {/* ── Header (normal mode only) ── */}
       {!isCompactHeight && (
         <div className="dock-media-header">
