@@ -184,45 +184,44 @@ export default function DockBottomToolbar({
           </button>
         </div>
 
-        {/* Spacer pushes right actions to the end */}
-        <div className="dock-btm-spacer" />
-
-        {/* Visibility toggle — always accessible */}
-        {onClear && (
-          <button
-            type="button"
-            className="dock-btm-toolbar__clear--inline"
-            onClick={onClear}
-            disabled={clearDisabled}
-            aria-label={resolvedClearLabel}
-            aria-pressed={!sourceVisible}
-            title={resolvedClearLabel}
-          >
-            <Icon name={visibilityIcon} size={16} />
-          </button>
-        )}
-
-        {inlineAction}
-
-        {/* ⋯ Overflow menu for hidden actions */}
-        {children && (
-          <div className="dock-btm-overflow" ref={overflowRef}>
+        <div className="dock_bottom_bar">
+          {/* Visibility toggle — always accessible */}
+          {onClear && (
             <button
               type="button"
-              className={`dock-btm-toolbar__icon-btn${showOverflow ? " dock-btm-toolbar__icon-btn--active" : ""}`}
-              onClick={toggleOverflow}
-              aria-label={t("dock.bottomToolbar.moreActions")}
-              title={t("dock.bottomToolbar.moreActions")}
+              className="dock-btm-toolbar__clear--inline"
+              onClick={onClear}
+              disabled={clearDisabled}
+              aria-label={resolvedClearLabel}
+              aria-pressed={!sourceVisible}
+              title={resolvedClearLabel}
             >
-              <Icon name="more_horiz" size={16} />
+              <Icon name={visibilityIcon} size={16} />
             </button>
-            {showOverflow && (
-              <div className="dock-btm-overflow__menu" role="menu">
-                {children}
-              </div>
-            )}
-          </div>
-        )}
+          )}
+
+          {inlineAction}
+
+          {/* ⋯ Overflow menu for hidden actions */}
+          {children && (
+            <div className="dock-btm-overflow" ref={overflowRef}>
+              <button
+                type="button"
+                className={`dock-btm-toolbar__icon-btn${showOverflow ? " dock-btm-toolbar__icon-btn--active" : ""}`}
+                onClick={toggleOverflow}
+                aria-label={t("dock.bottomToolbar.moreActions")}
+                title={t("dock.bottomToolbar.moreActions")}
+              >
+                <Icon name="more_horiz" size={16} />
+              </button>
+              {showOverflow && (
+                <div className="dock-btm-overflow__menu" role="menu">
+                  {children}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

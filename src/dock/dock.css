@@ -6327,7 +6327,7 @@
 }
 
 .dock-bible-reader {
-  flex: 0 0 95%;
+  flex: 0 0 94%;
   min-height: 0;
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--dock-border) 60%, transparent);
@@ -23398,7 +23398,7 @@
   align-items: center;
   gap: 4px;
   padding: 8px 12px;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--dock-text-dim, #94A3B8);
   background: transparent;
@@ -23710,6 +23710,7 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -26437,9 +26438,6 @@ button.dock-btm-toolbar__clear--inline,
   display: none !important;
 }
 
-.dock-btm-toolbar--compact button {
-  display: block !important;
-}
 
 @media (max-width:345px) {
   .dock-btm-toolbar__clear.dock-btm-toolbar__clear--bible {
@@ -26471,9 +26469,6 @@ button.dock-btm-toolbar__clear--inline,
 
   }
 
-  .dock-btm-toolbar__row {
-    display: block !important;
-  }
 
   .dock-btm-toolbar__actions {
     margin-top: 12px !important;
@@ -26500,10 +26495,7 @@ button.dock-btm-toolbar__clear--inline,
     order: 10;
 
     /* padding: 8px 0; */
-    border: 1px solid var(--error-border, #991B1B);
     border-radius: var(--radius, 8px);
-    background: var(--error-bg, #7F1D1D);
-    color: var(--error, #DC2626);
     font-family: var(--font-body);
     font-size: 12px;
     font-weight: 500;
@@ -26516,7 +26508,7 @@ button.dock-btm-toolbar__clear--inline,
   }
 
   .dock-btm-segmented {
-    width: 98%;
+    width: fit-content;
   }
 
   .dock-btm-segmented button {
@@ -26538,7 +26530,7 @@ button.dock-btm-toolbar__clear--inline,
 .dock-lt-editor-layout {
   display: flex;
   flex-direction: column;
-  min-height: 100px;
+  height: 520px;
   border: 1px solid var(--dock-border);
   border-radius: 4px;
   overflow: hidden;
