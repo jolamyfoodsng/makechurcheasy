@@ -29258,6 +29258,50 @@ button.dock-btm-toolbar__clear--inline,
   max-height: 310px;
 }
 
+.dock-media-console--micro {
+  max-height: 360px;
+}
+
+.dock-media-console--micro .dock-media-gallery-card__name,
+.dock-media-console--micro .dock-media-gall.dock-media-console--compactery-card__meta,
+.dock-media-console--micro .dock-media-gallery-card__type-badge,
+.dock-media-console--micro .dock-media-gallery-card__duration {
+  font-size: 7px;
+}
+
+.dock-media-console--micro .dock-media-gallery-card__context-item,
+.dock-media-console--micro .dock-media-gallery-card__menu-btn {
+  font-size: 9px;
+  padding: 2px 4px;
+  height: 18px;
+}
+
+.dock-media-console--micro .dock-media-gallery-card__context-item svg,
+.dock-media-console--micro .dock-media-gallery-card__menu-btn svg {
+  width: 9px;
+  height: 9px;
+}
+
+.dock-media-console--micro .dock-media-tabs .dock-media-tabs__tab {
+  font-size: 8px;
+  padding: 3px 6px;
+}
+
+.dock-media-console--micro .dock-media-tabs-row__actions button {
+  font-size: 8px;
+  padding: 2px 4px;
+}
+
+.dock-media-console--micro .dock-media-tabs-row__actions button svg {
+  width: 10px;
+  height: 10px;
+}
+
+.dock-media-console--micro .dock-media-list {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
 /* ── Media tabs row ── */
 .dock-media-tabs-row {
   display: flex;
