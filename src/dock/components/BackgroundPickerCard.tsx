@@ -2313,12 +2313,7 @@ function CompareSettingsPanel({
 
   return (
     <div className="dtb-compare-settings">
-      <div className="dtb-compare-settings__header">
-        <div className="dtb-section-title">{t("bgPicker.compare", "Compare")}</div>
-        <button type="button" className="dock-btn dock-btn--ghost dock-btn--compact" onClick={resetCompare}>
-          Reset
-        </button>
-      </div>
+
 
       {/* Layout */}
       <div className="dtb-bg-picker__settings" style={{ display: "flex", flexDirection: "column", gap: 8 }}>

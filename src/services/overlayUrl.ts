@@ -16,7 +16,7 @@ let _cachedBaseUrl: string | null = null;
 let _lastInvokeAttempt = 0;
 const RETRY_COOLDOWN_MS = 2000;
 const DEFAULT_TAURI_OVERLAY_BASE_URL = "http://127.0.0.1:45678";
-const DEV_VITE_PORT = "1501";
+const DEV_VITE_PORT = "1420";
 
 function isLocalOverlayHost(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
@@ -81,12 +81,12 @@ export function resolveOverlayAssetUrl(value: string | undefined): string {
  * Get the base URL for overlay HTML files that OBS can access.
  *
  * - Production: http://127.0.0.1:<port> (served by Tauri's embedded HTTP server)
- * - Development: http://localhost:1501 (served by Vite)
+ * - Development: http://localhost:1420 (served by Vite)
  */
 export async function getOverlayBaseUrl(): Promise<string> {
   if (_cachedBaseUrl) return _cachedBaseUrl;
 
-  // In Vite dev mode (port 1501), try to resolve the actual overlay server
+  // In Vite dev mode (port 1420), try to resolve the actual overlay server
   // URL from Tauri before falling back to the Vite origin. Uploaded assets
   // are only served by Tauri's overlay HTTP server, not by Vite.
   if (typeof window !== "undefined" && window.location?.origin) {
@@ -175,6 +175,19 @@ export function getOverlayBaseUrlSync(): string {
     }
   }
   return DEFAULT_TAURI_OVERLAY_BASE_URL;
+}
+
+export function getDockBaseUrl(): string {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    const { protocol, hostname } = window.location;
+    const isHttpLocalOrigin =
+      (protocol === "http:" || protocol === "https:") &&
+      (hostname === "localhost" || hostname === "127.0.0.1");
+    if (isHttpLocalOrigin) {
+      return "http://localhost:1420";
+    }
+  }
+  return getOverlayBaseUrlSync();
 }
 
 /**

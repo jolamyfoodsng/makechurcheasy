@@ -5,7 +5,7 @@
   "identifier": "com.makechurcheasy.desktop",
   "build": {
     "beforeDevCommand": "node scripts/prepare-bundle-assets.cjs && npm run dev",
-    "devUrl": "http://localhost:1501",
+    "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "node scripts/prepare-bundle-assets.cjs && npm run build",
     "beforeBundleCommand": "node scripts/prepare-bundle-assets.cjs",
     "frontendDist": "../dist"

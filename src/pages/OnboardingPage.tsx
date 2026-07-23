@@ -30,8 +30,8 @@ import {
   Users,
 } from "lucide-react";
 import { obsService } from "../services/obsService";
-import { getOverlayBaseUrlSync } from "../services/overlayUrl";
-import { getEnvConfig } from "../services/envConfig";
+import { getDockBaseUrl } from "../services/overlayUrl";
+
 import { getDeviceId } from "../services/authService";
 import { track } from "../services/analytics";
 import { getDefaultOBSPort } from "../services/desktopConfig";
@@ -469,7 +469,7 @@ function StepInstallDock({
   onTutorial: () => void;
 }) {
   const [copied, setCopied] = useState<"dock" | "ai" | null>(null);
-  const base = getEnvConfig().isTest ? "http://localhost:1420" : getOverlayBaseUrlSync();
+  const base = getDockBaseUrl();
   const dockUrl = `${base}/dock`;
   const aiUrl = `${base}/lm-dock`;
 
@@ -600,8 +600,7 @@ function StepTest({
   const runDiagnostics = useCallback(async () => {
     setRunning(true);
     const results: DiagItem[] = [];
-    const isDev = getEnvConfig().isTest;
-    const base = isDev ? "http://localhost:1420" : getOverlayBaseUrlSync();
+    const base = getDockBaseUrl();
 
     // 1. OBS
     results.push({
@@ -613,7 +612,7 @@ function StepTest({
 
     // 2. MakeChurchEasy Dock
     try {
-      const dockUrl = isDev ? `${base}/dock` : `${base}/dock.html`;
+      const dockUrl = `${base}/dock`;
       await fetch(dockUrl, { method: "HEAD", mode: "no-cors" });
       results.push({
         label: "MakeChurchEasy Dock",

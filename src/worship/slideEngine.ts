@@ -112,20 +112,40 @@ export function getSectionTypeTone(type: Slide["type"]): string {
 /**
  * Parse raw lyrics into structured worship sections: Verse, Chorus, Bridge,
  * Tag, etc. If a stanza is unlabeled, it becomes the next Verse.
+ *
+ * Blank lines between lyric blocks act as stanza/slide boundaries.
+ * Single newlines inside a block are preserved as line breaks within
+ * the same slide.
  */
 export function parseWorshipLyricSections(rawLyrics: string, linesPerSlide: number): LyricSection[] {
   const normalizedLyrics = rawLyrics.replace(/\r\n?/g, "\n").trim();
   if (!normalizedLyrics) return [];
 
+  // Split on one or more blank lines (spaces/tabs allowed between newlines).
+  // \n+ covers single blank line, double blank line, etc. — all count as
+  // one stanza boundary so extra blank lines don't create empty stanzas.
+  const stanzas = normalizedLyrics
+    .split(/\n[ \t]*\n+/)
+    .map((block) =>
+      block
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .join("\n")
+        .trim(),
+    )
+    .filter((block) => block.length > 0);
+
   const sections: LyricSection[] = [];
   let verseCount = 0;
   let slideCursor = 0;
 
-  const pushSection = (baseSection: SectionLabel, lines: string[]) => {
-    const cleanLines = lines.map((line) => line.trim()).filter(Boolean);
+  const pushSection = (baseSection: SectionLabel, content: string) => {
+    const cleanLines = content.split("\n").map((l) => l.trimEnd()).filter((l) => l.length > 0);
     if (cleanLines.length === 0) return;
     const slideCount = Math.max(1, Math.ceil(cleanLines.length / Math.max(1, linesPerSlide)));
-    const idBase = `${baseSection.shortLabel || baseSection.label}-${sections.length}`.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const idBase = `${baseSection.shortLabel || baseSection.label}-${sections.length}`
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-");
     sections.push({
       id: `section-${idBase}`,
       label: baseSection.label,
@@ -138,9 +158,9 @@ export function parseWorshipLyricSections(rawLyrics: string, linesPerSlide: numb
     slideCursor += slideCount;
   };
 
-  normalizedLyrics.split(/\n\s*\n/).forEach((stanza) => {
-    const stanzaLines = stanza.split("\n").map((line) => line.trim()).filter(Boolean);
-    if (stanzaLines.length === 0) return;
+  for (const stanza of stanzas) {
+    const stanzaLines = stanza.split("\n").map((l) => l.trimEnd());
+    if (stanzaLines.length === 0 || stanzaLines.every((l) => l.length === 0)) continue;
 
     let label = parseSectionLabelLine(stanzaLines[0]);
     let lines = stanzaLines;
@@ -148,7 +168,7 @@ export function parseWorshipLyricSections(rawLyrics: string, linesPerSlide: numb
     if (label) {
       lines = [
         ...(label.rest ? [label.rest] : []),
-        ...stanzaLines.slice(1),
+        ...stanzaLines.slice(1).filter((l) => l.length > 0),
       ];
     } else {
       verseCount += 1;
@@ -156,6 +176,7 @@ export function parseWorshipLyricSections(rawLyrics: string, linesPerSlide: numb
         section: { label: `Verse ${verseCount}`, shortLabel: `V${verseCount}`, type: "verse" },
         rest: "",
       };
+      lines = stanzaLines.filter((l) => l.length > 0);
     }
 
     const inlineSections: Array<{ section: SectionLabel; lines: string[] }> = [];
@@ -174,8 +195,10 @@ export function parseWorshipLyricSections(rawLyrics: string, linesPerSlide: numb
     }
 
     inlineSections.push(current);
-    inlineSections.forEach((section) => pushSection(section.section, section.lines));
-  });
+    for (const s of inlineSections) {
+      pushSection(s.section, s.lines.join("\n"));
+    }
+  }
 
   return sections;
 }
@@ -184,7 +207,7 @@ export function formatLyricsFromSections(sections: Array<Pick<LyricSection, "lab
   return sections
     .map((section) => {
       const label = toTitleCase(section.label.trim());
-      const lines = section.lines.map((line) => line.trim()).filter(Boolean);
+      const lines = section.lines.map((line) => line.trimEnd()).filter((l) => l.length > 0);
       return [label ? `${label}:` : "", ...lines].filter(Boolean).join("\n");
     })
     .filter(Boolean)
@@ -296,56 +319,99 @@ function splitIntoBalancedSlides(lines: string[], maxLines: number): string[][] 
 /**
  * Split raw lyrics into slides based on stanza breaks and lines-per-slide.
  *
- * When identifyChorus (auto-split) is ON, the engine:
- *  1. Expands each line at natural boundaries (labels, commas, semicolons)
- *  2. Respects sentence boundaries — no mid-thought breaks
- *  3. Balances slide sizes — no tiny last slides
- *  4. Keeps section labels (Verse:, Chorus:) with their content
+ * ── Stanza-first parsing ──
+ *  • Blank lines are the primary slide boundaries.
+ *  • A single newline keeps two lyric lines inside the same slide.
+ *  • Multiple blank lines count as one boundary (no empty slides).
+ *  • Visual textarea wrapping is not a newline — only real \n matters.
  *
- * When auto-split is OFF, each parsed section becomes one slide.
+ * ── Auto-split OFF (identifyChorus = false) ──
+ *  • Each stanza becomes exactly one slide.
+ *  • linesPerSlide is ignored — the user's stanza breaks are authoritative.
+ *
+ * ── Auto-split ON (identifyChorus = true) ──
+ *  • Each stanza is chunked into slides of at most linesPerSlide lines.
+ *  • A stanza is never merged with another stanza, even if both are short.
+ *  • Continuation labels (cont) only appear when a single stanza is
+ *    genuinely split because it exceeds linesPerSlide.
  */
 export function generateSlides(
   rawLyrics: string,
   linesPerSlide: number,
   identifyChorus: boolean
 ): Slide[] {
-  if (!rawLyrics.trim()) return [];
+  const normalized = rawLyrics.replace(/\r\n?/g, "\n").trim();
+  if (!normalized) return [];
 
-  const sections = parseWorshipLyricSections(rawLyrics, linesPerSlide);
+  // 1. Split into stanzas using blank lines as boundaries
+  const stanzas = normalized
+    .split(/\n[ \t]*\n+/)
+    .map((block) =>
+      block
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .join("\n")
+        .trim(),
+    )
+    .filter((block) => block.length > 0);
 
-  if (!identifyChorus) {
-    // Auto-split OFF: each section is a single slide (no line chunking)
-    return sections.map((section) => ({
-      id: `slide-${section.id}-0`,
-      label: section.label,
-      content: section.lines.join("\n"),
-      isContinuation: false,
-      type: section.type,
-    }));
-  }
-
-  // ── Auto-split ON ──────────────────────────────────────────────────────
-  // Split each section independently through splitIntoBalancedSlides so
-  // stanza boundaries (blank lines / section labels) are always respected.
-  // Without this, lines from a verse and a chorus get mixed together when
-  // flattened across all sections.
+  // 2. For each stanza: detect section label, extract lines, build slides
+  let verseCount = 0;
   const resultSlides: Slide[] = [];
   let slideIndex = 0;
 
-  for (const section of sections) {
-    const groups = splitIntoBalancedSlides(section.lines, linesPerSlide);
-    for (let i = 0; i < groups.length; i++) {
-      const group = groups[i];
-      const label = detectGroupLabel(group) || (slideIndex === 0 ? section.label : `${section.label} (cont)`);
-      const type = detectGroupType(group);
+  for (const stanza of stanzas) {
+    const stanzaLines = stanza
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .filter((line) => line.length > 0);
+
+    if (stanzaLines.length === 0) continue;
+
+    // Detect section label from the first line
+    let label: SectionLabel;
+    let contentLines: string[];
+
+    const detectedLabel = parseSectionLabelLine(stanzaLines[0]);
+    if (detectedLabel) {
+      label = detectedLabel.section;
+      contentLines = [
+        ...(detectedLabel.rest ? [detectedLabel.rest] : []),
+        ...stanzaLines.slice(1),
+      ];
+    } else {
+      verseCount += 1;
+      label = { label: `Verse ${verseCount}`, shortLabel: `V${verseCount}`, type: "verse" };
+      contentLines = stanzaLines;
+    }
+
+    if (contentLines.length === 0) continue;
+
+    // 3. Build slide(s) from this stanza
+    if (!identifyChorus) {
+      // Auto-split OFF: one stanza = one slide
       resultSlides.push({
-        id: `slide-auto-${slideIndex}`,
-        label,
-        content: group.join("\n"),
-        isContinuation: i > 0,
-        type,
+        id: `slide-${slideIndex}`,
+        label: label.label,
+        content: contentLines.join("\n"),
+        isContinuation: false,
+        type: label.type,
       });
       slideIndex++;
+    } else {
+      // Auto-split ON: chunk by linesPerSlide, never merge stanzas
+      const safeLinesPerSlide = Math.max(1, linesPerSlide || 2);
+      for (let start = 0; start < contentLines.length; start += safeLinesPerSlide) {
+        const partIndex = Math.floor(start / safeLinesPerSlide);
+        resultSlides.push({
+          id: `slide-auto-${slideIndex}`,
+          label: partIndex === 0 ? label.label : `${label.label} (cont)`,
+          content: contentLines.slice(start, start + safeLinesPerSlide).join("\n"),
+          isContinuation: partIndex > 0,
+          type: label.type,
+        });
+        slideIndex++;
+      }
     }
   }
 

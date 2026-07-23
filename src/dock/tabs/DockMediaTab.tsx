@@ -423,11 +423,11 @@ function isAnimatedPattern(pattern: BackgroundPattern): boolean {
   return /%3Canimate(?:Transform)?/i.test(pattern.src);
 }
 
-function TemplateVideoPreview({ src, label }: { src: string; label: string }) {
-  const { t } = useTranslation();
+function AnimationTilePreview({ src, label }: { src: string; label: string }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
+  const [hoverPlay, setHoverPlay] = useState(false);
   const previewSrc = `${src}#t=0.1`;
 
   useEffect(() => {
@@ -448,52 +448,38 @@ function TemplateVideoPreview({ src, label }: { src: string; label: string }) {
     return () => observer.disconnect();
   }, [shouldLoad]);
 
-  const handlePointerEnter = useCallback(() => {
+  useEffect(() => {
+    if (!hoverPlay || !shouldLoad) return;
     const video = videoRef.current;
     if (!video) return;
     void video.play().catch(() => { });
-  }, []);
-
-  const handlePointerLeave = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.pause();
-    try {
-      video.currentTime = 0.1;
-    } catch {
-      // Ignore seek failures on partially buffered previews.
-    }
-  }, []);
+    return () => {
+      if (video) { video.pause(); try { video.currentTime = 0.1; } catch { /* */ } }
+    };
+  }, [hoverPlay, shouldLoad]);
 
   return (
     <div
       ref={hostRef}
-      className="dock-media-template-preview"
-      onMouseEnter={handlePointerEnter}
-      onMouseLeave={handlePointerLeave}
-      onFocus={handlePointerEnter}
-      onBlur={handlePointerLeave}
+      className="dock-animation-tile__thumb"
+      onMouseEnter={() => setHoverPlay(true)}
+      onMouseLeave={() => setHoverPlay(false)}
+      onFocus={() => setHoverPlay(true)}
+      onBlur={() => setHoverPlay(false)}
     >
       {shouldLoad ? (
-        <>
-          <video
-            ref={videoRef}
-            className="dock-media-card__preview dock-media-card__preview-video"
-            src={previewSrc}
-            muted
-            playsInline
-            preload="metadata"
-            aria-label={`${label} preview`}
-          />
-          <span className="dock-media-template-preview__badge">
-            <Icon name="movie" size={10} />
-            <span>{t('media.toPreview')}</span>
-          </span>
-        </>
+        <video
+          ref={videoRef}
+          className="dock-animation-tile__img"
+          src={previewSrc}
+          muted
+          playsInline
+          preload="metadata"
+          aria-label={`${label} preview`}
+        />
       ) : (
-        <div className="dock-media-card__placeholder" aria-hidden="true">
-          <Icon name="movie" size={18} />
-          <span>{t('media.templateVideos')}</span>
+        <div className="dock-animation-tile__placeholder" aria-hidden="true">
+          <Icon name="movie" size={20} />
         </div>
       )}
     </div>
@@ -2446,8 +2432,49 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
                 </button>
               </div>
             ) : (
-              <div className="dock-media-list">
-                {filteredAnimationEntries.map((entry) => renderMediaCard(entry))}
+              <div className="dock-animation-grid">
+                {filteredAnimationEntries.map((entry) => {
+                  const isActiveTarget = activeTargets.active?.key === entry.key;
+                  const prefs = getEntryPrefs(entry);
+                  const displayName = prefs.label?.trim() || entry.name;
+                  const thumbUrl = entry.thumbnailUrl || (entry.previewUrl && entry.kind === "image" ? entry.previewUrl : null);
+
+                  return (
+                    <div
+                      key={entry.key}
+                      className={`dock-animation-tile${isActiveTarget ? " dock-animation-tile--active" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => { void handleSendEntry(entry); }}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void handleSendEntry(entry); } }}
+                    >
+                      <div className="dock-animation-tile__thumb">
+                        {thumbUrl ? (
+                          <img src={thumbUrl} alt={displayName} loading="lazy" className="dock-animation-tile__img" />
+                        ) : entry.previewUrl && entry.kind === "video" ? (
+                          <video src={entry.previewUrl} className="dock-animation-tile__img" muted playsInline preload="metadata" />
+                        ) : (
+                          <div className="dock-animation-tile__placeholder">
+                            <Icon name="movie" size={20} />
+                          </div>
+                        )}
+                        <div className="dock-animation-tile__play-hint">
+                          <Icon name="play_arrow" size={22} />
+                        </div>
+                        <div className="dock-animation-tile__gradient" />
+                        <div className="dock-animation-tile__info">
+                          <span className="dock-animation-tile__name">{displayName}</span>
+                          <span className="dock-animation-tile__meta">
+                            {entry.durationSec ? fmtDuration(entry.durationSec) : t('media.animation').toUpperCase()}
+                          </span>
+                        </div>
+                        <span className="dock-animation-tile__dl-badge">
+                          <Icon name="check_circle" size={11} />
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </>
@@ -3274,7 +3301,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
                       <div className="dock-empty__text">{t('media.noTemplateVideosMatch')}</div>
                     </div>
                   ) : (
-                    <div className="dock-media-list">
+                    <div className="dock-animation-grid">
                       {filteredTemplateVideos.map((asset) => {
                         const downloadedItem = findDownloadedTemplateVideo(asset);
                         const downloading = templateVideoProgress[asset.id] !== undefined;
@@ -3283,46 +3310,41 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
                           : `${Math.round((templateVideoProgress[asset.id] || 0) * 100)}%`;
 
                         return (
-                          <div key={asset.id} className="dock-media-card">
-                            <div className="dock-media-card__preview-shell">
-                              {downloadedItem?.thumbnailUrl ? (
-                                <img
-                                  src={downloadedItem.thumbnailUrl}
-                                  alt={asset.fileName}
-                                  className="dock-media-card__preview"
-                                  loading="lazy"
-                                />
-                              ) : (
-                                <TemplateVideoPreview src={asset.videoUrl} label={asset.fileName} />
-                              )}
-
-                            </div>
-                            <div className="dock-media-card__body">
-                              <div className="dock-media-card__title" title={asset.fileName}>{asset.fileName}</div>
-                              <div className="dock-media-card__meta">
-                                {downloadedItem?.durationSec ? `${fmtDuration(downloadedItem.durationSec)} · ` : ""}
-                                {formatFileSize(downloadedItem?.fileSize || asset.size)}
-                                {downloading ? ` · ${progressLabel}` : ""}
+                          <div
+                            key={asset.id}
+                            className={`dock-animation-tile${downloadedItem ? " dock-animation-tile--downloaded" : ""}`}
+                          >
+                            {downloadedItem?.thumbnailUrl ? (
+                              <div className="dock-animation-tile__thumb">
+                                <img src={downloadedItem.thumbnailUrl} alt={asset.fileName} loading="lazy" className="dock-animation-tile__img" />
+                                <div className="dock-animation-tile__play-hint">
+                                  <Icon name="play_arrow" size={22} />
+                                </div>
+                                <div className="dock-animation-tile__gradient" />
+                                <div className="dock-animation-tile__info">
+                                  <span className="dock-animation-tile__name">{asset.fileName}</span>
+                                  <span className="dock-animation-tile__meta">
+                                    {downloadedItem?.durationSec ? fmtDuration(downloadedItem.durationSec) : formatFileSize(asset.size)}
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-                            <div className="dock-media-card__footer dock-media-card__footer--visible">
-                              <div className="dock-media-card__actions">
-                                <button
-                                  type="button"
-                                  className={`dock-media-card__action-icon${downloadedItem ? " dock-media-card__action-icon--active-program" : ""}`}
-                                  aria-label={downloadedItem ? t('media.isAlreadySaved', { fileName: asset.fileName }) : t('media.downloadAsset', { fileName: asset.fileName })}
-                                  title={downloadedItem ? t('media.alreadySavedToAnimations') : downloading ? t('media.downloadingProgress', { progress: progressLabel }) : t('media.downloadTemplateVideo')}
-                                  disabled={downloading || Boolean(downloadedItem)}
-                                  onClick={() => void handleDownloadTemplateVideo(asset)}
-                                >
-                                  <Icon
-                                    name={downloadedItem ? "check_circle" : downloading ? "downloading" : "download"}
-                                    size={13}
-                                    style={{ animation: downloading ? "spin 1s linear infinite" : undefined }}
-                                  />
-                                </button>
-                              </div>
-                            </div>
+                            ) : (
+                              <AnimationTilePreview src={asset.videoUrl} label={asset.fileName} />
+                            )}
+                            <button
+                              type="button"
+                              className="dock-animation-tile__dl-btn"
+                              aria-label={downloadedItem ? t('media.isAlreadySaved', { fileName: asset.fileName }) : t('media.downloadAsset', { fileName: asset.fileName })}
+                              title={downloadedItem ? t('media.alreadySavedToAnimations') : downloading ? t('media.downloadingProgress', { progress: progressLabel }) : t('media.downloadTemplateVideo')}
+                              disabled={downloading || Boolean(downloadedItem)}
+                              onClick={() => void handleDownloadTemplateVideo(asset)}
+                            >
+                              <Icon
+                                name={downloadedItem ? "check_circle" : downloading ? "downloading" : "download"}
+                                size={13}
+                                style={{ animation: downloading ? "spin 1s linear infinite" : undefined }}
+                              />
+                            </button>
                           </div>
                         );
                       })}

@@ -69,6 +69,10 @@
   color: var(--text-primary, #F8FAFC);
 }
 
+.dock-btm-segmented__item--full {
+  flex: 3;
+}
+
 /* ── Morphing pulse ── */
 @keyframes dock-btm-morph-pulse {
   0% {
@@ -139,7 +143,46 @@
   background: var(--surface-active, #2E2E34);
 }
 
+.dock-btm-toolbar__icon-btn--active {
+  background: var(--primary, #1D4ED8);
+  color: #fff;
+}
+
 /* ── Clear button — only visible in collapsed mode ── */
+.dock-btm-toolbar__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: var(--dock-surface-alt, #1F2937);
+  color: var(--dock-text-dim, #7E8AA3);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.dock-btm-toolbar__clear:hover {
+  background: var(--dock-surface-hover, #374151);
+  color: var(--dock-text, #F8FAFC);
+  border-color: var(--dock-border-active, #6B7280);
+}
+
+.dock-btm-toolbar__clear:active {
+  background: var(--dock-surface-active, #374151);
+}
+
+.dock-btm-toolbar__clear:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .dock-btm-toolbar--collapsed .dock-btm-toolbar__clear {
   flex: 1;
   order: 0;

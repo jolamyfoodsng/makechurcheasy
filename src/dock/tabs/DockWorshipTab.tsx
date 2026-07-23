@@ -329,7 +329,10 @@ async function loadDockWorshipPreferencesFromApp(): Promise<DockWorshipPreferenc
 
 function parseLyricSections(lyrics: string, linesPerSlide: number, autoSplit = false): DockWorshipSection[] {
   if (!lyrics.trim()) return [];
-  return generateSlides(lyrics, linesPerSlide, autoSplit).map((slide) => ({
+
+  const effectiveLPS = autoSplit ? Math.max(1, linesPerSlide || 2) : 2;
+
+  return generateSlides(lyrics, effectiveLPS, autoSplit).map((slide) => ({
     id: slide.id,
     label: slide.isContinuation ? "" : slide.label,
     text: slide.content,
@@ -408,14 +411,14 @@ function applyLyricsFormat(text: string, action: LyricsFormatAction, autosplitLi
       const sections: string[][] = [];
       let current: string[] = [];
       for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed === "") {
+        const trimmedEnd = line.trimEnd();
+        if (trimmedEnd === "") {
           if (current.length > 0) {
             sections.push(current);
             current = [];
           }
         } else {
-          current.push(trimmed);
+          current.push(trimmedEnd);
         }
       }
       if (current.length > 0) sections.push(current);
@@ -848,9 +851,12 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const effectiveLyrics = songEditor && songDraft.lyrics !== selectedSong?.lyrics
     ? songDraft.lyrics
     : (selectedSong?.lyrics ?? "");
+  const effectiveLinesPerSlide = clampLinesPerSlide(
+    selectedSong?.linesPerSlide ?? linesPerSlide,
+  );
   const selectedSongSections = useMemo(
-    () => (selectedSong ? parseLyricSections(effectiveLyrics, linesPerSlide, selectedSong.autoSplit ?? false) : []),
-    [effectiveLyrics, linesPerSlide, selectedSong],
+    () => (selectedSong ? parseLyricSections(effectiveLyrics, effectiveLinesPerSlide, selectedSong.autoSplit ?? false) : []),
+    [effectiveLyrics, effectiveLinesPerSlide, selectedSong],
   );
 
   const totalLyricLines = useMemo(
@@ -1712,7 +1718,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     const isAutoSplitOpen = autoSplitPopoverTarget === target;
     return (
       <div className="dock-lyrics-toolbar" role="toolbar" aria-label="Lyrics formatting tools">
-        <div className="dock-lyrics-toolbar__cluster dock-lyrics-toolbar__cluster--format">
+        <div className="dock-lyrics-toolbar__actions">
           <div className="dock-lyrics-autosplit" ref={autoSplitPopoverRef}>
             <button
               type="button"
@@ -1749,7 +1755,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
             <span>Clean Text</span>
           </button>
 
-          <button type="button" className="dock-lyrics-toolbar__btn" onClick={() => formatLyrics(target, "remove-verse-numbers")} title="Verse Numbers">
+          <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--toggle" onClick={() => formatLyrics(target, "remove-verse-numbers")} title="Verse Numbers">
             <Icon name="tag" size={12} />
             <span>Verse Numbers</span>
           </button>
@@ -1762,7 +1768,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
             title={t("bible.uppercase")}
             aria-label={t("bible.uppercase")}
           >
-            <span>TT</span>
+            <span>AA</span>
           </button>
           <button
             type="button"
@@ -1771,7 +1777,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
             title="Lowercase"
             aria-label="Lowercase"
           >
-            <span>tt</span>
+            <span>aa</span>
           </button>
           <button
             type="button"
@@ -1780,7 +1786,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
             title={t("common.capitalize")}
             aria-label={t("common.capitalize")}
           >
-            <span>Tt</span>
+            <span>Aa</span>
           </button>
         </div>
 
@@ -3046,7 +3052,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                 </div>
                 <div className="dock-dialog__body">
                   <div className="dock-lyrics-toolbar" role="toolbar" aria-label="Slide text formatting">
-                    <div className="dock-lyrics-toolbar__cluster dock-lyrics-toolbar__cluster--format">
+                    <div className="dock-lyrics-toolbar__actions">
                       <div className="dock-lyrics-autosplit" ref={slideEditorAutoSplitPopoverRef}>
                         <button
                           type="button"
@@ -3082,19 +3088,23 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                         <Icon name="auto_fix_high" size={12} />
                         <span>Clean Text</span>
                       </button>
+                      <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--toggle" onClick={() => handleFormatSlideEditor("remove-verse-numbers")} title="Verse Numbers">
+                        <Icon name="tag" size={12} />
+                        <span>Verse Numbers</span>
+                      </button>
                     </div>
                     <div className="dock-lyrics-toolbar__group" role="group" aria-label="Text case controls">
                       <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
                         onClick={() => handleFormatSlideEditor("uppercase")} title="Uppercase" aria-label="Uppercase">
-                        <span>TT</span>
+                        <span>AA</span>
                       </button>
                       <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
                         onClick={() => handleFormatSlideEditor("lowercase")} title="Lowercase" aria-label="Lowercase">
-                        <span>tt</span>
+                        <span>aa</span>
                       </button>
                       <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
                         onClick={() => handleFormatSlideEditor("capitalize")} title="Capitalize" aria-label="Capitalize">
-                        <span>Tt</span>
+                        <span>Aa</span>
                       </button>
                     </div>
                   </div>

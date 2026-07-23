@@ -2,8 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { obsService } from "../services/obsService";
-import { getOverlayBaseUrlSync } from "../services/overlayUrl";
-import { getEnvConfig } from "../services/envConfig";
+import { getDockBaseUrl } from "../services/overlayUrl";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import Icon from "../components/Icon";
 
@@ -44,12 +43,12 @@ export default function DashboardPage() {
   // Keep OBS dock URLs stable. The dock reads the active device session from
   // the local overlay server instead of requiring a deviceId query string.
   const dockUrl = useMemo(() => {
-    const base = getEnvConfig().isTest ? "http://localhost:1420" : getOverlayBaseUrlSync();
+    const base = getDockBaseUrl();
     return `${base}/dock`;
   }, []);
 
   const lmDockUrl = useMemo(() => {
-    const base = getEnvConfig().isTest ? "http://localhost:1420" : getOverlayBaseUrlSync();
+    const base = getDockBaseUrl();
     return `${base}/lm-dock`;
   }, []);
 

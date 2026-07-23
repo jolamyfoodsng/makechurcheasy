@@ -5058,9 +5058,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                             continue;
                         }
 
-                        // Redirect to Vite dev server (localhost:1501) so it handles
+                        // Redirect to Vite dev server (localhost:1420) so it handles
                         // module transforms, HMR, etc.
-                        let redirect_url = format!("http://localhost:1501/{}", clean);
+                        let redirect_url = format!("http://localhost:1420/{}", clean);
                         let header = overlay_header("Location", redirect_url.as_str());
                         let cors = overlay_header("Access-Control-Allow-Origin", "*");
                         let resp =

@@ -53,7 +53,7 @@ import { fetchCreditDetails, getCreditsBalance } from "../services/credits";
 import { getEffectivePlan, getTrialDaysRemaining, getUserPlan, getUserPlanLimits, isInTrial } from "../services/licenseService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService, type ConnectionStatus } from "../services/obsService";
-import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { getDockBaseUrl, getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { getPlanConfig, getPlanLabel } from "../services/planConfig";
 import { getCachedSubscription } from "../services/subscriptionCache";
 import { getAllSongs } from "../worship/worshipDb";
@@ -619,7 +619,7 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showInstructions, setShowInstructions] = useState(false);
 
-  const base = getEnvConfig().isTest ? "http://localhost:1420" : getOverlayBaseUrlSync();
+  const base = getDockBaseUrl();
 
   const overlayUrl = `${base}/dock`;
   const lmDockUrl = `${base}/lm-dock`;

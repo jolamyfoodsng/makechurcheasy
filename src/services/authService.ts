@@ -330,7 +330,7 @@ export async function syncSessionToOverlay(session: AuthSession | null): Promise
     if (port > 0) {
       // Always sync to BOTH servers — the Tauri overlay server (for dock
       // running on the Tauri port) AND the Vite file-based server (for dock
-      // running on localhost:1501). Without both, the dock may hit the
+      // running on localhost:1420). Without both, the dock may hit the
       // server that doesn't have the session.
       await Promise.allSettled([
         clearSession(`http://127.0.0.1:${port}/api/auth/session`),
