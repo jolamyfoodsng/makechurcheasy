@@ -1,0 +1,111 @@
+/* ── ProfileCompletionModal ── */
+
+.pcm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+}
+
+.pcm-modal {
+  width: 100%;
+  max-width: 420px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 28px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  transform: scale(0.95);
+  opacity: 0;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+.pcm-modal--visible {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.pcm-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.pcm-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+.pcm-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 8px;
+  font-family: var(--font-heading);
+}
+
+.pcm-description {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin: 0;
+  font-family: var(--font-body);
+}
+
+.pcm-form {
+  margin-bottom: 20px;
+}
+
+.pcm-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  font-family: var(--font-body);
+}
+
+.pcm-required {
+  color: var(--error);
+}
+
+.pcm-error {
+  background: var(--error-bg, rgba(239, 68, 68, 0.1));
+  border: 1px solid var(--error-border, rgba(239, 68, 68, 0.3));
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  color: var(--error);
+  font-size: 13px;
+  font-family: var(--font-body);
+}
+
+.pcm-save-btn {
+  width: 100%;
+  padding: 10px 0;
+  border-radius: 6px;
+  border: none;
+  background: var(--primary);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: background 0.2s ease;
+}
+
+.pcm-save-btn:hover:not(.pcm-save-btn--disabled) {
+  background: var(--primary-hover);
+}
+
+.pcm-save-btn:active:not(.pcm-save-btn--disabled) {
+  background: var(--primary-pressed);
+}
+
+.pcm-save-btn--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

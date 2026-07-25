@@ -1,0 +1,48 @@
+/**
+ * compat-mode.css — Global CSS overrides for compatibility mode
+ *
+ * When the performance manager detects a weak GPU it sets
+ * `data-compat-mode="true"` on <body>. These attribute selectors
+ * force-disable GPU-heavy CSS effects across the entire app.
+ *
+ * Scope: backdrop-filter, large box-shadows (>8px), CSS animations,
+ * CSS filters, and transitions.
+ */
+
+/* ---- Backdrop-filter: kill everywhere ---- */
+
+[data-compat-mode="true"] * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ---- Box-shadow: cap at a small, safe value ---- */
+
+[data-compat-mode="true"] * {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* ---- Animations & transitions: disable ---- */
+
+[data-compat-mode="true"] * {
+  animation: none !important;
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition: none !important;
+}
+
+/* ---- CSS filters: disable ---- */
+
+[data-compat-mode="true"] * {
+  filter: none !important;
+}
+
+/* ---- Also respect OS-level reduced-motion preference ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

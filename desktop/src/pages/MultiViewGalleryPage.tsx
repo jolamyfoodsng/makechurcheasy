@@ -1,0 +1,720 @@
+/**
+ * MultiViewGalleryPage.tsx — Dedicated Multi-View Layout Gallery
+ *
+ * Browse, preview, and add multi-view layouts to OBS.
+ * Layouts are JSON-driven for easy future expansion.
+ *
+ * Tracks which layouts have been added to OBS via localStorage.
+ * Added layouts appear under the "Added" category filter.
+ */
+
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import { HelpCircle, RotateCcw, AlertTriangle } from "lucide-react";
+import MultiViewGalleryTutorial, {
+  isMultiViewGalleryTutorialCompleted,
+  markMultiViewGalleryTutorialCompleted,
+  resetMultiViewGalleryTutorial,
+} from "./MultiViewGalleryTutorial";
+import {
+  GALLERY_LAYOUTS,
+  GALLERY_CATEGORIES,
+  type GalleryLayout,
+  type GalleryLayoutCategory,
+} from "../multiview/galleryLayouts";
+import { obsService } from "../services/obsService";
+import { getUserScopedKey } from "../services/userScopedStorage";
+import Icon from "../components/Icon";
+import "./MultiViewGalleryPage.css";
+
+// ── Color conversion helper (CSS hex → OBS 32-bit integer for color_source_v3) ──
+
+function cssColorToObsInt(cssColor: string): number {
+  const hex = cssColor.replace("#", "");
+  let r = 0, g = 0, b = 0;
+  if (hex.length === 3) {
+    r = parseInt(hex[0] + hex[0], 16);
+    g = parseInt(hex[1] + hex[1], 16);
+    b = parseInt(hex[2] + hex[2], 16);
+  } else if (hex.length >= 6) {
+    r = parseInt(hex.slice(0, 2), 16);
+    g = parseInt(hex.slice(2, 4), 16);
+    b = parseInt(hex.slice(4, 6), 16);
+  }
+  return (0xFF << 24 | b << 16 | g << 8 | r) >>> 0;
+}
+
+// ── Added layout tracking ──────────────────────────────────────────────────
+
+const ADDED_IDS_KEY = "mvg-added-ids";
+
+function loadAddedIds(): Set<string> {
+  try {
+    // Migration: try unscoped key first, fall back to user-scoped key
+    let raw = localStorage.getItem(ADDED_IDS_KEY);
+    if (!raw) {
+      raw = localStorage.getItem(getUserScopedKey(ADDED_IDS_KEY));
+      if (raw) {
+        // Migrate from scoped to unscoped key
+        localStorage.setItem(ADDED_IDS_KEY, raw);
+      }
+    }
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveAddedIds(ids: Set<string>) {
+  try {
+    const raw = JSON.stringify([...ids]);
+    localStorage.setItem(ADDED_IDS_KEY, raw);
+    // Also persist to server so the dock (OBS CEF) can read it
+    fetch("/api/save-dock-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "mv-added-ids", data: raw }),
+    }).catch(() => {});
+  } catch { /* ignore */ }
+}
+
+// ── Dock layout storage helpers ────────────────────────────────────────────
+
+const DOCK_MV_KEY = "dock-mv-layouts";
+
+interface DockMVLayout {
+  id: string;
+  name: string;
+  description: string;
+  regionCount: number;
+  canvasLabel: string;
+  updatedAt: string;
+  isTemplate: boolean;
+  tags: string[];
+}
+
+function loadDockLayouts(): DockMVLayout[] {
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(DOCK_MV_KEY));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDockLayouts(items: DockMVLayout[]) {
+  try {
+    localStorage.setItem(getUserScopedKey(DOCK_MV_KEY), JSON.stringify(items));
+  } catch { /* ignore */ }
+}
+
+// ── Slot content type → display info ───────────────────────────────────────
+
+const CONTENT_TYPE_INFO: Record<string, { label: string; icon: string; color: string }> = {
+  camera: { label: "Camera", icon: "videocam", color: "#0078d4" },
+  scripture: { label: "Scripture", icon: "menu_book", color: "#3B82F6" },
+  translation: { label: "Translation", icon: "translate", color: "#00bcd4" },
+  "lower-third": { label: "Lower Third", icon: "subtitles", color: "#ff9800" },
+  browser: { label: "Browser", icon: "language", color: "#ff5722" },
+  image: { label: "Image", icon: "image", color: "#9c27b0" },
+};
+
+// ── SVG Preview ────────────────────────────────────────────────────────────
+
+function LayoutPreviewSVG({ layout }: { layout: GalleryLayout }) {
+  const canvasW = 1920;
+  const canvasH = 1080;
+
+  return (
+    <svg viewBox={`0 0 ${canvasW} ${canvasH}`} className="mvg-card-svg">
+      {/* Dark background */}
+      <rect width={canvasW} height={canvasH} fill="#111" />
+
+      {/* Slots */}
+      {layout.slots.map((slot) => {
+        const info = CONTENT_TYPE_INFO[slot.contentType] || CONTENT_TYPE_INFO.camera;
+        const fontSize = slot.width > 400 && slot.height > 200 ? 28 : 16;
+        const labelY = slot.y + slot.height / 2 + fontSize * 0.35;
+        const labelX = slot.x + slot.width / 2;
+
+        return (
+          <g key={slot.id}>
+            <rect
+              x={slot.x}
+              y={slot.y}
+              width={slot.width}
+              height={slot.height}
+              fill={info.color}
+              opacity={0.45}
+            />
+            <rect
+              x={slot.x}
+              y={slot.y}
+              width={slot.width}
+              height={slot.height}
+              fill="none"
+              stroke={info.color}
+              strokeWidth={2}
+              opacity={0.7}
+            />
+            {slot.width > 140 && slot.height > 60 && (
+              <text
+                x={labelX}
+                y={labelY}
+                textAnchor="middle"
+                fill="rgba(255,255,255,0.9)"
+                fontSize={fontSize}
+                fontWeight="600"
+                fontFamily="Inter, system-ui, sans-serif"
+              >
+                {slot.label}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ── Preview Modal ──────────────────────────────────────────────────────────
+
+function PreviewModal({
+  layout,
+  onClose,
+  onAddToOBS,
+  obsConnected,
+  installing,
+  isAdded,
+}: {
+  layout: GalleryLayout;
+  onClose: () => void;
+  onAddToOBS: () => void;
+  obsConnected: boolean;
+  installing: boolean;
+  isAdded: boolean;
+}) {
+  const { t } = useTranslation();
+  const contentTypeLabels = useMemo(() => ({
+    camera: t("gallery.type.camera"),
+    scripture: t("gallery.type.scripture"),
+    translation: t("gallery.type.translation"),
+    "lower-third": t("gallery.type.lowerThird"),
+    browser: t("gallery.type.browser"),
+    image: t("gallery.type.image"),
+  }), [t]);
+
+  return (
+    <div className="mvg-modal-overlay" onClick={onClose}>
+      <div className="mvg-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="mvg-modal-close" onClick={onClose} aria-label={t("gallery.close")} title={t("gallery.close")}>
+          <Icon name="close" size={20} />
+        </button>
+
+        {/* Preview */}
+        <div className="mvg-modal-preview">
+          <LayoutPreviewSVG layout={layout} />
+        </div>
+
+        {/* Info */}
+        <div className="mvg-modal-info">
+          <div className="mvg-modal-header">
+            <h2 className="mvg-modal-title">{layout.name}</h2>
+            <span className="mvg-modal-category">
+              {isAdded ? (
+                <span className="mvg-modal-added-badge">
+                  <Icon name="check_circle" size={12} /> {t("gallery.added")}
+                </span>
+              ) : (
+                GALLERY_CATEGORIES.find((c) => c.key === layout.category)?.label
+              )}
+            </span>
+          </div>
+
+          <p className="mvg-modal-desc">{layout.description}</p>
+
+          {/* Slots */}
+          <div className="mvg-modal-section">
+            <h3 className="mvg-modal-section-title">
+              {t("gallery.layoutSlots", { count: layout.slots.length })}
+            </h3>
+            <div className="mvg-modal-slots">
+              {layout.slots.map((slot) => {
+                const info = CONTENT_TYPE_INFO[slot.contentType] || CONTENT_TYPE_INFO.camera;
+                return (
+                  <div key={slot.id} className="mvg-modal-slot">
+                    <div className="mvg-modal-slot-dot" style={{ background: info.color }} />
+                    <Icon name={info.icon} size={14} className="mvg-modal-slot-icon" />
+                    <span className="mvg-modal-slot-label">{slot.label}</span>
+                    <span className="mvg-modal-slot-type">{contentTypeLabels[slot.contentType] || info.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Use Cases */}
+          <div className="mvg-modal-section">
+            <h3 className="mvg-modal-section-title">{t("gallery.useCases")}</h3>
+            <div className="mvg-modal-usecases">
+              {layout.useCases.map((uc) => (
+                <span key={uc} className="mvg-modal-usecase">{uc}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Scene Dimensions */}
+          <div className="mvg-modal-section">
+            <div className="mvg-modal-meta">
+              <span className="mvg-modal-meta-item">
+                <Icon name="aspect_ratio" size={14} />
+                1920 × 1080
+              </span>
+              <span className="mvg-modal-meta-item">
+                <Icon name="view_module" size={14} />
+                {t("gallery.slotCount", { count: layout.slots.length })}
+              </span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="mvg-modal-actions">
+            <button
+              className={`mvg-btn ${isAdded ? "mvg-btn--added" : "mvg-btn--primary"}`}
+              onClick={onAddToOBS}
+              disabled={installing}
+              title={t("gallery.addToObs")}>
+              {installing ? (
+                <>
+                  <span className="loading-spinner-sm" /> {t("gallery.installing")}
+                </>
+              ) : isAdded ? (
+                <>
+                  <Icon name="check_circle" size={16} /> {t("gallery.addedToObs")}
+                </>
+              ) : (
+                <>
+                  <Icon name="add" size={16} /> {t("gallery.addToObs")}
+                </>
+              )}
+            </button>
+          </div>
+
+          {!obsConnected && (
+            <p className="mvg-modal-obs-hint">
+              <Icon name="info" size={12} /> {t("gallery.connectToObsHint")}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── OBS Not Connected Modal ────────────────────────────────────────────────
+
+function OBSDisconnectedModal({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="mvg-modal-overlay" onClick={onClose}>
+      <div className="mvg-modal mvg-modal--small" onClick={(e) => e.stopPropagation()}>
+        <button className="mvg-modal-close" onClick={onClose} aria-label={t("gallery.close")} title={t("gallery.close")}>
+          <Icon name="close" size={20} />
+        </button>
+        <div className="mvg-disconnected-content">
+          <Icon name="cast_connected" size={40} className="mvg-disconnected-icon" />
+          <h3>{t("gallery.obsNotConnected")}</h3>
+          <p>{t("gallery.obsConnectDescription")}</p>
+          <div className="mvg-disconnected-actions">
+            <button className="mvg-btn mvg-btn--outline" onClick={onClose} title={t("gallery.cancel")}>
+              {t("gallery.cancel")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Gallery Page ──────────────────────────────────────────────────────
+
+export default function MultiViewGalleryPage() {
+  const { t } = useTranslation();
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<GalleryLayoutCategory | "all">("all");
+  const [previewLayout, setPreviewLayout] = useState<GalleryLayout | null>(null);
+  const [obsConnected, setObsConnected] = useState(obsService.status === "connected");
+  const [showDisconnected, setShowDisconnected] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [addedIds, setAddedIds] = useState<Set<string>>(() => loadAddedIds());
+  const [, setRenderTick] = useState(0);
+  const autoConnectingRef = useRef(false);
+
+  // ── Tutorial state ──
+  const [tourActive, setTourActive] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // ── Auto-start tutorial on first visit ──
+  useEffect(() => {
+    if (!isMultiViewGalleryTutorialCompleted() && !tourActive) {
+      const timer = setTimeout(() => setTourActive(true), 600);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Seed server file with any existing added IDs on mount ──
+  useEffect(() => {
+    const ids = loadAddedIds();
+    if (ids.size > 0) {
+      fetch("/api/save-dock-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "mv-added-ids", data: JSON.stringify([...ids]) }),
+      }).catch(() => {});
+    }
+  }, []);
+
+  // ── Listen to OBS status ──
+  useEffect(() => {
+    setObsConnected(obsService.status === "connected");
+    const unsub = obsService.onStatusChange((status) => {
+      setObsConnected(status === "connected");
+    });
+    return unsub;
+  }, []);
+
+  // ── Added count for filter badge ──
+  const addedCount = useMemo(() => addedIds.size, [addedIds]);
+
+  // ── Filtered layouts ──
+  const filtered = useMemo(() => {
+    let list = GALLERY_LAYOUTS;
+
+    if (filter === "added") {
+      list = list.filter((l) => addedIds.has(l.id));
+    } else if (filter !== "all") {
+      list = list.filter((l) => l.category === filter);
+    }
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (l) =>
+          l.name.toLowerCase().includes(q) ||
+          l.description.toLowerCase().includes(q) ||
+          l.useCases.some((uc) => uc.toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }, [filter, search, addedIds]);
+
+  // ── Toast helper ──
+  const showToast = useCallback((message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  // ── Mark layout as added and refresh ──
+  const markAdded = useCallback((layoutId: string) => {
+    const ids = loadAddedIds();
+    ids.add(layoutId);
+    saveAddedIds(ids);
+    setAddedIds(new Set(ids));
+    setRenderTick(t => t + 1);
+  }, []);
+
+  // ── Try auto-connecting to OBS if not already connected ──
+  const tryAutoConnect = useCallback(async (): Promise<boolean> => {
+    if (obsService.isConnected) return true;
+    if (autoConnectingRef.current) return false;
+    autoConnectingRef.current = true;
+    try {
+      await obsService.connect();
+    } catch {
+      return false;
+    } finally {
+      autoConnectingRef.current = false;
+    }
+    return obsService.isConnected;
+  }, []);
+
+  // ── Install layout to OBS ──
+  const handleAddToOBS = useCallback(
+    async (layout: GalleryLayout) => {
+      if (!obsConnected) {
+        const connected = await tryAutoConnect();
+        if (!connected) {
+          setShowDisconnected(true);
+          return;
+        }
+      }
+
+      setInstalling(true);
+      try {
+        // Use MV: prefix to match dock tab convention
+        const sceneName = `MV: ${layout.name}`;
+        try {
+          await obsService.createScene(sceneName);
+        } catch {
+          // Scene might already exist — continue
+        }
+
+        // Create color sources for each slot and position them
+        for (const slot of layout.slots) {
+          const inputName = `${sceneName} - ${slot.label}`;
+          const info = CONTENT_TYPE_INFO[slot.contentType] || CONTENT_TYPE_INFO.camera;
+
+          const itemId = await obsService.createInput(
+            sceneName,
+            inputName,
+            "color_source_v3",
+            {
+              color: cssColorToObsInt(info.color),
+              width: slot.width,
+              height: slot.height,
+            }
+          );
+
+          if (itemId >= 0) {
+            await obsService.setSceneItemTransform(sceneName, itemId, {
+              positionX: slot.x,
+              positionY: slot.y,
+              boundsType: "OBS_BOUNDS_STRETCH",
+              boundsWidth: slot.width,
+              boundsHeight: slot.height,
+              boundsAlignment: 0,
+            });
+          }
+        }
+
+        // Save to dock storage for the dock multiview tab
+        const dockEntry: DockMVLayout = {
+          id: `mvg-${layout.id}-${Date.now()}`,
+          name: layout.name,
+          description: layout.description,
+          regionCount: layout.slots.length,
+          canvasLabel: "1920×1080",
+          updatedAt: new Date().toISOString(),
+          isTemplate: false,
+          tags: layout.useCases,
+        };
+        const existing = loadDockLayouts();
+        existing.unshift(dockEntry);
+        saveDockLayouts(existing);
+
+        // Mark as added
+        markAdded(layout.id);
+
+        showToast(t("gallery.toastAdded", { name: sceneName }), "success");
+        setPreviewLayout(null);
+      } catch (err) {
+        console.error("[MultiViewGallery] Failed to install layout:", err);
+        showToast(t("gallery.toastFailed"), "error");
+      } finally {
+        setInstalling(false);
+      }
+    },
+    [tryAutoConnect, showToast, markAdded, t]
+  );
+
+  // ── Handle preview → install ──
+  const handlePreviewInstall = useCallback(() => {
+    if (previewLayout) {
+      handleAddToOBS(previewLayout);
+    }
+  }, [previewLayout, handleAddToOBS]);
+
+  return (
+    <div className="app-page mvg-page">
+      <div className="app-page__inner mvg-inner">
+        {/* Header */}
+        <header className="app-page__header mvg-header" data-mgt-tutorial="welcome">
+          <div className="app-page__header-copy">
+            <p className="app-page__eyebrow">{t("gallery.eyebrow")}</p>
+            <h1 className="app-page__title">{t("gallery.title")}</h1>
+            <p className="app-page__subtitle">
+              {t("gallery.subtitle")}
+            </p>
+          </div>
+          <div className="app-page__actions">
+            <button
+              className="production-btn production-btn--ghost"
+              onClick={() => { resetMultiViewGalleryTutorial(); setTourActive(true); setBannerDismissed(false); }}
+              title={t("mgt.button.tooltip")}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }}
+            >
+              <HelpCircle size={16} /> {t("mgt.button")}
+            </button>
+          </div>
+        </header>
+
+        {/* ── Incomplete tutorial banner ── */}
+        {!tourActive && !isMultiViewGalleryTutorialCompleted() && !bannerDismissed && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", margin: "0 24px 16px", background: "rgba(var(--primary-rgb, 99, 102, 241), 0.08)", border: "1px solid rgba(var(--primary-rgb, 99, 102, 241), 0.2)", borderRadius: 8, fontSize: "0.8125rem", color: "var(--text-muted)" }}>
+            <AlertTriangle size={14} style={{ color: "var(--primary)", flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>{t("mgt.banner")}</span>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "var(--primary)", color: "#fff", border: "1px solid var(--primary)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, cursor: "pointer" }} onClick={() => setTourActive(true)}>
+                {t("mgt.banner.continue")}
+              </button>
+              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => { resetMultiViewGalleryTutorial(); setTourActive(true); setBannerDismissed(false); }}>
+                <RotateCcw size={12} /> {t("mgt.banner.restart")}
+              </button>
+              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => setBannerDismissed(true)}>
+                {t("mgt.banner.dismiss")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Search */}
+        <div className="mvg-search" data-mgt-tutorial="search">
+          <Icon name="search" size={16} className="mvg-search-icon" />
+          <input
+            type="text"
+            className="mvg-search-input"
+            placeholder={t("gallery.searchPlaceholder")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <button className="mvg-search-clear" onClick={() => setSearch("")} aria-label={t("gallery.clearSearch")} title={t("gallery.clearSearch")}>
+              <Icon name="close" size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Category filters */}
+        <div className="mvg-filters" data-mgt-tutorial="filters">
+          {GALLERY_CATEGORIES.map((cat) => (
+            <button
+              key={cat.key}
+              className={`mvg-filter ${filter === cat.key ? "mvg-filter--active" : ""}`}
+              onClick={() => setFilter(cat.key)}
+            >
+              <Icon name={cat.icon} size={14} />
+              {cat.label}
+              {cat.key === "added" && addedCount > 0 && (
+                <span className="mvg-filter-count">{addedCount}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Layout grid */}
+        {filtered.length > 0 ? (
+          <div className="mvg-grid" data-mgt-tutorial="grid">
+            {filtered.map((layout) => {
+              const isAdded = addedIds.has(layout.id);
+              return (
+                <div key={layout.id} className={`mvg-card${isAdded ? " mvg-card--added" : ""}`}>
+                  {/* Preview */}
+                  <div className="mvg-card-preview">
+                    <LayoutPreviewSVG layout={layout} />
+                    <span className="mvg-card-slots">{t("gallery.slotCount", { count: layout.slots.length })}</span>
+                    {isAdded && (
+                      <span className="mvg-card-added-badge">
+                        <Icon name="check_circle" size={12} /> {t("gallery.added")}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Info */}
+                  <div className="mvg-card-info">
+                    <h3 className="mvg-card-name">{layout.name}</h3>
+                    <p className="mvg-card-desc">{layout.description}</p>
+                    <div className="mvg-card-usecases">
+                      {layout.useCases.slice(0, 2).map((uc) => (
+                        <span key={uc} className="mvg-card-usecase">{uc}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="mvg-card-actions" data-mgt-tutorial="card-actions">
+                    <button
+                      className="mvg-btn mvg-btn--outline mvg-btn--sm"
+                      onClick={() => setPreviewLayout(layout)}
+                      title={t("gallery.preview")}>
+                      <Icon name="visibility" size={14} /> {t("gallery.preview")}
+                    </button>
+                    <button
+                      className={`mvg-btn mvg-btn--sm ${isAdded ? "mvg-btn--added" : "mvg-btn--primary"}`}
+                      onClick={() => handleAddToOBS(layout)}
+                      title={t("gallery.addToObs")}>
+                      {isAdded ? (
+                        <>
+                          <Icon name="check_circle" size={14} /> {t("gallery.added")}
+                        </>
+                      ) : (
+                        <>
+                          <Icon name="add" size={14} /> {t("gallery.addToObs")}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mvg-empty">
+            <Icon name="view_module" size={48} className="mvg-empty-icon" />
+            <h3>
+              {filter === "added"
+                ? t("gallery.emptyAdded")
+                : t("gallery.emptyDefault")}
+            </h3>
+            <p>
+              {filter === "added"
+                ? t("gallery.emptyAddedDesc")
+                : t("gallery.emptyDefaultDesc")}
+            </p>
+          </div>
+        )}
+
+        {/* Preview Modal */}
+        {previewLayout && (
+          <PreviewModal
+            layout={previewLayout}
+            onClose={() => setPreviewLayout(null)}
+            onAddToOBS={handlePreviewInstall}
+            obsConnected={obsConnected}
+            installing={installing}
+            isAdded={addedIds.has(previewLayout.id)}
+          />
+        )}
+
+        {/* OBS Disconnected Modal */}
+        {showDisconnected && (
+          <OBSDisconnectedModal onClose={() => setShowDisconnected(false)} />
+        )}
+
+        {/* Toast */}
+        {toast && (
+          <div className={`mvg-toast mvg-toast--${toast.type}`}>
+            <Icon
+              name={toast.type === "success" ? "check_circle" : "error"}
+              size={18}
+            />
+            <span>{toast.message}</span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Tutorial Tour ── */}
+      <MultiViewGalleryTutorial
+        isActive={tourActive}
+        onClose={() => setTourActive(false)}
+        onFinish={() => { markMultiViewGalleryTutorialCompleted(); setTourActive(false); }}
+      />
+    </div>
+  );
+}

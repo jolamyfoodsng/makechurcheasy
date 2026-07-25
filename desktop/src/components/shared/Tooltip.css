@@ -1,0 +1,92 @@
+/* ── Tooltip ─────────────────────────────────────────────────────────────── */
+/* Pure CSS tooltip using ::after pseudo-element.                            */
+/* Wrap any element in <Tooltip content="..."> to add a hover tooltip.       */
+
+.mce-tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+/* The tooltip bubble */
+.mce-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: 9999;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #1a1a2e;
+  color: #f0f0f0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  max-width: 280px;
+  white-space: normal;
+  text-align: center;
+}
+
+/* Positions */
+.mce-tooltip--top::after {
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+}
+
+.mce-tooltip--bottom::after {
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+.mce-tooltip--left::after {
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%) translateX(4px);
+}
+
+.mce-tooltip--right::after {
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+}
+
+/* Show on hover and focus */
+.mce-tooltip:hover::after,
+.mce-tooltip:focus-within::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.mce-tooltip--top.mce-tooltip:hover::after,
+.mce-tooltip--top.mce-tooltip:focus-within::after {
+  transform: translateX(-50%) translateY(0);
+}
+
+.mce-tooltip--bottom.mce-tooltip:hover::after,
+.mce-tooltip--bottom.mce-tooltip:focus-within::after {
+  transform: translateX(-50%) translateY(0);
+}
+
+.mce-tooltip--left.mce-tooltip:hover::after,
+.mce-tooltip--left.mce-tooltip:focus-within::after {
+  transform: translateY(-50%) translateX(0);
+}
+
+.mce-tooltip--right.mce-tooltip:hover::after,
+.mce-tooltip--right.mce-tooltip:focus-within::after {
+  transform: translateY(-50%) translateX(0);
+}
+
+/* Hide when content is empty */
+.mce-tooltip[data-tooltip=""]::after,
+.mce-tooltip[data-tooltip]::after {
+  display: none;
+}
+
+.mce-tooltip:not([data-tooltip=""])::after {
+  display: block;
+}

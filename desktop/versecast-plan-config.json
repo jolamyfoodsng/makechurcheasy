@@ -1,0 +1,534 @@
+{
+    "_id": "default",
+    "creditCosts": [
+        {
+            "name": "Speech-to-Scripture",
+            "cost": 1,
+            "unit": "per minute",
+            "description": "Automatically transcribe live audio and detect scripture references."
+        },
+        {
+            "name": "Live Translation",
+            "cost": 2,
+            "unit": "per minute",
+            "description": "Translate live speech into another language."
+        },
+        {
+            "name": "AI Summary",
+            "cost": 5,
+            "unit": "flat",
+            "description": "Generate a sermon summary."
+        },
+        {
+            "name": "AI Sermon Notes",
+            "cost": 10,
+            "unit": "flat",
+            "description": "Generate structured sermon notes."
+        },
+        {
+            "name": "AI Sermon Points",
+            "cost": 10,
+            "unit": "flat",
+            "description": "Extract sermon points and supporting scriptures."
+        }
+    ],
+    "plans": {
+        "free": {
+            "credits": 25,
+            "label": "Free",
+            "price": 0,
+            "paystackAmountNGN": 0,
+            "paystackPlanCode": "",
+            "priceNGN": 0,
+            "entitlements": {
+                "songs": 3,
+                "images": 2,
+                "videos": 1,
+                "themes": 1,
+                "lowerThirds": 1,
+                "devices": 1,
+                "bibleVersions": 4,
+                "multiview": false,
+                "tickers": false,
+                "massImport": false,
+                "easyWorshipImport": false,
+                "proPresenterImport": false,
+                "translation": false,
+                "speechToScripture": false,
+                "sermonExport": false,
+                "aiFeatures": false,
+                "cloudSync": false,
+                "advancedAnalytics": false,
+                "customReports": false,
+                "mobileControl": false,
+                "apiAccess": false
+            }
+        },
+        "starter": {
+            "credits": 500,
+            "label": "Starter",
+            "price": 3000,
+            "paystackAmountNGN": 850000,
+            "paystackPlanCode": "versecast_starter_monthly",
+            "priceNGN": 8500,
+            "entitlements": {
+                "songs": -1,
+                "images": -1,
+                "videos": -1,
+                "themes": 10,
+                "lowerThirds": -1,
+                "devices": 5,
+                "bibleVersions": -1,
+                "multiview": true,
+                "tickers": true,
+                "massImport": true,
+                "easyWorshipImport": true,
+                "proPresenterImport": true,
+                "translation": true,
+                "speechToScripture": true,
+                "sermonExport": true,
+                "aiFeatures": false,
+                "cloudSync": false,
+                "advancedAnalytics": false,
+                "customReports": false,
+                "mobileControl": false,
+                "apiAccess": false
+            }
+        },
+        "growth": {
+            "credits": 2000,
+            "label": "Growth",
+            "price": 8500,
+            "paystackAmountNGN": 1500000,
+            "paystackPlanCode": "versecast_growth_monthly",
+            "priceNGN": 15000,
+            "entitlements": {
+                "songs": -1,
+                "images": -1,
+                "videos": -1,
+                "themes": -1,
+                "lowerThirds": -1,
+                "devices": -1,
+                "bibleVersions": -1,
+                "multiview": true,
+                "tickers": true,
+                "massImport": true,
+                "easyWorshipImport": true,
+                "proPresenterImport": true,
+                "translation": true,
+                "speechToScripture": true,
+                "sermonExport": true,
+                "aiFeatures": true,
+                "cloudSync": true,
+                "advancedAnalytics": true,
+                "customReports": false,
+                "mobileControl": false,
+                "apiAccess": false
+            }
+        },
+        "pro": {
+            "credits": -1,
+            "label": "Pro",
+            "price": 30000,
+            "paystackAmountNGN": 3400000,
+            "paystackPlanCode": "versecast_pro_monthly",
+            "priceNGN": 34000,
+            "entitlements": {
+                "songs": -1,
+                "images": -1,
+                "videos": -1,
+                "themes": -1,
+                "lowerThirds": -1,
+                "devices": -1,
+                "bibleVersions": -1,
+                "multiview": true,
+                "tickers": true,
+                "massImport": true,
+                "easyWorshipImport": true,
+                "proPresenterImport": true,
+                "translation": true,
+                "speechToScripture": true,
+                "sermonExport": true,
+                "aiFeatures": true,
+                "cloudSync": true,
+                "advancedAnalytics": true,
+                "customReports": true,
+                "mobileControl": true,
+                "apiAccess": true
+            }
+        },
+        "basic": {
+            "credits": 50,
+            "label": "Basic",
+            "paystackAmountNGN": 350000,
+            "paystackPlanCode": "versecast_basic_monthly",
+            "price": 3500,
+            "priceNGN": 3500,
+            "entitlements": {
+                "songs": 30,
+                "images": 20,
+                "videos": 10,
+                "themes": 3,
+                "lowerThirds": 1,
+                "devices": 2,
+                "bibleVersions": 20,
+                "multiview": false,
+                "tickers": false,
+                "massImport": false,
+                "easyWorshipImport": false,
+                "proPresenterImport": false,
+                "translation": false,
+                "speechToScripture": false,
+                "sermonExport": false,
+                "aiFeatures": false,
+                "cloudSync": false,
+                "advancedAnalytics": false,
+                "customReports": false,
+                "mobileControl": false,
+                "apiAccess": false
+            }
+        }
+    },
+    "translationWordsPerCredit": 150,
+    "updatedAt": "2026-06-20T14:11:40.529Z",
+    "featureBanners": [
+        {
+            "id": "worship",
+            "title": "Unlimited Worship",
+            "description": "Unlimited songs, lyrics and presentations.",
+            "iconName": "music",
+            "bg": "bg-purple-50",
+            "color": "text-brand-purple"
+        },
+        {
+            "id": "integration",
+            "title": "Seamless Integration",
+            "description": "Works perfectly with OBS and MakeChurchEasy.",
+            "iconName": "desktop",
+            "bg": "bg-blue-50",
+            "color": "text-brand-blue"
+        },
+        {
+            "id": "multilingual",
+            "title": "Built for Multilingual",
+            "description": "Powerful translation and multilingual tools.",
+            "iconName": "language",
+            "bg": "bg-green-50",
+            "color": "text-brand-green"
+        },
+        {
+            "id": "secure",
+            "title": "Secure & Reliable",
+            "description": "Your data is safe with enterprise-grade security.",
+            "iconName": "shield",
+            "bg": "bg-yellow-50",
+            "color": "text-brand-yellow"
+        }
+    ],
+    "pricingPlans": [
+        {
+            "id": "free",
+            "name": "Free",
+            "target": "For getting started",
+            "iconName": "gift",
+            "styles": {
+                "iconBg": "bg-brand-lightBlue",
+                "iconColor": "text-brand-purple",
+                "border": "border-brand-border",
+                "button": "text-brand-purple bg-brand-lightBlue",
+                "buttonHover": "hover:bg-indigo-100",
+                "checkColor": "text-brand-purple"
+            },
+            "pricing": {
+                "NGN": {
+                    "monthly": "₦0",
+                    "yearly": "₦0"
+                },
+                "USD": {
+                    "monthly": "$0",
+                    "yearly": "$0"
+                }
+            },
+            "features": [
+                {
+                    "text": "3 Songs"
+                },
+                {
+                    "text": "2 Images"
+                },
+                {
+                    "text": "1 Video"
+                },
+                {
+                    "text": "4 Bible Versions"
+                },
+                {
+                    "text": "1 Theme"
+                },
+                {
+                    "text": "10 Credits / month"
+                },
+                {
+                    "text": "No transcript viewing"
+                },
+                {
+                    "text": "1 Device limit"
+                },
+                {
+                    "text": "Weekly credit reset"
+                },
+                {
+                    "text": "Community Support"
+                }
+            ],
+            "buttonText": "Current Plan"
+        },
+        {
+            "id": "basic",
+            "name": "Basic",
+            "target": "For small churches",
+            "iconName": "leaf",
+            "styles": {
+                "iconBg": "bg-blue-50",
+                "iconColor": "text-brand-blue",
+                "border": "border-brand-border",
+                "button": "text-brand-blue border border-brand-blue",
+                "buttonHover": "hover:bg-blue-50",
+                "checkColor": "text-brand-blue"
+            },
+            "pricing": {
+                "NGN": {
+                    "monthly": "₦3,500",
+                    "originalMonthly": "₦4,500",
+                    "yearly": "₦43,200",
+                    "originalYearly": "₦54,000"
+                },
+                "USD": {
+                    "monthly": "$2.33",
+                    "yearly": "$28.80"
+                }
+            },
+            "features": [
+                {
+                    "text": "10 Songs"
+                },
+                {
+                    "text": "30 Images"
+                },
+                {
+                    "text": "20 Videos"
+                },
+                {
+                    "text": "20 Bible Versions"
+                },
+                {
+                    "text": "5 Themes"
+                },
+                {
+                    "text": "1 Lower-third only"
+                },
+                {
+                    "text": "1 Device limit"
+                },
+                {
+                    "text": "Weekly credit reset"
+                },
+                {
+                    "text": "50 Credits / month"
+                },
+                {
+                    "text": "Email Support"
+                }
+            ],
+            "buttonText": "Choose Basic"
+        },
+        {
+            "id": "starter",
+            "name": "Starter",
+            "target": "For growing churches",
+            "iconName": "star",
+            "styles": {
+                "iconBg": "bg-purple-50",
+                "iconColor": "text-brand-purple",
+                "border": "border-brand-purple border-2",
+                "button": "text-white bg-brand-purple shadow-md",
+                "buttonHover": "hover:bg-indigo-700",
+                "popular": true,
+                "popularBadgeBg": "bg-brand-purple",
+                "checkColor": "text-brand-purple"
+            },
+            "pricing": {
+                "NGN": {
+                    "monthly": "₦8,500",
+                    "yearly": "₦85,000"
+                },
+                "USD": {
+                    "monthly": "$5.67",
+                    "yearly": "$56.67"
+                }
+            },
+            "features": [
+                {
+                    "text": "Songs",
+                    "prefixHighlight": "Unlimited"
+                },
+                {
+                    "text": "Media",
+                    "prefixHighlight": "Unlimited"
+                },
+                {
+                    "text": "Videos",
+                    "prefixHighlight": "Unlimited"
+                },
+                {
+                    "text": "50+ Bible Versions"
+                },
+                {
+                    "text": "10 Themes"
+                },
+                {
+                    "text": "Lower-thirds & Tickers"
+                },
+                {
+                    "text": "Speech-to-transcription"
+                },
+                {
+                    "text": "Translation to other languages"
+                },
+                {
+                    "text": "Export sermon"
+                },
+                {
+                    "text": "Limited Multiview (2 templates, background color only)"
+                },
+                {
+                    "text": "5 Device setup"
+                },
+                {
+                    "text": "Daily credit reset"
+                },
+                {
+                    "text": "Priority Support"
+                },
+                {
+                    "text": "Mass Song Import"
+                },
+                {
+                    "text": "EasyWorship Import"
+                },
+                {
+                    "text": "ProPresenter Import"
+                }
+            ],
+            "buttonText": "Choose Starter"
+        },
+        {
+            "id": "growth",
+            "name": "Growth",
+            "target": "For active ministries",
+            "iconName": "chart",
+            "styles": {
+                "iconBg": "bg-green-50",
+                "iconColor": "text-brand-green",
+                "border": "border-brand-border border",
+                "button": "text-brand-green border border-brand-green",
+                "buttonHover": "hover:bg-green-50",
+                "checkColor": "text-brand-green"
+            },
+            "pricing": {
+                "NGN": {
+                    "monthly": "₦15,000",
+                    "yearly": "₦150,000"
+                },
+                "USD": {
+                    "monthly": "$10.00",
+                    "yearly": "$100.00"
+                }
+            },
+            "features": [
+                {
+                    "prefixHighlight": "Everything in Starter,",
+                    "text": "plus"
+                },
+                {
+                    "text": "Unlimited Devices"
+                },
+                {
+                    "text": "Unlimited Multiview"
+                },
+                {
+                    "text": "Cloud support"
+                },
+                {
+                    "text": "Access to AI features"
+                },
+                {
+                    "text": "Future mobile phone control"
+                },
+                {
+                    "text": "Daily credit reset"
+                },
+                {
+                    "text": "Advanced Analytics"
+                },
+                {
+                    "text": "Custom Reports"
+                },
+                {
+                    "text": "Priority Support"
+                }
+            ],
+            "buttonText": "Choose Growth"
+        },
+        {
+            "id": "pro",
+            "name": "Pro",
+            "target": "For large ministries",
+            "iconName": "crown",
+            "styles": {
+                "iconBg": "bg-yellow-50",
+                "iconColor": "text-brand-yellow",
+                "border": "border-brand-border border",
+                "button": "text-brand-yellow border border-brand-yellow",
+                "buttonHover": "hover:bg-yellow-50",
+                "checkColor": "text-brand-yellow"
+            },
+            "pricing": {
+                "NGN": {
+                    "monthly": "₦34,000",
+                    "yearly": "₦340,000"
+                },
+                "USD": {
+                    "monthly": "$22.67",
+                    "yearly": "$226.67"
+                }
+            },
+            "features": [
+                {
+                    "prefixHighlight": "Everything in Growth,",
+                    "text": "plus"
+                },
+                {
+                    "text": "Mobile Control"
+                },
+                {
+                    "text": "API Access"
+                },
+                {
+                    "text": "Credits",
+                    "prefixHighlight": "Unlimited"
+                },
+                {
+                    "text": "24/7 Priority Support"
+                },
+                {
+                    "text": "Dedicated Onboarding"
+                },
+                {
+                    "text": "Custom Integrations"
+                }
+            ],
+            "buttonText": "Choose Pro"
+        }
+    ]
+}

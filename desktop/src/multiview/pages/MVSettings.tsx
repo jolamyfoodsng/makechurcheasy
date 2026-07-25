@@ -1,0 +1,1908 @@
+/**
+ * MVSettings.tsx — Unified Settings (Redesigned)
+ *
+ * Tabbed layout with header and tab navigation.
+ * Tabs: General, OBS Connection, Appearance, Branding, Bible, Free Usage, Pro License
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
+import { getBibleSettings, getInstalledTranslations, saveBibleSettings } from "../../bible/bibleDb";
+import { useBible } from "../../bible/bibleStore";
+import type { BibleTranslation } from "../../bible/types";
+import { AppLogo } from "../../components/AppLogo";
+import { UpgradeModal } from "../../components/UpgradeModal";
+import { useAuth } from "../../contexts/AuthContext";
+import {
+  INTERFACE_LOCALES,
+} from "../../i18n/localeCatalog";
+import { ltDurationStore } from "../../lowerthirds/ltDurationStore";
+import { applyBrandingSettingsToDom } from "../../services/branding";
+import { fetchCreditDetails, fetchCreditTransactions, onCreditChange, type CreditTransaction } from "../../services/credits";
+import {
+  applyInterfaceLanguagePreference,
+  getInterfaceLanguageLabel,
+  getResolvedInterfaceLanguage,
+} from "../../services/interfaceLanguage";
+import { canUseMobileControl, getEffectivePlan, getTrialDaysRemaining, getUserPlan, isInTrial } from "../../services/licenseService";
+import { lmDockService } from "../../services/lmDockService";
+import { obsService } from "../../services/obsService";
+import { persistOBSWebSocketConfig } from "../../services/obsConnectionSettings";
+import { normalizeOBSWebSocketUrl } from "../../services/obsWebSocketUrl";
+import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
+import { formatCredits, getPlanConfig, getPlanCredits, getPlanLabel, type PlanConfig } from "../../services/planConfig";
+import { isProUnlocked } from "../../services/proLicense";
+import { voiceBibleService } from "../../services/voiceBibleService";
+import { clearAllSongs } from "../../worship/worshipDb";
+import { refreshTheme } from "../components/MVThemeProvider";
+import * as db from "../mvStore";
+import {
+  DEFAULT_SETTINGS,
+  type MVSettings as MVSettingsType,
+  type SpeakerProfileSetting
+} from "../mvStore";
+
+import { invoke } from "@tauri-apps/api/core";
+import {
+  Bell,
+  Calendar,
+  Check,
+  CheckCircle,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  FileText,
+  Globe,
+  History,
+  Monitor,
+  Moon,
+  Music,
+  Paintbrush,
+  Palette,
+  Printer,
+  Radio,
+  RefreshCw,
+  RotateCcw,
+  Settings,
+  Smartphone,
+  Sun,
+  Trash2,
+  Users,
+  Zap,
+} from "lucide-react";
+import { refreshAccountBootstrapFromServer } from "../../services/authService";
+
+import "./MVSettings.css";
+
+/* ── Constants ── */
+const SWATCHES = [
+  { id: "purple", hex: "#1D4ED8", rgb: "29, 78, 216", name: "Purple" },
+  { id: "blue", hex: "#3B82F6", rgb: "59, 130, 246", name: "Blue" },
+  { id: "cyan", hex: "#06B6D4", rgb: "6, 182, 212", name: "Cyan" },
+  { id: "green", hex: "#10B981", rgb: "16, 185, 129", name: "Green" },
+  { id: "yellow", hex: "#F59E0B", rgb: "245, 158, 11", name: "Yellow" },
+  { id: "orange", hex: "#F97316", rgb: "249, 115, 22", name: "Orange" },
+  { id: "pink", hex: "#EC4899", rgb: "236, 72, 153", name: "Pink" },
+  { id: "deeppurple", hex: "#1D4ED8", rgb: "168, 85, 247", name: "Deep Purple" },
+];
+
+const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
+  { value: "KJV", label: "King James Version (KJV)" },
+];
+
+type SettingsTab = "general" | "obs" | "mobile" | "appearance" | "branding" | "bible" | "usage" | "audio";
+
+const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "", imageUrl: "" };
+
+/* ── Helpers ── */
+function resolveLogoPreviewSrc(path: string): string {
+  return resolveOverlayAssetUrl(path);
+}
+
+
+function sanitizeSpeakerProfiles(value: unknown): SpeakerProfileSetting[] {
+  if (!Array.isArray(value)) return [];
+  const result: SpeakerProfileSetting[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const raw = item as Partial<Record<string, unknown>>;
+    const name = typeof raw.name === "string" ? raw.name.trim() : "";
+    const role = typeof raw.role === "string" ? raw.role.trim() : "";
+    const imageUrl = typeof raw.imageUrl === "string" ? raw.imageUrl.trim() : "";
+    if (!name) continue;
+    const profile: SpeakerProfileSetting = { name, role, imageUrl };
+    if (typeof raw.isMain === "boolean") profile.isMain = raw.isMain;
+    result.push(profile);
+  }
+  return result;
+}
+
+function parseLegacyPastorNames(pastorNames: string): SpeakerProfileSetting[] {
+  return pastorNames.split(/\r?\n|,/).map((n) => n.trim()).filter(Boolean).map((n) => ({ name: n, role: "" }));
+}
+
+function resolveSpeakerProfiles(settings: MVSettingsType): SpeakerProfileSetting[] {
+  const structured = sanitizeSpeakerProfiles((settings as Partial<MVSettingsType>).pastorSpeakers);
+  if (structured.length > 0) return structured;
+  return parseLegacyPastorNames(settings.pastorNames);
+}
+
+/* ── Main Component ── */
+export function MVSettings() {
+  const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
+  const validTabs: SettingsTab[] = ["general", "obs", "mobile", "appearance", "branding", "bible", "usage", "audio"];
+  const initialTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    initialTab && validTabs.includes(initialTab as SettingsTab) ? (initialTab as SettingsTab) : "general"
+  );
+  const hasSettingsSidebar = activeTab === "obs";
+  const [settings, setSettings] = useState<MVSettingsType>(db.getSettings);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [cleared, setCleared] = useState(false);
+  const [confirmClearWorship, setConfirmClearWorship] = useState(false);
+  const [worshipCleared, setWorshipCleared] = useState(false);
+  const [obsStatus, setObsStatus] = useState<"connected" | "connecting" | "disconnected">("disconnected");
+  const [obsTestResult, setObsTestResult] = useState<string | null>(null);
+  const [obsPasswordDraft, setObsPasswordDraft] = useState(() => db.getSettings().obsPassword ?? "");
+  const obsPasswordScrubbedRef = useRef(false);
+  const [_brandLogoStatus, _setBrandLogoStatus] = useState<string | null>(null);
+  const [_brandLogoStatusType, _setBrandLogoStatusType] = useState<"ok" | "err">("ok");
+  const [_brandLogoUploading, _setBrandLogoUploading] = useState(false);
+  const [speakerProfiles, setSpeakerProfiles] = useState<SpeakerProfileSetting[]>(() => {
+    const profiles = resolveSpeakerProfiles(db.getSettings());
+    return profiles.length > 0 ? profiles : [{ ...EMPTY_SPEAKER_PROFILE }];
+  });
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  // ── Bible settings state ──
+  const { state: bibleState, dispatch: bibleDispatch, setTheme: bibleSetTheme } = useBible();
+  const [bDefaultTranslation, setBDefaultTranslation] = useState<BibleTranslation>("KJV");
+  const [bDefaultThemeId, setBDefaultThemeId] = useState("classic-dark");
+  const [bShowVerseNumbers, setBShowVerseNumbers] = useState(true);
+  const [bMaxLines, setBMaxLines] = useState(4);
+  const [bAutoSend, setBAutoSend] = useState(true);
+  const [bColorMode, setBColorMode] = useState<"dark" | "light" | "system">("dark");
+  const [bReduceMotion, setBReduceMotion] = useState(false);
+  const [bHighContrast, setBHighContrast] = useState(false);
+  const [_bSaved, setBSaved] = useState(false);
+  const [_bTranslations, setBTranslations] = useState(FALLBACK_TRANSLATIONS);
+  const [bibleSettingsDirty, setBibleSettingsDirty] = useState(false);
+
+  // ── Pro License state ──
+  const [proUnlocked] = useState(() => isProUnlocked());
+
+  // ── Credits state (fetched from backend) ──
+  const { user: authUser, refreshUser } = useAuth();
+  const effectivePlan = getEffectivePlan(authUser);
+  const hasMobileAccess = canUseMobileControl(authUser);
+  const [showMobileUpgrade, setShowMobileUpgrade] = useState(false);
+  const [, setCreditBalance] = useState<number>(0);
+  const [creditsUsedThisMonth, setCreditsUsedThisMonth] = useState<number>(0);
+  const [planConfig, setPlanConfig] = useState<PlanConfig | null>(null);
+  const [recentTransactions, setRecentTransactions] = useState<CreditTransaction[]>([]);
+  const userPlan = proUnlocked ? "pro" as const : getUserPlan(authUser);
+  const trialActive = !proUnlocked && isInTrial(authUser);
+  // During trial, user gets Growth-level credits — use the trial config tier for lookup
+  const effectivePlanForCredits = trialActive ? "trial" as const : userPlan;
+  const planCredits = planConfig ? getPlanCredits(planConfig, effectivePlanForCredits) : (proUnlocked ? -1 : 1000);
+  const trialDaysLeft = trialActive ? getTrialDaysRemaining(authUser) : 0;
+  const trialEndDate = trialActive && authUser?.trial?.endsAt
+    ? new Date(authUser.trial.endsAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
+  const planLabel = trialActive
+    ? "Growth Trial"
+    : (planConfig ? getPlanLabel(planConfig, userPlan) : (proUnlocked ? "Pro" : "Free"));
+  const isUnlimited = planCredits === -1;
+  const usagePct = planCredits > 0 ? Math.min(100, Math.round((creditsUsedThisMonth / planCredits) * 100)) : 0;
+
+  useEffect(() => {
+    getPlanConfig().then(setPlanConfig);
+  }, []);
+
+  // Fetch transactions after auth is ready
+  useEffect(() => {
+    if (!authUser?.id) return;
+    fetchCreditTransactions(10).then(setRecentTransactions);
+  }, [authUser?.id]);
+
+  useEffect(() => {
+    if (!authUser?.id) return;
+    fetchCreditDetails().then((details) => {
+      if (details) {
+        setCreditBalance(details.credits);
+        setCreditsUsedThisMonth(details.totalConsumed);
+      }
+    }).catch(() => {
+      setCreditBalance(0);
+      setCreditsUsedThisMonth(0);
+    });
+  }, [authUser?.id, planConfig]);
+
+  // Live-update credits when deductions happen anywhere in the app
+  useEffect(() => {
+    const unsub = onCreditChange((newBalance) => {
+      setCreditBalance(newBalance);
+      // Re-fetch full details to get accurate totalConsumed
+      fetchCreditDetails().then((details) => {
+        if (details) setCreditsUsedThisMonth(details.totalConsumed);
+      });
+      fetchCreditTransactions(10).then(setRecentTransactions);
+    });
+    return unsub;
+  }, []);
+
+  // Re-fetch credits and transactions every time the Usage tab is opened
+  useEffect(() => {
+    if (activeTab !== "usage" || !authUser?.id) return;
+    let cancelled = false;
+
+    const loadUsageState = async () => {
+      try {
+        await refreshAccountBootstrapFromServer();
+        if (!cancelled) {
+          refreshUser();
+        }
+      } catch {
+        // Keep the settings screen usable even if bootstrap refresh fails.
+      }
+
+      try {
+        const details = await fetchCreditDetails();
+        if (!cancelled && details) {
+          setCreditBalance(details.credits);
+          setCreditsUsedThisMonth(details.totalConsumed);
+        }
+      } catch {
+        // noop
+      }
+
+      try {
+        const transactions = await fetchCreditTransactions(10);
+        if (!cancelled) {
+          setRecentTransactions(transactions);
+        }
+      } catch {
+        // noop
+      }
+    };
+
+    void loadUsageState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, authUser?.id, refreshUser]);
+
+  // ── Appearance customization state ──
+  const [theme, setTheme] = useState<"light" | "dark" | "system">(
+    () => (settings.theme as "light" | "dark" | "system") || "dark"
+  );
+  const [accentColor, setAccentColor] = useState<string>("purple");
+  const [density, setDensity] = useState<"comfortable" | "balanced" | "compact">("balanced");
+  const [fontSizeRange, setFontSizeRange] = useState<number>(2);
+  const [highContrastUI, setHighContrastUI] = useState<boolean>(settings.highContrast ?? false);
+  const [reduceMotion, setReduceMotion] = useState<boolean>(false);
+  const [roundedCorners, setRoundedCorners] = useState<boolean>(true);
+  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => getResolvedInterfaceLanguage());
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
+
+  // ── Toast system ──
+  const [toasts, setToasts] = useState<Array<{ id: number; message: string; type: "success" | "accent" }>>([]);
+
+  // ── OBS advanced state ──
+  const [obsMethod, setObsMethod] = useState<"WebSocket" | "Remote">("WebSocket");
+  const [obsReconnectInterval, setObsReconnectInterval] = useState("5 seconds");
+  const [showLogsPanel, setShowLogsPanel] = useState(false);
+  const [obsLogs, setObsLogs] = useState<Array<{ id: number; timestamp: string; message: string; source: string }>>([
+    { id: 1, timestamp: "10:24:02", message: "Initializing OBS WebSocket connection module...", source: "System" },
+    { id: 2, timestamp: "10:24:03", message: "Handshaking with server ws://localhost:4455", source: "Network" },
+    { id: 3, timestamp: "10:24:04", message: "OBS server accepted connection. Version 30.1.2", source: "OBS" },
+  ]);
+
+  /* ── Toast helper ── */
+  const triggerToast = useCallback((message: string, type: "success" | "accent" = "accent") => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
+  }, []);
+
+  /* ── Effects ── */
+  useEffect(() => {
+    getBibleSettings().then((s) => {
+      setBDefaultTranslation((s.defaultTranslation as BibleTranslation) ?? "KJV");
+      setBDefaultThemeId(s.activeThemeId ?? "classic-dark");
+      setBColorMode(s.colorMode ?? "dark");
+      setBAutoSend(s.autoSendOnDoubleClick ?? true);
+      setBReduceMotion(s.reduceMotion ?? false);
+      setBHighContrast(s.highContrast ?? false);
+      if (s.slideConfig) {
+        setBShowVerseNumbers(s.slideConfig.showVerseNumbers ?? true);
+        setBMaxLines(s.slideConfig.maxLines ?? 4);
+      }
+      setBibleSettingsDirty(false);
+    }).catch(console.error);
+
+    getInstalledTranslations().then((list) => {
+      if (list.length > 0) {
+        setBTranslations(list.map((t) => ({ value: t.abbr, label: `${t.name} (${t.abbr})` })));
+      }
+    }).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (bibleSettingsDirty) return;
+    if (bDefaultTranslation !== bibleState.translation) {
+      setBDefaultTranslation(bibleState.translation);
+    }
+  }, [bDefaultTranslation, bibleSettingsDirty, bibleState.translation]);
+
+  useEffect(() => {
+    const check = () => setObsStatus(obsService.isConnected ? "connected" : "disconnected");
+    check();
+    const iv = setInterval(check, 2000);
+    return () => clearInterval(iv);
+  }, []);
+
+  useEffect(() => {
+    const profiles = resolveSpeakerProfiles(settings);
+    setSpeakerProfiles(profiles.length > 0 ? profiles : [{ ...EMPTY_SPEAKER_PROFILE }]);
+  }, [settings.pastorSpeakers, settings.pastorNames]);
+
+  const applyLowerThirdDefaultDuration = useCallback((seconds: number) => {
+    const safe = Math.max(1, Math.min(300, Math.floor(seconds || 10)));
+    ltDurationStore.setGlobalDefaults({ durations: { speaker: safe, scripture: safe, announcement: safe, generic: safe } });
+  }, []);
+
+  useEffect(() => {
+    applyBrandingSettingsToDom({ brandColor: settings.brandColor, churchName: settings.churchName });
+    applyLowerThirdDefaultDuration(settings.lowerThirdDefaultDurationSec);
+  }, []);
+
+  /* ── Dynamic CSS theming ── */
+  useEffect(() => {
+    let appliedTheme = theme;
+    if (theme === "system") {
+      appliedTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    document.documentElement.setAttribute("data-theme", appliedTheme);
+    document.documentElement.setAttribute("data-contrast", highContrastUI ? "high" : "standard");
+    document.documentElement.setAttribute("data-reduced-motion", reduceMotion ? "true" : "false");
+    document.documentElement.setAttribute("data-roundness", roundedCorners ? "standard" : "none");
+
+    // Sync .light / .dark classes so App.css :root.light overrides activate
+    const root = document.documentElement;
+    if (appliedTheme === "light") {
+      root.classList.add("light");
+    } else {
+      root.classList.remove("light");
+    }
+
+    // Apply density and font-scale without wiping other classes
+    root.classList.remove("density-comfortable", "density-balanced", "density-compact");
+    root.classList.add(`density-${density}`);
+    root.classList.remove("font-scale-small", "font-scale-medium", "font-scale-large");
+    root.classList.add(`font-scale-${fontSizeRange === 1 ? "small" : fontSizeRange === 2 ? "medium" : "large"}`);
+
+    const swatch = SWATCHES.find((s) => s.id === accentColor) || SWATCHES[0];
+    document.documentElement.style.setProperty("--accent-color", swatch.hex);
+    document.documentElement.style.setProperty("--accent-rgb", swatch.rgb);
+  }, [theme, accentColor, density, fontSizeRange, highContrastUI, reduceMotion, roundedCorners]);
+
+  /* ── Settings update helper ── */
+  const update = useCallback(
+    (patch: Partial<MVSettingsType>) => {
+      const next = db.updateSettings(patch);
+      setSettings(next);
+      if (patch.obsAutoReconnect !== undefined) obsService.setAutoReconnect(patch.obsAutoReconnect);
+      if (patch.theme !== undefined || patch.highContrast !== undefined) refreshTheme();
+      if (patch.brandColor !== undefined || patch.churchName !== undefined) {
+        applyBrandingSettingsToDom({ brandColor: next.brandColor, churchName: next.churchName });
+      }
+      if (patch.lowerThirdDefaultDurationSec !== undefined) applyLowerThirdDefaultDuration(next.lowerThirdDefaultDurationSec);
+    },
+    [applyLowerThirdDefaultDuration]
+  );
+
+  useEffect(() => {
+    if (obsPasswordScrubbedRef.current) return;
+    obsPasswordScrubbedRef.current = true;
+    if (!settings.obsPassword) return;
+    setObsPasswordDraft(settings.obsPassword);
+    update({ obsPassword: "" });
+  }, [settings.obsPassword, update]);
+
+  /* ── Church profile sync (Web → Desktop) ── */
+  const runSync = useCallback(async () => {
+    setSyncing(true);
+    setSyncStatus(null);
+    try {
+      const { syncChurchProfile } = await import("../../services/churchProfileSync");
+      const result = await syncChurchProfile();
+      // Re-read settings after sync to reflect updated values
+      const fresh = db.getSettings();
+      setSettings(fresh);
+      const profiles = resolveSpeakerProfiles(fresh);
+      setSpeakerProfiles(profiles.length > 0 ? profiles : [{ ...EMPTY_SPEAKER_PROFILE }]);
+      setSyncStatus(result.message);
+    } catch {
+      setSyncStatus("Sync failed unexpectedly.");
+    } finally {
+      setSyncing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== "branding") return;
+    runSync();
+  }, [activeTab, runSync]);
+
+  /* ── Speaker profiles ── */
+
+
+  /* ── Actions ── */
+  const handleClear = async () => {
+    try {
+      await db.clearAll();
+      setCleared(true);
+      setConfirmClear(false);
+      triggerToast(t("mvSettings.toast.databaseCleared"), "success");
+      setTimeout(() => setCleared(false), 3000);
+    } catch (err) {
+      console.error("Clear failed:", err);
+      triggerToast(t("mvSettings.toast.failedClearData"), "accent");
+    }
+  };
+
+  const handleClearWorship = async () => {
+    try {
+      await clearAllSongs();
+      setWorshipCleared(true);
+      setConfirmClearWorship(false);
+      triggerToast(t("mvSettings.toast.worshipSongsCleared"), "success");
+      setTimeout(() => setWorshipCleared(false), 3000);
+    } catch (err) {
+      console.error("Clear worship failed:", err);
+      triggerToast(t("mvSettings.toast.failedClearWorship"), "accent");
+    }
+  };
+
+  const handleTestObs = async () => {
+    setObsTestResult(null);
+    setObsStatus("connecting");
+    try {
+      const obsUrl = normalizeOBSWebSocketUrl(settings.obsUrl);
+      if (obsUrl !== settings.obsUrl) {
+        update({ obsUrl });
+      }
+      if (!obsService.isConnected) await obsService.connect(obsUrl, obsPasswordDraft || undefined);
+      const version = await obsService.call("GetVersion");
+      await persistOBSWebSocketConfig(obsUrl, obsPasswordDraft || undefined, settings.obsAutoReconnect);
+      setObsTestResult(t("mvSettings.obs.testResultConnected", { obsVersion: version.obsVersion, wsVersion: version.obsWebSocketVersion }));
+      setObsStatus("connected");
+      triggerToast(t("mvSettings.toast.obsConnected"), "success");
+    } catch (err: any) {
+      setObsTestResult(t("mvSettings.obs.testResultFailed", { message: err.message || "Connection failed" }));
+      setObsStatus("disconnected");
+      triggerToast(t("mvSettings.toast.obsConnectionFailed"), "accent");
+    }
+  };
+
+  const handleResetSettings = () => {
+    const next = db.updateSettings(DEFAULT_SETTINGS);
+    setSettings({ ...next });
+    setObsPasswordDraft("");
+    _setBrandLogoStatus(null);
+    applyBrandingSettingsToDom({ brandColor: next.brandColor, churchName: next.churchName });
+    applyLowerThirdDefaultDuration(next.lowerThirdDefaultDurationSec);
+    triggerToast(t("mvSettings.toast.settingsResetToDefaults"), "success");
+  };
+
+  const handleResetBrandingSettings = () => {
+    update({
+      churchName: DEFAULT_SETTINGS.churchName,
+      mainPastorName: DEFAULT_SETTINGS.mainPastorName,
+      pastorNames: DEFAULT_SETTINGS.pastorNames,
+      pastorSpeakers: DEFAULT_SETTINGS.pastorSpeakers,
+      lowerThirdDefaultDurationSec: DEFAULT_SETTINGS.lowerThirdDefaultDurationSec,
+      brandColor: DEFAULT_SETTINGS.brandColor,
+      brandSecondaryColor: DEFAULT_SETTINGS.brandSecondaryColor,
+      brandLogoPath: DEFAULT_SETTINGS.brandLogoPath,
+      brandLogoAssets: DEFAULT_SETTINGS.brandLogoAssets,
+    });
+    setSpeakerProfiles([{ ...EMPTY_SPEAKER_PROFILE }]);
+    _setBrandLogoStatus(null);
+    triggerToast(t("mvSettings.toast.brandingSettingsReset"), "success");
+  };
+
+  const handleResetChurchOnboarding = useCallback(() => {
+    update({ churchProfileOnboardingCompleted: false });
+    // Also reset the desktop onboarding wizard so it re-runs on next launch
+    try {
+      localStorage.removeItem("mce-onboarding-complete");
+      localStorage.removeItem("mce-onboarding-step");
+    } catch { /* ignore */ }
+    // Hard-reload so App.tsx re-reads the cleared localStorage flag.
+    // On reload the index route will <Navigate> to /onboarding automatically.
+    window.location.href = "/";
+  }, [update]);
+
+  /* ── Bible settings save ── */
+  const handleSaveBible = useCallback(async () => {
+    bibleDispatch({ type: "SET_TRANSLATION", translation: bDefaultTranslation });
+    bibleDispatch({ type: "SET_SLIDE_CONFIG", config: { ...bibleState.slideConfig, showVerseNumbers: bShowVerseNumbers, maxLines: bMaxLines } });
+    bibleDispatch({ type: "SET_COLOR_MODE", mode: bColorMode });
+    bibleDispatch({ type: "SET_AUTO_SEND", enabled: bAutoSend });
+    bibleDispatch({ type: "SET_REDUCE_MOTION", enabled: bReduceMotion });
+    bibleDispatch({ type: "SET_HIGH_CONTRAST", enabled: bHighContrast });
+    bibleSetTheme(bDefaultThemeId);
+    await saveBibleSettings({
+      defaultTranslation: bDefaultTranslation,
+      activeThemeId: bDefaultThemeId,
+      slideConfig: { ...bibleState.slideConfig, showVerseNumbers: bShowVerseNumbers, maxLines: bMaxLines },
+      colorMode: bColorMode,
+      autoSendOnDoubleClick: bAutoSend,
+      reduceMotion: bReduceMotion,
+      highContrast: bHighContrast,
+    });
+    setBibleSettingsDirty(false);
+    setBSaved(true);
+    triggerToast(t("mvSettings.toast.bibleSettingsSaved"), "success");
+    setTimeout(() => setBSaved(false), 2000);
+  }, [bDefaultTranslation, bDefaultThemeId, bShowVerseNumbers, bMaxLines, bColorMode, bAutoSend, bReduceMotion, bHighContrast, bibleDispatch, bibleSetTheme, bibleState.slideConfig, triggerToast]);
+
+  /* ── Appearance helpers ── */
+  const handleResetAppearance = useCallback(() => {
+    setTheme("dark");
+    setAccentColor("purple");
+    setDensity("balanced");
+    setFontSizeRange(2);
+    setHighContrastUI(false);
+    setReduceMotion(false);
+    setRoundedCorners(true);
+    setInterfaceLanguage("en-US");
+    void applyInterfaceLanguagePreference("en-US", { broadcast: true });
+    update({ theme: "dark", highContrast: false });
+    triggerToast(t("mvSettings.toast.appearanceResetToDefaults"), "success");
+  }, [update, triggerToast, t]);
+
+  const handleReconnectNow = useCallback(() => {
+    triggerToast(t("mvSettings.toast.reconnectingToObs"), "accent");
+    const ts = new Date().toLocaleTimeString();
+    setObsLogs((prev) => [...prev, { id: Date.now() + 10, timestamp: ts, message: "Manual reconnection triggered.", source: "System" }]);
+    setTimeout(() => {
+      triggerToast(t("mvSettings.toast.obsReconnected"), "success");
+      setObsLogs((prev) => [...prev, { id: Date.now() + 20, timestamp: new Date().toLocaleTimeString(), message: "Handshake restored.", source: "Network" }]);
+    }, 1500);
+  }, [triggerToast]);
+
+  /* ── Tab descriptions ── */
+  const tabDescription = useMemo(() => {
+    switch (activeTab) {
+      case "general": return t("mvSettings.tabDesc.general");
+      case "obs": return t("mvSettings.tabDesc.obs");
+      case "mobile": return t("mvSettings.tabDesc.mobile");
+      case "appearance": return t("mvSettings.tabDesc.appearance");
+      case "branding": return t("mvSettings.tabDesc.branding");
+      case "bible": return t("mvSettings.tabDesc.bible");
+      case "usage": return t("mvSettings.tabDesc.usage");
+      case "audio": return t("mvSettings.tabDesc.audio");
+    }
+  }, [activeTab]);
+
+  /* ── Mobile Remote state & handlers ── */
+  const [mobileServerStatus, setMobileServerStatus] = useState<{ running: boolean; port: number } | null>(null);
+  const [mobilePairingInfo, setMobilePairingInfo] = useState<{ ip: string; port: number; pairingToken: string } | null>(null);
+  const [mobileConnectedDevices, _setMobileConnectedDevices] = useState(0);
+  const [mobileApprovedDevices, setMobileApprovedDevices] = useState<{ id: string; name: string; lastConnected: string }[]>([]);
+  const [mobileDeviceRequests, setMobileDeviceRequests] = useState<{ id: string; name: string; model: string }[]>([]);
+  const [mobilePermissions, setMobilePermissions] = useState([
+    { key: "slides", icon: Monitor, nameKey: "mvSettings.mobile.permSlides", descKey: "mvSettings.mobile.permSlidesDesc", enabled: true, locked: false, requiredPlan: "" },
+    { key: "bible", icon: Globe, nameKey: "mvSettings.mobile.permBible", descKey: "mvSettings.mobile.permBibleDesc", enabled: true, locked: false, requiredPlan: "" },
+    { key: "lowerThird", icon: Users, nameKey: "mvSettings.mobile.permLowerThird", descKey: "mvSettings.mobile.permLowerThirdDesc", enabled: true, locked: false, requiredPlan: "" },
+    { key: "songLyrics", icon: Music, nameKey: "mvSettings.mobile.permSongLyrics", descKey: "mvSettings.mobile.permSongLyricsDesc", enabled: true, locked: false, requiredPlan: "" },
+    { key: "automation", icon: Zap, nameKey: "mvSettings.mobile.permAutomation", descKey: "mvSettings.mobile.permAutomationDesc", enabled: false, locked: true, requiredPlan: "Growth" },
+  ]);
+
+  const mobilePairingPayload = useMemo(() => {
+    if (!mobilePairingInfo) return "";
+    return JSON.stringify({
+      desktopName: settings.mobileDesktopName || "My Church",
+      ip: mobilePairingInfo.ip,
+      wsPort: mobilePairingInfo.port,
+      apiPort: 45678,
+      pairingCode: mobilePairingInfo.pairingToken,
+    });
+  }, [mobilePairingInfo, settings.mobileDesktopName]);
+
+  const handleMobileRestart = useCallback(async () => {
+    try {
+      await invoke("restart_mobile_companion");
+      triggerToast(t("mvSettings.toast.mobileServerStarted"), "success");
+    } catch {
+      triggerToast(t("mvSettings.toast.mobileServerFailed"), "accent");
+    }
+  }, [triggerToast, t]);
+
+  const handleMobileLogs = useCallback(() => {
+    // Placeholder: open logs panel
+    triggerToast(t("mvSettings.mobile.logsPanelSoon"), "accent");
+  }, [triggerToast, t]);
+
+  const handleMobileRefreshPairing = useCallback(async () => {
+    try {
+      const info = await invoke<{ ip: string; port: number; pairingToken: string }>("get_mobile_pairing_info");
+      setMobilePairingInfo(info);
+    } catch { /* ignore */ }
+  }, []);
+
+  const handleMobileCopyPayload = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(mobilePairingPayload);
+      triggerToast(t("mvSettings.toast.mobileCopied"), "success");
+    } catch { /* ignore */ }
+  }, [mobilePairingPayload, triggerToast, t]);
+
+  const handleMobilePrintQR = useCallback(() => {
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(mobilePairingPayload)}`;
+    const w = window.open("", "_blank", "width=400,height=500");
+    if (w) {
+      w.document.write(`<html><head><title>${t("mvSettings.mobile.qrPrintTitle")}</title><style>body{display:flex;flex-direction:column;align-items:center;font-family:sans-serif;padding:20px}img{margin:16px 0}p{font-size:12px;color:#666}</style></head><body><img src="${qrUrl}" width="300" height="300"/><p>${mobilePairingInfo?.pairingToken ?? ""}</p></body></html>`);
+      w.document.close();
+      w.print();
+    }
+  }, [mobilePairingPayload, mobilePairingInfo, t]);
+
+  const handleMobileRenameDevice = useCallback(async (device: { id: string; name: string }) => {
+    const newName = prompt(t("mvSettings.mobile.renamePrompt"), device.name);
+    if (newName && newName.trim()) {
+      setMobileApprovedDevices((prev) => prev.map((d) => d.id === device.id ? { ...d, name: newName.trim() } : d));
+      triggerToast(t("mvSettings.toast.mobileDeviceRenamed"), "success");
+    }
+  }, [triggerToast, t]);
+
+  const handleMobileDisconnectDevice = useCallback((device: { id: string }) => {
+    setMobileApprovedDevices((prev) => prev.filter((d) => d.id !== device.id));
+    triggerToast(t("mvSettings.toast.mobileDeviceRejected"), "success");
+  }, [triggerToast, t]);
+
+  const handleMobileRemoveDevice = useCallback((device: { id: string }) => {
+    setMobileApprovedDevices((prev) => prev.filter((d) => d.id !== device.id));
+    triggerToast(t("mvSettings.toast.mobileDeviceRemoved"), "success");
+  }, [triggerToast, t]);
+
+  const handleMobileApproveRequest = useCallback((request: { id: string; name: string }) => {
+    setMobileApprovedDevices((prev) => [...prev, { id: request.id, name: request.name, lastConnected: t("mvSettings.mobile.justNow") }]);
+    setMobileDeviceRequests((prev) => prev.filter((r) => r.id !== request.id));
+    triggerToast(t("mvSettings.toast.mobileDeviceApproved"), "success");
+  }, [triggerToast, t]);
+
+  const handleMobileRejectRequest = useCallback((request: { id: string }) => {
+    setMobileDeviceRequests((prev) => prev.filter((r) => r.id !== request.id));
+    triggerToast(t("mvSettings.toast.mobileDeviceRejected"), "success");
+  }, [triggerToast, t]);
+
+  const handleMobilePermToggle = useCallback((key: string, enabled: boolean) => {
+    setMobilePermissions((prev) => prev.map((p) => p.key === key ? { ...p, enabled } : p));
+  }, []);
+
+  /* Fetch pairing info once when remote is enabled */
+  useEffect(() => {
+    if (!settings.mobileRemoteEnabled) return;
+    let mounted = true;
+    invoke<{ ip: string; port: number; pairingToken: string }>("get_mobile_pairing_info")
+      .then((info) => { if (mounted) setMobilePairingInfo(info); })
+      .catch(() => { });
+    return () => { mounted = false; };
+  }, [settings.mobileRemoteEnabled]);
+
+  /* Poll server status every 3s when remote is enabled */
+  useEffect(() => {
+    if (!settings.mobileRemoteEnabled) return;
+    let mounted = true;
+    const poll = async () => {
+      try {
+        const status = await invoke<{ running: boolean; port: number }>("get_mobile_server_status");
+        if (mounted) setMobileServerStatus(status);
+      } catch { /* backend not available */ }
+    };
+    poll();
+    const id = setInterval(poll, 3000);
+    return () => { mounted = false; clearInterval(id); };
+  }, [settings.mobileRemoteEnabled]);
+
+  return (
+    <div className="app-container">
+      {/* Toast stack */}
+      <div className="toast-container">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`toast-item ${toast.type === "success" ? "success-toast" : ""}`}>
+            <span className={`toast-icon-box ${toast.type === "success" ? "success-toast" : "accent-toast"}`}>
+              <CheckCircle size={16} />
+            </span>
+            <span>{toast.message}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Main content */}
+      <main className="app-main settings-main">
+        <header className="main-header">
+          <div className="title-group">
+            <h2 className="main-title">{t("mvSettings.page.title")}</h2>
+            <p className="main-description">{tabDescription}</p>
+          </div>
+          <button className="reset-button" onClick={() => {
+            if (activeTab === "general") handleResetSettings();
+            else if (activeTab === "branding") handleResetBrandingSettings();
+            else if (activeTab === "appearance") handleResetAppearance();
+            else if (activeTab === "bible") handleSaveBible();
+            else if (activeTab === "audio") {
+              db.updateSettings({ inputGain: 100 });
+              voiceBibleService.setInputGain(100);
+              lmDockService.setInputGain(100);
+              triggerToast(t("mvSettings.toast.inputGainReset"), "accent");
+            }
+            else if (activeTab === "mobile") {
+              db.updateSettings({
+                mobileRemoteEnabled: false,
+                mobileRequireApproval: true,
+                mobileAllowMultipleDevices: true,
+                mobileMaxDevices: 3,
+                mobileAutoRemoveInactive: true,
+                mobileDesktopName: "My Church",
+              });
+              setSettings(db.getSettings());
+              triggerToast(t("mvSettings.toast.mobileReset"), "accent");
+            }
+            else triggerToast(t("mvSettings.toast.resetOptionsAvailable"), "accent");
+          }} title="Reset">
+            <RotateCcw size={16} />
+            <span>{activeTab === "bible" ? t("mvSettings.page.saveBible") : t("mvSettings.page.resetDefaults")}</span>
+          </button>
+        </header>
+
+        {/* Tab bar */}
+        <div className="tabs-navigation">
+          {([
+            ["general", Settings, t("mvSettings.tabs.general")],
+            ["branding", Paintbrush, t("mvSettings.tabs.branding")],
+            ["appearance", Palette, t("mvSettings.tabs.appearance")],
+            ["usage", History, t("mvSettings.tabs.usage")],
+            ["obs", Radio, t("mvSettings.tabs.obs")],
+            // ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
+            // ["audio", Mic, t("mvSettings.tabs.audio")],
+            // ["pro", ShieldCheck, "Pro License"],
+            // ["developer", Key, "Developer"],
+          ] as const).map(([id, IconComp, label]) => (
+            <button key={id} className={`tab-btn ${activeTab === id ? "active" : ""}`} onClick={() => setActiveTab(id)}>
+              <IconComp size={16} /> <span>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Scrollable content */}
+        <div className="main-scroll-pane">
+          <div className={`settings-grid ${hasSettingsSidebar ? "" : "settings-grid--no-sidebar"} ${activeTab === "usage" ? "settings-grid--usage" : ""}`}>
+            {/* Left: main form column */}
+            <div className="settings-form-column">
+
+              {/* ══════════════ GENERAL TAB ══════════════ */}
+              {activeTab === "general" && (
+                <div className="settings-section">
+                  <div className="section-header">
+                    <h3 className="section-title">{t("mvSettings.general.studioPreferences")}</h3>
+                    <p className="section-desc">{t("mvSettings.general.studioPreferencesDesc")}</p>
+                  </div>
+
+                  <div className="settings-card fields-rows-stack">
+                    <div className="flex-between-center">
+                      <div className="switch-left">
+                        <span className="switch-title">{t("mvSettings.general.globalInterfaceLanguage")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.general.globalInterfaceLanguageDesc")}</span>
+                      </div>
+                      <div className="form-select-container" style={{ width: "180px" }}>
+                        <select className="custom-select" value={interfaceLanguage} onChange={(e) => { setPendingLanguage(e.target.value); setShowLanguageModal(true); }}>
+                          {INTERFACE_LOCALES.map((lang) => (
+                            <option key={lang.code} value={lang.code}>{lang.nativeName}</option>
+                          ))}
+                        </select>
+                        <span className="select-arrow"><ChevronDown size={14} /></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Global Module Defaults ── */}
+                  <div className="settings-section" style={{ marginTop: "24px" }}>
+                    <div className="section-header">
+                      <h3 className="section-title">{t("mvSettings.general.globalModuleDefaults")}</h3>
+                      <p className="section-desc">{t("mvSettings.general.globalModuleDefaultsDesc")}</p>
+                    </div>
+                    <div className="settings-card fields-rows-stack">
+                      <div className="flex-between-center">
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.general.defaultBibleOverlayMode")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.general.defaultBibleOverlayModeDesc")}</span>
+                        </div>
+                        <div className="form-select-container" style={{ width: "180px" }}>
+                          <select
+                            className="custom-select"
+                            value={settings.defaultBibleOverlayMode}
+                            onChange={(e) => update({ defaultBibleOverlayMode: e.target.value as "fullscreen" | "lower-third" })}
+                          >
+                            <option value="fullscreen">{t("mvSettings.general.fullscreen")}</option>
+                            <option value="lower-third">{t("mvSettings.general.lowerThird")}</option>
+                          </select>
+                          <span className="select-arrow"><ChevronDown size={14} /></span>
+                        </div>
+                      </div>
+
+                      <div className="flex-between-center">
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.general.defaultSpeakerSize")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.general.defaultSpeakerSizeDesc")}</span>
+                        </div>
+                        <div className="form-select-container" style={{ width: "180px" }}>
+                          <select
+                            className="custom-select"
+                            value={settings.defaultSpeakerSize}
+                            onChange={(e) => update({ defaultSpeakerSize: e.target.value })}
+                          >
+                            <option value="s">{t("mvSettings.general.smallS")}</option>
+                            <option value="m">{t("mvSettings.general.mediumM")}</option>
+                            <option value="l">{t("mvSettings.general.largeL")}</option>
+                            <option value="xl">{t("mvSettings.general.extraLargeXL")}</option>
+                            <option value="2xl">{t("mvSettings.general.xxl")}</option>
+                            <option value="3xl">{t("mvSettings.general.xxxl")}</option>
+                          </select>
+                          <span className="select-arrow"><ChevronDown size={14} /></span>
+                        </div>
+                      </div>
+
+                      <div className="flex-between-center">
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.general.defaultTickerScrollSpeed")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.general.defaultTickerScrollSpeedDesc")}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <input
+                            type="range"
+                            min={1}
+                            max={5}
+                            step={1}
+                            value={settings.defaultTickerScrollSpeed}
+                            onChange={(e) => update({ defaultTickerScrollSpeed: Number(e.target.value) })}
+                            style={{ width: 100, accentColor: settings.brandColor }}
+                          />
+                          <span style={{ fontSize: 12, color: "var(--text-muted)", minWidth: 20, textAlign: "center" }}>
+                            {settings.defaultTickerScrollSpeed}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* About */}
+                  <div className="settings-section" style={{ marginTop: "24px" }}>
+                    <div className="section-header">
+                      <h3 className="section-title">{t("mvSettings.general.aboutTitle")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                        <AppLogo alt="MakeChurchEasy" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "contain" }} />
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>MakeChurchEasy</p>
+                          <p style={{ margin: 0, fontSize: 12, color: "var(--text-muted)" }}>Version {typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0"}</p>
+                        </div>
+                      </div>
+                      <p style={{ color: "var(--text-secondary)", fontSize: 13, lineHeight: 1.6, marginBottom: 8 }}>
+                        {t("mvSettings.general.aboutDescription")}
+                      </p>
+                      <p style={{ color: "var(--text-muted)", fontSize: 12 }}>{t("mvSettings.general.aboutBuiltWith")}</p>
+                    </div>
+                  </div>
+
+
+
+
+                  {/* Danger Zone */}
+                  <div className="settings-section" style={{ marginTop: "24px", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-lg)", padding: "24px" }}>
+                    <h3 className="section-title" style={{ color: "var(--danger-color)" }}><Trash2 size={18} style={{ verticalAlign: "text-bottom" }} /> {t("mvSettings.general.dangerZone")}</h3>
+
+                    {/* Clear All Data */}
+                    <p className="section-desc">{t("mvSettings.general.clearAllDataDesc")}</p>
+                    {cleared ? (
+                      <p style={{ color: "var(--success-color)", fontSize: 13 }}><CheckCircle size={16} style={{ verticalAlign: "middle" }} /> {t("mvSettings.general.databaseCleared")}</p>
+                    ) : confirmClear ? (
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ color: "var(--danger-color)" }}>{t("mvSettings.general.areYouSure")}</span>
+                        <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClear} title="Yes">{t("mvSettings.general.yesClearEverything")}</button>
+                        <button className="action-btn" onClick={() => setConfirmClear(false)} title="Cancel">{t("mvSettings.general.cancel")}</button>
+                      </div>
+                    ) : (
+                      <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClear(true)} title="Clear">
+                        <Trash2 size={14} /><span>{t("mvSettings.general.clearAllData")}</span>
+                      </button>
+                    )}
+
+                    {/* Clear Worship Songs */}
+                    <div style={{ marginTop: 16, borderTop: "1px solid rgba(239,68,68,0.1)", paddingTop: 16 }}>
+                      <p className="section-desc">{t("mvSettings.general.clearWorshipSongsDesc")}</p>
+                      {worshipCleared ? (
+                        <p style={{ color: "var(--success-color)", fontSize: 13 }}><CheckCircle size={16} style={{ verticalAlign: "middle" }} /> {t("mvSettings.general.worshipSongsCleared")}</p>
+                      ) : confirmClearWorship ? (
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <span style={{ color: "var(--danger-color)" }}>{t("mvSettings.general.areYouSure")}</span>
+                          <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClearWorship} title="Yes">{t("mvSettings.general.yesClearWorship")}</button>
+                          <button className="action-btn" onClick={() => setConfirmClearWorship(false)} title="Cancel">{t("mvSettings.general.cancel")}</button>
+                        </div>
+                      ) : (
+                        <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClearWorship(true)} title="Clear">
+                          <Trash2 size={14} /><span>{t("mvSettings.general.clearWorshipSongs")}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ══════════════ OBS CONNECTION TAB ══════════════ */}
+              {activeTab === "obs" && (
+                <div className="settings-section">
+                  <div className="section-header">
+                    <p className="section-desc">{t("mvSettings.obs.webSocketDesc")}</p>
+                  </div>
+
+                  <div className="settings-card fields-rows-stack">
+                    {/* Connection method */}
+                    <div className="form-group">
+                      <label className="form-label">{t("mvSettings.obs.connectionMethod")}</label>
+                      <div className="grid-2-col" style={{ marginTop: "4px" }}>
+                        <label className="option-select-card">
+                          <input type="radio" name="obs_method" checked={obsMethod === "WebSocket"} onChange={() => setObsMethod("WebSocket")} />
+                          <div className="option-select-inner" style={{ padding: "16px", alignItems: "flex-start", textAlign: "left" }}>
+                            <div className="checked-indicator"><Check size={10} /></div>
+                            <div className="density-icon-box" style={{ background: obsMethod === "WebSocket" ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: obsMethod === "WebSocket" ? "var(--accent-color)" : "var(--text-secondary)" }}><Radio size={16} /></div>
+                            <div style={{ marginTop: "8px" }}>
+                              <span className="option-title">{t("mvSettings.obs.webSocketRecommended")}</span>
+                              <p className="option-desc" style={{ marginTop: "4px" }}>{t("mvSettings.obs.webSocketDirectDesc")}</p>
+                            </div>
+                          </div>
+                        </label>
+                        <label className="option-select-card">
+                          <input type="radio" name="obs_method" checked={obsMethod === "Remote"} onChange={() => setObsMethod("Remote")} />
+                          <div className="option-select-inner" style={{ padding: "16px", alignItems: "flex-start", textAlign: "left" }}>
+                            <div className="checked-indicator"><Check size={10} /></div>
+                            <div className="density-icon-box" style={{ background: obsMethod === "Remote" ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: obsMethod === "Remote" ? "var(--accent-color)" : "var(--text-secondary)" }}><ExternalLink size={16} /></div>
+                            <div style={{ marginTop: "8px" }}>
+                              <span className="option-title">{t("mvSettings.obs.alternativeRemoteApi")}</span>
+                              <p className="option-desc" style={{ marginTop: "4px" }}>{t("mvSettings.obs.alternativeRemoteApiDesc")}</p>
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    <hr className="settings-divider" />
+
+                    {/* Server address */}
+                    <div className="form-group">
+                      <label className="form-label">{t("mvSettings.obs.webSocketHostAddress")}</label>
+                      <div className="custom-input-container">
+                        <input type="text" className="custom-textbox" value={settings.obsUrl} onChange={(e) => update({ obsUrl: e.target.value })} placeholder="ws://localhost:4455" />
+                        <button className="action-btn btn-primary" onClick={handleTestObs} disabled={obsStatus === "connecting"} title="Refresh">
+                          {obsStatus === "connecting" ? (<><RefreshCw size={14} className="animate-spin" /><span>{t("mvSettings.obs.connecting")}</span></>) : (<><CheckCircle size={14} /><span>{t("mvSettings.obs.testConnection")}</span></>)}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Password */}
+                    <div className="form-group" style={{ marginTop: "12px" }}>
+                      <label className="form-label">{t("mvSettings.obs.passwordOptional")}</label>
+                      <div className="custom-input-container">
+                        <input type="password" className="custom-textbox" value={obsPasswordDraft} onChange={(e) => setObsPasswordDraft(e.target.value)} placeholder={t("mvSettings.obs.obsAuthKey")} />
+                      </div>
+                      <span className="mv-settings-hint" style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>{t("mvSettings.obs.storedInSession")}</span>
+                    </div>
+
+                    {obsTestResult && (
+                      <p style={{ fontSize: 12, color: obsStatus === "connected" ? "var(--success-color)" : "var(--danger-color)" }}>
+                        {obsStatus === "connected" ? "✓" : "✗"} {obsTestResult}
+                      </p>
+                    )}
+
+                    <hr className="settings-divider" />
+
+                    {/* Connection rules */}
+                    <div>
+                      <h4 className="form-label" style={{ marginBottom: "16px" }}>{t("mvSettings.obs.connectionRules")}</h4>
+                      <div className="switch-row" style={{ padding: "10px 0" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.obs.autoReconnectFallback")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.obs.autoReconnectDesc")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input type="checkbox" checked={settings.obsAutoReconnect} onChange={() => update({ obsAutoReconnect: !settings.obsAutoReconnect })} />
+                          <span className="switch-slider"></span>
+                        </label>
+                      </div>
+                      <div className="flex-between-center" style={{ padding: "10px 0" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.obs.reconnectInterval")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.obs.reconnectIntervalDesc")}</span>
+                        </div>
+                        <div className="form-select-container" style={{ width: "130px" }}>
+                          <select className="custom-select" value={obsReconnectInterval} onChange={(e) => { setObsReconnectInterval(e.target.value); triggerToast(t("mvSettings.obs.intervalSetTo", { interval: e.target.value }), "accent"); }}>
+                            <option>{t("mvSettings.obs.fiveSeconds")}</option>
+                            <option>{t("mvSettings.obs.tenSeconds")}</option>
+                            <option>{t("mvSettings.obs.thirtySeconds")}</option>
+                          </select>
+                          <span className="select-arrow"><ChevronDown size={14} /></span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+
+                </div>
+              )}
+
+              {/* ══════════════ MOBILE REMOTE TAB ══════════════ */}
+              {activeTab === "mobile" && (
+                hasMobileAccess ? (
+                  <div className="settings-section">
+                    {/* ── Section 1: Enable Mobile Remote ── */}
+                    <div className="section-header">
+                      <h3 className="section-title">{t("mvSettings.mobile.enable")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <div className="switch-row">
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.mobile.enableDesc")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.mobile.enableHint")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={settings.mobileRemoteEnabled}
+                            onChange={(e) => {
+                              const next = e.target.checked;
+                              db.updateSettings({ mobileRemoteEnabled: next });
+                              setSettings(db.getSettings());
+                            }}
+                          />
+                          <span className="switch-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* ── Section 2: Connection Status ── */}
+                    <div className="section-header" style={{ marginTop: 24 }}>
+                      <h3 className="section-title">{t("mvSettings.mobile.status")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <div className="mr-status-grid">
+                        <div className="mr-status-item">
+                          <span className="mr-status-label">{t("mvSettings.mobile.statusServer")}</span>
+                          <span className={`mr-status-badge ${mobileServerStatus?.running ? "mr-status-on" : "mr-status-off"}`}>
+                            {mobileServerStatus?.running ? t("mvSettings.mobile.statusRunning") : t("mvSettings.mobile.statusStopped")}
+                          </span>
+                        </div>
+                        <div className="mr-status-item">
+                          <span className="mr-status-label">{t("mvSettings.mobile.statusWsPort")}</span>
+                          <span className="mr-status-value">8765</span>
+                        </div>
+                        <div className="mr-status-item">
+                          <span className="mr-status-label">{t("mvSettings.mobile.statusApiPort")}</span>
+                          <span className="mr-status-value">45678</span>
+                        </div>
+                        <div className="mr-status-item">
+                          <span className="mr-status-label">{t("mvSettings.mobile.statusDevices")}</span>
+                          <span className="mr-status-value">{mobileConnectedDevices}</span>
+                        </div>
+                      </div>
+                      <div className="mr-status-actions">
+                        <button className="action-btn secondary" onClick={handleMobileRestart}>
+                          <RefreshCw size={14} /> {t("mvSettings.mobile.statusRestart")}
+                        </button>
+                        <button className="action-btn secondary" onClick={handleMobileLogs}>
+                          <Monitor size={14} /> {t("mvSettings.mobile.statusLogs")}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* ── Section 3: QR Pairing ── */}
+                    <div className="section-header" style={{ marginTop: 24 }}>
+                      <h3 className="section-title">{t("mvSettings.mobile.qrTitle")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <p className="section-desc">{t("mvSettings.mobile.qrDesc")}</p>
+                      <div className="mr-qr-container">
+                        <div className="mr-qr-box">
+                          {mobilePairingInfo ? (
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mobilePairingPayload)}`}
+                              alt="QR Code"
+                              className="mr-qr-image"
+                              onError={(e) => {
+                                // Fallback: generate SVG locally
+                                const target = e.currentTarget;
+                                target.style.display = "none";
+                                const fallback = target.nextElementSibling as HTMLElement;
+                                if (fallback) fallback.style.display = "flex";
+                              }}
+                            />
+                          ) : null}
+                          <div className="mr-qr-fallback" style={{ display: mobilePairingInfo ? "none" : "flex" }}>
+                            <Smartphone size={48} />
+                          </div>
+                        </div>
+                        <div className="mr-qr-info">
+                          <div className="mr-qr-code-display">
+                            <span className="mr-qr-code-label">{t("mvSettings.mobile.qrCode")}</span>
+                            <span className="mr-qr-code-value">{mobilePairingInfo?.pairingToken ?? "------"}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mr-qr-actions">
+                        <button className="action-btn secondary" onClick={handleMobileRefreshPairing}>
+                          <RefreshCw size={14} /> {t("mvSettings.mobile.qrRefresh")}
+                        </button>
+                        <button className="action-btn secondary" onClick={handleMobileCopyPayload}>
+                          <Copy size={14} /> {t("mvSettings.mobile.qrCopy")}
+                        </button>
+                        <button className="action-btn secondary" onClick={handleMobilePrintQR}>
+                          <Printer size={14} /> {t("mvSettings.mobile.qrPrint")}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* ── Section 4: Approved Devices ── */}
+                    <div className="section-header" style={{ marginTop: 24 }}>
+                      <h3 className="section-title">{t("mvSettings.mobile.approvedDevices")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <p className="section-desc">{t("mvSettings.mobile.approvedDevicesDesc")}</p>
+                      {mobileApprovedDevices.length === 0 ? (
+                        <p className="mr-empty-state">{t("mvSettings.mobile.noDevices")}</p>
+                      ) : (
+                        <div className="mr-device-list">
+                          {mobileApprovedDevices.map((device) => (
+                            <div key={device.id} className="mr-device-item">
+                              <div className="mr-device-info">
+                                <Smartphone size={16} className="mr-device-icon" />
+                                <span className="mr-device-name">{device.name}</span>
+                                <span className="mr-device-last">{device.lastConnected}</span>
+                              </div>
+                              <div className="mr-device-actions">
+                                <button className="action-btn small secondary" onClick={() => handleMobileRenameDevice(device)}>
+                                  {t("mvSettings.mobile.rename")}
+                                </button>
+                                <button className="action-btn small secondary" onClick={() => handleMobileDisconnectDevice(device)}>
+                                  {t("mvSettings.mobile.disconnect")}
+                                </button>
+                                <button className="action-btn small danger" onClick={() => handleMobileRemoveDevice(device)}>
+                                  {t("mvSettings.mobile.remove")}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Section 5: Device Requests ── */}
+                    <div className="section-header" style={{ marginTop: 24 }}>
+                      <h3 className="section-title">{t("mvSettings.mobile.deviceRequests")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <p className="section-desc">{t("mvSettings.mobile.deviceRequestsDesc")}</p>
+                      {mobileDeviceRequests.length === 0 ? (
+                        <p className="mr-empty-state">{t("mvSettings.mobile.noRequests")}</p>
+                      ) : (
+                        <div className="mr-device-list">
+                          {mobileDeviceRequests.map((request) => (
+                            <div key={request.id} className="mr-device-item mr-device-pending">
+                              <div className="mr-device-info">
+                                <Bell size={16} className="mr-device-icon" />
+                                <span className="mr-device-name">{request.name}</span>
+                                <span className="mr-device-model">{request.model}</span>
+                              </div>
+                              <div className="mr-device-actions">
+                                <button className="action-btn small primary" onClick={() => handleMobileApproveRequest(request)}>
+                                  {t("mvSettings.mobile.approve")}
+                                </button>
+                                <button className="action-btn small danger" onClick={() => handleMobileRejectRequest(request)}>
+                                  {t("mvSettings.mobile.reject")}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Section 6: Mobile Permissions ── */}
+                    <div className="section-header" style={{ marginTop: 24 }}>
+                      <h3 className="section-title">{t("mvSettings.mobile.permissions")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <p className="section-desc">{t("mvSettings.mobile.permissionsDesc")}</p>
+                      <div className="mr-permissions-list">
+                        {mobilePermissions.map((perm) => (
+                          <div key={perm.key} className={`mr-perm-item ${perm.locked ? "mr-perm-locked" : ""}`}>
+                            <div className="mr-perm-icon">
+                              <perm.icon size={18} />
+                            </div>
+                            <div className="mr-perm-info">
+                              <span className="mr-perm-name">{t(perm.nameKey)}</span>
+                              <span className="mr-perm-desc">{t(perm.descKey)}</span>
+                            </div>
+                            {perm.locked ? (
+                              <span className="mr-perm-badge">{t("mvSettings.mobile.permLocked", { plan: perm.requiredPlan })}</span>
+                            ) : (
+                              <label className="switch-toggle-label">
+                                <input
+                                  type="checkbox"
+                                  checked={perm.enabled}
+                                  onChange={(e) => handleMobilePermToggle(perm.key, e.target.checked)}
+                                />
+                                <span className="switch-slider"></span>
+                              </label>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ── Section 7: Security ── */}
+                    <div className="section-header" style={{ marginTop: 24 }}>
+                      <h3 className="section-title">{t("mvSettings.mobile.security")}</h3>
+                    </div>
+                    <div className="settings-card">
+                      <p className="section-desc">{t("mvSettings.mobile.securityDesc")}</p>
+
+                      <div className="switch-row">
+                        <div>
+                          <p className="switch-label">{t("mvSettings.mobile.secRequireApproval")}</p>
+                          <p className="switch-hint">{t("mvSettings.mobile.secRequireApprovalDesc")}</p>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={settings.mobileRequireApproval}
+                            onChange={(e) => {
+                              db.updateSettings({ mobileRequireApproval: e.target.checked });
+                              setSettings(db.getSettings());
+                            }}
+                          />
+                          <span className="switch-slider"></span>
+                        </label>
+                      </div>
+
+                      <div className="switch-row">
+                        <div>
+                          <p className="switch-label">{t("mvSettings.mobile.secAllowMultiple")}</p>
+                          <p className="switch-hint">{t("mvSettings.mobile.secAllowMultipleDesc")}</p>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={settings.mobileAllowMultipleDevices}
+                            onChange={(e) => {
+                              db.updateSettings({ mobileAllowMultipleDevices: e.target.checked });
+                              setSettings(db.getSettings());
+                            }}
+                          />
+                          <span className="switch-slider"></span>
+                        </label>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">{t("mvSettings.mobile.secMaxDevices")}</label>
+                        <p className="switch-hint">{t("mvSettings.mobile.secMaxDevicesDesc")}</p>
+                        <input
+                          type="number"
+                          className="form-input"
+                          min={1}
+                          max={20}
+                          value={settings.mobileMaxDevices}
+                          onChange={(e) => {
+                            const val = Math.max(1, Math.min(20, parseInt(e.target.value) || 3));
+                            db.updateSettings({ mobileMaxDevices: val });
+                            setSettings(db.getSettings());
+                          }}
+                        />
+                      </div>
+
+                      <div className="switch-row">
+                        <div>
+                          <p className="switch-label">{t("mvSettings.mobile.secAutoRemove")}</p>
+                          <p className="switch-hint">{t("mvSettings.mobile.secAutoRemoveDesc")}</p>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={settings.mobileAutoRemoveInactive}
+                            onChange={(e) => {
+                              db.updateSettings({ mobileAutoRemoveInactive: e.target.checked });
+                              setSettings(db.getSettings());
+                            }}
+                          />
+                          <span className="switch-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="settings-section">
+                    <div className="settings-card" style={{ textAlign: "center", padding: "48px 32px" }}>
+                      <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+                      <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8, color: "var(--text-primary)" }}>
+                        {t("mvSettings.mobile.upgradeTitle")}
+                      </h3>
+                      <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 24, maxWidth: 400, margin: "0 auto 24px" }}>
+                        {t("mvSettings.mobile.upgradeDesc")}
+                      </p>
+                      <button
+                        className="mv-btn mv-btn--primary"
+                        onClick={() => setShowMobileUpgrade(true)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 24px" }}
+                      >
+                        <Zap size={18} />
+                        {t("mvSettings.mobile.upgradeBtn")}
+                      </button>
+                    </div>
+                  </div>
+                )
+              )}
+
+              {/* ══════════════ APPEARANCE TAB ══════════════ */}
+              {activeTab === "appearance" && (
+                <div className="settings-section">
+                  <div className="section-header">
+                    <h3 className="section-title">{t("mvSettings.appearance.designAndLayout")}</h3>
+                    <p className="section-desc">{t("mvSettings.tabDesc.appearance")}</p>
+                  </div>
+
+                  <div className="settings-card fields-rows-stack">
+                    {/* Theme mode */}
+                    <div className="form-group">
+                      <label className="form-label">{t("mvSettings.appearance.interfaceTheme")}</label>
+                      <div className="grid-3-col" style={{ marginTop: "4px" }}>
+                        {([
+                          ["dark", Moon, t("mvSettings.appearance.dark")],
+                          ["light", Sun, t("mvSettings.appearance.light")],
+                          ["system", Monitor, t("mvSettings.appearance.system")],
+                        ] as const).map(([id, IconComp, label]) => (
+                          <label key={id} className="option-select-card">
+                            <input type="radio" name="theme_mode" checked={theme === id} onChange={() => { setTheme(id); update({ theme: id } as any); }} />
+                            <div className="option-select-inner" style={{ padding: "12px", textAlign: "center" }}>
+                              <div className="checked-indicator"><Check size={10} /></div>
+                              <div className="density-icon-box" style={{ margin: "0 auto", background: theme === id ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: theme === id ? "var(--accent-color)" : "var(--text-secondary)" }}>
+                                <IconComp size={16} />
+                              </div>
+                              <span className="option-title" style={{ marginTop: "8px", display: "block" }}>{label}</span>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+
+
+                    {/* Accent color */}
+
+
+                    <hr className="settings-divider" />
+
+                    {/* Density */}
+
+
+                    <hr className="settings-divider" />
+
+
+                    {/* Toggles */}
+                    <div className="switch-row">
+                      <div className="switch-left">
+                        <span className="switch-title">{t("mvSettings.appearance.highContrastMode")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.appearance.highContrastDesc")}</span>
+                      </div>
+                      <label className="switch-toggle-label">
+                        <input type="checkbox" checked={highContrastUI} onChange={() => { setHighContrastUI(!highContrastUI); update({ highContrast: !highContrastUI }); }} />
+                        <span className="switch-slider"></span>
+                      </label>
+                    </div>
+
+
+                  </div>
+                </div>
+              )}
+
+              {/* ══════════════ BRANDING TAB ══════════════ */}
+              {activeTab === "branding" && (
+                <div className="settings-section">
+                  <div className="section-header">
+                    <h3 className="section-title">Church Profile</h3>
+                    <p className="section-desc">Identity values synced from the web dashboard. Edit at makechurcheasy.creatorstudioslabs.stream → Church Profile.</p>
+                  </div>
+
+                  {/* Sync status bar */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, padding: "8px 12px", borderRadius: 8, backgroundColor: syncStatus ? "var(--surface-secondary, rgba(255,255,255,0.04))" : "transparent", border: syncStatus ? "1px solid var(--border-color)" : "none" }}>
+                    {syncing && (
+                      <>
+                        <RefreshCw size={14} className="spin" style={{ animation: "spin 1s linear infinite" }} />
+                        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Syncing from web dashboard…</span>
+                      </>
+                    )}
+                    {!syncing && syncStatus && (
+                      <>
+                        <CheckCircle size={14} style={{ color: "var(--accent, #10B981)", flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, color: "var(--text-muted)", flex: 1 }}>{syncStatus}</span>
+                        <button
+                          className="btn btn-ghost"
+                          onClick={runSync}
+                          disabled={syncing}
+                          style={{ fontSize: 11, padding: "2px 8px", gap: 4, flexShrink: 0 }}
+                          title="Retry">
+                          <RefreshCw size={12} />
+                          Retry
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="settings-card fields-rows-stack">
+                    <div className="form-group">
+                      <label className="form-label">Church Name</label>
+                      <input className="custom-textbox" type="text" value={settings.churchName} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
+                    </div>
+                    {/* <div className="form-group">
+                      <label className="form-label">Main Pastor Name</label>
+                      <input className="custom-textbox" type="text" value={settings.mainPastorName} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
+                    </div> */}
+                    <div className="form-group">
+                      <label className="form-label">Pastors / Speakers</label>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "44px 1.1fr 1fr auto", gap: 8, alignItems: "center", fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" as const }}>
+                          <span>Photo</span><span>Name</span><span>Position</span><span />
+                        </div>
+                        {speakerProfiles.filter((p) => p.name.trim()).map((profile, index) => (
+                          <div key={`sp-${index}`} style={{ display: "grid", gridTemplateColumns: "44px 1.1fr 1fr auto", gap: 8, alignItems: "center" }}>
+                            {profile.imageUrl ? (
+                              <img
+                                src={resolveLogoPreviewSrc(profile.imageUrl)}
+                                alt={profile.name}
+                                style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", border: "1px solid var(--border-color)" }}
+                              />
+                            ) : (
+                              <div style={{ width: 36, height: 36, borderRadius: 8, background: "var(--bg-tertiary)", border: "1px solid var(--border-color)" }} />
+                            )}
+                            <input className="custom-textbox" type="text" value={profile.name} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
+                            <input className="custom-textbox" type="text" value={profile.role} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
+                            {profile.isMain && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent, #F59E0B)", background: "rgba(245, 158, 11, 0.15)", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>MAIN</span>
+                            )}
+                          </div>
+                        ))}
+                        {speakerProfiles.filter((p) => p.name.trim()).length === 0 && (
+                          <p style={{ fontSize: 13, color: "var(--text-muted)" }}>No speakers configured.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Brand defaults */}
+                  <div className="settings-section" style={{ marginTop: "24px" }}>
+                    <div className="section-header">
+                      <h3 className="section-title">Brand Defaults</h3>
+                      <p className="section-desc">Defaults for lower-third and speaker overlays (OBS output).</p>
+                    </div>
+
+                    <div className="settings-card fields-rows-stack">
+                      <div className="form-group">
+                        <label className="form-label">Default lower-third duration</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <input className="custom-textbox" type="number" min={1} max={300} value={settings.lowerThirdDefaultDurationSec} readOnly tabIndex={-1} style={{ width: 80, opacity: 0.7, cursor: "default" }} />
+                          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>sec</span>
+                        </div>
+                      </div>
+
+                      <div className="grid-2-col">
+                        <div className="form-group">
+                          <label className="form-label">Primary Color</label>
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: settings.brandColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
+                            <input className="custom-textbox" type="text" value={settings.brandColor} readOnly tabIndex={-1} style={{ flex: 1, fontFamily: "monospace", opacity: 0.7, cursor: "default" }} />
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Secondary Color</label>
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: settings.brandSecondaryColor || DEFAULT_SETTINGS.brandColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
+                            <input className="custom-textbox" type="text" value={settings.brandSecondaryColor} readOnly tabIndex={-1} style={{ flex: 1, fontFamily: "monospace", opacity: 0.7, cursor: "default" }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid-2-col">
+                        <div className="form-group">
+                          <label className="form-label">Accent Color</label>
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: settings.brandAccentColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
+                            <input className="custom-textbox" type="text" value={settings.brandAccentColor} readOnly tabIndex={-1} style={{ flex: 1, fontFamily: "monospace", opacity: 0.7, cursor: "default" }} />
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Font Family</label>
+                          <input className="custom-textbox" type="text" value={settings.brandFontFamily} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Brand logo */}
+                  <div className="settings-section" style={{ marginTop: "24px" }}>
+                    <div className="section-header">
+                      <h3 className="section-title">Brand Logo</h3>
+                      <p className="section-desc">Church logo synced from the web dashboard.</p>
+                    </div>
+
+                    <div className="settings-card fields-rows-stack">
+                      {settings.brandLogoPath ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 8 }}>
+                          <img
+                            src={resolveLogoPreviewSrc(settings.brandLogoPath)}
+                            alt="Church logo"
+                            style={{ width: 48, height: 48, borderRadius: 8, objectFit: "contain", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)" }}
+                          />
+                          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Logo synced from web dashboard</span>
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>No logo set. Upload one from the web dashboard.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* First-launch setup */}
+                  <div className="settings-section" style={{ marginTop: "24px" }}>
+                    <div className="section-header">
+                      <h3 className="section-title">First-Launch Setup</h3>
+                      <p className="section-desc">Reopen the church profile setup flow for a new operator.</p>
+                    </div>
+                    <button className="action-btn" onClick={handleResetChurchOnboarding} title="Reset"><RefreshCw size={14} /> Reset Onboarding</button>
+                  </div>
+                </div>
+              )}
+
+              {/* ══════════════ BIBLE TAB ══════════════ */}
+
+
+              {/* ══════════════ CREDITS TAB ══════════════ */}
+              {activeTab === "usage" && (
+                <div className="settings-section">
+                  <div className="section-header">
+                    <h3 className="section-title">Credits Overview</h3>
+                    <p className="section-desc">Track your AI credits usage and plan details.</p>
+                  </div>
+
+                  {/* ── Trial Banner ── */}
+                  {trialActive && (
+                    <div style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      padding: "14px 18px", borderRadius: "3px", marginBottom: "24px",
+                      background: "rgba(29, 78, 216, 0.08)",
+                      border: "1px solid rgba(29, 78, 216, 0.2)",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <Calendar size={18} style={{ color: "#1D4ED8" }} />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary)" }}>
+                            Growth Trial — {trialDaysLeft} Day{trialDaysLeft !== 1 ? "s" : ""} Remaining
+                          </div>
+                          <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                            Ends {trialEndDate} · All premium features are active · {t("common.upgradePlansStartToday", { amount: "3,500" })}
+                          </div>
+                        </div>
+                      </div>
+                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/subscription/plans to upgrade", "accent")} title="Upgrade">
+                        <ExternalLink size={12} /> Upgrade
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ── Credits Dashboard ── */}
+                  <div className="settings-card credits-dashboard" style={{ marginBottom: "24px" }}>
+                    <div className="credits-dashboard-grid">
+                      <div className="credits-stat">
+                        <span className="credits-stat-label">Current Plan</span>
+                        <div className="credits-stat-value-row">
+                          <span className="credits-stat-value">{planLabel} Plan</span>
+                          <span className="feature-tag-pill" style={{
+                            textTransform: "uppercase",
+                            fontSize: "12px",
+                            background: trialActive ? "rgba(29,78,216,0.15)" : "rgba(16,185,129,0.15)",
+                            color: trialActive ? "#1D4ED8" : "var(--success-color)",
+                          }}>{trialActive ? "Active Trial" : "Active"}</span>
+                        </div>
+                      </div>
+                      <div className="credits-stat">
+                        <span className="credits-stat-label">Credits Remaining</span>
+                        <span className="credits-stat-value credits-accent">{isUnlimited ? "Unlimited" : formatCredits(planCredits)}</span>
+                      </div>
+                      <div className="credits-stat">
+                        <span className="credits-stat-label">This Month</span>
+                        <span className="credits-stat-value">{isUnlimited ? "—" : `${creditsUsedThisMonth} Credits Used`}</span>
+                      </div>
+                      <div className="credits-stat">
+                        <span className="credits-stat-label">Next Reset</span>
+                        <span className="credits-stat-value">{isUnlimited ? "N/A" : (() => { const d = new Date(); d.setMonth(d.getMonth() + 1, 1); return d.toLocaleDateString("en-US", { month: "long", day: "numeric" }); })()}</span>
+                      </div>
+                    </div>
+
+                    {!isUnlimited && (
+                      <div className="credits-progress-section">
+                        <div className="credits-progress-header">
+                          <span className="credits-progress-text">{creditsUsedThisMonth} of {formatCredits(planCredits)} Credits Used</span>
+                          <span className="credits-progress-pct">{usagePct}%</span>
+                        </div>
+                        <div className="credits-progress-track">
+                          <div className="credits-progress-fill" style={{ width: `${usagePct}%` }}></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Recent Transactions ── */}
+                  <div className="settings-section" style={{ marginTop: "24px" }}>
+                    <h4 className="section-title">Recent Transactions</h4>
+                    {recentTransactions.length === 0 ? (
+                      <p className="section-desc" style={{ marginTop: "8px" }}>No transactions yet.</p>
+                    ) : (
+                      <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                        {recentTransactions.map((tx) => (
+                          <div key={tx._id || tx.createdAt} style={{
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            padding: "8px 12px", borderRadius: "3px",
+                            background: "var(--bg-secondary, rgba(255,255,255,0.04))",
+                            fontSize: "0.8rem",
+                          }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                              <span style={{ fontWeight: 600 }}>{tx.description}</span>
+                              <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>
+                                {new Date(tx.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                            <span style={{ fontWeight: 700, color: tx.amount < 0 ? "#EF4444" : "#22C55E" }}>
+                              {tx.amount > 0 ? "+" : ""}{tx.amount}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── About Credits ── */}
+                  <div className="settings-section" style={{ marginTop: "24px" }}>
+                    <h4 className="section-title">About Credits</h4>
+                    <p className="section-desc about-credits-lead">
+                      Credits are only used when MakeChurchEasy runs AI for transcription, translation, or content generation.
+                    </p>
+
+                    <div className="about-credits-stack">
+                      <div className="about-credits-block">
+                        <div className="about-credits-block-title">Does not use credits</div>
+                        <div className="about-credits-grid">
+                          {[
+                            "Bible Presentation",
+                            "Worship Presentation",
+                            "Media Management",
+                            "OBS Integration",
+                            "Themes",
+                            "Lower Thirds",
+                          ].map((item, i) => (
+                            <div key={i} className="about-credit-item">
+                              <Check size={13} />
+                              <span>{item}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="about-credits-note">
+                          Your normal presentation workflow stays available without reducing your credit balance.
+                        </p>
+                      </div>
+
+                      <div className="about-credits-block">
+                        <div className="about-credits-block-title">Uses credits</div>
+                        <div className="credit-rates-grid">
+                          {[
+                            {
+                              icon: Radio,
+                              title: "Speech-to-Scripture",
+                              cost: "1 credit / minute",
+                              description: "Live sermon transcription and automatic scripture detection while the app is listening.",
+                            },
+                            {
+                              icon: Globe,
+                              title: "Transcript Translation",
+                              cost: "1 credit / 150 words",
+                              description: "Translating a saved transcript into another language uses credits based on transcript length.",
+                            },
+                            {
+                              icon: FileText,
+                              title: "AI Sermon Summary",
+                              cost: "5 credits",
+                              description: "Generates a concise sermon summary with key takeaways.",
+                            },
+                            {
+                              icon: FileText,
+                              title: "AI Sermon Notes",
+                              cost: "10 credits",
+                              description: "Turns a sermon into structured notes for follow-up, study, or sharing.",
+                            },
+                            {
+                              icon: Zap,
+                              title: "AI Sermon Points",
+                              cost: "10 credits",
+                              description: "Builds key sermon points with explanations and supporting scriptures.",
+                            },
+                          ].map((item) => {
+                            const Icon = item.icon;
+                            return (
+                              <div key={item.title} className="credit-rate-row">
+                                <div className="credit-rate-icon">
+                                  <Icon size={16} />
+                                </div>
+                                <div className="credit-rate-content">
+                                  <div className="credit-rate-header">
+                                    <span className="credit-rate-title">{item.title}</span>
+                                    <span className="credit-rate-cost">{item.cost}</span>
+                                  </div>
+                                  <p className="credit-rate-desc">{item.description}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="about-credits-note">
+                          AI-assisted worship import can also use credits based on document size. Larger files are split into multiple AI batches, and each AI-processed batch adds usage. Every charge appears in Recent Transactions above.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Credit Consumption Rates ── */}
+
+
+
+                  {/* ── Plan Features ── */}
+
+                </div>
+              )}
+            </div>
+
+            {/* Right: widgets column */}
+            {hasSettingsSidebar && (
+            <div className="widgets-column">
+              {/* Appearance preview widget */}
+
+
+              {/* Settings summary widget */}
+
+
+              {/* OBS connection widget */}
+              {activeTab === "obs" && (
+                <div className="widget-card">
+                  <div className="widget-header">
+                    <h4 className="widget-title">Connection Status</h4>
+                  </div>
+                  <div className="widget-body">
+                    <div className="radar-pulse-ambient">
+                      <div className="radar-circle-outer">
+                        <div className="radar-circle-inner" style={{ borderColor: obsStatus === "connected" ? "var(--success-color)" : "var(--text-muted)", color: obsStatus === "connected" ? "var(--success-color)" : "var(--text-muted)" }}>
+                          <Radio size={28} />
+                        </div>
+                      </div>
+                      {obsStatus === "connected" && <div className="radar-ripple"></div>}
+                    </div>
+                    <div className="details-rows-list" style={{ marginTop: "16px" }}>
+                      <div className="details-row">
+                        <span className="details-label">Ping</span>
+                        <span className="details-value">
+                          {obsStatus === "connected" ? (<><span className="dot-indicator dot-success"></span><span>Connected</span></>) : <span>Disconnected</span>}
+                        </span>
+                      </div>
+                      <div className="details-row">
+                        <span className="details-label">Endpoint</span>
+                        <span className="details-value mono-display" style={{ fontSize: "12px" }}>{settings.obsUrl || "N/A"}</span>
+                      </div>
+                    </div>
+
+                    {/* Connection actions */}
+                    <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={handleReconnectNow} title="Refresh">
+                        <RefreshCw size={14} /><span>Force Reconnect</span>
+                      </button>
+                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={() => setShowLogsPanel(!showLogsPanel)} title="Hide">
+                        <FileText size={14} /><span>{showLogsPanel ? "Hide Logs" : "View Logs"}</span>
+                      </button>
+                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600", color: "var(--danger-color)" }} onClick={() => { obsService.disconnect(); setObsStatus("disconnected"); setObsPasswordDraft(""); triggerToast("Disconnected.", "accent"); }} title="Disconnect">
+                        <Trash2 size={14} /><span>Disconnect</span>
+                      </button>
+                    </div>
+                    {showLogsPanel && (
+                      <div className="expandable-logs-panel" style={{ marginTop: "12px" }}>
+                        {obsLogs.map((log) => (
+                          <div key={log.id} className="log-entry">
+                            <span className="log-time">[{log.timestamp}]</span>
+                            <span className="log-source">[{log.source}]</span>
+                            <span>{log.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ══════════════ AUDIO TAB ══════════════ */}
+
+
+              {/* Tips card */}
+
+            </div>
+            )}
+          </div>
+        </div>
+      </main >
+
+      {/* Language Change Confirmation Modal */}
+      {
+        showLanguageModal && pendingLanguage && (
+          <div className="mv-modal-backdrop" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
+            <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
+              <h3 className="mv-modal-title">{t("mvSettings.modal.language.changeLanguage")}</h3>
+              <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.85rem", lineHeight: 1.5, margin: "0 0 4px" }}>
+                {t("mvSettings.modal.language.switchLanguagePrompt", {
+                  language: getInterfaceLanguageLabel(pendingLanguage),
+                })}
+              </p>
+              <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.8rem", lineHeight: 1.5 }}>
+                {t("mvSettings.modal.language.interfaceUpdateImmediately")}
+              </p>
+              <div className="mv-modal-actions" style={{ marginTop: 12 }}>
+                <button className="mv-btn mv-btn--ghost" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
+                  {t("mvSettings.modal.language.cancel")}
+                </button>
+                <button
+                  className="mv-btn mv-btn--primary"
+                  onClick={() => {
+                    const code = pendingLanguage!;
+                    void applyInterfaceLanguagePreference(code, { broadcast: true }).then(setInterfaceLanguage);
+                    setShowLanguageModal(false);
+                    setPendingLanguage(null);
+                  }}
+                >
+                  {t("mvSettings.modal.language.change")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {/* Mobile Remote upgrade modal */}
+      <UpgradeModal
+        open={showMobileUpgrade}
+        onClose={() => setShowMobileUpgrade(false)}
+        feature="Mobile Remote"
+        requiredPlan="growth"
+        currentPlan={effectivePlan}
+        message="Mobile Remote access is available on Growth and Pro plans."
+      />
+    </div >
+  );
+}

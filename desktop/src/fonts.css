@@ -1,0 +1,22 @@
+/*
+ * fonts.css — @font-face declarations for bundled Unicode fonts
+ *
+ * Charis SIL: Broad African language coverage (Twi, Yoruba, Igbo, etc.)
+ * Loaded locally from public/fonts/ for reliable Tauri WebView rendering.
+ */
+
+@font-face {
+  font-family: 'Charis SIL';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/charis-sil/CharisSIL-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Charis SIL';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/charis-sil/CharisSIL-Bold.ttf') format('truetype');
+}

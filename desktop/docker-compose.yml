@@ -1,0 +1,8 @@
+services:
+  maildev:
+    image: djfarrelly/maildev
+    container_name: maildev
+    restart: unless-stopped
+    ports:
+      - "1025:25"   # SMTP (host:container)
+      - "1080:80"   # Web UI (host:container)

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920,height=1080">
+  <title>Bible Overlay — Background Only</title>
+  <link href="/fonts/google/google-fonts.css" rel="stylesheet">
+  <link href="/fonts/cmg-sans-fonts.css" rel="stylesheet">
+  <style>
+    @font-face {
+      font-family: 'Charis SIL';
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url('/fonts/charis-sil/CharisSIL-Regular.ttf') format('truetype');
+    }
+
+    @font-face {
+      font-family: 'Charis SIL';
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url('/fonts/charis-sil/CharisSIL-Bold.ttf') format('truetype');
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: transparent;
+      font-family: "Charis SIL", "CMG Sans", "Noto Sans", sans-serif;
+    }
+
+    #background {
+      position: absolute;
+      inset: 0;
+      background-color: var(--bg-color, transparent);
+      background-image: var(--bg-image, none);
+      background-size: cover;
+      background-position: center;
+      opacity: var(--bg-opacity, 1);
+      z-index: 0;
+      /* Smooth transition when theme background changes */
+      transition: background-color 0.4s ease, opacity 0.4s ease;
+    }
+
+    #background-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: var(--bg-opacity, 1);
+      display: none;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="background"></div>
+  <video id="background-video" muted loop playsinline></video>
+
+  <script>
+    /**
+     * Bible Background-Only Overlay
+     *
+     * A static layer that displays only the theme background.
+     * Updated only when the theme changes (not on every verse).
+     * This eliminates flicker since the background never reloads.
+     *
+     * Data format (same as main overlay):
+     *   { theme: { backgroundColor, backgroundImage, backgroundOpacity, ... }, timestamp }
+     */
+
+    let lastTimestamp = 0;
+    const backgroundVideoEl = document.getElementById('background-video');
+
+    const PATTERN_CSS = {
+      'diagonal-lines': 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.15) 4px, rgba(255,255,255,0.15) 5px)',
+      'horizontal-lines': 'repeating-linear-gradient(0deg, transparent, transparent 6px, rgba(255,255,255,0.12) 6px, rgba(255,255,255,0.12) 7px)',
+      'vertical-lines': 'repeating-linear-gradient(90deg, transparent, transparent 6px, rgba(255,255,255,0.12) 6px, rgba(255,255,255,0.12) 7px)',
+      'dots': 'radial-gradient(circle, rgba(255,255,255,0.2) 1.5px, transparent 1.5px) 0 0 / 12px 12px',
+      'grid': 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px) 0 0 / 14px 14px',
+      'chevrons': 'linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%), linear-gradient(225deg, rgba(255,255,255,0.15) 25%, transparent 25%) 0 0 / 12px 12px',
+      'cross-hatch': 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 5px), repeating-linear-gradient(-45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 5px)',
+      'diagonal-checker': 'linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%), linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%) 0 0 / 16px 16px',
+      'zigzag': 'linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%) -6px 0, linear-gradient(225deg, rgba(255,255,255,0.15) 25%, transparent 25%) -6px 0, linear-gradient(315deg, rgba(255,255,255,0.15) 25%, transparent 25%), linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%) 0 0 / 12px 12px',
+      'subtle-noise': "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E\")",
+      'star-field': "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.3) 1px, transparent 1px), radial-gradient(circle at 80% 70%, rgba(255,255,255,0.2) 1px, transparent 1px), radial-gradient(circle at 50% 10%, rgba(255,255,255,0.25) 0.5px, transparent 0.5px) 0 0 / 20px 20px, 30px 30px, 15px 15px",
+    };
+
+    function readObsCssOverrideText() {
+      const direct = document.getElementById('obs-cssoverride');
+      if (direct && typeof direct.textContent === 'string' && direct.textContent.includes('--')) {
+        return direct.textContent;
+      }
+      const styles = document.querySelectorAll('style');
+      for (const styleEl of styles) {
+        const cssText = typeof styleEl.textContent === 'string' ? styleEl.textContent : '';
+        if (cssText && (cssText.includes('--overlay-data') || cssText.includes('--bg-pattern-data') || cssText.includes('--bg-image'))) {
+          return cssText;
+        }
+      }
+      return '';
+    }
+
+    function extractCssCustomPropertyValue(cssText, name) {
+      if (!cssText || !name) return '';
+      const propertyIndex = cssText.indexOf(name);
+      if (propertyIndex === -1) return '';
+      const colonIndex = cssText.indexOf(':', propertyIndex + name.length);
+      if (colonIndex === -1) return '';
+      let i = colonIndex + 1;
+      let quote = '';
+      let parenDepth = 0;
+      for (; i < cssText.length; i += 1) {
+        const ch = cssText[i];
+        const prev = i > 0 ? cssText[i - 1] : '';
+        if (quote) {
+          if (ch === quote && prev !== '\\') quote = '';
+          continue;
+        }
+        if (ch === '"' || ch === "'") {
+          quote = ch;
+          continue;
+        }
+        if (ch === '(') {
+          parenDepth += 1;
+          continue;
+        }
+        if (ch === ')') {
+          parenDepth = Math.max(0, parenDepth - 1);
+          continue;
+        }
+        if (ch === ';' && parenDepth === 0) break;
+      }
+      return cssText.slice(colonIndex + 1, i).trim();
+    }
+
+    function readComputedCssVar(name) {
+      const root = document.documentElement;
+      const inlineValue = root.style.getPropertyValue(name);
+      root.style.removeProperty(name);
+      const cssValue = getComputedStyle(root).getPropertyValue(name).trim();
+      if (!cssValue && inlineValue) root.style.setProperty(name, inlineValue);
+      return cssValue;
+    }
+
+    function readInjectedCssVar(name) {
+      const cssOverrideValue = extractCssCustomPropertyValue(readObsCssOverrideText(), name);
+      if (cssOverrideValue) return cssOverrideValue;
+      return readComputedCssVar(name);
+    }
+
+    function resolvePatternCss(pattern) {
+      const value = String(pattern || '').trim();
+      if (!value) return '';
+      if (value.startsWith('data:')) return `url("${value.replace(/"/g, '\\"')}")`;
+      if (value === '__FROM_CSS__') return readInjectedCssVar('--bg-pattern-data');
+      return PATTERN_CSS[value] || '';
+    }
+
+    function applyBackground(data) {
+      if (!data) return;
+      if (data.timestamp && data.timestamp <= lastTimestamp) return;
+      lastTimestamp = data.timestamp || 0;
+
+      const theme = data.theme;
+      if (!theme) return;
+
+      const root = document.documentElement.style;
+      const bgOpacity = String(theme.backgroundOpacity ?? 1);
+      const bgColor = String(theme.backgroundColor || 'transparent');
+      const bgColorEnd = String(theme.backgroundColorEnd || '').trim();
+      const bgGradientAngle = theme.bgGradientAngle ?? 135;
+      const isTransparent = !bgColor ||
+        bgColor === 'transparent' ||
+        bgColor === '#0000' ||
+        bgColor === '#00000000' ||
+        bgColor === 'rgba(0,0,0,0)' ||
+        bgColor === 'rgba(0, 0, 0, 0)';
+      const hasGradient = !isTransparent && Boolean(bgColorEnd) && bgColorEnd !== bgColor;
+      const bgColorFinal = hasGradient
+        ? `linear-gradient(${bgGradientAngle}deg, ${bgColor}, ${bgColorEnd})`
+        : bgColor;
+
+      root.setProperty('--bg-opacity', bgOpacity);
+
+      const bgVideoUrl = String(theme.backgroundVideo || '').trim();
+      if (bgVideoUrl) {
+        root.setProperty('--bg-image', 'none');
+        root.setProperty('--bg-color', 'transparent');
+        backgroundVideoEl.style.display = 'block';
+        backgroundVideoEl.style.opacity = bgOpacity;
+        backgroundVideoEl.loop = true;
+        backgroundVideoEl.muted = true;
+        if (backgroundVideoEl.getAttribute('src') !== bgVideoUrl) {
+          backgroundVideoEl.src = bgVideoUrl;
+          try { backgroundVideoEl.load(); } catch { }
+        }
+        const playPromise = backgroundVideoEl.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(() => { });
+        }
+        return;
+      }
+
+      if (backgroundVideoEl.getAttribute('src')) {
+        backgroundVideoEl.pause();
+        backgroundVideoEl.removeAttribute('src');
+        backgroundVideoEl.load();
+      }
+      backgroundVideoEl.style.display = 'none';
+
+      // Pattern: SVG data URIs (from BACKGROUND_PATTERNS) or legacy CSS patterns
+      if (theme.backgroundPattern) {
+        const patternCss = resolvePatternCss(theme.backgroundPattern);
+        if (patternCss) {
+          root.setProperty('--bg-image', patternCss);
+          root.setProperty('--bg-color', 'transparent');
+          return;
+        }
+      }
+
+      if (hasGradient) {
+        root.setProperty('--bg-color', 'transparent');
+        root.setProperty('--bg-image', bgColorFinal);
+        return;
+      }
+
+      if (theme.backgroundImage) {
+        let bgUrl = theme.backgroundImage;
+        if (bgUrl === '__BG_SOURCE__') return; // Separate OBS source handles BG
+        if (bgUrl === '__FROM_CSS__') {
+          const cssVal = getComputedStyle(document.documentElement).getPropertyValue('--bg-image').trim();
+          root.setProperty('--bg-image', cssVal || 'none');
+          if (cssVal) {
+            root.setProperty('--bg-color', 'transparent');
+          }
+          return;
+        }
+        if (bgUrl === '__FROM_LOCALSTORAGE__') {
+          const stored = localStorage.getItem('bible-overlay-bg-image');
+          bgUrl = stored || '';
+        }
+        if (bgUrl) {
+          root.setProperty('--bg-image', `url(${bgUrl})`);
+        } else {
+          root.setProperty('--bg-image', 'none');
+        }
+      } else {
+        root.setProperty('--bg-image', 'none');
+      }
+
+      root.setProperty('--bg-color', bgColor);
+    }
+
+    // Read from URL hash
+    function readFromUrlHash() {
+      try {
+        const hash = window.location.hash;
+        if (hash && hash.startsWith('#data=')) {
+          const encoded = hash.slice(6);
+          const data = JSON.parse(decodeURIComponent(encoded));
+          applyBackground(data);
+          return true;
+        }
+      } catch { /* parse error */ }
+      return false;
+    }
+
+    // BroadcastChannel
+    try {
+      const bc = new BroadcastChannel('obs-church-studio-bible-bg');
+      bc.onmessage = (e) => { applyBackground(e.data); };
+    } catch { /* not supported */ }
+
+    window.addEventListener('hashchange', () => { readFromUrlHash(); });
+
+    // Initial read
+    readFromUrlHash();
+  </script>
+</body>
+
+</html>
