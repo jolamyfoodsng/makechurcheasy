@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+    --color-brand-purple: #6C48F5;
+    --color-brand-blue: #4A62F3;
+    --color-brand-lightBlue: #F0F4FF;
+    --color-brand-darkText: #1F2937;
+    --color-brand-grayText: #6B7280;
+    --color-brand-border: #E5E7EB;
+    --color-brand-green: #10B981;
+    --color-brand-yellow: #F59E0B;
+}
+
+body {
+    background-color: #F9FAFB;
+}
+
+.pricing-grid-wrapper::-webkit-scrollbar {
+    display: none;
+}
+
+.pricing-grid-wrapper {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.gradient-bg {
+    background: linear-gradient(135deg, #4A62F3 0%, #6C48F5 100%);
+}
+
+.pricing-card {
+    transition: all 0.3s ease;
+}
+
+.pricing-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+/* Success check animation */
+@keyframes check-pop {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+
+    50% {
+        transform: scale(1.15);
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.success-check {
+    animation: check-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}

@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+    /* ── Brand Colors ─────────────────────────────────────────────── */
+    --color-brand-blue: #1D4ED8;
+    --color-brand-purple: #7C3AED;
+    --color-brand-orange: #F97316;
+
+    /* ── Light Mode ───────────────────────────────────────────────── */
+    --color-surface: #FFFFFF;
+    --color-background: #F8FAFC;
+    --color-elevated: #F1F5F9;
+    --color-border: #CBD5E1;
+    --color-border-subtle: #E2E8F0;
+
+    /* ── Text ─────────────────────────────────────────────────────── */
+    --color-text-primary: #0F172A;
+    --color-text-secondary: #334155;
+    --color-text-muted: #64748B;
+
+    /* ── Status ───────────────────────────────────────────────────── */
+    --color-success: #22C55E;
+    --color-warning: #F59E0B;
+    --color-error: #EF4444;
+
+    /* ── Legacy compat (will migrate) ─────────────────────────────── */
+    --color-brand-lightBlue: #F0F4FF;
+    --color-brand-darkText: #1F2937;
+    --color-brand-grayText: #6B7280;
+    --color-brand-border: #E5E7EB;
+    --color-brand-green: #10B981;
+    --color-brand-yellow: #F59E0B;
+}
+
+body {
+    background-color: #F8FAFC;
+    color: #0F172A;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────── */
+.pricing-grid-wrapper::-webkit-scrollbar {
+    display: none;
+}
+
+.pricing-grid-wrapper {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}

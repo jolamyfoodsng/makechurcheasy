@@ -1,0 +1,6 @@
+{
+  "name": "MakeChurchEasy Onboarding",
+  "description": "An interactive, beautiful, and fully responsive multi-step onboarding flow for church leaders setting up MakeChurchEasy.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

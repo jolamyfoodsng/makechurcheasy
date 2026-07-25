@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-primary-brand: #6c2bd9;
+  --color-primary-brand-dark: #5300b9;
+  --color-primary-brand-light: #dac7ff;
+  
+  --color-secondary-brand: #10b981;
+  --color-secondary-brand-dark: #006c49;
+  --color-secondary-brand-light: #6cf8bb;
+
+  --color-accent-brand: #f59e0b;
+  --color-accent-brand-dark: #7d4e00;
+
+  --color-bg-brand: #f9f9ff;
+  --color-surface-card: #ffffff;
+  --color-surface-dim: #d3daea;
+
+  --animate-floating: floating 3s ease-in-out infinite;
+  --animate-confetti: confetti 10s linear infinite;
+
+  @keyframes floating {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-8px); }
+    100% { transform: translateY(0px); }
+  }
+  @keyframes confetti {
+    from { transform: translateY(-10%) rotate(0deg); }
+    to { transform: translateY(100%) rotate(360deg); }
+  }
+}
+
+html, body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-brand);
+  color: #151c27;
+}
+
+/* Custom interactive classes */
+.custom-shadow {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 40px -10px rgba(108, 43, 217, 0.08);
+}
+

@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Subscription Management | ChurchFlow Pro</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <!-- Tailwind Configuration -->
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "background": "#fbf8ff",
+                        "primary": "#000000",
+                        "error-container": "#ffdad6",
+                        "secondary-fixed": "#dae1ff",
+                        "on-tertiary-container": "#838485",
+                        "surface-container-highest": "#e3e1ec",
+                        "on-secondary-fixed": "#001849",
+                        "on-primary-fixed-variant": "#474747",
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "on-surface": "#1a1b22",
+                        "outline-variant": "#cfc4c5",
+                        "on-secondary": "#ffffff",
+                        "surface-container-low": "#f4f2fd",
+                        "on-primary-fixed": "#1b1b1b",
+                        "on-background": "#1a1b22",
+                        "surface-variant": "#e3e1ec",
+                        "error": "#ba1a1a",
+                        "on-surface-variant": "#4c4546",
+                        "on-error-container": "#93000a",
+                        "on-secondary-fixed-variant": "#003fa4",
+                        "surface": "#fbf8ff",
+                        "surface-tint": "#5e5e5e",
+                        "surface-bright": "#fbf8ff",
+                        "on-error": "#ffffff",
+                        "surface-dim": "#dad9e3",
+                        "outline": "#7e7576",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-primary": "#c6c6c6",
+                        "tertiary-fixed": "#e2e2e3",
+                        "surface-container-high": "#e8e7f1",
+                        "surface-container": "#eeedf7",
+                        "on-tertiary-fixed-variant": "#454748",
+                        "on-secondary-container": "#f9f7ff",
+                        "tertiary-container": "#1a1c1d",
+                        "on-primary": "#ffffff",
+                        "secondary-container": "#0266ff",
+                        "inverse-on-surface": "#f1effa",
+                        "secondary-fixed-dim": "#b3c5ff",
+                        "inverse-surface": "#2f3038",
+                        "primary-fixed": "#e2e2e2",
+                        "on-tertiary-fixed": "#1a1c1d",
+                        "on-primary-container": "#848484",
+                        "primary-fixed-dim": "#c6c6c6",
+                        "tertiary": "#000000",
+                        "primary-container": "#1b1b1b",
+                        "secondary": "#0050cc"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-md": "16px",
+                        "container-max": "1200px",
+                        "gutter": "24px",
+                        "section-gap": "80px",
+                        "margin-mobile": "16px",
+                        "stack-sm": "8px",
+                        "stack-lg": "32px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Inter", "sans-serif"],
+                        "display-lg": ["Inter", "sans-serif"],
+                        "pricing-naira": ["Inter", "sans-serif"],
+                        "body-md": ["Inter", "sans-serif"],
+                        "metadata": ["JetBrains Mono", "monospace"],
+                        "headline-lg-mobile": ["Inter", "sans-serif"],
+                        "body-sm": ["Inter", "sans-serif"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "700" }],
+                        "pricing-naira": ["40px", { "lineHeight": "1", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "metadata": ["12px", { "lineHeight": "1", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "1.2", "fontWeight": "600" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }]
+                    }
+                },
+            },
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 24px;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(8px);
+            border: 1px solid #E4E4E7;
+        }
+
+        .active-nav-item {
+            background-color: #0266ff;
+            color: #ffffff;
+        }
+    </style>
+    <style>
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+</head>
+
+<body class="bg-background text-on-background min-h-screen">
+    <!-- Desktop Sidebar -->
+    <aside
+        class="hidden md:flex fixed left-0 top-0 h-full w-64 flex-col p-4 bg-surface-container-low border-r border-outline-variant z-40">
+        <div class="mb-8 px-2 flex items-center gap-3">
+            <span class="material-symbols-outlined text-secondary text-3xl"
+                style="font-variation-settings: 'FILL' 1;">church</span>
+            <span class="font-headline-lg text-[20px] font-black text-secondary">ChurchFlow Pro</span>
+        </div>
+        <div class="space-y-1">
+            <nav class="flex flex-col gap-1">
+                <a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-variant rounded-lg transition-all group"
+                    href="#">
+                    <span class="material-symbols-outlined text-xl">dashboard</span>
+                    <span class="font-body-md">Overview</span>
+                </a>
+                <a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-variant rounded-lg transition-all"
+                    href="#">
+                    <span class="material-symbols-outlined text-xl">compare_arrows</span>
+                    <span class="font-body-md">Compare Plans</span>
+                </a>
+                <a class="flex items-center gap-3 px-3 py-2 bg-secondary-container text-on-secondary-container rounded-lg font-bold"
+                    href="#">
+                    <span class="material-symbols-outlined text-xl"
+                        style="font-variation-settings: 'FILL' 1;">receipt_long</span>
+                    <span class="font-body-md">Billing</span>
+                </a>
+                <a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-variant rounded-lg transition-all"
+                    href="#">
+                    <span class="material-symbols-outlined text-xl">history</span>
+                    <span class="font-body-md">History</span>
+                </a>
+                <a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-variant rounded-lg transition-all"
+                    href="#">
+                    <span class="material-symbols-outlined text-xl">settings</span>
+                    <span class="font-body-md">Settings</span>
+                </a>
+            </nav>
+        </div>
+        <div class="mt-auto p-3 bg-surface-container rounded-xl flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full overflow-hidden bg-outline-variant flex items-center justify-center">
+                <img class="w-full h-full object-cover"
+                    data-alt="A clean, professional portrait of a tech-savvy production lead in a modern church environment, wearing a minimalist black polo, with soft studio lighting against a neutral background. The aesthetic is high-end corporate minimalism."
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuCiyypQDQFbEeyfmyhJPcWiryaDDr7G-EmoEIe1RkFKYzU6M__zlez9o3Qj5VV0WiwcQDz8WV4FNnOLCLdQ0vGRt3qMQnAuRR67D2oFvZpNZcP-Xwx-SNZnrKeFoPnxbM4SaRA8MZdd_wnNtfAF5r4cbBXG4evi9S7oqgGRBErS_naNI9lkrILKqCHWzzx7h0Iq7WISsTX4xbEQcOj1g6BX4bFnCJNKhgprGH_txmoviCb4-wKFRQp0g9pQX8I4kkp8_RKUcw3pgEL7" />
+            </div>
+            <div class="flex flex-col overflow-hidden">
+                <span class="font-body-md font-bold truncate">Grace Cathedral</span>
+                <span class="font-metadata text-on-surface-variant text-[10px]">Premium Plan</span>
+            </div>
+        </div>
+    </aside>
+    <!-- Top AppBar (Mobile) -->
+    <header
+        class="md:hidden fixed top-0 w-full h-16 bg-surface border-b border-outline-variant flex items-center justify-between px-4 z-50">
+        <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary">church</span>
+            <span class="font-headline-lg-mobile text-primary font-bold">ChurchFlow Pro</span>
+        </div>
+        <div class="w-8 h-8 rounded-full overflow-hidden">
+            <img class="w-full h-full object-cover"
+                data-alt="A minimalist logo for a church software platform, featuring stylized architectural lines and a modern, monochromatic aesthetic."
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmEggYf-ho8maCm9pk7TRXjvsqD1nEy6HiD-ZH0zzsmznrvm-Z6E0uvqOHb5hDCje3x0D-lKfQjzT6RO79Cxa6_nwtHoBavWa99cN31_w78hv8aFbT3rhWuPS2m4zgLBFfEWO9kXhmHKWmlRIQSsTvZZD13Y6p_OBNsNXF1UNRUv7wUEbMNR9WR11zApf7kmjK4a3Q9mKNtj3Swk42YKnrWGRMtcEu2vjKktK90DhQIkP_Lk-MyiLBQji0JocuOc7M1LnWpIt7gyWV" />
+        </div>
+    </header>
+    <!-- Main Content Canvas -->
+    <main class="md:pl-64 pt-16 md:pt-0 pb-24 md:pb-8 min-h-screen">
+        <div class="max-w-container-max mx-auto px-margin-mobile md:px-gutter py-8">
+            <!-- Header Section -->
+            <div class="flex flex-col md:flex-row md:items-end justify-between mb-stack-lg gap-4">
+                <div>
+                    <h1 class="font-headline-lg text-headline-lg text-primary">Subscription</h1>
+                    <p class="font-body-md text-on-surface-variant">Manage your plan, usage and billing.</p>
+                </div>
+                <div class="flex gap-3">
+                    <button
+                        class="px-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-body-sm font-medium hover:bg-surface-variant transition-colors flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[18px]">credit_card</span>
+                        Manage Billing
+                    </button>
+                    <button
+                        class="px-4 py-2 bg-primary text-on-primary rounded-lg font-body-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[18px]">upgrade</span>
+                        Change Plan
+                    </button>
+                </div>
+            </div>
+            <!-- Current Plan Bento -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-stack-lg">
+                <!-- Large Primary Card -->
+                <div
+                    class="md:col-span-2 glass-card rounded-xl p-8 flex flex-col justify-between border-2 border-secondary relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 p-4">
+                        <span
+                            class="px-3 py-1 bg-secondary text-white text-[12px] font-bold rounded-full uppercase tracking-wider">Active</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="font-metadata text-secondary uppercase tracking-widest">Complete Plan</span>
+                        </div>
+                        <h2 class="font-display-lg text-display-lg mb-1">Pro</h2>
+                        <div class="flex items-baseline gap-1 mb-6">
+                            <span class="font-pricing-naira text-pricing-naira text-primary">₦12,000</span>
+                            <span class="font-body-md text-on-surface-variant">/ month</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between mt-4 pt-6 border-t border-outline-variant">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-on-surface-variant">event_repeat</span>
+                            <span class="font-body-sm text-on-surface-variant">Renews on <span
+                                    class="font-bold text-on-surface">August 16, 2026</span></span>
+                        </div>
+                        <div class="flex -space-x-2">
+                            <div
+                                class="w-8 h-8 rounded-full border-2 border-white bg-surface-container flex items-center justify-center overflow-hidden">
+                                <img class="w-full h-full object-cover"
+                                    data-alt="Close-up of a high-tech audio mixing console in a modern, dark auditorium, with glowing LEDs and faders, representing advanced production capabilities in a minimalist style."
+                                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBatDr0NyjeArY1R8CF-IdzTCqutJdfWSXxCZvjMW7OQaVbht3WMXq_rf1c_SqRWVUH77QHOhDExbNg4Rx7050CF58XXcTN7x2UvG_1_q38UBdi835GMz07ep2yrNFDdwKcRuS4iV3H8xqC1OrZoumiuv1yFLBKOERvBOaxUFfccSguk0AoY6QMrDaeNJJaqPHG7KYGctb7FVH__t_4S_7dgxker7_YkqI8N2Aps3M0qfUzq-VsJaTNCD7sMmUURzQ1IfJS7VnneCSZ" />
+                            </div>
+                            <div
+                                class="w-8 h-8 rounded-full border-2 border-white bg-surface-container flex items-center justify-center">
+                                <span class="text-[10px] font-bold">+4</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Billing Snapshot -->
+                <div
+                    class="bg-surface-container-low rounded-xl p-6 flex flex-col justify-between border border-outline-variant">
+                    <h3 class="font-body-md font-bold mb-4">Billing Snapshot</h3>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center">
+                            <span class="font-body-sm text-on-surface-variant">Current charge</span>
+                            <span class="font-body-sm font-bold">₦12,000/mo</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="font-body-sm text-on-surface-variant">Next payment</span>
+                            <span class="font-body-sm font-bold">Aug 16, 2026</span>
+                        </div>
+                        <div class="flex justify-between items-center pt-4 border-t border-outline-variant">
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class="material-symbols-outlined text-[20px] text-on-surface-variant">payments</span>
+                                <span class="font-body-sm text-on-surface-variant">Visa •••• 4242</span>
+                            </div>
+                            <button
+                                class="text-secondary font-metadata text-[11px] hover:underline uppercase">Edit</button>
+                        </div>
+                    </div>
+                    <div class="mt-6">
+                        <button
+                            class="w-full py-2 bg-surface-variant hover:bg-outline-variant transition-colors rounded-lg font-metadata text-[12px] uppercase">Download
+                            Last Invoice</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Usage Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-stack-lg">
+                <div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm">
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <h3 class="font-body-md font-bold">AI Credits</h3>
+                            <p class="font-body-sm text-on-surface-variant">Used for transcription and translation</p>
+                        </div>
+                        <span class="font-metadata text-secondary">62% Left</span>
+                    </div>
+                    <div class="w-full h-2 bg-surface-container rounded-full overflow-hidden mb-4">
+                        <div class="h-full bg-secondary rounded-full" style="width: 62.35%"></div>
+                    </div>
+                    <p class="font-body-sm mb-4"><span class="font-bold">1,247 credits</span> remaining of 2,000 monthly
+                        credits</p>
+                    <button
+                        class="font-metadata text-secondary text-[12px] flex items-center gap-1 hover:gap-2 transition-all">
+                        BUY MORE CREDITS <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+                    </button>
+                </div>
+                <div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm">
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <h3 class="font-body-md font-bold">Connected Devices</h3>
+                            <p class="font-body-sm text-on-surface-variant">Devices allowed for remote control</p>
+                        </div>
+                        <span
+                            class="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded uppercase">Optimal</span>
+                    </div>
+                    <div class="flex items-center gap-4 mb-4">
+                        <div class="flex -space-x-1">
+                            <span class="material-symbols-outlined text-secondary text-3xl">smartphone</span>
+                            <span class="material-symbols-outlined text-secondary text-3xl">tablet</span>
+                            <span class="material-symbols-outlined text-outline-variant text-3xl">laptop</span>
+                        </div>
+                        <p class="font-body-sm"><span class="font-bold">2 connected</span> of 3 allowed</p>
+                    </div>
+                    <button
+                        class="font-metadata text-secondary text-[12px] flex items-center gap-1 hover:gap-2 transition-all">
+                        MANAGE DEVICES <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+                    </button>
+                </div>
+            </div>
+            <!-- Features and Limits Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-gutter mb-stack-lg">
+                <!-- Included Features -->
+                <div class="lg:col-span-2">
+                    <h3 class="font-body-md font-bold mb-6 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-secondary">verified</span>
+                        Included with your plan
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="p-4 bg-surface rounded-lg border border-outline-variant flex items-start gap-3">
+                            <span class="material-symbols-outlined text-secondary mt-1">settings_remote</span>
+                            <div>
+                                <h4 class="font-body-sm font-bold">Full Android Remote</h4>
+                                <p class="text-[12px] text-on-surface-variant">Control presentations from any device.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="p-4 bg-surface rounded-lg border border-outline-variant flex items-start gap-3">
+                            <span class="material-symbols-outlined text-secondary mt-1">present_to_all</span>
+                            <div>
+                                <h4 class="font-body-sm font-bold">Advanced Presentation</h4>
+                                <p class="text-[12px] text-on-surface-variant">Multi-screen support with alpha channel.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="p-4 bg-surface rounded-lg border border-outline-variant flex items-start gap-3">
+                            <span class="material-symbols-outlined text-secondary mt-1">mic</span>
+                            <div>
+                                <h4 class="font-body-sm font-bold">Speech-to-Scripture</h4>
+                                <p class="text-[12px] text-on-surface-variant">Automatic bible verse detection via
+                                    voice.</p>
+                            </div>
+                        </div>
+                        <div class="p-4 bg-surface rounded-lg border border-outline-variant flex items-start gap-3">
+                            <span class="material-symbols-outlined text-secondary mt-1">translate</span>
+                            <div>
+                                <h4 class="font-body-sm font-bold">Live Translation</h4>
+                                <p class="text-[12px] text-on-surface-variant">Real-time multilingual captioning.</p>
+                            </div>
+                        </div>
+                        <div class="p-4 bg-surface rounded-lg border border-outline-variant flex items-start gap-3">
+                            <span class="material-symbols-outlined text-secondary mt-1">cloud_sync</span>
+                            <div>
+                                <h4 class="font-body-sm font-bold">Cloud Sync</h4>
+                                <p class="text-[12px] text-on-surface-variant">Sync songs and media across all campus.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="p-4 bg-surface rounded-lg border border-outline-variant flex items-start gap-3">
+                            <span class="material-symbols-outlined text-secondary mt-1">api</span>
+                            <div>
+                                <h4 class="font-body-sm font-bold">API Access</h4>
+                                <p class="text-[12px] text-on-surface-variant">Connect with OBS, vMix, and more.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Plan Limits List -->
+                <div class="bg-white rounded-xl border border-outline-variant p-6 h-fit">
+                    <h3 class="font-body-md font-bold mb-6">Plan Limits</h3>
+                    <ul class="space-y-4">
+                        <li class="flex justify-between items-center">
+                            <span class="font-body-sm text-on-surface-variant">Songs</span>
+                            <span class="font-metadata text-primary">Unlimited</span>
+                        </li>
+                        <li class="flex justify-between items-center">
+                            <span class="font-body-sm text-on-surface-variant">Images &amp; Videos</span>
+                            <span class="font-metadata text-primary">Unlimited</span>
+                        </li>
+                        <li class="flex justify-between items-center">
+                            <span class="font-body-sm text-on-surface-variant">Bible Versions</span>
+                            <span class="font-metadata text-primary">Unlimited</span>
+                        </li>
+                        <li class="flex justify-between items-center">
+                            <span class="font-body-sm text-on-surface-variant">AI Credits</span>
+                            <span class="font-metadata text-primary">2,000/mo</span>
+                        </li>
+                        <li class="flex justify-between items-center">
+                            <span class="font-body-sm text-on-surface-variant">Devices</span>
+                            <span class="font-metadata text-primary">3</span>
+                        </li>
+                        <li class="flex justify-between items-center">
+                            <span class="font-body-sm text-on-surface-variant">Cloud Storage</span>
+                            <span class="font-metadata text-primary">50 GB</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <!-- Recent Activity -->
+            <section class="mt-section-gap">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="font-body-md font-bold">Recent Billing Activity</h3>
+                    <button class="text-secondary font-metadata text-[12px] uppercase">View History</button>
+                </div>
+                <div class="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-surface-container-low border-b border-outline-variant">
+                                <tr>
+                                    <th class="px-6 py-3 font-metadata text-on-surface-variant">EVENT</th>
+                                    <th class="px-6 py-3 font-metadata text-on-surface-variant">DETAILS</th>
+                                    <th class="px-6 py-3 font-metadata text-on-surface-variant text-right">DATE</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-outline-variant">
+                                <tr class="hover:bg-surface-bright transition-colors">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-2">
+                                            <span
+                                                class="material-symbols-outlined text-green-600 text-[20px]">arrow_upward</span>
+                                            <span class="font-body-sm font-medium">Plan upgraded</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 font-body-sm text-on-surface-variant">Basic → Growth, +2,000
+                                        plan credits</td>
+                                    <td class="px-6 py-4 font-body-sm text-on-surface-variant text-right">July 24, 2024
+                                    </td>
+                                </tr>
+                                <tr class="hover:bg-surface-bright transition-colors">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-2">
+                                            <span
+                                                class="material-symbols-outlined text-on-surface-variant text-[20px]">audio_file</span>
+                                            <span class="font-body-sm font-medium">Transcription</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 font-body-sm text-on-surface-variant">22m 04s audio processed,
+                                        -23 credits</td>
+                                    <td class="px-6 py-4 font-body-sm text-on-surface-variant text-right">July 17, 2024
+                                    </td>
+                                </tr>
+                                <tr class="hover:bg-surface-bright transition-colors">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-2">
+                                            <span
+                                                class="material-symbols-outlined text-on-surface-variant text-[20px]">sync_alt</span>
+                                            <span class="font-body-sm font-medium">Plan changed</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 font-body-sm text-on-surface-variant">Pro → Basic downgrade
+                                    </td>
+                                    <td class="px-6 py-4 font-body-sm text-on-surface-variant text-right">July 17, 2024
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+            <!-- Footer -->
+            <footer
+                class="max-w-container-max mx-auto py-8 flex flex-col md:flex-row justify-between items-center gap-4 mt-section-gap border-t border-outline-variant">
+                <p class="font-metadata text-on-surface-variant">© 2024 ChurchFlow Systems. Built for Ministry
+                    Excellence.</p>
+                <div class="flex gap-6">
+                    <a class="font-metadata text-on-surface-variant hover:text-primary transition-colors" href="#">Terms
+                        of Service</a>
+                    <a class="font-metadata text-on-surface-variant hover:text-primary transition-colors"
+                        href="#">Privacy Policy</a>
+                    <a class="font-metadata text-on-surface-variant hover:text-primary transition-colors" href="#">Help
+                        Center</a>
+                </div>
+            </footer>
+        </div>
+    </main>
+    <!-- Mobile Bottom Navigation -->
+    <nav
+        class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-2 bg-surface border-t border-outline-variant z-50">
+        <a class="flex flex-col items-center justify-center text-on-surface-variant p-2" href="#">
+            <span class="material-symbols-outlined">home</span>
+            <span class="font-body-sm text-[10px]">Home</span>
+        </a>
+        <a class="flex flex-col items-center justify-center text-on-surface-variant p-2" href="#">
+            <span class="material-symbols-outlined">account_balance_wallet</span>
+            <span class="font-body-sm text-[10px]">Plans</span>
+        </a>
+        <a class="flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container rounded-xl p-2 px-4"
+            href="#">
+            <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">payments</span>
+            <span class="font-body-sm text-[10px]">Billing</span>
+        </a>
+        <a class="flex flex-col items-center justify-center text-on-surface-variant p-2" href="#">
+            <span class="material-symbols-outlined">support_agent</span>
+            <span class="font-body-sm text-[10px]">Support</span>
+        </a>
+    </nav>
+    <script>
+        // Micro-interactions
+        document.querySelectorAll('button, a').forEach(elem => {
+            elem.addEventListener('mousedown', () => {
+                elem.style.transform = 'scale(0.98)';
+            });
+            elem.addEventListener('mouseup', () => {
+                elem.style.transform = 'scale(1)';
+            });
+            elem.addEventListener('mouseleave', () => {
+                elem.style.transform = 'scale(1)';
+            });
+        });
+
+        // Simple visibility observer for fade-in effect
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('opacity-100', 'translate-y-0');
+                    entry.target.classList.remove('opacity-0', 'translate-y-4');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('section, .glass-card, .bg-surface-container-lowest').forEach(el => {
+            el.classList.add('transition-all', 'duration-700', 'opacity-0', 'translate-y-4');
+            observer.observe(el);
+        });
+    </script>
+</body>
+
+</html>
