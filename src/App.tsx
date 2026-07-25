@@ -76,6 +76,7 @@ import ServicePlannerPage from "./pages/ServicePlannerPage";
 import SpeechToScripturePage from "./pages/SpeechToScripturePage";
 import TranscriptLibraryPage from "./pages/TranscriptLibraryPage";
 import TranscriptDetailPage from "./pages/TranscriptDetailPage";
+import CreditsPage from "./pages/CreditsPage";
 import CreditsGuard from "./components/CreditsGuard";
 import {
   getServicePlannerSnapshot,
@@ -1252,6 +1253,7 @@ function App() {
                       <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
                       <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
                       <Route path="countdowns" element={<CountdownsPage />} />
+                      <Route path="credits" element={<CreditsPage />} />
                       <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
                       <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />
                       <Route path="library" element={<Navigate to="/resources" replace />} />

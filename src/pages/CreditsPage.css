@@ -1,0 +1,784 @@
+/* ── Credits Page ──────────────────────────────────────────────────────── */
+
+.credits-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── Header ── */
+
+.credits-page__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.credits-page__title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.credits-page__subtitle {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  margin: 4px 0 0;
+}
+
+.credits-page__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Buttons ── */
+
+.credits-page__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
+  white-space: nowrap;
+}
+
+.credits-page__btn:active {
+  transform: scale(0.97);
+}
+
+.credits-page__btn--primary {
+  background: var(--accent-color);
+  color: #fff;
+}
+
+.credits-page__btn--primary:hover {
+  background: var(--accent-hover);
+}
+
+.credits-page__btn--secondary {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.credits-page__btn--secondary:hover {
+  background: var(--bg-secondary);
+}
+
+/* ── Balance Card ── */
+
+.credits-page__balance-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.credits-page__balance-card--low {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: linear-gradient(135deg, var(--bg-card), rgba(245, 158, 11, 0.04));
+}
+
+.credits-page__balance-card--zero {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: linear-gradient(135deg, var(--bg-card), rgba(239, 68, 68, 0.04));
+}
+
+.credits-page__balance-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.credits-page__balance-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.credits-page__balance-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.credits-page__balance-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.credits-page__balance-unit {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.credits-page__balance-sub {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 0;
+}
+
+.credits-page__admin-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+  margin-top: 4px;
+  width: fit-content;
+}
+
+.credits-page__balance-right {
+  flex: 1;
+  max-width: 380px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.credits-page__progress-track {
+  width: 100%;
+  height: 6px;
+  background: var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.credits-page__progress-fill {
+  height: 100%;
+  background: var(--accent-color);
+  border-radius: 4px;
+  transition: width 0.4s ease-in-out;
+}
+
+.credits-page__balance-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.credits-page__low-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: #f59e0b;
+  padding: 6px 10px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 4px;
+}
+
+.credits-page__zero-notice {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 6px 10px;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  border-radius: 4px;
+  line-height: 1.4;
+}
+
+/* ── Grid (Feature + Chart) ── */
+
+.credits-page__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* ── Card ── */
+
+.credits-page__card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.credits-page__card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.credits-page__card-title svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ── Feature Usage List ── */
+
+.credits-page__feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.credits-page__feature-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  transition: border-color 0.15s ease;
+}
+
+.credits-page__feature-row:hover {
+  border-color: var(--text-muted);
+}
+
+.credits-page__feature-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.credits-page__feature-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  background: rgba(var(--accent-rgb, 29, 78, 216), 0.12);
+  color: var(--accent-color);
+  flex-shrink: 0;
+}
+
+.credits-page__feature-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: block;
+}
+
+.credits-page__feature-count {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  display: block;
+}
+
+.credits-page__feature-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.credits-page__feature-bar-track {
+  width: 60px;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.credits-page__feature-bar-fill {
+  height: 100%;
+  background: var(--accent-color);
+  border-radius: 2px;
+}
+
+.credits-page__feature-credits {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #ef4444;
+  min-width: 36px;
+  text-align: right;
+}
+
+.credits-page__empty-feature {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  text-align: center;
+  gap: 4px;
+}
+
+.credits-page__empty-feature p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.credits-page__empty-feature-sub {
+  font-size: 0.78rem !important;
+  color: var(--text-muted) !important;
+}
+
+/* ── Credit Costs Reference ── */
+
+.credits-page__costs-ref {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.credits-page__costs-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.credits-page__cost-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  padding: 4px 0;
+}
+
+.credits-page__cost-name {
+  color: var(--text-secondary);
+}
+
+.credits-page__cost-value {
+  font-weight: 600;
+  color: var(--accent-color);
+  font-size: 0.72rem;
+  background: rgba(var(--accent-rgb, 29, 78, 216), 0.08);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+/* ── Chart ── */
+
+.credits-page__chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.credits-page__chart-range {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px;
+}
+
+.credits-page__range-btn {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.credits-page__range-btn:hover {
+  color: var(--text-primary);
+}
+
+.credits-page__range-btn--active {
+  background: var(--accent-color);
+  color: #fff;
+}
+
+.credits-page__chart-container {
+  margin-top: 4px;
+}
+
+.credits-page__empty-chart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+  gap: 8px;
+  min-height: 180px;
+}
+
+.credits-page__empty-chart svg {
+  color: var(--text-muted);
+  opacity: 0.4;
+}
+
+.credits-page__empty-chart p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.credits-page__empty-chart-sub {
+  font-size: 0.78rem !important;
+  color: var(--text-muted) !important;
+}
+
+/* ── Activity ── */
+
+.credits-page__activity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.credits-page__view-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-color);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.credits-page__view-all:hover {
+  opacity: 0.8;
+}
+
+.credits-page__activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.credits-page__activity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  transition: border-color 0.15s ease;
+}
+
+.credits-page__activity-row:hover {
+  border-color: var(--text-muted);
+}
+
+.credits-page__activity-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.credits-page__activity-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.credits-page__activity-icon--deduction {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.credits-page__activity-icon--credit {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.credits-page__activity-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.credits-page__activity-date {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  display: block;
+}
+
+.credits-page__activity-amount {
+  font-size: 0.82rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.credits-page__activity-amount--deduction {
+  color: #ef4444;
+}
+
+.credits-page__activity-amount--credit {
+  color: #22c55e;
+}
+
+.credits-page__empty-activity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  text-align: center;
+  gap: 8px;
+}
+
+.credits-page__empty-activity svg {
+  color: var(--text-muted);
+  opacity: 0.4;
+}
+
+.credits-page__empty-activity p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.credits-page__empty-activity-sub {
+  font-size: 0.78rem !important;
+  color: var(--text-muted) !important;
+}
+
+/* ── Bottom CTA ── */
+
+.credits-page__bottom-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.credits-page__cta-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.credits-page__cta-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.credits-page__cta-subtitle {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.credits-page__cta-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Error State ── */
+
+.credits-page__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.credits-page__error svg {
+  color: var(--text-muted);
+}
+
+.credits-page__retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.credits-page__retry-btn:hover {
+  background: var(--bg-secondary);
+}
+
+/* ── Skeleton ── */
+
+.credits-skeleton {
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--border-color) 25%,
+    var(--bg-card-hover) 50%,
+    var(--border-color) 75%
+  );
+  background-size: 200% 100%;
+  animation: credits-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes credits-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Recharts tooltip override ── */
+
+.credits-page__chart-container .recharts-tooltip-wrapper {
+  outline: none;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 768px) {
+  .credits-page {
+    padding: 20px 16px 32px;
+    gap: 16px;
+  }
+
+  .credits-page__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .credits-page__header-actions {
+    width: 100%;
+  }
+
+  .credits-page__balance-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 20px;
+  }
+
+  .credits-page__balance-right {
+    max-width: none;
+    width: 100%;
+  }
+
+  .credits-page__balance-value {
+    font-size: 1.5rem;
+  }
+
+  .credits-page__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .credits-page__activity-title {
+    max-width: 180px;
+  }
+
+  .credits-page__bottom-cta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .credits-page__cta-actions {
+    width: 100%;
+  }
+
+  .credits-page__cta-actions .credits-page__btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .credits-page__header-actions {
+    flex-direction: column;
+  }
+
+  .credits-page__header-actions .credits-page__btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .credits-page__feature-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .credits-page__feature-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .credits-page__feature-bar-track {
+    flex: 1;
+  }
+}
