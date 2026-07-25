@@ -1,0 +1,35 @@
+{
+  "version": "2.60.0",
+  "notes": "## MakeChurchEasy\n\n### Downloads\n| Platform | File |\n|----------|------|\n| macOS (Apple Silicon) | `.dmg` (arm64) |\n| macOS (Intel) | `.dmg` (x64) |\n| Windows | `.exe` (NSIS installer) or `.msi` |\n\n### Auto-Update\nExisting installations will automatically download and install this update on next launch.\n\n---\n_Built automatically from commit 38e2659cd65a00578cc4095e26b9b3366ca6af0d_",
+  "pub_date": "2026-07-16T08:05:20.615Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUZTNlbEpUQld0aUhGUnRhVFJkeFNuWllOQ0N6M1FZVERidXFCaE94a3k2ME9TbHNwa256ckJtblRFS25aS09MZ3RuWFkrTUR6RFBpOVBUSmliQVpkbVUyaURxSnR5U0FFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTg3ODQwCWZpbGU6TWFrZUNodXJjaEVhc3lfMi42MC4wX3g2NF9lbi1VUy5tc2kKOGFidTh1ZHM2bVNveVRteUZ5R0V1MDNLdy9XZDZxM0Q1clNnRTduN2hwN1gyTDZHbVhuMG5oVjUwWXhDNG04eWt2Z0lqZll1NlJVd1FWM1BGaVJFQUE9PQo=",
+      "url": "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/download/v2.60.0/MakeChurchEasy_2.60.0_x64_en-US.msi"
+    },
+    "windows-x86_64-msi": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUZTNlbEpUQld0aUhGUnRhVFJkeFNuWllOQ0N6M1FZVERidXFCaE94a3k2ME9TbHNwa256ckJtblRFS25aS09MZ3RuWFkrTUR6RFBpOVBUSmliQVpkbVUyaURxSnR5U0FFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTg3ODQwCWZpbGU6TWFrZUNodXJjaEVhc3lfMi42MC4wX3g2NF9lbi1VUy5tc2kKOGFidTh1ZHM2bVNveVRteUZ5R0V1MDNLdy9XZDZxM0Q1clNnRTduN2hwN1gyTDZHbVhuMG5oVjUwWXhDNG04eWt2Z0lqZll1NlJVd1FWM1BGaVJFQUE9PQo=",
+      "url": "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/download/v2.60.0/MakeChurchEasy_2.60.0_x64_en-US.msi"
+    },
+    "windows-x86_64-nsis": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUZTNlbEpUQld0aUI5N3I0dmptOTM4OThBQU8xMit0WTBLRE01VzZNYXhXTlU5Z1BxTjcydEpPeDg2ZnM1UU11Q2RSa2dZOTRwTEtvbDNleU5EMWdzejNmMEtMYjNMcndVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTg3ODQwCWZpbGU6TWFrZUNodXJjaEVhc3lfMi42MC4wX3g2NC1zZXR1cC5leGUKdmFUaFlqK1FtWUtqbWNWTWVOQ290M3J3ZlJDVDZlZDlaZE1qNmdqbDhKaGYrL0VmejZJUTIxakZ6UHlnR2t0cDV2R3dFZHdNcUp0MTJoVG50VmxlQnc9PQo=",
+      "url": "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/download/v2.60.0/MakeChurchEasy_2.60.0_x64-setup.exe"
+    },
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUZTNlbEpUQld0aUdkUG5zREFwRXlCdm5WTDJjSGJiTU81NFdzZHF3Z2h3b0s3RFdHRzZtUzZYVUxvNVNVOU9CNVliaU5waXUvYm1UR2hTeEpNbHRXSmpHSW1vRE9keVFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTg4MzE3CWZpbGU6TWFrZUNodXJjaEVhc3kuYXBwLnRhci5negp3SjJEOHRRZis0aHpJbFV4aXlBMWtTckJ5TktWcG5wVUh0Y3VLOERHS1hZS1QyMzJWNHZoYlM0ZWYxNzd1TnRRWWtYY2NKODdYOHpXR05RdHpEbkVBQT09Cg==",
+      "url": "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/download/v2.60.0/MakeChurchEasy_aarch64.app.tar.gz"
+    },
+    "darwin-aarch64-app": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUZTNlbEpUQld0aUdkUG5zREFwRXlCdm5WTDJjSGJiTU81NFdzZHF3Z2h3b0s3RFdHRzZtUzZYVUxvNVNVOU9CNVliaU5waXUvYm1UR2hTeEpNbHRXSmpHSW1vRE9keVFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTg4MzE3CWZpbGU6TWFrZUNodXJjaEVhc3kuYXBwLnRhci5negp3SjJEOHRRZis0aHpJbFV4aXlBMWtTckJ5TktWcG5wVUh0Y3VLOERHS1hZS1QyMzJWNHZoYlM0ZWYxNzd1TnRRWWtYY2NKODdYOHpXR05RdHpEbkVBQT09Cg==",
+      "url": "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/download/v2.60.0/MakeChurchEasy_aarch64.app.tar.gz"
+    },
+    "darwin-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUZTNlbEpUQld0aUROYXY1NDI1a2R5djVZTVE4aXBzMGZCZzVxaTdzVUJWdUR0ODFsTGxYZDJFT1QrTGFSL1ZDU3ZSbFYzK0ZURDVsRUhpMDB2TzNCWTQ4Y25JaElIelFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTg5MTEyCWZpbGU6TWFrZUNodXJjaEVhc3kuYXBwLnRhci5negpsUW1DRURvR0lnWEpHQkxHd1l2K2JpSE56SmUxaEhEcHdHRVRMS2FvS2FvYzV3YVlxaHUrQlBOZXovUmV2c2gzY3lPS0R5WlZCMXZ4akhjR094SFBEQT09Cg==",
+      "url": "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/download/v2.60.0/MakeChurchEasy_x64.app.tar.gz"
+    },
+    "darwin-x86_64-app": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUZTNlbEpUQld0aUROYXY1NDI1a2R5djVZTVE4aXBzMGZCZzVxaTdzVUJWdUR0ODFsTGxYZDJFT1QrTGFSL1ZDU3ZSbFYzK0ZURDVsRUhpMDB2TzNCWTQ4Y25JaElIelFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTg5MTEyCWZpbGU6TWFrZUNodXJjaEVhc3kuYXBwLnRhci5negpsUW1DRURvR0lnWEpHQkxHd1l2K2JpSE56SmUxaEhEcHdHRVRMS2FvS2FvYzV3YVlxaHUrQlBOZXovUmV2c2gzY3lPS0R5WlZCMXZ4akhjR094SFBEQT09Cg==",
+      "url": "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/download/v2.60.0/MakeChurchEasy_x64.app.tar.gz"
+    }
+  }
+}

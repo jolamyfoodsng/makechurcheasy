@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "ab-testing": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/ab-testing/SKILL.md",
+      "computedHash": "c42af0107540e71dfe9605eca51b5100d96730d0bddf51085fc0c9429e40083c"
+    }
+  }
+}

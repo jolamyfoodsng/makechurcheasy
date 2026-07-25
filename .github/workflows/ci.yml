@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  lint-typecheck:
+    name: Lint & TypeCheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  build-desktop:
+    name: Build Desktop Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_APP_ENV: development
+
+  build-api:
+    name: Build API (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_APP_ENV: development
+          NEXT_PUBLIC_APP_URL: http://localhost:4000
+          MONGODB_URI: mongodb://localhost:27017/makechurcheasy
+          AUTH_SECRET: ci-build-placeholder
+          FIREBASE_SERVICE_ACCOUNT_KEY: "{}"
+          NEXT_PUBLIC_FIREBASE_API_KEY: placeholder
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: placeholder
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: placeholder
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: placeholder
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+          NEXT_PUBLIC_FIREBASE_APP_ID: placeholder
+          NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: placeholder
+          PAYSTACK_SECRET_KEY: placeholder
+
+  build-dashboard:
+    name: Build Dashboard (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_APP_ENV: development
+          NEXT_PUBLIC_API_URL: http://localhost:4000
+          BACKEND_URL: http://localhost:3004
+          NEXT_PUBLIC_FIREBASE_API_KEY: placeholder
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: placeholder
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: placeholder
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: placeholder
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+          NEXT_PUBLIC_FIREBASE_APP_ID: placeholder
+          NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: placeholder
+
+  verify-env:
+    name: Required env vars present
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check VITE_APP_ENV
+        run: |
+          if [ -z "$VITE_APP_ENV" ]; then
+            echo "::error::VITE_APP_ENV is required but not set"
+            exit 1
+          fi
+          echo "VITE_APP_ENV=$VITE_APP_ENV"
+        env:
+          VITE_APP_ENV: ${{ vars.VITE_APP_ENV || 'development' }}
