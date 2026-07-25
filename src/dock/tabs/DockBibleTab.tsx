@@ -3506,14 +3506,24 @@ export default function DockBibleTab({
   const handleSelectFullscreenTheme = useCallback((theme: BibleTheme) => {
     setSelectedBibleTheme(theme);
     selectedBibleThemeRef.current = theme;
+    const variant = theme.variants?.fullscreen;
+    const baseTheme = variant
+      ? { ...theme, settings: variant.settings, rawTemplate: variant.rawTemplate }
+      : theme;
+    fsThemeSettingsRef.current = applyFullscreenQuickThemeSettings(baseTheme, fullscreenQuickThemeSettings).settings;
     handleOverlayModeChange("fullscreen");
-  }, [handleOverlayModeChange]);
+  }, [handleOverlayModeChange, fullscreenQuickThemeSettings]);
 
   const handleSelectLowerThirdTheme = useCallback((theme: BibleTheme) => {
     setSelectedLowerThirdTheme(theme);
     selectedLowerThirdThemeRef.current = theme;
+    const variant = theme.variants?.lowerThird;
+    const baseTheme = variant
+      ? { ...theme, settings: variant.settings, rawTemplate: variant.rawTemplate }
+      : theme;
+    ltThemeSettingsRef.current = applyLowerThirdQuickThemeSettings(baseTheme, lowerThirdQuickThemeSettings).settings;
     handleOverlayModeChange("lower-third");
-  }, [handleOverlayModeChange]);
+  }, [handleOverlayModeChange, lowerThirdQuickThemeSettings]);
 
   // Each mode keeps its own selected theme so switching to lower-third does
   // not accidentally keep reusing a fullscreen-only theme.
