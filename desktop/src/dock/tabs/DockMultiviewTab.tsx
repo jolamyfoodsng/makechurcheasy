@@ -4,7 +4,7 @@
  * Card-based Multi-View manager:
  *   - Each Multi-View is an independent card stacked vertically
  *   - Inline template selection + scene assignment per card
- *   - Per-card Push to OBS
+ *   - Per-card Push to OBS-
  *   - Card actions menu (⋮): Rename, Duplicate, Delete
  *   - No detail pages, no back buttons, everything on one screen
  */
@@ -1485,20 +1485,20 @@ function FramePicker({
           {filtered.map(frame => {
             const isSelected = selectedId === frame.id;
             return (
-            <button
-              key={frame.id}
-              type="button"
-              onClick={() => onSelect(frame.id)}
-              style={{
-                display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
-                padding: 10, borderRadius: 4, border: isSelected ? "1px solid var(--dock-accent)" : "1px solid var(--dock-border)",
-                background: isSelected ? "var(--dock-accent-bg, rgba(99,102,241,0.1))" : "transparent",
-                cursor: "pointer",
-              }}
-            >
-              <FramePreviewThumb frame={frame} />
-              <span style={{ fontSize: 10, color: "var(--dock-text-dim)", textAlign: "center" }}>{frame.name}</span>
-            </button>
+              <button
+                key={frame.id}
+                type="button"
+                onClick={() => onSelect(frame.id)}
+                style={{
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                  padding: 10, borderRadius: 4, border: isSelected ? "1px solid var(--dock-accent)" : "1px solid var(--dock-border)",
+                  background: isSelected ? "var(--dock-accent-bg, rgba(99,102,241,0.1))" : "transparent",
+                  cursor: "pointer",
+                }}
+              >
+                <FramePreviewThumb frame={frame} />
+                <span style={{ fontSize: 10, color: "var(--dock-text-dim)", textAlign: "center" }}>{frame.name}</span>
+              </button>
             );
           })}
         </div>
@@ -1839,16 +1839,16 @@ export default function DockMultiviewTab() {
   const feedbackTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const obsScanBusyRef = useRef(false);
 
-async function loadAddedLayoutIdsFromServer(): Promise<Set<string>> {
-  try {
-    const resp = await fetch("/uploads/mv-added-ids.json");
-    if (!resp.ok) return new Set();
-    const data = await resp.json();
-    return Array.isArray(data) ? new Set(data) : new Set();
-  } catch {
-    return new Set();
+  async function loadAddedLayoutIdsFromServer(): Promise<Set<string>> {
+    try {
+      const resp = await fetch("/uploads/mv-added-ids.json");
+      if (!resp.ok) return new Set();
+      const data = await resp.json();
+      return Array.isArray(data) ? new Set(data) : new Set();
+    } catch {
+      return new Set();
+    }
   }
-}
 
   // Show layouts that are added via gallery OR in use by saved cards
   const [addedLayoutIds, setAddedLayoutIds] = useState<Set<string>>(() => loadAddedLayoutIds());
@@ -2010,7 +2010,7 @@ async function loadAddedLayoutIdsFromServer(): Promise<Set<string>> {
             return updated;
           });
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [savedList]);
 

@@ -2248,7 +2248,7 @@ export default function App() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col bg-[#0F172A] text-[#F8FAFC] font-['Inter'] selection:bg-[#1D4ED8] selection:text-[rgba(29,78,216,0.08)]" id="app-root">
+        <div className="min-h-screen flex flex-col bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-['Inter']" id="app-root">
             {/* Main Content Body — dashboard provides header/footer */}
             {pricingLoading ? (
                 <div className="flex-1 pt-16 flex items-center justify-center">
