@@ -1,0 +1,299 @@
+/* ────────────────────────────────────────────────────────────────────────────
+   Dashboard Tutorial – Interactive Onboarding System
+   Prefix: dt-
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Overlay ── */
+.dt-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 9998;
+  animation: dt-fade-in 200ms ease-out;
+  pointer-events: none;
+}
+
+@keyframes dt-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── Target glow pulse ── */
+.mce-tutorial-glow-pulse {
+  animation: mce-tutorial-glow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes mce-tutorial-glow-pulse {
+  0%, 100% { box-shadow: var(--mce-glow); }
+  50% { box-shadow: var(--mce-glow-dim); }
+}
+
+/* ── Panel ── */
+.dt-panel {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: auto;
+  width: 340px;
+  background: var(--surface-dark);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(var(--primary-rgb), 0.08);
+  overflow: hidden;
+  animation: dt-panel-in 250ms ease-out;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes dt-panel-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Progress Bar ── */
+.dt-progress-bar {
+  height: 3px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.dt-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  transition: width 300ms ease;
+  border-radius: 0 2px 2px 0;
+}
+
+/* ── Panel Header ── */
+.dt-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 0;
+}
+
+.dt-step-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.1);
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.dt-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  transition: 0.15s;
+}
+
+.dt-close:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+/* ── Panel Body ── */
+.dt-panel-body {
+  padding: 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dt-step-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(var(--primary-rgb), 0.12);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dt-step-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.dt-step-desc {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.dt-action-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(var(--primary-rgb), 0.06);
+  border: 1px solid rgba(var(--primary-rgb), 0.15);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--primary);
+}
+
+.dt-action-hint svg { flex-shrink: 0; }
+
+.dt-step-complete {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--success);
+  animation: dt-check-in 200ms ease-out;
+}
+
+@keyframes dt-check-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Panel Footer ── */
+.dt-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.dt-nav-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Buttons ── */
+.dt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.dt-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.dt-btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.dt-btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.dt-btn-primary.dt-btn--waiting {
+  animation: dt-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes dt-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(var(--primary-rgb), 0); }
+}
+
+.dt-btn-ghost {
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.dt-btn-ghost:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+/* ── Final Step ── */
+.dt-panel--final { width: 400px; }
+
+.dt-final-header {
+  text-align: center;
+  padding: 28px 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.dt-final-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(var(--primary-rgb), 0.12);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.dt-final-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.dt-final-desc {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.dt-final-checklist {
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dt-final-check-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(var(--primary-rgb), 0.04);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+}
+
+.dt-check-icon { color: var(--success); flex-shrink: 0; }
+
+.dt-final-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 24px 24px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 720px) {
+  .dt-panel {
+    width: calc(100vw - 32px);
+    left: 16px !important;
+    right: 16px;
+  }
+  .dt-panel--final {
+    width: calc(100vw - 32px);
+  }
+}

@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>MCE Countdown</title>
+  <script>
+    (function() {
+      document.addEventListener("keydown", function(e) { var c = e.ctrlKey || e.metaKey; if (!c) return; var k = e.key; if (k === "=" || k === "-" || k === "0" || k === "Plus" || k === "Minus" || k === "NumpadAdd" || k === "NumpadSubtract" || k === "Numpad0") { e.preventDefault(); e.stopPropagation(); } }, true);
+      document.addEventListener("wheel", function(e) { if (e.ctrlKey || e.metaKey) e.preventDefault(); }, { passive: false, capture: true });
+      document.addEventListener("gesturestart", function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gesturechange", function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gestureend", function(e) { e.preventDefault(); }, { passive: false });
+    })();
+  </script>
+  <style>html,body,#countdown-container{touch-action:pan-y;-ms-content-zooming:none;}</style>
+  <style>
+    @import url('/fonts/fonts.css');
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    #countdown-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+    }
+
+    .timer-display {
+      color: #fff;
+      font-weight: 700;
+      font-size: clamp(80px, 25vw, 400px);
+      line-height: 1;
+      font-family: Inter, SF Pro Display, Arial, sans-serif;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.05em;
+      user-select: none;
+      text-shadow: 0 2px 16px rgba(0, 0, 0, 0.6), 0 0 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .message-display {
+      color: #ffffff;
+      font-weight: 600;
+      font-size: clamp(16px, 3vw, 48px);
+      line-height: 1.3;
+      font-family: Inter, SF Pro Display, Arial, sans-serif;
+      text-align: center;
+      max-width: 80%;
+      user-select: none;
+      opacity: 0;
+      transition: opacity 0.5s ease-in-out;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      white-space: normal;
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6), 0 0 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .message-display.visible {
+      opacity: 1;
+    }
+
+    .message-display.hidden {
+      opacity: 0;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="countdown-container">
+    <div id="timer" class="timer-display"></div>
+    <div id="message" class="message-display hidden"></div>
+  </div>
+
+  <script>
+    let countdownTimer = null;
+    let totalDuration = 0;
+    let startedAt = 0;
+    let currentCfg = {};
+    let lastSyncState = null;
+
+    const timerEl = document.getElementById("timer");
+    const messageEl = document.getElementById("message");
+
+    function parsePayload() {
+      try {
+        const hash = window.location.hash || "";
+        const marker = "#data=";
+        if (!hash.startsWith(marker)) return null;
+        return JSON.parse(decodeURIComponent(hash.slice(marker.length)));
+      } catch { return null; }
+    }
+
+    function formatTime(seconds, showH, showM, showS) {
+      const s = Math.max(0, Math.floor(seconds));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      const parts = [];
+      if (showH) parts.push(String(h).padStart(2, "0"));
+      if (showM) parts.push(String(m).padStart(2, "0"));
+      if (showS) parts.push(String(sec).padStart(2, "0"));
+      return parts.join(":") || "00:00";
+    }
+
+    function tick() {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      const remaining = Math.max(0, totalDuration - elapsed);
+
+      timerEl.textContent = formatTime(
+        remaining,
+        currentCfg.timer.showHours,
+        currentCfg.timer.showMinutes,
+        currentCfg.timer.showSeconds,
+      );
+
+      if (remaining <= 0 && countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+        handleAutoAction();
+      }
+    }
+
+    function handleAutoAction() {
+      const obs = currentCfg.obs || {};
+      if (!obs.autoAction || obs.autoAction === "none") return;
+      try {
+        window.parent.postMessage({
+          type: "countdown-complete",
+          action: obs.autoAction,
+          scene: obs.autoActionScene,
+        }, "*");
+      } catch { }
+    }
+
+    function renderMessage() {
+      const msg = currentCfg.message;
+      const container = document.getElementById("countdown-container");
+      if (msg && msg.text && msg.text.trim()) {
+        messageEl.textContent = msg.text;
+        messageEl.style.color = msg.color || "#ffffff";
+        messageEl.classList.remove("hidden");
+        messageEl.classList.add("visible");
+        // Position: above or below timer
+        if (msg.position === "above") {
+          container.insertBefore(messageEl, timerEl);
+        } else {
+          container.insertBefore(timerEl, messageEl);
+          container.appendChild(messageEl);
+        }
+      } else {
+        messageEl.classList.remove("visible");
+        messageEl.classList.add("hidden");
+      }
+    }
+
+    function render() {
+      const payload = parsePayload();
+      if (!payload || !payload.config) return;
+
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+      }
+
+      currentCfg = payload.config;
+      const timer = currentCfg.timer || {};
+      const sync = payload.sync;
+
+      // If sync state provided, use remaining directly instead of calculating
+      if (sync && typeof sync.remaining === "number") {
+        totalDuration = sync.remaining;
+        startedAt = Date.now();
+
+        if (sync.paused) {
+          // Paused: show static time, do not start interval
+          tick();
+          lastSyncState = sync;
+          return;
+        }
+      } else {
+        // No sync state — calculate from timer settings
+        if (timer.mode === "end-at-time" && timer.endAt) {
+          const endMs = new Date(timer.endAt).getTime();
+          totalDuration = Math.max(0, Math.floor((endMs - Date.now()) / 1000));
+        } else {
+          totalDuration = timer.durationSeconds || 600;
+        }
+        startedAt = Date.now();
+      }
+
+      lastSyncState = sync || null;
+      tick();
+      renderMessage();
+      countdownTimer = setInterval(tick, 250);
+    }
+
+    window.addEventListener("hashchange", render);
+    render();
+  </script>
+</body>
+
+</html>

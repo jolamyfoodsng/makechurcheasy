@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MakeChurchEasy Presentation</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #000000;
+      --fg: #f8fafc;
+      --muted: rgba(226, 232, 240, 0.78);
+      --panel: rgba(15, 23, 42, 0.86);
+      --border: rgba(148, 163, 184, 0.24);
+      --accent: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "Inter", "Segoe UI", sans-serif;
+      position: relative;
+    }
+
+    .remote-screen {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    .remote-stage {
+      position: absolute;
+      inset: 0;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    .stage-bg,
+    .stage-bg img,
+    .stage-bg video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .stage-bg img,
+    .stage-bg video {
+      object-fit: cover;
+      background: #000;
+    }
+
+    .stage-overlay {
+      position: absolute;
+      inset: 0;
+    }
+
+    .stage-content {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(28px, 4vw, 72px);
+    }
+
+    .stage-box {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      max-width: min(1440px, 100%);
+      width: 100%;
+      text-align: center;
+      white-space: pre-wrap;
+    }
+
+    .stage-box.align-left {
+      text-align: left;
+      align-items: flex-start;
+    }
+
+    .stage-box.align-center {
+      text-align: center;
+      align-items: center;
+      width: 100%;
+      max-width: none;
+    }
+
+    .stage-box.align-right {
+      text-align: right;
+      align-items: flex-end;
+    }
+
+    .stage-reference {
+      font-size: clamp(16px, 1.4vw, 26px);
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .stage-title {
+      font-size: clamp(28px, 2.6vw, 56px);
+      font-weight: 700;
+      line-height: 1.08;
+    }
+
+    .stage-subtitle {
+      font-size: clamp(18px, 1.5vw, 30px);
+      color: var(--muted);
+    }
+
+    .stage-body {
+      font-size: clamp(34px, 4vw, 86px);
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .media-layer,
+    .media-layer img,
+    .media-layer video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+    }
+
+    .media-layer img,
+    .media-layer video {
+      object-position: center center;
+    }
+
+    .countdown-shell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      text-align: center;
+    }
+
+    .countdown-clock {
+      font-variant-numeric: tabular-nums;
+      font-size: clamp(84px, 10vw, 210px);
+      line-height: 1;
+      font-weight: 800;
+    }
+
+    .countdown-message {
+      font-size: clamp(20px, 1.8vw, 34px);
+      color: var(--muted);
+    }
+
+    .ticker-layer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      z-index: 4;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .ticker-layer.ticker-top {
+      top: 0;
+    }
+
+    .ticker-layer.ticker-bottom {
+      bottom: 0;
+    }
+
+    .ticker-bar {
+      width: 100%;
+      padding: 14px 0;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .ticker-track {
+      display: inline-block;
+      padding-inline: 4vw;
+      will-change: transform;
+    }
+
+    .ticker-track.ticker-rtl {
+      animation-name: ticker-rtl;
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+    }
+
+    .ticker-track.ticker-ltr {
+      animation-name: ticker-ltr;
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+    }
+
+    .ticker-track.ticker-static {
+      display: block;
+      text-align: center;
+    }
+
+    .ticker-paused {
+      animation-play-state: paused !important;
+    }
+
+    .waiting-state,
+    .invalid-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      background: #000;
+    }
+
+    .state-card {
+      max-width: min(620px, 100%);
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 18px;
+      padding: 30px 34px;
+      text-align: center;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(18px);
+    }
+
+    .state-title {
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .state-copy {
+      margin-top: 10px;
+      font-size: 16px;
+      color: var(--muted);
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @keyframes ticker-rtl {
+      from {
+        transform: translateX(100%);
+      }
+
+      to {
+        transform: translateX(-100%);
+      }
+    }
+
+    @keyframes ticker-ltr {
+      from {
+        transform: translateX(-100%);
+      }
+
+      to {
+        transform: translateX(100%);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="remote-screen">
+    <div id="waitingState" class="waiting-state hidden">
+      <div class="state-card">
+        <div class="state-title">MakeChurchEasy Presentation</div>
+        <div class="state-copy">Waiting for presentation content…</div>
+      </div>
+    </div>
+    <div id="invalidState" class="invalid-state hidden">
+      <div class="state-card">
+        <div class="state-title">Presentation link is invalid</div>
+        <div class="state-copy">Open the locally generated presentation link from MakeChurchEasy again.</div>
+      </div>
+    </div>
+    <div id="stage" class="remote-stage"></div>
+  </div>
+
+  <script>
+    (function () {
+      const body = document.body;
+      const waitingState = document.getElementById("waitingState");
+      const invalidState = document.getElementById("invalidState");
+      const stage = document.getElementById("stage");
+
+      let sessionId = "";
+      let wsPort = 0;
+      let viewerId = "";
+      let socket = null;
+      let reconnectTimer = null;
+      let reconnectAttempt = 0;
+      let heartbeatTimer = null;
+      let pollTimer = null;
+      let countdownTimer = null;
+      let lastResolvedState = undefined;
+
+      const reconnectDelays = [1000, 3000, 5000, 10000];
+
+      function parseTokenFromPath() {
+        const match = window.location.pathname.match(/\/p\/([^/?#]+)/i);
+        return match ? decodeURIComponent(match[1]) : "";
+      }
+
+      function escapeHtml(value) {
+        return String(value == null ? "" : value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function getSessionId() {
+        const params = new URLSearchParams(window.location.search);
+        return parseTokenFromPath() || params.get("sessionId") || "";
+      }
+
+      function getViewerId() {
+        if (!sessionId) return "";
+        const key = `mce-presentation-viewer:${sessionId}`;
+        try {
+          const existing = sessionStorage.getItem(key);
+          if (existing) return existing;
+          const next = self.crypto && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `viewer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          sessionStorage.setItem(key, next);
+          return next;
+        } catch {
+          return `viewer-${Date.now()}`;
+        }
+      }
+
+      function clearCountdownTimer() {
+        if (countdownTimer !== null) {
+          window.clearInterval(countdownTimer);
+          countdownTimer = null;
+        }
+      }
+
+      function showInvalid() {
+        if (body) {
+          body.style.background = "#000";
+        }
+        stage.style.background = "transparent";
+        invalidState.classList.remove("hidden");
+        waitingState.classList.add("hidden");
+        stage.innerHTML = "";
+      }
+
+      function showWaiting() {
+        if (body) {
+          body.style.background = "#000";
+        }
+        stage.style.background = "transparent";
+        invalidState.classList.add("hidden");
+        waitingState.classList.remove("hidden");
+        stage.innerHTML = "";
+      }
+
+      function showBlank() {
+        invalidState.classList.add("hidden");
+        waitingState.classList.add("hidden");
+        stage.innerHTML = "";
+        if (body) {
+          body.style.background = "#000";
+        }
+        stage.style.background = "transparent";
+      }
+
+      function getContentUrl(value) {
+        const trimmed = String(value || "").trim();
+        if (!trimmed) return "";
+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
+          return trimmed;
+        }
+        if (trimmed.startsWith("/")) {
+          return trimmed;
+        }
+        return `/${trimmed.replace(/^\/+/, "")}`;
+      }
+
+      function getStyle(item) {
+        return item && item.style ? item.style : {};
+      }
+
+      function renderTextLayer(item) {
+        const style = getStyle(item);
+        const alignClass = `align-${style.textAlign || "center"}`;
+        const bodySize = style.fontSize ? `${Math.max(18, Number(style.fontSize))}px` : "";
+        const bodyColor = style.textColor || "#ffffff";
+        const boxOpacity = Number(style.overlayOpacity || 0);
+
+        const bgImage = getContentUrl(style.backgroundImage);
+        const bgVideo = getContentUrl(style.backgroundVideo);
+        const hasText = item.title || item.body || item.reference || item.subtitle;
+
+        return `
+          <div class="stage-bg">
+            ${bgImage ? `<img src="${escapeHtml(bgImage)}" alt="" style="object-fit:cover;opacity:${Math.max(0, Math.min(1, Number(style.backgroundOpacity || 1)))};" />` : ""}
+            ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" autoplay muted loop playsinline style="object-fit:cover;opacity:${Math.max(0, Math.min(1, Number(style.backgroundOpacity || 1)))};"></video>` : ""}
+          </div>
+          <div class="stage-overlay" style="opacity:${Math.max(0, Math.min(1, Number(style.backgroundOpacity == null ? 1 : style.backgroundOpacity)))};"></div>
+          ${hasText ? `
+            <div class="stage-content" style="padding:${Math.max(0, Number(style.safeArea || style.padding || 48))}px;">
+              <div class="stage-box ${alignClass}" style="
+                color:${escapeHtml(bodyColor)};
+                font-family:${escapeHtml(style.fontFamily || '"Inter", "Segoe UI", sans-serif')};
+                font-weight:${escapeHtml(String(style.fontWeight || 700))};
+                line-height:${Math.max(1, Number(style.lineHeight || 1.2))};
+                text-shadow:${escapeHtml(style.textShadow || "0 12px 40px rgba(0,0,0,0.45)")};
+                border-radius:${Math.max(0, Number(style.padding || 0) * 0.25)}px;
+                padding:${boxOpacity > 0 ? `${Math.max(12, Number(style.padding || 24))}px` : "0"};
+                opacity:1;
+              ">
+                ${item.reference ? `<div class="stage-reference">${escapeHtml(item.reference)}</div>` : ""}
+                ${item.title ? `<div class="stage-title">${escapeHtml(item.title)}</div>` : ""}
+                ${item.subtitle ? `<div class="stage-subtitle">${escapeHtml(item.subtitle)}</div>` : ""}
+                ${item.body ? `<div class="stage-body" style="font-size:${bodySize || "clamp(34px, 4vw, 86px)"};">${escapeHtml(item.body)}</div>` : ""}
+              </div>
+            </div>
+          ` : ""}
+        `;
+      }
+
+      function getMediaFit(value) {
+        switch (value) {
+          case "fit":
+          case "contain":
+            return "contain";
+          case "stretch":
+            return "fill";
+          case "fill":
+          default:
+            return "cover";
+        }
+      }
+
+      function syncVideoPlayback(video, playback) {
+        if (!video || !playback) return;
+        video.muted = Boolean(playback.muted);
+        video.loop = Boolean(playback.loop);
+        video.volume = Math.max(0, Math.min(1, Number(playback.volume == null ? 1 : playback.volume)));
+
+        const desiredPosition = Number(playback.positionSeconds || 0);
+        if (Number.isFinite(desiredPosition) && Math.abs(video.currentTime - desiredPosition) > 1.2) {
+          try {
+            video.currentTime = desiredPosition;
+          } catch {
+            // Ignore seek failures until metadata is ready.
+          }
+        }
+
+        if (playback.playing === false) {
+          video.pause();
+        } else {
+          video.play().catch(function () { });
+        }
+      }
+
+      function renderMediaLayer(item) {
+        const media = item.media || {};
+        const fit = getMediaFit(media.fit);
+        const background = media.backgroundColor || "#000000";
+        const src = getContentUrl(media.url || item.imageUrl || item.videoUrl);
+        const isVideo = media.kind === "video" || Boolean(item.videoUrl);
+
+        return `
+          <div class="media-layer" style="background:${escapeHtml(background)};">
+            ${isVideo
+              ? `<video id="stageVideo" src="${escapeHtml(src)}" autoplay muted loop playsinline style="object-fit:${fit};"></video>`
+              : `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title || "Presentation media")}" style="object-fit:${fit};" />`}
+          </div>
+        `;
+      }
+
+      function calculateRemainingSeconds(payload) {
+        if (!payload) return 0;
+        if (payload.status === "completed") return 0;
+        if (payload.status === "paused") {
+          return Math.max(0, Math.floor(Number(payload.pausedRemainingSeconds || 0)));
+        }
+        if (payload.mode === "time" && payload.endsAt) {
+          return Math.max(0, Math.floor((new Date(payload.endsAt).getTime() - Date.now()) / 1000));
+        }
+        if (payload.status === "running" && payload.startedAt) {
+          const startedAt = new Date(payload.startedAt).getTime();
+          const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+          return Math.max(0, Math.floor(Number(payload.durationSeconds || 0)) - elapsedSeconds);
+        }
+        if (payload.pausedRemainingSeconds != null) {
+          return Math.max(0, Math.floor(Number(payload.pausedRemainingSeconds)));
+        }
+        return Math.max(0, Math.floor(Number(payload.durationSeconds || 0)));
+      }
+
+      function formatClock(seconds, payload) {
+        const safeSeconds = Math.max(0, Math.floor(seconds));
+        const hours = Math.floor(safeSeconds / 3600);
+        const minutes = Math.floor((safeSeconds % 3600) / 60);
+        const secs = safeSeconds % 60;
+        const showHours = Boolean(payload.showHours || hours > 0);
+        const showMinutes = payload.showMinutes !== false || showHours;
+        const showSeconds = payload.showSeconds !== false || !showMinutes;
+        const parts = [];
+
+        if (showHours) {
+          parts.push(String(hours).padStart(2, "0"));
+        }
+        if (showMinutes) {
+          parts.push(String(minutes).padStart(2, "0"));
+        }
+        if (showSeconds) {
+          parts.push(String(secs).padStart(2, "0"));
+        }
+        return parts.join(":");
+      }
+
+      function renderCountdownLayer(item) {
+        const payload = item.countdown || {};
+        const style = getStyle(item);
+        const bgImage = getContentUrl(style.backgroundImage);
+        const bgVideo = getContentUrl(style.backgroundVideo);
+        const textColor = style.textColor || "#ffffff";
+        const title = payload.showTitle === false ? "" : (payload.title || item.title || "Countdown");
+        const message = payload.completionMessage || item.subtitle || "";
+
+        return `
+          <div class="stage-bg">
+            ${bgImage ? `<img src="${escapeHtml(bgImage)}" alt="" style="object-fit:cover;" />` : ""}
+            ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" autoplay muted loop playsinline style="object-fit:cover;"></video>` : ""}
+          </div>
+          <div class="stage-overlay" style="opacity:${Math.max(0, Math.min(1, Number(style.backgroundOpacity == null ? 1 : style.backgroundOpacity)))};"></div>
+          <div class="stage-content">
+            <div class="countdown-shell" style="
+              color:${escapeHtml(textColor)};
+              font-family:${escapeHtml(style.fontFamily || '"Inter", "Segoe UI", sans-serif')};
+              text-shadow:${escapeHtml(style.textShadow || "0 12px 40px rgba(0,0,0,0.45)")};
+            ">
+              ${title ? `<div class="stage-title">${escapeHtml(title)}</div>` : ""}
+              <div id="countdownClock" class="countdown-clock"></div>
+              ${message ? `<div class="countdown-message">${escapeHtml(message)}</div>` : ""}
+            </div>
+          </div>
+        `;
+      }
+
+      function renderTickerLayer(item) {
+        const ticker = item.ticker || {};
+        if (!ticker.text || ticker.hidden) return "";
+        const direction = ticker.direction || "rtl";
+        const durationSeconds = Math.max(6, 42 / Math.max(0.25, Number(ticker.speed || 1)));
+        const pausedClass = ticker.paused ? "ticker-paused" : "";
+        const directionClass = direction === "ltr"
+          ? "ticker-ltr"
+          : direction === "static"
+            ? "ticker-static"
+            : "ticker-rtl";
+        const positionClass = ticker.position === "top" ? "ticker-top" : "ticker-bottom";
+
+        return `
+          <div class="ticker-layer ${positionClass}">
+            <div class="ticker-bar" style="
+              background:${escapeHtml(ticker.backgroundColor || "#000000")};
+              color:${escapeHtml(ticker.textColor || "#ffffff")};
+              font-size:${Math.max(16, Number(ticker.fontSize || 32))}px;
+              font-weight:700;
+            ">
+              <div class="ticker-track ${directionClass} ${pausedClass}" style="animation-duration:${durationSeconds}s;">
+                ${escapeHtml(ticker.text)}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      function renderItem(item) {
+        clearCountdownTimer();
+        waitingState.classList.add("hidden");
+        invalidState.classList.add("hidden");
+
+        if (!item) {
+          showBlank();
+          return;
+        }
+
+        const isCountdown = Boolean(item.countdown);
+        const isMedia = Boolean(item.media) || Boolean(item.imageUrl) || Boolean(item.videoUrl);
+        const tickerMarkup = item.ticker ? renderTickerLayer(item) : "";
+        const stageMarkup = isCountdown
+          ? renderCountdownLayer(item)
+            : isMedia
+              ? renderMediaLayer(item)
+              : renderTextLayer(item);
+
+        if (body) {
+          body.style.background = getStyle(item).backgroundColor || "#000000";
+        }
+        stage.style.background = getStyle(item).backgroundColor || "#000000";
+        stage.innerHTML = `${stageMarkup}${tickerMarkup}`;
+
+        if (isCountdown) {
+          const payload = item.countdown || {};
+          const clock = document.getElementById("countdownClock");
+          const updateClock = function () {
+            if (!clock) return;
+            const remaining = calculateRemainingSeconds(payload);
+            clock.textContent = formatClock(remaining, payload);
+          };
+          updateClock();
+          countdownTimer = window.setInterval(updateClock, 250);
+          return;
+        }
+
+        const video = document.getElementById("stageVideo");
+        if (video && item.media && item.media.playback) {
+          const applyPlayback = function () {
+            syncVideoPlayback(video, item.media.playback);
+          };
+          video.addEventListener("loadedmetadata", applyPlayback, { once: true });
+          applyPlayback();
+        }
+      }
+
+      function applyRemoteState(nextState) {
+        lastResolvedState = nextState;
+        if (nextState === undefined) {
+          showWaiting();
+          return;
+        }
+        if (nextState === null) {
+          showWaiting();
+          return;
+        }
+
+        const item = nextState.fullscreen || nextState.lowerThird || null;
+        if (!item) {
+          showBlank();
+          return;
+        }
+        renderItem(item);
+      }
+
+      async function fetchMeta() {
+        const response = await fetch(`/api/presentation-meta?sessionId=${encodeURIComponent(sessionId)}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error("meta");
+        }
+        return response.json();
+      }
+
+      async function fetchState() {
+        if (!sessionId) return;
+        try {
+          const response = await fetch(`/api/presentation-state?sessionId=${encodeURIComponent(sessionId)}`, {
+            cache: "no-store",
+          });
+          if (!response.ok) return;
+          const payload = await response.json();
+          if (payload && Object.prototype.hasOwnProperty.call(payload, "state")) {
+            applyRemoteState(payload.state || null);
+            return;
+          }
+          applyRemoteState(payload || null);
+        } catch {
+          // Ignore fetch errors. Polling will retry.
+        }
+      }
+
+      async function sendHeartbeat() {
+        if (!sessionId || !viewerId) return;
+        try {
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+              type: "viewer_heartbeat",
+              sessionId,
+              viewerId,
+            }));
+            return;
+          }
+          await fetch("/api/presentation-viewer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId, viewerId }),
+          });
+        } catch {
+          // Ignore heartbeat failures.
+        }
+      }
+
+      function stopHeartbeat() {
+        if (heartbeatTimer !== null) {
+          window.clearInterval(heartbeatTimer);
+          heartbeatTimer = null;
+        }
+      }
+
+      function startHeartbeat() {
+        stopHeartbeat();
+        heartbeatTimer = window.setInterval(sendHeartbeat, 10000);
+      }
+
+      function stopPolling() {
+        if (pollTimer !== null) {
+          window.clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }
+
+      function startPolling() {
+        if (pollTimer !== null) return;
+        pollTimer = window.setInterval(function () {
+          if (document.visibilityState === "hidden") return;
+          void fetchState();
+          void sendHeartbeat();
+        }, 12000);
+      }
+
+      function clearReconnectTimer() {
+        if (reconnectTimer !== null) {
+          window.clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+      }
+
+      function scheduleReconnect() {
+        if (!sessionId || wsPort <= 0) {
+          startPolling();
+          return;
+        }
+
+        clearReconnectTimer();
+        const delay = reconnectDelays[Math.min(reconnectAttempt, reconnectDelays.length - 1)];
+        reconnectTimer = window.setTimeout(function () {
+          reconnectTimer = null;
+          reconnectAttempt += 1;
+          connectSocket();
+        }, delay);
+      }
+
+      function connectSocket() {
+        if (!sessionId || wsPort <= 0) {
+          startPolling();
+          return;
+        }
+
+        if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+          return;
+        }
+
+        try {
+          const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+          const host = window.location.hostname || "127.0.0.1";
+          socket = new WebSocket(`${protocol}//${host}:${wsPort}`);
+        } catch {
+          socket = null;
+          scheduleReconnect();
+          return;
+        }
+
+        socket.addEventListener("open", function () {
+          reconnectAttempt = 0;
+          stopPolling();
+          socket.send(JSON.stringify({
+            type: "viewer_hello",
+            sessionId,
+            viewerId,
+          }));
+          void sendHeartbeat();
+        });
+
+        socket.addEventListener("message", function (event) {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload && payload.type === "presentation_state" && payload.sessionId === sessionId) {
+              applyRemoteState(payload.state || null);
+            }
+          } catch {
+            // Ignore malformed socket messages.
+          }
+        });
+
+        socket.addEventListener("close", function () {
+          socket = null;
+          scheduleReconnect();
+        });
+
+        socket.addEventListener("error", function () {
+          if (socket) {
+            socket.close();
+          }
+        });
+      }
+
+      async function bootstrap() {
+        sessionId = getSessionId();
+        if (!sessionId) {
+          showInvalid();
+          return;
+        }
+
+        viewerId = getViewerId();
+        showWaiting();
+
+        try {
+          const params = new URLSearchParams(window.location.search);
+          wsPort = Number(params.get("wsPort") || "0");
+          if (wsPort <= 0) {
+            const meta = await fetchMeta();
+            wsPort = Number(meta && meta.wsPort ? meta.wsPort : 0);
+          }
+        } catch {
+          wsPort = 0;
+        }
+
+        await fetchState();
+        connectSocket();
+        startHeartbeat();
+        startPolling();
+        void sendHeartbeat();
+      }
+
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") {
+          void fetchState();
+          void sendHeartbeat();
+        }
+      });
+
+      window.addEventListener("beforeunload", function () {
+        stopHeartbeat();
+        stopPolling();
+        clearReconnectTimer();
+        clearCountdownTimer();
+        try {
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.close();
+          }
+        } catch {
+          // Ignore close failures.
+        }
+      });
+
+      bootstrap().catch(function () {
+        showInvalid();
+      });
+    })();
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>MCE Countdown Background</title>
+  <script>
+    (function() {
+      document.addEventListener("keydown", function(e) { var c = e.ctrlKey || e.metaKey; if (!c) return; var k = e.key; if (k === "=" || k === "-" || k === "0" || k === "Plus" || k === "Minus" || k === "NumpadAdd" || k === "NumpadSubtract" || k === "Numpad0") { e.preventDefault(); e.stopPropagation(); } }, true);
+      document.addEventListener("wheel", function(e) { if (e.ctrlKey || e.metaKey) e.preventDefault(); }, { passive: false, capture: true });
+      document.addEventListener("gesturestart", function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gesturechange", function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gestureend", function(e) { e.preventDefault(); }, { passive: false });
+    })();
+  </script>
+  <style>html,body,#bg-container,#bg-layer,#bg-video,#bg-overlay{touch-action:pan-y;-ms-content-zooming:none;}</style>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    #bg-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #bg-layer {
+      position: absolute;
+      inset: 0;
+      background: #000;
+    }
+
+    #bg-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    #bg-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0);
+    }
+  </style>
+</head>
+
+<body>
+  <div id="bg-container">
+    <div id="bg-layer"></div>
+    <video id="bg-video" style="display:none;" playsinline></video>
+    <div id="bg-overlay"></div>
+  </div>
+
+  <script>
+    const bgLayer = document.getElementById("bg-layer");
+    const bgVideo = document.getElementById("bg-video");
+    const bgOverlay = document.getElementById("bg-overlay");
+
+    function parsePayload() {
+      try {
+        const hash = window.location.hash || "";
+        const marker = "#data=";
+        if (!hash.startsWith(marker)) return null;
+        return JSON.parse(decodeURIComponent(hash.slice(marker.length)));
+      } catch { return null; }
+    }
+
+    function resolveAssetUrl(url) {
+      if (!url) return "";
+      if (url.startsWith("data:") || url.startsWith("blob:")) return url;
+      if (url.startsWith("http://") || url.startsWith("https://")) return url;
+      if (url.startsWith("/")) {
+        try {
+          const base = window.location.origin;
+          return base + url;
+        } catch { return url; }
+      }
+      return url;
+    }
+
+    function renderBackground() {
+      const payload = parsePayload();
+      if (!payload || !payload.config) return;
+
+      const bg = payload.config.background || {};
+      const baseUrl = payload.baseUrl || "";
+
+      // Reset
+      bgLayer.style.cssText = "position:absolute;inset:0;";
+      bgVideo.style.display = "none";
+      bgVideo.src = "";
+      bgOverlay.style.background = "rgba(0,0,0,0)";
+
+      switch (bg.type) {
+        case "solid":
+          bgLayer.style.backgroundColor = bg.color || "#000";
+          break;
+
+        case "gradient":
+          bgLayer.style.background = `linear-gradient(${bg.gradientAngle || 180}deg, ${bg.gradientStart || "#000"}, ${bg.gradientEnd || "#333"})`;
+          break;
+
+        case "image": {
+          const imgSrc = resolveAssetUrl(bg.imageUrl) || "";
+          bgLayer.style.backgroundImage = `url(${imgSrc})`;
+          bgLayer.style.backgroundSize = bg.imageFit || "cover";
+          bgLayer.style.backgroundPosition = `${bg.positionX || 50}% ${bg.positionY || 50}%`;
+          bgLayer.style.backgroundRepeat = "no-repeat";
+
+          const blur = bg.blur || 0;
+          const brightness = bg.brightness != null ? bg.brightness : 100;
+          const zoom = bg.zoom || 1;
+          bgLayer.style.filter = `blur(${blur}px) brightness(${brightness}%)`;
+          bgLayer.style.transform = `scale(${zoom})`;
+          bgLayer.style.transformOrigin = `${bg.positionX || 50}% ${bg.positionY || 50}%`;
+          break;
+        }
+
+        case "video": {
+          const vidSrc = resolveAssetUrl(bg.videoUrl) || "";
+          if (vidSrc) {
+            bgLayer.style.backgroundColor = "#000";
+            bgVideo.src = vidSrc;
+            bgVideo.loop = bg.loop !== false;
+            bgVideo.muted = bg.muted !== false;
+            bgVideo.autoplay = true;
+            bgVideo.style.display = "block";
+
+            const fit = bg.imageFit || "cover";
+            bgVideo.style.objectFit = fit === "stretch" ? "fill" : fit;
+
+            const blur = bg.blur || 0;
+            const brightness = bg.brightness != null ? bg.brightness : 100;
+            if (blur > 0 || brightness !== 100) {
+              bgVideo.style.filter = `blur(${blur}px) brightness(${brightness}%)`;
+            }
+          } else {
+            bgLayer.style.backgroundColor = "#000";
+          }
+          break;
+        }
+
+        case "transparent":
+          bgLayer.style.background = "transparent";
+          break;
+
+        default:
+          bgLayer.style.backgroundColor = bg.color || "#000";
+      }
+
+      // Dark overlay for image/video (flyerMode or overlayOpacity)
+      const hasOverlay = bg.type === "image" || bg.type === "video";
+      if (hasOverlay) {
+        const opacity = bg.flyerMode ? 0.6 : (bg.overlayOpacity || 0);
+        if (opacity > 0) {
+          bgOverlay.style.background = `rgba(0,0,0,${opacity})`;
+        }
+      }
+    }
+
+    // Only set once on load — never listen for hashchange
+    renderBackground();
+  </script>
+</body>
+
+</html>

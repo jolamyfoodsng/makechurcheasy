@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Font Test — Twi/Yoruba</title>
+  <style>
+    @font-face {
+      font-family: 'Charis SIL';
+      font-style: normal;
+      font-weight: 400;
+      src: url('/fonts/charis-sil/CharisSIL-Regular.ttf') format('truetype');
+    }
+
+    @font-face {
+      font-family: 'Charis SIL';
+      font-style: normal;
+      font-weight: 700;
+      src: url('/fonts/charis-sil/CharisSIL-Bold.ttf') format('truetype');
+    }
+
+    body {
+      padding: 40px;
+      background: #0f172a;
+      color: #e0e0e0;
+      font-family: system-ui;
+    }
+
+    h2 {
+      color: #60a5fa;
+      margin-top: 24px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 150px;
+      font-size: 18px;
+      font-family: 'Charis SIL', monospace;
+      background: #1e293b;
+      color: #e0e0e0;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 8px;
+    }
+
+    .sample {
+      font-size: 18px;
+      padding: 8px 0;
+    }
+
+    .label {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 8px;
+    }
+
+    .check {
+      color: #22c55e;
+      font-weight: bold;
+    }
+
+    .fail {
+      color: #ef4444;
+      font-weight: bold;
+    }
+
+    #result {
+      margin-top: 16px;
+      padding: 12px;
+      background: #1e293b;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>🔤 Charis SIL Font Test</h1>
+  <p>Open the DevTools console (F12) to see font loading status.</p>
+
+  <div class="label">Static text (Charis SIL):</div>
+  <div class="sample" style="font-family: 'Charis SIL', serif;">
+    Ɛyɛ obi a ɔpɛ sɛ ɔbɛyɛ ayɛ &nbsp;|&nbsp; Ọlọ́run &nbsp;|&nbsp; Chineke ụwa
+  </div>
+
+  <h2>Paste test — type or paste Twi/Yoruba below:</h2>
+  <textarea id="input" placeholder="Paste Twi here: ɛ ɔ Ɛ Ɔ — or Yoruba: ẹ ọ — or Igbo: ụ ị"></textarea>
+
+  <div id="result">
+    <strong>Char检测:</strong> <span id="status">Waiting for input...</span>
+  </div>
+
+  <script>
+    const input = document.getElementById('input');
+    const status = document.getElementById('status');
+
+    // Check if Charis SIL loaded
+    document.fonts.ready.then(() => {
+      const loaded = [...document.fonts].filter(f => f.family === 'Charis SIL');
+      console.log('Charis SIL fonts loaded:', loaded.length);
+      loaded.forEach(f => console.log(`  ${f.weight} — ${f.status}`));
+    });
+
+    input.addEventListener('input', () => {
+      const text = input.value;
+      const checks = [];
+      const chars = {
+        'ɛ': '0x025B', 'ɔ': '0x0254', 'Ɛ': '0x0190', 'Ɔ': '0x0186',
+        'ẹ': '0x1EB9', 'ọ': '0x1ECD', 'ụ': '0x1EE5', 'ị': '0x1ECB'
+      };
+      for (const [ch, code] of Object.entries(chars)) {
+        if (text.includes(ch)) {
+          checks.push(`<span class="check">✓</span> '${ch}' (U+${code.slice(2)}) found`);
+        }
+      }
+      status.innerHTML = checks.length ? checks.join('<br>') : 'No special characters detected yet.';
+    });
+  </script>
+</body>
+
+</html>

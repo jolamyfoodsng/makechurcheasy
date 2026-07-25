@@ -1,0 +1,257 @@
+/**
+ * useCountryPricing.ts — Fetches pricing for the desktop app.
+ *
+ * Uses the 3-region model API:
+ * - "nigeria": NGN pricing with introductory rates
+ * - "africa": USD Africa pricing
+ * - "global": USD Global pricing
+ *
+ * Supports manual region override via localStorage.
+ */
+
+import { useState, useEffect, useCallback } from "react";
+import { getDeviceSecret } from "../services/authService";
+import { getUserScopedKey } from "../services/userScopedStorage";
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+export interface PlanPrice {
+  monthly: number;
+  yearly: number;
+  introductoryMonthly?: number;
+}
+
+export interface CountryPricing {
+  countryCode: string;
+  countryName: string;
+  currency: string;
+  currencySymbol: string;
+  plans: {
+    basic: PlanPrice;
+    growth: PlanPrice;
+    pro: PlanPrice;
+  };
+  pricingVersion: number;
+  region: "nigeria" | "africa" | "global";
+  source: "country" | "override" | "fallback";
+  detectedCountry?: string;
+}
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const API_BASE =
+  import.meta.env.VITE_AUTH_API_URL ||
+  "https://api.creatorstudioslabs.stream";
+
+const CACHE_KEY = "ocs-country-pricing";
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const HARD_EXPIRY_MS = CACHE_TTL_MS * 10; // 50 minutes max
+const REGION_KEY = "pricingRegion";
+
+// ── Cache helpers ────────────────────────────────────────────────────────────
+
+interface CacheEntry {
+  pricing: CountryPricing;
+  fetchedAt: number;
+}
+
+function readCacheEntry(): CacheEntry | null {
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(CACHE_KEY));
+    if (!raw) return null;
+    const entry: CacheEntry = JSON.parse(raw);
+    if (Date.now() - entry.fetchedAt > HARD_EXPIRY_MS) return null;
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+function readCache(): CountryPricing | null {
+  return readCacheEntry()?.pricing ?? null;
+}
+
+function writeCache(pricing: CountryPricing): void {
+  try {
+    localStorage.setItem(
+      getUserScopedKey(CACHE_KEY),
+      JSON.stringify({ pricing, fetchedAt: Date.now() })
+    );
+  } catch {
+    // quota exceeded — ignore
+  }
+}
+
+// ── Fetcher ──────────────────────────────────────────────────────────────────
+
+let inflight: Promise<CountryPricing> | null = null;
+
+async function fetchPricing(region?: string): Promise<CountryPricing> {
+  if (inflight) return inflight;
+  inflight = doFetch(region).finally(() => {
+    inflight = null;
+  });
+  return inflight;
+}
+
+async function doFetch(region?: string): Promise<CountryPricing> {
+  const secret = getDeviceSecret();
+  const regionParam = region ? `?region=${region}` : "";
+  const res = await fetch(`${API_BASE}/api/pricing/country${regionParam}`, {
+    headers: {
+      "X-Device-Secret": secret || "",
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Pricing API returned ${res.status}`);
+  }
+  const data = await res.json();
+  if (!data?.plans || !data?.currency) {
+    throw new Error("Invalid pricing response");
+  }
+  writeCache(data);
+  return data;
+}
+
+// ── React hook ───────────────────────────────────────────────────────────────
+
+interface UseCountryPricingResult {
+  pricing: CountryPricing | null;
+  loading: boolean;
+  error: string | null;
+  retry: () => void;
+  formatPrice: (amount: number) => string;
+  getPlanPrice: (
+    planId: "basic" | "growth" | "pro",
+    cycle: "monthly" | "yearly"
+  ) => number;
+  getFormattedPlanPrice: (
+    planId: "basic" | "growth" | "pro",
+    cycle: "monthly" | "yearly"
+  ) => string;
+  getIntroPrice: (planId: "basic" | "growth" | "pro") => number | undefined;
+  currency: string;
+  currencySymbol: string;
+  region: "nigeria" | "africa" | "global";
+  source: string;
+  detectedCountry?: string;
+  manualRegion: string | null;
+  setRegion: (region: string) => void;
+}
+
+export function useCountryPricing(): UseCountryPricingResult {
+  const [pricing, setPricing] = useState<CountryPricing | null>(() => readCache());
+  const [loading, setLoading] = useState(!pricing);
+  const [error, setError] = useState<string | null>(null);
+  const [manualRegion, setManualRegion] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(getUserScopedKey(REGION_KEY));
+    } catch {
+      return null;
+    }
+  });
+
+  const setRegion = useCallback((region: string) => {
+    try {
+      localStorage.setItem(getUserScopedKey(REGION_KEY), region);
+    } catch { /* ignore */ }
+    setManualRegion(region);
+  }, []);
+
+  const load = useCallback(async (force = false) => {
+    // Serve cache unless forced refresh
+    if (!force) {
+      const cachedEntry = readCacheEntry();
+      if (cachedEntry) {
+        setPricing(cachedEntry.pricing);
+        setLoading(false);
+        if (Date.now() - cachedEntry.fetchedAt >= CACHE_TTL_MS) {
+          fetchPricing(manualRegion || undefined)
+            .then((fresh) => setPricing(fresh))
+            .catch(() => { });
+        }
+        return;
+      }
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const fresh = await fetchPricing(manualRegion || undefined);
+      setPricing(fresh);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load pricing"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [manualRegion]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const retry = useCallback(() => {
+    load(true);
+  }, [load]);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  const formatPrice = useCallback(
+    (amount: number): string => {
+      if (!pricing) return "...";
+      if (amount === 0) return `${pricing.currencySymbol}0`;
+      const formatted = amount.toLocaleString("en-US");
+      return `${pricing.currencySymbol}${formatted}`;
+    },
+    [pricing]
+  );
+
+  const getPlanPrice = useCallback(
+    (
+      planId: "basic" | "growth" | "pro",
+      cycle: "monthly" | "yearly"
+    ): number => {
+      if (!pricing) return 0;
+      return pricing.plans[planId]?.[cycle] ?? 0;
+    },
+    [pricing]
+  );
+
+  const getFormattedPlanPrice = useCallback(
+    (
+      planId: "basic" | "growth" | "pro",
+      cycle: "monthly" | "yearly"
+    ): string => {
+      const amount = getPlanPrice(planId, cycle);
+      return formatPrice(amount);
+    },
+    [getPlanPrice, formatPrice]
+  );
+
+  const getIntroPrice = useCallback(
+    (planId: "basic" | "growth" | "pro"): number | undefined => {
+      return pricing?.plans[planId]?.introductoryMonthly;
+    },
+    [pricing]
+  );
+
+  return {
+    pricing,
+    loading,
+    error,
+    retry,
+    formatPrice,
+    getPlanPrice,
+    getFormattedPlanPrice,
+    getIntroPrice,
+    currency: pricing?.currency ?? "",
+    currencySymbol: pricing?.currencySymbol ?? "",
+    region: pricing?.region ?? "global",
+    source: pricing?.source ?? "",
+    detectedCountry: pricing?.detectedCountry,
+    manualRegion,
+    setRegion,
+  };
+}
