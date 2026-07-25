@@ -253,7 +253,7 @@ const Header: React.FC<{
         ];
 
         return (
-            <header className="w-full top-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 z-50 fixed shadow-xs" id="main-header">
+            <header className="w-full top-0 bg-white border-b border-slate-200 z-50 fixed shadow-xs" id="main-header">
                 <div className="flex justify-between items-center w-full px-4 sm:px-6 max-w-[1000px] mx-auto h-16">
                     {/* Brand Logo */}
                     <div
@@ -261,8 +261,8 @@ const Header: React.FC<{
                         className="flex items-center gap-2 cursor-pointer active:opacity-80 transition-opacity"
                         id="brand-logo"
                     >
-                        <span className="material-symbols-outlined text-slate-900 dark:text-slate-100 text-[32px] font-semibold">church</span>
-                        <span className="font-['Geist'] text-[22px] sm:text-[24px] font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                        <span className="material-symbols-outlined text-slate-900 text-[32px] font-semibold">church</span>
+                        <span className="font-['Geist'] text-[22px] sm:text-[24px] font-bold text-slate-900 tracking-tight">
                             ChurchFlow Pro
                         </span>
                     </div>
@@ -277,8 +277,8 @@ const Header: React.FC<{
                                     id={`nav-tab-${item.id}`}
                                     onClick={() => setActiveTab(item.id)}
                                     className={`h-full flex items-center px-1 text-sm font-medium transition-colors duration-200 relative cursor-pointer ${isActive
-                                        ? 'text-slate-900 dark:text-slate-100 font-bold border-b-2 border-[#1D4ED8]'
-                                        : 'text-slate-600 dark:text-slate-300 hover:text-[#1D4ED8]'
+                                        ? 'text-slate-900 font-bold border-b-2 border-[#1D4ED8]'
+                                        : 'text-slate-600 hover:text-[#1D4ED8]'
                                         }`}
                                 >
                                     {item.label}
@@ -290,14 +290,14 @@ const Header: React.FC<{
                     {/* Admin Profile & Organization */}
                     <div className="relative flex items-center gap-3">
                         <div className="hidden sm:block text-right">
-                            <p className="font-bold text-sm leading-none text-slate-900 dark:text-slate-100">{churchName}</p>
-                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{adminName}</p>
+                            <p className="font-bold text-sm leading-none text-slate-900">{churchName}</p>
+                            <p className="text-xs text-slate-600 mt-0.5">{adminName}</p>
                         </div>
 
                         <button
                             id="profile-avatar-btn"
                             onClick={() => setProfileOpen(!profileOpen)}
-                            className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/40 transition-shadow cursor-pointer"
+                            className="w-10 h-10 rounded-full bg-white border border-slate-200 overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/40 transition-shadow cursor-pointer"
                             title="Account Menu"
                         >
                             <img
@@ -309,10 +309,10 @@ const Header: React.FC<{
 
                         {/* Profile Dropdown */}
                         {profileOpen && (
-                            <div className="absolute right-0 top-14 w-64 bg-white border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg py-2 z-50 text-sm" id="profile-dropdown">
+                            <div className="absolute right-0 top-14 w-64 bg-white border border-slate-200 rounded-xl shadow-lg py-2 z-50 text-sm" id="profile-dropdown">
                                 <div className="px-4 py-2 border-b border-[rgba(29,78,216,0.04)]">
-                                    <p className="font-bold text-slate-900 dark:text-slate-100">{churchName}</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">admin@gracecathedral.org</p>
+                                    <p className="font-bold text-slate-900">{churchName}</p>
+                                    <p className="text-xs text-slate-500">admin@gracecathedral.org</p>
                                     <span className="inline-block mt-1 px-2 py-0.5 bg-[rgba(29,78,216,0.06)] text-[#1D4ED8] text-[10px] font-bold rounded-full font-['JetBrains_Mono']">
                                         BASIC PLAN ACTIVE
                                     </span>
@@ -322,7 +322,7 @@ const Header: React.FC<{
                                     <button
                                         id="profile-link-overview"
                                         onClick={() => { setActiveTab('overview'); setProfileOpen(false); }}
-                                        className="w-full px-4 py-2 text-left text-slate-900 dark:text-slate-100 hover:bg-[rgba(29,78,216,0.06)] flex items-center gap-2 cursor-pointer"
+                                        className="w-full px-4 py-2 text-left text-slate-900 hover:bg-[rgba(29,78,216,0.06)] flex items-center gap-2 cursor-pointer"
                                     >
                                         <span className="material-symbols-outlined text-[18px]">dashboard</span>
                                         Dashboard Overview
@@ -330,7 +330,7 @@ const Header: React.FC<{
                                     <button
                                         id="profile-link-settings"
                                         onClick={() => { setActiveTab('settings'); setProfileOpen(false); }}
-                                        className="w-full px-4 py-2 text-left text-slate-900 dark:text-slate-100 hover:bg-[rgba(29,78,216,0.06)] flex items-center gap-2 cursor-pointer"
+                                        className="w-full px-4 py-2 text-left text-slate-900 hover:bg-[rgba(29,78,216,0.06)] flex items-center gap-2 cursor-pointer"
                                     >
                                         <span className="material-symbols-outlined text-[18px]">manage_accounts</span>
                                         Ministry Profile & Team
@@ -338,7 +338,7 @@ const Header: React.FC<{
                                     <button
                                         id="profile-link-billing"
                                         onClick={() => { setActiveTab('billing'); setProfileOpen(false); }}
-                                        className="w-full px-4 py-2 text-left text-slate-900 dark:text-slate-100 hover:bg-[rgba(29,78,216,0.06)] flex items-center gap-2 cursor-pointer"
+                                        className="w-full px-4 py-2 text-left text-slate-900 hover:bg-[rgba(29,78,216,0.06)] flex items-center gap-2 cursor-pointer"
                                     >
                                         <span className="material-symbols-outlined text-[18px]">receipt_long</span>
                                         Invoices & Payment
@@ -371,13 +371,13 @@ const MobileNav: React.FC<{
     setActiveTab: (tab: ActiveTab) => void;
 }> = ({ activeTab, setActiveTab }) => {
     return (
-        <div className="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-2 bg-white dark:bg-slate-900 shadow-md border-t border-slate-200 dark:border-slate-700 z-50" id="mobile-bottom-nav">
+        <div className="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-2 bg-white shadow-md border-t border-slate-200 z-50" id="mobile-bottom-nav">
             <button
                 id="mobile-tab-overview"
                 onClick={() => setActiveTab('overview')}
                 className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-150 cursor-pointer ${activeTab === 'overview'
-                    ? 'bg-[#2563EB] text-slate-900 dark:text-slate-100'
-                    : 'text-slate-600 dark:text-slate-300 active:bg-white dark:bg-slate-800'
+                    ? 'bg-[#2563EB] text-slate-900'
+                    : 'text-slate-600 active:bg-white'
                     }`}
             >
                 <span className="material-symbols-outlined text-[22px]">home</span>
@@ -388,8 +388,8 @@ const MobileNav: React.FC<{
                 id="mobile-tab-compare"
                 onClick={() => setActiveTab('compare')}
                 className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-150 cursor-pointer ${activeTab === 'compare'
-                    ? 'bg-[#2563EB] text-slate-900 dark:text-slate-100'
-                    : 'text-slate-600 dark:text-slate-300 active:bg-white dark:bg-slate-800'
+                    ? 'bg-[#2563EB] text-slate-900'
+                    : 'text-slate-600 active:bg-white'
                     }`}
             >
                 <span className="material-symbols-outlined fill-icon text-[22px]">account_balance_wallet</span>
@@ -400,8 +400,8 @@ const MobileNav: React.FC<{
                 id="mobile-tab-billing"
                 onClick={() => setActiveTab('billing')}
                 className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-150 cursor-pointer ${activeTab === 'billing'
-                    ? 'bg-[#2563EB] text-slate-900 dark:text-slate-100'
-                    : 'text-slate-600 dark:text-slate-300 active:bg-white dark:bg-slate-800'
+                    ? 'bg-[#2563EB] text-slate-900'
+                    : 'text-slate-600 active:bg-white'
                     }`}
             >
                 <span className="material-symbols-outlined text-[22px]">payments</span>
@@ -412,8 +412,8 @@ const MobileNav: React.FC<{
                 id="mobile-tab-support"
                 onClick={() => setActiveTab('support')}
                 className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-150 cursor-pointer ${activeTab === 'support'
-                    ? 'bg-[#2563EB] text-slate-900 dark:text-slate-100'
-                    : 'text-slate-600 dark:text-slate-300 active:bg-white dark:bg-slate-800'
+                    ? 'bg-[#2563EB] text-slate-900'
+                    : 'text-slate-600 active:bg-white'
                     }`}
             >
                 <span className="material-symbols-outlined text-[22px]">support_agent</span>
@@ -431,13 +431,13 @@ const Footer: React.FC<{
     onOpenRegionalModal?: () => void;
 }> = ({ setActiveTab, onOpenRegionalModal }) => {
     return (
-        <footer className="w-full mt-20 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" id="main-footer">
+        <footer className="w-full mt-20 border-t border-slate-200 bg-white" id="main-footer">
             <div className="max-w-[1200px] mx-auto py-8 px-4 sm:px-6 flex flex-col md:flex-row justify-between items-center gap-6">
                 <div className="flex flex-col items-center md:items-start gap-2">
-                    <span className="font-['JetBrains_Mono'] text-[12px] font-medium uppercase tracking-widest text-slate-600 dark:text-slate-300">
+                    <span className="font-['JetBrains_Mono'] text-[12px] font-medium uppercase tracking-widest text-slate-600">
                         ChurchFlow Systems
                     </span>
-                    <p className="font-['JetBrains_Mono'] text-[10px] text-slate-500 dark:text-slate-400 text-center md:text-left">
+                    <p className="font-['JetBrains_Mono'] text-[10px] text-slate-500 text-center md:text-left">
                         © 2026 ChurchFlow Systems. Built for Ministry Excellence.
                     </p>
                 </div>
@@ -446,28 +446,28 @@ const Footer: React.FC<{
                     <button
                         id="footer-terms-btn"
                         onClick={() => alert('ChurchFlow Pro Terms of Service: All plans include church presentation rights.')}
-                        className="font-['JetBrains_Mono'] text-[12px] font-medium text-slate-600 dark:text-slate-300 hover:text-[#1D4ED8] transition-colors cursor-pointer"
+                        className="font-['JetBrains_Mono'] text-[12px] font-medium text-slate-600 hover:text-[#1D4ED8] transition-colors cursor-pointer"
                     >
                         Terms of Service
                     </button>
                     <button
                         id="footer-privacy-btn"
                         onClick={() => alert('Privacy Policy: End-to-end media encryption for all church assets.')}
-                        className="font-['JetBrains_Mono'] text-[12px] font-medium text-slate-600 dark:text-slate-300 hover:text-[#1D4ED8] transition-colors cursor-pointer"
+                        className="font-['JetBrains_Mono'] text-[12px] font-medium text-slate-600 hover:text-[#1D4ED8] transition-colors cursor-pointer"
                     >
                         Privacy Policy
                     </button>
                     <button
                         id="footer-regional-btn"
                         onClick={onOpenRegionalModal}
-                        className="font-['JetBrains_Mono'] text-[12px] font-medium text-slate-600 dark:text-slate-300 hover:text-[#1D4ED8] transition-colors cursor-pointer"
+                        className="font-['JetBrains_Mono'] text-[12px] font-medium text-slate-600 hover:text-[#1D4ED8] transition-colors cursor-pointer"
                     >
                         Regional Settings
                     </button>
                     <button
                         id="footer-help-btn"
                         onClick={() => setActiveTab && setActiveTab('support')}
-                        className="font-['JetBrains_Mono'] text-[12px] font-medium text-slate-600 dark:text-slate-300 hover:text-[#1D4ED8] transition-colors cursor-pointer"
+                        className="font-['JetBrains_Mono'] text-[12px] font-medium text-slate-600 hover:text-[#1D4ED8] transition-colors cursor-pointer"
                     >
                         Help Center
                     </button>
@@ -536,12 +536,12 @@ const UpgradeModal: React.FC<{
 
         return (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs" id="upgrade-modal-backdrop">
-                <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-2xl max-w-lg w-full p-6 sm:p-8 shadow-2xl relative animate-in fade-in zoom-in duration-200" id="upgrade-modal-card">
+                <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 sm:p-8 shadow-2xl relative animate-in fade-in zoom-in duration-200" id="upgrade-modal-card">
                     {/* Close Button */}
                     <button
                         id="modal-close-btn"
                         onClick={onClose}
-                        className="absolute top-4 right-4 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-slate-100 p-1 rounded-full hover:bg-[rgba(29,78,216,0.04)] cursor-pointer"
+                        className="absolute top-4 right-4 text-slate-500 hover:text-slate-900 p-1 rounded-full hover:bg-[rgba(29,78,216,0.04)] cursor-pointer"
                     >
                         <span className="material-symbols-outlined">close</span>
                     </button>
@@ -555,29 +555,29 @@ const UpgradeModal: React.FC<{
                                 </span>
                             </div>
 
-                            <h3 className="text-2xl font-bold font-['Geist'] text-slate-900 dark:text-slate-100 mb-1">
+                            <h3 className="text-2xl font-bold font-['Geist'] text-slate-900 mb-1">
                                 Confirm {planTitle}
                             </h3>
-                            <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">
+                            <p className="text-sm text-slate-600 mb-6">
                                 Grace Cathedral · Admin Console Subscription
                             </p>
 
-                            <div className="bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-xl p-4 mb-6 space-y-3">
+                            <div className="bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-xl p-4 mb-6 space-y-3">
                                 <div className="flex justify-between items-baseline">
-                                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Selected Plan</span>
+                                    <span className="text-sm font-medium text-slate-900">Selected Plan</span>
                                     <span className="font-bold text-lg text-[#1D4ED8]">{planTitle}</span>
                                 </div>
                                 <div className="flex justify-between items-baseline">
-                                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Billing Cycle</span>
+                                    <span className="text-sm font-medium text-slate-900">Billing Cycle</span>
                                     <span className="text-sm capitalize font-semibold">{billingCycle} Billed</span>
                                 </div>
                                 <div className="flex justify-between items-baseline">
-                                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Region / Currency</span>
+                                    <span className="text-sm font-medium text-slate-900">Region / Currency</span>
                                     <span className="text-sm font-['JetBrains_Mono']">{regionData.label}</span>
                                 </div>
-                                <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between items-baseline">
-                                    <span className="font-bold text-slate-900 dark:text-slate-100">Total Due Today</span>
-                                    <span className="text-2xl font-bold font-['Inter'] text-slate-900 dark:text-slate-100">
+                                <div className="pt-2 border-t border-slate-200 flex justify-between items-baseline">
+                                    <span className="font-bold text-slate-900">Total Due Today</span>
+                                    <span className="text-2xl font-bold font-['Inter'] text-slate-900">
                                         {priceMain}
                                     </span>
                                 </div>
@@ -586,9 +586,9 @@ const UpgradeModal: React.FC<{
 
                             {targetPlan === 'ambassador' ? (
                                 <div className="space-y-4">
-                                    <p className="text-xs text-slate-600 dark:text-slate-300">
+                                    <p className="text-xs text-slate-600">
                                         Our enterprise ministry relations manager will contact your executive staff at{' '}
-                                        <strong className="text-slate-900 dark:text-slate-100">admin@gracecathedral.org</strong> within 2 business hours.
+                                        <strong className="text-slate-900">admin@gracecathedral.org</strong> within 2 business hours.
                                     </p>
                                     <button
                                         id="submit-inquiry-btn"
@@ -608,7 +608,7 @@ const UpgradeModal: React.FC<{
                                         <button
                                             id="cancel-downgrade-btn"
                                             onClick={onClose}
-                                            className="flex-1 py-3 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-semibold rounded-lg hover:bg-[rgba(29,78,216,0.04)] cursor-pointer"
+                                            className="flex-1 py-3 border border-slate-200 text-slate-900 font-semibold rounded-lg hover:bg-[rgba(29,78,216,0.04)] cursor-pointer"
                                         >
                                             Keep Current Plan
                                         </button>
@@ -625,7 +625,7 @@ const UpgradeModal: React.FC<{
                             ) : (
                                 <div className="space-y-4">
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-['JetBrains_Mono']">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-['JetBrains_Mono']">
                                             Select Payment Method
                                         </label>
                                         <div className="grid grid-cols-3 gap-2">
@@ -634,7 +634,7 @@ const UpgradeModal: React.FC<{
                                                 onClick={() => setPaymentMethod('card')}
                                                 className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1 text-xs font-bold transition-all cursor-pointer ${paymentMethod === 'card'
                                                     ? 'border-[#1D4ED8] bg-[rgba(29,78,216,0.06)] text-[#1D4ED8]'
-                                                    : 'border-slate-200 dark:border-slate-700 hover:border-[#1D4ED8]'
+                                                    : 'border-slate-200 hover:border-[#1D4ED8]'
                                                     }`}
                                             >
                                                 <span className="material-symbols-outlined text-[20px]">credit_card</span>
@@ -645,7 +645,7 @@ const UpgradeModal: React.FC<{
                                                 onClick={() => setPaymentMethod('paystack')}
                                                 className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1 text-xs font-bold transition-all cursor-pointer ${paymentMethod === 'paystack'
                                                     ? 'border-[#1D4ED8] bg-[rgba(29,78,216,0.06)] text-[#1D4ED8]'
-                                                    : 'border-slate-200 dark:border-slate-700 hover:border-[#1D4ED8]'
+                                                    : 'border-slate-200 hover:border-[#1D4ED8]'
                                                     }`}
                                             >
                                                 <span className="material-symbols-outlined text-[20px]">payments</span>
@@ -656,7 +656,7 @@ const UpgradeModal: React.FC<{
                                                 onClick={() => setPaymentMethod('transfer')}
                                                 className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1 text-xs font-bold transition-all cursor-pointer ${paymentMethod === 'transfer'
                                                     ? 'border-[#1D4ED8] bg-[rgba(29,78,216,0.06)] text-[#1D4ED8]'
-                                                    : 'border-slate-200 dark:border-slate-700 hover:border-[#1D4ED8]'
+                                                    : 'border-slate-200 hover:border-[#1D4ED8]'
                                                     }`}
                                             >
                                                 <span className="material-symbols-outlined text-[20px]">account_balance</span>
@@ -693,11 +693,11 @@ const UpgradeModal: React.FC<{
                             <div className="w-16 h-16 bg-[#1D4ED8]/10 text-[#1D4ED8] rounded-full flex items-center justify-center mx-auto">
                                 <span className="material-symbols-outlined text-[36px]">check_circle</span>
                             </div>
-                            <h3 className="text-2xl font-bold font-['Geist'] text-slate-900 dark:text-slate-100">
+                            <h3 className="text-2xl font-bold font-['Geist'] text-slate-900">
                                 {targetPlan === 'ambassador' ? 'Inquiry Submitted!' : 'Plan Upgraded Successfully!'}
                             </h3>
-                            <p className="text-sm text-slate-600 dark:text-slate-300">
-                                Grace Cathedral is now configured for <strong className="text-slate-900 dark:text-slate-100">{planTitle}</strong>. An updated receipt has been generated and sent to admin@gracecathedral.org.
+                            <p className="text-sm text-slate-600">
+                                Grace Cathedral is now configured for <strong className="text-slate-900">{planTitle}</strong>. An updated receipt has been generated and sent to admin@gracecathedral.org.
                             </p>
 
                             <button
@@ -726,12 +726,12 @@ const CaseStudiesModal: React.FC<{
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" id="case-studies-backdrop">
-            <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-2xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto" id="case-studies-card">
+            <div className="bg-white border border-slate-200 rounded-2xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto" id="case-studies-card">
                 {/* Close Button */}
                 <button
                     id="case-studies-close-btn"
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-slate-100 p-1 rounded-full hover:bg-[rgba(29,78,216,0.04)] cursor-pointer"
+                    className="absolute top-4 right-4 text-slate-500 hover:text-slate-900 p-1 rounded-full hover:bg-[rgba(29,78,216,0.04)] cursor-pointer"
                 >
                     <span className="material-symbols-outlined">close</span>
                 </button>
@@ -740,10 +740,10 @@ const CaseStudiesModal: React.FC<{
                     <span className="inline-block px-3 py-1 bg-[rgba(29,78,216,0.04)] text-[#1D4ED8] rounded-full text-[10px] font-bold uppercase tracking-widest font-['JetBrains_Mono'] mb-2">
                         Ministry Case Studies
                     </span>
-                    <h2 className="text-2xl sm:text-3xl font-bold font-['Geist'] text-slate-900 dark:text-slate-100">
+                    <h2 className="text-2xl sm:text-3xl font-bold font-['Geist'] text-slate-900">
                         How Leading Ministries Production Teams Rely on ChurchFlow Pro
                     </h2>
-                    <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                    <p className="text-sm text-slate-600 mt-1">
                         Real impact metrics from regional cathedrals, mega-churches, and broadcasting networks.
                     </p>
                 </div>
@@ -752,12 +752,12 @@ const CaseStudiesModal: React.FC<{
                     {CASE_STUDIES.map((cs, idx) => (
                         <div
                             key={idx}
-                            className="p-6 border border-slate-200 dark:border-slate-700 rounded-xl bg-[rgba(29,78,216,0.06)] space-y-4"
+                            className="p-6 border border-slate-200 rounded-xl bg-[rgba(29,78,216,0.06)] space-y-4"
                         >
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700/60 pb-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
                                 <div>
-                                    <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100">{cs.churchName}</h3>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">{cs.location} · {cs.attendance}</p>
+                                    <h3 className="font-bold text-lg text-slate-900">{cs.churchName}</h3>
+                                    <p className="text-xs text-slate-500">{cs.location} · {cs.attendance}</p>
                                 </div>
                                 <span className="px-3 py-1 bg-[#1D4ED8] text-white text-xs font-bold rounded-full font-['JetBrains_Mono'] self-start sm:self-auto">
                                     Ambassador Deployment
@@ -765,20 +765,20 @@ const CaseStudiesModal: React.FC<{
                             </div>
 
                             <h4 className="font-bold text-base text-[#1D4ED8]">{cs.title}</h4>
-                            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{cs.summary}</p>
+                            <p className="text-sm text-slate-600 leading-relaxed">{cs.summary}</p>
 
-                            <blockquote className="p-4 bg-white border-l-4 border-[#1D4ED8] rounded-r-lg italic text-sm text-slate-900 dark:text-slate-100">
+                            <blockquote className="p-4 bg-white border-l-4 border-[#1D4ED8] rounded-r-lg italic text-sm text-slate-900">
                                 "{cs.quote}"
-                                <footer className="mt-2 text-xs font-bold text-slate-500 dark:text-slate-400 not-italic">
+                                <footer className="mt-2 text-xs font-bold text-slate-500 not-italic">
                                     — {cs.quoteAuthor}
                                 </footer>
                             </blockquote>
 
                             <div className="grid grid-cols-3 gap-3 pt-2">
                                 {cs.stats.map((st, i) => (
-                                    <div key={i} className="bg-white p-3 rounded-lg border border-slate-200 dark:border-slate-700/50 text-center">
+                                    <div key={i} className="bg-white p-3 rounded-lg border border-slate-200 text-center">
                                         <p className="text-lg sm:text-2xl font-bold font-['Inter'] text-[#1D4ED8]">{st.value}</p>
-                                        <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">{st.label}</p>
+                                        <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-0.5">{st.label}</p>
                                     </div>
                                 ))}
                             </div>
@@ -786,10 +786,10 @@ const CaseStudiesModal: React.FC<{
                     ))}
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-white dark:bg-slate-800 text-white rounded-xl">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-white text-white rounded-xl">
                     <div>
                         <h4 className="font-bold text-base">Ready for Enterprise Ministry Scale?</h4>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Get a tailored deployment estimate for your campuses.</p>
+                        <p className="text-xs text-slate-500">Get a tailored deployment estimate for your campuses.</p>
                     </div>
                     <button
                         id="contact-ministry-team-btn"
@@ -869,31 +869,31 @@ const ComparePlansView: React.FC<{
             <main className="pt-10 pb-32 max-w-[1200px] mx-auto px-4 sm:px-6" id="compare-plans-page">
                 {/* Top Title Section */}
                 <div className="mb-8">
-                    <h1 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                    <h1 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 mb-2">
                         Subscription
                     </h1>
-                    <p className="text-slate-600 dark:text-slate-300 text-base">
+                    <p className="text-slate-600 text-base">
                         Manage your plan, billing and included features.
                     </p>
                 </div>
 
                 {/* Mobile Tab Navigation bar */}
-                <div className="flex md:hidden border-b border-slate-200 dark:border-slate-700 mb-8" id="mobile-top-tabs">
+                <div className="flex md:hidden border-b border-slate-200 mb-8" id="mobile-top-tabs">
                     <button
                         onClick={() => setActiveTab('overview')}
-                        className="flex-1 py-3 text-slate-600 dark:text-slate-300 font-medium border-b-2 border-transparent text-center cursor-pointer"
+                        className="flex-1 py-3 text-slate-600 font-medium border-b-2 border-transparent text-center cursor-pointer"
                     >
                         Overview
                     </button>
                     <button
                         onClick={() => setActiveTab('compare')}
-                        className="flex-1 py-3 text-slate-900 dark:text-slate-100 font-bold border-b-2 border-[#1D4ED8] text-center cursor-pointer"
+                        className="flex-1 py-3 text-slate-900 font-bold border-b-2 border-[#1D4ED8] text-center cursor-pointer"
                     >
                         Compare Plans
                     </button>
                     <button
                         onClick={() => setActiveTab('billing')}
-                        className="flex-1 py-3 text-slate-600 dark:text-slate-300 font-medium border-b-2 border-transparent text-center cursor-pointer"
+                        className="flex-1 py-3 text-slate-600 font-medium border-b-2 border-transparent text-center cursor-pointer"
                     >
                         Billing
                     </button>
@@ -902,10 +902,10 @@ const ComparePlansView: React.FC<{
                 {/* Sub-Header & Controls Row */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                     <div className="max-w-2xl">
-                        <h2 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                        <h2 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 mb-2">
                             Compare plans
                         </h2>
-                        <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">
+                        <p className="text-slate-600 text-sm sm:text-base">
                             Find the plan that matches your church’s production needs.
                         </p>
                     </div>
@@ -917,28 +917,28 @@ const ComparePlansView: React.FC<{
                                 id="region-selector"
                                 value={region}
                                 onChange={(e) => setRegion(e.target.value as CurrencyRegion)}
-                                className="w-full sm:w-auto appearance-none pl-10 pr-10 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8] outline-none cursor-pointer"
+                                className="w-full sm:w-auto appearance-none pl-10 pr-10 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8] outline-none cursor-pointer"
                             >
                                 <option value="ngn">Nigeria · NGN</option>
                                 <option value="africa">Africa · USD</option>
                                 <option value="global">Global · USD</option>
                             </select>
-                            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-900 dark:text-slate-100">
+                            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-900">
                                 <span className="material-symbols-outlined text-[18px]">public</span>
                             </div>
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-900 dark:text-slate-100">
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-900">
                                 <span className="material-symbols-outlined text-[18px]">expand_more</span>
                             </div>
                         </div>
 
                         {/* Billing Cycle Toggle Switch */}
-                        <div className="relative w-full sm:w-auto p-1 bg-[rgba(29,78,216,0.04)] border border-slate-200 dark:border-slate-700 rounded-full flex items-center" id="billing-toggle-container">
+                        <div className="relative w-full sm:w-auto p-1 bg-[rgba(29,78,216,0.04)] border border-slate-200 rounded-full flex items-center" id="billing-toggle-container">
                             <button
                                 id="billing-toggle-monthly"
                                 onClick={() => setBillingCycle('monthly')}
                                 className={`flex-1 sm:px-6 py-2 rounded-full text-sm font-bold z-10 transition-colors duration-200 cursor-pointer ${billingCycle === 'monthly'
-                                    ? 'bg-[#2563EB] text-slate-900 dark:text-slate-100 shadow-xs'
-                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:text-slate-100'
+                                    ? 'bg-[#2563EB] text-slate-900 shadow-xs'
+                                    : 'text-slate-600 hover:text-slate-900'
                                     }`}
                             >
                                 Monthly
@@ -947,8 +947,8 @@ const ComparePlansView: React.FC<{
                                 id="billing-toggle-yearly"
                                 onClick={() => setBillingCycle('yearly')}
                                 className={`flex-1 sm:px-6 py-2 rounded-full text-sm font-medium z-10 transition-colors duration-200 cursor-pointer ${billingCycle === 'yearly'
-                                    ? 'bg-[#2563EB] text-slate-900 dark:text-slate-100 shadow-xs'
-                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:text-slate-100'
+                                    ? 'bg-[#2563EB] text-slate-900 shadow-xs'
+                                    : 'text-slate-600 hover:text-slate-900'
                                     }`}
                             >
                                 Yearly
@@ -968,23 +968,23 @@ const ComparePlansView: React.FC<{
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20" id="pricing-cards">
                     {/* Basic Plan Card */}
                     <div
-                        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 sm:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-[0px_4px_12px_rgba(0,0,0,0.03)]"
+                        className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-[0px_4px_12px_rgba(0,0,0,0.03)]"
                         id="card-basic-plan"
                     >
                         <div>
                             <div className="mb-4">
-                                <h3 className="font-bold text-xl mb-1 text-slate-900 dark:text-slate-100">Basic</h3>
-                                <p className="text-sm text-slate-600 dark:text-slate-300 min-h-[40px]">
+                                <h3 className="font-bold text-xl mb-1 text-slate-900">Basic</h3>
+                                <p className="text-sm text-slate-600 min-h-[40px]">
                                     Everything you need to run a complete church presentation workflow.
                                 </p>
                             </div>
 
                             <div className="mb-6">
                                 <div className="flex items-baseline gap-1">
-                                    <span className="font-['Inter'] text-[40px] font-bold leading-none tracking-tight text-slate-900 dark:text-slate-100">
+                                    <span className="font-['Inter'] text-[40px] font-bold leading-none tracking-tight text-slate-900">
                                         {pricing.basic[billingCycle].main}
                                     </span>
-                                    <span className="text-slate-600 dark:text-slate-300 text-sm font-['Inter']">{billingCycle === 'yearly' ? '/yr' : '/mo'}</span>
+                                    <span className="text-slate-600 text-sm font-['Inter']">{billingCycle === 'yearly' ? '/yr' : '/mo'}</span>
                                 </div>
                                 <p className="text-xs text-[#1D4ED8] font-medium mt-1">
                                     {pricing.basic[billingCycle].sub}
@@ -994,33 +994,33 @@ const ComparePlansView: React.FC<{
                             <button
                                 id="basic-current-btn"
                                 disabled
-                                className="w-full py-3 px-4 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm cursor-not-allowed mb-6 text-center"
+                                className="w-full py-3 px-4 rounded-lg bg-slate-100 text-slate-600 font-bold text-sm cursor-not-allowed mb-6 text-center"
                             >
                                 Current Plan
                             </button>
 
                             <div className="space-y-4">
-                                <p className="font-['JetBrains_Mono'] text-[12px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                <p className="font-['JetBrains_Mono'] text-[12px] font-medium text-slate-500 uppercase tracking-wider">
                                     Plan Highlights
                                 </p>
                                 <ul className="space-y-3">
-                                    <li className="flex items-center gap-3 text-sm text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg">check_circle</span>
                                         Bible & Scripture
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg">check_circle</span>
                                         Worship Lyrics
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg">check_circle</span>
                                         Media Library (50 songs/images/videos)
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg">check_circle</span>
                                         Lower Thirds & Countdowns
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg">check_circle</span>
                                         300 AI credits / month
                                     </li>
@@ -1031,7 +1031,7 @@ const ComparePlansView: React.FC<{
 
                     {/* Growth Plan Card (RECOMMENDED) */}
                     <div
-                        className="bg-white dark:bg-slate-800 border-2 border-[#1D4ED8] rounded-xl p-6 sm:p-8 flex flex-col justify-between relative transition-all duration-300 shadow-xl"
+                        className="bg-white border-2 border-[#1D4ED8] rounded-xl p-6 sm:p-8 flex flex-col justify-between relative transition-all duration-300 shadow-xl"
                         id="card-growth-plan"
                     >
                         <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#1D4ED8] text-white px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-xs">
@@ -1040,8 +1040,8 @@ const ComparePlansView: React.FC<{
 
                         <div>
                             <div className="mb-4">
-                                <h3 className="font-bold text-xl mb-1 text-slate-900 dark:text-slate-100">Growth</h3>
-                                <p className="text-sm text-slate-600 dark:text-slate-300 min-h-[40px]">
+                                <h3 className="font-bold text-xl mb-1 text-slate-900">Growth</h3>
+                                <p className="text-sm text-slate-600 min-h-[40px]">
                                     Faster workflows, advanced imports, AI tools and cloud sync for active media teams.
                                 </p>
                             </div>
@@ -1051,7 +1051,7 @@ const ComparePlansView: React.FC<{
                                     <span className="font-['Inter'] text-[40px] font-bold leading-none tracking-tight text-[#1D4ED8]">
                                         {pricing.growth[billingCycle].main}
                                     </span>
-                                    <span className="text-slate-600 dark:text-slate-300 text-sm font-['Inter']">{billingCycle === 'yearly' ? '/yr' : '/mo'}</span>
+                                    <span className="text-slate-600 text-sm font-['Inter']">{billingCycle === 'yearly' ? '/yr' : '/mo'}</span>
                                 </div>
                                 <p className="text-xs text-[#1D4ED8] font-medium mt-1">
                                     {pricing.growth[billingCycle].sub}
@@ -1071,27 +1071,27 @@ const ComparePlansView: React.FC<{
                                     Everything in Basic, plus:
                                 </p>
                                 <ul className="space-y-3">
-                                    <li className="flex items-center gap-3 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm font-medium text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg fill-icon">bolt</span>
                                         Unlimited Songs, Images & Videos
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm font-medium text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg fill-icon">smartphone</span>
                                         Mobile Control & Android Remote
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm font-medium text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg fill-icon">laptop_windows</span>
                                         Presentation Mode (2-Laptop)
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm font-medium text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg fill-icon">translate</span>
                                         Speech-to-Scripture & Translation
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm font-medium text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg fill-icon">cloud_sync</span>
                                         Cloud Sync & Bulk Import
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm font-medium text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg fill-icon">auto_awesome</span>
                                         1,000 AI credits / month
                                     </li>
@@ -1102,25 +1102,25 @@ const ComparePlansView: React.FC<{
 
                     {/* Pro Plan Card */}
                     <div
-                        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 sm:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-[0px_4px_12px_rgba(0,0,0,0.03)]"
+                        className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-[0px_4px_12px_rgba(0,0,0,0.03)]"
                         id="card-pro-plan"
                     >
                         <div>
                             <div className="mb-4">
-                                <h3 className="font-bold text-xl mb-1 text-slate-900 dark:text-slate-100">Pro</h3>
-                                <p className="text-sm text-slate-600 dark:text-slate-300 min-h-[40px]">
+                                <h3 className="font-bold text-xl mb-1 text-slate-900">Pro</h3>
+                                <p className="text-sm text-slate-600 min-h-[40px]">
                                     Advanced automation, live translation and remote control for demanding productions.
                                 </p>
                             </div>
 
                             <div className="mb-6">
                                 <div className="flex items-baseline gap-1">
-                                    <span className="font-['Inter'] text-[40px] font-bold leading-none tracking-tight text-slate-900 dark:text-slate-100">
+                                    <span className="font-['Inter'] text-[40px] font-bold leading-none tracking-tight text-slate-900">
                                         {pricing.pro[billingCycle].main}
                                     </span>
-                                    <span className="text-slate-600 dark:text-slate-300 text-sm font-['Inter']">{billingCycle === 'yearly' ? '/yr' : '/mo'}</span>
+                                    <span className="text-slate-600 text-sm font-['Inter']">{billingCycle === 'yearly' ? '/yr' : '/mo'}</span>
                                 </div>
-                                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                                <p className="text-xs text-slate-600 mt-1">
                                     {pricing.pro[billingCycle].sub}
                                 </p>
                             </div>
@@ -1134,27 +1134,27 @@ const ComparePlansView: React.FC<{
                             </button>
 
                             <div className="space-y-4">
-                                <p className="font-['JetBrains_Mono'] text-[12px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                <p className="font-['JetBrains_Mono'] text-[12px] font-medium text-slate-500 uppercase tracking-wider">
                                     Everything in Growth, plus:
                                 </p>
                                 <ul className="space-y-3">
-                                    <li className="flex items-center gap-3 text-sm text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg">smartphone</span>
                                         Full Android Remote Control
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg">analytics</span>
                                         Advanced Analytics & Reports
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg">api</span>
                                         API Access
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg">corporate_fare</span>
                                         Campus Management
                                     </li>
-                                    <li className="flex items-center gap-3 text-sm text-slate-900 dark:text-slate-100">
+                                    <li className="flex items-center gap-3 text-sm text-slate-900">
                                         <span className="material-symbols-outlined text-[#1D4ED8] text-lg">auto_awesome</span>
                                         3,000 AI credits / month
                                     </li>
@@ -1168,10 +1168,10 @@ const ComparePlansView: React.FC<{
                 <section className="mb-20" id="feature-comparison-section">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                         <div>
-                            <h2 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                            <h2 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 mb-1">
                                 Detailed Comparison
                             </h2>
-                            <p className="text-slate-600 dark:text-slate-300 text-sm">
+                            <p className="text-slate-600 text-sm">
                                 Compare every feature across our plans to find the perfect fit.
                             </p>
                         </div>
@@ -1183,33 +1183,33 @@ const ComparePlansView: React.FC<{
                                 placeholder="Search features..."
                                 value={filterSearch}
                                 onChange={(e) => setFilterSearch(e.target.value)}
-                                className="w-full pl-9 pr-3 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-[#1D4ED8]"
+                                className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#1D4ED8]"
                             />
-                            <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[16px] text-slate-500 dark:text-slate-400">
+                            <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[16px] text-slate-500">
                                 search
                             </span>
                         </div>
                     </div>
 
-                    <div className="overflow-x-auto hide-scrollbar border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800">
+                    <div className="overflow-x-auto hide-scrollbar border border-slate-200 rounded-xl bg-white">
                         <table className="w-full min-w-[800px] border-collapse">
                             <thead>
-                                <tr className="bg-[rgba(29,78,216,0.04)] text-left border-b border-slate-200 dark:border-slate-700">
-                                    <th className="p-6 font-['JetBrains_Mono'] text-[12px] uppercase tracking-widest text-slate-900 dark:text-slate-100 w-1/3">
+                                <tr className="bg-[rgba(29,78,216,0.04)] text-left border-b border-slate-200">
+                                    <th className="p-6 font-['JetBrains_Mono'] text-[12px] uppercase tracking-widest text-slate-900 w-1/3">
                                         Features
                                     </th>
-                                    <th className="p-6 font-['JetBrains_Mono'] text-[12px] uppercase tracking-widest text-center text-slate-900 dark:text-slate-100">
+                                    <th className="p-6 font-['JetBrains_Mono'] text-[12px] uppercase tracking-widest text-center text-slate-900">
                                         Basic
                                     </th>
                                     <th className="p-6 font-['JetBrains_Mono'] text-[12px] uppercase tracking-widest text-center text-[#1D4ED8]">
                                         Growth
                                     </th>
-                                    <th className="p-6 font-['JetBrains_Mono'] text-[12px] uppercase tracking-widest text-center text-slate-900 dark:text-slate-100">
+                                    <th className="p-6 font-['JetBrains_Mono'] text-[12px] uppercase tracking-widest text-center text-slate-900">
                                         Pro
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-200/30 dark:divide-slate-700/30">
+                            <tbody className="divide-y divide-slate-200/30">
                                 {COMPARISON_FEATURES.map((group, groupIdx) => {
                                     const matchingRows = group.rows.filter(row =>
                                         row.name.toLowerCase().includes(filterSearch.toLowerCase())
@@ -1220,13 +1220,13 @@ const ComparePlansView: React.FC<{
                                     return (
                                         <React.Fragment key={groupIdx}>
                                             <tr className="bg-[rgba(29,78,216,0.06)]/60">
-                                                <td className="px-6 py-3 font-bold text-sm text-slate-900 dark:text-slate-100" colSpan={4}>
+                                                <td className="px-6 py-3 font-bold text-sm text-slate-900" colSpan={4}>
                                                     {group.category}
                                                 </td>
                                             </tr>
                                             {matchingRows.map((row, rowIdx) => (
-                                                <tr key={rowIdx} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                                                    <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                                <tr key={rowIdx} className="hover:bg-slate-50">
+                                                    <td className="px-6 py-4 text-sm font-medium text-slate-900">
                                                         {row.name}
                                                     </td>
                                                     <td className="text-center py-4">
@@ -1234,10 +1234,10 @@ const ComparePlansView: React.FC<{
                                                             row.basic ? (
                                                                 <span className="material-symbols-outlined text-[#1D4ED8]">check</span>
                                                             ) : (
-                                                                <span className="text-slate-400 dark:text-slate-500">—</span>
+                                                                <span className="text-slate-400">—</span>
                                                             )
                                                         ) : (
-                                                            <span className="text-xs font-['JetBrains_Mono'] text-slate-600 dark:text-slate-300">{row.basic}</span>
+                                                            <span className="text-xs font-['JetBrains_Mono'] text-slate-600">{row.basic}</span>
                                                         )}
                                                     </td>
                                                     <td className="text-center py-4 bg-[rgba(29,78,216,0.06)]/30">
@@ -1245,7 +1245,7 @@ const ComparePlansView: React.FC<{
                                                             row.growth ? (
                                                                 <span className="material-symbols-outlined text-[#1D4ED8]">check</span>
                                                             ) : (
-                                                                <span className="text-slate-400 dark:text-slate-500">—</span>
+                                                                <span className="text-slate-400">—</span>
                                                             )
                                                         ) : (
                                                             <span className="text-xs font-['JetBrains_Mono'] font-bold text-[#1D4ED8]">{row.growth}</span>
@@ -1256,10 +1256,10 @@ const ComparePlansView: React.FC<{
                                                             row.pro ? (
                                                                 <span className="material-symbols-outlined text-[#1D4ED8]">check</span>
                                                             ) : (
-                                                                <span className="text-slate-400 dark:text-slate-500">—</span>
+                                                                <span className="text-slate-400">—</span>
                                                             )
                                                         ) : (
-                                                            <span className="text-xs font-['JetBrains_Mono'] font-bold text-slate-900 dark:text-slate-100">{row.pro}</span>
+                                                            <span className="text-xs font-['JetBrains_Mono'] font-bold text-slate-900">{row.pro}</span>
                                                         )}
                                                     </td>
                                                 </tr>
@@ -1275,33 +1275,33 @@ const ComparePlansView: React.FC<{
                 {/* Bottom Cards Row: Free Plan & Enterprise */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8" id="bottom-options-row">
                     {/* Free Plan Card */}
-                    <div className="p-8 border border-slate-200 dark:border-slate-700 rounded-xl bg-[rgba(29,78,216,0.06)] flex flex-col justify-between" id="card-free-plan">
+                    <div className="p-8 border border-slate-200 rounded-xl bg-[rgba(29,78,216,0.06)] flex flex-col justify-between" id="card-free-plan">
                         <div>
-                            <span className="inline-block px-3 py-1 bg-slate-100 dark:bg-slate-700 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 font-['JetBrains_Mono'] text-slate-900 dark:text-slate-100">
+                            <span className="inline-block px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 font-['JetBrains_Mono'] text-slate-900">
                                 Just exploring?
                             </span>
-                            <h3 className="font-['Geist'] text-xl font-bold mb-2 text-slate-900 dark:text-slate-100">Free Plan</h3>
-                            <p className="text-slate-600 dark:text-slate-300 mb-6 text-sm leading-relaxed">
+                            <h3 className="font-['Geist'] text-xl font-bold mb-2 text-slate-900">Free Plan</h3>
+                            <p className="text-slate-600 mb-6 text-sm leading-relaxed">
                                 Perfect for small house fellowships or hobbyists starting their digital ministry journey.
                             </p>
                         </div>
                         <button
                             id="downgrade-free-btn"
                             onClick={() => onSelectUpgrade('free')}
-                            className="w-full sm:w-auto px-8 py-3 border border-[#1D4ED8] text-slate-900 dark:text-slate-100 font-bold rounded-lg hover:bg-[#1D4ED8] hover:text-white transition-colors cursor-pointer text-center text-sm"
+                            className="w-full sm:w-auto px-8 py-3 border border-[#1D4ED8] text-slate-900 font-bold rounded-lg hover:bg-[#1D4ED8] hover:text-white transition-colors cursor-pointer text-center text-sm"
                         >
                             Downgrade to Free
                         </button>
                     </div>
 
                     {/* Ambassador & Unlimited Enterprise Card */}
-                    <div className="p-8 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 flex flex-col justify-between" id="card-ambassador-plan">
+                    <div className="p-8 border border-slate-200 rounded-xl bg-white flex flex-col justify-between" id="card-ambassador-plan">
                         <div>
-                            <span className="inline-block px-3 py-1 bg-slate-100 dark:bg-slate-700 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 font-['JetBrains_Mono'] text-slate-900 dark:text-slate-100">
+                            <span className="inline-block px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 font-['JetBrains_Mono'] text-slate-900">
                                 Plans for larger organisations
                             </span>
-                            <h3 className="font-['Geist'] text-xl font-bold mb-2 text-slate-900 dark:text-slate-100">Ambassador & Unlimited</h3>
-                            <p className="text-slate-600 dark:text-slate-300 mb-6 text-sm leading-relaxed">
+                            <h3 className="font-['Geist'] text-xl font-bold mb-2 text-slate-900">Ambassador & Unlimited</h3>
+                            <p className="text-slate-600 mb-6 text-sm leading-relaxed">
                                 Custom solutions for mega-churches, television networks, and international ministries with high demand.
                             </p>
                         </div>
@@ -1316,7 +1316,7 @@ const ComparePlansView: React.FC<{
                             <button
                                 id="see-case-studies-btn"
                                 onClick={onOpenCaseStudies}
-                                className="flex-1 py-3 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-bold rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer text-sm text-center"
+                                className="flex-1 py-3 border border-slate-300 text-slate-600 font-bold rounded-lg bg-white hover:bg-slate-100 transition-colors cursor-pointer text-sm text-center"
                             >
                                 See Case Studies
                             </button>
@@ -1348,18 +1348,18 @@ const OverviewView: React.FC<{
     return (
         <main className="pt-24 pb-32 max-w-[1200px] mx-auto px-4 sm:px-6 space-y-8" id="overview-page">
             {/* Welcome Banner */}
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 sm:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-xs">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-xs">
                 <div>
                     <div className="flex items-center gap-2 mb-2">
                         <span className="px-2.5 py-1 bg-[rgba(29,78,216,0.06)] text-[#1D4ED8] text-xs font-bold rounded-full font-['JetBrains_Mono']">
                             ACTIVE CHURCH CONSOLE
                         </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">Grace Cathedral · Primary Display Server</span>
+                        <span className="text-xs text-slate-500">Grace Cathedral · Primary Display Server</span>
                     </div>
-                    <h1 className="text-2xl sm:text-3xl font-bold font-['Geist'] text-slate-900 dark:text-slate-100">
+                    <h1 className="text-2xl sm:text-3xl font-bold font-['Geist'] text-slate-900">
                         Welcome, Admin Console
                     </h1>
-                    <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                    <p className="text-sm text-slate-600 mt-1">
                         Current Active Plan: <strong className="text-[#1D4ED8]">{activePlanName}</strong>. 1 Presentation Laptop Connected.
                     </p>
                 </div>
@@ -1378,52 +1378,52 @@ const OverviewView: React.FC<{
 
             {/* Grid Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white p-5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                    <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex justify-between items-center text-slate-500">
                         <span className="text-xs font-['JetBrains_Mono'] font-bold uppercase">AI Credits Balance</span>
                         <span className="material-symbols-outlined text-[20px] text-[#1D4ED8]">auto_awesome</span>
                     </div>
                     <div className="flex items-baseline justify-between">
-                        <span className="text-2xl font-bold font-['Inter'] text-slate-900 dark:text-slate-100">50 / 50</span>
+                        <span className="text-2xl font-bold font-['Inter'] text-slate-900">50 / 50</span>
                         <span className="text-xs text-[#1D4ED8] font-medium">Basic Tier</span>
                     </div>
                     <div className="w-full bg-[rgba(29,78,216,0.04)] h-2 rounded-full overflow-hidden">
                         <div className="bg-[#1D4ED8] h-full w-[100%]" />
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Resets in 8 days. Need more? Upgrade plan.</p>
+                    <p className="text-[11px] text-slate-500">Resets in 8 days. Need more? Upgrade plan.</p>
                 </div>
 
-                <div className="bg-white p-5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                    <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex justify-between items-center text-slate-500">
                         <span className="text-xs font-['JetBrains_Mono'] font-bold uppercase">Scripture Versions</span>
                         <span className="material-symbols-outlined text-[20px] text-[#1D4ED8]">auto_stories</span>
                     </div>
                     <div className="flex items-baseline justify-between">
-                        <span className="text-2xl font-bold font-['Inter'] text-slate-900 dark:text-slate-100">32 Available</span>
+                        <span className="text-2xl font-bold font-['Inter'] text-slate-900">32 Available</span>
                         <span className="text-xs text-[#1D4ED8] font-medium">Offline Ready</span>
                     </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-300">KJV, NIV, NLT, AMP, MSG, Yoruba, Igbo, Hausa.</p>
+                    <p className="text-xs text-slate-600">KJV, NIV, NLT, AMP, MSG, Yoruba, Igbo, Hausa.</p>
                 </div>
 
-                <div className="bg-white p-5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                    <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex justify-between items-center text-slate-500">
                         <span className="text-xs font-['JetBrains_Mono'] font-bold uppercase">Connected Display</span>
                         <span className="material-symbols-outlined text-[20px] text-[#1D4ED8]">monitor</span>
                     </div>
                     <div className="flex items-baseline justify-between">
-                        <span className="text-2xl font-bold font-['Inter'] text-slate-900 dark:text-slate-100">1 Laptop</span>
+                        <span className="text-2xl font-bold font-['Inter'] text-slate-900">1 Laptop</span>
                         <span className="text-xs bg-[rgba(29,78,216,0.04)] px-2 py-0.5 rounded text-[#1D4ED8] font-bold">LIVE</span>
                     </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-300">Main Sanctuary Stage LED (1080p @ 60fps)</p>
+                    <p className="text-xs text-slate-600">Main Sanctuary Stage LED (1080p @ 60fps)</p>
                 </div>
 
-                <div className="bg-white p-5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                    <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex justify-between items-center text-slate-500">
                         <span className="text-xs font-['JetBrains_Mono'] font-bold uppercase">Android Remote</span>
-                        <span className="material-symbols-outlined text-[20px] text-slate-500 dark:text-slate-400">smartphone</span>
+                        <span className="material-symbols-outlined text-[20px] text-slate-500">smartphone</span>
                     </div>
                     <div className="flex items-baseline justify-between">
-                        <span className="text-2xl font-bold font-['Inter'] text-slate-500 dark:text-slate-400">Disabled</span>
+                        <span className="text-2xl font-bold font-['Inter'] text-slate-500">Disabled</span>
                         <button
                             id="unlock-remote-btn"
                             onClick={() => onSelectUpgrade('growth')}
@@ -1432,19 +1432,19 @@ const OverviewView: React.FC<{
                             Unlock
                         </button>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Requires Growth or Pro plan tier.</p>
+                    <p className="text-xs text-slate-500">Requires Growth or Pro plan tier.</p>
                 </div>
             </div>
 
             {/* Main Workflow Sandbox & Live Projection Test */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 bg-white border border-slate-200 dark:border-slate-700 rounded-xl p-6 space-y-6">
+                <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 space-y-6">
                     <div>
-                        <h3 className="text-lg font-bold font-['Geist'] text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <h3 className="text-lg font-bold font-['Geist'] text-slate-900 flex items-center gap-2">
                             <span className="material-symbols-outlined text-[#1D4ED8]">menu_book</span>
                             Live Presentation & Scripture Search
                         </h3>
-                        <p className="text-xs text-slate-600 dark:text-slate-300">
+                        <p className="text-xs text-slate-600">
                             Search verses and project directly to connected Sanctuary displays.
                         </p>
                     </div>
@@ -1457,14 +1457,14 @@ const OverviewView: React.FC<{
                                 value={quickScripture}
                                 onChange={(e) => setQuickScripture(e.target.value)}
                                 placeholder="Enter Scripture (e.g. John 3:16)..."
-                                className="w-full px-4 py-2.5 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium focus:outline-none focus:border-[#1D4ED8]"
+                                className="w-full px-4 py-2.5 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-[#1D4ED8]"
                             />
                         </div>
                         <select
                             id="bible-version-select"
                             value={selectedBibleVersion}
                             onChange={(e) => setSelectedBibleVersion(e.target.value)}
-                            className="px-4 py-2.5 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer"
+                            className="px-4 py-2.5 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:outline-none cursor-pointer"
                         >
                             <option value="KJV">KJV - King James</option>
                             <option value="NIV">NIV - New Int.</option>
@@ -1475,18 +1475,18 @@ const OverviewView: React.FC<{
 
                     {/* Preset Verses */}
                     <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 font-['JetBrains_Mono'] uppercase">
+                        <label className="text-xs font-bold text-slate-500 font-['JetBrains_Mono'] uppercase">
                             Quick Verses Queue
                         </label>
                         <div className="space-y-2">
                             {sampleBibles.map((item, idx) => (
                                 <div
                                     key={idx}
-                                    className="p-3 border border-slate-200 dark:border-slate-700/60 rounded-lg bg-white dark:bg-slate-900 flex items-center justify-between gap-4 hover:border-[#1D4ED8] transition-colors"
+                                    className="p-3 border border-slate-200 rounded-lg bg-white flex items-center justify-between gap-4 hover:border-[#1D4ED8] transition-colors"
                                 >
                                     <div>
                                         <span className="font-bold text-sm text-[#1D4ED8] block">{item.verse} ({selectedBibleVersion})</span>
-                                        <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1">{item.text}</p>
+                                        <p className="text-xs text-slate-600 line-clamp-1">{item.text}</p>
                                     </div>
                                     <button
                                         id={`project-verse-btn-${idx}`}
@@ -1501,7 +1501,7 @@ const OverviewView: React.FC<{
                     </div>
 
                     {/* Live Stage Monitor Output Simulation */}
-                    <div className="border border-slate-200 dark:border-slate-700 rounded-xl bg-[#1D4ED8] text-white p-6 text-center space-y-3 relative overflow-hidden min-h-[160px] flex flex-col justify-center items-center" id="stage-simulator">
+                    <div className="border border-slate-200 rounded-xl bg-[#1D4ED8] text-white p-6 text-center space-y-3 relative overflow-hidden min-h-[160px] flex flex-col justify-center items-center" id="stage-simulator">
                         <span className="absolute top-2 left-3 text-[10px] font-['JetBrains_Mono'] text-[#1D4ED8] uppercase tracking-widest font-bold bg-white/10 px-2 py-0.5 rounded">
                             STAGE OUTPUT SIMULATOR
                         </span>
@@ -1510,7 +1510,7 @@ const OverviewView: React.FC<{
                                 "{projectedVerse}"
                             </p>
                         ) : (
-                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                            <p className="text-sm text-slate-500">
                                 Click "Project Live" above to broadcast verse to sanctuary output screen.
                             </p>
                         )}
@@ -1518,34 +1518,34 @@ const OverviewView: React.FC<{
                 </div>
 
                 {/* Side Panel - Plan Highlights & Church Service Checklist */}
-                <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-xl p-6 space-y-6">
-                    <h3 className="text-lg font-bold font-['Geist'] text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-6">
+                    <h3 className="text-lg font-bold font-['Geist'] text-slate-900 flex items-center gap-2">
                         <span className="material-symbols-outlined text-[#1D4ED8]">church</span>
                         Sunday Service Readiness
                     </h3>
 
                     <div className="space-y-3 text-xs">
                         <div className="flex items-center justify-between p-2.5 bg-[rgba(29,78,216,0.06)] rounded-lg">
-                            <span className="font-medium text-slate-900 dark:text-slate-100">Worship Lyrics Sync</span>
+                            <span className="font-medium text-slate-900">Worship Lyrics Sync</span>
                             <span className="text-[#1D4ED8] font-bold">READY (12 Songs)</span>
                         </div>
                         <div className="flex items-center justify-between p-2.5 bg-[rgba(29,78,216,0.06)] rounded-lg">
-                            <span className="font-medium text-slate-900 dark:text-slate-100">Bible Versions</span>
+                            <span className="font-medium text-slate-900">Bible Versions</span>
                             <span className="text-[#1D4ED8] font-bold">DOWNLOADED</span>
                         </div>
                         <div className="flex items-center justify-between p-2.5 bg-[rgba(29,78,216,0.06)] rounded-lg">
-                            <span className="font-medium text-slate-900 dark:text-slate-100">Multi-Laptop Sync</span>
-                            <span className="text-slate-500 dark:text-slate-400">Growth Plan Needed</span>
+                            <span className="font-medium text-slate-900">Multi-Laptop Sync</span>
+                            <span className="text-slate-500">Growth Plan Needed</span>
                         </div>
                         <div className="flex items-center justify-between p-2.5 bg-[rgba(29,78,216,0.06)] rounded-lg">
-                            <span className="font-medium text-slate-900 dark:text-slate-100">AI Translation</span>
-                            <span className="text-slate-500 dark:text-slate-400">Pro Plan Needed</span>
+                            <span className="font-medium text-slate-900">AI Translation</span>
+                            <span className="text-slate-500">Pro Plan Needed</span>
                         </div>
                     </div>
 
                     <div className="p-4 bg-[rgba(29,78,216,0.04)] rounded-xl space-y-3">
-                        <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">Upgrade Church Presentation Capability</h4>
-                        <p className="text-xs text-slate-600 dark:text-slate-300">
+                        <h4 className="font-bold text-sm text-slate-900">Upgrade Church Presentation Capability</h4>
+                        <p className="text-xs text-slate-600">
                             Unlock 2,000 AI credits, 2-Laptop presentation failover, and Android wireless remote controller.
                         </p>
                         <button
@@ -1581,23 +1581,23 @@ const BillingView: React.FC<{
     return (
         <main className="pt-24 pb-32 max-w-[1200px] mx-auto px-4 sm:px-6 space-y-8" id="billing-page">
             <div>
-                <h1 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                <h1 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 mb-1">
                     Billing & Invoices
                 </h1>
-                <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">
+                <p className="text-slate-600 text-sm sm:text-base">
                     Manage payment details, tax info, auto-renewal preferences and download past receipts.
                 </p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-xl p-6 space-y-4">
+                    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[rgba(29,78,216,0.04)] pb-4">
                             <div>
                                 <span className="text-xs font-['JetBrains_Mono'] text-[#1D4ED8] font-bold uppercase">
                                     Active Subscription
                                 </span>
-                                <h3 className="text-xl font-bold font-['Geist'] text-slate-900 dark:text-slate-100">
+                                <h3 className="text-xl font-bold font-['Geist'] text-slate-900">
                                     {activePlanName}
                                 </h3>
                             </div>
@@ -1608,20 +1608,20 @@ const BillingView: React.FC<{
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 text-sm">
                             <div>
-                                <span className="text-xs text-slate-500 dark:text-slate-400 block">Monthly Amount</span>
-                                <span className="font-bold text-slate-900 dark:text-slate-100">₦3,500 / month</span>
+                                <span className="text-xs text-slate-500 block">Monthly Amount</span>
+                                <span className="font-bold text-slate-900">₦3,500 / month</span>
                             </div>
                             <div>
-                                <span className="text-xs text-slate-500 dark:text-slate-400 block">Next Renewal Date</span>
-                                <span className="font-bold text-slate-900 dark:text-slate-100">August 01, 2026</span>
+                                <span className="text-xs text-slate-500 block">Next Renewal Date</span>
+                                <span className="font-bold text-slate-900">August 01, 2026</span>
                             </div>
                             <div>
-                                <span className="text-xs text-slate-500 dark:text-slate-400 block">Auto-Renewal</span>
+                                <span className="text-xs text-slate-500 block">Auto-Renewal</span>
                                 <div className="flex items-center gap-2 mt-1">
                                     <button
                                         id="autorenew-toggle-btn"
                                         onClick={() => setAutoRenew(!autoRenew)}
-                                        className={`w-10 h-5 rounded-full p-0.5 transition-colors duration-200 cursor-pointer ${autoRenew ? 'bg-[#1D4ED8]' : 'bg-slate-100 dark:bg-slate-700'
+                                        className={`w-10 h-5 rounded-full p-0.5 transition-colors duration-200 cursor-pointer ${autoRenew ? 'bg-[#1D4ED8]' : 'bg-slate-100'
                                             }`}
                                     >
                                         <div
@@ -1647,16 +1647,16 @@ const BillingView: React.FC<{
                             <button
                                 id="billing-pause-sub-btn"
                                 onClick={() => alert('Subscription paused for next month.')}
-                                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold rounded-lg text-xs hover:bg-[rgba(29,78,216,0.04)] cursor-pointer"
+                                className="px-4 py-2 border border-slate-200 text-slate-600 font-semibold rounded-lg text-xs hover:bg-[rgba(29,78,216,0.04)] cursor-pointer"
                             >
                                 Pause Subscription
                             </button>
                         </div>
                     </div>
 
-                    <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-xl p-6 space-y-4">
+                    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
                         <div className="flex justify-between items-center border-b border-[rgba(29,78,216,0.04)] pb-4">
-                            <h3 className="text-lg font-bold font-['Geist'] text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                            <h3 className="text-lg font-bold font-['Geist'] text-slate-900 flex items-center gap-2">
                                 <span className="material-symbols-outlined text-[#1D4ED8]">credit_card</span>
                                 Payment Method
                             </h3>
@@ -1669,28 +1669,28 @@ const BillingView: React.FC<{
                             </button>
                         </div>
 
-                        <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-[rgba(29,78,216,0.06)] flex items-center justify-between">
+                        <div className="p-4 border border-slate-200 rounded-xl bg-[rgba(29,78,216,0.06)] flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-8 bg-[#1D4ED8] text-white rounded flex items-center justify-center font-bold text-xs font-['JetBrains_Mono']">
                                     VISA
                                 </div>
                                 <div>
-                                    <p className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                                    <p className="font-bold text-sm text-slate-900">
                                         •••• •••• •••• {savedCard.last4}
                                     </p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    <p className="text-xs text-slate-500">
                                         Expires {savedCard.exp} · {savedCard.holder}
                                     </p>
                                 </div>
                             </div>
-                            <span className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold rounded font-['JetBrains_Mono']">
+                            <span className="px-2.5 py-1 bg-white border border-slate-200 text-[10px] font-bold rounded font-['JetBrains_Mono']">
                                 DEFAULT
                             </span>
                         </div>
                     </div>
 
-                    <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-xl p-6 space-y-4">
-                        <h3 className="text-lg font-bold font-['Geist'] text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                        <h3 className="text-lg font-bold font-['Geist'] text-slate-900 flex items-center gap-2">
                             <span className="material-symbols-outlined text-[#1D4ED8]">history</span>
                             Past Receipts & Invoices
                         </h3>
@@ -1698,7 +1698,7 @@ const BillingView: React.FC<{
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm border-collapse">
                                 <thead>
-                                    <tr className="border-b border-slate-200 dark:border-slate-700 text-xs font-['JetBrains_Mono'] text-slate-500 dark:text-slate-400 uppercase">
+                                    <tr className="border-b border-slate-200 text-xs font-['JetBrains_Mono'] text-slate-500 uppercase">
                                         <th className="py-2 px-3">Invoice ID</th>
                                         <th className="py-2 px-3">Date</th>
                                         <th className="py-2 px-3">Description</th>
@@ -1709,13 +1709,13 @@ const BillingView: React.FC<{
                                 </thead>
                                 <tbody className="divide-y divide-[rgba(29,78,216,0.04)]">
                                     {SAMPLE_INVOICES.map((inv) => (
-                                        <tr key={inv.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
+                                        <tr key={inv.id} className="hover:bg-slate-50">
                                             <td className="py-3 px-3 font-['JetBrains_Mono'] font-bold text-xs text-[#1D4ED8]">
                                                 {inv.id}
                                             </td>
-                                            <td className="py-3 px-3 text-xs text-slate-600 dark:text-slate-300">{inv.date}</td>
-                                            <td className="py-3 px-3 font-medium text-xs text-slate-900 dark:text-slate-100">{inv.planName}</td>
-                                            <td className="py-3 px-3 font-bold text-xs text-slate-900 dark:text-slate-100">{inv.amount}</td>
+                                            <td className="py-3 px-3 text-xs text-slate-600">{inv.date}</td>
+                                            <td className="py-3 px-3 font-medium text-xs text-slate-900">{inv.planName}</td>
+                                            <td className="py-3 px-3 font-bold text-xs text-slate-900">{inv.amount}</td>
                                             <td className="py-3 px-3">
                                                 <span className="px-2 py-0.5 bg-[rgba(29,78,216,0.06)] text-[#1D4ED8] text-[10px] font-bold rounded-full font-['JetBrains_Mono']">
                                                     {inv.status}
@@ -1740,26 +1740,26 @@ const BillingView: React.FC<{
                 </div>
 
                 <div className="space-y-6">
-                    <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-xl p-6 space-y-4">
-                        <h3 className="text-base font-bold font-['Geist'] text-slate-900 dark:text-slate-100">
+                    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                        <h3 className="text-base font-bold font-['Geist'] text-slate-900">
                             Tax & Ministry Information
                         </h3>
 
                         <div className="space-y-3">
                             <div>
-                                <label className="text-xs text-slate-500 dark:text-slate-400 font-['JetBrains_Mono'] block mb-1">
+                                <label className="text-xs text-slate-500 font-['JetBrains_Mono'] block mb-1">
                                     MINISTRY LEGAL NAME
                                 </label>
                                 <input
                                     type="text"
                                     id="ministry-legal-name-input"
                                     defaultValue="Grace Cathedral International Ltd"
-                                    className="w-full px-3 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold"
+                                    className="w-full px-3 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg text-xs font-semibold"
                                 />
                             </div>
 
                             <div>
-                                <label className="text-xs text-slate-500 dark:text-slate-400 font-['JetBrains_Mono'] block mb-1">
+                                <label className="text-xs text-slate-500 font-['JetBrains_Mono'] block mb-1">
                                     TAX IDENTIFICATION NUMBER (TIN / VAT)
                                 </label>
                                 <input
@@ -1767,19 +1767,19 @@ const BillingView: React.FC<{
                                     id="tin-vat-input"
                                     value={vatId}
                                     onChange={(e) => setVatId(e.target.value)}
-                                    className="w-full px-3 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold"
+                                    className="w-full px-3 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg text-xs font-semibold"
                                 />
                             </div>
 
                             <div>
-                                <label className="text-xs text-slate-500 dark:text-slate-400 font-['JetBrains_Mono'] block mb-1">
+                                <label className="text-xs text-slate-500 font-['JetBrains_Mono'] block mb-1">
                                     BILLING EMAIL RECEIVER
                                 </label>
                                 <input
                                     type="email"
                                     id="billing-email-input"
                                     defaultValue="finance@gracecathedral.org"
-                                    className="w-full px-3 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold"
+                                    className="w-full px-3 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg text-xs font-semibold"
                                 />
                             </div>
 
@@ -1793,9 +1793,9 @@ const BillingView: React.FC<{
                         </div>
                     </div>
 
-                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 space-y-3">
-                        <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">Need Enterprise Invoicing?</h4>
-                        <p className="text-xs text-slate-600 dark:text-slate-300">
+                    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-3">
+                        <h4 className="font-bold text-sm text-slate-900">Need Enterprise Invoicing?</h4>
+                        <p className="text-xs text-slate-600">
                             We issue official Tax/VAT invoices for Nigerian churches & international non-profit organizations.
                         </p>
                         <button
@@ -1850,17 +1850,17 @@ const HistoryView: React.FC = () => {
     return (
         <main className="pt-24 pb-32 max-w-[1200px] mx-auto px-4 sm:px-6 space-y-8" id="history-page">
             <div>
-                <h1 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                <h1 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 mb-1">
                     Activity & Plan History
                 </h1>
-                <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">
+                <p className="text-slate-600 text-sm sm:text-base">
                     Audit trail of plan modifications, AI credit usage, and Sunday presentation session logs.
                 </p>
             </div>
 
-            <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-xl p-6 shadow-xs space-y-4">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
                 <div className="flex justify-between items-center border-b border-[rgba(29,78,216,0.04)] pb-3">
-                    <span className="text-xs font-['JetBrains_Mono'] text-slate-500 dark:text-slate-400 font-bold uppercase">
+                    <span className="text-xs font-['JetBrains_Mono'] text-slate-500 font-bold uppercase">
                         RECENT ACTIVITY LOGS
                     </span>
                     <button
@@ -1877,20 +1877,20 @@ const HistoryView: React.FC = () => {
                     {historyLogs.map((log) => (
                         <div
                             key={log.id}
-                            className="p-4 border border-slate-200 dark:border-slate-700/60 rounded-xl bg-[rgba(29,78,216,0.06)]/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[rgba(29,78,216,0.06)] transition-colors"
+                            className="p-4 border border-slate-200 rounded-xl bg-[rgba(29,78,216,0.06)]/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[rgba(29,78,216,0.06)] transition-colors"
                         >
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs font-['JetBrains_Mono'] font-bold text-[#1D4ED8]">
                                         {log.id}
                                     </span>
-                                    <span className="font-bold text-sm text-slate-900 dark:text-slate-100">{log.event}</span>
+                                    <span className="font-bold text-sm text-slate-900">{log.event}</span>
                                 </div>
-                                <p className="text-xs text-slate-600 dark:text-slate-300">{log.detail}</p>
+                                <p className="text-xs text-slate-600">{log.detail}</p>
                             </div>
 
-                            <div className="text-right text-xs text-slate-500 dark:text-slate-400 self-start sm:self-auto">
-                                <p className="font-medium text-slate-900 dark:text-slate-100">{log.user}</p>
+                            <div className="text-right text-xs text-slate-500 self-start sm:self-auto">
+                                <p className="font-medium text-slate-900">{log.user}</p>
                                 <p className="font-['JetBrains_Mono'] text-[10px] mt-0.5">{log.date}</p>
                             </div>
                         </div>
@@ -1912,25 +1912,25 @@ const SettingsView: React.FC = () => {
     return (
         <main className="pt-24 pb-32 max-w-[1200px] mx-auto px-4 sm:px-6 space-y-8" id="settings-page">
             <div>
-                <h1 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                <h1 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 mb-1">
                     Ministry & System Settings
                 </h1>
-                <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">
+                <p className="text-slate-600 text-sm sm:text-base">
                     Configure church organization branding, admin permissions, display resolutions, and regional localization defaults.
                 </p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-xl p-6 space-y-4">
-                        <h3 className="text-lg font-bold font-['Geist'] text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                        <h3 className="text-lg font-bold font-['Geist'] text-slate-900 flex items-center gap-2">
                             <span className="material-symbols-outlined text-[#1D4ED8]">church</span>
                             Church Organization Branding
                         </h3>
 
                         <div className="space-y-4">
                             <div>
-                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 font-['JetBrains_Mono'] block mb-1">
+                                <label className="text-xs font-bold text-slate-500 font-['JetBrains_Mono'] block mb-1">
                                     CHURCH / MINISTRY NAME
                                 </label>
                                 <input
@@ -1938,12 +1938,12 @@ const SettingsView: React.FC = () => {
                                     id="settings-church-name-input"
                                     value={churchName}
                                     onChange={(e) => setChurchName(e.target.value)}
-                                    className="w-full px-4 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold"
+                                    className="w-full px-4 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg text-sm font-semibold"
                                 />
                             </div>
 
                             <div>
-                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 font-['JetBrains_Mono'] block mb-1">
+                                <label className="text-xs font-bold text-slate-500 font-['JetBrains_Mono'] block mb-1">
                                     TAGLINE / MINISTRY MOTTO
                                 </label>
                                 <input
@@ -1951,12 +1951,12 @@ const SettingsView: React.FC = () => {
                                     id="settings-motto-input"
                                     value={motto}
                                     onChange={(e) => setMotto(e.target.value)}
-                                    className="w-full px-4 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold"
+                                    className="w-full px-4 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg text-sm font-semibold"
                                 />
                             </div>
 
                             <div>
-                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 font-['JetBrains_Mono'] block mb-1">
+                                <label className="text-xs font-bold text-slate-500 font-['JetBrains_Mono'] block mb-1">
                                     PRIMARY WORSHIP LANGUAGES
                                 </label>
                                 <input
@@ -1964,7 +1964,7 @@ const SettingsView: React.FC = () => {
                                     id="settings-lang-input"
                                     value={primaryLang}
                                     onChange={(e) => setPrimaryLang(e.target.value)}
-                                    className="w-full px-4 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold"
+                                    className="w-full px-4 py-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg text-sm font-semibold"
                                 />
                             </div>
 
@@ -1978,18 +1978,18 @@ const SettingsView: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-xl p-6 space-y-4">
-                        <h3 className="text-lg font-bold font-['Geist'] text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                        <h3 className="text-lg font-bold font-['Geist'] text-slate-900 flex items-center gap-2">
                             <span className="material-symbols-outlined text-[#1D4ED8]">aspect_ratio</span>
                             Sanctuary Display Defaults
                         </h3>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                             <div>
-                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 font-['JetBrains_Mono'] block mb-1">
+                                <label className="text-xs font-bold text-slate-500 font-['JetBrains_Mono'] block mb-1">
                                     STAGE DISPLAY ASPECT RATIO
                                 </label>
-                                <select className="w-full p-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg font-semibold cursor-pointer">
+                                <select className="w-full p-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg font-semibold cursor-pointer">
                                     <option>16:9 Widescreen (1080p / 4K)</option>
                                     <option>16:10 LED Wall Custom Ratio</option>
                                     <option>4:3 Legacy Projector</option>
@@ -1997,10 +1997,10 @@ const SettingsView: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 font-['JetBrains_Mono'] block mb-1">
+                                <label className="text-xs font-bold text-slate-500 font-['JetBrains_Mono'] block mb-1">
                                     DEFAULT BIBLE TEXT SIZE
                                 </label>
-                                <select className="w-full p-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg font-semibold cursor-pointer">
+                                <select className="w-full p-2 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg font-semibold cursor-pointer">
                                     <option>Large (48pt) - High Visibility</option>
                                     <option>Medium (36pt)</option>
                                     <option>Extra Large (60pt)</option>
@@ -2011,26 +2011,26 @@ const SettingsView: React.FC = () => {
                 </div>
 
                 <div className="space-y-6">
-                    <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-xl p-6 space-y-4">
-                        <h3 className="text-base font-bold font-['Geist'] text-slate-900 dark:text-slate-100">
+                    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                        <h3 className="text-base font-bold font-['Geist'] text-slate-900">
                             Media Operators & Admins
                         </h3>
 
                         <div className="space-y-3 text-xs">
                             <div className="p-3 bg-[rgba(29,78,216,0.06)] rounded-lg flex items-center justify-between">
                                 <div>
-                                    <p className="font-bold text-slate-900 dark:text-slate-100">David O. (Lead Admin)</p>
-                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">david@gracecathedral.org</p>
+                                    <p className="font-bold text-slate-900">David O. (Lead Admin)</p>
+                                    <p className="text-[10px] text-slate-500">david@gracecathedral.org</p>
                                 </div>
                                 <span className="text-[10px] font-bold text-[#1D4ED8] uppercase font-['JetBrains_Mono']">OWNER</span>
                             </div>
 
                             <div className="p-3 bg-[rgba(29,78,216,0.06)] rounded-lg flex items-center justify-between">
                                 <div>
-                                    <p className="font-bold text-slate-900 dark:text-slate-100">Sarah A. (Operator)</p>
-                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">sarah@gracecathedral.org</p>
+                                    <p className="font-bold text-slate-900">Sarah A. (Operator)</p>
+                                    <p className="text-[10px] text-slate-500">sarah@gracecathedral.org</p>
                                 </div>
-                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase font-['JetBrains_Mono']">EDITOR</span>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase font-['JetBrains_Mono']">EDITOR</span>
                             </div>
                         </div>
 
@@ -2065,25 +2065,25 @@ const SupportView: React.FC = () => {
     return (
         <main className="pt-24 pb-32 max-w-[1200px] mx-auto px-4 sm:px-6 space-y-8" id="support-page">
             <div>
-                <h1 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                <h1 className="font-['Geist'] text-2xl md:text-3xl font-semibold text-slate-900 mb-1">
                     Ministry Technical Support Desk
                 </h1>
-                <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">
+                <p className="text-slate-600 text-sm sm:text-base">
                     Get priority help for live Sunday service setup, NDI streaming issues, or remote controllers.
                 </p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 bg-white border border-slate-200 dark:border-slate-700 rounded-xl p-6 sm:p-8 space-y-6">
-                    <h3 className="text-xl font-bold font-['Geist'] text-slate-900 dark:text-slate-100">
+                <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 sm:p-8 space-y-6">
+                    <h3 className="text-xl font-bold font-['Geist'] text-slate-900">
                         Submit Urgent Support Ticket
                     </h3>
 
                     {submitted ? (
                         <div className="p-6 bg-[rgba(29,78,216,0.06)] border border-[#1D4ED8] rounded-xl text-center space-y-3">
                             <span className="material-symbols-outlined text-[#1D4ED8] text-[40px]">check_circle</span>
-                            <h4 className="font-bold text-lg text-slate-900 dark:text-slate-100">Support Ticket #TKT-8841 Opened</h4>
-                            <p className="text-xs text-slate-600 dark:text-slate-300">
+                            <h4 className="font-bold text-lg text-slate-900">Support Ticket #TKT-8841 Opened</h4>
+                            <p className="text-xs text-slate-600">
                                 Our church systems engineer team has been alerted. Your response SLA is <strong className="text-[#1D4ED8]">within 12 hours</strong>.
                             </p>
                             <button
@@ -2097,10 +2097,10 @@ const SupportView: React.FC = () => {
                     ) : (
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
-                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 font-['JetBrains_Mono'] block mb-1">
+                                <label className="text-xs font-bold text-slate-500 font-['JetBrains_Mono'] block mb-1">
                                     ISSUE CATEGORY
                                 </label>
-                                <select className="w-full px-4 py-2.5 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold cursor-pointer">
+                                <select className="w-full px-4 py-2.5 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg text-sm font-semibold cursor-pointer">
                                     <option>Display / Projection Output Lag</option>
                                     <option>Android Scene Remote Connection</option>
                                     <option>Billing / Plan Upgrade Assistance</option>
@@ -2110,7 +2110,7 @@ const SupportView: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 font-['JetBrains_Mono'] block mb-1">
+                                <label className="text-xs font-bold text-slate-500 font-['JetBrains_Mono'] block mb-1">
                                     SUBJECT
                                 </label>
                                 <input
@@ -2119,13 +2119,13 @@ const SupportView: React.FC = () => {
                                     placeholder="e.g. Cannot connect second presentation laptop..."
                                     value={ticketSubject}
                                     onChange={(e) => setTicketSubject(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold"
+                                    className="w-full px-4 py-2.5 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg text-sm font-semibold"
                                     required
                                 />
                             </div>
 
                             <div>
-                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 font-['JetBrains_Mono'] block mb-1">
+                                <label className="text-xs font-bold text-slate-500 font-['JetBrains_Mono'] block mb-1">
                                     DESCRIPTION OF ISSUES BEFORE SUNDAY SERVICE
                                 </label>
                                 <textarea
@@ -2134,7 +2134,7 @@ const SupportView: React.FC = () => {
                                     placeholder="Describe what happened or error messages shown..."
                                     value={ticketMsg}
                                     onChange={(e) => setTicketMsg(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-[rgba(29,78,216,0.06)] border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold"
+                                    className="w-full px-4 py-2.5 bg-[rgba(29,78,216,0.06)] border border-slate-200 rounded-lg text-sm font-semibold"
                                     required
                                 />
                             </div>
@@ -2151,8 +2151,8 @@ const SupportView: React.FC = () => {
                 </div>
 
                 <div className="space-y-6">
-                    <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-xl p-6 space-y-4">
-                        <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">Knowledge Base Quick Links</h3>
+                    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                        <h3 className="font-bold text-base text-slate-900">Knowledge Base Quick Links</h3>
                         <ul className="space-y-2 text-xs">
                             <li>
                                 <a href="#" onClick={(e) => { e.preventDefault(); alert('Opening Guide...'); }} className="text-[#1D4ED8] hover:underline font-medium flex items-center gap-2">
@@ -2248,7 +2248,7 @@ export default function App() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-['Inter']" id="app-root">
+        <div className="min-h-screen flex flex-col bg-white text-slate-900 font-['Inter']" id="app-root">
             {/* Main Content Body — dashboard provides header/footer */}
             {pricingLoading ? (
                 <div className="flex-1 pt-16 flex items-center justify-center">
