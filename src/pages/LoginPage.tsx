@@ -30,6 +30,9 @@ export default function LoginPage() {
   const [view, setView] = useState<View>("initial");
   const [code, setCode] = useState("");
   const [manualCode, setManualCode] = useState("");
+  const displayCode = manualCode.length > 4
+    ? `${manualCode.slice(0, 4)}-${manualCode.slice(4, 8)}`
+    : manualCode;
   const [countdown, setCountdown] = useState(300);
   const [error, setError] = useState("");
   const [welcomeBack, setWelcomeBack] = useState(false);
@@ -44,6 +47,9 @@ export default function LoginPage() {
   const [verificationMessage, setVerificationMessage] = useState("");
   const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [checkStatus, setCheckStatus] = useState<"idle" | "checking" | "verified" | "not_verified" | "error">("idle");
+
+  const [regenError, setRegenError] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
 
   const cleanupRef = useRef<(() => void) | null>(null);
   const welcomeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,6 +78,34 @@ export default function LoginPage() {
     setCountdown(300);
     setView("qr");
     startWatching(result.code);
+  }
+
+  async function handleRegenerate() {
+    cleanupRef.current?.();
+    cleanupRef.current = null;
+    setRegenerating(true);
+    setRegenError("");
+    setCode("");
+    setQrDataUrl("");
+
+    const result = await createPairingCode("MakeChurchEasy");
+    if ("error" in result) {
+      setRegenError(result.error);
+      setRegenerating(false);
+      return;
+    }
+
+    setCode(result.code);
+    setRegenerating(false);
+    setCountdown(300);
+    startWatching(result.code);
+
+    if (view === "qr") {
+      const dataUrl = await generateQrDataUrl(result.code).catch(() => "");
+      setQrDataUrl(dataUrl);
+    } else {
+      await openPairingInBrowser(result.code);
+    }
   }
 
   async function openPairingInBrowser(targetCode: string) {
@@ -124,8 +158,7 @@ export default function LoginPage() {
       },
       onExpired() {
         cleanupRef.current = null;
-        setError("Code expired. Please generate a new one.");
-        setView("initial");
+        setCountdown(0);
       },
       onError(msg) {
         cleanupRef.current = null;
@@ -147,7 +180,7 @@ export default function LoginPage() {
 
 
   async function handleManualSubmit() {
-    if (!manualCode || manualCode.length < 8) {
+    if (!manualCode || manualCode.length !== 8) {
       setError("Please enter a valid pairing code");
       return;
     }
@@ -391,6 +424,54 @@ export default function LoginPage() {
         {/* Pairing View — waiting for authorization */}
         {view === "pairing" && (
           <div style={{ textAlign: "center" }}>
+            {regenError && (
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "4px",
+                  background: "rgba(239, 68, 68, 0.1)",
+                  fontSize: "12px",
+                  color: "#ef4444",
+                  marginBottom: "12px",
+                }}
+              >
+                {regenError}
+              </div>
+            )}
+
+            {/* Generating spinner */}
+            {regenerating ? (
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ fontSize: "13px", color: "#9898a8", marginBottom: "8px" }}>
+                  Generating a new authorization code...
+                </div>
+                <button
+                  disabled
+                  style={{
+                    width: "100%",
+                    height: "38px",
+                    borderRadius: "4px",
+                    border: "none",
+                    background: "#1D4ED8",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "#fff",
+                    cursor: "default",
+                    opacity: 0.6,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ animation: "spin 1s linear infinite" }}>
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="56" strokeDashoffset="14" />
+                  </svg>
+                  Generating...
+                </button>
+              </div>
+            ) : (
+              <>
             <div
               style={{
                 marginBottom: "20px",
@@ -429,56 +510,79 @@ export default function LoginPage() {
               </span>
             </div>
 
-            <p style={{ fontSize: "12px", color: "#6a6a7a", marginBottom: "12px" }}>
-              Check your browser to authorize this device.
-            </p>
-            <div
-              style={{
-                marginBottom: "24px",
-              }}
-            >
-              <div style={{ display: "flex", gap: "6px" }}>
+            {countdown > 0 ? (
+              <>
+                <p style={{ fontSize: "12px", color: "#6a6a7a", marginBottom: "12px" }}>
+                  Check your browser to authorize this device.
+                </p>
+                <div style={{ marginBottom: "24px" }}>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <button
+                      onClick={() => openPairingInBrowser(code)}
+                      style={{
+                        flex: 1,
+                        height: "32px",
+                        borderRadius: "4px",
+                        border: "1px solid #1D4ED8",
+                        background: "#1D4ED8",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        color: "#fff",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Open in Browser
+                    </button>
+                    <button
+                      onClick={() => {
+                        const url = `${getDashboardBaseForAuth()}/device?code=${code}`;
+                        navigator.clipboard.writeText(url).then(() => {
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        });
+                      }}
+                      style={{
+                        flex: 1,
+                        height: "32px",
+                        borderRadius: "4px",
+                        border: "1px solid #2a2a3a",
+                        background: copied ? "#22c55e" : "#16161f",
+                        fontSize: "12px",
+                        fontWeight: 500,
+                        color: copied ? "#fff" : "#9898a8",
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      {copied ? "✓ Copied" : "Copy Link"}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: "12px", color: "#6a6a7a", marginBottom: "16px", lineHeight: 1.5 }}>
+                  This authorization code has expired.
+                </p>
                 <button
-                  onClick={() => openPairingInBrowser(code)}
+                  onClick={() => { setRegenError(""); handleRegenerate(); }}
                   style={{
-                    flex: 1,
-                    height: "32px",
+                    width: "100%",
+                    height: "38px",
                     borderRadius: "4px",
-                    border: "1px solid #1D4ED8",
+                    border: "none",
                     background: "#1D4ED8",
-                    fontSize: "12px",
+                    fontSize: "13px",
                     fontWeight: 600,
                     color: "#fff",
                     cursor: "pointer",
+                    marginBottom: "8px",
                   }}
-                  title="Open">
-                  Open in Browser
+                >
+                  Generate New Code
                 </button>
-                <button
-                  onClick={() => {
-                    const url = `${getDashboardBaseForAuth()}/device?code=${code}`;
-                    navigator.clipboard.writeText(url).then(() => {
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    });
-                  }}
-                  style={{
-                    flex: 1,
-                    height: "32px",
-                    borderRadius: "4px",
-                    border: "1px solid #2a2a3a",
-                    background: copied ? "#22c55e" : "#16161f",
-                    fontSize: "12px",
-                    fontWeight: 500,
-                    color: copied ? "#fff" : "#9898a8",
-                    cursor: "pointer",
-                    transition: "all 0.15s",
-                  }}
-                  title="Copy">
-                  {copied ? "✓ Copied" : "Copy Link"}
-                </button>
-              </div>
-            </div>
+              </>
+            )}
 
             <button
               onClick={() => {
@@ -487,6 +591,7 @@ export default function LoginPage() {
                 setView("initial");
                 setCode("");
                 setError("");
+                setRegenError("");
               }}
               style={{
                 width: "100%",
@@ -509,6 +614,8 @@ export default function LoginPage() {
                 50% { opacity: 0.4; }
               }
             `}</style>
+            </>
+          )}
           </div>
         )}
 
@@ -557,10 +664,12 @@ export default function LoginPage() {
             </p>
             <input
               type="text"
-              value={manualCode}
-              onChange={(e) => setManualCode(e.target.value.toUpperCase())}
+              value={displayCode}
+              onChange={(e) => {
+                const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+                setManualCode(raw);
+              }}
               placeholder="ABCD-1234"
-              maxLength={9}
               autoFocus
               disabled={redeeming}
               onKeyDown={(e) => e.key === "Enter" && handleManualSubmit()}
@@ -606,7 +715,7 @@ export default function LoginPage() {
               </button>
               <button
                 onClick={handleManualSubmit}
-                disabled={!manualCode || manualCode.length < 8 || redeeming}
+                disabled={!manualCode || manualCode.length !== 8 || redeeming}
                 style={{
                   flex: 2,
                   height: "38px",
@@ -616,8 +725,8 @@ export default function LoginPage() {
                   fontSize: "13px",
                   fontWeight: 600,
                   color: "#fff",
-                  cursor: !manualCode || manualCode.length < 8 || redeeming ? "default" : "pointer",
-                  opacity: !manualCode || manualCode.length < 8 ? 0.5 : 1,
+                  cursor: !manualCode || manualCode.length !== 8 || redeeming ? "default" : "pointer",
+                  opacity: !manualCode || manualCode.length !== 8 ? 0.5 : 1,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -640,7 +749,7 @@ export default function LoginPage() {
         {/* QR Code View */}
         {view === "qr" && (
           <div style={{ textAlign: "center" }}>
-            {error && (
+            {regenError && (
               <div
                 style={{
                   padding: "8px 12px",
@@ -651,9 +760,42 @@ export default function LoginPage() {
                   marginBottom: "12px",
                 }}
               >
-                {error}
+                {regenError}
               </div>
             )}
+
+            {regenerating ? (
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ fontSize: "13px", color: "#9898a8", marginBottom: "12px" }}>
+                  Generating a new authorization code...
+                </div>
+                <button
+                  disabled
+                  style={{
+                    width: "100%",
+                    height: "38px",
+                    borderRadius: "4px",
+                    border: "none",
+                    background: "#1D4ED8",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "#fff",
+                    cursor: "default",
+                    opacity: 0.6,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ animation: "spin 1s linear infinite" }}>
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="56" strokeDashoffset="14" />
+                  </svg>
+                  Generating...
+                </button>
+              </div>
+            ) : (
+              <>
 
             <p style={{ fontSize: "13px", color: "#9898a8", marginBottom: "16px" }}>
               Scan this QR code with your phone to log in
@@ -733,6 +875,31 @@ export default function LoginPage() {
               </span>
             </div>
 
+            {countdown <= 0 && (
+              <>
+                <p style={{ fontSize: "12px", color: "#6a6a7a", marginBottom: "16px", lineHeight: 1.5 }}>
+                  This authorization code has expired.
+                </p>
+                <button
+                  onClick={() => { setRegenError(""); handleRegenerate(); }}
+                  style={{
+                    width: "100%",
+                    height: "38px",
+                    borderRadius: "4px",
+                    border: "none",
+                    background: "#1D4ED8",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "#fff",
+                    cursor: "pointer",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Generate New Code
+                </button>
+              </>
+            )}
+
             <button
               onClick={() => {
                 cleanupRef.current?.();
@@ -741,6 +908,7 @@ export default function LoginPage() {
                 setCode("");
                 setQrDataUrl("");
                 setError("");
+                setRegenError("");
               }}
               style={{
                 width: "100%",
@@ -763,8 +931,11 @@ export default function LoginPage() {
                 50% { opacity: 0.4; }
               }
             `}</style>
+            </>
+          )}
           </div>
         )}
+
       </div>
 
       {/* Email Verification Modal */}
@@ -916,7 +1087,7 @@ export default function LoginPage() {
           from { opacity: 0; transform: translateX(20px); }
           to { opacity: 1; transform: translateX(0); }
         }
-      `}</style>
+            `}</style>
     </div>
   );
 }

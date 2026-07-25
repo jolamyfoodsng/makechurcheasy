@@ -78,6 +78,7 @@ import TranscriptLibraryPage from "./pages/TranscriptLibraryPage";
 import TranscriptDetailPage from "./pages/TranscriptDetailPage";
 import CreditsPage from "./pages/CreditsPage";
 import CreditsGuard from "./components/CreditsGuard";
+import { AnnouncementModalHost } from "./components/AnnouncementModalHost";
 import {
   getServicePlannerSnapshot,
   importDockServicePlansFromUploads,
@@ -1314,6 +1315,8 @@ function App() {
       {globalMediaUploading && !splashVisible && (
         <div className="app-global-media-uploading">Saving media...</div>
       )}
+
+      <AnnouncementModalHost />
     </div>
   );
 }

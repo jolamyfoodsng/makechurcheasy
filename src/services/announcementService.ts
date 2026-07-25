@@ -52,3 +52,24 @@ export async function dismissDesktopAnnouncement(deliveryId: string, clicked = f
   }).catch(() => {});
 }
 
+/**
+ * Opens an SSE connection receiving real-time announcement events.
+ * Returns an EventSource — caller closes it on cleanup.
+ */
+export function subscribeToAnnouncementStream(
+  onEvent: () => void,
+): EventSource {
+  const deviceId = getDeviceId();
+  const deviceSecret = getDeviceSecret();
+
+  const url = new URL(`${API_BASE}/api/user/announcements/stream`);
+  if (deviceId) url.searchParams.set("deviceId", deviceId);
+  if (deviceSecret) url.searchParams.set("deviceSecret", deviceSecret);
+
+  const es = new EventSource(url.toString());
+  es.addEventListener("message", () => onEvent());
+  es.addEventListener("open", () => console.log("[Announcements] SSE connected"));
+
+  return es;
+}
+

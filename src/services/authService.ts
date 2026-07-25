@@ -594,7 +594,7 @@ export async function redeemPairingCode(
         "Content-Type": "application/json",
         "X-App-Version": APP_VERSION,
       },
-      body: JSON.stringify({ code: code.toUpperCase(), deviceName: os }),
+      body: JSON.stringify({ code: code.toUpperCase().replace(/[^A-Z0-9]/g, ""), deviceName: os }),
     });
 
     const data = await res.json();
@@ -658,7 +658,8 @@ export function watchPairingStatus(
   }
 ): () => void {
   const os = detectOS();
-  const url = `${_activePairingApiBase}/api/pairing/stream?code=${encodeURIComponent(code)}&v=${encodeURIComponent(APP_VERSION)}&os=${encodeURIComponent(os)}`;
+  const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const url = `${_activePairingApiBase}/api/pairing/stream?code=${encodeURIComponent(normalizedCode)}&v=${encodeURIComponent(APP_VERSION)}&os=${encodeURIComponent(os)}`;
   const es = new EventSource(url);
   let settled = false;
 
@@ -770,7 +771,7 @@ export async function resendVerificationEmail(
     const { response: res } = await fetchAuthApi("/api/pairing/resend-verification", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code: code.toUpperCase().replace(/[^A-Z0-9]/g, "") }),
     });
     const data = await res.json();
     if (!res.ok) return { error: data.error || "Failed to resend" };
@@ -792,7 +793,7 @@ export async function checkVerificationStatus(
     const { response: res } = await fetchAuthApi("/api/pairing/check-verification", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code: code.toUpperCase().replace(/[^A-Z0-9]/g, "") }),
     });
     const data = await res.json();
     if (!res.ok) return { verified: false, error: data.error || "Failed to check" };

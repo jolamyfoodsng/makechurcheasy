@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   dismissDesktopAnnouncement,
   fetchNextDesktopAnnouncement,
+  subscribeToAnnouncementStream,
   type DesktopAnnouncement,
 } from "../services/announcementService";
 
@@ -29,12 +30,23 @@ export function AnnouncementModalHost() {
     const handleFocus = () => void refresh();
     const interval = window.setInterval(() => void refresh(), 60_000);
 
+    // Real-time SSE listener for instant delivery
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = subscribeToAnnouncementStream(() => {
+        if (!cancelled) refresh();
+      });
+    } catch {
+      // SSE unavailable, polling fallback is sufficient
+    }
+
     window.addEventListener("online", handleOnline);
     window.addEventListener("focus", handleFocus);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
       window.clearInterval(interval);
+      if (eventSource) eventSource.close();
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("focus", handleFocus);
     };
