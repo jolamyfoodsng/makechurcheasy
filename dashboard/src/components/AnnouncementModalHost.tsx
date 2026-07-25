@@ -53,9 +53,11 @@ export function AnnouncementModalHost() {
   useEffect(() => {
     const timer = window.setTimeout(() => void refresh(), 1200);
     const handleFocus = () => void refresh();
+    const interval = window.setInterval(() => void refresh(), 60_000);
     window.addEventListener("focus", handleFocus);
     return () => {
       window.clearTimeout(timer);
+      window.clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
     };
   }, [refresh]);

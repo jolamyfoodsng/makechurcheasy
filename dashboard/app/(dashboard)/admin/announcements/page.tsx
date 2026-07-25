@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   BarChart3,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   Clock4,
   Eye,
   ExternalLink,
@@ -13,33 +14,29 @@ import {
   Globe2,
   Loader2,
   Megaphone,
+  MoreHorizontal,
   MousePointerClick,
   PauseCircle,
   PlayCircle,
+  Plus,
+  Search,
   Send,
   Sparkles,
   Tags,
   Users,
+  X,
   XCircle,
 } from "lucide-react";
 
 type AnnouncementTone = "info" | "success" | "warning" | "offer" | "upgrade";
 type AnnouncementAudience =
-  | "all_users"
-  | "free_users"
-  | "paid_users"
-  | "trial_users"
-  | "basic_users"
-  | "growth_users"
-  | "pro_users"
-  | "ambassador_users"
-  | "just_subscribed"
-  | "cancelled_users"
-  | "expired_trials";
+  | "all_users" | "free_users" | "paid_users" | "trial_users"
+  | "basic_users" | "growth_users" | "pro_users" | "ambassador_users"
+  | "just_subscribed" | "cancelled_users" | "expired_trials";
 type AnnouncementStatus = "draft" | "scheduled" | "active" | "paused" | "archived";
 type AnnouncementSurface = "dashboard" | "desktop";
-type TabKey = "announcements" | "engagement" | "platform" | "create";
-type RangeKey = "daily" | "weekly" | "monthly";
+type RangeKey = "today" | "7d" | "30d" | "90d";
+type FilterStatus = "all" | "active" | "scheduled" | "paused" | "ended";
 
 type Announcement = {
   _id: string;
@@ -69,6 +66,7 @@ type AnnouncementStats = {
   scheduled: number;
   paused: number;
   delivered: number;
+  ended?: number;
 };
 
 type AnnouncementUserEvent = {
@@ -180,18 +178,25 @@ const TONES: Array<{ value: AnnouncementTone; label: string }> = [
   { value: "upgrade", label: "Upgrade" },
 ];
 
-const TABS: Array<{ key: TabKey; label: string; icon: typeof Megaphone }> = [
-  { key: "announcements", label: "Announcements", icon: Megaphone },
-  { key: "engagement", label: "Engagement", icon: MousePointerClick },
-  { key: "platform", label: "Platform activity", icon: BarChart3 },
-  { key: "create", label: "Create", icon: Send },
+const RANGES: Array<{ key: RangeKey; label: string }> = [
+  { key: "7d", label: "Last 7 days" },
+  { key: "30d", label: "Last 30 days" },
+  { key: "90d", label: "Last 90 days" },
 ];
 
-const RANGES: Array<{ key: RangeKey; label: string }> = [
-  { key: "daily", label: "Daily" },
-  { key: "weekly", label: "Weekly" },
-  { key: "monthly", label: "Monthly" },
-];
+const RANGE_API_MAP: Record<RangeKey, string> = {
+  today: "daily",
+  "7d": "weekly",
+  "30d": "monthly",
+  "90d": "monthly",
+};
+
+const RANGE_DAYS_MAP: Record<RangeKey, number> = {
+  today: 1,
+  "7d": 7,
+  "30d": 30,
+  "90d": 90,
+};
 
 const defaultForm: AnnouncementForm = {
   title: "",
@@ -270,10 +275,7 @@ function defaultExpiresAtValue(now = new Date()) {
 }
 
 function createDefaultForm(): AnnouncementForm {
-  return {
-    ...defaultForm,
-    expiresAt: defaultExpiresAtValue(),
-  };
+  return { ...defaultForm, expiresAt: defaultExpiresAtValue() };
 }
 
 function fromLocalInputValue(value: string) {
@@ -281,7 +283,7 @@ function fromLocalInputValue(value: string) {
 }
 
 function formatDate(value?: string | null) {
-  if (!value) return "No expiry";
+  if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("en-US", {
@@ -289,6 +291,16 @@ function formatDate(value?: string | null) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+  }).format(date);
+}
+
+function formatShortDate(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
   }).format(date);
 }
 
@@ -305,17 +317,34 @@ function formatDateTime(value?: string | null) {
 }
 
 function formatEventName(event: string) {
-  return event
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return event.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function statusStyle(status: AnnouncementStatus) {
-  if (status === "active") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
-  if (status === "scheduled") return "border-blue-500/30 bg-blue-500/10 text-blue-300";
-  if (status === "paused") return "border-amber-500/30 bg-amber-500/10 text-amber-300";
-  if (status === "archived") return "border-slate-700 bg-slate-800 text-slate-400";
+function isEnded(announcement: Announcement): boolean {
+  if (announcement.status === "archived") return true;
+  if (announcement.expiresAt && new Date(announcement.expiresAt) < new Date()) return true;
+  return false;
+}
+
+function effectiveStatus(announcement: Announcement): FilterStatus {
+  if (isEnded(announcement)) return "ended";
+  if (announcement.status === "active") return "active";
+  if (announcement.status === "scheduled") return "scheduled";
+  if (announcement.status === "paused") return "paused";
+  return "all";
+}
+
+function statusStyle(status: string): string {
+  if (status === "active") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-400";
+  if (status === "scheduled") return "border-blue-500/30 bg-blue-500/10 text-blue-400";
+  if (status === "paused") return "border-amber-500/30 bg-amber-500/10 text-amber-400";
+  if (status === "ended" || status === "archived") return "border-slate-600 bg-slate-800 text-slate-400";
   return "border-slate-700 bg-slate-800 text-slate-300";
+}
+
+function statusLabel(status: string): string {
+  if (status === "ended") return "Ended";
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 function actionStyle(action: AnnouncementUserEvent["action"]) {
@@ -324,89 +353,114 @@ function actionStyle(action: AnnouncementUserEvent["action"]) {
   return "border-slate-700 bg-slate-800 text-slate-300";
 }
 
+function audienceLabel(audience: AnnouncementAudience): string {
+  const entry = AUDIENCES.find((a) => a.value === audience);
+  return entry?.label ?? audience.replace(/_/g, " ");
+}
+
 function SkeletonBlock({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-xl bg-gray-800 ${className}`} />;
-}
-
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  tone,
-  caption,
-}: {
-  label: string;
-  value: number | string;
-  icon: typeof Megaphone;
-  tone: string;
-  caption?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-700 bg-gray-900 p-5">
-      <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${tone}`}>
-        <Icon className="h-5 w-5" />
-      </div>
-      <p className="mt-4 text-xs font-medium uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-slate-50">{value}</p>
-      {caption ? <p className="mt-1 text-xs text-slate-500">{caption}</p> : null}
-    </div>
-  );
-}
-
-function EmptyPanel({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-slate-700 bg-gray-900 px-5 py-12 text-center">
-      <Megaphone className="mx-auto mb-3 h-8 w-8 text-slate-600" />
-      <p className="text-sm font-semibold text-slate-300">{title}</p>
-      <p className="mt-1 text-sm text-slate-500">{description}</p>
-    </div>
-  );
-}
-
-function ActivityTimeline({ items }: { items: AnnouncementInsights["activitySeries"] }) {
-  const maxActive = Math.max(1, ...items.map((item) => item.activeUsers));
-
-  return (
-    <div className="rounded-xl border border-slate-700 bg-gray-900 p-5">
-      <h2 className="text-base font-semibold text-slate-50">Activity timeline</h2>
-      <p className="mt-1 text-sm text-slate-400">Daily active users, platform actions, announcement views, and clicks.</p>
-      <div className="mt-4 space-y-3">
-        {items.map((item) => (
-          <div key={item.date} className="grid grid-cols-1 gap-2 text-sm md:grid-cols-[76px_minmax(0,1fr)_220px] md:items-center md:gap-3">
-            <span className="text-xs text-slate-500">{item.label}</span>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-800">
-              <div
-                className="h-full rounded-full bg-blue-500"
-                style={{ width: `${Math.min(100, Math.round((item.activeUsers / maxActive) * 100))}%` }}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-left text-xs text-slate-500 sm:grid-cols-4 md:text-right">
-              <span><strong className="text-slate-100">{item.activeUsers}</strong> users</span>
-              <span><strong className="text-slate-100">{item.actions}</strong> actions</span>
-              <span><strong className="text-slate-100">{item.announcementViews}</strong> views</span>
-              <span><strong className="text-slate-100">{item.announcementClicks}</strong> clicks</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  return <div className={`animate-pulse rounded-xl bg-slate-800 ${className}`} />;
 }
 
 function FieldLabel({ children }: { children: string }) {
   return <span className="text-xs font-semibold uppercase text-slate-400">{children}</span>;
 }
 
+function OverflowMenu({
+  announcement,
+  onEdit,
+  onDuplicate,
+  onArchive,
+  onViewAnalytics,
+  disabled,
+}: {
+  announcement: Announcement;
+  onEdit: (a: Announcement) => void;
+  onDuplicate: (a: Announcement) => void;
+  onArchive: (a: Announcement) => void;
+  onViewAnalytics: (a: Announcement) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200 disabled:opacity-40"
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-xl border border-slate-700 bg-slate-900 py-1 shadow-xl">
+          <button
+            type="button"
+            onClick={() => { onEdit(announcement); setOpen(false); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => { onDuplicate(announcement); setOpen(false); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+          >
+            Duplicate
+          </button>
+          <button
+            type="button"
+            onClick={() => { onViewAnalytics(announcement); setOpen(false); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+          >
+            View analytics
+          </button>
+          <div className="my-1 border-t border-slate-800" />
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm("Archive this announcement? This cannot be easily undone.")) {
+                onArchive(announcement);
+              }
+              setOpen(false);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-slate-800"
+          >
+            Archive
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminAnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [stats, setStats] = useState<AnnouncementStats | null>(null);
   const [insights, setInsights] = useState<AnnouncementInsights | null>(null);
-  const [form, setForm] = useState<AnnouncementForm>(() => createDefaultForm());
-  const [activeTab, setActiveTab] = useState<TabKey>("announcements");
-  const [range, setRange] = useState<RangeKey>("weekly");
+  const [activeTab, setActiveTab] = useState<"announcements" | "analytics">("announcements");
+  const [range, setRange] = useState<RangeKey>("7d");
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<AnnouncementForm>(createDefaultForm);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionLoading, setActionLoading] = useState<Set<string>>(new Set());
+
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const audienceHint = useMemo(() => {
     return new Map(AUDIENCES.map((item) => [item.value, item.hint]));
@@ -415,7 +469,8 @@ export default function AdminAnnouncementsPage() {
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/announcements?range=${range}`, { credentials: "include" });
+      const apiRange = RANGE_API_MAP[range];
+      const res = await fetch(`/api/admin/announcements?range=${apiRange}`, { credentials: "include" });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "Failed to load announcements");
       setAnnouncements(body.announcements || []);
@@ -430,7 +485,8 @@ export default function AdminAnnouncementsPage() {
 
   useEffect(() => {
     void load();
-  }, [range]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function updateForm(patch: Partial<AnnouncementForm>) {
     setForm((current) => ({ ...current, ...patch }));
@@ -439,11 +495,38 @@ export default function AdminAnnouncementsPage() {
   function toggleSurface(surface: AnnouncementSurface) {
     setForm((current) => {
       const exists = current.surfaces.includes(surface);
-      const next = exists
-        ? current.surfaces.filter((item) => item !== surface)
-        : [...current.surfaces, surface];
+      const next = exists ? current.surfaces.filter((item) => item !== surface) : [...current.surfaces, surface];
       return { ...current, surfaces: next.length ? next : [surface] };
     });
+  }
+
+  function openCreate() {
+    setEditingId(null);
+    setForm(createDefaultForm());
+    setShowCreate(true);
+  }
+
+  function openEdit(announcement: Announcement) {
+    setEditingId(announcement._id);
+    setForm({
+      title: announcement.title,
+      message: announcement.message,
+      tone: announcement.tone,
+      status: announcement.status === "scheduled" ? "scheduled" : "active",
+      surfaces: announcement.surfaces,
+      audience: announcement.audience,
+      tags: (announcement.tags || []).join(", "),
+      targetEmails: (announcement.targetEmails || []).join(", "),
+      ctaLabel: announcement.ctaLabel || "",
+      ctaUrl: announcement.ctaUrl || "",
+      imageUrl: announcement.imageUrl || "",
+      offerCode: announcement.offerCode || "",
+      priority: announcement.priority,
+      publishAt: announcement.publishAt ? toDateTimeLocalInputValue(new Date(announcement.publishAt)) : "",
+      expiresAt: announcement.expiresAt ? toDateTimeLocalInputValue(new Date(announcement.expiresAt)) : "",
+      deliverySpacingMinutes: announcement.deliverySpacingMinutes,
+    });
+    setShowCreate(true);
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -451,8 +534,10 @@ export default function AdminAnnouncementsPage() {
     setSubmitting(true);
     setToast(null);
     try {
-      const res = await fetch("/api/admin/announcements", {
-        method: "POST",
+      const url = editingId ? `/api/admin/announcements/${editingId}` : "/api/admin/announcements";
+      const method = editingId ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -464,20 +549,21 @@ export default function AdminAnnouncementsPage() {
         }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || "Failed to create announcement");
-      setToast("Announcement saved.");
-      setForm(createDefaultForm());
-      setActiveTab("announcements");
+      if (!res.ok) throw new Error(body.error || `Failed to ${editingId ? "update" : "create"} announcement`);
+      setToast(editingId ? "Announcement updated." : "Announcement created.");
+      setShowCreate(false);
+      setEditingId(null);
       await load();
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "Failed to create announcement");
+      setToast(error instanceof Error ? error.message : "Failed to save announcement");
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function patchAnnouncement(id: string, patch: Partial<Announcement>) {
+  async function doAction(id: string, patch: Partial<Announcement>) {
     setToast(null);
+    setActionLoading((prev) => new Set(prev).add(id));
     try {
       const res = await fetch(`/api/admin/announcements/${id}`, {
         method: "PATCH",
@@ -490,328 +576,566 @@ export default function AdminAnnouncementsPage() {
       await load();
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Failed to update announcement");
+    } finally {
+      setActionLoading((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
+
+  async function stopAnnouncement(id: string) {
+    await doAction(id, { status: "paused" });
+  }
+
+  async function restartAnnouncement(id: string) {
+    await doAction(id, { status: "active", publishAt: new Date().toISOString() });
+  }
+
+  async function startNow(id: string) {
+    await doAction(id, { status: "active", publishAt: new Date().toISOString() });
+  }
+
+  async function runAgain(announcement: Announcement) {
+    setToast(null);
+    setActionLoading((prev) => new Set(prev).add(announcement._id));
+    try {
+      const res = await fetch("/api/admin/announcements", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: announcement.title,
+          message: announcement.message,
+          tone: announcement.tone,
+          status: "active",
+          surfaces: announcement.surfaces,
+          audience: announcement.audience,
+          tags: announcement.tags,
+          targetEmails: announcement.targetEmails,
+          ctaLabel: announcement.ctaLabel,
+          ctaUrl: announcement.ctaUrl,
+          imageUrl: announcement.imageUrl,
+          offerCode: announcement.offerCode,
+          priority: announcement.priority,
+          publishAt: new Date().toISOString(),
+          deliverySpacingMinutes: announcement.deliverySpacingMinutes,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Failed to duplicate announcement");
+      setToast("Announcement duplicated and activated.");
+      await load();
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Failed to run again");
+    } finally {
+      setActionLoading((prev) => {
+        const next = new Set(prev);
+        next.delete(announcement._id);
+        return next;
+      });
+    }
+  }
+
+  function archiveAnnouncement(id: string) {
+    return doAction(id, { status: "archived" });
+  }
+
+  async function duplicateAnnouncement(announcement: Announcement) {
+    setToast(null);
+    try {
+      const res = await fetch("/api/admin/announcements", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `${announcement.title} (copy)`,
+          message: announcement.message,
+          tone: announcement.tone,
+          status: "draft",
+          surfaces: announcement.surfaces,
+          audience: announcement.audience,
+          tags: announcement.tags,
+          targetEmails: announcement.targetEmails,
+          ctaLabel: announcement.ctaLabel,
+          ctaUrl: announcement.ctaUrl,
+          imageUrl: announcement.imageUrl,
+          offerCode: announcement.offerCode,
+          priority: announcement.priority,
+          deliverySpacingMinutes: announcement.deliverySpacingMinutes,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Failed to duplicate announcement");
+      setToast("Announcement duplicated.");
+      await load();
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Failed to duplicate");
+    }
+  }
+
+  function viewAnalytics(_announcement: Announcement) {
+    setActiveTab("analytics");
+  }
+
+  const filteredAnnouncements = useMemo(() => {
+    let result = announcements;
+    if (filterStatus !== "all") {
+      result = result.filter((a) => effectiveStatus(a) === filterStatus);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (a) =>
+          a.title.toLowerCase().includes(q) ||
+          a.message.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [announcements, filterStatus, searchQuery]);
 
   const summaryCards = [
     { label: "Active", value: stats?.active ?? 0, icon: CheckCircle2, tone: "bg-emerald-500/12 text-emerald-300" },
     { label: "Scheduled", value: stats?.scheduled ?? 0, icon: CalendarClock, tone: "bg-blue-500/12 text-blue-300" },
     { label: "Paused", value: stats?.paused ?? 0, icon: PauseCircle, tone: "bg-amber-500/12 text-amber-300" },
-    { label: "Delivered", value: stats?.delivered ?? 0, icon: Send, tone: "bg-violet-500/12 text-violet-300" },
+    { label: "Ended", value: stats?.ended ?? 0, icon: Archive, tone: "bg-slate-600 text-slate-300" },
   ];
+
+  const FILTER_LABELS: Array<{ key: FilterStatus; label: string }> = [
+    { key: "all", label: "All" },
+    { key: "active", label: "Active" },
+    { key: "scheduled", label: "Scheduled" },
+    { key: "paused", label: "Paused" },
+    { key: "ended", label: "Ended" },
+  ];
+
+  const endedCount = stats?.ended ?? 0;
 
   return (
     <div className="mx-auto max-w-[1440px] space-y-6 p-6 lg:p-8">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-gray-900 px-3 py-1.5 text-xs font-semibold uppercase text-slate-400">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold uppercase text-slate-400">
             <Megaphone className="h-3.5 w-3.5" />
             Admin announcements
           </div>
           <h1 className="mt-3 text-2xl font-bold text-slate-50">Announcement Center</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-400">
-            Control announcements, see who viewed or clicked them, and monitor daily, weekly, and monthly platform activity.
+            Create and manage messages shown to MakeChurchEasy users.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {RANGES.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setRange(item.key)}
-              className={`h-10 rounded-xl border px-4 text-sm font-semibold transition-colors ${
-                range === item.key
-                  ? "border-blue-500 bg-blue-600 text-white"
-                  : "border-slate-700 bg-gray-900 text-slate-300 hover:border-slate-500"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <button
+          type="button"
+          onClick={openCreate}
+          className="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-500"
+        >
+          <Plus className="h-4 w-4" />
+          Create announcement
+        </button>
       </div>
 
       {toast ? (
-        <div className="rounded-xl border border-slate-700 bg-gray-900 px-4 py-3 text-sm text-slate-200">
-          {toast}
-        </div>
+        <div className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200">{toast}</div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2 rounded-xl border border-slate-700 bg-gray-900 p-2">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              className={`inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors ${
-                activeTab === tab.key
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-400 hover:bg-gray-800 hover:text-slate-100"
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          );
-        })}
+      {/* Tabs */}
+      <div className="flex gap-1 rounded-xl border border-slate-700 bg-slate-900 p-1.5 w-fit">
+        <button
+          type="button"
+          onClick={() => setActiveTab("announcements")}
+          className={`inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors ${
+            activeTab === "announcements"
+              ? "bg-blue-600 text-white"
+              : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+          }`}
+        >
+          <Megaphone className="h-4 w-4" />
+          Announcements
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("analytics")}
+          className={`inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors ${
+            activeTab === "analytics"
+              ? "bg-blue-600 text-white"
+              : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+          }`}
+        >
+          <BarChart3 className="h-4 w-4" />
+          Analytics
+        </button>
       </div>
 
       {loading ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, index) => (
-              <SkeletonBlock key={index} className="h-32" />
+              <SkeletonBlock key={index} className="h-28" />
             ))}
           </div>
           <SkeletonBlock className="h-96" />
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {summaryCards.map((card) => (
-              <StatCard key={card.label} {...card} />
+              <button
+                key={card.label}
+                type="button"
+                onClick={() => {
+                  if (card.label === "Ended") {
+                    setFilterStatus("ended");
+                  } else {
+                    setFilterStatus(card.label.toLowerCase() as FilterStatus);
+                  }
+                  setActiveTab("announcements");
+                }}
+                className="rounded-xl border border-slate-700 bg-slate-900 p-4 text-left transition-colors hover:border-slate-500"
+              >
+                <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${card.tone}`}>
+                  <card.icon className="h-4.5 w-4.5" />
+                </div>
+                <p className="mt-3 text-2xl font-bold text-slate-50">{card.value}</p>
+                <p className="mt-0.5 text-xs font-medium uppercase text-slate-500">{card.label}</p>
+              </button>
             ))}
           </div>
 
+          {/* ANNOUNCEMENTS TAB */}
           {activeTab === "announcements" && (
             <section className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-50">Announcements</h2>
-                  <p className="text-sm text-slate-400">Stop, restart, archive, and inspect every announcement from one list.</p>
+              {/* Filters + Search */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-1.5">
+                  {FILTER_LABELS.map((f) => {
+                    const count =
+                      f.key === "all"
+                        ? announcements.length
+                        : f.key === "ended"
+                          ? endedCount
+                          : stats?.[f.key as keyof AnnouncementStats] ?? 0;
+                    return (
+                      <button
+                        key={f.key}
+                        type="button"
+                        onClick={() => setFilterStatus(f.key)}
+                        className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors ${
+                          filterStatus === f.key
+                            ? "border-blue-500 bg-blue-600 text-white"
+                            : "border-slate-700 bg-slate-900 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                        }`}
+                      >
+                        {f.label}
+                        <span className="opacity-60">{count}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("create")}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-500"
-                >
-                  <Send className="h-4 w-4" />
-                  Create announcement
-                </button>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <input
+                    className="h-10 w-full rounded-lg border border-slate-700 bg-slate-900 pl-9 pr-3 text-sm text-slate-200 outline-none placeholder:text-slate-500 focus:border-blue-500 sm:w-64"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search announcements..."
+                  />
+                </div>
               </div>
 
-              {announcements.length === 0 ? (
-                <EmptyPanel title="No announcements yet" description="Create the first message from the Create tab." />
+              {filteredAnnouncements.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900 px-5 py-12 text-center">
+                  <Megaphone className="mx-auto mb-3 h-8 w-8 text-slate-600" />
+                  <p className="text-sm font-semibold text-slate-300">
+                    {searchQuery ? "No announcements match your search" : "No announcements yet"}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {searchQuery ? "Try a different search term." : "Create your first announcement to get started."}
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-3">
-                  {announcements.map((announcement) => (
-                    <article key={announcement._id} className="rounded-xl border border-slate-700 bg-gray-900 p-5">
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusStyle(announcement.status)}`}>
-                              {announcement.status}
+                  {filteredAnnouncements.map((announcement) => {
+                    const eff = effectiveStatus(announcement);
+                    const isBusy = actionLoading.has(announcement._id);
+
+                    return (
+                      <article
+                        key={announcement._id}
+                        className="rounded-xl border border-slate-700 bg-slate-900 p-5"
+                      >
+                        {/* Row 1: Status + Audience */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                              eff === "active"
+                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                                : statusStyle(eff)
+                            }`}
+                          >
+                            {eff === "active" && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
+                            {statusLabel(eff)}
+                          </span>
+                          <span className="rounded-full border border-slate-700 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
+                            {audienceLabel(announcement.audience)}
+                          </span>
+                          {announcement.offerCode ? (
+                            <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2.5 py-1 text-[11px] font-semibold text-orange-300">
+                              {announcement.offerCode}
                             </span>
-                            <span className="rounded-full border border-slate-700 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
-                              {announcement.audience.replace(/_/g, " ")}
-                            </span>
-                            {announcement.offerCode ? (
-                              <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2.5 py-1 text-[11px] font-semibold text-orange-300">
-                                {announcement.offerCode}
-                              </span>
-                            ) : null}
-                          </div>
-                          <h3 className="mt-3 text-base font-semibold text-slate-50">{announcement.title}</h3>
-                          <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-400">{announcement.message}</p>
-                          <div className="mt-4 grid grid-cols-1 gap-3 text-xs text-slate-500 md:grid-cols-2 xl:grid-cols-4">
-                            <span className="inline-flex items-center gap-1.5">
-                              <Clock4 className="h-3.5 w-3.5" />
-                              {formatDate(announcement.publishAt)}
-                            </span>
-                            <span className="inline-flex items-center gap-1.5">
-                              <CalendarClock className="h-3.5 w-3.5" />
-                              Expires {formatDate(announcement.expiresAt)}
-                            </span>
-                            <span className="inline-flex items-center gap-1.5">
-                              <Send className="h-3.5 w-3.5" />
-                              {announcement.surfaces.join(", ")}
-                            </span>
-                            <span className="inline-flex items-center gap-1.5">
-                              <Tags className="h-3.5 w-3.5" />
-                              {announcement.tags?.length ? announcement.tags.join(", ") : "No tags"}
-                            </span>
-                          </div>
+                          ) : null}
                         </div>
 
-                        <div className="grid min-w-[260px] grid-cols-3 gap-2 text-center">
-                          <div className="rounded-xl border border-slate-700 bg-slate-950 p-3">
-                            <p className="text-lg font-semibold text-slate-50">{announcement.metrics?.shown ?? 0}</p>
-                            <p className="text-[11px] text-slate-500">Shown</p>
-                          </div>
-                          <div className="rounded-xl border border-slate-700 bg-slate-950 p-3">
-                            <p className="text-lg font-semibold text-slate-50">{announcement.metrics?.dismissed ?? 0}</p>
-                            <p className="text-[11px] text-slate-500">Dismissed</p>
-                          </div>
-                          <div className="rounded-xl border border-slate-700 bg-slate-950 p-3">
-                            <p className="text-lg font-semibold text-slate-50">{announcement.metrics?.clicked ?? 0}</p>
-                            <p className="text-[11px] text-slate-500">Clicked</p>
-                          </div>
-                        </div>
-                      </div>
+                        {/* Row 2: Title + Preview */}
+                        <h3 className="mt-3 text-base font-semibold text-slate-50">{announcement.title}</h3>
+                        <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-400">{announcement.message}</p>
 
-                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4">
-                        <p className="font-mono text-xs text-slate-500">ID: {announcement._id}</p>
-                        <div className="flex flex-wrap gap-2">
-                          {announcement.status === "active" || announcement.status === "scheduled" ? (
+                        {/* Row 3: Schedule + Channels */}
+                        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Clock4 className="h-3.5 w-3.5" />
+                            {formatDate(announcement.publishAt)}
+                            {announcement.expiresAt && (
+                              <> → {formatDate(announcement.expiresAt)}</>
+                            )}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <Send className="h-3.5 w-3.5" />
+                            {announcement.surfaces.map((s) => s === "dashboard" ? "Dashboard" : "Desktop").join(" · ")}
+                          </span>
+                        </div>
+
+                        {/* Row 4: Engagement */}
+                        <div className="mt-3 flex items-center gap-4 text-xs text-slate-500">
+                          <span>
+                            <strong className="text-slate-200 font-semibold">{announcement.metrics?.shown ?? 0}</strong>{" "}
+                            Views
+                          </span>
+                          <span>
+                            <strong className="text-slate-200 font-semibold">{announcement.metrics?.dismissed ?? 0}</strong>{" "}
+                            Dismissals
+                          </span>
+                          <span>
+                            <strong className="text-slate-200 font-semibold">{announcement.metrics?.clicked ?? 0}</strong>{" "}
+                            Clicks
+                          </span>
+                        </div>
+
+                        {/* Row 5: Actions */}
+                        <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-800 pt-4">
+                          {eff === "active" && (
                             <button
                               type="button"
-                              onClick={() => void patchAnnouncement(announcement._id, { status: "paused" })}
-                              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-700 px-3 text-xs font-semibold text-slate-300 hover:border-slate-500"
+                              disabled={isBusy}
+                              onClick={() => stopAnnouncement(announcement._id)}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-700 px-3 text-xs font-semibold text-slate-300 hover:border-slate-500 disabled:opacity-40"
                             >
-                              <PauseCircle className="h-3.5 w-3.5" />
+                              {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PauseCircle className="h-3.5 w-3.5" />}
                               Stop
                             </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={() => void patchAnnouncement(announcement._id, {
-                              status: "active",
-                              publishAt: new Date().toISOString(),
-                            })}
-                            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-700 px-3 text-xs font-semibold text-slate-300 hover:border-slate-500"
-                          >
-                            <PlayCircle className="h-3.5 w-3.5" />
-                            Restart
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void patchAnnouncement(announcement._id, { status: "archived" })}
-                            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-700 px-3 text-xs font-semibold text-slate-300 hover:border-slate-500"
-                          >
-                            <Archive className="h-3.5 w-3.5" />
-                            Archive
-                          </button>
+                          )}
+                          {eff === "paused" && (
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => restartAnnouncement(announcement._id)}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-700 px-3 text-xs font-semibold text-slate-300 hover:border-slate-500 disabled:opacity-40"
+                            >
+                              {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
+                              Restart
+                            </button>
+                          )}
+                          {eff === "scheduled" && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => openEdit(announcement)}
+                                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-700 px-3 text-xs font-semibold text-slate-300 hover:border-slate-500 disabled:opacity-40"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => startNow(announcement._id)}
+                                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 text-xs font-semibold text-blue-400 hover:border-blue-500 disabled:opacity-40"
+                              >
+                                {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
+                                Start now
+                              </button>
+                            </>
+                          )}
+                          {eff === "ended" && (
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => runAgain(announcement)}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-700 px-3 text-xs font-semibold text-slate-300 hover:border-slate-500 disabled:opacity-40"
+                            >
+                              {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
+                              Run again
+                            </button>
+                          )}
+                          <OverflowMenu
+                            announcement={announcement}
+                            onEdit={openEdit}
+                            onDuplicate={duplicateAnnouncement}
+                            onArchive={() => archiveAnnouncement(announcement._id)}
+                            onViewAnalytics={viewAnalytics}
+                            disabled={isBusy}
+                          />
                         </div>
-                      </div>
-                    </article>
-                  ))}
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </section>
           )}
 
-          {activeTab === "engagement" && insights && (
-            <section className="space-y-5">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard label="Views" value={insights.platform.announcementViews} icon={Eye} tone="bg-blue-500/12 text-blue-300" caption={`${range} window`} />
-                <StatCard label="Clicks" value={insights.platform.announcementClicks} icon={MousePointerClick} tone="bg-violet-500/12 text-violet-300" caption={`${insights.platform.clickRate}% click rate`} />
-                <StatCard label="Dismissals" value={insights.platform.announcementDismissals} icon={XCircle} tone="bg-amber-500/12 text-amber-300" caption="Closed by users" />
-                <StatCard label="Active users" value={insights.platform.periodActiveUsers} icon={Users} tone="bg-emerald-500/12 text-emerald-300" caption={`Across ${insights.days} day${insights.days === 1 ? "" : "s"}`} />
+          {/* ANALYTICS TAB */}
+          {activeTab === "analytics" && insights && (
+            <section className="space-y-6">
+              {/* Date range */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-50">Announcement Analytics</h2>
+                  <p className="text-sm text-slate-400">Engagement and platform activity for the selected period.</p>
+                </div>
+                <div className="relative">
+                  <select
+                    value={range}
+                    onChange={(e) => { setRange(e.target.value as RangeKey); void load(); }}
+                    className="h-10 appearance-none rounded-lg border border-slate-700 bg-slate-900 pl-3 pr-9 text-sm text-slate-200 outline-none focus:border-blue-500"
+                  >
+                    {RANGES.map((r) => (
+                      <option key={r.key} value={r.key}>{r.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.85fr_1.15fr]">
-                <div className="rounded-xl border border-slate-700 bg-gray-900 p-5">
-                  <h2 className="text-base font-semibold text-slate-50">Top announcements</h2>
-                  <p className="mt-1 text-sm text-slate-400">Ranked by views in the selected range.</p>
-                  <div className="mt-4 space-y-3">
-                    {insights.topAnnouncements.length === 0 ? (
-                      <p className="rounded-xl border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-500">No announcement engagement yet.</p>
-                    ) : insights.topAnnouncements.map((item) => (
-                      <div key={item.announcementId} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-50">{item.title}</p>
-                            <p className="mt-1 font-mono text-[11px] text-slate-500">{item.announcementId}</p>
-                          </div>
-                          <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${statusStyle(item.status)}`}>{item.status}</span>
-                        </div>
-                        <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs">
-                          <div><p className="font-semibold text-slate-100">{item.views}</p><p className="text-slate-500">Views</p></div>
-                          <div><p className="font-semibold text-slate-100">{item.clicks}</p><p className="text-slate-500">Clicks</p></div>
-                          <div><p className="font-semibold text-slate-100">{item.dismissals}</p><p className="text-slate-500">Closed</p></div>
-                          <div><p className="font-semibold text-slate-100">{item.clickRate}%</p><p className="text-slate-500">CTR</p></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+              {/* Overview metrics */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+                  <p className="text-xs font-medium uppercase text-slate-500">Total views</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-50">{insights.platform.announcementViews.toLocaleString()}</p>
                 </div>
+                <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+                  <p className="text-xs font-medium uppercase text-slate-500">Dismissals</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-50">{insights.platform.announcementDismissals.toLocaleString()}</p>
+                </div>
+                <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+                  <p className="text-xs font-medium uppercase text-slate-500">Dismissal rate</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-50">
+                    {insights.platform.announcementViews > 0
+                      ? `${Math.round((insights.platform.announcementDismissals / insights.platform.announcementViews) * 100)}%`
+                      : "—"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+                  <p className="text-xs font-medium uppercase text-slate-500">CTR</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-50">
+                    {insights.platform.clickRate > 0 ? `${insights.platform.clickRate}%` : "—"}
+                  </p>
+                </div>
+              </div>
 
-                <div className="rounded-xl border border-slate-700 bg-gray-900 p-5">
-                  <h2 className="text-base font-semibold text-slate-50">Viewed and clicked users</h2>
-                  <p className="mt-1 text-sm text-slate-400">User id, email, country, surface, and action for every recent delivery.</p>
-                  <div className="mt-4 overflow-x-auto">
-                    <table className="w-full min-w-[860px] text-left text-sm">
-                      <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
+              {/* Announcement performance table */}
+              <div className="rounded-xl border border-slate-700 bg-slate-900 p-5">
+                <h2 className="text-base font-semibold text-slate-50">Announcement performance</h2>
+                <p className="mt-1 text-sm text-slate-400">Views, dismissals, clicks, and click-through rate per announcement.</p>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full min-w-[600px] text-left text-sm">
+                    <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="py-3 pr-4 font-semibold">Announcement</th>
+                        <th className="py-3 pr-4 font-semibold text-right">Views</th>
+                        <th className="py-3 pr-4 font-semibold text-right">Dismissals</th>
+                        <th className="py-3 pr-4 font-semibold text-right">Clicks</th>
+                        <th className="py-3 pr-4 font-semibold text-right">CTR</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {insights.topAnnouncements.length === 0 ? (
                         <tr>
-                          <th className="py-3 pr-4 font-semibold">User</th>
-                          <th className="py-3 pr-4 font-semibold">Announcement</th>
-                          <th className="py-3 pr-4 font-semibold">Action</th>
-                          <th className="py-3 pr-4 font-semibold">Country</th>
-                          <th className="py-3 pr-4 font-semibold">Surface</th>
-                          <th className="py-3 pr-4 font-semibold">Time</th>
+                          <td colSpan={5} className="py-10 text-center text-slate-500">No data for this period.</td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {insights.recentAnnouncementEvents.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="py-10 text-center text-slate-500">No user delivery events yet.</td>
-                          </tr>
-                        ) : insights.recentAnnouncementEvents.map((event) => (
-                          <tr key={event.id}>
-                            <td className="py-3 pr-4">
-                              <p className="font-medium text-slate-100">{event.email || event.userName}</p>
-                              <p className="font-mono text-[11px] text-slate-500">{event.userId}</p>
-                            </td>
-                            <td className="max-w-[260px] py-3 pr-4">
-                              <p className="truncate text-slate-300">{event.announcementTitle}</p>
-                              <p className="font-mono text-[11px] text-slate-500">{event.announcementId}</p>
-                            </td>
-                            <td className="py-3 pr-4">
-                              <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${actionStyle(event.action)}`}>{event.action}</span>
-                            </td>
-                            <td className="py-3 pr-4 text-slate-300">{event.country}</td>
-                            <td className="py-3 pr-4 text-slate-300">{event.surface}</td>
-                            <td className="py-3 pr-4 text-slate-400">{formatDateTime(event.occurredAt)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      ) : insights.topAnnouncements.map((item) => (
+                        <tr key={item.announcementId} className="hover:bg-slate-800/50 transition-colors">
+                          <td className="py-3 pr-4">
+                            <p className="font-medium text-slate-100 truncate max-w-[300px]">{item.title}</p>
+                          </td>
+                          <td className="py-3 pr-4 text-right font-mono text-slate-200">{item.views}</td>
+                          <td className="py-3 pr-4 text-right font-mono text-slate-200">{item.dismissals}</td>
+                          <td className="py-3 pr-4 text-right font-mono text-slate-200">{item.clicks}</td>
+                          <td className="py-3 pr-4 text-right font-mono text-slate-200">
+                            {item.clickRate > 0 ? `${item.clickRate}%` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            </section>
-          )}
 
-          {activeTab === "platform" && insights && (
-            <section className="space-y-5">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard label="Daily users" value={insights.platform.dailyActiveUsers} icon={Users} tone="bg-blue-500/12 text-blue-300" caption="Logged in or sent events today" />
-                <StatCard label="Weekly users" value={insights.platform.weeklyActiveUsers} icon={Users} tone="bg-violet-500/12 text-violet-300" caption="Last 7 days" />
-                <StatCard label="Monthly users" value={insights.platform.monthlyActiveUsers} icon={Users} tone="bg-emerald-500/12 text-emerald-300" caption="Last 30 days" />
-                <StatCard label="Actions" value={insights.platform.periodActions} icon={BarChart3} tone="bg-amber-500/12 text-amber-300" caption={`${range} platform events`} />
-              </div>
+              {/* Platform activity */}
+              <div className="rounded-xl border border-slate-700 bg-slate-900 p-5">
+                <h2 className="text-base font-semibold text-slate-50">Platform activity</h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Active users and platform actions over the selected period.
+                </p>
 
-              <ActivityTimeline items={insights.activitySeries} />
-
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.8fr_1.2fr]">
-                <div className="rounded-xl border border-slate-700 bg-gray-900 p-5">
-                  <h2 className="text-base font-semibold text-slate-50">Countries</h2>
-                  <p className="mt-1 text-sm text-slate-400">Where active users are coming from.</p>
-                  <div className="mt-4 space-y-3">
-                    {insights.topCountries.length === 0 ? (
-                      <p className="rounded-xl border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-500">No country activity yet.</p>
-                    ) : insights.topCountries.map((country) => (
-                      <div key={country.country} className="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <Globe2 className="h-4 w-4 text-blue-300" />
-                          <span className="text-sm font-medium text-slate-100">{country.country}</span>
-                        </div>
-                        <div className="text-right text-xs text-slate-500">
-                          <p><span className="font-semibold text-slate-100">{country.activeUsers}</span> users</p>
-                          <p>{country.actions} actions</p>
-                        </div>
-                      </div>
-                    ))}
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl border border-slate-700 bg-slate-950 p-3">
+                    <p className="text-xs text-slate-500">Active users</p>
+                    <p className="mt-1 text-xl font-bold text-slate-50">{insights.platform.periodActiveUsers.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-700 bg-slate-950 p-3">
+                    <p className="text-xs text-slate-500">Platform actions</p>
+                    <p className="mt-1 text-xl font-bold text-slate-50">{insights.platform.periodActions.toLocaleString()}</p>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-slate-700 bg-gray-900 p-5">
-                  <h2 className="text-base font-semibold text-slate-50">Recent platform actions</h2>
-                  <p className="mt-1 text-sm text-slate-400">Shows what users did, with id, email, plan, and country.</p>
-                  <div className="mt-4 overflow-x-auto">
-                    <table className="w-full min-w-[780px] text-left text-sm">
+                {/* Activity timeline */}
+                {insights.activitySeries.length > 0 && (
+                  <div className="mt-5">
+                    <h3 className="text-sm font-semibold text-slate-300">Activity timeline</h3>
+                    <div className="mt-3 space-y-2">
+                      {insights.activitySeries.map((item) => {
+                        const maxHeight = Math.max(1, ...insights.activitySeries.map((s) => s.activeUsers));
+                        return (
+                          <div key={item.date} className="flex items-center gap-3">
+                            <span className="w-16 shrink-0 text-xs text-slate-500">{item.label}</span>
+                            <div className="flex flex-1 items-center gap-2">
+                              <div className="h-1.5 flex-1 rounded-full bg-slate-800">
+                                <div
+                                  className="h-full rounded-full bg-blue-500"
+                                  style={{ width: `${Math.min(100, Math.round((item.activeUsers / maxHeight) * 100))}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-slate-500">{item.activeUsers} users</span>
+                              <span className="text-xs text-slate-600">·</span>
+                              <span className="text-xs text-slate-500">{item.announcementViews} views</span>
+                              <span className="text-xs text-slate-600">·</span>
+                              <span className="text-xs text-slate-500">{item.announcementClicks} clicks</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent platform events */}
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold text-slate-300">Recent platform events</h3>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[700px] text-left text-sm">
                       <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
                         <tr>
                           <th className="py-3 pr-4 font-semibold">User</th>
@@ -824,13 +1148,12 @@ export default function AdminAnnouncementsPage() {
                       <tbody className="divide-y divide-slate-800">
                         {insights.recentPlatformEvents.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="py-10 text-center text-slate-500">No platform actions in this range.</td>
+                            <td colSpan={5} className="py-10 text-center text-slate-500">No platform activity in this period.</td>
                           </tr>
                         ) : insights.recentPlatformEvents.map((event) => (
                           <tr key={event.id}>
                             <td className="py-3 pr-4">
                               <p className="font-medium text-slate-100">{event.email || event.userName}</p>
-                              <p className="font-mono text-[11px] text-slate-500">{event.userId}</p>
                             </td>
                             <td className="py-3 pr-4 text-slate-300">{formatEventName(event.event)}</td>
                             <td className="py-3 pr-4 text-slate-300">{event.country}</td>
@@ -843,29 +1166,75 @@ export default function AdminAnnouncementsPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Countries */}
+              <div className="rounded-xl border border-slate-700 bg-slate-900 p-5">
+                <h2 className="text-base font-semibold text-slate-50">Top countries</h2>
+                <p className="mt-1 text-sm text-slate-400">Where active users are coming from.</p>
+                <div className="mt-4 space-y-2">
+                  {insights.topCountries.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-500">No country data yet.</p>
+                  ) : insights.topCountries.map((country) => (
+                    <div key={country.country} className="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <Globe2 className="h-4 w-4 text-blue-300" />
+                        <span className="text-sm font-medium text-slate-100">{country.country}</span>
+                      </div>
+                      <div className="text-right text-xs text-slate-500">
+                        <span className="font-semibold text-slate-100">{country.activeUsers}</span> users
+                        <span className="mx-1.5">·</span>
+                        {country.actions} actions
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </section>
           )}
+        </>
+      )}
 
-          {activeTab === "create" && (
-            <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-              <form onSubmit={submit} className="space-y-5 rounded-xl border border-slate-700 bg-gray-900 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500/12 text-blue-300">
-                    <Send className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-50">Create announcement</h2>
-                    <p className="text-sm text-slate-400">Dashboard and desktop users receive it when they come online.</p>
-                  </div>
+      {/* Create / Edit modal */}
+      {showCreate && (
+        <div
+          className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/60 p-4 pt-[10vh]"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setEditingId(null); } }}
+        >
+          <div className="relative w-full max-w-4xl rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/12 text-blue-300">
+                  <Send className="h-5 w-5" />
                 </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-50">
+                    {editingId ? "Edit announcement" : "Create announcement"}
+                  </h2>
+                  <p className="text-sm text-slate-400">
+                    {editingId
+                      ? "Update your announcement and associated details."
+                      : "Dashboard and desktop users receive it when they come online."}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowCreate(false); setEditingId(null); }}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
 
+            <form onSubmit={submit} className="grid grid-cols-1 gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_280px]">
+              <div className="space-y-5">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <label className="space-y-2">
                     <FieldLabel>Title</FieldLabel>
                     <input
-                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
+                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
                       value={form.title}
-                      onChange={(event) => updateForm({ title: event.target.value })}
+                      onChange={(e) => updateForm({ title: e.target.value })}
                       placeholder="Happy New Month"
                       required
                     />
@@ -873,9 +1242,9 @@ export default function AdminAnnouncementsPage() {
                   <label className="space-y-2">
                     <FieldLabel>Audience</FieldLabel>
                     <select
-                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
+                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
                       value={form.audience}
-                      onChange={(event) => updateForm({ audience: event.target.value as AnnouncementAudience })}
+                      onChange={(e) => updateForm({ audience: e.target.value as AnnouncementAudience })}
                     >
                       {AUDIENCES.map((audience) => (
                         <option key={audience.value} value={audience.value}>{audience.label}</option>
@@ -888,21 +1257,21 @@ export default function AdminAnnouncementsPage() {
                 <label className="block space-y-2">
                   <FieldLabel>Message</FieldLabel>
                   <textarea
-                    className="min-h-[150px] w-full resize-y rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 text-sm leading-6 text-slate-50 outline-none focus:border-blue-500"
+                    className="min-h-[130px] w-full resize-y rounded-lg border border-slate-700 bg-slate-900 px-3 py-3 text-sm leading-6 text-slate-50 outline-none focus:border-blue-500"
                     value={form.message}
-                    onChange={(event) => updateForm({ message: event.target.value })}
+                    onChange={(e) => updateForm({ message: e.target.value })}
                     placeholder="Write the announcement users should see."
                     required
                   />
                 </label>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <label className="space-y-2">
                     <FieldLabel>Tone</FieldLabel>
                     <select
-                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
+                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
                       value={form.tone}
-                      onChange={(event) => updateForm({ tone: event.target.value as AnnouncementTone })}
+                      onChange={(e) => updateForm({ tone: e.target.value as AnnouncementTone })}
                     >
                       {TONES.map((tone) => <option key={tone.value} value={tone.value}>{tone.label}</option>)}
                     </select>
@@ -913,9 +1282,9 @@ export default function AdminAnnouncementsPage() {
                       type="number"
                       min={-100}
                       max={100}
-                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
+                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
                       value={form.priority}
-                      onChange={(event) => updateForm({ priority: Number(event.target.value) })}
+                      onChange={(e) => updateForm({ priority: Number(e.target.value) })}
                     />
                   </label>
                   <label className="space-y-2">
@@ -924,16 +1293,16 @@ export default function AdminAnnouncementsPage() {
                       type="number"
                       min={0}
                       max={1440}
-                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
+                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
                       value={form.deliverySpacingMinutes}
-                      onChange={(event) => updateForm({ deliverySpacingMinutes: Number(event.target.value) })}
+                      onChange={(e) => updateForm({ deliverySpacingMinutes: Number(e.target.value) })}
                     />
                   </label>
                 </div>
 
-                <div className="rounded-xl border border-slate-700 bg-slate-950/80 p-4">
+                <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-                    <Users className="h-4 w-4 text-blue-300" />
+                    <Globe2 className="h-4 w-4 text-blue-300" />
                     Surfaces
                   </div>
                   <div className="mt-3 flex flex-wrap gap-3">
@@ -959,18 +1328,18 @@ export default function AdminAnnouncementsPage() {
                     <FieldLabel>Publish at</FieldLabel>
                     <input
                       type="datetime-local"
-                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
+                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
                       value={form.publishAt}
-                      onChange={(event) => updateForm({ publishAt: event.target.value, status: event.target.value ? "scheduled" : "active" })}
+                      onChange={(e) => updateForm({ publishAt: e.target.value, status: e.target.value ? "scheduled" : "active" })}
                     />
                   </label>
                   <label className="space-y-2">
                     <FieldLabel>Expires at</FieldLabel>
                     <input
                       type="datetime-local"
-                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
+                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
                       value={form.expiresAt}
-                      onChange={(event) => updateForm({ expiresAt: event.target.value })}
+                      onChange={(e) => updateForm({ expiresAt: e.target.value })}
                     />
                   </label>
                 </div>
@@ -979,9 +1348,9 @@ export default function AdminAnnouncementsPage() {
                   <label className="space-y-2">
                     <FieldLabel>CTA label</FieldLabel>
                     <input
-                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
+                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
                       value={form.ctaLabel}
-                      onChange={(event) => updateForm({ ctaLabel: event.target.value })}
+                      onChange={(e) => updateForm({ ctaLabel: e.target.value })}
                       placeholder="View plans"
                     />
                   </label>
@@ -989,9 +1358,9 @@ export default function AdminAnnouncementsPage() {
                     <FieldLabel>CTA URL</FieldLabel>
                     <div className="relative">
                       <input
-                        className="h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 pr-10 text-sm text-slate-50 outline-none focus:border-blue-500"
+                        className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 pr-10 text-sm text-slate-50 outline-none focus:border-blue-500"
                         value={form.ctaUrl}
-                        onChange={(event) => updateForm({ ctaUrl: event.target.value })}
+                        onChange={(e) => updateForm({ ctaUrl: e.target.value })}
                         placeholder="/subscription/plans or https://..."
                       />
                       <ExternalLink className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-500" />
@@ -1003,18 +1372,18 @@ export default function AdminAnnouncementsPage() {
                   <label className="space-y-2">
                     <FieldLabel>Tags</FieldLabel>
                     <input
-                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
+                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
                       value={form.tags}
-                      onChange={(event) => updateForm({ tags: event.target.value })}
+                      onChange={(e) => updateForm({ tags: e.target.value })}
                       placeholder="christmas, offer, upgrade"
                     />
                   </label>
                   <label className="space-y-2">
                     <FieldLabel>Offer code</FieldLabel>
                     <input
-                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
+                      className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
                       value={form.offerCode}
-                      onChange={(event) => updateForm({ offerCode: event.target.value })}
+                      onChange={(e) => updateForm({ offerCode: e.target.value })}
                       placeholder="CHRISTMAS25"
                     />
                   </label>
@@ -1023,30 +1392,38 @@ export default function AdminAnnouncementsPage() {
                 <label className="block space-y-2">
                   <FieldLabel>Specific user emails</FieldLabel>
                   <input
-                    className="h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
+                    className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-50 outline-none focus:border-blue-500"
                     value={form.targetEmails}
-                    onChange={(event) => updateForm({ targetEmails: event.target.value })}
+                    onChange={(e) => updateForm({ targetEmails: e.target.value })}
                     placeholder="pastor@example.com, media@example.com"
                   />
                 </label>
 
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <div className="flex flex-wrap items-center gap-3 pt-2">
                   <button
                     type="submit"
                     disabled={submitting}
                     className="inline-flex h-11 items-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
                   >
                     {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    Save announcement
+                    {editingId ? "Update announcement" : "Save announcement"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCreate(false); setEditingId(null); }}
+                    className="inline-flex h-11 items-center rounded-xl border border-slate-700 px-5 text-sm font-semibold text-slate-300 hover:border-slate-500"
+                  >
+                    Cancel
                   </button>
                 </div>
-              </form>
+              </div>
 
-              <aside className="space-y-4">
-                <div className="rounded-xl border border-slate-700 bg-gray-900 p-5">
-                  <h2 className="text-base font-semibold text-slate-50">Templates</h2>
-                  <p className="mt-1 text-sm text-slate-400">Start from common campaign types.</p>
-                  <div className="mt-4 space-y-2">
+              {/* Templates sidebar */}
+              <aside className="space-y-4 xl:border-l xl:border-slate-800 xl:pl-6">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-300">Templates</h3>
+                  <p className="mt-1 text-xs text-slate-500">Start from common campaign types.</p>
+                  <div className="mt-3 space-y-2">
                     {templates.map((template) => {
                       const Icon = template.icon;
                       return (
@@ -1054,7 +1431,7 @@ export default function AdminAnnouncementsPage() {
                           key={template.name}
                           type="button"
                           onClick={() => updateForm(template.patch)}
-                          className="flex w-full items-center gap-3 rounded-xl border border-slate-700 px-4 py-3 text-left text-sm font-semibold text-slate-300 hover:border-slate-500"
+                          className="flex w-full items-center gap-3 rounded-xl border border-slate-700 px-4 py-3 text-left text-sm font-semibold text-slate-300 hover:border-slate-500 transition-colors"
                         >
                           <Icon className="h-4 w-4 text-blue-300" />
                           {template.name}
@@ -1064,18 +1441,18 @@ export default function AdminAnnouncementsPage() {
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-slate-700 bg-gray-900 p-5">
-                  <h2 className="text-base font-semibold text-slate-50">Delivery rules</h2>
-                  <div className="mt-4 space-y-3 text-sm text-slate-400">
-                    <div className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">Only one announcement is returned per user request.</div>
-                    <div className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">Spacing controls when the next message can appear for that user.</div>
-                    <div className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">Dashboard and desktop deliveries are tracked separately.</div>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-300">Delivery rules</h3>
+                  <div className="mt-3 space-y-2 text-xs text-slate-400">
+                    <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5">Only one announcement is returned per user request.</div>
+                    <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5">Spacing controls when the next message can appear for that user.</div>
+                    <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5">Dashboard and desktop deliveries are tracked separately.</div>
                   </div>
                 </div>
               </aside>
-            </section>
-          )}
-        </>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -27,12 +27,14 @@ export function AnnouncementModalHost() {
     const timer = window.setTimeout(() => void refresh(), 1500);
     const handleOnline = () => void refresh();
     const handleFocus = () => void refresh();
+    const interval = window.setInterval(() => void refresh(), 60_000);
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("focus", handleFocus);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      window.clearInterval(interval);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("focus", handleFocus);
     };
