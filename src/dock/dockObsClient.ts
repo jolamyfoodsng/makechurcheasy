@@ -35,7 +35,7 @@ import * as obsQueue from "../services/obsRequestQueue";
 import * as browserQueue from "../services/browserUpdateQueue";
 import { ALL_THEMES, type ThemeLike } from "../lowerthirds/themes";
 import { getWorshipLTFavorites } from "../services/favoriteThemes";
-import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { getOverlayBaseUrlSync, resolveOverlayAssetUrl } from "../services/overlayUrl";
 import { getMinistryData, buildSpeakerRoleMap } from "../services/ministryStore";
 import { PRESENTATION_SCENE_NAME, PROGRAM_SCENE_SOURCE_NAME, SOURCE_NAMES, BG_SOURCE_NAMES, FULLSCREEN_SOURCE_NAMES, FULLSCREEN_BG_SOURCE_NAMES } from "../services/PresentationSceneManager";
 import type { DockLiveThemeOverrides } from "./dockConsoleTheme";
@@ -376,6 +376,8 @@ class DockObsClient {
   private _reconnectAttempts = 0;
   private _url = getDefaultOBSUrl();
   private _password: string | undefined;
+  private _persistConnectionParams = true;
+  private _hasTransientExplicitConnection = false;
   /** Track last overlay mode per source so we can force-reload when switching HTML files */
   private _lastOverlayMode: Record<string, string> = {};
   /** Last overlay mode for the unified Bible source ("fullscreen" | "lower-third") */
@@ -643,11 +645,31 @@ class DockObsClient {
 
   // ── Connection ──
 
-  async connect(url?: string, password?: string, forceReconnect = false) {
+  async connect(
+    url?: string,
+    password?: string,
+    forceReconnect = false,
+    options?: { persist?: boolean },
+  ) {
+    const hasExplicitUrl = Boolean(url);
+    if (!hasExplicitUrl && !forceReconnect) {
+      if (this.isConnected) return;
+      if (this._connectPromise) return this._connectPromise;
+    }
+
     const previousUrl = this._url;
     const previousPassword = this._password;
-    this.resolveParams(url, password);
-    const explicitParamsChanged = Boolean(url) &&
+
+    if (hasExplicitUrl) {
+      this._persistConnectionParams = options?.persist !== false;
+      this._hasTransientExplicitConnection = options?.persist === false;
+      this.resolveParams(url, password);
+    } else if (!this._hasTransientExplicitConnection) {
+      this._persistConnectionParams = true;
+      this.resolveParams();
+    }
+
+    const explicitParamsChanged = hasExplicitUrl &&
       (this._url !== previousUrl || this._password !== previousPassword);
 
     if (this.reconnectTimer) {
@@ -756,8 +778,12 @@ class DockObsClient {
         this.setStatus("connected");
         connTracker.register("dock-cef", this._url);
 
-        // Persist connection params so auto-reconnect works across dock reloads
-        this.persistParams();
+        // Persist normal dock connection params so auto-reconnect works across
+        // dock reloads. Remote presentation uses a transient target and must
+        // not overwrite the user's normal OBS settings.
+        if (this._persistConnectionParams) {
+          this.persistParams();
+        }
 
         const startupPromise = (async () => {
           // A dock reload must not reorder, rebuild, or otherwise mutate the
@@ -796,6 +822,8 @@ class DockObsClient {
     // this deliberate disconnect cannot schedule an automatic reconnect.
     this._obsGeneration += 1;
     this._connectPromise = null;
+    this._persistConnectionParams = true;
+    this._hasTransientExplicitConnection = false;
     this.resetObsStateCaches();
     await this.deleteClone().catch(() => { });
     try { await this.obs.disconnect(); } catch { /* ignore */ }
@@ -891,7 +919,7 @@ class DockObsClient {
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
       if (this._status !== "connected") {
-        await this.connect(this._url, this._password, true);
+        await this.connect(this._url, this._password, true, { persist: this._persistConnectionParams });
       }
     }, delay);
   }
@@ -4490,6 +4518,47 @@ class DockObsClient {
 
   private getOverlayBaseUrl(): string {
     return getOverlayBaseUrlSync();
+  }
+
+  private isRemotePresentationSession(): boolean {
+    return this._hasTransientExplicitConnection && !this._persistConnectionParams;
+  }
+
+  private async toRemoteServedMediaUrl(filePath: string, fileName: string): Promise<string> {
+    const trimmed = String(filePath || "").trim();
+    if (!trimmed) return "";
+
+    if (/^(https?:|data:|blob:)/i.test(trimmed)) {
+      return resolveOverlayAssetUrl(trimmed);
+    }
+
+    if (trimmed.startsWith("/uploads/") || trimmed.startsWith("uploads/")) {
+      return resolveOverlayAssetUrl(trimmed);
+    }
+
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      let targetHost = "";
+      try {
+        targetHost = new URL(this._url).hostname;
+      } catch {
+        targetHost = "";
+      }
+      return await invoke<string>("prepare_remote_media_url", {
+        filePath: trimmed,
+        fileName,
+        targetHost: targetHost || undefined,
+      });
+    } catch {
+      // Non-Tauri dock contexts cannot copy files. Fall back to the managed
+      // uploads URL convention; this works for media already saved in uploads.
+    }
+
+    const withoutFileProtocol = trimmed.replace(/^file:\/\//i, "");
+    const safeFileName = withoutFileProtocol.split(/[\\/]/).pop()?.trim() || "";
+    if (!safeFileName) return trimmed;
+
+    return `${this.getOverlayBaseUrl()}/uploads/${encodeURIComponent(safeFileName)}`;
   }
 
   private buildOverlayHtmlUrl(
@@ -8142,6 +8211,7 @@ class DockObsClient {
     const mediaPatternSource = "MCE Media - Pattern";
     const mediaImageAudioSource = "MCE Media - Image Audio";
     const mediaTextSource = "MCE Media - Text";
+    const remoteMediaSource = "MCE Media - Remote";
 
     const target = await this.getPresentationTargetScene("media");
     const sceneName = target.sceneName;
@@ -8168,6 +8238,60 @@ class DockObsClient {
       })());
     }
     await Promise.allSettled(hidePromises);
+
+    if (this.isRemotePresentationSession()) {
+      await this.hideMediaSourceWithAnimation(sceneName, mediaVideoSource).catch(() => { });
+      await this.hideMediaSourceWithAnimation(sceneName, mediaImageSource).catch(() => { });
+      await this.hideOverlaySource(sceneName, mediaImageAudioSource).catch(() => { });
+
+      const mediaUrl = await this.toRemoteServedMediaUrl(filePath, fileName);
+      if (!mediaUrl) {
+        throw new Error("Could not create a network media URL for remote OBS.");
+      }
+
+      const canvas = await this.getCanvasSize();
+      const sceneItemId = await this.ensureOverlaySource(
+        sceneName,
+        remoteMediaSource,
+        canvas.width,
+        canvas.height,
+        true,
+      );
+      const packet = {
+        url: mediaUrl,
+        title: fileName,
+        isImage,
+        fitMode: options.fitMode ?? "cover",
+        looping: options.looping ?? true,
+        muted: isImage ? true : options.muted ?? true,
+        timestamp: Date.now(),
+      };
+      const overlayUrl = `${this.buildOverlayHtmlUrl("mce-media-overlay.html")}#data=${encodeURIComponent(JSON.stringify(packet))}`;
+
+      await this.setBrowserSourceUrl(remoteMediaSource, overlayUrl, true);
+      await this.applyMediaFitMode(sceneName, sceneItemId, options.fitMode ?? "cover");
+
+      if (!isImage) {
+        try {
+          await this.call("SetInputMute", {
+            inputName: remoteMediaSource,
+            inputMuted: options.muted ?? true,
+          });
+        } catch { /* ignore */ }
+      }
+
+      await this.animateMediaSceneItem(sceneName, sceneItemId, "in");
+
+      try {
+        await this.bringSceneSourceToFront(sceneName, mediaTextSource);
+      } catch { /* ignore */ }
+
+      try {
+        await this.ensureTickerAboveSource(sceneName, remoteMediaSource);
+      } catch { /* ignore */ }
+
+      return;
+    }
 
     if (isImage) {
       const sceneItemId = await this._ensureNativeMediaSource(
@@ -8792,6 +8916,7 @@ class DockObsClient {
     // Hide all media sources in MCE Presentation
     await this.hideOverlaySource(scene, "MCE Media - Video").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Image").catch(() => { });
+    await this.hideOverlaySource(scene, "MCE Media - Remote").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Pattern").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Image Audio").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Text").catch(() => { });

@@ -1,226 +1,560 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowRight, Check, Copy, ExternalLink, Globe, Info, RotateCcw, Users } from "lucide-react";
-
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  type PresentationSettings,
-  getPresentationSettings,
-  regenerateSession,
-  savePresentationSettings,
-} from "../services/presentationSettings";
-import { syncPresentationRemoteAccessInfo } from "../services/presentationRemote";
-import { fetchPresentationViewerCount } from "../services/presentationState";
-import { launchPresentationScreen } from "../services/presentationWindow";
+  ArrowLeft,
+  CheckCircle2,
+  Eye,
+  Loader2,
+  MonitorUp,
+  PlugZap,
+  RefreshCw,
+  Router,
+  ShieldCheck,
+  Wifi,
+} from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { useNavigate } from "react-router-dom";
+
+import DockPage from "../dock/DockPage";
+import { dockObsClient, type DockObsStatus } from "../dock/dockObsClient";
+import { setOverlayBaseUrlOverride } from "../services/overlayUrl";
+import { normalizeOBSWebSocketUrl } from "../services/obsWebSocketUrl";
 
 import "./PresentationSetupPage.css";
 
-function SectionHeader({ number, title }: { number: number; title: string }) {
-  return (
-    <div className="ps-section-header">
-      <span className="ps-section-number">{number}</span>
-      <h3 className="ps-section-title">{title}</h3>
-    </div>
-  );
+const REMOTE_PRESENTATION_SETTINGS_KEY = "mce-remote-presentation-obs";
+const PREVIEW_POLL_MS = 2500;
+
+type RemotePresentationSettings = {
+  host: string;
+  port: string;
+  password: string;
+  url: string;
+};
+
+type PreviewSnapshot = {
+  sceneName: string;
+  imageData: string | null;
+  studioModeEnabled: boolean;
+};
+
+type ObsSceneResponse = {
+  currentPreviewSceneName?: string;
+  currentProgramSceneName?: string;
+  sceneName?: string;
+};
+
+type RemoteObsCandidate = {
+  host: string;
+  port: number;
+  url: string;
+  label: string;
+};
+
+type RemoteObsDiscoveryResult = {
+  localIp: string;
+  subnet: string;
+  port: number;
+  candidates: RemoteObsCandidate[];
+};
+
+type LanOverlayInfo = {
+  ip: string;
+  port: number;
+  baseUrl: string;
+};
+
+function loadRemotePresentationSettings(): RemotePresentationSettings {
+  try {
+    const raw = localStorage.getItem(REMOTE_PRESENTATION_SETTINGS_KEY);
+    if (!raw) throw new Error("No saved settings");
+    const parsed = JSON.parse(raw) as Partial<RemotePresentationSettings>;
+    return {
+      host: parsed.host || "",
+      port: parsed.port || "4455",
+      password: parsed.password || "",
+      url: parsed.url || "",
+    };
+  } catch {
+    return { host: "", port: "4455", password: "", url: "" };
+  }
 }
 
-interface PresentationLinkCardProps {
-  settings: PresentationSettings;
-  onUpdate: (patch: Partial<PresentationSettings>) => void;
+function saveRemotePresentationSettings(settings: RemotePresentationSettings): void {
+  try {
+    localStorage.setItem(REMOTE_PRESENTATION_SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    // Storage can fail in embedded browser contexts; connection still works for this session.
+  }
 }
 
-function PresentationLinkCard({ settings, onUpdate }: PresentationLinkCardProps) {
-  const [copied, setCopied] = useState(false);
+function buildRemoteObsUrl(host: string, port: string): string {
+  const trimmedHost = host.trim();
+  const trimmedPort = port.trim() || "4455";
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(settings.presentationLink).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
-    }).catch(() => { });
-  }, [settings.presentationLink]);
+  if (!trimmedHost) return "";
+  if (/^wss?:\/\//i.test(trimmedHost)) return normalizeOBSWebSocketUrl(trimmedHost);
+  if (/^\d{2,5}$/.test(trimmedHost)) return normalizeOBSWebSocketUrl(trimmedHost);
 
-  const handleOpen = useCallback(() => {
-    void launchPresentationScreen(settings.sessionId, settings.presentationLink);
-  }, [settings.presentationLink, settings.sessionId]);
+  const withoutProtocol = trimmedHost
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, "")
+    .replace(/\/.*$/, "");
 
-  const handleRegenerate = useCallback(() => {
-    const updated = regenerateSession();
-    onUpdate(updated);
-    void syncPresentationRemoteAccessInfo(updated.sessionId)
-      .then((remoteInfo) => {
-        onUpdate({
-          ...updated,
-          presentationLink: remoteInfo.link,
-          connectedViewers: 0,
-        });
-      })
-      .catch(() => { });
-  }, [onUpdate]);
-
-  return (
-    <div className="ps-config-card ps-config-card--hero">
-      <div className="ps-config-card-header">
-        <Globe size={16} />
-        <span>Presentation link</span>
-      </div>
-
-      <p className="ps-config-copy">
-        This link is generated and hosted locally by MakeChurchEasy on this machine. Open it on the projector computer, another laptop on the same network, or launch it directly on an extended display from here.
-      </p>
-
-      <label className="ps-label">Presentation URL</label>
-      <div className="ps-link-row">
-        <input className="ps-input ps-input--link" readOnly value={settings.presentationLink} />
-        <button className="ps-btn ps-btn--small" onClick={handleCopy} title="Copy link">
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-        </button>
-        <button className="ps-btn ps-btn--small" onClick={handleOpen} title="Open screen">
-          <ExternalLink size={14} />
-        </button>
-        <button className="ps-btn ps-btn--small" onClick={handleRegenerate} title="Regenerate link">
-          <RotateCcw size={14} />
-        </button>
-      </div>
-
-      <div className="ps-launch-actions">
-        <button className="ps-btn ps-btn--primary ps-btn--medium" onClick={handleCopy}>
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-          {copied ? "Copied" : "Copy Link"}
-        </button>
-        <button className="ps-btn ps-btn--secondary ps-btn--medium" onClick={handleOpen}>
-          <ExternalLink size={14} />
-          Open Screen
-        </button>
-      </div>
-
-      <p className="ps-launch-note">
-        Regenerating the link rotates the local token and disconnects the old screen URL without changing the rest of the presentation console.
-      </p>
-
-      <div className="ps-viewers">
-        <Users size={14} />
-        <span>Connected screens: {settings.connectedViewers}</span>
-      </div>
-    </div>
-  );
+  const hasPort = /:\d{2,5}$/.test(withoutProtocol);
+  return normalizeOBSWebSocketUrl(`${withoutProtocol}${hasPort ? "" : `:${trimmedPort}`}`);
 }
 
-const PRESENTATION_USAGE_STEPS = [
-  {
-    title: "Copy the local link",
-    description: "Open it on the projector machine or another laptop on the same network.",
-  },
-  {
-    title: "Open the screen here",
-    description: "Launch Screen opens a clean presentation window and pushes it to the external display when one is connected.",
-  },
-  {
-    title: "Control from the console",
-    description: "Select Ministry or Bible content, preview it locally, then click Present.",
-  },
-];
+function getStatusLabel(status: DockObsStatus): string {
+  switch (status) {
+    case "connected":
+      return "Connected";
+    case "connecting":
+      return "Connecting";
+    case "error":
+      return "Connection failed";
+    default:
+      return "Not connected";
+  }
+}
 
-function PresentationUsageCard() {
+function RemoteObsConnectPanel({
+  settings,
+  status,
+  error,
+  discovering,
+  discoveryResult,
+  discoveryError,
+  onChange,
+  onConnect,
+  onDiscover,
+  onSelectCandidate,
+  onBack,
+}: {
+  settings: RemotePresentationSettings;
+  status: DockObsStatus;
+  error: string;
+  discovering: boolean;
+  discoveryResult: RemoteObsDiscoveryResult | null;
+  discoveryError: string;
+  onChange: (settings: RemotePresentationSettings) => void;
+  onConnect: () => void;
+  onDiscover: () => void;
+  onSelectCandidate: (candidate: RemoteObsCandidate) => void;
+  onBack: () => void;
+}) {
+  const connecting = status === "connecting";
+  const remoteUrl = useMemo(() => buildRemoteObsUrl(settings.host, settings.port), [settings.host, settings.port]);
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    onConnect();
+  };
+
   return (
-    <div className="ps-config-card ps-config-card--guide">
-      <div className="ps-config-card-header">
-        <Info size={16} />
-        <span>How it works</span>
-      </div>
+    <div className="remote-presentation-page remote-presentation-page--centered">
+      <button type="button" className="remote-back-button" onClick={onBack}>
+        <ArrowLeft size={18} />
+        Back
+      </button>
 
-      <p className="ps-config-copy ps-config-copy--compact">
-        The presentation feature now runs through one locally hosted screen link. There is no OBS setup inside this flow.
-      </p>
+      <section className="remote-connect-card" aria-labelledby="remote-presentation-title">
+        <div className="remote-connect-card__icon">
+          <MonitorUp size={32} />
+        </div>
 
-      <div className="ps-guide-list">
-        {PRESENTATION_USAGE_STEPS.map((step, index) => (
-          <div key={step.title} className="ps-guide-item">
-            <div className="ps-guide-step">
-              <span className="ps-guide-step-number">{index + 1}</span>
-              <div className="ps-guide-step-body">
-                <strong>{step.title}</strong>
-                <span>{step.description}</span>
-              </div>
-            </div>
+        <div className="remote-connect-card__header">
+          <p className="remote-eyebrow">Remote Presentation</p>
+          <h1 id="remote-presentation-title">Connect to OBS on another laptop</h1>
+          <p>
+            This presentation page does not use OBS on this computer. Enter the IP address of the laptop running OBS, then continue to the dock controls.
+          </p>
+        </div>
+
+        <form className="remote-connect-form" onSubmit={submit}>
+          <label className="remote-field">
+            <span>OBS laptop IP address</span>
+            <input
+              value={settings.host}
+              onChange={(event) => onChange({ ...settings, host: event.target.value })}
+              placeholder="Enter OBS laptop IP, e.g. 192.168.1.25"
+              autoComplete="off"
+              autoFocus
+            />
+          </label>
+
+          <div className="remote-connect-form__grid">
+            <label className="remote-field">
+              <span>OBS WebSocket port</span>
+              <input
+                value={settings.port}
+                onChange={(event) => onChange({ ...settings, port: event.target.value })}
+                placeholder="4455"
+                inputMode="numeric"
+                autoComplete="off"
+              />
+            </label>
+
+            <label className="remote-field">
+              <span>Password (Optional)</span>
+              <input
+                value={settings.password}
+                onChange={(event) => onChange({ ...settings, password: event.target.value })}
+                placeholder="Enter OBS WebSocket password"
+                type="password"
+                autoComplete="off"
+              />
+            </label>
           </div>
-        ))}
-      </div>
+
+          <div className="remote-url-preview">
+            <Wifi size={16} />
+            <span>{remoteUrl || "ws://192.168.1.25:4455"}</span>
+          </div>
+
+          <div className="remote-connect-actions">
+            <button
+              className="remote-secondary-button remote-discover-button"
+              type="button"
+              disabled={connecting || discovering}
+              onClick={onDiscover}
+            >
+              {discovering ? <Loader2 className="remote-spin" size={18} /> : <Router size={18} />}
+              {discovering ? "Scanning network..." : "Find OBS Automatically"}
+            </button>
+
+            <button className="remote-primary-button" type="submit" disabled={connecting || !settings.host.trim()}>
+              {connecting ? <Loader2 className="remote-spin" size={20} /> : <PlugZap size={20} />}
+              {connecting ? "Connecting To Remote OBS..." : "Connect To Remote OBS"}
+            </button>
+          </div>
+
+          {(discoveryResult || discoveryError) ? (
+            <div className="remote-discovery-panel">
+              {discoveryError ? (
+                <span className="remote-discovery-message">{discoveryError}</span>
+              ) : discoveryResult ? (
+                <>
+                  <div className="remote-discovery-header">
+                    <strong>
+                      {discoveryResult.candidates.length
+                        ? `Found ${discoveryResult.candidates.length} possible OBS server${discoveryResult.candidates.length === 1 ? "" : "s"}`
+                        : "No OBS server found"}
+                    </strong>
+                    <span>Scanned {discoveryResult.subnet} on port {discoveryResult.port}</span>
+                  </div>
+
+                  {discoveryResult.candidates.length ? (
+                    <div className="remote-discovery-list">
+                      {discoveryResult.candidates.map((candidate) => (
+                        <button
+                          key={candidate.url}
+                          type="button"
+                          className="remote-discovery-candidate"
+                          onClick={() => onSelectCandidate(candidate)}
+                        >
+                          <MonitorUp size={18} />
+                          <span>{candidate.host}</span>
+                          <small>{candidate.url}</small>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="remote-discovery-message">
+                      Make sure both laptops are on the same Wi-Fi and OBS WebSocket Server is enabled.
+                    </span>
+                  )}
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="remote-connect-alert" role="alert">
+              <ShieldCheck size={16} />
+              <span>{error}</span>
+            </div>
+          ) : null}
+        </form>
+
+        <div className="remote-connect-steps">
+          <div>
+            <strong>On Laptop 2</strong>
+            <span>Open OBS → Tools → WebSocket Server Settings → Enable server.</span>
+          </div>
+          <div>
+            <strong>On Laptop 1</strong>
+            <span>Use the Laptop 2 IP address. Both laptops must be on the same network.</span>
+          </div>
+        </div>
+      </section>
     </div>
+  );
+}
+
+function RemotePreviewPanel({
+  status,
+  targetUrl,
+  overlayBaseUrl,
+}: {
+  status: DockObsStatus;
+  targetUrl: string;
+  overlayBaseUrl: string;
+}) {
+  const [snapshot, setSnapshot] = useState<PreviewSnapshot | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+
+  const refreshPreview = useCallback(async () => {
+    if (status !== "connected") return;
+
+    setLoading(true);
+    setPreviewError("");
+
+    try {
+      const studio = await dockObsClient.call("GetStudioModeEnabled") as { studioModeEnabled?: boolean };
+      const studioModeEnabled = Boolean(studio.studioModeEnabled);
+      const sceneResponse = studioModeEnabled
+        ? await dockObsClient.call("GetCurrentPreviewScene") as ObsSceneResponse
+        : await dockObsClient.call("GetCurrentProgramScene") as ObsSceneResponse;
+
+      const sceneName = (
+        sceneResponse.currentPreviewSceneName ||
+        sceneResponse.currentProgramSceneName ||
+        sceneResponse.sceneName ||
+        ""
+      ).trim();
+
+      if (!sceneName) {
+        setSnapshot(null);
+        setPreviewError("OBS did not return an active scene.");
+        return;
+      }
+
+      const imageResponse = await dockObsClient.call("GetSourceScreenshot", {
+        sourceName: sceneName,
+        imageFormat: "png",
+        imageWidth: 960,
+      }) as { imageData?: string };
+
+      setSnapshot({
+        sceneName,
+        studioModeEnabled,
+        imageData: imageResponse.imageData || null,
+      });
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : "Could not load OBS preview.");
+    } finally {
+      setLoading(false);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    void refreshPreview();
+    if (status !== "connected") return;
+    const interval = window.setInterval(() => {
+      void refreshPreview();
+    }, PREVIEW_POLL_MS);
+    return () => window.clearInterval(interval);
+  }, [refreshPreview, status]);
+
+  return (
+    <aside className="remote-preview-panel" aria-label="Remote OBS preview">
+      <div className="remote-preview-panel__header">
+        <div>
+          <p className="remote-eyebrow">Remote OBS Preview</p>
+          <h2>{snapshot?.sceneName || "Waiting for scene"}</h2>
+        </div>
+        <button type="button" className="remote-icon-button" onClick={() => void refreshPreview()} title="Refresh preview">
+          <RefreshCw size={20} />
+        </button>
+      </div>
+
+      <div className="remote-preview-meta">
+        <span className={`remote-status-pill remote-status-pill--${status}`}>
+          {status === "connected" ? <CheckCircle2 size={16} /> : <Router size={16} />}
+          {getStatusLabel(status)}
+        </span>
+        <span>{targetUrl}</span>
+        {overlayBaseUrl ? <span>Overlay: {overlayBaseUrl}</span> : null}
+        {snapshot ? <span>{snapshot.studioModeEnabled ? "Preview scene" : "Program scene"}</span> : null}
+      </div>
+
+      <div className="remote-preview-stage">
+        {snapshot?.imageData ? (
+          <img src={snapshot.imageData} alt={`Remote OBS ${snapshot.sceneName} preview`} />
+        ) : loading ? (
+          <div className="remote-preview-skeleton" aria-label="Loading OBS preview" />
+        ) : (
+          <div className="remote-preview-empty">
+            <Eye size={48} />
+            <strong>No preview yet</strong>
+            <span>{previewError || "Connect to remote OBS and push content from the dock controls."}</span>
+          </div>
+        )}
+      </div>
+    </aside>
   );
 }
 
 export default function PresentationSetupPage() {
   const navigate = useNavigate();
-  const [settings, setSettings] = useState<PresentationSettings>(() => getPresentationSettings());
+  const [settings, setSettings] = useState<RemotePresentationSettings>(() => loadRemotePresentationSettings());
+  const [status, setStatus] = useState<DockObsStatus>("disconnected");
+  const [error, setError] = useState("");
+  const [connectedUrl, setConnectedUrl] = useState(settings.url);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoveryResult, setDiscoveryResult] = useState<RemoteObsDiscoveryResult | null>(null);
+  const [discoveryError, setDiscoveryError] = useState("");
+  const [remoteOverlayBaseUrl, setRemoteOverlayBaseUrl] = useState("");
 
   useEffect(() => {
-    let cancelled = false;
-
-    const syncRemoteStatus = async () => {
-      const current = getPresentationSettings();
-      const [remoteInfo, viewerCount] = await Promise.all([
-        syncPresentationRemoteAccessInfo(current.sessionId),
-        fetchPresentationViewerCount(current.sessionId).catch(() => 0),
-      ]);
-
-      if (cancelled) return;
-
-      const nextSettings = {
-        ...current,
-        presentationLink: remoteInfo.link,
-        connectedViewers: viewerCount,
-      };
-
-      setSettings(nextSettings);
-      savePresentationSettings(nextSettings);
-    };
-
-    void syncRemoteStatus();
-    const interval = window.setInterval(() => {
-      void syncRemoteStatus();
-    }, 5000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  const handleUpdate = useCallback((patch: Partial<PresentationSettings>) => {
-    setSettings((previous) => {
-      const next = { ...previous, ...patch, updatedAt: new Date().toISOString() };
-      savePresentationSettings(next);
-      return next;
+    const unsubscribe = dockObsClient.onStatusChange((nextStatus, nextError) => {
+      setStatus(nextStatus);
+      if (nextError) setError(nextError);
+      if (nextStatus === "connected") setError("");
     });
+    return unsubscribe;
   }, []);
 
-  const handleContinue = useCallback(() => {
-    savePresentationSettings(settings);
-    navigate("/presentation/console");
-  }, [navigate, settings]);
+  useEffect(() => {
+    return () => {
+      setOverlayBaseUrlOverride(null);
+    };
+  }, []);
+
+  const updateSettings = useCallback((nextSettings: RemotePresentationSettings) => {
+    setSettings(nextSettings);
+    saveRemotePresentationSettings(nextSettings);
+  }, []);
+
+  const handleSelectCandidate = useCallback((candidate: RemoteObsCandidate) => {
+    updateSettings({
+      ...settings,
+      host: candidate.host,
+      port: String(candidate.port),
+      url: candidate.url,
+    });
+    setError("");
+  }, [settings, updateSettings]);
+
+  const handleDiscover = useCallback(async () => {
+    const parsedPort = Number.parseInt(settings.port.trim() || "4455", 10);
+    const port = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 4455;
+
+    setDiscovering(true);
+    setDiscoveryError("");
+    setDiscoveryResult(null);
+    setError("");
+
+    try {
+      const result = await invoke<RemoteObsDiscoveryResult>("discover_remote_obs_hosts", { port });
+      setDiscoveryResult(result);
+
+      if (result.candidates.length === 1) {
+        const [candidate] = result.candidates;
+        updateSettings({
+          ...settings,
+          host: candidate.host,
+          port: String(candidate.port),
+          url: candidate.url,
+        });
+      }
+    } catch (discoverError) {
+      setDiscoveryError(discoverError instanceof Error ? discoverError.message : "Could not scan this network for OBS.");
+    } finally {
+      setDiscovering(false);
+    }
+  }, [settings, updateSettings]);
+
+  const handleConnect = useCallback(async () => {
+    const url = buildRemoteObsUrl(settings.host, settings.port);
+    if (!url) {
+      setError("Enter the IP address of the laptop running OBS.");
+      return;
+    }
+
+    setError("");
+    setStatus("connecting");
+
+    try {
+      const overlayInfo = await invoke<LanOverlayInfo>("get_lan_overlay_info", {
+        targetHost: settings.host.trim(),
+      });
+      setOverlayBaseUrlOverride(overlayInfo.baseUrl);
+      setRemoteOverlayBaseUrl(overlayInfo.baseUrl);
+
+      await dockObsClient.connect(url, settings.password || undefined, true, { persist: false });
+      const nextSettings = { ...settings, url };
+      saveRemotePresentationSettings(nextSettings);
+      setSettings(nextSettings);
+      setConnectedUrl(url);
+      setStatus("connected");
+    } catch (connectError) {
+      setOverlayBaseUrlOverride(null);
+      setRemoteOverlayBaseUrl("");
+      await dockObsClient.disconnect().catch(() => undefined);
+      setStatus("error");
+      setError(connectError instanceof Error ? connectError.message : "Could not connect to remote OBS.");
+    }
+  }, [settings]);
+
+  const handleBack = useCallback(() => {
+    setOverlayBaseUrlOverride(null);
+    setRemoteOverlayBaseUrl("");
+    void dockObsClient.disconnect();
+    navigate("/", { replace: false });
+  }, [navigate]);
+
+  if (status !== "connected") {
+    return (
+      <RemoteObsConnectPanel
+        settings={settings}
+        status={status}
+        error={error}
+        discovering={discovering}
+        discoveryResult={discoveryResult}
+        discoveryError={discoveryError}
+        onChange={updateSettings}
+        onConnect={handleConnect}
+        onDiscover={handleDiscover}
+        onSelectCandidate={handleSelectCandidate}
+        onBack={handleBack}
+      />
+    );
+  }
 
   return (
-    <div className="ps-page">
-      <div className="ps-container">
-        <div className="ps-header">
-          <h1 className="ps-title">Presentation Screen Setup</h1>
-
-        </div>
-
-        <div className="ps-section">
-          <SectionHeader number={1} title="Presentation setup" />
-          <div className="ps-overview-grid">
-            <PresentationLinkCard settings={settings} onUpdate={handleUpdate} />
-            <PresentationUsageCard />
+    <div className="remote-presentation-page remote-presentation-page--workspace">
+      <header className="remote-presentation-header">
+        <div className="remote-presentation-header__main">
+          <button type="button" className="remote-icon-button" onClick={handleBack} title="Back to main app" aria-label="Back to main app">
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <p className="remote-eyebrow">Remote Presentation</p>
+            <h1>Control OBS on another laptop</h1>
+            <p>Use the dock controls below. All OBS actions are sent to the remote OBS WebSocket target, not the OBS on this computer.</p>
           </div>
         </div>
+        <button
+          type="button"
+          className="remote-secondary-button"
+          onClick={() => {
+            setOverlayBaseUrlOverride(null);
+            setRemoteOverlayBaseUrl("");
+            void dockObsClient.disconnect();
+            setStatus("disconnected");
+          }}
+        >
+          Change Remote OBS
+        </button>
+      </header>
 
-        <div className="ps-footer">
-          <button className="ps-btn ps-btn--primary ps-btn--large" onClick={handleContinue}>
-            Open Presentation Console
-            <ArrowRight size={16} />
-          </button>
-        </div>
-      </div>
+      <main className="remote-presentation-workspace">
+        <section className="remote-dock-panel" aria-label="Remote dock controls">
+          <DockPage externalObsSession presentationBibleLmSplit />
+        </section>
+        <RemotePreviewPanel status={status} targetUrl={connectedUrl} overlayBaseUrl={remoteOverlayBaseUrl} />
+      </main>
     </div>
   );
 }

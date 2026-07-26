@@ -61,7 +61,10 @@ fn extract_channel(text: &str) -> String {
 fn is_mode_change(text: &str) -> bool {
     serde_json::from_str::<Value>(text)
         .ok()
-        .and_then(|v| v.get("type").and_then(|t| t.as_str().map(|s| s == "mode-change")))
+        .and_then(|v| {
+            v.get("type")
+                .and_then(|t| t.as_str().map(|s| s == "mode-change"))
+        })
         .unwrap_or(false)
 }
 
@@ -153,11 +156,7 @@ pub async fn start_overlay_relay(port: u16) -> Result<(), String> {
 
                             // Receive broadcasts from other clients
                             while let Ok(text) = rx.recv().await {
-                                if ws_sender
-                                    .send(Message::Text(text.into()))
-                                    .await
-                                    .is_err()
-                                {
+                                if ws_sender.send(Message::Text(text.into())).await.is_err() {
                                     break;
                                 }
                             }
@@ -165,10 +164,7 @@ pub async fn start_overlay_relay(port: u16) -> Result<(), String> {
                             let _ = forward_handle.await;
                         }
                         Err(e) => {
-                            eprintln!(
-                                "[OverlayRelay] WS accept error from {}: {}",
-                                peer, e
-                            );
+                            eprintln!("[OverlayRelay] WS accept error from {}: {}", peer, e);
                         }
                     }
                 });

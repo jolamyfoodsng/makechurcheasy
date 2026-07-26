@@ -53,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshUser]);
 
   function setUser(u: AuthUser) {
+    console.log("[AuthContext] setUser called, authenticated:", isAuthenticated(), "user:", u.name);
     setUserState(u);
     setAuthenticated(isAuthenticated());
     setIsAdmin(u.role === "admin");
@@ -117,6 +118,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           `[AuthContext] refreshAccountState: ${result.status} — preserving local session, failure ${consecutiveFailuresRef.current}/${DEVICE_STATE_WARNING_THRESHOLD}`,
         );
         return true;
+      }
+
+      if (result.status === "device_removed") {
+        console.warn(
+          "[AuthContext] refreshAccountState: device_removed confirmed — clearing stale local session",
+        );
+        logout();
+        return false;
       }
 
       console.warn(

@@ -13,6 +13,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 let _cachedBaseUrl: string | null = null;
+let _overrideBaseUrl: string | null = null;
 let _lastInvokeAttempt = 0;
 const RETRY_COOLDOWN_MS = 2000;
 const DEFAULT_TAURI_OVERLAY_BASE_URL = "http://127.0.0.1:45678";
@@ -77,6 +78,11 @@ export function resolveOverlayAssetUrl(value: string | undefined): string {
   return trimmed;
 }
 
+export function setOverlayBaseUrlOverride(baseUrl: string | null): void {
+  const trimmed = String(baseUrl || "").trim().replace(/\/+$/, "");
+  _overrideBaseUrl = trimmed || null;
+}
+
 /**
  * Get the base URL for overlay HTML files that OBS can access.
  *
@@ -84,6 +90,7 @@ export function resolveOverlayAssetUrl(value: string | undefined): string {
  * - Development: http://localhost:1420 (served by Vite)
  */
 export async function getOverlayBaseUrl(): Promise<string> {
+  if (_overrideBaseUrl) return _overrideBaseUrl;
   if (_cachedBaseUrl) return _cachedBaseUrl;
 
   // In Vite dev mode (port 1420), try to resolve the actual overlay server
@@ -161,6 +168,7 @@ export async function getOverlayBaseUrl(): Promise<string> {
  * Call getOverlayBaseUrl() first to ensure it's initialized.
  */
 export function getOverlayBaseUrlSync(): string {
+  if (_overrideBaseUrl) return _overrideBaseUrl;
   if (_cachedBaseUrl) return _cachedBaseUrl;
   if (typeof window !== "undefined" && window.location?.origin) {
     const { protocol, hostname } = window.location;

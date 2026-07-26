@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCE Media Overlay</title>
+  <style>
+    html,
+    body,
+    #stage {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    #stage {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    img,
+    video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <main id="stage" aria-label="MakeChurchEasy media overlay"></main>
+
+  <script>
+    function readPayload() {
+      const raw = window.location.hash.startsWith("#data=")
+        ? window.location.hash.slice(6)
+        : "";
+      if (!raw) return null;
+      try {
+        return JSON.parse(decodeURIComponent(raw));
+      } catch {
+        return null;
+      }
+    }
+
+    function normalizeFitMode(value) {
+      if (value === "contain" || value === "stretch") return value;
+      return "cover";
+    }
+
+    function render() {
+      const stage = document.getElementById("stage");
+      const payload = readPayload();
+      stage.innerHTML = "";
+      if (!payload || !payload.url) return;
+
+      const isImage = Boolean(payload.isImage);
+      const node = document.createElement(isImage ? "img" : "video");
+      const fitMode = normalizeFitMode(payload.fitMode);
+      node.style.objectFit = fitMode === "stretch" ? "fill" : fitMode;
+      node.src = payload.url;
+
+      if (isImage) {
+        node.alt = payload.title || "Media";
+      } else {
+        node.autoplay = true;
+        node.playsInline = true;
+        node.loop = payload.looping !== false;
+        node.muted = payload.muted !== false;
+        node.controls = false;
+        node.addEventListener("loadedmetadata", function () {
+          node.play().catch(function () {});
+        }, { once: true });
+      }
+
+      stage.appendChild(node);
+    }
+
+    window.addEventListener("hashchange", render);
+    render();
+  </script>
+</body>
+</html>

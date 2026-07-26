@@ -16,6 +16,7 @@ import DockWorshipTab from "./tabs/DockWorshipTab";
 import DockPlannerTab from "./tabs/DockPlannerTab";
 import DockMultiviewTab from "./tabs/DockMultiviewTab";
 import DockMinistryTab from "./tabs/DockMinistryTab";
+import DockLmTab from "./tabs/DockLmTab";
 import { useAppTheme } from "../hooks/useAppTheme";
 import {
   type DockProductionSettingsPayload,
@@ -135,7 +136,13 @@ function getCompactDockTabLabel(tab: DockTab, t: (key: string) => string): strin
   }
 }
 
-export default function DockPage() {
+export default function DockPage({
+  externalObsSession = false,
+  presentationBibleLmSplit = false,
+}: {
+  externalObsSession?: boolean;
+  presentationBibleLmSplit?: boolean;
+} = {}) {
   const { t } = useTranslation();
   // Synchronous config reader (reads from cache, falls back to defaults)
   const cfg = readDesktopConfigCache() || DEFAULT_DESKTOP_CONFIG;
@@ -310,11 +317,13 @@ export default function DockPage() {
       void dockObsClient.connect();
     };
 
-    // First attempt — immediate
-    tryConnect();
+    if (!externalObsSession) {
+      // First attempt — immediate
+      tryConnect();
 
-    // Retry every 2 seconds until connected
-    autoReconnectTimer = setInterval(tryConnect, getRecommendedPollingInterval(2000));
+      // Retry every 2 seconds until connected
+      autoReconnectTimer = setInterval(tryConnect, getRecommendedPollingInterval(2000));
+    }
 
     const unsubObs = dockObsClient.onStatusChange((status: DockObsStatus, err?: string) => {
       setObsConnected(status === "connected");
@@ -428,9 +437,11 @@ export default function DockPage() {
       unsubObs();
       unsubState();
       window.clearInterval(pingInterval);
-      dockObsClient.disconnect();
+      if (!externalObsSession) {
+        dockObsClient.disconnect();
+      }
     };
-  }, []);
+  }, [externalObsSession]);
 
   const handleStage = useCallback((item: DockStagedItem | null) => {
     setStaged(item);
@@ -1117,14 +1128,34 @@ export default function DockPage() {
               />
             )}
             {activeTab === "bible" && (
-              <DockBibleTab
-                staged={staged}
-                onStage={handleStage}
-                productionDefaults={productionSettings.bible}
-                appConnected={appConnected}
-                showHistory={showHistory}
-                onHistoryClose={() => setShowHistory(false)}
-              />
+              presentationBibleLmSplit ? (
+                <div className="dock-presentation-bible-lm-split">
+                  <section className="dock-presentation-bible-lm-pane" aria-label="Bible dock">
+                    <div className="dock-presentation-bible-lm-pane__title">Bible</div>
+                    <DockBibleTab
+                      staged={staged}
+                      onStage={handleStage}
+                      productionDefaults={productionSettings.bible}
+                      appConnected={appConnected}
+                      showHistory={showHistory}
+                      onHistoryClose={() => setShowHistory(false)}
+                    />
+                  </section>
+                  <section className="dock-presentation-bible-lm-pane" aria-label="Scripture assistant dock">
+                    <div className="dock-presentation-bible-lm-pane__title">Scripture Assistant</div>
+                    <DockLmTab />
+                  </section>
+                </div>
+              ) : (
+                <DockBibleTab
+                  staged={staged}
+                  onStage={handleStage}
+                  productionDefaults={productionSettings.bible}
+                  appConnected={appConnected}
+                  showHistory={showHistory}
+                  onHistoryClose={() => setShowHistory(false)}
+                />
+              )
             )}
             {activeTab === "worship" && (
               <DockWorshipTab

@@ -4,6 +4,7 @@ import {
   createPairingCode,
   getDashboardBaseForAuth,
   redeemPairingCode,
+  resetPairingApiBase,
   watchPairingStatus
 } from "@/services/authService";
 import { DEFAULT_DESKTOP_CONFIG, readDesktopConfigCache } from "@/services/desktopConfig";
@@ -29,6 +30,9 @@ export default function LoginPage() {
   const { setUser, user, authenticated } = useAuth();
   const [view, setView] = useState<View>("initial");
   const [code, setCode] = useState("");
+  const displayPairingCode = code.length === 8
+    ? `${code.slice(0, 4)}-${code.slice(4, 8)}`
+    : code;
   const [manualCode, setManualCode] = useState("");
   const displayCode = manualCode.length > 4
     ? `${manualCode.slice(0, 4)}-${manualCode.slice(4, 8)}`
@@ -54,7 +58,12 @@ export default function LoginPage() {
   const cleanupRef = useRef<(() => void) | null>(null);
   const welcomeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  if (authenticated && user) return null;
+  if (authenticated && user) {
+    console.log("[LoginPage] authenticated && user → returning null (showing dashboard)");
+    return null;
+  }
+
+  console.log("[LoginPage] render — authenticated:", authenticated, "user:", !!user, "view:", view);
 
   async function generateQrDataUrl(pairCode: string): Promise<string> {
     const pairUrl = `${getDashboardBaseForAuth()}/pair/mobile?code=${pairCode}`;
@@ -67,6 +76,7 @@ export default function LoginPage() {
 
   async function startQrLogin() {
     setError("");
+    resetPairingApiBase();
     const result = await createPairingCode("MakeChurchEasy");
     if ("error" in result) {
       setError(result.error);
@@ -87,6 +97,7 @@ export default function LoginPage() {
     setRegenError("");
     setCode("");
     setQrDataUrl("");
+    resetPairingApiBase();
 
     const result = await createPairingCode("MakeChurchEasy");
     if ("error" in result) {
@@ -142,6 +153,7 @@ export default function LoginPage() {
 
     cleanupRef.current = watchPairingStatus(pairingCode, {
       onAuthorized(user) {
+        console.log("[LoginPage] onAuthorized called, setting user:", user.name);
         cleanupRef.current = null;
         // Stop countdown immediately — code is redeemed, expiration is irrelevant
         setCountdown(0);
@@ -163,6 +175,11 @@ export default function LoginPage() {
       onError(msg) {
         cleanupRef.current = null;
         setError(msg);
+        setView("initial");
+      },
+      onVersionBlocked(message) {
+        cleanupRef.current = null;
+        setError(message);
         setView("initial");
       },
       onVerificationRequired(email, name, message) {
@@ -192,6 +209,7 @@ export default function LoginPage() {
       const result = await redeemPairingCode(manualCode);
 
       if (result.success) {
+        console.log("[LoginPage] handleManualSubmit success, setting user:", result.user.name);
         trackLogin("pairing");
         trackDevicePaired();
         const hasVisited = localStorage.getItem("mce_has_visited");
@@ -202,6 +220,7 @@ export default function LoginPage() {
         localStorage.setItem("mce_has_visited", "1");
         setUser(result.user);
       } else {
+        console.log("[LoginPage] handleManualSubmit failed:", result.error);
         setError(result.error);
       }
     } catch {
@@ -347,6 +366,7 @@ export default function LoginPage() {
             <button
               onClick={async () => {
                 setError("");
+                resetPairingApiBase();
                 const result = await createPairingCode("MakeChurchEasy");
                 if ("error" in result) {
                   setError(result.error);
@@ -482,7 +502,7 @@ export default function LoginPage() {
                 color: "#1D4ED8",
               }}
             >
-              {code}
+              {displayPairingCode}
             </div>
 
             <div
@@ -847,7 +867,7 @@ export default function LoginPage() {
                 marginBottom: "8px",
               }}
             >
-              {code}
+              {displayPairingCode}
             </div>
 
             <div

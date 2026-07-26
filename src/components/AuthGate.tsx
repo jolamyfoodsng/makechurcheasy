@@ -8,6 +8,8 @@ import LoginPage from "@/pages/LoginPage";
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const { authenticated, loading } = useAuth();
 
+  console.log("[AuthGate] render — authenticated:", authenticated, "loading:", loading);
+
   if (loading) {
     return (
       <div

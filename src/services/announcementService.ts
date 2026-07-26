@@ -61,9 +61,12 @@ export function subscribeToAnnouncementStream(
 ): EventSource {
   const deviceId = getDeviceId();
   const deviceSecret = getDeviceSecret();
+  if (!deviceId) {
+    throw new Error("Desktop device is not authenticated");
+  }
 
   const url = new URL(`${API_BASE}/api/user/announcements/stream`);
-  if (deviceId) url.searchParams.set("deviceId", deviceId);
+  url.searchParams.set("deviceId", deviceId);
   if (deviceSecret) url.searchParams.set("deviceSecret", deviceSecret);
 
   const es = new EventSource(url.toString());
@@ -72,4 +75,3 @@ export function subscribeToAnnouncementStream(
 
   return es;
 }
-

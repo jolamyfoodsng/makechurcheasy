@@ -38,9 +38,10 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
+use std::net::{SocketAddr, TcpStream, UdpSocket};
 use std::path::{Component, Path};
 use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{mpsc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{image::Image, Manager};
 
@@ -1161,6 +1162,102 @@ fn save_app_data(data: String) -> Result<(), String> {
 #[tauri::command]
 fn get_overlay_port() -> u16 {
     OVERLAY_PORT.load(Ordering::Relaxed)
+}
+
+fn get_local_ip_for_target(target_host: Option<&str>) -> Option<String> {
+    let target = target_host
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("8.8.8.8");
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect(format!("{}:80", target)).ok()?;
+    let addr = socket.local_addr().ok()?;
+    Some(addr.ip().to_string())
+}
+
+/// Return a LAN-accessible overlay base URL for remote OBS browser sources.
+#[tauri::command]
+fn get_lan_overlay_info(target_host: Option<String>) -> Result<serde_json::Value, String> {
+    let port = OVERLAY_PORT.load(Ordering::Relaxed);
+    if port == 0 {
+        return Err("Overlay server is not running".to_string());
+    }
+
+    let ip = get_local_ip_for_target(target_host.as_deref())
+        .or_else(get_local_ip)
+        .ok_or_else(|| "Could not determine this computer's LAN IP".to_string())?;
+    Ok(serde_json::json!({
+        "ip": ip,
+        "port": port,
+        "baseUrl": format!("http://{}:{}", ip, port),
+    }))
+}
+
+/// Prepare a local media file for remote OBS by ensuring it is served from the
+/// MakeChurchEasy uploads directory, then return its LAN URL.
+#[tauri::command]
+fn prepare_remote_media_url(
+    file_path: String,
+    file_name: String,
+    target_host: Option<String>,
+) -> Result<String, String> {
+    let port = OVERLAY_PORT.load(Ordering::Relaxed);
+    if port == 0 {
+        return Err("Overlay server is not running".to_string());
+    }
+
+    let trimmed = file_path.trim();
+    if trimmed.is_empty() {
+        return Err("Media file path is required".to_string());
+    }
+
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return Ok(trimmed.to_string());
+    }
+
+    let uploads_dir = app_dir()?.join("uploads");
+    fs::create_dir_all(&uploads_dir)
+        .map_err(|error| format!("Failed to create uploads directory: {}", error))?;
+
+    let decoded_path = if trimmed.starts_with("file://") {
+        urlencoding::decode(trimmed.trim_start_matches("file://"))
+            .map(|value| value.to_string())
+            .unwrap_or_else(|_| trimmed.trim_start_matches("file://").to_string())
+    } else {
+        trimmed.to_string()
+    };
+
+    let source_path = Path::new(&decoded_path);
+    let safe_name = source_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .or_else(|| Path::new(file_name.trim()).file_name().and_then(|value| value.to_str()))
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "Could not determine media file name".to_string())?
+        .replace(['/', '\\'], "_");
+
+    let served_path = uploads_dir.join(&safe_name);
+
+    if source_path.exists() {
+        let source_canonical = source_path.canonicalize().ok();
+        let served_canonical = served_path.canonicalize().ok();
+        if source_canonical != served_canonical {
+            fs::copy(source_path, &served_path)
+                .map_err(|error| format!("Failed to prepare media for remote OBS: {}", error))?;
+        }
+    } else if !served_path.exists() {
+        return Err(format!("Media file is not available: {}", trimmed));
+    }
+
+    let ip = get_local_ip_for_target(target_host.as_deref())
+        .or_else(get_local_ip)
+        .ok_or_else(|| "Could not determine this computer's LAN IP".to_string())?;
+    Ok(format!(
+        "http://{}:{}/uploads/{}",
+        ip,
+        port,
+        urlencoding::encode(&safe_name)
+    ))
 }
 
 /// Return device hostname and OS (legacy — kept for backward compat).
@@ -3972,7 +4069,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
     };
 
     // Use a fixed port so the OBS dock / overlay URL never changes
-    let server = match tiny_http::Server::http("127.0.0.1:45678")
+    let server = match tiny_http::Server::http("0.0.0.0:45678")
     {
         Ok(s) => s,
         Err(e) => {
@@ -4002,12 +4099,40 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
             let clean = clean.trim_start_matches('/');
 
             // Friendly default route: allow opening the base URL directly
-            // (http://127.0.0.1:<port>/) without a 404.
-            let clean = if clean.is_empty() {
-                "lower-third-overlay.html"
-            } else {
-                clean
-            };
+            // (http://<lan-ip>:<port>/) from another laptop to verify reachability.
+            if clean.is_empty() || clean == "health" {
+                let body = if clean == "health" {
+                    r#"{"ok":true,"service":"MakeChurchEasy overlay server"}"#.to_string()
+                } else {
+                    format!(
+                        r#"<!doctype html>
+<html><head><meta charset="utf-8"><title>MakeChurchEasy Overlay Server</title>
+<style>body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0F172A;color:#F8FAFC;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}}main{{max-width:680px;padding:32px;border:1px solid #334155;border-radius:16px;background:#111827}}h1{{margin:0 0 12px;font-size:28px}}p{{margin:0 0 12px;color:#CBD5E1;line-height:1.6}}code{{display:block;margin-top:8px;padding:10px 12px;border-radius:10px;background:#1F2937;color:#93C5FD}}</style>
+</head><body><main>
+<h1>MakeChurchEasy overlay server is running</h1>
+<p>This address is reachable. OBS browser sources should load specific overlay files from this server.</p>
+<p>Test Bible overlay:</p>
+<code>http://&lt;this-ip&gt;:{}/mce-bible-overlay.html</code>
+<p>Health check:</p>
+<code>http://&lt;this-ip&gt;:{}/health</code>
+</main></body></html>"#,
+                        port, port
+                    )
+                };
+                let content_type = if clean == "health" {
+                    "application/json; charset=utf-8"
+                } else {
+                    "text/html; charset=utf-8"
+                };
+                let header = tiny_http::Header::from_bytes("Content-Type", content_type).unwrap();
+                let cors =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
+                let resp = tiny_http::Response::from_string(body)
+                    .with_header(header)
+                    .with_header(cors);
+                let _ = request.respond(resp);
+                continue;
+            }
 
             // Security: don't allow path traversal
             if clean.contains("..") {
@@ -5359,11 +5484,127 @@ async fn get_presentation_remote_info(session_id: String) -> Result<serde_json::
 
 /// Get local IP addresses (first non-loopback IPv4).
 fn get_local_ip() -> Option<String> {
-    use std::net::UdpSocket;
     let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
     socket.connect("8.8.8.8:80").ok()?;
     let addr = socket.local_addr().ok()?;
     Some(addr.ip().to_string())
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteObsCandidate {
+    host: String,
+    port: u16,
+    url: String,
+    label: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteObsDiscoveryResult {
+    local_ip: String,
+    subnet: String,
+    port: u16,
+    candidates: Vec<RemoteObsCandidate>,
+}
+
+fn host_is_reachable(host: &str, port: u16, timeout_ms: u64) -> bool {
+    let socket_addr = match format!("{}:{}", host, port).parse::<SocketAddr>() {
+        Ok(addr) => addr,
+        Err(_) => return false,
+    };
+
+    TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout_ms)).is_ok()
+}
+
+fn subnet_prefix_from_ip(ip: &str) -> Option<String> {
+    let mut parts = ip.split('.');
+    let a = parts.next()?;
+    let b = parts.next()?;
+    let c = parts.next()?;
+    let d = parts.next()?;
+    if parts.next().is_some() || d.parse::<u8>().is_err() {
+        return None;
+    }
+    Some(format!("{}.{}.{}", a, b, c))
+}
+
+/// Discover likely OBS WebSocket servers on the same /24 LAN subnet.
+///
+/// This intentionally checks only the local subnet and the selected port.
+/// The final OBS authentication still happens in the frontend when the user
+/// clicks a candidate and supplies the OBS password if required.
+#[tauri::command]
+async fn discover_remote_obs_hosts(port: Option<u16>) -> Result<RemoteObsDiscoveryResult, String> {
+    let port = port.unwrap_or(4455);
+    let local_ip =
+        get_local_ip().ok_or_else(|| "Could not determine this computer's LAN IP".to_string())?;
+    let subnet = subnet_prefix_from_ip(&local_ip)
+        .ok_or_else(|| format!("Unsupported LAN IP address: {}", local_ip))?;
+    let local_suffix = local_ip
+        .split('.')
+        .last()
+        .and_then(|value| value.parse::<u8>().ok());
+
+    let (tx, rx) = mpsc::channel::<RemoteObsCandidate>();
+    let mut handles = Vec::new();
+    let timeout_ms = 260;
+    let chunk_size = 16usize;
+
+    for chunk_start in (1u16..=254u16).step_by(chunk_size) {
+        let tx = tx.clone();
+        let subnet = subnet.clone();
+        let local_suffix = local_suffix;
+        let chunk_end = (chunk_start + chunk_size as u16 - 1).min(254);
+
+        handles.push(std::thread::spawn(move || {
+            for suffix in chunk_start..=chunk_end {
+                if Some(suffix as u8) == local_suffix {
+                    continue;
+                }
+
+                let host = format!("{}.{}", subnet, suffix);
+                if host_is_reachable(&host, port, timeout_ms) {
+                    let _ = tx.send(RemoteObsCandidate {
+                        label: format!("OBS candidate at {}", host),
+                        url: format!("ws://{}:{}", host, port),
+                        host,
+                        port,
+                    });
+                }
+            }
+        }));
+    }
+
+    drop(tx);
+
+    for handle in handles {
+        let _ = handle.join();
+    }
+
+    let mut candidates: Vec<RemoteObsCandidate> = rx.try_iter().collect();
+    candidates.sort_by(|a, b| {
+        let a_suffix = a
+            .host
+            .split('.')
+            .last()
+            .and_then(|value| value.parse::<u16>().ok())
+            .unwrap_or(0);
+        let b_suffix = b
+            .host
+            .split('.')
+            .last()
+            .and_then(|value| value.parse::<u16>().ok())
+            .unwrap_or(0);
+        a_suffix.cmp(&b_suffix)
+    });
+
+    Ok(RemoteObsDiscoveryResult {
+        local_ip,
+        subnet: format!("{}.0/24", subnet),
+        port,
+        candidates,
+    })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -5508,6 +5749,8 @@ pub fn run() {
             load_app_data,
             save_app_data,
             get_overlay_port,
+            get_lan_overlay_info,
+            prepare_remote_media_url,
             get_device_info,
             get_system_hardware_info,
             get_memory_usage,
@@ -5539,6 +5782,7 @@ pub fn run() {
             save_obs_connection_for_mobile,
             get_mobile_server_status,
             get_presentation_remote_info,
+            discover_remote_obs_hosts,
             #[cfg(target_os = "macos")]
             app_icon::set_app_icon
         ])

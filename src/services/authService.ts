@@ -22,6 +22,15 @@ function normalizeApiBase(value: string | undefined): string {
 const API_BASE = normalizeApiBase(import.meta.env.VITE_AUTH_API_URL);
 let _activePairingApiBase = API_BASE;
 
+/**
+ * Reset the active pairing API base back to the env-configured API.
+ * Call this when starting a new pairing attempt to ensure the SSE
+ * stream and API calls all target the same server.
+ */
+export function resetPairingApiBase(): void {
+  _activePairingApiBase = API_BASE;
+}
+
 function isLocalApiBase(apiBase: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(apiBase);
 }
@@ -660,17 +669,27 @@ export function watchPairingStatus(
   const os = detectOS();
   const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
   const url = `${_activePairingApiBase}/api/pairing/stream?code=${encodeURIComponent(normalizedCode)}&v=${encodeURIComponent(APP_VERSION)}&os=${encodeURIComponent(os)}`;
+  console.log("[authService] watchPairingStatus connecting to:", url);
   const es = new EventSource(url);
   let settled = false;
+
+  es.onopen = () => console.log("[authService] EventSource onopen — readyState:", es.readyState);
+  es.onerror = (e) => console.log("[authService] EventSource onerror — readyState:", es.readyState, "event:", e.type);
 
   function finish(callback: () => void): void {
     if (settled) return;
     settled = true;
+    console.log("[authService] finish() — closing EventSource");
     es.close();
     callback();
   }
 
+  es.addEventListener("connected", (e: MessageEvent) => {
+    console.log("[authService] SSE received 'connected' event:", e.data);
+  });
+
   es.addEventListener("authorized", (e: MessageEvent) => {
+    console.log("[authService] SSE received authorized event");
     const data = JSON.parse(e.data);
     const authUser: AuthUser = {
       id: data.user.id,
@@ -703,11 +722,13 @@ export function watchPairingStatus(
     finish(() => callbacks.onAuthorized(authUser, data.deviceId));
   });
 
-  es.addEventListener("expired", () => {
+  es.addEventListener("expired", (e) => {
+    console.log("[authService] SSE received 'expired' event:", e);
     finish(callbacks.onExpired);
   });
 
   es.addEventListener("version-blocked", (e: MessageEvent) => {
+    console.log("[authService] SSE received 'version-blocked' event:", e.data);
     const data = JSON.parse(e.data);
     finish(() => {
       callbacks.onVersionBlocked?.(data.message || "This version is no longer supported. Please update.");
@@ -715,6 +736,7 @@ export function watchPairingStatus(
   });
 
   es.addEventListener("verification_required", (e: MessageEvent) => {
+    console.log("[authService] SSE received 'verification_required' event:", e.data);
     const data = JSON.parse(e.data);
     finish(() => {
       callbacks.onVerificationRequired?.(
@@ -726,6 +748,7 @@ export function watchPairingStatus(
   });
 
   es.addEventListener("device_limit_reached", (e: MessageEvent) => {
+    console.log("[authService] SSE received 'device_limit_reached' event:", e.data);
     const data = JSON.parse(e.data);
     finish(() => {
       callbacks.onError(data.message || "Device limit reached. Remove an old device or upgrade your plan.");
@@ -737,6 +760,7 @@ export function watchPairingStatus(
     const msg = "data" in e
       ? JSON.parse(e.data).message || "Connection lost"
       : "Connection lost";
+    console.log("[authService] SSE error:", msg);
     finish(() => callbacks.onError(msg));
   });
 

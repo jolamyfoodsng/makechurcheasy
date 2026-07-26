@@ -1346,6 +1346,22 @@ export default function DockLmTab() {
               </div>
 
               <div style={S.settingsGroup}>
+                <div style={S.settingsGroupLabel}>OVERLAY MODE</div>
+                <div style={S.settingRow}>
+                  <span style={S.settingLabel}>Overlay display</span>
+                  <select
+                    style={S.settingSelect}
+                    value={settings.overlayMode}
+                    onChange={(e) => updateSetting("overlayMode", e.target.value as "fullscreen" | "lower-third")}
+                  >
+                    <option value="fullscreen">Fullscreen</option>
+                    <option value="lower-third">Lower Third</option>
+                  </select>
+                </div>
+                <span style={S.settingHint}>Choose how pushed verses appear on screen. Fullscreen fills the entire OBS scene. Lower third shows a compact overlay at the bottom.</span>
+              </div>
+
+              <div style={S.settingsGroup}>
                 <div style={S.settingsGroupLabel}>NAVIGATION</div>
                 <label style={S.settingRow}>
                   <span style={S.settingLabel}>{t("lm.autoNavigate")}</span>

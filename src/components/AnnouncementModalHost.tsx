@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import {
   dismissDesktopAnnouncement,
   fetchNextDesktopAnnouncement,
@@ -20,21 +20,21 @@ export function AnnouncementModalHost() {
   useEffect(() => {
     let cancelled = false;
 
-    const refresh = async () => {
+    const refreshIfActive = async () => {
       const next = await fetchNextDesktopAnnouncement().catch(() => null);
       if (!cancelled) setAnnouncement(next);
     };
 
-    const timer = window.setTimeout(() => void refresh(), 1500);
-    const handleOnline = () => void refresh();
-    const handleFocus = () => void refresh();
-    const interval = window.setInterval(() => void refresh(), 60_000);
+    const timer = window.setTimeout(() => void refreshIfActive(), 1500);
+    const handleOnline = () => void refreshIfActive();
+    const handleFocus = () => void refreshIfActive();
+    const interval = window.setInterval(() => void refreshIfActive(), 30_000);
 
     // Real-time SSE listener for instant delivery
     let eventSource: EventSource | null = null;
     try {
       eventSource = subscribeToAnnouncementStream(() => {
-        if (!cancelled) refresh();
+        if (!cancelled) void refreshIfActive();
       });
     } catch {
       // SSE unavailable, polling fallback is sufficient
@@ -108,4 +108,3 @@ export function AnnouncementModalHost() {
     </div>
   );
 }
-
