@@ -6,6 +6,12 @@ import backgroundOverlayHtml from "../../../public/bible-overlay-bg.html?raw";
 import backgroundPickerSource from "./BackgroundPickerCard.tsx?raw";
 import dockThemeSettingsModalSource from "./DockThemeSettingsModal.tsx?raw";
 import dockBibleTabSource from "../tabs/DockBibleTab.tsx?raw";
+import dockWorshipTabSource from "../tabs/DockWorshipTab.tsx?raw";
+import dockThemeDataSource from "../dockThemeData.ts?raw";
+import themeCreatorSource from "../../pages/ThemeCreatorModal.tsx?raw";
+import productionThemeSettingsSource from "../../pages/ProductionThemeSettingsPage.tsx?raw";
+import productionSettingsSource from "../../services/productionSettings.ts?raw";
+import bibleDbSource from "../../bible/bibleDb.ts?raw";
 
 /* ── Helpers — mirrors the updater pattern each Text tab control uses ── */
 
@@ -550,7 +556,7 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(draftSelectionBlock).not.toContain("onBackgroundPresetChange?.(\"theme\")");
 
     const backgroundPickerPropsStart = dockThemeSettingsModalSource.indexOf("<BackgroundPickerCard");
-    const sectionDividerStart = dockThemeSettingsModalSource.indexOf("<SectionDivider", backgroundPickerPropsStart);
+    const sectionDividerStart = dockThemeSettingsModalSource.indexOf("{/* Spacer for sticky footer */}", backgroundPickerPropsStart);
     const backgroundPickerProps = dockThemeSettingsModalSource.slice(backgroundPickerPropsStart, sectionDividerStart);
 
     expect(backgroundPickerPropsStart).toBeGreaterThan(-1);
@@ -592,5 +598,24 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(lowerThirdSelectBlock).toContain("setSavedFullscreenQuickThemeSettings(nextFullscreenQuickSettings)");
     expect(dockBibleTabSource).toContain("function extractLowerThirdQuickThemeSettings");
     expect(dockBibleTabSource).toContain("return extractThemeQuickSettingsForOverlayMode(theme, effectiveOverlayMode)");
+  });
+
+  it("keeps custom Bible themes visible in the dock background theme picker", () => {
+    expect(themeCreatorSource).toContain("await saveCustomTheme(themeToSave)");
+    expect(themeCreatorSource).toContain("await addBibleFavorite(themeToSave.id)");
+    expect(productionThemeSettingsSource).toContain("<ThemeCreatorModal");
+    expect(productionThemeSettingsSource).toContain("onSaved={(theme) => void handleThemeSaved(theme)}");
+    expect(productionSettingsSource).toContain("const customThemes = await getCustomThemes()");
+    expect(productionSettingsSource).toContain("...customThemes.filter((theme) => !builtinIds.has(theme.id))");
+    expect(bibleDbSource).toContain("syncCustomThemesToDock().catch");
+    expect(bibleDbSource).toContain("syncFavoriteBibleThemesToDock().catch");
+    expect(bibleDbSource).toContain('name: "dock-bible-themes"');
+    expect(dockThemeDataSource).toContain("const customThemes = await loadDockCustomBibleThemes()");
+    expect(dockThemeDataSource).toContain("const localThemes = [...favoritedBuiltins, ...uniqueCustom]");
+    expect(backgroundPickerSource).toContain("const all = await loadDockFavoriteBibleThemes()");
+    expect(backgroundPickerSource).toContain("themeSupportsBibleOverlayMode(theme, overlayMode)");
+    expect(backgroundPickerSource).toContain("window.addEventListener(FAVORITE_THEMES_UPDATED_EVENT, refresh)");
+    expect(dockBibleTabSource).toContain('allowedCategories={["bible", "general"]}');
+    expect(dockWorshipTabSource).toContain('allowedCategories={["worship", "general"]}');
   });
 });

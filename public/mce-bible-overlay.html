@@ -204,7 +204,7 @@
     #verse-container {
       display: flex;
       flex-direction: column;
-      align-items: var(--text-align, center);
+      align-items: var(--content-align-self, center);
       justify-content: center;
       width: 100%;
       max-width: 100%;
@@ -229,8 +229,23 @@
       text-shadow: var(--text-shadow);
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
+      white-space: pre-line;
       word-wrap: break-word;
       overflow-wrap: break-word;
+    }
+
+    #verse-text .verse-text__line,
+    #lt-verse-text .verse-text__line,
+    .compare-column__verse .verse-text__line,
+    .lt-compare-col .verse-text__line {
+      display: block;
+    }
+
+    #verse-text .verse-text__line + .verse-text__line,
+    #lt-verse-text .verse-text__line + .verse-text__line,
+    .compare-column__verse .verse-text__line + .verse-text__line,
+    .lt-compare-col .verse-text__line + .verse-text__line {
+      margin-top: 0.18em;
     }
 
     #reference {
@@ -240,6 +255,7 @@
       font-style: var(--ref-font-style, normal);
       color: var(--ref-font-color);
       text-align: var(--ref-text-align, var(--text-align));
+      align-self: var(--ref-align-self, center);
       margin-top: var(--ref-spacing);
       width: var(--ref-width);
       max-width: 100%;
@@ -262,6 +278,35 @@
 
     #reference:empty {
       display: none;
+    }
+
+    #overlay.ref-anchor-top #verse-container {
+      padding-top: calc(var(--ref-font-size) + var(--ref-spacing) + 18px);
+      box-sizing: border-box;
+    }
+
+    #overlay.ref-anchor-bottom #verse-container {
+      padding-bottom: calc(var(--ref-font-size) + var(--ref-spacing) + 18px);
+      box-sizing: border-box;
+    }
+
+    #overlay.ref-anchor-top #reference,
+    #overlay.ref-anchor-bottom #reference {
+      position: absolute;
+      left: var(--padding, 64px);
+      right: var(--padding, 64px);
+      width: auto;
+      max-width: calc(100% - (var(--padding, 64px) * 2));
+      margin: 0;
+      z-index: 4;
+    }
+
+    #overlay.ref-anchor-top #reference {
+      top: var(--padding, 64px);
+    }
+
+    #overlay.ref-anchor-bottom #reference {
+      bottom: var(--padding, 64px);
     }
 
     /* ══════════════════════════════════════════════════════
@@ -364,6 +409,7 @@
       text-shadow: var(--text-shadow);
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
+      white-space: pre-line;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
@@ -494,7 +540,7 @@
       overflow: hidden;
       isolation: isolate;
       flex-direction: column;
-      align-items: var(--text-align, center);
+      align-items: var(--content-align-self, center);
       justify-content: center;
       transition: opacity var(--anim-duration, 152ms) ease;
     }
@@ -564,6 +610,7 @@
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
       text-transform: var(--text-transform);
+      white-space: pre-line;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
@@ -576,6 +623,7 @@
       color: var(--ref-font-color);
       text-align: var(--ref-text-align, var(--text-align));
       align-self: var(--ref-align-self, center);
+      margin-top: var(--ref-spacing);
       width: var(--ref-width, 100%);
       max-width: 100%;
       padding: var(--ref-bg-padding);
@@ -595,8 +643,37 @@
 
     #lt-bar #ref-text.top {
       margin-top: 0;
-      margin-bottom: 12px;
+      margin-bottom: var(--ref-spacing);
       order: 0;
+    }
+
+    #lt-bar.ref-anchor-top #lt-verse-text {
+      padding-top: calc(var(--ref-font-size) + var(--ref-spacing) + 8px);
+      box-sizing: border-box;
+    }
+
+    #lt-bar.ref-anchor-bottom #lt-verse-text {
+      padding-bottom: calc(var(--ref-font-size) + var(--ref-spacing) + 8px);
+      box-sizing: border-box;
+    }
+
+    #lt-bar.ref-anchor-top #ref-text,
+    #lt-bar.ref-anchor-bottom #ref-text {
+      position: absolute;
+      left: var(--lt-card-horizontal-padding, 48px);
+      right: var(--lt-card-horizontal-padding, 48px);
+      width: auto;
+      max-width: calc(100% - (var(--lt-card-horizontal-padding, 48px) * 2));
+      margin: 0;
+      z-index: 2;
+    }
+
+    #lt-bar.ref-anchor-top #ref-text {
+      top: var(--lt-card-vertical-padding, 28px);
+    }
+
+    #lt-bar.ref-anchor-bottom #ref-text {
+      bottom: var(--lt-card-vertical-padding, 28px);
     }
 
     #bar-background-video {
@@ -717,6 +794,15 @@
       function safeSupText(h) {
         if (typeof h !== 'string') return '';
         return h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+      function renderVerseLines(text) {
+        if (typeof text !== 'string') return '';
+        return text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => `<span class="verse-text__line">${safeSupText(line)}</span>`)
+          .join('');
       }
 
       const PATTERN_CSS = {
@@ -848,6 +934,19 @@
         if (value === 'left') return 'flex-start';
         if (value === 'right') return 'flex-end';
         return 'center';
+      }
+
+      function normalizeRefAnchor(value) {
+        if (value === 'top' || value === 'bottom') return value;
+        return 'normal';
+      }
+
+      function applyReferenceAnchor(value) {
+        var anchor = normalizeRefAnchor(value);
+        overlay.classList.toggle('ref-anchor-top', anchor === 'top');
+        overlay.classList.toggle('ref-anchor-bottom', anchor === 'bottom');
+        ltBar.classList.toggle('ref-anchor-top', anchor === 'top');
+        ltBar.classList.toggle('ref-anchor-bottom', anchor === 'bottom');
       }
 
       function ensureCmgSansFont() {
@@ -1777,6 +1876,7 @@
         root.style.setProperty('--line-height', String(s.lineHeight || 1.6));
         root.style.setProperty('--letter-spacing', (s.letterSpacing || 0) + 'px');
         root.style.setProperty('--text-align', s.textAlign || 'center');
+        root.style.setProperty('--content-align-self', mapFlexAlign(s.textAlign || 'center'));
         root.style.setProperty('--text-shadow', s.textShadow || 'none');
         root.style.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
         root.style.setProperty('--outline-color', s.textOutline ? (s.textOutlineColor || '#000') : 'transparent');
@@ -1893,6 +1993,7 @@
           applyFullscreenBackground(s);
         }
         root.style.setProperty('--safe-area', (s.safeArea || 40) + 'px');
+        applyReferenceAnchor(s.refAnchor);
         if (s.refPosition === 'top') reference.classList.add('top'); else reference.classList.remove('top');
         root.dataset.refBgEnabled = s.referenceBackgroundEnabled === true ? 'true' : 'false';
       }
@@ -1928,7 +2029,13 @@
         barMaxHeight = Math.max(120, Math.min(900, Number(s.lowerThirdBarMaxHeight) || 600));
         root.style.setProperty('--lt-max-height', barMaxHeight + 'px');
         root.style.setProperty('--lt-min-height', (s.lowerThirdBarMinHeight || 0) + 'px');
-        root.style.setProperty('--lt-card-padding', s.lowerThirdCardPadding || `${baseBarPadding}px`);
+        const cardPadding = s.lowerThirdCardPadding || `${baseBarPadding}px`;
+        const cardPaddingParts = String(cardPadding).trim().split(/\s+/).filter(Boolean);
+        const cardPadTop = cardPaddingParts[0] || `${baseBarPadding}px`;
+        const cardPadRight = cardPaddingParts[1] || cardPaddingParts[0] || `${baseBarPadding}px`;
+        root.style.setProperty('--lt-card-padding', cardPadding);
+        root.style.setProperty('--lt-card-vertical-padding', cardPadTop);
+        root.style.setProperty('--lt-card-horizontal-padding', cardPadRight);
         root.style.setProperty('--lt-card-radius', (s.lowerThirdCardRadius || 18) + 'px');
         ltBar.style.justifyContent = lowerThirdContentVerticalAlign(s.lowerThirdCaptionPosition);
         const bb = s.boxBackground || 'rgba(0,0,0,0.65)', bo = s.boxOpacity ?? 1; let fbb = bb;
@@ -1963,6 +2070,7 @@
             ltBarBg.style.display = 'block';
           }
         } else ltBarBg.style.display = 'none';
+        applyReferenceAnchor(s.refAnchor);
         if (s.refPosition === 'top') { reference.classList.add('top'); ltRefText.classList.add('top'); } else { reference.classList.remove('top'); ltRefText.classList.remove('top'); }
       }
 
@@ -2066,8 +2174,8 @@
           compareReferenceRight.textContent = formatCompareReference(r.reference, r.translation);
           compareTranslationLeft.textContent = '';
           compareTranslationRight.textContent = '';
-          compareTextLeft.innerHTML = safeSupText(l.text);
-          compareTextRight.innerHTML = safeSupText(r.text);
+          compareTextLeft.innerHTML = renderVerseLines(l.text);
+          compareTextRight.innerHTML = renderVerseLines(r.text);
           // Switch between side-by-side and line-by-line
           const clMode = sl.compareLayout || 'line-by-line';
           currentCompareLayout = clMode;
@@ -2082,7 +2190,7 @@
           compareLayout.classList.remove('is-visible');
           compareLayout.style.display = 'none';
           verseContainer.classList.remove('is-hidden');
-          verseText.innerHTML = safeSupText(sl.text);
+          verseText.innerHTML = renderVerseLines(sl.text);
           const rt = typeof sl.reference === 'string' ? sl.reference.trim() : '';
           reference.textContent = rt;
           reference.style.display = rt ? 'block' : 'none';
@@ -2106,12 +2214,12 @@
         if (isCompare) {
           const [l, r] = cc;
           const layoutMode = sl.compareLayout || 'line-by-line';
-          const lText = safeSupText(l.text || '');
-          const rText = safeSupText(r.text || '');
+          const lText = renderVerseLines(l.text || '');
+          const rText = renderVerseLines(r.text || '');
           const lRef = l.reference ? `<span class="lt-compare-ref">${escapeHtml(l.reference)} (${escapeHtml(l.translation || '')})</span>` : '';
           const rRef = r.reference ? `<span class="lt-compare-ref">${escapeHtml(r.reference)} (${escapeHtml(r.translation || '')})</span>` : '';
-          const lBlock = `<div class="lt-compare-unit">${lRef}${lText ? `<span class="lt-compare-col">${lText}</span>` : ''}</div>`;
-          const rBlock = `<div class="lt-compare-unit">${rRef}${rText ? `<span class="lt-compare-col">${rText}</span>` : ''}</div>`;
+          const lBlock = `<div class="lt-compare-unit">${lRef}${lText ? `<div class="lt-compare-col">${lText}</div>` : ''}</div>`;
+          const rBlock = `<div class="lt-compare-unit">${rRef}${rText ? `<div class="lt-compare-col">${rText}</div>` : ''}</div>`;
           if (layoutMode === 'side-by-side') {
             ltVerseText.innerHTML = `<div class="lt-compare-row">${lBlock}<span class="lt-compare-divider"></span>${rBlock}</div>`;
           } else {
@@ -2120,7 +2228,7 @@
           ltRefText.textContent = '';
           ltRefText.style.display = 'none';
         } else {
-          ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; ltRefText.style.display = rt ? '' : 'none';
+          ltVerseText.innerHTML = renderVerseLines(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; ltRefText.style.display = rt ? '' : 'none';
         }
 
         try { if (hasThemePayload(data.theme)) applyThemeIfChanged(data.theme, !hasShownOnce); } catch (error) { console.error('mce-bible-overlay lower-third theme error', error); }

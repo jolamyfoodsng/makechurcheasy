@@ -11,6 +11,7 @@ const LINKED_LOWER_THIRD_INHERITED_KEYS: Array<keyof DockFullscreenQuickThemeSet
   "fontColor",
   "refFontColor",
   "refPosition",
+  "refAnchor",
   "refTextTransform",
   "refLetterSpacing",
   "refOpacity",

@@ -13,6 +13,7 @@ export type DockFullscreenQuickThemeSettings = Pick<
   | "fontColor"
   | "refFontColor"
   | "refPosition"
+  | "refAnchor"
   | "refTextTransform"
   | "refLetterSpacing"
   | "refOpacity"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { flushSync } from "react-dom";
 import type { BibleTheme } from "../../bible/types";
@@ -70,21 +70,6 @@ function resolveFallbackThemeQuickSettings(
   };
 }
 
-/* ── Section Divider ── */
-function SectionDivider() {
-  return <div className="dtb-section-divider" />;
-}
-
-/* ── Section Label (ThemeModalStitch style) ── */
-function SectionLabel({ icon, label, accent }: { icon: string; label: string; accent?: boolean }) {
-  return (
-    <h3 className={`dtb-section-label${accent ? " dtb-section-label--accent" : ""}`}>
-      <Icon name={icon} size={14} className="dtb-section-label__icon" />
-      <span>{label}</span>
-    </h3>
-  );
-}
-
 /* ── Main Component ── */
 export default function DockThemeSettingsModal({
   selectedThemeId,
@@ -127,7 +112,6 @@ export default function DockThemeSettingsModal({
   const draftSelectedThemeRef = useRef<BibleTheme | null>(null);
   const pendingBackgroundPresetRef = useRef<DockBackgroundPreset | null>(null);
   const [saving, setSaving] = useState(false);
-  const [effectsOpen, setEffectsOpen] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(view !== "closed");
   const originalSettingsRef = useRef(quickSettings);
@@ -155,64 +139,6 @@ export default function DockThemeSettingsModal({
     },
     [],
   );
-
-  const EFFECT_DEFS = useMemo(() => [
-    {
-      id: "fadeIn",
-      label: t('worship.fadeIn'),
-      icon: "opacity",
-      isActive: (s: DockFullscreenQuickThemeSettings) => s.animation === "fade",
-      toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
-        ...s,
-        animation: s.animation === "fade" ? "none" : "fade",
-        animationDuration: 400,
-      }),
-    },
-    {
-      id: "glow",
-      label: t('worship.glow'),
-      icon: "wb_sunny",
-      isActive: (s: DockFullscreenQuickThemeSettings) => s.textShadow.includes("0 0"),
-      toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
-        ...s,
-        textShadow: s.textShadow.includes("0 0")
-          ? "0 2px 8px rgba(0,0,0,0.6)"
-          : "0 0 24px rgba(255,255,220,0.8), 0 0 48px rgba(255,255,220,0.4)",
-      }),
-    },
-    {
-      id: "subtleZoom",
-      label: t('worship.subtleZoom'),
-      icon: "zoom_in",
-      isActive: (s: DockFullscreenQuickThemeSettings) => s.animation === "scale-in",
-      toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
-        ...s,
-        animation: s.animation === "scale-in" ? "none" : "scale-in",
-        animationDuration: 400,
-      }),
-    },
-    {
-      id: "verseReveal",
-      label: t('worship.verseReveal'),
-      icon: "visibility",
-      isActive: (s: DockFullscreenQuickThemeSettings) => s.animation === "reveal-bg-then-text",
-      toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
-        ...s,
-        animation: s.animation === "reveal-bg-then-text" ? "none" : "reveal-bg-then-text",
-        animationDuration: 600,
-      }),
-    },
-    {
-      id: "textShadow",
-      label: t('worship.textShadow'),
-      icon: "blur_on",
-      isActive: (s: DockFullscreenQuickThemeSettings) => s.textShadow !== "none" && s.textShadow !== "",
-      toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
-        ...s,
-        textShadow: s.textShadow !== "none" && s.textShadow !== "" ? "none" : "0 2px 8px rgba(0,0,0,0.6)",
-      }),
-    },
-  ], [t]);
 
   useEffect(() => {
     if (view === "closed") return undefined;
@@ -309,18 +235,14 @@ export default function DockThemeSettingsModal({
           >
             {/* ── Header ── */}
             <div className="dtb-studio__header">
-              <div className="dtb-studio__header-spacer" />
-              <div className="dtb-studio__header-center">
-                <h2 className="dtb-studio__title">{t('worship.openThemeSettings')}</h2>
-                <p className="dtb-studio__subtitle">{subtitle}</p>
-              </div>
+              <span className="dtb-studio__header-label">{title || subtitle}</span>
               <button
                 type="button"
-                className="dtb-studio__close"
+                className="dtb-studio__close dtb-studio__close--strong"
                 onClick={() => setView("closed")}
                 aria-label={t('common.close')}
                 title={t('common.close')}>
-                <Icon name="close" size={16} />
+                <Icon name="close" size={18} />
               </button>
             </div>
 
@@ -348,49 +270,6 @@ export default function DockThemeSettingsModal({
                   storageScope={storageScope}
                   hideBackgroundOnCompare={hideBackgroundOnCompare}
                 />
-
-                {/* Lower-Third Positioning — only shown in lower-third mode */}
-
-                <SectionDivider />
-
-                {/* ═══ Effects Section (collapsed by default) ═══ */}
-                <div className="dtb-section">
-                  <button
-                    type="button"
-                    className="dtb-section-toggle"
-                    onClick={() => setEffectsOpen((o) => !o)}
-                    aria-expanded={effectsOpen}
-                  >
-                    <SectionLabel icon="auto_awesome" label={t('worship.textStyle')} />
-                    <Icon
-                      name={effectsOpen ? "expand_less" : "expand_more"}
-                      size={14}
-                      className="dtb-section-toggle__chevron"
-                    />
-                  </button>
-
-                  {effectsOpen && (
-                    <div className="dtb-effects-grid">
-                      {EFFECT_DEFS.map((effect) => (
-                        <button
-                          key={effect.id}
-                          type="button"
-                          className={`dtb-effect-toggle${effect.isActive(draftSettings) ? " dtb-effect-toggle--active" : ""}`}
-                          aria-pressed={effect.isActive(draftSettings)}
-                          onClick={() => updateDraft((c) => effect.toggle(c))}
-                        >
-                          <Icon name={effect.icon} size={14} />
-                          <span>{effect.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <SectionDivider />
-
-                {/* ═══ Quick Presets Section ═══ */}
-
                 {/* Spacer for sticky footer */}
                 <div className="dtb-studio__spacer" />
               </div>

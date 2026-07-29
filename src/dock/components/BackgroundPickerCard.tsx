@@ -1595,12 +1595,20 @@ function ReferenceSection({
   const { t } = useTranslation();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const refPosition = quickSettings.refPosition ?? "bottom";
+  const refAnchor = quickSettings.refAnchor ?? "normal";
   const refFontSize = quickSettings.refFontSize ?? 12;
   const refFontWeight = quickSettings.refFontWeight ?? "normal";
   const refTextTransform = quickSettings.refTextTransform ?? "none";
   const refOpacity = quickSettings.refOpacity ?? 1;
   const refTextAlign = quickSettings.refTextAlign ?? "match";
   const refSpacing = quickSettings.refSpacing ?? 24;
+  const setRefAnchor = (anchor: NonNullable<DockFullscreenQuickThemeSettings["refAnchor"]>) => {
+    onQuickSettingsChange((prev) => ({
+      ...prev,
+      refAnchor: anchor,
+      refPosition: anchor === "top" ? "top" : anchor === "bottom" ? "bottom" : prev.refPosition,
+    }));
+  };
 
   return (
     <div className="dtb-bg-picker__settings">
@@ -1610,9 +1618,31 @@ function ReferenceSection({
           {t('bgPicker.referenceSectionDescription', 'Control how the scripture reference is shown above or below the verse.')}
         </p>
       </div>
+
+      {/* Reference Placement */}
+      <div className="dtb-font-weight-row">
+        <span className="dtb-position-label">{t('bgPicker.referencePlacement', 'Placement')}</span>
+        <div className="dtb-position-options">
+          {([
+            { value: "normal" as const, label: t('bgPicker.withVerse', 'With verse') },
+            { value: "top" as const, label: t('bgPicker.topEdge', 'Top edge') },
+            { value: "bottom" as const, label: t('bgPicker.bottomEdge', 'Bottom edge') },
+          ]).map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              className={`dtb-position-btn${refAnchor === item.value ? " dtb-position-btn--active" : ""}`}
+              onClick={() => setRefAnchor(item.value)}
+              title={item.label}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Reference Position */}
       <div className="dtb-position-row">
-        <span className="dtb-position-label">{t('bgPicker.position')}</span>
+        <span className="dtb-position-label">{t('bgPicker.nearVersePosition', 'Near verse')}</span>
         <div className="dtb-position-options">
           {(["top", "bottom"] as const).map((pos) => (
             <button
@@ -1620,6 +1650,7 @@ function ReferenceSection({
               type="button"
               className={`dtb-position-btn${refPosition === pos ? " dtb-position-btn--active" : ""}`}
               onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refPosition: pos }))}
+              disabled={refAnchor !== "normal"}
               title={t('bgPicker.aboveVerse')}>
               {pos === "top" ? t('bgPicker.aboveVerse') : t('bgPicker.belowVerse')}
             </button>
@@ -1653,6 +1684,48 @@ function ReferenceSection({
           onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, refFontColor: v }))}
         />
       </div>
+
+      {/* Reference Alignment */}
+      <div className="dtb-font-weight-row">
+        <span className="dtb-position-label">{t('bgPicker.alignment')}</span>
+        <div className="dtb-position-options">
+          {(["match", "left", "center", "right"] as const).map((a) => (
+            <button
+              key={a}
+              type="button"
+              className={`dtb-position-btn${refTextAlign === a ? " dtb-position-btn--active" : ""}`}
+              onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refTextAlign: a }))}
+              title={t('bgPicker.alignment')}>
+              {a === "match" ? t('bgPicker.matchVerse') : t(`common.${a}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Reference Spacing */}
+      <div className="dtb-slider-field">
+        <div className="dtb-slider-field__head">
+          <span>{t('bgPicker.spacing')}</span>
+          <span className="dtb-slider-field__value">{refSpacing}px</span>
+        </div>
+        <input
+          type="range"
+          className="dtb-slider"
+          min={0}
+          max={120}
+          step={1}
+          value={refSpacing}
+          onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, refSpacing: Number(e.target.value) }))}
+          aria-label={t('bgPicker.spacing')}
+        />
+      </div>
+
+      {overlayMode !== "lower-third" && (
+        <ReferenceBackgroundSection
+          quickSettings={quickSettings}
+          onQuickSettingsChange={onQuickSettingsChange}
+        />
+      )}
 
       <button
         type="button"
@@ -1700,41 +1773,6 @@ function ReferenceSection({
             </div>
           </div>
 
-          {/* Reference Alignment */}
-          <div className="dtb-font-weight-row">
-            <span className="dtb-position-label">{t('bgPicker.alignment')}</span>
-            <div className="dtb-position-options">
-              {(["match", "left", "center", "right"] as const).map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  className={`dtb-position-btn${refTextAlign === a ? " dtb-position-btn--active" : ""}`}
-                  onClick={() => onQuickSettingsChange((prev) => ({ ...prev, refTextAlign: a }))}
-                  title={t('bgPicker.alignment')}>
-                  {a === "match" ? t('bgPicker.matchVerse') : t(`common.${a}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Letter Spacing */}
-          <div className="dtb-slider-field">
-            <div className="dtb-slider-field__head">
-              <span>{t('bgPicker.spacing')}</span>
-              <span className="dtb-slider-field__value">{refSpacing}px</span>
-            </div>
-            <input
-              type="range"
-              className="dtb-slider"
-              min={0}
-              max={80}
-              step={1}
-              value={refSpacing}
-              onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, refSpacing: Number(e.target.value) }))}
-              aria-label={t('bgPicker.spacing')}
-            />
-          </div>
-
           {/* Opacity */}
           <div className="dtb-slider-field">
             <div className="dtb-slider-field__head">
@@ -1753,12 +1791,6 @@ function ReferenceSection({
             />
           </div>
 
-          {overlayMode !== "lower-third" && (
-            <ReferenceBackgroundSection
-              quickSettings={quickSettings}
-              onQuickSettingsChange={onQuickSettingsChange}
-            />
-          )}
         </>
       )}
     </div>

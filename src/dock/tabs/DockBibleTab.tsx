@@ -189,6 +189,7 @@ function extractFullscreenQuickThemeSettings(
     fontColor: settings.fontColor || DEFAULT_THEME_SETTINGS.fontColor,
     refFontColor: settings.refFontColor || settings.fontColor || DEFAULT_THEME_SETTINGS.refFontColor,
     refPosition: settings.refPosition || DEFAULT_THEME_SETTINGS.refPosition,
+    refAnchor: settings.refAnchor || DEFAULT_THEME_SETTINGS.refAnchor || "normal",
     refTextTransform: settings.refTextTransform || DEFAULT_THEME_SETTINGS.refTextTransform,
     refLetterSpacing: clampNumber(settings.refLetterSpacing, 0, 10),
     refOpacity: clampNumber(settings.refOpacity, 0, 1),
@@ -346,6 +347,10 @@ function sanitizeFullscreenQuickThemeSettings(
     fontColor: sanitizeColor(source.fontColor, DEFAULT_THEME_SETTINGS.fontColor),
     refFontColor: sanitizeColor(source.refFontColor, DEFAULT_THEME_SETTINGS.refFontColor),
     refPosition: (source.refPosition as BibleThemeSettings["refPosition"]) || DEFAULT_THEME_SETTINGS.refPosition,
+    refAnchor:
+      source.refAnchor === "top" || source.refAnchor === "bottom" || source.refAnchor === "normal"
+        ? source.refAnchor
+        : (DEFAULT_THEME_SETTINGS.refAnchor ?? "normal"),
     refTextTransform: (source.refTextTransform as BibleThemeSettings["refTextTransform"]) || DEFAULT_THEME_SETTINGS.refTextTransform,
     refLetterSpacing: clampNumber(Number(source.refLetterSpacing ?? DEFAULT_THEME_SETTINGS.refLetterSpacing), 0, 10),
     refOpacity: clampNumber(Number(source.refOpacity ?? DEFAULT_THEME_SETTINGS.refOpacity), 0, 1),
@@ -474,6 +479,7 @@ function applyFullscreenQuickThemeSettings(
       fontColor: quickSettings.fontColor,
       refFontColor: quickSettings.refFontColor,
       refPosition: quickSettings.refPosition,
+      refAnchor: quickSettings.refAnchor ?? "normal",
       refTextTransform: quickSettings.refTextTransform,
       refLetterSpacing: quickSettings.refLetterSpacing,
       refOpacity: quickSettings.refOpacity,
@@ -870,7 +876,7 @@ export default function DockBibleTab({
   const [isUtilityCollapsed, _setIsUtilityCollapsed] = useState(
     () => loadDockBibleUiPreferences().controlsCollapsed ?? false,
   );
-  const [bibleBgOnly, setBibleBgOnly] = useState(false);
+  const bibleBgOnly = false;
   const [bibleOverlayVisible, setBibleOverlayVisible] = useState(true);
   const liveVerseRequestIdRef = useRef(0);
   const modeSwitchSequenceRef = useRef(0);
@@ -921,7 +927,6 @@ export default function DockBibleTab({
   const [isChapterDropdownOpen, setIsChapterDropdownOpen] = useState(false);
   const [isVerseDropdownOpen, setIsVerseDropdownOpen] = useState(false);
   const [showVerseLinePopover, setShowVerseLinePopover] = useState(false);
-  const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [themeSettingsInitialTab, setThemeSettingsInitialTab] = useState<ThemeSettingsTab>("text");
   const [showBibleHistory, setShowBibleHistory] = useState(false);
@@ -1060,14 +1065,11 @@ export default function DockBibleTab({
       if (historyPopoverRef.current && !historyPopoverRef.current.contains(event.target as Node)) {
         setShowHistoryDropdown(false);
       }
-      if (showOptionsModal && !target?.closest(".dock-bible-options-modal")) {
-        setShowOptionsModal(false);
-      }
     };
 
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [showOptionsModal]);
+  }, []);
 
   useEffect(() => {
     const transcript = voiceBible.transcript?.trim() ?? "";
@@ -3401,65 +3403,6 @@ export default function DockBibleTab({
   ]);
   void handleSendCompareToObs;
 
-  const handleToggleBibleBgOnly = useCallback(async () => {
-    setBibleBgOnly((prev) => {
-      const next = !prev;
-      if (staged?.type === "bible") {
-        const data = staged.data as Record<string, unknown> | undefined;
-        if (data) {
-          if (presentationLinkMode) {
-            const nextStageItem = {
-              ...staged,
-              data: {
-                ...data,
-                overlayMode: "fullscreen",
-                bibleThemeSettings: effectiveSelectedBibleTheme.settings as unknown as Record<string, unknown>,
-                liveOverrides: fullscreenLiveOverrides as Record<string, unknown> | null,
-                backgroundOnly: next,
-              },
-            } as DockStagedItem;
-            latestStagedRef.current = nextStageItem;
-            onStage(nextStageItem);
-            setBibleOverlayVisible(true);
-            return next;
-          }
-          ensureObsConnected().then(() => dockObsClient.pushBible({
-            book: (data.book as string) ?? "",
-            chapter: (data.chapter as number) ?? 1,
-            verse: (data.verse as number) ?? 1,
-            verseEnd: data.verseEnd as number | undefined,
-            verseRange: data.verseRange as string | undefined,
-            referenceLabel: data.referenceLabel as string | undefined,
-            translation: (data.translation as string) ?? "KJV",
-            translationA: data.translationA as string | undefined,
-            translationB: data.translationB as string | undefined,
-            verseText: data.verseText as string | undefined,
-            overlayMode: fullscreenOnlyMode ? "fullscreen" : (data.overlayMode as "fullscreen" | "lower-third") ?? "fullscreen",
-            theme: data.theme as string | undefined,
-            bibleThemeSettings: fullscreenOnlyMode
-              ? effectiveSelectedBibleTheme.settings as unknown as Record<string, unknown>
-              : data.bibleThemeSettings as Record<string, unknown> | null | undefined,
-            liveOverrides: fullscreenOnlyMode
-              ? fullscreenLiveOverrides as Record<string, unknown> | null
-              : data.liveOverrides as Record<string, unknown> | null | undefined,
-            backgroundOnly: next,
-            compareEnabled: Boolean(data.compareEnabled),
-            compareLayout: (data.compareLayout as CompareLayout | undefined) ?? compareLayout,
-            compare: data.compare as Record<string, unknown> | undefined,
-          })).catch((err) => {
-            const message = err instanceof Error ? err.message : String(err);
-            const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
-            if (!isTransient) {
-              console.warn("[DockBibleTab] toggleBgOnly failed:", err);
-              setActionError(message);
-            }
-          });
-        }
-      }
-      return next;
-    });
-  }, [compareLayout, effectiveSelectedBibleTheme.settings, fullscreenLiveOverrides, fullscreenOnlyMode, onStage, presentationLinkMode, staged]);
-
   const handleOverlayModeChange = useCallback((nextMode: OverlayMode) => {
     if (nextMode === overlayMode) return;
 
@@ -4038,22 +3981,22 @@ export default function DockBibleTab({
       onVerseToggle={handleVerseToggle}
       onVerseSelect={handleVerseSelect}
       onVersionChange={(version) => handleQuickVersionChange(activeColumnIndex, version)}
-      onOptionsClick={() => setShowOptionsModal(true)}
       onGoToChapter={handleGoToChapter}
       onTranslationsChanged={loadTranslations}
       abbreviateBook={abbreviateBibleBook}
       BOOK_CHAPTERS={BOOK_CHAPTERS}
       compactActions={
         isShortHeight ? (
-          <div className="dock-bible-compact-actions">
+          <>
             <button
               type="button"
-              className="dock-bible-topbar__toggle-btn"
-              onClick={() => setShowOptionsModal(true)}
-              aria-label={t("bible.options")}
-              title={t("bible.options")}
+              className={`dock-bible-compact-actions__browse${isTopbarExpanded ? " dock-bible-compact-actions__browse--active" : ""}`}
+              onClick={() => setIsTopbarExpanded((prev) => !prev)}
+              aria-label={isTopbarExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}
+              title={isTopbarExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}
+              aria-expanded={isTopbarExpanded}
             >
-              <Icon name="book_open" size={14} />
+              <Icon name="menu_book" size={14} />
             </button>
             <button
               type="button"
@@ -4146,7 +4089,7 @@ export default function DockBibleTab({
                 </div>
               </div>
             )}
-          </div>
+          </>
         ) : undefined
       }
       headerActions={
@@ -4591,159 +4534,60 @@ export default function DockBibleTab({
           collapsed={toolbarCollapsed}
           onCollapseChange={setToolbarCollapsed}
           inlineAction={
-            <button
-              type="button"
-              className="dock-btm-toolbar__icon-btn"
-              onClick={() => openThemeSettings("text")}
-              title={t("bible.quickEdits")}
-              aria-label={t("bible.quickEdits")}
-            >
-              <Icon name="edit" size={14} />
-            </button>
-          }
-        >
-          <button
-            type="button"
-            className={`dock-btm-toolbar__icon-btn${bibleBgOnly ? " dock-btm-toolbar__icon-btn--active" : ""}`}
-            onClick={handleToggleBibleBgOnly}
-            disabled={!staged || staged.type !== "bible" || (!fullscreenOnlyMode && overlayMode === "lower-third")}
-            title={bibleBgOnly ? t("bible.showWithText") : t("bible.backgroundOnly")}
-          >
-            <Icon name="image" size={14} />
-          </button>
+            <>
+              <button
+                type="button"
+                className="dock-btm-toolbar__icon-btn"
+                onClick={() => openThemeSettings("text")}
+                title={t("bible.quickEdits")}
+                aria-label={t("bible.quickEdits")}
+              >
+                <Icon name="edit" size={14} />
+              </button>
 
-          <div
-            className={`dock-line-popover dock-line-popover--toolbar${showVerseLinePopover ? " is-open" : ""}`}
-            ref={verseLinePopoverRef}
-          >
-            <button
-              type="button"
-              className={`dock-btm-toolbar__icon-btn${showVerseLinePopover ? " dock-btm-toolbar__icon-btn--active" : ""}`}
-              onClick={() => setShowVerseLinePopover((current) => !current)}
-              aria-haspopup="dialog"
-              aria-expanded={showVerseLinePopover}
-              title={t("bible.linesPerStage")}
-            >
-              <Icon name="text_fields" size={14} />
-            </button>
+              <div
+                className={`dock-line-popover dock-line-popover--toolbar${showVerseLinePopover ? " is-open" : ""}`}
+                ref={verseLinePopoverRef}
+              >
+                <button
+                  type="button"
+                  className={`dock-btm-toolbar__icon-btn${showVerseLinePopover ? " dock-btm-toolbar__icon-btn--active" : ""}`}
+                  onClick={() => setShowVerseLinePopover((current) => !current)}
+                  aria-haspopup="dialog"
+                  aria-expanded={showVerseLinePopover}
+                  title={t("bible.linesPerStage")}
+                >
+                  <Icon name="text_fields" size={14} />
+                </button>
 
-            {showVerseLinePopover && (
-              <div className="dock-line-popover__menu" role="dialog" aria-label={t("bible.lineCount")}>
-                <div className="dock-line-popover__title">{t("bible.linesPerStage")}</div>
-                <div className="dock-line-popover__grid dock-line-popover__grid--compact">
-                  {Array.from({ length: MAX_VERSE_LINES }, (_, index) => index + 1).map((count) => (
-                    <button
-                      key={`verse-line-choice-${count}`}
-                      type="button"
-                      className={`dock-line-popover__option${verseLineCount === count ? " dock-line-popover__option--active" : ""}`}
-                      onClick={() => {
-                        setVerseLineCount(count);
-                        setShowVerseLinePopover(false);
-                      }}
-                    >
-                      {count}
-                    </button>
-                  ))}
-                </div>
+                {showVerseLinePopover && (
+                  <div className="dock-line-popover__menu" role="dialog" aria-label={t("bible.lineCount")}>
+                    <div className="dock-line-popover__title">{t("bible.linesPerStage")}</div>
+                    <div className="dock-line-popover__grid dock-line-popover__grid--compact">
+                      {Array.from({ length: MAX_VERSE_LINES }, (_, index) => index + 1).map((count) => (
+                        <button
+                          key={`verse-line-choice-${count}`}
+                          type="button"
+                          className={`dock-line-popover__option${verseLineCount === count ? " dock-line-popover__option--active" : ""}`}
+                          onClick={() => {
+                            setVerseLineCount(count);
+                            setShowVerseLinePopover(false);
+                          }}
+                        >
+                          {count}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </DockBottomToolbar>
+            </>
+          }
+        />
 
         {/* ── Footer actions ── */}
 
       </section>
-
-      {/* ── Options modal ── */}
-      {
-        showOptionsModal && (
-          <div className="dock-dialog-backdrop" role="presentation" onClick={() => setShowOptionsModal(false)}>
-            <div
-              className="dock-bible-options-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="bible-options-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="dock-dialog__header">
-                <div>
-                  <div className="dock-dialog__eyebrow">{t("bible.settings")}</div>
-                  <h2 id="bible-options-title" className="dock-dialog__title">{t("bible.options")}</h2>
-                </div>
-                <button
-                  type="button"
-                  className="dock-dialog__close"
-                  onClick={() => setShowOptionsModal(false)}
-                  aria-label={t("bible.closeOptions")}
-                  title={t("common.close")}>
-                  <Icon name="close" size={14} />
-                </button>
-              </div>
-
-              <div className="dock-dialog__body">
-                {!fullscreenOnlyMode && (
-                  <div className="dock-bible-options__section">
-                    <label className="dock-bible-options__label">{t("bible.overlayMode")}</label>
-                    <div
-                      className={`dock-console-segmented dock-console-segmented--compact${modeMorphing ? " dock-console-segmented--morphing" : ""}`}
-                      role="group"
-                      aria-label={t("bible.overlayMode")}
-                    >
-                      <button
-                        type="button"
-                        className={`dock-console-segmented__item${overlayMode === "fullscreen" ? " dock-console-segmented__item--active" : ""}`}
-                        onClick={() => handleOverlayModeChange("fullscreen")}
-                        aria-pressed={overlayMode === "fullscreen"}
-                        title={t("bible.full")}>
-                        <span>{t("bible.full")}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`dock-console-segmented__item${overlayMode === "lower-third" ? " dock-console-segmented__item--active" : ""}`}
-                        onClick={() => handleOverlayModeChange("lower-third")}
-                        aria-pressed={overlayMode === "lower-third"}
-                        title={t("bible.lt")}>
-                        <span>{t("bible.lt")}</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Theme settings */}
-                <div className="dock-bible-options__section">
-                  <label className="dock-bible-options__label">{t("bible.theme")}</label>
-                  <button
-                    type="button"
-                    className="dock-btn dock-btn--ghost dock-btn--compact"
-                    onClick={() => { setShowOptionsModal(false); openThemeSettings("text"); }}
-                    style={{ width: "100%" }}
-                    title={t("bible.openThemeSettings")}>
-                    <Icon name="palette" size={14} />
-                    {t("bible.openThemeSettings")}
-                  </button>
-                </div>
-
-                {/* Lines per stage */}
-                <div className="dock-bible-options__section">
-                  <label className="dock-bible-options__label">{t("bible.linesPerStage")}</label>
-                  <div className="dock-bible-options__line-grid">
-                    {Array.from({ length: MAX_VERSE_LINES }, (_, index) => index + 1).map((count) => (
-                      <button
-                        key={`options-line-${count}`}
-                        type="button"
-                        className={`dock-bible-options__line-btn${verseLineCount === count ? " dock-bible-options__line-btn--active" : ""}`}
-                        onClick={() => setVerseLineCount(count)}
-                      >
-                        {count}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      }
 
       {
         keywordActionResult && (

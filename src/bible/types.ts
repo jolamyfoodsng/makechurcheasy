@@ -262,6 +262,7 @@ export interface BibleThemeSettings {
   refFontColor: string;
   refFontWeight: "normal" | "bold" | "light";
   refPosition: "top" | "bottom";
+  refAnchor?: "normal" | "top" | "bottom";
   refTextTransform: "none" | "uppercase" | "lowercase" | "capitalize";
   refLetterSpacing: number;       // px
   refOpacity: number;             // 0-1
@@ -344,6 +345,7 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   refFontColor: "#cccccc",
   refFontWeight: "normal",
   refPosition: "bottom",
+  refAnchor: "normal",
   refTextTransform: "none",
   refLetterSpacing: 0,
   refOpacity: 1,

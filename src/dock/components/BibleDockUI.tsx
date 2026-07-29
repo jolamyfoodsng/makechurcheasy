@@ -27,7 +27,6 @@ interface BibleControlsProps {
   onChapterSelect: (chapter: number) => void;
   onVerseToggle: (event: React.MouseEvent) => void;
   onVerseSelect: (verse: number) => void;
-  onOptionsClick: () => void;
   onGoToChapter?: () => void;
   abbreviateBook: (book: string) => string;
   BOOK_CHAPTERS: typeof import("../dockTypes").BOOK_CHAPTERS;
@@ -268,7 +267,6 @@ interface BibleDockContainerProps {
   onVerseToggle: (event: React.MouseEvent) => void;
   onVerseSelect: (verse: number) => void;
   onVersionChange: (version: string) => void;
-  onOptionsClick: () => void;
   onGoToChapter?: () => void;
   onTranslationsChanged?: () => void;
   abbreviateBook: (book: string) => string;
@@ -302,7 +300,6 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
   onVerseToggle,
   onVerseSelect,
   onVersionChange,
-  onOptionsClick,
   onGoToChapter,
   onTranslationsChanged,
   abbreviateBook,
@@ -350,7 +347,6 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
       onChapterSelect={onChapterSelect}
       onVerseToggle={onVerseToggle}
       onVerseSelect={onVerseSelect}
-      onOptionsClick={onOptionsClick}
       onGoToChapter={onGoToChapter}
       abbreviateBook={abbreviateBook}
       BOOK_CHAPTERS={BOOK_CHAPTERS}
@@ -396,7 +392,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
         </div>
       </div>
 
-      {!isCompact && isTopbarExpanded && (
+      {isTopbarExpanded && (
         <div className="dock-bible-controls-panel">
           {browseControls}
         </div>
