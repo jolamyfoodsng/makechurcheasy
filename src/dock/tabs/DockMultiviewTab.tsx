@@ -18,6 +18,16 @@ import Icon from "../DockIcon";
 import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { GALLERY_LAYOUTS, type GalleryLayout, type GallerySlot } from "../../multiview/galleryLayouts";
+import {
+  areAddedLayoutIdsEqual,
+  getAddedLayoutLocalStorageKeys,
+  loadAddedLayoutIdsFromDockData,
+  loadLocalAddedLayoutIds,
+  mergeAddedLayoutIds,
+  MULTIVIEW_ADDED_LAYOUTS_CHANGED_EVENT,
+  saveAddedLayoutIdsToDockData,
+  saveLocalAddedLayoutIds,
+} from "../../multiview/addedLayoutStorage";
 import { saveToDisk, getSafeFileName } from "../dockUploadService";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
@@ -26,7 +36,6 @@ import { getRecommendedPollingInterval } from "../../services/performanceManager
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = "dock-mv-saved";
-const ADDED_LAYOUTS_KEY = "mvg-added-ids";
 const CANVAS_W = 1920;
 const CANVAS_H = 1080;
 
@@ -419,24 +428,6 @@ function loadSaved(): SavedMultiView[] {
   } catch { return []; }
 }
 
-function loadAddedLayoutIds(): Set<string> {
-  try {
-    // Migration: try unscoped key first, fall back to user-scoped key
-    let raw = localStorage.getItem(ADDED_LAYOUTS_KEY);
-    if (!raw) {
-      raw = localStorage.getItem(getUserScopedKey(ADDED_LAYOUTS_KEY));
-      if (raw) {
-        localStorage.setItem(ADDED_LAYOUTS_KEY, raw);
-      }
-    }
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? new Set(parsed) : new Set();
-  } catch {
-    return new Set();
-  }
-}
-
 function saveSaved(items: SavedMultiView[]) {
   try {
     localStorage.setItem(getUserScopedKey(STORAGE_KEY), JSON.stringify(items));
@@ -574,7 +565,6 @@ function LayoutMiniPreview({ layout, thumbnails, frameId, slotFrames, frameThick
 function ContentPicker({
   open,
   obsScenes,
-  obsSources,
   loading,
   onSelect,
   onClose,
@@ -582,29 +572,28 @@ function ContentPicker({
 }: {
   open: boolean;
   obsScenes: string[];
-  obsSources: string[];
   loading: boolean;
-  onSelect: (value: string, mode: "scene" | "source") => void;
+  onSelect: (value: string) => void;
   onClose: () => void;
   excludeScenes?: string[];
 }) {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<"scene" | "source">("scene");
   const [query, setQuery] = useState("");
 
   if (!open) return null;
 
   const exclude = new Set(excludeScenes ?? []);
-  const scenes = obsScenes.filter(s => (!query || s.toLowerCase().includes(query.toLowerCase())) && !exclude.has(s));
-  const sources = obsSources.filter(s => !query || s.toLowerCase().includes(query.toLowerCase()));
-  const items = tab === "scene" ? scenes : sources;
+  const normalizedQuery = query.trim().toLowerCase();
+  const scenes = obsScenes.filter(s => (!normalizedQuery || s.toLowerCase().includes(normalizedQuery)) && !exclude.has(s));
 
   return (
     <div className="dock-mv-modal-overlay" onClick={onClose}>
       <div className="dock-mv-content-picker" onClick={(e) => e.stopPropagation()}>
         <div className="dock-mv-content-picker__header">
-          <span className="dock-mv-content-picker__title">{t('multiview.chooseContent')}</span>
-          <span className="dock-mv-content-picker__subtitle">{t('multiview.chooseContentDesc')}</span>
+          <div>
+            <span className="dock-mv-content-picker__title">{t('multiview.chooseContent')}</span>
+            <span className="dock-mv-content-picker__subtitle">{t('multiview.chooseContentDesc')}</span>
+          </div>
           <button type="button" className="dock-mv-content-picker__close" onClick={onClose}>
             <Icon name="close" size={14} />
           </button>
@@ -616,44 +605,41 @@ function ContentPicker({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('multiview.searchContent')}
+            placeholder={t('multiview.searchScenes', 'Search OBS scenes...')}
             autoFocus
           />
         </div>
-        <div className="dock-mv-content-picker__tabs">
-          <button
-            type="button"
-            className={`dock-mv-content-picker__tab${tab === "scene" ? " dock-mv-content-picker__tab--active" : ""}`}
-            onClick={() => setTab("scene")}
-          >
-            {t('multiview.scenes')}
-          </button>
-          <button
-            type="button"
-            className={`dock-mv-content-picker__tab${tab === "source" ? " dock-mv-content-picker__tab--active" : ""}`}
-            onClick={() => setTab("source")}
-          >
-            {t('multiview.sources')}
-          </button>
+        <div className="dock-mv-content-picker__summary" aria-live="polite">
+          <span>{t('multiview.scenes')} · {scenes.length}</span>
+          <span>{t('multiview.scenePickerHint', 'Use a full OBS scene inside this area.')}</span>
         </div>
         <div className="dock-mv-content-picker__list" aria-busy={loading}>
           {loading ? (
             <div className="dock-mv-content-picker__loading" role="status" aria-live="polite">
-              <Icon name="progress_activity" size={18} />
               <span>{t('common.loading')}</span>
             </div>
-          ) : items.length === 0 ? (
+          ) : scenes.length === 0 ? (
             <div className="dock-mv-content-picker__empty">{t('multiview.noContentFound')}</div>
           ) : (
-            items.map(item => (
+            scenes.map(item => (
               <button
-                key={item}
+                key={`scene:${item}`}
                 type="button"
                 className="dock-mv-content-picker__item"
-                onClick={() => onSelect(item, tab)}
+                onClick={() => onSelect(item)}
               >
-                <span className="dock-mv-content-picker__item-name">{item}</span>
-
+                <span className="dock-mv-content-picker__item-icon" aria-hidden="true">
+                  <Icon name="grid_view" size={14} />
+                </span>
+                <span className="dock-mv-content-picker__item-body">
+                  <span className="dock-mv-content-picker__item-name">{item}</span>
+                  <span className="dock-mv-content-picker__item-meta">
+                    {t('multiview.scene', 'Scene')}
+                  </span>
+                </span>
+                <span className="dock-mv-content-picker__item-action">
+                  <Icon name="arrow_forward" size={13} />
+                </span>
               </button>
             ))
           )}
@@ -670,20 +656,68 @@ function ContentPicker({
 // ---------------------------------------------------------------------------
 interface SlotRect { x: number; y: number; width: number; height: number }
 interface FramingParams { mode: "fill" | "fit" | "custom"; focalX: number; focalY: number; zoom: number }
+interface SourceSize { width: number; height: number }
 
-function calculateSlotTransform(
+function normalizeSourceSize(width?: number, height?: number): SourceSize {
+  const safeWidth = Number(width);
+  const safeHeight = Number(height);
+  return {
+    width: Number.isFinite(safeWidth) && safeWidth > 0 ? safeWidth : CANVAS_W,
+    height: Number.isFinite(safeHeight) && safeHeight > 0 ? safeHeight : CANVAS_H,
+  };
+}
+
+function normalizeSlotFraming(
+  framing: { displayMode: "fill" | "fit" | "custom"; zoom: number; focalX: number; focalY: number },
+) {
+  return {
+    displayMode: framing.displayMode,
+    zoom: Math.max(1, Math.min(5, Number(framing.zoom) || 1)),
+    focalX: Math.max(0, Math.min(1, Number(framing.focalX) || 0.5)),
+    focalY: Math.max(0, Math.min(1, Number(framing.focalY) || 0.5)),
+  };
+}
+
+async function getSceneItemSourceSize(sceneName: string, sceneItemId: number): Promise<SourceSize> {
+  try {
+    const response = await dockObsClient.call("GetSceneItemTransform", {
+      sceneName,
+      sceneItemId,
+    }) as {
+      sceneItemTransform?: {
+        sourceWidth?: number;
+        sourceHeight?: number;
+      };
+    };
+    return normalizeSourceSize(
+      response.sceneItemTransform?.sourceWidth,
+      response.sceneItemTransform?.sourceHeight,
+    );
+  } catch {
+    return normalizeSourceSize();
+  }
+}
+
+export function calculateSlotTransform(
   sourceWidth: number,
   sourceHeight: number,
   slot: SlotRect,
   framing: FramingParams,
 ) {
-  const fitScale = Math.min(slot.width / sourceWidth, slot.height / sourceHeight);
-  const fillScale = Math.max(slot.width / sourceWidth, slot.height / sourceHeight);
+  const sourceSize = normalizeSourceSize(sourceWidth, sourceHeight);
+  const safeFraming = normalizeSlotFraming({
+    displayMode: framing.mode,
+    zoom: framing.zoom,
+    focalX: framing.focalX,
+    focalY: framing.focalY,
+  });
+  const fitScale = Math.min(slot.width / sourceSize.width, slot.height / sourceSize.height);
+  const fillScale = Math.max(slot.width / sourceSize.width, slot.height / sourceSize.height);
 
-  if (framing.mode === "fit") {
+  if (safeFraming.displayMode === "fit") {
     const scale = fitScale;
-    const renderedWidth = sourceWidth * scale;
-    const renderedHeight = sourceHeight * scale;
+    const renderedWidth = sourceSize.width * scale;
+    const renderedHeight = sourceSize.height * scale;
     return {
       scale,
       renderedWidth,
@@ -693,24 +727,24 @@ function calculateSlotTransform(
     };
   }
 
-  const scale = fillScale * Math.max(1, framing.zoom);
-  const renderedWidth = sourceWidth * scale;
-  const renderedHeight = sourceHeight * scale;
+  const scale = fillScale * safeFraming.zoom;
+  const renderedWidth = sourceSize.width * scale;
+  const renderedHeight = sourceSize.height * scale;
   const visibleSourceWidth = slot.width / scale;
   const visibleSourceHeight = slot.height / scale;
-  const hCrop = Math.max(0, sourceWidth - visibleSourceWidth);
-  const vCrop = Math.max(0, sourceHeight - visibleSourceHeight);
+  const hCrop = Math.max(0, sourceSize.width - visibleSourceWidth);
+  const vCrop = Math.max(0, sourceSize.height - visibleSourceHeight);
 
   return {
     scale,
     renderedWidth,
     renderedHeight,
-    positionX: slot.x - hCrop * framing.focalX,
-    positionY: slot.y - vCrop * framing.focalY,
-    cropLeft: hCrop * framing.focalX,
-    cropRight: hCrop - hCrop * framing.focalX,
-    cropTop: vCrop * framing.focalY,
-    cropBottom: vCrop - vCrop * framing.focalY,
+    positionX: slot.x - hCrop * safeFraming.focalX,
+    positionY: slot.y - vCrop * safeFraming.focalY,
+    cropLeft: hCrop * safeFraming.focalX,
+    cropRight: hCrop - hCrop * safeFraming.focalX,
+    cropTop: vCrop * safeFraming.focalY,
+    cropBottom: vCrop - vCrop * safeFraming.focalY,
   };
 }
 
@@ -734,8 +768,9 @@ function FramingEditor({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState(initialFraming);
+  const [draft, setDraft] = useState(() => normalizeSlotFraming(initialFraming));
   const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [previewSize, setPreviewSize] = useState<SourceSize>(() => normalizeSourceSize());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -774,8 +809,9 @@ function FramingEditor({
 
   useEffect(() => {
     if (open) {
-      setDraft(initialFraming);
+      setDraft(normalizeSlotFraming(initialFraming));
       setScreenshot(null);
+      setPreviewSize(normalizeSourceSize());
       setError(null);
       mountedRef.current = true;
       captureScreenshot();
@@ -786,7 +822,7 @@ function FramingEditor({
   // ── Preview image transform using the shared calculation ──
   const imageStyle = useMemo((): React.CSSProperties => {
     const tx = calculateSlotTransform(
-      CANVAS_W, CANVAS_H,
+      previewSize.width, previewSize.height,
       { x: 0, y: 0, width: slotWidth, height: slotHeight },
       { mode: draft.displayMode, focalX: draft.focalX, focalY: draft.focalY, zoom: draft.zoom },
     );
@@ -805,7 +841,7 @@ function FramingEditor({
       maxWidth: "none",
       objectFit: "none",
     };
-  }, [draft, slotWidth, slotHeight]);
+  }, [draft, previewSize.height, previewSize.width, slotWidth, slotHeight]);
 
   // ── Pointer handlers for Custom mode drag ──
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
@@ -826,7 +862,7 @@ function FramingEditor({
     const dx = e.clientX - dragRef.current.startX;
     const dy = e.clientY - dragRef.current.startY;
     const sensitivity = 0.003;
-    setDraft(prev => ({
+    setDraft(prev => normalizeSlotFraming({
       ...prev,
       focalX: Math.max(0, Math.min(1, dragRef.current!.startFocalX + dx * sensitivity)),
       focalY: Math.max(0, Math.min(1, dragRef.current!.startFocalY + dy * sensitivity)),
@@ -843,7 +879,7 @@ function FramingEditor({
     if (!isCustom) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setDraft(prev => ({ ...prev, zoom: Math.max(0.5, Math.min(5, prev.zoom + delta)) }));
+    setDraft(prev => normalizeSlotFraming({ ...prev, zoom: prev.zoom + delta }));
   }, [isCustom]);
 
   // ── Compute slot aspect ratio label ──
@@ -919,6 +955,9 @@ function FramingEditor({
                 src={screenshot}
                 alt={`Preview of ${selectedContentName}`}
                 style={imageStyle}
+                onLoad={(event) => {
+                  setPreviewSize(normalizeSourceSize(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight));
+                }}
                 draggable={false}
               />
             )}
@@ -940,7 +979,7 @@ function FramingEditor({
                 key={mode}
                 type="button"
                 className={`dock-mv-framing-editor__mode${draft.displayMode === mode ? " dock-mv-framing-editor__mode--active" : ""}`}
-                onClick={() => setDraft(prev => ({ ...prev, displayMode: mode }))}
+                onClick={() => setDraft(prev => normalizeSlotFraming({ ...prev, displayMode: mode }))}
               >
                 {t(`multiview.framingMode_${mode}`)}
               </button>
@@ -955,23 +994,25 @@ function FramingEditor({
                 <div className="dock-mv-framing-editor__control-row">
                   <input
                     type="range"
-                    min="0.5"
+                    min="1"
                     max="5"
                     step="0.05"
                     value={draft.zoom}
-                    onChange={(e) => setDraft(prev => ({ ...prev, zoom: parseFloat(e.target.value) }))}
+                    onChange={(e) => setDraft(prev => normalizeSlotFraming({ ...prev, zoom: parseFloat(e.target.value) }))}
                     className="dock-mv-framing-editor__slider"
                   />
                   <span className="dock-mv-framing-editor__control-value">{draft.zoom.toFixed(2)}x</span>
                 </div>
               </label>
 
-              <p className="dock-mv-framing-editor__drag-hint">{t('multiview.dragHint')}</p>
+              <p className="dock-mv-framing-editor__drag-hint">
+                {t('multiview.dragHint', 'Drag the preview to reposition. Use zoom for a tighter crop.')}
+              </p>
 
               <button
                 type="button"
                 className="dock-btn dock-btn--sm"
-                onClick={() => setDraft(prev => ({ ...prev, focalX: 0.5, focalY: 0.5, zoom: 1 }))}
+                onClick={() => setDraft(prev => normalizeSlotFraming({ ...prev, focalX: 0.5, focalY: 0.5, zoom: 1 }))}
               >
                 {t('multiview.resetCenter')}
               </button>
@@ -993,7 +1034,7 @@ function FramingEditor({
           <button
             type="button"
             className="dock-btn dock-btn--sm dock-btn--primary"
-            onClick={() => { onSave(draft); onClose(); }}
+            onClick={() => { onSave(normalizeSlotFraming(draft)); onClose(); }}
           >
             {t('multiview.saveFraming')}
           </button>
@@ -1044,7 +1085,9 @@ function SlotControl({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const hasValue = !!value && (mode === "scene" ? obsScenes.includes(value) : obsSources.includes(value));
+  const hasValue = Boolean(value);
+  const isLegacySource = mode === "source";
+  const valueExistsInObs = hasValue && (mode === "scene" ? obsScenes.includes(value) : obsSources.includes(value));
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -1071,16 +1114,26 @@ function SlotControl({
           )}
           {hasValue && (
             <>
-              <span className="dock-mv-slot-row__selected-name">{value}</span>
-              <button
-                type="button"
-                className="dock-mv-slot-row__framing-btn"
-                onClick={() => onFramingChange(framing)}
-                title={t('multiview.adjustFraming')}
-                aria-label={t('multiview.adjustFraming')}
+              <span className={`dock-mv-slot-row__selected-type dock-mv-slot-row__selected-type--${mode}`}>
+                {mode === "scene" ? t('multiview.scene', 'Scene') : t('multiview.replaceSource', 'Replace source')}
+              </span>
+              <span
+                className={`dock-mv-slot-row__selected-name${valueExistsInObs ? "" : " dock-mv-slot-row__selected-name--unknown"}`}
+                title={valueExistsInObs ? value : `${value} (${t('multiview.notSeenInObs', 'not seen in current OBS scan')})`}
               >
-                <Icon name="crop" size={14} />
-              </button>
+                {value}
+              </span>
+              {!isLegacySource && (
+                <button
+                  type="button"
+                  className="dock-mv-slot-row__framing-btn"
+                  onClick={() => onFramingChange(framing)}
+                  title={t('multiview.adjustFraming')}
+                  aria-label={t('multiview.adjustFraming')}
+                >
+                  <Icon name="crop" size={14} />
+                </button>
+              )}
               <div className="dock-mv-slot-row__menu-wrap" ref={menuRef}>
                 <button
                   type="button"
@@ -1536,7 +1589,6 @@ function MVCard({
   onUpdateLayout,
   onUpdateBackground,
   onAssign,
-  onAssignSlotMode,
   onAssignSlotFraming,
   onClearSlot,
   onUpdateFrame,
@@ -1560,8 +1612,7 @@ function MVCard({
   onUpdateName: (id: string, name: string) => void;
   onUpdateLayout: (id: string, layoutId: string) => void;
   onUpdateBackground: (id: string, bg: MVBackground) => void;
-  onAssign: (id: string, slotId: string, val: string) => void;
-  onAssignSlotMode: (id: string, slotId: string, mode: "scene" | "source") => void;
+  onAssign: (id: string, slotId: string, val: string, mode: "scene" | "source") => void;
   onAssignSlotFraming: (id: string, slotId: string, framing: { displayMode: "fill" | "fit" | "custom"; zoom: number; focalX: number; focalY: number }) => void;
   onClearSlot: (id: string, slotId: string) => void;
   onUpdateFrame: (id: string, frameId: string | null) => void;
@@ -1597,9 +1648,8 @@ function MVCard({
     return () => document.removeEventListener("mousedown", handler);
   }, [showFrameSettings]);
 
-  const handleContentSelect = (slotId: string, value: string, mode: "scene" | "source") => {
-    onAssignSlotMode(mv.id, slotId, mode);
-    onAssign(mv.id, slotId, value);
+  const handleContentSelect = (slotId: string, value: string) => {
+    onAssign(mv.id, slotId, value, "scene");
     setPickerSlot(null);
   };
 
@@ -1749,7 +1799,7 @@ function MVCard({
                 mode={mode}
                 framing={framing}
                 onSelect={() => setPickerSlot(slot.id)}
-                onChange={(v, m) => handleContentSelect(slot.id, v, m)}
+                onChange={(v) => handleContentSelect(slot.id, v)}
                 onFramingChange={(_f) => setFramingSlot(slot.id)}
                 onRemove={() => onClearSlot(mv.id, slot.id)}
                 obsScenes={obsScenes}
@@ -1760,9 +1810,8 @@ function MVCard({
                 <ContentPicker
                   open
                   obsScenes={obsScenes}
-                  obsSources={obsSources}
                   loading={obsContentLoading}
-                  onSelect={(v, m) => handleContentSelect(slot.id, v, m)}
+                  onSelect={(v) => handleContentSelect(slot.id, v)}
                   onClose={() => setPickerSlot(null)}
                   excludeScenes={[mv.obsSceneName]}
                 />
@@ -1839,31 +1888,62 @@ export default function DockMultiviewTab() {
   const feedbackTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const obsScanBusyRef = useRef(false);
 
-  async function loadAddedLayoutIdsFromServer(): Promise<Set<string>> {
-    try {
-      const resp = await fetch("/uploads/mv-added-ids.json");
-      if (!resp.ok) return new Set();
-      const data = await resp.json();
-      return Array.isArray(data) ? new Set(data) : new Set();
-    } catch {
-      return new Set();
-    }
-  }
-
   // Show layouts that are added via gallery OR in use by saved cards
-  const [addedLayoutIds, setAddedLayoutIds] = useState<Set<string>>(() => loadAddedLayoutIds());
+  const [addedLayoutIds, setAddedLayoutIds] = useState<Set<string>>(() => loadLocalAddedLayoutIds());
+
+  const mergeIntoAddedLayoutIds = useCallback((...sources: Array<Iterable<unknown> | null | undefined>) => {
+    setAddedLayoutIds(prev => {
+      const next = mergeAddedLayoutIds(prev, ...sources);
+      if (areAddedLayoutIdsEqual(prev, next)) return prev;
+      saveLocalAddedLayoutIds(next, { emit: false });
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
-    // Initial load from server (overrides localStorage)
-    loadAddedLayoutIdsFromServer().then((ids) => {
-      if (ids.size > 0) setAddedLayoutIds(ids);
-    });
-    // Poll server every 5s
+    let cancelled = false;
+
+    const mergeLocalIds = () => {
+      mergeIntoAddedLayoutIds(loadLocalAddedLayoutIds());
+    };
+
+    const refreshFromDockData = async () => {
+      const remoteIds = await loadAddedLayoutIdsFromDockData();
+      if (cancelled) return;
+
+      const localIds = loadLocalAddedLayoutIds();
+      const mergedIds = mergeAddedLayoutIds(localIds, remoteIds);
+      mergeIntoAddedLayoutIds(mergedIds);
+
+      if (remoteIds.size === 0 && mergedIds.size > 0) {
+        saveAddedLayoutIdsToDockData(mergedIds).catch(() => {});
+      }
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && !getAddedLayoutLocalStorageKeys().includes(event.key)) return;
+      mergeLocalIds();
+    };
+
+    const handleAddedLayoutsChanged = (event: Event) => {
+      const ids = (event as CustomEvent<{ ids?: string[] }>).detail?.ids;
+      mergeIntoAddedLayoutIds(ids ?? loadLocalAddedLayoutIds());
+    };
+
+    mergeLocalIds();
+    refreshFromDockData();
     const interval = setInterval(() => {
-      loadAddedLayoutIdsFromServer().then((ids) => setAddedLayoutIds(ids));
+      refreshFromDockData();
     }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(MULTIVIEW_ADDED_LAYOUTS_CHANGED_EVENT, handleAddedLayoutsChanged);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(MULTIVIEW_ADDED_LAYOUTS_CHANGED_EVENT, handleAddedLayoutsChanged);
+    };
+  }, [mergeIntoAddedLayoutIds]);
 
   const addedLayouts = useMemo(() => {
     const usedIds = new Set(savedList.map(m => m.layoutId).filter(Boolean));
@@ -1976,20 +2056,32 @@ export default function DockMultiviewTab() {
   }, [savedList]);
 
   const handleUpdateLayout = useCallback((id: string, layoutId: string) => {
-    const next = savedList.map(m => m.id === id ? { ...m, layoutId, assignments: {}, updatedAt: new Date().toISOString() } : m);
+    const next = savedList.map(m => m.id === id ? {
+      ...m,
+      layoutId,
+      assignments: {},
+      slotModes: {},
+      slotFraming: {},
+      updatedAt: new Date().toISOString(),
+    } : m);
     setSavedList(next);
     saveSaved(next);
   }, [savedList]);
 
-  const handleAssign = useCallback((id: string, slotId: string, val: string) => {
+  const handleAssign = useCallback((id: string, slotId: string, val: string, mode: "scene" | "source") => {
     const now = new Date().toISOString();
     const next = savedList.map(m => {
       if (m.id !== id) return m;
-      return { ...m, assignments: { ...m.assignments, [slotId]: val }, updatedAt: now };
+      return {
+        ...m,
+        assignments: { ...m.assignments, [slotId]: val },
+        slotModes: { ...m.slotModes, [slotId]: mode },
+        updatedAt: now,
+      };
     });
     setSavedList(next);
     saveSaved(next);
-    // Capture screenshot of assigned scene for thumbnail preview
+    // Capture screenshot of assigned scene/source for thumbnail preview.
     if (dockObsClient.isConnected && val) {
       dockObsClient.call("GetSourceScreenshot", {
         sourceName: val,
@@ -2012,15 +2104,6 @@ export default function DockMultiviewTab() {
         }
       }).catch(() => { });
     }
-  }, [savedList]);
-
-  const handleAssignSlotMode = useCallback((id: string, slotId: string, mode: "scene" | "source") => {
-    const next = savedList.map(m => {
-      if (m.id !== id) return m;
-      return { ...m, slotModes: { ...m.slotModes, [slotId]: mode }, updatedAt: new Date().toISOString() };
-    });
-    setSavedList(next);
-    saveSaved(next);
   }, [savedList]);
 
   const handleAssignSlotFraming = useCallback((id: string, slotId: string, framing: { displayMode: "fill" | "fit" | "custom"; zoom: number; focalX: number; focalY: number }) => {
@@ -2141,6 +2224,12 @@ export default function DockMultiviewTab() {
     const hasAny = Object.values(mv.assignments).some(v => v);
     if (!hasAny) { showFeedback("error", t('multiview.assignBeforePush')); return; }
 
+    const legacySourceSlot = layout.slots.find(slot => mv.assignments[slot.id] && mv.slotModes?.[slot.id] === "source");
+    if (legacySourceSlot) {
+      showFeedback("error", t('multiview.sourcesNoLongerSupported', 'Replace source assignments with OBS scenes before pushing.'));
+      return;
+    }
+
     setPushingId(mv.id);
     try {
       const sceneName = mv.obsSceneName;
@@ -2177,7 +2266,7 @@ export default function DockMultiviewTab() {
       };
 
       // ── Phase 1: Create / find all managed scene items ──────────────────
-      const entries: Array<{ slotId: string; sceneItemId: number; zIndex: number }> = [];
+      const entries: Array<{ slotId: string; sceneItemId: number; zIndex: number; sourceSize?: SourceSize }> = [];
 
       // Background (always zIndex 0) — skip when transparent/effectively none
       const bg = getMvBg(mv);
@@ -2212,15 +2301,17 @@ export default function DockMultiviewTab() {
       for (const slot of layout.slots) {
         const assigned = mv.assignments[slot.id];
         if (!assigned) continue;
+        const assignedMode = mv.slotModes?.[slot.id] ?? "scene";
         try {
           const created = await dockObsClient.call("CreateSceneItem", {
             sceneName, sourceName: assigned, sceneItemEnabled: true,
           }) as { sceneItemId: number };
           if (created.sceneItemId >= 0) {
-            entries.push({ slotId: slot.id, sceneItemId: created.sceneItemId, zIndex: slot.zIndex ?? 1 });
+            const sourceSize = await getSceneItemSourceSize(sceneName, created.sceneItemId);
+            entries.push({ slotId: slot.id, sceneItemId: created.sceneItemId, zIndex: slot.zIndex ?? 1, sourceSize });
           }
         } catch (err) {
-          console.warn("[DockMultiview] slot push failed for", slot.id, assigned, err);
+          console.warn("[DockMultiview] slot push failed for", { slotId: slot.id, assigned, mode: assignedMode, err });
         }
       }
 
@@ -2275,8 +2366,9 @@ export default function DockMultiviewTab() {
           const slot = layout.slots.find(s => s.id === entry.slotId);
           if (!slot) continue;
           const framing = mv.slotFraming?.[entry.slotId] ?? { displayMode: "fill", zoom: 1, focalX: 0.5, focalY: 0.5 };
+          const sourceSize = entry.sourceSize ?? normalizeSourceSize();
           const tx = calculateSlotTransform(
-            CANVAS_W, CANVAS_H,
+            sourceSize.width, sourceSize.height,
             { x: slot.x, y: slot.y, width: slot.width, height: slot.height },
             { mode: framing.displayMode, focalX: framing.focalX ?? 0.5, focalY: framing.focalY ?? 0.5, zoom: framing.zoom ?? 1 },
           );
@@ -2411,7 +2503,6 @@ export default function DockMultiviewTab() {
             onUpdateLayout={handleUpdateLayout}
             onUpdateBackground={handleUpdateBackground}
             onAssign={handleAssign}
-            onAssignSlotMode={handleAssignSlotMode}
             onAssignSlotFraming={handleAssignSlotFraming}
             onClearSlot={handleRemoveSlot}
             onUpdateFrame={handleUpdateFrame}

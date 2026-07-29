@@ -482,22 +482,22 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredit
   const [estimatedCredits, setEstimatedCredits] = useState(0);
   const [availableCredits, setAvailableCredits] = useState(0);
   const [verifyingAccess, setVerifyingAccess] = useState(false);
-  const pro = isProUnlocked();
+  const fullAccess = isProUnlocked();
   const wordCount = countWords(transcriptText);
   useEffect(() => {
     calculateTranslationCredits(wordCount).then(setEstimatedCredits);
   }, [wordCount]);
   // Fetch credits from backend — never from localStorage
   useEffect(() => {
-    if (!userId || pro) return;
+    if (!userId || fullAccess) return;
     fetchCreditsFromBackend().then((credits) => {
-      if (credits >= 0) {
+      if (credits !== null && credits >= 0) {
         setAvailableCredits(credits);
         applyCreditSnapshotFromServer(credits);
       }
     });
-  }, [userId, pro]);
-  const canAfford = pro || availableCredits >= estimatedCredits;
+  }, [userId, fullAccess]);
+  const canAfford = fullAccess || availableCredits >= estimatedCredits;
   return (
     <div className={`modal-overlay ${isOpen ? 'open' : ''}`}>
       <div className="modal-panel">
@@ -572,10 +572,10 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredit
               <span style={{ color: 'var(--text-muted)' }}>Estimated Cost</span>
               <span style={{ fontWeight: 600, color: 'var(--gold)' }}>
                 <Zap size={12} style={{ verticalAlign: -1, marginRight: 3 }} />
-                {pro ? 'Free (Pro)' : `${estimatedCredits} credit${estimatedCredits !== 1 ? 's' : ''}`}
+                {fullAccess ? 'Included' : `${estimatedCredits} credit${estimatedCredits !== 1 ? 's' : ''}`}
               </span>
             </div>
-            {!pro && (
+            {!fullAccess && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                 <span style={{ color: 'var(--text-muted)' }}>Available Credits</span>
                 <span style={{ fontWeight: 600, color: availableCredits >= estimatedCredits ? 'var(--green)' : 'var(--error)' }}>
@@ -626,7 +626,7 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredit
             )}
           </button>
 
-          {!pro && (
+          {!fullAccess && (
             <button
               className="btn btn-outline btn-block"
               style={{ marginTop: 8 }}
@@ -1014,7 +1014,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   const [translationError, setTranslationError] = useState<string | null>(null);
 
   // Derived plan flags
-  const canTranslate = ['basic', 'growth', 'pro'].includes(userPlan);
+  const canTranslate = ['basic', 'growth'].includes(userPlan);
 
   // ── Tutorial state ────────────────────────────────────────────────────
   const [tourActive, setTourActive] = useState(false);
@@ -1233,7 +1233,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
             setCreditReservationId(null);
             if (committed) {
               const newBal = await fetchCreditsFromBackend();
-              if (newBal >= 0) {
+              if (newBal !== null && newBal >= 0) {
                 setUserCredits(newBal);
                 applyCreditSnapshotFromServer(newBal);
               }
@@ -1243,7 +1243,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
               setTranslationStatus('success'); // translation succeeded, treat as success
             }
           } else {
-            // Pro user or zero-cost — no reservation to commit
+            // Full-access user or zero-cost — no reservation to commit
             setTranslationStatus('success');
           }
           setIsTranslating(false);
@@ -1691,7 +1691,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         }}
         onBeforeStart={async () => {
           const wordCount = countWords(transcript?.transcriptText ?? '');
-          const credits = userPlan === 'pro' ? 0 : Math.ceil(wordCount / 150);
+          const credits = await calculateTranslationCredits(wordCount);
           const access = await checkPremiumAccess('translation', { requiredCredits: credits });
           if (!access.allowed) {
             setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });

@@ -72,6 +72,10 @@ const USER_SCOPED_KEY_PREFIXES = [
   "ocs-dock-media-preferences-v1",
   "ocs-dock-media-library-v1",
 
+  // Notes
+  "ocs-dock-notes-preferences",
+  "ocs-dock-notes-v1",
+
   // Sermon
   "ocs-dock-sermon-items-v1",
   "ocs-dock-sermon",
@@ -107,6 +111,7 @@ const USER_SCOPED_KEY_PREFIXES = [
   // Multiview
   "dock-mv-saved",
   "dock-mv-layouts",
+  "mvg-added-ids",
   "mv-settings",
   "mv-recovery-layout",
   "mv-onboarding-complete",

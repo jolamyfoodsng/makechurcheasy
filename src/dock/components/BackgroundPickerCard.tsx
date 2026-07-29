@@ -7,13 +7,13 @@ import type { BibleTheme } from "../../bible/types";
 import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
 import type { MediaItem } from "../../library/libraryTypes";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { FAVORITE_THEMES_UPDATED_EVENT } from "../../services/favoriteThemes";
 import Icon from "../DockIcon";
 import {
   COMPARE_GAP_PRESETS,
   COMPARE_LAYOUT_PRESETS,
   normalizeCompareThemeSettings,
   type CompareFontWeight,
-  type CompareMetadataAlign,
   type CompareMetadataPosition,
   type CompareTextAlign
 } from "../compareThemeConfig";
@@ -466,6 +466,74 @@ export default function BackgroundPickerCard({
   }, [dropdownOpen, styleMenuOpen]);
 
   const selectedOption = BG_OPTIONS.find((o) => o.id === bgType) ?? BG_OPTIONS[0];
+  const localStylesControl = (
+    <>
+      <div className="dtb-local-styles dtb-local-styles--theme">
+        <label className="dtb-local-styles__label" htmlFor={localStylesSelectId}>
+          Saved Styles
+        </label>
+        <select
+          id={localStylesSelectId}
+          className="dtb-local-styles__select"
+          value={selectedLocalStyleId}
+          onChange={(event) => handleApplyLocalStyle(event.target.value)}
+          disabled={savedStyles.length === 0}
+          aria-label="Saved Styles"
+          title="Saved Styles"
+        >
+          <option value="">
+            {savedStyles.length === 0 ? "No saved styles yet" : "Choose a saved style"}
+          </option>
+          {savedStyles.map((style) => (
+            <option key={style.id} value={style.id}>
+              {style.name}
+            </option>
+          ))}
+        </select>
+        <div className="dtb-local-styles__menu-wrap" ref={styleMenuRef}>
+          <button
+            type="button"
+            className={`dtb-local-styles__menu-btn${styleMenuOpen ? " dtb-local-styles__menu-btn--open" : ""}`}
+            onClick={() => setStyleMenuOpen((open) => !open)}
+            aria-haspopup="menu"
+            aria-expanded={styleMenuOpen}
+            aria-label="Saved style actions"
+            title="Saved style actions"
+          >
+            <Icon name="more_vert" size={15} />
+          </button>
+          {styleMenuOpen && (
+            <div className="dtb-local-styles__menu" role="menu">
+              <button
+                type="button"
+                className="dtb-local-styles__menu-item"
+                role="menuitem"
+                onClick={handleSaveLocalStyle}
+              >
+                <Icon name="save" size={14} />
+                <span>Save Current Style</span>
+              </button>
+              <button
+                type="button"
+                className="dtb-local-styles__menu-item dtb-local-styles__menu-item--danger"
+                role="menuitem"
+                onClick={handleDeleteSelectedLocalStyle}
+                disabled={!selectedLocalStyle}
+              >
+                <Icon name="delete_outline" size={14} />
+                <span>Delete Selected Style</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      {localStyleStatus && (
+        <p className="dtb-local-styles__status" role="status">
+          {localStyleStatus}
+        </p>
+      )}
+    </>
+  );
 
   return (
     <div className="dtb-studio-card">
@@ -504,71 +572,6 @@ export default function BackgroundPickerCard({
             </button>
           )}
         </div>
-
-        <div className="dtb-local-styles">
-          <label className="dtb-local-styles__label" htmlFor={localStylesSelectId}>
-            Local Styles
-          </label>
-          <select
-            id={localStylesSelectId}
-            className="dtb-local-styles__select"
-            value={selectedLocalStyleId}
-            onChange={(event) => handleApplyLocalStyle(event.target.value)}
-            disabled={savedStyles.length === 0}
-            aria-label="Local Styles"
-            title="Local Styles"
-          >
-            <option value="">
-              {savedStyles.length === 0 ? "No saved styles yet" : "Choose a saved style"}
-            </option>
-            {savedStyles.map((style) => (
-              <option key={style.id} value={style.id}>
-                {style.name}
-              </option>
-            ))}
-          </select>
-          <div className="dtb-local-styles__menu-wrap" ref={styleMenuRef}>
-            <button
-              type="button"
-              className={`dtb-local-styles__menu-btn${styleMenuOpen ? " dtb-local-styles__menu-btn--open" : ""}`}
-              onClick={() => setStyleMenuOpen((open) => !open)}
-              aria-haspopup="menu"
-              aria-expanded={styleMenuOpen}
-              aria-label="Local style actions"
-              title="Local style actions"
-            >
-              <Icon name="more_vert" size={15} />
-            </button>
-            {styleMenuOpen && (
-              <div className="dtb-local-styles__menu" role="menu">
-                <button
-                  type="button"
-                  className="dtb-local-styles__menu-item"
-                  role="menuitem"
-                  onClick={handleSaveLocalStyle}
-                >
-                  <Icon name="save" size={14} />
-                  <span>Save As Local Style</span>
-                </button>
-                <button
-                  type="button"
-                  className="dtb-local-styles__menu-item dtb-local-styles__menu-item--danger"
-                  role="menuitem"
-                  onClick={handleDeleteSelectedLocalStyle}
-                  disabled={!selectedLocalStyle}
-                >
-                  <Icon name="delete_outline" size={14} />
-                  <span>Delete Selected Style</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-        {localStyleStatus && (
-          <p className="dtb-local-styles__status" role="status">
-            {localStyleStatus}
-          </p>
-        )}
 
         {/* Background Tab */}
         {activeTab === "background" && (
@@ -644,12 +647,15 @@ export default function BackgroundPickerCard({
                 />
               )}
               {bgType === "theme" && (
-                <ThemeSection
-                  selectedThemeId={_selectedThemeId}
-                  onThemeSelect={_onThemeSelect}
-                  allowedCategories={_allowedCategories}
-                  overlayMode={overlayMode}
-                />
+                <div className="dtb-bg-picker__theme-stack">
+                  {localStylesControl}
+                  <ThemeSection
+                    selectedThemeId={_selectedThemeId}
+                    onThemeSelect={_onThemeSelect}
+                    allowedCategories={_allowedCategories}
+                    overlayMode={overlayMode}
+                  />
+                </div>
               )}
             </div>
 
@@ -1889,37 +1895,46 @@ function ThemeSection({
   const [loading, setLoading] = useState(true);
   const { t } = useTranslation();
 
+  const loadThemes = useCallback(async () => {
+    try {
+      // Load all themes (unified — no templateType filter)
+      const all = await loadDockFavoriteBibleThemes();
+      const allowed = new Set((allowedCategories ?? []).map((c) => c.toLowerCase()));
+      const filtered = allowed.size === 0
+        ? all
+        : all.filter((t) => {
+          const cats = t.categories?.length ? t.categories : t.category ? [t.category] : [];
+          return cats.some((c) => allowed.has(c.toLowerCase()));
+        });
+      const modeFiltered = filtered.filter((theme) => themeSupportsBibleOverlayMode(theme, overlayMode));
+      console.log("[ThemeSection]", {
+        overlayMode,
+        allowedCategories: allowedCategories ?? "ALL",
+        loadedCount: all.length,
+        filteredCount: modeFiltered.length,
+        themeNames: modeFiltered.map((t) => t.name),
+      });
+      setThemes(modeFiltered);
+    } catch (err) {
+      console.error("[ThemeSection] failed to load themes:", err);
+      setThemes([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [allowedCategories, overlayMode]);
+
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        // Load all themes (unified — no templateType filter)
-        const all = await loadDockFavoriteBibleThemes();
-        const allowed = new Set((allowedCategories ?? []).map((c) => c.toLowerCase()));
-        const filtered = allowed.size === 0
-          ? all
-          : all.filter((t) => {
-            const cats = t.categories?.length ? t.categories : t.category ? [t.category] : [];
-            return cats.some((c) => allowed.has(c.toLowerCase()));
-          });
-        const modeFiltered = filtered.filter((theme) => themeSupportsBibleOverlayMode(theme, overlayMode));
-        console.log("[ThemeSection]", {
-          overlayMode,
-          allowedCategories: allowedCategories ?? "ALL",
-          loadedCount: all.length,
-          filteredCount: modeFiltered.length,
-          themeNames: modeFiltered.map((t) => t.name),
-        });
-        if (!cancelled) setThemes(modeFiltered);
-      } catch (err) {
-        console.error("[ThemeSection] failed to load themes:", err);
-        if (!cancelled) setThemes([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [allowedCategories, overlayMode]);
+    void loadThemes().catch(() => { });
+    const refresh = () => {
+      if (!cancelled) void loadThemes().catch(() => { });
+    };
+    window.addEventListener(FAVORITE_THEMES_UPDATED_EVENT, refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(FAVORITE_THEMES_UPDATED_EVENT, refresh);
+    };
+  }, [loadThemes]);
 
   if (loading) {
     return (
@@ -2140,12 +2155,6 @@ const COMPARE_META_POSITION_OPTIONS: Array<{ value: CompareMetadataPosition; lab
   { value: "hidden", label: "Hidden" },
 ];
 
-const COMPARE_META_ALIGN_OPTIONS: Array<{ value: CompareMetadataAlign; label: string }> = [
-  { value: "left", label: "Left" },
-  { value: "center", label: "Center" },
-  { value: "right", label: "Right" },
-];
-
 function clampNumberValue(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
@@ -2228,6 +2237,146 @@ function SelectField({
   );
 }
 
+function CompareLayoutPopover({
+  value,
+  gap,
+  options,
+  onPresetChange,
+  onGapChange,
+}: {
+  value: string;
+  gap: number;
+  options: Array<{ value: string; label: string; description?: string }>;
+  onPresetChange: (value: string) => void;
+  onGapChange: (value: number) => void;
+}) {
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 292 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  const openPopover = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const width = Math.min(292, Math.max(240, window.innerWidth - 16));
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+    const top = Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - 430));
+    setPos({ top, left, width });
+    setOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        popoverRef.current?.contains(target) ||
+        triggerRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="dtb-compare-layout-control">
+      <button
+        ref={triggerRef}
+        type="button"
+        className="dtb-compare-layout-trigger"
+        onClick={() => open ? setOpen(false) : openPopover()}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? id : undefined}
+        aria-label="Layout and gap"
+        title="Layout and gap"
+      >
+        <Icon name="tune" size={16} />
+      </button>
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          ref={popoverRef}
+          id={id}
+          className="dtb-compare-layout-popover"
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 10000 }}
+          role="menu"
+        >
+          <div className="dtb-compare-layout-popover__header">
+            <div>
+              <span className="dtb-compare-layout-popover__eyebrow">Layout</span>
+              <strong>{selected?.label ?? "Custom"}</strong>
+            </div>
+            <button
+              type="button"
+              className="dtb-compare-layout-popover__close"
+              onClick={() => setOpen(false)}
+              aria-label="Close layout settings"
+            >
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+          <div className="dtb-compare-layout-popover__section">
+            <span className="dtb-compare-layout-popover__label">Preset</span>
+            <div className="dtb-compare-layout-popover__options">
+              {options.map((option) => {
+                const active = option.value === value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`dtb-compare-layout-popover__option${active ? " dtb-compare-layout-popover__option--active" : ""}`}
+                    onClick={() => {
+                      onPresetChange(option.value);
+                    }}
+                    role="menuitemradio"
+                    aria-checked={active}
+                  >
+                    <span className="dtb-compare-layout-popover__option-icon">
+                      <Icon name={option.value === "custom" ? "tune" : "view_column"} size={16} />
+                    </span>
+                    <span className="dtb-compare-layout-popover__option-copy">
+                      <span className="dtb-compare-layout-popover__option-label">{option.label}</span>
+                      {option.description && (
+                        <span className="dtb-compare-layout-popover__option-desc">{option.description}</span>
+                      )}
+                    </span>
+                    {active && <Icon name="check" size={16} className="dtb-compare-layout-popover__option-check" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="dtb-compare-layout-popover__section">
+            <SliderNumberField
+              label="Gap between columns"
+              value={gap}
+              min={0}
+              max={100}
+              step={1}
+              unit="px"
+              onChange={onGapChange}
+            />
+          </div>
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
 function CompareSettingsPanel({
   quickSettings,
   onQuickSettingsChange,
@@ -2255,6 +2404,17 @@ function CompareSettingsPanel({
     [quickSettings],
   );
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const layoutOptions = useMemo(
+    () => [
+      ...COMPARE_LAYOUT_PRESETS.map((preset) => ({
+        value: preset.id,
+        label: preset.label,
+        description: `${preset.leftWidth}/${preset.rightWidth} • ${preset.gap}px gap`,
+      })),
+      { value: "custom", label: "Custom", description: "Manual spacing and padding" },
+    ],
+    [],
+  );
 
   const applyPatch = useCallback((patch: Record<string, unknown>) => {
     onQuickSettingsChange((prev) => ({ ...prev, ...toQuickSettingsPatch(patch) }));
@@ -2308,37 +2468,27 @@ function CompareSettingsPanel({
 
       {/* Layout */}
       <div className="dtb-bg-picker__settings" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div className="dtb-section-title">Layout</div>
+        <div className="dtb-compare-layout-heading">
+          <div className="dtb-section-title">Layout</div>
+          <CompareLayoutPopover
+            value={resolvedLayoutPreset}
+            gap={compare.gap}
+            options={layoutOptions}
+            onPresetChange={(value) => {
+              if (value !== "custom") applyLayoutPreset(value);
+            }}
+            onGapChange={(value) => setGap(value)}
+          />
+        </div>
 
         <SelectField
           label="Background"
           value={compareBackdropValue}
           onChange={(value) => onBackdropChange(value as BackgroundType)}
-          options={[
-            { value: "off", label: t("bgPicker.transparent", "Transparent") },
-            { value: "theme", label: t("bgPicker.theme", "Theme") },
-            { value: "color", label: t("common.color") },
-            { value: "image", label: t("common.image", "Image") },
-            { value: "pattern", label: t("common.pattern", "Pattern") },
-            { value: "video", label: t("common.video", "Video") },
-          ]}
-        />
-
-        <SelectField
-          label="Layout preset"
-          value={resolvedLayoutPreset}
-          onChange={applyLayoutPreset}
-          options={[
-            ...COMPARE_LAYOUT_PRESETS.map((preset) => ({ value: preset.id, label: preset.label })),
-            { value: "custom", label: "Custom" },
-          ]}
-        />
-
-        <SliderNumberField
-          label="Gap between columns"
-          value={compare.gap}
-          min={0} max={100} step={1} unit="px"
-          onChange={(value) => setGap(value)}
+          options={BG_OPTIONS.map((option) => ({
+            value: option.id,
+            label: t(option.label, option.label),
+          }))}
         />
       </div>
 
@@ -2489,16 +2639,6 @@ function CompareSettingsPanel({
                 compareReferencePositionRight: value,
               })}
               options={COMPARE_META_POSITION_OPTIONS}
-            />
-
-            <SelectField
-              label="Reference alignment"
-              value={compare.compareReferenceAlignmentLeft}
-              onChange={(value) => applyPatch({
-                compareReferenceAlignmentLeft: value,
-                compareReferenceAlignmentRight: value,
-              })}
-              options={COMPARE_META_ALIGN_OPTIONS}
             />
 
             <ReferenceBackgroundSection

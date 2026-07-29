@@ -551,22 +551,81 @@
 
 .song-import-done {
   color: #d1fae5;
+  overflow: hidden;
 }
 
-.song-import-done__list {
+.song-import-done__summary {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(180px, 1fr) minmax(260px, 1.7fr);
+  gap: 12px;
+  width: min(820px, 100%);
+  margin-top: 10px;
+  text-align: left;
+}
+
+.song-import-done__stat {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 14px 16px;
+}
+
+.song-import-done__stat span,
+.song-import-done__preview-label {
+  display: block;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.song-import-done__stat strong {
+  display: block;
+  min-width: 0;
+  margin-top: 7px;
+  color: #d1fae5;
+  font-size: 15px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.song-import-done__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(820px, 100%);
+  margin-top: 2px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.34);
+  padding: 14px;
+  text-align: left;
+}
+
+.song-import-done__preview > div {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: 8px;
+  max-height: 86px;
+  overflow: hidden;
 }
 
-.song-import-done__list span {
-  padding: 8px 12px;
+.song-import-done__preview > div span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  max-width: 220px;
   border-radius: 999px;
-  background: rgba(16, 185, 129, 0.15);
+  background: rgba(16, 185, 129, 0.14);
   color: #d1fae5;
-  font-size: 13px;
-  font-weight: 600;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .song-import-btn {
@@ -635,6 +694,7 @@
 
   .song-import-steps,
   .song-import-review__summary,
+  .song-import-done__summary,
   .song-import-editor-grid,
   .song-import-stats,
   .song-import-section-card__row {

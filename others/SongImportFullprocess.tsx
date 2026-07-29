@@ -83,6 +83,61 @@ function defaultSongTitle(sourceName: string, index = 0): string {
   return index > 0 ? `${base} ${index + 1}` : base;
 }
 
+function titleCountLabel(count: number): string {
+  return `${count} song${count === 1 ? "" : "s"}`;
+}
+
+function compactNumberRanges(values: number[]): string[] {
+  const sorted = [...new Set(values)].sort((a, b) => a - b);
+  const ranges: string[] = [];
+  let start: number | null = null;
+  let previous: number | null = null;
+
+  sorted.forEach((value) => {
+    if (start === null || previous === null) {
+      start = value;
+      previous = value;
+      return;
+    }
+
+    if (value === previous + 1) {
+      previous = value;
+      return;
+    }
+
+    ranges.push(start === previous ? `${start}` : `${start}-${previous}`);
+    start = value;
+    previous = value;
+  });
+
+  if (start !== null && previous !== null) {
+    ranges.push(start === previous ? `${start}` : `${start}-${previous}`);
+  }
+
+  return ranges;
+}
+
+function summarizeImportedTitles(titles: string[]): string {
+  if (titles.length === 0) return "No songs were imported.";
+
+  const hymnNumbers = titles
+    .map((title) => title.match(/\bhymn\s+(\d+)\b/i)?.[1])
+    .filter((value): value is string => Boolean(value))
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value));
+
+  if (hymnNumbers.length >= Math.max(3, Math.floor(titles.length * 0.5))) {
+    const ranges = compactNumberRanges(hymnNumbers);
+    const visibleRanges = ranges.slice(0, 8);
+    const hiddenRangeCount = ranges.length - visibleRanges.length;
+    return `Hymns ${visibleRanges.join(", ")}${hiddenRangeCount > 0 ? `, +${hiddenRangeCount} more range${hiddenRangeCount === 1 ? "" : "s"}` : ""}`;
+  }
+
+  const visibleTitles = titles.slice(0, 5);
+  const hiddenCount = titles.length - visibleTitles.length;
+  return `${visibleTitles.join(", ")}${hiddenCount > 0 ? `, +${hiddenCount} more` : ""}`;
+}
+
 function sanitizeDraftsForImport(drafts: EditableImportSongDraft[]): SmartImportSongDraft[] {
   return drafts
     .filter((draft) => draft.enabled)
@@ -295,6 +350,13 @@ export default function SongImportFullprocess({
       .map((section) => [section.label, section.content].filter(Boolean).join("\n"))
       .join("\n\n");
   }, [activeSong]);
+
+  const importedTitleSummary = useMemo(
+    () => summarizeImportedTitles(importedTitles),
+    [importedTitles],
+  );
+  const importedTitlePreview = importedTitles.slice(0, 6);
+  const hiddenImportedTitleCount = Math.max(0, importedTitles.length - importedTitlePreview.length);
 
   return (
     <div className="song-import-modal-backdrop" onMouseDown={step === "importing" ? undefined : onClose}>
@@ -676,13 +738,34 @@ export default function SongImportFullprocess({
           <section className="song-import-done">
             <CheckCircle2 size={42} />
             <h3>Import complete</h3>
-            <p>{importedTitles.length} song{importedTitles.length === 1 ? "" : "s"} added to the worship library.</p>
+            <p>{titleCountLabel(importedTitles.length)} added to the worship library.</p>
 
             {importedTitles.length > 0 && (
-              <div className="song-import-done__list">
-                {importedTitles.map((title) => (
-                  <span key={title}>{title}</span>
-                ))}
+              <div className="song-import-done__summary" aria-label="Import summary">
+                <div className="song-import-done__stat">
+                  <span>Added</span>
+                  <strong>{titleCountLabel(importedTitles.length)}</strong>
+                </div>
+                <div className="song-import-done__stat">
+                  <span>Source</span>
+                  <strong>{sourceName}</strong>
+                </div>
+                <div className="song-import-done__stat song-import-done__stat--wide">
+                  <span>Summary</span>
+                  <strong>{importedTitleSummary}</strong>
+                </div>
+              </div>
+            )}
+
+            {importedTitlePreview.length > 0 && (
+              <div className="song-import-done__preview" aria-label="Imported song examples">
+                <span className="song-import-done__preview-label">Examples imported</span>
+                <div>
+                  {importedTitlePreview.map((title) => (
+                    <span key={title}>{title}</span>
+                  ))}
+                  {hiddenImportedTitleCount > 0 ? <span>+{hiddenImportedTitleCount} more</span> : null}
+                </div>
               </div>
             )}
           </section>

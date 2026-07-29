@@ -35,6 +35,56 @@ window.addEventListener("unhandledrejection", (event) => {
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 void initOverlayUrl();
 
+function getPublicPresentationSessionId(): string | null {
+  const match = window.location.pathname.match(/^\/p\/([^/?#]+)/i);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function renderPresentationOpening(message = "Opening presentation screen...") {
+  root.render(
+    <React.StrictMode>
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#000", color: "#f8fafc", fontFamily: "Inter, system-ui, sans-serif" }}>
+        <div style={{ display: "grid", gap: 10, justifyItems: "center" }}>
+          <div style={{ width: 22, height: 22, borderRadius: "50%", border: "2px solid #1D4ED8", borderTopColor: "transparent", animation: "spin 0.6s linear infinite" }} />
+          <span>{message}</span>
+        </div>
+      </div>
+    </React.StrictMode>,
+  );
+}
+
+async function openPublicPresentationRoute(sessionId: string) {
+  renderPresentationOpening();
+
+  try {
+    const { getPresentationRemoteAccessInfo } = await import("./services/presentationRemote");
+    const info = await getPresentationRemoteAccessInfo(sessionId);
+    const candidates = [info.localLink, info.link].filter(Boolean);
+    const current = new URL(window.location.href);
+    const target = candidates.find((candidate) => {
+      try {
+        const parsed = new URL(candidate);
+        return parsed.origin !== current.origin || parsed.pathname !== current.pathname;
+      } catch {
+        return false;
+      }
+    });
+
+    if (target) {
+      window.location.replace(target);
+      return;
+    }
+
+    const params = new URLSearchParams({ sessionId });
+    if (info.wsPort > 0) params.set("wsPort", String(info.wsPort));
+    window.location.replace(`/presentation.html?${params.toString()}`);
+  } catch (error) {
+    console.warn("[PresentationRoute] Could not open presentation server:", error);
+    const params = new URLSearchParams({ sessionId });
+    window.location.replace(`/presentation.html?${params.toString()}`);
+  }
+}
+
 const appRouter = createHashRouter([
   {
     path: "*",
@@ -50,9 +100,14 @@ const appRouter = createHashRouter([
   },
 ]);
 
+const publicPresentationSessionId = getPublicPresentationSessionId();
+
 // Await auth store so the session is in memory before any component reads it.
 // initAuthStore no longer blocks on network (plan refresh is fire-and-forget),
 // so this resolves immediately from local storage.
+if (publicPresentationSessionId) {
+  void openPublicPresentationRoute(publicPresentationSessionId);
+} else {
 void initAuthStore().then(async () => {
   // Sync church profile from web API on startup (ensures speakers, branding, etc. are in localStorage)
   try {
@@ -131,3 +186,4 @@ void initAuthStore().then(async () => {
     );
   }
 });
+}

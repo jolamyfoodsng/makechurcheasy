@@ -15,12 +15,28 @@ use crate::{
     PresentationViewerHeartbeat, PRESENTATION_STATE, PRESENTATION_VIEWERS,
 };
 
-const PRESENTATION_HTML: &str = include_str!("../../public/presentation.html");
+const PRESENTATION_HTML_EMBEDDED: &str = include_str!("../../public/presentation.html");
 const DEFAULT_HTTP_PORT: u16 = 45679;
 const DEFAULT_WS_PORT: u16 = 8766;
 
 static PRESENTATION_HTTP_PORT: AtomicU16 = AtomicU16::new(0);
 static PRESENTATION_WS_PORT: AtomicU16 = AtomicU16::new(0);
+
+fn get_presentation_html() -> String {
+    for path in [
+        "./public/presentation.html",
+        "../public/presentation.html",
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../public/presentation.html"),
+    ] {
+        if let Ok(mut f) = File::open(path) {
+            let mut buf = String::new();
+            if f.read_to_string(&mut buf).is_ok() && !buf.is_empty() {
+                return buf;
+            }
+        }
+    }
+    PRESENTATION_HTML_EMBEDDED.to_owned()
+}
 
 #[derive(Debug, Clone)]
 struct PresentationBroadcast {
@@ -391,7 +407,7 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
             }
 
             if clean == "presentation.html" || clean == "p" || clean.starts_with("p/") {
-                let response = Response::from_string(PRESENTATION_HTML)
+                let response = Response::from_string(get_presentation_html())
                     .with_header(
                         Header::from_bytes("Content-Type", "text/html; charset=utf-8").unwrap(),
                     )

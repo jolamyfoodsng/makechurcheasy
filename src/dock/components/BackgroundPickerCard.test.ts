@@ -4,6 +4,8 @@ import type { BibleThemeSettings } from "../../bible/types";
 import overlayHtml from "../../../public/mce-bible-overlay.html?raw";
 import backgroundOverlayHtml from "../../../public/bible-overlay-bg.html?raw";
 import backgroundPickerSource from "./BackgroundPickerCard.tsx?raw";
+import dockThemeSettingsModalSource from "./DockThemeSettingsModal.tsx?raw";
+import dockBibleTabSource from "../tabs/DockBibleTab.tsx?raw";
 
 /* ── Helpers — mirrors the updater pattern each Text tab control uses ── */
 
@@ -423,8 +425,35 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(overlayHtml).toContain("s.comparePanelInnerPadding");
     expect(overlayHtml).toContain("s.compareReferencePositionLeft");
     expect(overlayHtml).toContain("s.compareReferencePositionRight");
-    expect(overlayHtml).toContain("s.compareReferenceAlignmentLeft");
-    expect(overlayHtml).toContain("s.compareReferenceAlignmentRight");
+  });
+
+  it("uses the compare text alignment for references without a separate reference alignment setting", () => {
+    expect(overlayHtml).toContain("const compareReferenceAlign = compareTextAlignForReference(compareAlign)");
+    expect(overlayHtml).toContain("root.style.setProperty('--compare-reference-align', compareReferenceAlign)");
+    expect(overlayHtml).toContain("root.style.setProperty('--compare-inline-align', mapFlexAlign(compareReferenceAlign))");
+    expect(overlayHtml).toContain("align-self: var(--compare-inline-align, center)");
+    expect(overlayHtml).toContain("#compare-layout.is-line-by-line .compare-column__reference");
+    expect(overlayHtml).toContain("compareLayout.classList.toggle('is-line-by-line', clMode === 'line-by-line')");
+    expect(backgroundPickerSource).not.toContain("Reference alignment");
+    expect(backgroundPickerSource).not.toContain("compareReferenceAlignmentLeft");
+    expect(backgroundPickerSource).not.toContain("compareReferenceAlignmentRight");
+  });
+
+  it("opens compare layout preset and gap controls from a compact icon trigger", () => {
+    expect(backgroundPickerSource).toContain("function CompareLayoutPopover");
+    expect(backgroundPickerSource).toContain("aria-label=\"Layout and gap\"");
+    expect(backgroundPickerSource).toContain("label=\"Gap between columns\"");
+    expect(backgroundPickerSource).toContain("label=\"Background\"");
+    expect(backgroundPickerSource).not.toContain("label=\"Layout preset\"");
+  });
+
+  it("centers Bible compare content by default while keeping the lower-third caption position setting", () => {
+    expect(overlayHtml).toContain("#compare-layout");
+    expect(overlayHtml).toContain("align-content: center");
+    expect(overlayHtml).toContain("function normalizeCompareVerticalAlign");
+    expect(overlayHtml).toContain("compareGridVerticalAlign(leftVerticalAlign, 'center')");
+    expect(overlayHtml).toContain("compareColumnVerticalAlign(index === 1 ? rightVerticalAlign : leftVerticalAlign, 'flex-start')");
+    expect(overlayHtml).toContain("ltBar.style.justifyContent = lowerThirdContentVerticalAlign(s.lowerThirdCaptionPosition)");
   });
 
   it("renders compare reference and bible version as one label", () => {
@@ -433,11 +462,13 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(overlayHtml).toContain("formatCompareReference(r.reference, r.translation)");
     expect(overlayHtml).toContain("compareTranslationLeft.textContent = ''");
     expect(overlayHtml).toContain("compareTranslationRight.textContent = ''");
+    expect(overlayHtml).toContain("lt-compare-unit");
   });
 
   it("orders scripture reference above or below the verse without DOM reshuffling", () => {
     expect(overlayHtml).toContain("#reference.top");
     expect(overlayHtml).toContain("#lt-bar #ref-text.top");
+    expect(overlayHtml).toContain("#lt-bar #ref-text:empty");
     expect(overlayHtml).toContain("order: 0");
     expect(overlayHtml).toContain("order: 2");
   });
@@ -473,8 +504,10 @@ describe("Active OBS Bible overlay wiring", () => {
 
     expect(overlayHtml).toContain("function applyFullscreenBackground");
     expect(overlayHtml).toContain("function readInjectedCssVar");
+    expect(overlayHtml).toContain("function resolveBackgroundImageCss");
     expect(overlayHtml).toContain("const bgVideoUrl = String(theme.backgroundVideo || '').trim()");
     expect(overlayHtml).toContain("const patternCss = resolvePatternCss(theme.backgroundPattern)");
+    expect(overlayHtml).toContain("const bgImageCss = resolveBackgroundImageCss(s.backgroundImage)");
     expect(overlayHtml).toContain("if (hasGradient)");
     expect(overlayHtml).toContain("const rawBgImage = String(theme.backgroundImage || '').trim()");
     expect(overlayHtml).toContain("value === '__FROM_CSS__'");
@@ -492,5 +525,72 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(videoIndex).toBeLessThan(patternIndex);
     expect(patternIndex).toBeLessThan(gradientIndex);
     expect(gradientIndex).toBeLessThan(imageIndex);
+  });
+
+  it("sends the active theme with Bible full/lower-third mode changes", () => {
+    const modeChangeStart = dockBibleTabSource.indexOf("const handleOverlayModeChange");
+    const modeChangeEnd = dockBibleTabSource.indexOf("const handleToggleFavoritePassage", modeChangeStart);
+    const modeChangeBlock = dockBibleTabSource.slice(modeChangeStart, modeChangeEnd);
+
+    expect(modeChangeBlock).toContain("fullscreenLiveOverrides");
+    expect(modeChangeBlock).toContain("theme: modeTheme");
+    expect(modeChangeBlock).toContain("existing.theme = modeTheme");
+  });
+
+  it("keeps theme/background draft changes local until the theme settings save commit", () => {
+    const handleThemeSelectStart = dockThemeSettingsModalSource.indexOf("const handleThemeSelect");
+    const handleSaveStart = dockThemeSettingsModalSource.indexOf("const handleSave", handleThemeSelectStart);
+    const draftSelectionBlock = dockThemeSettingsModalSource.slice(handleThemeSelectStart, handleSaveStart);
+
+    expect(handleThemeSelectStart).toBeGreaterThan(-1);
+    expect(handleSaveStart).toBeGreaterThan(handleThemeSelectStart);
+    expect(draftSelectionBlock).toContain("pendingBackgroundPresetRef.current = \"theme\"");
+    expect(draftSelectionBlock).toContain("setDraftSettings(nextSettings)");
+    expect(draftSelectionBlock).not.toContain("onSelect(theme)");
+    expect(draftSelectionBlock).not.toContain("onBackgroundPresetChange?.(\"theme\")");
+
+    const backgroundPickerPropsStart = dockThemeSettingsModalSource.indexOf("<BackgroundPickerCard");
+    const sectionDividerStart = dockThemeSettingsModalSource.indexOf("<SectionDivider", backgroundPickerPropsStart);
+    const backgroundPickerProps = dockThemeSettingsModalSource.slice(backgroundPickerPropsStart, sectionDividerStart);
+
+    expect(backgroundPickerPropsStart).toBeGreaterThan(-1);
+    expect(sectionDividerStart).toBeGreaterThan(backgroundPickerPropsStart);
+    expect(backgroundPickerProps).toContain("pendingBackgroundPresetRef.current = preset");
+    expect(backgroundPickerProps).not.toContain("onBackgroundPresetChange?.(preset)");
+
+    const saveBlock = dockThemeSettingsModalSource.slice(handleSaveStart, dockThemeSettingsModalSource.indexOf("const handleReset", handleSaveStart));
+    expect(saveBlock).toContain("onSelect(nextTheme)");
+    expect(saveBlock).toContain("onBackgroundPresetChange?.(nextPreset)");
+    expect(saveBlock).toContain("onQuickSettingsSave(nextSettings)");
+  });
+
+  it("hydrates saved Bible dock background preferences before first render and persists saves immediately", () => {
+    expect(dockBibleTabSource).toContain("initialPrefsRef.current = loadDockBiblePreferences()");
+    expect(dockBibleTabSource).toContain("useState<DockBackgroundPreset>(");
+    expect(dockBibleTabSource).toContain("initialPrefs.backgroundPreset ?? \"theme\"");
+    expect(dockBibleTabSource).toContain("useState<DockFullscreenQuickThemeSettings | null>(initialFullscreenQuickThemeSettings)");
+    expect(dockBibleTabSource).toContain("persistDockBiblePreferencesNow({");
+    expect(dockBibleTabSource).toContain("fullscreenQuickThemeSettings: nextSavedSettings");
+  });
+
+  it("pairs dual-variant Bible theme selection so later lower-third uses the same theme", () => {
+    const fullscreenSelectStart = dockBibleTabSource.indexOf("const handleSelectFullscreenTheme");
+    const lowerThirdSelectStart = dockBibleTabSource.indexOf("const handleSelectLowerThirdTheme");
+    const activePickerStart = dockBibleTabSource.indexOf("const activeThemePickerProps");
+    const fullscreenSelectBlock = dockBibleTabSource.slice(fullscreenSelectStart, lowerThirdSelectStart);
+    const lowerThirdSelectBlock = dockBibleTabSource.slice(lowerThirdSelectStart, activePickerStart);
+
+    expect(fullscreenSelectStart).toBeGreaterThan(-1);
+    expect(lowerThirdSelectStart).toBeGreaterThan(fullscreenSelectStart);
+    expect(activePickerStart).toBeGreaterThan(lowerThirdSelectStart);
+    expect(fullscreenSelectBlock).toContain("themeSupportsBibleOverlayMode(theme, \"lower-third\")");
+    expect(fullscreenSelectBlock).toContain("setSelectedLowerThirdTheme(theme)");
+    expect(fullscreenSelectBlock).toContain("setSavedLowerThirdQuickThemeSettings(nextLowerThirdQuickSettings)");
+    expect(fullscreenSelectBlock).toContain("handleOverlayModeChange(\"fullscreen\")");
+    expect(lowerThirdSelectBlock).toContain("themeSupportsBibleOverlayMode(theme, \"fullscreen\")");
+    expect(lowerThirdSelectBlock).toContain("setSelectedBibleTheme(theme)");
+    expect(lowerThirdSelectBlock).toContain("setSavedFullscreenQuickThemeSettings(nextFullscreenQuickSettings)");
+    expect(dockBibleTabSource).toContain("function extractLowerThirdQuickThemeSettings");
+    expect(dockBibleTabSource).toContain("return extractThemeQuickSettingsForOverlayMode(theme, effectiveOverlayMode)");
   });
 });

@@ -24,7 +24,7 @@
  *   - If offline > 14 days: immediately lock
  *
  * Feature gating:
- *   Use hasRequiredPlan("pro") or canUseFeature("multiview") — never isUnlocked()
+ *   Use hasRequiredPlan("growth") or canUseFeature("multiview") — never isUnlocked()
  *   for premium feature checks.
  */
 
@@ -99,6 +99,7 @@ export interface LicenseGuardState {
   verifying: boolean;
   lastVerifiedAt: number | null;
   daysOffline: number;
+  offlineDaysRemaining: number;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -106,6 +107,8 @@ export interface LicenseGuardState {
 const STORAGE_KEY = "ocs-license-cache";
 const DOWNGRADE_NOTIFIED_KEY = "ocs-downgrade-notified";
 const VISIBILITY_REVERIFY_MIN_INTERVAL_MS = 15 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_BACKGROUND_REVERIFY_INTERVAL_MS = 60 * 1000;
 
 const FEATURE_ALIAS_MAP: Record<string, FeatureKey> = {
   multiview: "multiview",
@@ -121,7 +124,7 @@ const PLAN_HIERARCHY: Record<string, number> = {
   free: 0,
   basic: 1,
   growth: 2,
-  pro: 3,
+  pro: 2,
 };
 const APP_VERSION: string =
   typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
@@ -319,8 +322,23 @@ function evaluateLicense(payload: LicensePayload): LockReason {
   return null;
 }
 
-function evaluateOfflineValidity(_cached: LicenseCache): LockReason {
-  return null;
+function getLastVerifiedMs(cached: LicenseCache): number {
+  const fromPayload = new Date(cached.payload.lastVerifiedAt).getTime();
+  if (Number.isFinite(fromPayload)) return fromPayload;
+  return Number.isFinite(cached.cachedAt) ? cached.cachedAt : 0;
+}
+
+function getOfflineWindowDays(cached: LicenseCache): number {
+  const configured = Number(cached.payload.internetVerificationDays || 14);
+  return Number.isFinite(configured) && configured > 0 ? configured : 14;
+}
+
+function evaluateOfflineValidity(cached: LicenseCache): LockReason {
+  const lastVerifiedMs = getLastVerifiedMs(cached);
+  if (!lastVerifiedMs) return "internet_required";
+
+  const offlineWindowMs = getOfflineWindowDays(cached) * DAY_MS;
+  return Date.now() - lastVerifiedMs > offlineWindowMs ? "internet_required" : null;
 }
 
 // ── Core State Management ────────────────────────────────────────────────────
@@ -346,11 +364,12 @@ function computeState(): void {
 
 export function getState(): LicenseGuardState {
   const cached = _cache;
-  const lastVerified = cached
-    ? new Date(cached.payload.lastVerifiedAt).getTime()
-    : null;
+  const lastVerified = cached ? getLastVerifiedMs(cached) : null;
   const daysOffline = lastVerified
-    ? Math.floor((Date.now() - lastVerified) / (1000 * 60 * 60 * 24))
+    ? Math.floor((Date.now() - lastVerified) / DAY_MS)
+    : 0;
+  const offlineDaysRemaining = cached && lastVerified
+    ? Math.max(0, Math.ceil((lastVerified + getOfflineWindowDays(cached) * DAY_MS - Date.now()) / DAY_MS))
     : 0;
 
   return {
@@ -360,6 +379,7 @@ export function getState(): LicenseGuardState {
     verifying: _verifying,
     lastVerifiedAt: lastVerified,
     daysOffline,
+    offlineDaysRemaining,
   };
 }
 
@@ -369,7 +389,7 @@ export function getState(): LicenseGuardState {
  * Returns true if the current plan meets or exceeds the required plan.
  * Use this for premium feature checks — never isUnlocked().
  *
- * Example: hasRequiredPlan("pro")
+ * Example: hasRequiredPlan("growth")
  */
 export function hasRequiredPlan(requiredPlan: string): boolean {
   const currentPlan = _cache?.payload?.plan || "free";
@@ -443,8 +463,20 @@ export function getLicensePayload(): LicensePayload | null {
 export function getDaysOffline(): number {
   const cached = _cache;
   if (!cached) return 0;
-  const lastVerified = new Date(cached.payload.lastVerifiedAt).getTime();
-  return Math.floor((Date.now() - lastVerified) / (1000 * 60 * 60 * 24));
+  const lastVerified = getLastVerifiedMs(cached);
+  if (!lastVerified) return 0;
+  return Math.floor((Date.now() - lastVerified) / DAY_MS);
+}
+
+/**
+ * Get days remaining before offline license verification is required.
+ */
+export function getOfflineDaysRemaining(): number {
+  const cached = _cache;
+  if (!cached) return 0;
+  const lastVerified = getLastVerifiedMs(cached);
+  if (!lastVerified) return 0;
+  return Math.max(0, Math.ceil((lastVerified + getOfflineWindowDays(cached) * DAY_MS - Date.now()) / DAY_MS));
 }
 
 /**
@@ -483,12 +515,10 @@ export async function verify(): Promise<boolean> {
     const online = await checkInternet();
 
     if (!online) {
-      // Offline — never lock. Use cached license if available, otherwise
-      // allow the app to proceed unlocked (offline usage is always permitted).
       if (_cache) {
         _lockReason = evaluateOfflineValidity(_cache);
       } else {
-        _lockReason = null;
+        _lockReason = "internet_required";
       }
       emit();
       return _lockReason === null;
@@ -504,11 +534,9 @@ export async function verify(): Promise<boolean> {
         emit();
         return _lockReason === null;
       }
-      // No cache and can't reach backend — don't lock, let the app proceed
-      // (this is a transient failure, not a license issue)
-      _lockReason = null;
+      _lockReason = "internet_required";
       emit();
-      return true;
+      return false;
     }
 
     // Normalize before caching — convert billing expiry to free plan
@@ -524,7 +552,10 @@ export async function verify(): Promise<boolean> {
     return _lockReason === null;
   } catch (err) {
     console.error("[licenseGuard] Verification error:", err);
-    // On error, keep existing state
+    if (!_cache) {
+      _lockReason = "internet_required";
+      emit();
+    }
     return _lockReason === null;
   } finally {
     _verifying = false;
@@ -580,8 +611,7 @@ export async function initLicenseGuard(): Promise<void> {
     // Online — verify with backend
     await verify();
   } else {
-    // Offline — never lock the app
-    _lockReason = null;
+    _lockReason = _cache ? evaluateOfflineValidity(_cache) : "internet_required";
     emit();
   }
 
@@ -598,7 +628,10 @@ function startPeriodicVerification(): void {
   if (_revalidationTimer) return;
 
   const intervalHours = _cache?.payload?.verificationIntervalHours || 6;
-  const intervalMs = intervalHours * 60 * 60 * 1000;
+  const intervalMs = Math.max(
+    30_000,
+    Math.min(intervalHours * 60 * 60 * 1000, MAX_BACKGROUND_REVERIFY_INTERVAL_MS),
+  );
 
   _revalidationTimer = setInterval(async () => {
     const online = await checkInternet();

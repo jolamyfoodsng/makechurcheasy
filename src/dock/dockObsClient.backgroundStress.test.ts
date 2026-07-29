@@ -158,6 +158,9 @@ describe("dockObsClient background reflection stress", () => {
       getCurrentProgramSceneName: client.getCurrentProgramSceneName,
       ensureMCEPresentationInScene: client.ensureMCEPresentationInScene,
       waitForSceneMatch: client.waitForSceneMatch,
+      prepareFastOverlayScene: client.prepareFastOverlayScene,
+      pushWorshipLyrics: client.pushWorshipLyrics,
+      pushNotesLyrics: client.pushNotesLyrics,
     };
 
     inputs = new Map();
@@ -202,6 +205,14 @@ describe("dockObsClient background reflection stress", () => {
           existing.inputSettings = { ...(payload.inputSettings as Record<string, unknown>) };
           return {};
         }
+        case "GetInputSettings": {
+          const inputName = String(payload.inputName);
+          const existing = inputs.get(inputName);
+          if (!existing) throw new Error(`Missing input ${inputName}`);
+          return { inputSettings: existing.inputSettings };
+        }
+        case "CallVendorRequest":
+          return {};
         case "RemoveInput":
           inputs.delete(String(payload.inputName));
           return {};
@@ -299,7 +310,260 @@ describe("dockObsClient background reflection stress", () => {
     });
   });
 
-  it("reflects 50 sequential Bible lower-third background changes through the fast overlay path", async () => {
+  it("does not rewrite the Bible browser URL when OBS already has the overlay document loaded", async () => {
+    const sourceName = "MCE Browser - Bible";
+    const baseUrl = "http://overlay.test/mce-bible-overlay.html?v=2026-07-29-1-lt-bg-image&tab=bible";
+    inputs.set(sourceName, {
+      inputKind: "browser_source",
+      inputSettings: {
+        url: `${baseUrl}#data=${encodeURIComponent(JSON.stringify({ mode: "fullscreen", slide: { text: "Old verse" } }))}`,
+        css: "",
+      },
+    });
+    client._lastBrowserSourceUrlBySource[sourceName] = "";
+
+    await client.deliverCssOverlayPacket(
+      sourceName,
+      "bible",
+      {
+        slide: { id: "dock-bible-slide", reference: "Acts 3:1 (KJV)", text: "Now Peter and John went up together.", verseRange: "1" },
+        theme: makeBackgroundTheme({ backgroundPattern: "diagonal-lines" }),
+        live: true,
+        blanked: false,
+        timestamp: 123,
+        mode: "fullscreen",
+      },
+      baseUrl,
+      "",
+    );
+
+    const urlWrites = callLog.filter((entry) =>
+      entry.method === "SetInputSettings" &&
+      Object.prototype.hasOwnProperty.call(entry.payload.inputSettings as Record<string, unknown>, "url")
+    );
+
+    expect(urlWrites).toHaveLength(0);
+    expect(callLog.some((entry) => entry.method === "GetInputSettings" && entry.payload.inputName === sourceName)).toBe(true);
+    expect(callLog.some((entry) => entry.method === "CallVendorRequest")).toBe(true);
+    expect(client._lastBrowserSourceUrlBySource[sourceName]).toBe(baseUrl);
+  });
+
+  it("delivers Bible background changes as live events without rewriting OBS browser CSS", async () => {
+    const sourceName = "MCE Browser - Bible";
+    const baseUrl = "http://overlay.test/mce-bible-overlay.html?v=2026-07-29-1-lt-bg-image&tab=bible";
+    inputs.set(sourceName, {
+      inputKind: "browser_source",
+      inputSettings: { url: baseUrl, css: "" },
+    });
+    client._lastBrowserSourceUrlBySource[sourceName] = baseUrl;
+    client._lastCssOverlayPacketBySource[sourceName] = {
+      slide: { id: "dock-bible-slide", reference: "Acts 3:1 (KJV)", text: "Old verse", verseRange: "1" },
+      theme: makeBackgroundTheme({ backgroundColor: "#000000" }),
+      live: true,
+      blanked: false,
+      timestamp: 122,
+      mode: "fullscreen",
+    };
+    client._lastCssOverlayBaseUrlBySource[sourceName] = baseUrl;
+    client._lastCssOverlayThemeCssBySource[sourceName] = "";
+
+    await client.deliverCssOverlayPacket(
+      sourceName,
+      "bible",
+      {
+        slide: { id: "dock-bible-slide", reference: "Acts 3:1 (KJV)", text: "Old verse", verseRange: "1" },
+        theme: makeBackgroundTheme({ backgroundPattern: "diagonal-lines" }),
+        live: true,
+        blanked: false,
+        timestamp: 124,
+        mode: "fullscreen",
+      },
+      baseUrl,
+      ":root { --bg-pattern-data: url(\"data:image/svg+xml,%3Csvg%2F%3E\"); }",
+    );
+
+    const sourceWrites = callLog.filter((entry) => entry.method === "SetInputSettings");
+
+    expect(sourceWrites).toHaveLength(0);
+    expect(callLog.some((entry) => entry.method === "CallVendorRequest")).toBe(true);
+    expect(client._lastCssOverlayThemeCssBySource[sourceName]).toContain("--bg-pattern-data");
+  });
+
+  it("falls back to a durable CSS packet when a live Bible click event is not acknowledged", async () => {
+    const sourceName = "MCE Browser - Bible";
+    const baseUrl = "http://overlay.test/mce-bible-overlay.html?v=2026-07-29-1-lt-bg-image&tab=bible";
+    const theme = makeBackgroundTheme({ backgroundColor: "#000000" });
+
+    inputs.set(sourceName, {
+      inputKind: "browser_source",
+      inputSettings: { url: baseUrl, css: "" },
+    });
+    client._lastBrowserSourceUrlBySource[sourceName] = baseUrl;
+    client._lastCssOverlayPacketBySource[sourceName] = {
+      slide: { id: "dock-bible-slide", reference: "Acts 3:1 (KJV)", text: "Old verse", verseRange: "1" },
+      theme,
+      live: true,
+      blanked: false,
+      timestamp: 122,
+      mode: "fullscreen",
+    };
+    client._lastCssOverlayBaseUrlBySource[sourceName] = baseUrl;
+    client._lastCssOverlayThemeCssBySource[sourceName] = "";
+
+    await client.deliverCssOverlayPacket(
+      sourceName,
+      "bible",
+      {
+        slide: { id: "dock-bible-slide", reference: "Acts 3:2 (KJV)", text: "A new visible verse", verseRange: "2" },
+        theme,
+        live: true,
+        blanked: false,
+        timestamp: 124,
+        mode: "fullscreen",
+      },
+      baseUrl,
+      "",
+    );
+
+    const cssWrites = callLog.filter((entry) =>
+      entry.method === "SetInputSettings" &&
+      Object.prototype.hasOwnProperty.call(entry.payload.inputSettings as Record<string, unknown>, "css")
+    );
+
+    expect(callLog.some((entry) => entry.method === "CallVendorRequest")).toBe(true);
+    expect(cssWrites).toHaveLength(1);
+    expect(String((cssWrites[0].payload.inputSettings as Record<string, unknown>).css)).toContain("A%20new%20visible%20verse");
+  });
+
+  it("keeps Bible fullscreen setup stable when only background settings change", () => {
+    const firstSignature = client.buildBibleFullscreenSetupSignature(
+      "MCE Presentation",
+      "Camera",
+      makeBackgroundTheme({ backgroundPattern: "diagonal-lines" }),
+    );
+    const nextSignature = client.buildBibleFullscreenSetupSignature(
+      "MCE Presentation",
+      "Camera",
+      makeBackgroundTheme({ backgroundPattern: "cross-hatch", backgroundOpacity: 0.75 }),
+    );
+
+    expect(nextSignature).toBe(firstSignature);
+  });
+
+  it.each([
+    {
+      label: "Worship",
+      tab: "worship",
+      sourceName: "MCE Worship",
+      baseUrl: "http://overlay.test/mce-worship-overlay.html",
+      initializedKey: "_worshipInitialized",
+      fastMethod: "pushWorshipOverlayFast",
+      fallbackMethod: "pushWorshipLyrics",
+    },
+    {
+      label: "Notes",
+      tab: "notes",
+      sourceName: "MCE Notes",
+      baseUrl: "http://overlay.test/mce-note.html",
+      initializedKey: "_notesInitialized",
+      fastMethod: "pushNotesOverlayFast",
+      fallbackMethod: "pushNotesLyrics",
+    },
+  ] as const)("reuses the loaded $label overlay document after a dock reload", async ({
+    tab,
+    sourceName,
+    baseUrl,
+    initializedKey,
+    fastMethod,
+    fallbackMethod,
+  }) => {
+    inputs.set(sourceName, {
+      inputKind: "browser_source",
+      inputSettings: {
+        url: `${baseUrl}#data=${encodeURIComponent(JSON.stringify({ mode: "lower-third", slide: { text: "Old text" } }))}`,
+        css: "",
+      },
+    });
+    sceneItems.set("MCE Presentation", new Map([
+      [sourceName, { sourceName, sceneItemId: 100, sceneItemIndex: 0, enabled: true }],
+    ]));
+    client[initializedKey] = false;
+    client._lastBrowserSourceUrlBySource[sourceName] = "";
+    client[fallbackMethod] = vi.fn(async () => {});
+    client.prepareFastOverlayScene = vi.fn(async () => {});
+
+    await client[fastMethod]({
+      sectionText: "Keep this text live",
+      sectionLabel: "Verse 1",
+      songTitle: "Reload Check",
+      bibleThemeSettings: makeBackgroundTheme({ backgroundPattern: "diagonal-lines" }),
+    });
+
+    const sourceWrites = callLog.filter((entry) => entry.method === "SetInputSettings");
+
+    expect(client[fallbackMethod]).not.toHaveBeenCalled();
+    expect(client[initializedKey]).toBe(true);
+    expect(client._lastBrowserSourceUrlBySource[sourceName]).toBe(baseUrl);
+    expect(client.prepareFastOverlayScene).toHaveBeenCalledWith(tab, sourceName, expect.any(Function));
+    expect(callLog.some((entry) => entry.method === "GetInputSettings" && entry.payload.inputName === sourceName)).toBe(true);
+    expect(callLog.some((entry) => entry.method === "CallVendorRequest")).toBe(true);
+    expect(sourceWrites).toHaveLength(0);
+  });
+
+  it.each([
+    {
+      label: "Worship",
+      sourceName: "MCE Worship",
+      baseUrl: "http://overlay.test/mce-worship-overlay.html",
+      initializedKey: "_worshipInitialized",
+      primeMethod: "primeWorshipOverlay",
+    },
+    {
+      label: "Notes",
+      sourceName: "MCE Notes",
+      baseUrl: "http://overlay.test/mce-note.html",
+      initializedKey: "_notesInitialized",
+      primeMethod: "primeNotesOverlay",
+    },
+  ] as const)("does not double-publish $label while priming a loaded overlay document", async ({
+    sourceName,
+    baseUrl,
+    initializedKey,
+    primeMethod,
+  }) => {
+    inputs.set(sourceName, {
+      inputKind: "browser_source",
+      inputSettings: {
+        url: `${baseUrl}#data=${encodeURIComponent(JSON.stringify({ mode: "lower-third", slide: { text: "Already live" } }))}`,
+        css: "",
+      },
+    });
+    sceneItems.set("MCE Presentation", new Map([
+      [sourceName, { sourceName, sceneItemId: 110, sceneItemIndex: 0, enabled: true }],
+    ]));
+    client[initializedKey] = false;
+    client._lastBrowserSourceUrlBySource[sourceName] = "";
+    client.publishFullscreenOverlayPacket = vi.fn();
+
+    await client[primeMethod]({
+      sectionText: "Do not flash this",
+      sectionLabel: "Verse 1",
+      songTitle: "Reload Check",
+      overlayMode: "lower-third",
+      bibleThemeSettings: makeBackgroundTheme({ backgroundPattern: "diagonal-lines" }),
+    });
+
+    const sourceWrites = callLog.filter((entry) => entry.method === "SetInputSettings");
+
+    expect(client.publishFullscreenOverlayPacket).not.toHaveBeenCalled();
+    expect(callLog.some((entry) => entry.method === "CallVendorRequest")).toBe(false);
+    expect(sourceWrites).toHaveLength(0);
+    expect(client[initializedKey]).toBe(true);
+    expect(client._lastBrowserSourceUrlBySource[sourceName]).toBe(baseUrl);
+    expect(client._lastCssOverlayBaseUrlBySource[sourceName]).toBe(baseUrl);
+  });
+
+	  it("reflects 50 sequential Bible lower-third background changes through the fast overlay path", async () => {
     client._bibleLtInitialized = true;
     client._lastBibleMode = "lower-third";
     client._lastBrowserSourceUrlBySource[client._fullscreenSceneDefs.bible.browserSourceName] = "http://overlay.test/existing";

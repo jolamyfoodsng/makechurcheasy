@@ -7,7 +7,12 @@ import {
   reorderTwoColumnText,
 } from "./bulkImportService";
 import { parseCccHymnDrafts } from "./cccHymnImport";
-import { parseKnownHymnalDrafts, processDocumentWithAi } from "./bulkImportAiService";
+import {
+  parseKnownHymnalDrafts,
+  parseLargeNumberedHymnalDrafts,
+  processDocumentLocally,
+  processDocumentWithAi,
+} from "./bulkImportAiService";
 import type { DocumentStructureProvider } from "./bulkImportAiService";
 import type { BulkImportChunkRequest } from "./smartImportTypes";
 import {
@@ -185,6 +190,172 @@ describe("Phase 1: Core Import", () => {
     expect(drafts.length).toBeGreaterThanOrEqual(450);
     expect(drafts[0].title).toBe("Hymn 1");
     expect(drafts[0].sections.map((section) => section.label)).toEqual(["Yoruba", "English"]);
+  });
+});
+
+describe("Fast local hymn-book mode", () => {
+  it("detects large numbered hymn books and skips the AI path", async () => {
+    const text = Array.from({ length: 40 }, (_, index) => {
+      const hymnNumber = index + 1;
+      return [
+        `${hymnNumber}`,
+        `Hymn ${hymnNumber}`,
+        `1. Opening line for hymn ${hymnNumber} repeated for stable parsing and larger import sizing.`,
+        `2. Second verse line for hymn ${hymnNumber} repeated for stable parsing and larger import sizing.`,
+        "Chorus",
+        `Sing the chorus for hymn ${hymnNumber} repeated for stable parsing and larger import sizing.`,
+        `Bridge ${hymnNumber}`,
+        `Bridge line for hymn ${hymnNumber} repeated for stable parsing and larger import sizing.`,
+      ].join("\n");
+    }).join("\n\n");
+
+    const drafts = parseLargeNumberedHymnalDrafts(text);
+    expect(drafts).toHaveLength(40);
+    expect(drafts[0]?.hymnNumber).toBe("1");
+    expect(drafts[0]?.sections.some((section) => section.type === "chorus")).toBe(true);
+
+    const result = await processDocumentLocally(text, "Large-Hymn-Book.pdf");
+    expect(result.aiUsed).toBe(false);
+    expect(result.needsReview).toBe(true);
+    expect(result.stats.provider).toBe("numbered-local");
+    expect(result.songs).toHaveLength(40);
+    expect(result.warnings[0]).toContain("Large numbered hymn book detected");
+  });
+
+  it("uses index pages to choose the largest hymn block and recover wrapped first-line titles", () => {
+    const filler = "Repeated filler text to simulate a real scanned hymn book import and keep the fast local path active.";
+    const englishContent = Array.from({ length: 20 }, (_, index) => {
+      const hymnNumber = index + 1;
+      return [
+        `${hymnNumber}`,
+        `English hymn ${hymnNumber} opening`,
+        `line for the smaller block repeated to keep the document sizable and realistic. ${filler} ${filler}`,
+        `Another lyric line for English hymn ${hymnNumber} repeated to keep the document sizable and realistic. ${filler} ${filler}`,
+      ].join("\n");
+    }).join("\n\n");
+
+    const englishIndex = [
+      "INDEX OF FIRST LINES (ENGLISH)",
+      ...Array.from({ length: 20 }, (_, index) => `English hymn ${index + 1} opening line for the smaller block ${index + 1}`),
+    ].join("\n");
+
+    const twiContent = Array.from({ length: 26 }, (_, index) => {
+      const hymnNumber = index + 1;
+      return [
+        `${hymnNumber}`,
+        `Twi hymn ${hymnNumber} wrapped opening`,
+        "title for the larger block",
+        `Lyric line one for Twi hymn ${hymnNumber} repeated to keep the document sizable and realistic. ${filler} ${filler}`,
+        `Lyric line two for Twi hymn ${hymnNumber} repeated to keep the document sizable and realistic. ${filler} ${filler}`,
+      ].join("\n");
+    }).join("\n\n");
+
+    const twiIndex = [
+      "INDEX OF FIRST LINES (TWI)",
+      ...Array.from({ length: 26 }, (_, index) => `Twi hymn ${index + 1} wrapped opening title for the larger block ${index + 1}`),
+    ].join("\n");
+
+    const text = [englishContent, englishIndex, twiContent, twiIndex].join("\f");
+    const drafts = parseLargeNumberedHymnalDrafts(text);
+
+    expect(drafts).toHaveLength(26);
+    expect(drafts[0]?.title).toBe("Twi hymn 1 wrapped opening title for the larger block");
+    expect(drafts[0]?.hymnNumber).toBe("1");
+    expect(drafts[0]?.reviewNotes[0]).toContain("printed index");
+  });
+
+  it("keeps index hymns visible when one hymn body cannot be fully recovered", () => {
+    const filler = "Repeated filler text to simulate a real scanned hymn book import and keep the fast local path active.";
+    const content = Array.from({ length: 26 }, (_, index) => {
+      const hymnNumber = index + 1;
+      if (hymnNumber === 12) {
+        return [
+          `${hymnNumber}`,
+          "",
+          "",
+        ].join("\n");
+      }
+
+      return [
+        `${hymnNumber}`,
+        `Indexed hymn ${hymnNumber} opening line`,
+        `Lyric line one for indexed hymn ${hymnNumber}. ${filler} ${filler}`,
+        `Lyric line two for indexed hymn ${hymnNumber}. ${filler} ${filler}`,
+      ].join("\n");
+    }).join("\n\n");
+
+    const indexPage = [
+      "INDEX OF FIRST LINES (TWI)",
+      ...Array.from({ length: 26 }, (_, index) => `Indexed hymn ${index + 1} opening line ${index + 1}`),
+    ].join("\n");
+
+    const drafts = parseLargeNumberedHymnalDrafts([content, indexPage].join("\f"));
+    const missingBodyDraft = drafts.find((draft) => draft.hymnNumber === "12");
+
+    expect(drafts).toHaveLength(26);
+    expect(missingBodyDraft).toBeTruthy();
+    expect(missingBodyDraft?.warnings[0]).toContain("not fully recovered");
+    expect(missingBodyDraft?.reviewNotes.some((note) => note.includes("manually"))).toBe(true);
+  });
+
+  it("keeps extra numbered hymns even when their printed index entries are missing", () => {
+    const filler = "Repeated filler text to simulate a real scanned hymn book import and keep the fast local path active.";
+    const content = Array.from({ length: 26 }, (_, index) => {
+      const hymnNumber = index + 1;
+      return [
+        `${hymnNumber}`,
+        `Indexed hymn ${hymnNumber} opening line`,
+        `Lyric line one for indexed hymn ${hymnNumber}. ${filler} ${filler}`,
+        `Lyric line two for indexed hymn ${hymnNumber}. ${filler} ${filler}`,
+      ].join("\n");
+    }).join("\n\n");
+
+    const indexPage = [
+      "INDEX OF FIRST LINES (TWI)",
+      ...Array.from({ length: 25 }, (_, index) => `Indexed hymn ${index + 1} opening line ${index + 1}`),
+    ].join("\n");
+
+    const drafts = parseLargeNumberedHymnalDrafts([content, indexPage].join("\f"));
+    const extraDraft = drafts.find((draft) => draft.hymnNumber === "26");
+
+    expect(drafts).toHaveLength(26);
+    expect(extraDraft?.title).toBe("Indexed hymn 26 opening line");
+    expect(extraDraft?.warnings.some((warning) => warning.includes("printed index title"))).toBe(true);
+    expect(extraDraft?.reviewNotes.some((note) => note.includes("numbered body pages"))).toBe(true);
+  });
+
+  it("infers a placeholder for a missing hymn number inside a dense numbered sequence", () => {
+    const filler = "Repeated filler text to simulate a real scanned hymn book import and keep the fast local path active.";
+    const content = Array.from({ length: 26 }, (_, index) => {
+      const hymnNumber = index + 1;
+      if (hymnNumber === 12) {
+        return "";
+      }
+
+      return [
+        `${hymnNumber}`,
+        `Indexed hymn ${hymnNumber} opening line`,
+        `Lyric line one for indexed hymn ${hymnNumber}. ${filler} ${filler}`,
+        `Lyric line two for indexed hymn ${hymnNumber}. ${filler} ${filler}`,
+      ].join("\n");
+    }).filter(Boolean).join("\n\n");
+
+    const indexPage = [
+      "INDEX OF FIRST LINES (TWI)",
+      ...Array.from({ length: 25 }, (_, index) => {
+        const hymnNumber = index + 1;
+        const actualNumber = hymnNumber >= 12 ? hymnNumber + 1 : hymnNumber;
+        return `Indexed hymn ${actualNumber} opening line ${actualNumber}`;
+      }),
+    ].join("\n");
+
+    const drafts = parseLargeNumberedHymnalDrafts([content, indexPage].join("\f"));
+    const inferredDraft = drafts.find((draft) => draft.hymnNumber === "12");
+
+    expect(drafts).toHaveLength(26);
+    expect(inferredDraft?.title).toBe("Hymn 12");
+    expect(inferredDraft?.warnings.some((warning) => warning.includes("not fully recovered"))).toBe(true);
+    expect(inferredDraft?.reviewNotes.some((note) => note.includes("inferred from the surrounding hymn sequence"))).toBe(true);
   });
 });
 
@@ -474,7 +645,7 @@ describe("Phase 5: Fallback Recovery", () => {
 
       await vi.runOnlyPendingTimersAsync();
       await vi.runOnlyPendingTimersAsync();
-      await vi.advanceTimersByTimeAsync(45_000);
+      await vi.advanceTimersByTimeAsync(30_000);
       await vi.runOnlyPendingTimersAsync();
 
       const result = await resultPromise;
@@ -492,6 +663,14 @@ describe("Phase 5: Fallback Recovery", () => {
 // ── Phase 6: Retry Logic ──
 
 describe("Phase 6: Retry Logic", () => {
+  it("uses larger batches so medium documents stay within a few AI requests", async () => {
+    const text = "Batch sizing validation line\n".repeat(4000);
+    const provider = mockProvider();
+
+    const result = await processDocumentWithAi(text, "batch-sizing.txt", provider);
+    expect(result.stats.totalChunks).toBeLessThanOrEqual(3);
+  });
+
   it("Test 9: transient failure recovers on retry", async () => {
     const provider = mockProvider({
       transientFailures: 1,

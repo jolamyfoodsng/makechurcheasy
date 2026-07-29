@@ -118,11 +118,11 @@ export default function TranscriptLibraryPage({
   const [showUpgradeOverlay, setShowUpgradeOverlay] = useState(false);
 
   // ── Credits tracking ──────────────────────────────────────────────────
-  const isPro = effectivePlan === "pro";
+  const hasUnlimitedPlan = effectivePlan === "ambassador" || effectivePlan === "unlimited";
   const [creditRefreshKey, setCreditRefreshKey] = useState(0);
 
   useEffect(() => {
-    if (isPro) return;
+    if (hasUnlimitedPlan) return;
     void syncCreditsWithBackend().then(() => {
       setCreditRefreshKey((k) => k + 1);
     });
@@ -130,7 +130,7 @@ export default function TranscriptLibraryPage({
       setCreditRefreshKey((k) => k + 1);
     });
     return unsub;
-  }, [isPro]);
+  }, [hasUnlimitedPlan]);
 
   // ── Stat card config ──────────────────────────────────────────────────
   const statDefs = useMemo(() => [
@@ -268,7 +268,7 @@ export default function TranscriptLibraryPage({
             <p className="tl-subtitle">{t("transcript.subtitle")}</p>
           </div>
           <div className="tl-header-actions">
-            {!isPro && <CreditsDisplay userId={user?.id} refreshKey={creditRefreshKey} />}
+            {!hasUnlimitedPlan && <CreditsDisplay userId={user?.id} refreshKey={creditRefreshKey} />}
             <div className="tl-search-wrapper" data-transcript-tutorial="search">
               <input
                 type="text"

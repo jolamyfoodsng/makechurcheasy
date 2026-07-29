@@ -2,7 +2,7 @@
  * MVSettings.tsx — Unified Settings (Redesigned)
  *
  * Tabbed layout with header and tab navigation.
- * Tabs: General, OBS Connection, Appearance, Branding, Bible, Free Usage, Pro License
+ * Tabs: General, OBS Connection, Appearance, Branding, Bible, Free Usage
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -68,7 +68,6 @@ import {
   Smartphone,
   Sun,
   Trash2,
-  Users,
   Zap,
 } from "lucide-react";
 import { refreshAccountBootstrapFromServer } from "../../services/authService";
@@ -171,7 +170,7 @@ export function MVSettings() {
   const [_bTranslations, setBTranslations] = useState(FALLBACK_TRANSLATIONS);
   const [bibleSettingsDirty, setBibleSettingsDirty] = useState(false);
 
-  // ── Pro License state ──
+  // ── Full access key state ──
   const [proUnlocked] = useState(() => isProUnlocked());
 
   // ── Credits state (fetched from backend) ──
@@ -183,18 +182,18 @@ export function MVSettings() {
   const [creditsUsedThisMonth, setCreditsUsedThisMonth] = useState<number>(0);
   const [planConfig, setPlanConfig] = useState<PlanConfig | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<CreditTransaction[]>([]);
-  const userPlan = proUnlocked ? "pro" as const : getUserPlan(authUser);
+  const userPlan = proUnlocked ? "growth" as const : getUserPlan(authUser);
   const trialActive = !proUnlocked && isInTrial(authUser);
   // During trial, user gets Growth-level credits — use the trial config tier for lookup
   const effectivePlanForCredits = trialActive ? "trial" as const : userPlan;
-  const planCredits = planConfig ? getPlanCredits(planConfig, effectivePlanForCredits) : (proUnlocked ? -1 : 1000);
+  const planCredits = proUnlocked ? -1 : (planConfig ? getPlanCredits(planConfig, effectivePlanForCredits) : 1000);
   const trialDaysLeft = trialActive ? getTrialDaysRemaining(authUser) : 0;
   const trialEndDate = trialActive && authUser?.trial?.endsAt
     ? new Date(authUser.trial.endsAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : null;
   const planLabel = trialActive
     ? "Growth Trial"
-    : (planConfig ? getPlanLabel(planConfig, userPlan) : (proUnlocked ? "Pro" : "Free"));
+    : (proUnlocked ? "Full Access" : (planConfig ? getPlanLabel(planConfig, userPlan) : "Free"));
   const isUnlimited = planCredits === -1;
   const usagePct = planCredits > 0 ? Math.min(100, Math.round((creditsUsedThisMonth / planCredits) * 100)) : 0;
 
@@ -602,7 +601,6 @@ export function MVSettings() {
   const [mobilePermissions, setMobilePermissions] = useState([
     { key: "slides", icon: Monitor, nameKey: "mvSettings.mobile.permSlides", descKey: "mvSettings.mobile.permSlidesDesc", enabled: true, locked: false, requiredPlan: "" },
     { key: "bible", icon: Globe, nameKey: "mvSettings.mobile.permBible", descKey: "mvSettings.mobile.permBibleDesc", enabled: true, locked: false, requiredPlan: "" },
-    { key: "lowerThird", icon: Users, nameKey: "mvSettings.mobile.permLowerThird", descKey: "mvSettings.mobile.permLowerThirdDesc", enabled: true, locked: false, requiredPlan: "" },
     { key: "songLyrics", icon: Music, nameKey: "mvSettings.mobile.permSongLyrics", descKey: "mvSettings.mobile.permSongLyricsDesc", enabled: true, locked: false, requiredPlan: "" },
     { key: "automation", icon: Zap, nameKey: "mvSettings.mobile.permAutomation", descKey: "mvSettings.mobile.permAutomationDesc", enabled: false, locked: true, requiredPlan: "Growth" },
   ]);
@@ -775,7 +773,7 @@ export function MVSettings() {
             ["obs", Radio, t("mvSettings.tabs.obs")],
             // ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
             // ["audio", Mic, t("mvSettings.tabs.audio")],
-            // ["pro", ShieldCheck, "Pro License"],
+            // ["full-access", ShieldCheck, "Full Access"],
             // ["developer", Key, "Developer"],
           ] as const).map(([id, IconComp, label]) => (
             <button key={id} className={`tab-btn ${activeTab === id ? "active" : ""}`} onClick={() => setActiveTab(id)}>
@@ -824,24 +822,6 @@ export function MVSettings() {
                     <div className="settings-card fields-rows-stack">
                       <div className="flex-between-center">
                         <div className="switch-left">
-                          <span className="switch-title">{t("mvSettings.general.defaultBibleOverlayMode")}</span>
-                          <span className="switch-subtitle">{t("mvSettings.general.defaultBibleOverlayModeDesc")}</span>
-                        </div>
-                        <div className="form-select-container" style={{ width: "180px" }}>
-                          <select
-                            className="custom-select"
-                            value={settings.defaultBibleOverlayMode}
-                            onChange={(e) => update({ defaultBibleOverlayMode: e.target.value as "fullscreen" | "lower-third" })}
-                          >
-                            <option value="fullscreen">{t("mvSettings.general.fullscreen")}</option>
-                            <option value="lower-third">{t("mvSettings.general.lowerThird")}</option>
-                          </select>
-                          <span className="select-arrow"><ChevronDown size={14} /></span>
-                        </div>
-                      </div>
-
-                      <div className="flex-between-center">
-                        <div className="switch-left">
                           <span className="switch-title">{t("mvSettings.general.defaultSpeakerSize")}</span>
                           <span className="switch-subtitle">{t("mvSettings.general.defaultSpeakerSizeDesc")}</span>
                         </div>
@@ -859,27 +839,6 @@ export function MVSettings() {
                             <option value="3xl">{t("mvSettings.general.xxxl")}</option>
                           </select>
                           <span className="select-arrow"><ChevronDown size={14} /></span>
-                        </div>
-                      </div>
-
-                      <div className="flex-between-center">
-                        <div className="switch-left">
-                          <span className="switch-title">{t("mvSettings.general.defaultTickerScrollSpeed")}</span>
-                          <span className="switch-subtitle">{t("mvSettings.general.defaultTickerScrollSpeedDesc")}</span>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <input
-                            type="range"
-                            min={1}
-                            max={5}
-                            step={1}
-                            value={settings.defaultTickerScrollSpeed}
-                            onChange={(e) => update({ defaultTickerScrollSpeed: Number(e.target.value) })}
-                            style={{ width: 100, accentColor: settings.brandColor }}
-                          />
-                          <span style={{ fontSize: 12, color: "var(--text-muted)", minWidth: 20, textAlign: "center" }}>
-                            {settings.defaultTickerScrollSpeed}
-                          </span>
                         </div>
                       </div>
                     </div>
@@ -1426,8 +1385,8 @@ export function MVSettings() {
               {activeTab === "branding" && (
                 <div className="settings-section">
                   <div className="section-header">
-                    <h3 className="section-title">Church Profile</h3>
-                    <p className="section-desc">Identity values synced from the web dashboard. Edit at makechurcheasy.creatorstudioslabs.stream → Church Profile.</p>
+                    <h3 className="section-title">{t("mvSettings.branding.churchProfile")}</h3>
+                    <p className="section-desc">{t("mvSettings.branding.churchProfileDesc")}</p>
                   </div>
 
                   {/* Sync status bar */}
@@ -1435,7 +1394,7 @@ export function MVSettings() {
                     {syncing && (
                       <>
                         <RefreshCw size={14} className="spin" style={{ animation: "spin 1s linear infinite" }} />
-                        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Syncing from web dashboard…</span>
+                        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{t("mvSettings.branding.syncingFromDashboard")}</span>
                       </>
                     )}
                     {!syncing && syncStatus && (
@@ -1447,9 +1406,9 @@ export function MVSettings() {
                           onClick={runSync}
                           disabled={syncing}
                           style={{ fontSize: 11, padding: "2px 8px", gap: 4, flexShrink: 0 }}
-                          title="Retry">
+                          title={t("mvSettings.branding.retry")}>
                           <RefreshCw size={12} />
-                          Retry
+                          {t("mvSettings.branding.retry")}
                         </button>
                       </>
                     )}
@@ -1457,7 +1416,7 @@ export function MVSettings() {
 
                   <div className="settings-card fields-rows-stack">
                     <div className="form-group">
-                      <label className="form-label">Church Name</label>
+                      <label className="form-label">{t("mvSettings.branding.churchName")}</label>
                       <input className="custom-textbox" type="text" value={settings.churchName} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                     </div>
                     {/* <div className="form-group">
@@ -1465,10 +1424,10 @@ export function MVSettings() {
                       <input className="custom-textbox" type="text" value={settings.mainPastorName} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                     </div> */}
                     <div className="form-group">
-                      <label className="form-label">Pastors / Speakers</label>
+                      <label className="form-label">{t("mvSettings.branding.pastorsSpeakers")}</label>
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                         <div style={{ display: "grid", gridTemplateColumns: "44px 1.1fr 1fr auto", gap: 8, alignItems: "center", fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" as const }}>
-                          <span>Photo</span><span>Name</span><span>Position</span><span />
+                          <span>{t("mvSettings.branding.photo")}</span><span>{t("mvSettings.branding.name")}</span><span>{t("mvSettings.branding.position")}</span><span />
                         </div>
                         {speakerProfiles.filter((p) => p.name.trim()).map((profile, index) => (
                           <div key={`sp-${index}`} style={{ display: "grid", gridTemplateColumns: "44px 1.1fr 1fr auto", gap: 8, alignItems: "center" }}>
@@ -1484,12 +1443,12 @@ export function MVSettings() {
                             <input className="custom-textbox" type="text" value={profile.name} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                             <input className="custom-textbox" type="text" value={profile.role} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                             {profile.isMain && (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent, #F59E0B)", background: "rgba(245, 158, 11, 0.15)", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>MAIN</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent, #F59E0B)", background: "rgba(245, 158, 11, 0.15)", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>{t("mvSettings.branding.main")}</span>
                             )}
                           </div>
                         ))}
                         {speakerProfiles.filter((p) => p.name.trim()).length === 0 && (
-                          <p style={{ fontSize: 13, color: "var(--text-muted)" }}>No speakers configured.</p>
+                          <p style={{ fontSize: 13, color: "var(--text-muted)" }}>{t("mvSettings.branding.noSpeakersConfigured")}</p>
                         )}
                       </div>
                     </div>
@@ -1498,29 +1457,21 @@ export function MVSettings() {
                   {/* Brand defaults */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <div className="section-header">
-                      <h3 className="section-title">Brand Defaults</h3>
-                      <p className="section-desc">Defaults for lower-third and speaker overlays (OBS output).</p>
+                      <h3 className="section-title">{t("mvSettings.branding.brandDefaults")}</h3>
+                      <p className="section-desc">{t("mvSettings.branding.brandDefaultsDesc")}</p>
                     </div>
 
                     <div className="settings-card fields-rows-stack">
-                      <div className="form-group">
-                        <label className="form-label">Default lower-third duration</label>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <input className="custom-textbox" type="number" min={1} max={300} value={settings.lowerThirdDefaultDurationSec} readOnly tabIndex={-1} style={{ width: 80, opacity: 0.7, cursor: "default" }} />
-                          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>sec</span>
-                        </div>
-                      </div>
-
                       <div className="grid-2-col">
                         <div className="form-group">
-                          <label className="form-label">Primary Color</label>
+                          <label className="form-label">{t("mvSettings.branding.primaryColor")}</label>
                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                             <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: settings.brandColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
                             <input className="custom-textbox" type="text" value={settings.brandColor} readOnly tabIndex={-1} style={{ flex: 1, fontFamily: "monospace", opacity: 0.7, cursor: "default" }} />
                           </div>
                         </div>
                         <div className="form-group">
-                          <label className="form-label">Secondary Color</label>
+                          <label className="form-label">{t("mvSettings.branding.secondaryColor")}</label>
                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                             <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: settings.brandSecondaryColor || DEFAULT_SETTINGS.brandColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
                             <input className="custom-textbox" type="text" value={settings.brandSecondaryColor} readOnly tabIndex={-1} style={{ flex: 1, fontFamily: "monospace", opacity: 0.7, cursor: "default" }} />
@@ -1530,14 +1481,14 @@ export function MVSettings() {
 
                       <div className="grid-2-col">
                         <div className="form-group">
-                          <label className="form-label">Accent Color</label>
+                          <label className="form-label">{t("mvSettings.branding.accentColor")}</label>
                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                             <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: settings.brandAccentColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
                             <input className="custom-textbox" type="text" value={settings.brandAccentColor} readOnly tabIndex={-1} style={{ flex: 1, fontFamily: "monospace", opacity: 0.7, cursor: "default" }} />
                           </div>
                         </div>
                         <div className="form-group">
-                          <label className="form-label">Font Family</label>
+                          <label className="form-label">{t("mvSettings.branding.fontFamily")}</label>
                           <input className="custom-textbox" type="text" value={settings.brandFontFamily} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                         </div>
                       </div>
@@ -1547,8 +1498,8 @@ export function MVSettings() {
                   {/* Brand logo */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <div className="section-header">
-                      <h3 className="section-title">Brand Logo</h3>
-                      <p className="section-desc">Church logo synced from the web dashboard.</p>
+                      <h3 className="section-title">{t("mvSettings.branding.brandLogo")}</h3>
+                      <p className="section-desc">{t("mvSettings.branding.brandLogoDesc")}</p>
                     </div>
 
                     <div className="settings-card fields-rows-stack">
@@ -1559,10 +1510,10 @@ export function MVSettings() {
                             alt="Church logo"
                             style={{ width: 48, height: 48, borderRadius: 8, objectFit: "contain", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)" }}
                           />
-                          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Logo synced from web dashboard</span>
+                          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{t("mvSettings.branding.logoSynced")}</span>
                         </div>
                       ) : (
-                        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>No logo set. Upload one from the web dashboard.</p>
+                        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>{t("mvSettings.branding.noLogoSet")}</p>
                       )}
                     </div>
                   </div>
@@ -1570,10 +1521,10 @@ export function MVSettings() {
                   {/* First-launch setup */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <div className="section-header">
-                      <h3 className="section-title">First-Launch Setup</h3>
-                      <p className="section-desc">Reopen the church profile setup flow for a new operator.</p>
+                      <h3 className="section-title">{t("mvSettings.branding.firstLaunchSetup")}</h3>
+                      <p className="section-desc">{t("mvSettings.branding.firstLaunchSetupDesc")}</p>
                     </div>
-                    <button className="action-btn" onClick={handleResetChurchOnboarding} title="Reset"><RefreshCw size={14} /> Reset Onboarding</button>
+                    <button className="action-btn" onClick={handleResetChurchOnboarding} title={t("mvSettings.branding.resetOnboarding")}><RefreshCw size={14} /> {t("mvSettings.branding.resetOnboarding")}</button>
                   </div>
                 </div>
               )}
@@ -1585,8 +1536,8 @@ export function MVSettings() {
               {activeTab === "usage" && (
                 <div className="settings-section">
                   <div className="section-header">
-                    <h3 className="section-title">Credits Overview</h3>
-                    <p className="section-desc">Track your AI credits usage and plan details.</p>
+                    <h3 className="section-title">{t("mvSettings.credits.creditsOverview")}</h3>
+                    <p className="section-desc">{t("mvSettings.credits.creditsOverviewDesc")}</p>
                   </div>
 
                   {/* ── Trial Banner ── */}
@@ -1601,15 +1552,15 @@ export function MVSettings() {
                         <Calendar size={18} style={{ color: "#1D4ED8" }} />
                         <div>
                           <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary)" }}>
-                            Growth Trial — {trialDaysLeft} Day{trialDaysLeft !== 1 ? "s" : ""} Remaining
+                            {t("mvSettings.credits.trial.growthTrialDaysRemaining", { trialDaysLeft })}
                           </div>
                           <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                            Ends {trialEndDate} · All premium features are active · {t("common.upgradePlansStartToday", { amount: "3,500" })}
+                            {t("mvSettings.credits.trial.trialEndsDate", { trialEndDate })} · {t("common.upgradePlansStartToday", { amount: "3,500" })}
                           </div>
                         </div>
                       </div>
-                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/subscription/plans to upgrade", "accent")} title="Upgrade">
-                        <ExternalLink size={12} /> Upgrade
+                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => window.open("https://makechurcheasy.creatorstudioslabs.stream/subscription/plans", "_blank", "noopener,noreferrer")} title={t("mvSettings.credits.upgrade")}>
+                        <ExternalLink size={12} /> {t("mvSettings.credits.upgrade")}
                       </button>
                     </div>
                   )}
@@ -1618,35 +1569,35 @@ export function MVSettings() {
                   <div className="settings-card credits-dashboard" style={{ marginBottom: "24px" }}>
                     <div className="credits-dashboard-grid">
                       <div className="credits-stat">
-                        <span className="credits-stat-label">Current Plan</span>
+                        <span className="credits-stat-label">{t("mvSettings.credits.currentPlan")}</span>
                         <div className="credits-stat-value-row">
-                          <span className="credits-stat-value">{planLabel} Plan</span>
+                          <span className="credits-stat-value">{planLabel} {t("mvSettings.credits.plan")}</span>
                           <span className="feature-tag-pill" style={{
                             textTransform: "uppercase",
                             fontSize: "12px",
                             background: trialActive ? "rgba(29,78,216,0.15)" : "rgba(16,185,129,0.15)",
                             color: trialActive ? "#1D4ED8" : "var(--success-color)",
-                          }}>{trialActive ? "Active Trial" : "Active"}</span>
+                          }}>{trialActive ? t("mvSettings.credits.activeTrial") : t("mvSettings.credits.active")}</span>
                         </div>
                       </div>
                       <div className="credits-stat">
-                        <span className="credits-stat-label">Credits Remaining</span>
-                        <span className="credits-stat-value credits-accent">{isUnlimited ? "Unlimited" : formatCredits(planCredits)}</span>
+                        <span className="credits-stat-label">{t("mvSettings.credits.creditsRemaining")}</span>
+                        <span className="credits-stat-value credits-accent">{isUnlimited ? t("mvSettings.credits.unlimited") : formatCredits(planCredits)}</span>
                       </div>
                       <div className="credits-stat">
-                        <span className="credits-stat-label">This Month</span>
-                        <span className="credits-stat-value">{isUnlimited ? "—" : `${creditsUsedThisMonth} Credits Used`}</span>
+                        <span className="credits-stat-label">{t("mvSettings.credits.thisMonth")}</span>
+                        <span className="credits-stat-value">{isUnlimited ? "—" : t("mvSettings.credits.creditsUsed", { creditsUsedThisMonth })}</span>
                       </div>
                       <div className="credits-stat">
-                        <span className="credits-stat-label">Next Reset</span>
-                        <span className="credits-stat-value">{isUnlimited ? "N/A" : (() => { const d = new Date(); d.setMonth(d.getMonth() + 1, 1); return d.toLocaleDateString("en-US", { month: "long", day: "numeric" }); })()}</span>
+                        <span className="credits-stat-label">{t("mvSettings.credits.nextReset")}</span>
+                        <span className="credits-stat-value">{isUnlimited ? t("mvSettings.credits.notApplicable") : (() => { const d = new Date(); d.setMonth(d.getMonth() + 1, 1); return d.toLocaleDateString(undefined, { month: "long", day: "numeric" }); })()}</span>
                       </div>
                     </div>
 
                     {!isUnlimited && (
                       <div className="credits-progress-section">
                         <div className="credits-progress-header">
-                          <span className="credits-progress-text">{creditsUsedThisMonth} of {formatCredits(planCredits)} Credits Used</span>
+                          <span className="credits-progress-text">{t("mvSettings.credits.creditsUsedOf", { creditsUsedThisMonth, planCredits: formatCredits(planCredits) })}</span>
                           <span className="credits-progress-pct">{usagePct}%</span>
                         </div>
                         <div className="credits-progress-track">
@@ -1658,9 +1609,9 @@ export function MVSettings() {
 
                   {/* ── Recent Transactions ── */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <h4 className="section-title">Recent Transactions</h4>
+                    <h4 className="section-title">{t("mvSettings.credits.recentTransactions")}</h4>
                     {recentTransactions.length === 0 ? (
-                      <p className="section-desc" style={{ marginTop: "8px" }}>No transactions yet.</p>
+                      <p className="section-desc" style={{ marginTop: "8px" }}>{t("mvSettings.credits.noTransactionsYet")}</p>
                     ) : (
                       <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
                         {recentTransactions.map((tx) => (
@@ -1673,7 +1624,7 @@ export function MVSettings() {
                             <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                               <span style={{ fontWeight: 600 }}>{tx.description}</span>
                               <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>
-                                {new Date(tx.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                {new Date(tx.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                               </span>
                             </div>
                             <span style={{ fontWeight: 700, color: tx.amount < 0 ? "#EF4444" : "#22C55E" }}>
@@ -1687,22 +1638,22 @@ export function MVSettings() {
 
                   {/* ── About Credits ── */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <h4 className="section-title">About Credits</h4>
+                    <h4 className="section-title">{t("mvSettings.credits.aboutCredits")}</h4>
                     <p className="section-desc about-credits-lead">
-                      Credits are only used when MakeChurchEasy runs AI for transcription, translation, or content generation.
+                      {t("mvSettings.credits.creditsPowerAi")}
                     </p>
 
                     <div className="about-credits-stack">
                       <div className="about-credits-block">
-                        <div className="about-credits-block-title">Does not use credits</div>
+                        <div className="about-credits-block-title">{t("mvSettings.credits.doNotConsumeCredits")}</div>
                         <div className="about-credits-grid">
                           {[
-                            "Bible Presentation",
-                            "Worship Presentation",
-                            "Media Management",
-                            "OBS Integration",
-                            "Themes",
-                            "Lower Thirds",
+                            t("mvSettings.credits.biblePresentation"),
+                            t("mvSettings.credits.worshipPresentation"),
+                            t("mvSettings.credits.mediaManagement"),
+                            t("mvSettings.credits.obsIntegration"),
+                            t("mvSettings.credits.themes"),
+                            t("mvSettings.credits.lowerThirds"),
                           ].map((item, i) => (
                             <div key={i} className="about-credit-item">
                               <Check size={13} />
@@ -1711,43 +1662,43 @@ export function MVSettings() {
                           ))}
                         </div>
                         <p className="about-credits-note">
-                          Your normal presentation workflow stays available without reducing your credit balance.
+                          {t("mvSettings.credits.normalWorkflowNote")}
                         </p>
                       </div>
 
                       <div className="about-credits-block">
-                        <div className="about-credits-block-title">Uses credits</div>
+                        <div className="about-credits-block-title">{t("mvSettings.credits.creditConsumption")}</div>
                         <div className="credit-rates-grid">
                           {[
                             {
                               icon: Radio,
-                              title: "Speech-to-Scripture",
-                              cost: "1 credit / minute",
-                              description: "Live sermon transcription and automatic scripture detection while the app is listening.",
+                              title: t("mvSettings.credits.rate.speechToScripture.title"),
+                              cost: t("mvSettings.credits.rate.speechToScripture.cost"),
+                              description: t("mvSettings.credits.rate.speechToScripture.description"),
                             },
                             {
                               icon: Globe,
-                              title: "Transcript Translation",
-                              cost: "1 credit / 150 words",
-                              description: "Translating a saved transcript into another language uses credits based on transcript length.",
+                              title: t("mvSettings.credits.rate.transcriptTranslation.title"),
+                              cost: t("mvSettings.credits.rate.transcriptTranslation.cost"),
+                              description: t("mvSettings.credits.rate.transcriptTranslation.description"),
                             },
                             {
                               icon: FileText,
-                              title: "AI Sermon Summary",
-                              cost: "5 credits",
-                              description: "Generates a concise sermon summary with key takeaways.",
+                              title: t("mvSettings.credits.rate.aiSermonSummary.title"),
+                              cost: t("mvSettings.credits.rate.aiSermonSummary.cost"),
+                              description: t("mvSettings.credits.rate.aiSermonSummary.description"),
                             },
                             {
                               icon: FileText,
-                              title: "AI Sermon Notes",
-                              cost: "10 credits",
-                              description: "Turns a sermon into structured notes for follow-up, study, or sharing.",
+                              title: t("mvSettings.credits.rate.aiSermonNotes.title"),
+                              cost: t("mvSettings.credits.rate.aiSermonNotes.cost"),
+                              description: t("mvSettings.credits.rate.aiSermonNotes.description"),
                             },
                             {
                               icon: Zap,
-                              title: "AI Sermon Points",
-                              cost: "10 credits",
-                              description: "Builds key sermon points with explanations and supporting scriptures.",
+                              title: t("mvSettings.credits.rate.aiSermonPoints.title"),
+                              cost: t("mvSettings.credits.rate.aiSermonPoints.cost"),
+                              description: t("mvSettings.credits.rate.aiSermonPoints.description"),
                             },
                           ].map((item) => {
                             const Icon = item.icon;
@@ -1768,7 +1719,7 @@ export function MVSettings() {
                           })}
                         </div>
                         <p className="about-credits-note">
-                          AI-assisted worship import can also use credits based on document size. Larger files are split into multiple AI batches, and each AI-processed batch adds usage. Every charge appears in Recent Transactions above.
+                          {t("mvSettings.credits.aiImportNote")}
                         </p>
                       </div>
                     </div>
@@ -1901,7 +1852,7 @@ export function MVSettings() {
         feature="Mobile Remote"
         requiredPlan="growth"
         currentPlan={effectivePlan}
-        message="Mobile Remote access is available on Growth and Pro plans."
+        message="Mobile Remote access is available on Growth."
       />
     </div >
   );

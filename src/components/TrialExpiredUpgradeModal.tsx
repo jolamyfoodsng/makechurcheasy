@@ -44,7 +44,7 @@ export default function TrialExpiredUpgradeModal() {
     <div
       className="trial-expired-upgrade"
       role="dialog"
-      aria-modal="true"
+      aria-modal="false"
       aria-labelledby="trial-expired-upgrade-title"
       onClick={handleDismiss}
     >
@@ -53,7 +53,7 @@ export default function TrialExpiredUpgradeModal() {
           type="button"
           className="trial-expired-upgrade__close"
           onClick={handleDismiss}
-          aria-label="Dismiss"
+          aria-label="Close trial ended notice"
         >
           <Icon name="close" size={18} />
         </button>
@@ -69,8 +69,9 @@ export default function TrialExpiredUpgradeModal() {
             Upgrade to continue using MakeChurchEasy
           </h2>
           <p className="trial-expired-upgrade__copy">
-            Your free trial has ended. Upgrade to Growth to keep presentation,
-            broadcast, library, and team tools active for your church.
+            Your account has already fallen back to Free. Upgrade to Growth to
+            keep presentation, broadcast, library, and team tools active for
+            your church.
           </p>
         </div>
 

@@ -605,8 +605,6 @@ interface DiagItem {
 function StepTest({
   onFinish,
   onBack,
-  onTutorial,
-  tutorialUrl,
 }: {
   onFinish: () => void;
   onBack: () => void;

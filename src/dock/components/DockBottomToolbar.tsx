@@ -28,6 +28,8 @@ interface Props {
   onDisplayModeChange?: (mode: DisplayMode) => void;
   /** Whether the segmented control shows the morphing pulse */
   morphing?: boolean;
+  /** Hide Full/LT mode controls when the output is fixed to fullscreen */
+  hideOverlayModeToggle?: boolean;
   /** Action buttons rendered between the divider and spacer */
   children?: React.ReactNode;
   /** Label for the clear button */
@@ -52,6 +54,7 @@ export default function DockBottomToolbar({
   displayMode = "single",
   onDisplayModeChange,
   morphing = false,
+  hideOverlayModeToggle = false,
   children,
   clearLabel,
   onClear,
@@ -135,54 +138,55 @@ export default function DockBottomToolbar({
   return (
     <div className="dock-btm-toolbar dock-btm-toolbar--compact" ref={toolbarRef}>
       <div className="dock-btm-toolbar__row">
-        {/* Segmented: Full ▼ | LT */}
-        <div
-          className={`dock-btm-segmented${morphing ? " dock-btm-segmented--morphing" : ""}`}
-          role="group"
-          aria-label={t("dock.bottomToolbar.overlayModeLabel")}
-        >
-          <div className="dock-btm-display-mode-anchor" ref={displayModeMenuRef}>
+        {!hideOverlayModeToggle && (
+          <div
+            className={`dock-btm-segmented${morphing ? " dock-btm-segmented--morphing" : ""}`}
+            role="group"
+            aria-label={t("dock.bottomToolbar.overlayModeLabel")}
+          >
+            <div className="dock-btm-display-mode-anchor" ref={displayModeMenuRef}>
+              <button
+                type="button"
+                className={`dock-btm-segmented__item dock-btm-segmented__item--full${overlayMode === "fullscreen" ? " dock-btm-segmented__item--active" : ""}`}
+                onClick={() => {
+                  if (!morphing && overlayMode !== "fullscreen") onModeChange("fullscreen");
+                }}
+                disabled={morphing}
+                aria-busy={morphing}
+                title={t("dock.bottomToolbar.fullscreenTooltip")}
+              >
+                {t("dock.bottomToolbar.fullLabel")}
+              </button>
+              {showDisplayModeMenu && onDisplayModeChange && (
+                <div className="dock-btm-display-mode-menu" role="menu">
+                  {DISPLAY_MODES.map((mode) => (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      className={`dock-btm-display-mode-menu__item${displayMode === mode.id ? " dock-btm-display-mode-menu__item--active" : ""}`}
+                      onClick={() => handleDisplayModeSelect(mode.id)}
+                      role="menuitem"
+                    >
+                      {t(mode.labelKey)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               type="button"
-              className={`dock-btm-segmented__item dock-btm-segmented__item--full${overlayMode === "fullscreen" ? " dock-btm-segmented__item--active" : ""}`}
+              className={`dock-btm-segmented__item${overlayMode === "lower-third" ? " dock-btm-segmented__item--active" : ""}`}
               onClick={() => {
-                if (!morphing && overlayMode !== "fullscreen") onModeChange("fullscreen");
+                if (!morphing && overlayMode !== "lower-third") onModeChange("lower-third");
               }}
               disabled={morphing}
               aria-busy={morphing}
-              title={t("dock.bottomToolbar.fullscreenTooltip")}
+              title={t("dock.bottomToolbar.lowerThirdTooltip")}
             >
-              {t("dock.bottomToolbar.fullLabel")}
+              {t("dock.bottomToolbar.ltLabel")}
             </button>
-            {showDisplayModeMenu && onDisplayModeChange && (
-              <div className="dock-btm-display-mode-menu" role="menu">
-                {DISPLAY_MODES.map((mode) => (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    className={`dock-btm-display-mode-menu__item${displayMode === mode.id ? " dock-btm-display-mode-menu__item--active" : ""}`}
-                    onClick={() => handleDisplayModeSelect(mode.id)}
-                    role="menuitem"
-                  >
-                    {t(mode.labelKey)}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
-          <button
-            type="button"
-            className={`dock-btm-segmented__item${overlayMode === "lower-third" ? " dock-btm-segmented__item--active" : ""}`}
-            onClick={() => {
-              if (!morphing && overlayMode !== "lower-third") onModeChange("lower-third");
-            }}
-            disabled={morphing}
-            aria-busy={morphing}
-            title={t("dock.bottomToolbar.lowerThirdTooltip")}
-          >
-            {t("dock.bottomToolbar.ltLabel")}
-          </button>
-        </div>
+        )}
 
         <div className="dock_bottom_bar">
           {/* Visibility toggle — always accessible */}

@@ -20,6 +20,7 @@ const ENV_CONFIG = getEnvConfig();
 const ONLINE_API = ENV_CONFIG.authApiUrl;
 const PLAN_KEY = "ocs-dock-plan";
 const ENTITLEMENTS_KEY = "ocs-dock-entitlements";
+const DOCK_AUTH_USER_ID_KEY = "mce-dock-auth-user-id";
 
 type LocalAuthStatus = "authenticated" | "unauthenticated" | "unreachable";
 
@@ -27,6 +28,16 @@ function clearDockAuthCache(): void {
   try {
     localStorage.removeItem(getUserScopedKey(PLAN_KEY));
     localStorage.removeItem(getUserScopedKey(ENTITLEMENTS_KEY));
+    localStorage.removeItem(DOCK_AUTH_USER_ID_KEY);
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+function storeDockAuthUserId(userId: unknown): void {
+  if (typeof userId !== "string" || !userId.trim()) return;
+  try {
+    localStorage.setItem(DOCK_AUTH_USER_ID_KEY, userId.trim());
   } catch {
     // ignore localStorage failures
   }
@@ -52,6 +63,8 @@ async function checkLocalAuth(expectedDeviceId: string): Promise<LocalAuthStatus
       clearDockAuthCache();
       return "unauthenticated";
     }
+
+    storeDockAuthUserId(data.user?.id);
 
     if (data.user?.plan) {
       const effectivePlan = normalizePlanId(
@@ -93,6 +106,7 @@ async function checkDeviceOnline(deviceId: string): Promise<boolean> {
       const data = await res.json();
       const profile = data?.account?.user;
       if (profile?.plan) {
+        storeDockAuthUserId(profile.id);
         const effectivePlan = normalizePlanId(
           profile.effectivePlan || resolveCanonicalPlan(profile as any)
         );

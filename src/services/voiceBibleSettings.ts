@@ -1,7 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
 import { getLocalLlmRuntimeStatus } from "./localLlm";
 import { getByKey, putRecord, STORES, getCurrentUserId } from "./db";
 import { obsService } from "./obsService";
+import { safeTauriInvoke } from "./tauriSafe";
 import type {
   VoiceBibleInputOption,
   VoiceBibleObsInputOption,
@@ -23,7 +23,7 @@ export const DEFAULT_VOICE_BIBLE_SETTINGS: VoiceBibleSettings = {
   ollamaBaseUrl: "http://127.0.0.1:11434",
   ollamaModel: "qwen3-embedding:4b",
   ollamaNormalizerModel: "qwen2.5:3b",
-  detectionSpeed: "balanced",
+  detectionSpeed: "sharp",
 };
 
 const OBS_AUDIO_INPUT_KINDS = new Set([
@@ -39,7 +39,6 @@ function normalizeVoiceBibleSettings(
   fallbackSemanticMode: VoiceBibleSettings["semanticMode"] = DEFAULT_VOICE_BIBLE_SETTINGS.semanticMode,
 ): VoiceBibleSettings {
   const semanticModeCandidate = raw?.semanticMode as string | undefined;
-  const detectionSpeedCandidate = raw?.detectionSpeed as string | undefined;
   return {
     audioSourceMode:
       raw?.audioSourceMode === "obs-input" ? "obs-input" : "system-mic",
@@ -60,12 +59,7 @@ function normalizeVoiceBibleSettings(
           : semanticModeCandidate === "off" || semanticModeCandidate === "lexical-only"
             ? "off"
             : fallbackSemanticMode,
-    detectionSpeed:
-      detectionSpeedCandidate === "fast"
-        ? "fast"
-        : detectionSpeedCandidate === "accurate"
-          ? "accurate"
-          : "balanced",
+    detectionSpeed: "sharp",
     ollamaBaseUrl:
       typeof raw?.ollamaBaseUrl === "string" && raw.ollamaBaseUrl.trim()
         ? raw.ollamaBaseUrl
@@ -122,17 +116,17 @@ export async function saveVoiceBibleSettings(
 }
 
 export async function getVoiceBibleRuntimeStatus(): Promise<VoiceBibleRuntimeStatus> {
-  return invoke<VoiceBibleRuntimeStatus>("get_voice_bible_runtime_status");
+  return safeTauriInvoke<VoiceBibleRuntimeStatus>("get_voice_bible_runtime_status");
 }
 
 export async function prepareVoiceBibleModel(): Promise<VoiceBibleRuntimeStatus> {
-  return invoke<VoiceBibleRuntimeStatus>("prepare_voice_bible_model");
+  return safeTauriInvoke<VoiceBibleRuntimeStatus>("prepare_voice_bible_model");
 }
 
 export async function transcribeVoiceAudio(
   wavData: Uint8Array,
 ): Promise<string> {
-  return invoke<string>("transcribe_voice_audio", {
+  return safeTauriInvoke<string>("transcribe_voice_audio", {
     wavData: Array.from(wavData),
   });
 }

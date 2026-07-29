@@ -13,7 +13,7 @@
  *
  * Plan enforcement:
  *   • Free: max 3 songs, no bulk import
- *   • Basic: max 70 songs, bulk import, translation, tickers
+ *   • Basic: max 50 songs, tickers, lower thirds, and multiview
  *   • Growth+: unlimited songs, unlimited multiview
  *   • Existing songs are NEVER hidden or deleted on downgrade.
  */
@@ -995,7 +995,7 @@ export function SongsTab() {
           open={showUpgradeModal}
           onClose={() => setShowUpgradeModal(false)}
           feature="songs"
-          requiredPlan={effectivePlan === "free" ? "basic" : effectivePlan === "basic" ? "growth" : "pro"}
+          requiredPlan={effectivePlan === "free" ? "basic" : "growth"}
           currentPlan={effectivePlan}
           message={`Your ${effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)} plan allows up to ${songLimit} songs. Upgrade for more.`}
         />

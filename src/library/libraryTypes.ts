@@ -43,8 +43,14 @@ export interface MediaItem {
   createdAt: string;
   /** ISO date string for when a remote-backed asset was saved locally */
   downloadedAt?: string;
-  /** Optional origin marker for remote-backed assets saved locally */
-  source?: "local" | "template-cloudflare";
+  /** Optional origin marker for remote-backed/generated assets saved locally */
+  source?: "local" | "template-cloudflare" | "document-conversion";
+  /** Original document name when this item is a rendered PDF/DOCX page. */
+  documentSourceName?: string;
+  /** 1-based page/slide number when rendered from a document. */
+  documentPageNumber?: number;
+  /** Total rendered pages/slides in the source document. */
+  documentPageCount?: number;
   /** Original remote video URL for revalidation/debugging */
   remoteUrl?: string;
   /** Remote asset id from the source catalog */

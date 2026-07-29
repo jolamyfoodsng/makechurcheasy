@@ -20,7 +20,6 @@ const PLAN_LABELS: Record<string, string> = {
   free: "Free",
   basic: "Basic",
   growth: "Growth",
-  pro: "Pro",
   trial: "Trial",
   ambassador: "Ambassador",
 };
@@ -29,7 +28,7 @@ const PLAN_LABELS: Record<string, string> = {
 const NEXT_PLAN: Record<string, string> = {
   free: "basic",
   basic: "growth",
-  growth: "pro",
+  growth: "growth",
 };
 
 interface FeatureGuardProps {

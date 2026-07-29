@@ -213,7 +213,7 @@ const NO_SF: SafeFrameConfig = {
 // Template Definitions
 // ---------------------------------------------------------------------------
 
-export const TEMPLATE_LIBRARY: TemplateDefinition[] = [
+const RAW_TEMPLATE_LIBRARY: TemplateDefinition[] = [
   // ── 1. Full Camera ──
 
 
@@ -1908,6 +1908,12 @@ export const TEMPLATE_LIBRARY: TemplateDefinition[] = [
   // - Mission Giving
   // - Partner Sunday
 ];
+
+export const TEMPLATE_LIBRARY: TemplateDefinition[] = RAW_TEMPLATE_LIBRARY.filter((template) =>
+  !template.tags.some((tag) => tag.toLowerCase() === "lower-third") &&
+  !/lower\s+third/i.test(template.name) &&
+  !/lower-third/i.test(template.description),
+);
 
 // ---------------------------------------------------------------------------
 // Create an MVLayout from a TemplateDefinition

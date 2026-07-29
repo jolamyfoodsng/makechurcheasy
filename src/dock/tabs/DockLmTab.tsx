@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Copy, Edit2, MonitorUp, Check, StickyNote, HelpCircle } from "lucide-react";
 import { dockObsClient, type DockObsStatus } from "../dockObsClient";
 import { dockClient, type DockStateMessage, type DockCommandType } from "../../services/dockBridge";
+import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
+import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import type { VoiceBibleCandidate, TranscriptEntry } from "../../services/voiceBibleTypes";
 
 import { parseScriptureReference } from "../../services/scriptureParser";
@@ -16,8 +18,14 @@ import BibleAiOnboarding, {
   isBibleAiOnboardingCompleted,
   resetBibleAiOnboarding,
 } from "../../../others/BibleAiOnboarding";
+import { publishDockStagedItemToPresentation } from "../../services/presentationDockBridge";
+import {
+  appendTextToDockNotes,
+  resolveDockNotesPresentationSettings,
+} from "../dockNotesStorage";
 
 type LmStatus = "idle" | "requesting-mic" | "connecting" | "listening" | "error";
+type LmOverlayMode = "fullscreen" | "lower-third";
 
 const LM_DOCK_SETTINGS_KEY = "ocs-lm-dock-settings";
 const DOCK_BIBLE_PREFS_KEY = "ocs-dock-bible-preferences";
@@ -25,15 +33,10 @@ const HISTORY_STORAGE_KEY = "ocs-lm-dock-history";
 const MAX_HISTORY = 50;
 const MAX_TRANSCRIPT_LINES = 40;
 const MAX_QUEUE_SIZE = 3;
-const SUGGESTION_EXPIRY_MS = 20_000;
 const SUGGESTION_COOLDOWN_MS = 60_000;
-const NOTES_STORAGE_KEY = "ocs-dock-notes-v1";
 
-interface DockNote {
-  id: string;
-  title: string;
-  content: string;
-  updatedAt: number;
+interface DockLmTabProps {
+  presentationOutputTarget?: DockPresentationOutputTarget;
 }
 
 interface FreshnessInfo {
@@ -54,7 +57,7 @@ interface LmDockSettings {
   autoPushSuggestions: boolean;
   autoNavigate: boolean;
   translation: string;
-  overlayMode: "fullscreen" | "lower-third";
+  overlayMode: LmOverlayMode;
   autoScroll: boolean;
   pushScene: "ai" | "main";
   duplicateWindowSec: number;
@@ -73,15 +76,36 @@ const DEFAULT_SETTINGS: LmDockSettings = {
   suggestionLifetime: 20,
 };
 
+export function normalizeLmOverlayMode(value: unknown, fallback: LmOverlayMode = "fullscreen"): LmOverlayMode {
+  return value === "fullscreen" || value === "lower-third" ? value : fallback;
+}
+
+export function isLmAutoPushSuppressed(
+  lastPushedAt: number | undefined,
+  nowMs: number,
+  duplicateWindowSec: number,
+): boolean {
+  if (!lastPushedAt) return false;
+  const windowMs = Math.max(0, Number(duplicateWindowSec) || 0) * 1000;
+  return windowMs > 0 && nowMs - lastPushedAt < windowMs;
+}
+
 function loadSettings(): LmDockSettings {
   const globalDefaults = getSettings();
+  const fallbackOverlayMode = normalizeLmOverlayMode(globalDefaults.defaultBibleOverlayMode);
   try {
     const raw = localStorage.getItem(getUserScopedKey(LM_DOCK_SETTINGS_KEY));
-    if (!raw) return { ...DEFAULT_SETTINGS, overlayMode: globalDefaults.defaultBibleOverlayMode };
+    if (!raw) return { ...DEFAULT_SETTINGS, overlayMode: fallbackOverlayMode };
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    const merged = { ...DEFAULT_SETTINGS, ...parsed };
+    return {
+      ...merged,
+      overlayMode: normalizeLmOverlayMode(merged.overlayMode, fallbackOverlayMode),
+      duplicateWindowSec: Math.max(0, Number(merged.duplicateWindowSec) || DEFAULT_SETTINGS.duplicateWindowSec),
+      suggestionLifetime: Math.max(5, Number(merged.suggestionLifetime) || DEFAULT_SETTINGS.suggestionLifetime),
+    };
   } catch {
-    return { ...DEFAULT_SETTINGS, overlayMode: globalDefaults.defaultBibleOverlayMode };
+    return { ...DEFAULT_SETTINGS, overlayMode: fallbackOverlayMode };
   }
 }
 
@@ -116,12 +140,21 @@ function saveHistory(history: string[]): void {
 }
 
 
-export default function DockLmTab() {
+export default function DockLmTab({
+  presentationOutputTarget = "obs",
+}: DockLmTabProps = {}) {
   const { t } = useTranslation();
+  const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   const isTestEnv = getEnvConfig().isTest;
   const openAppToStartText = isTestEnv
     ? "Open Speech to Scripture in MakeChurchEasy Test on this computer to start listening."
     : t("lm.openAppToStart");
+  const pushActionLabel = presentationLinkMode ? "Show" : t("lm.pushToObs");
+  const pushActionTitle = presentationLinkMode
+    ? "Show this scripture on the presentation screen"
+    : t("lm.pushToObsTitle");
+  const transcriptPushLabel = presentationLinkMode ? "Show on screen" : "Push to OBS";
+  const transcriptPushShortLabel = presentationLinkMode ? "Show" : "Push OBS";
 
   const [settings, setSettings] = useState<LmDockSettings>(() => loadSettings());
   const [showSettings, setShowSettings] = useState(false);
@@ -133,14 +166,18 @@ export default function DockLmTab() {
       return next;
     });
   }, []);
+  const updateOverlayMode = useCallback((mode: LmOverlayMode) => {
+    updateSetting("overlayMode", mode);
+  }, [updateSetting]);
 
   const [obsStatus, setObsStatus] = useState<DockObsStatus>("disconnected");
 
   useEffect(() => {
+    if (presentationLinkMode) return () => { };
     const unsub = dockObsClient.onStatusChange((status) => setObsStatus(status));
     void dockObsClient.connect();
     return unsub;
-  }, []);
+  }, [presentationLinkMode]);
 
   const [appConnected, setAppConnected] = useState(false);
 
@@ -169,9 +206,7 @@ export default function DockLmTab() {
   const [matching, setMatching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const lastAutoPushRef = useRef<string | null>(null);
-  const lastAutoPushTimeRef = useRef(0);
-  const pushedVersesRef = useRef<Set<string>>(new Set());
+  const pushedVerseTimesRef = useRef<Map<string, number>>(new Map());
   const pollRelayRef = useRef<(() => Promise<void>) | null>(null);
   const relayBusyRef = useRef(false);
 
@@ -232,7 +267,7 @@ export default function DockLmTab() {
     return unsub;
   }, []);
 
-  const creditLabel = proUnlocked ? "Pro" : creditBalance > 0 ? `${creditBalance} cr` : null;
+  const creditLabel = proUnlocked ? "Full" : creditBalance > 0 ? `${creditBalance} cr` : null;
 
   const [pushing, setPushing] = useState(false);
   const [pushSuccess, setPushSuccess] = useState<string | null>(null);
@@ -359,15 +394,15 @@ export default function DockLmTab() {
     }
   }, [entries, settings.autoScroll]);
 
-  // ── Push verse to OBS ──
+  // ── Show/push detected scripture ──
   const handlePushVerse = useCallback(async (candidate: VoiceBibleCandidate, source?: "queue" | "suggestion") => {
-    if (obsStatus !== "connected") {
+    if (!presentationLinkMode && obsStatus !== "connected") {
       setPushError(t("lm.notConnected"));
       return;
     }
 
     const refKey = `${candidate.book}:${candidate.chapter}:${candidate.verse}`;
-    pushedVersesRef.current.add(refKey);
+    pushedVerseTimesRef.current.set(refKey, Date.now());
 
     setPushing(true);
     setPushError(null);
@@ -383,20 +418,43 @@ export default function DockLmTab() {
         ? (biblePrefs.fullscreenQuickThemeSettings as Record<string, unknown> | null | undefined)
         : (biblePrefs.lowerThirdQuickThemeSettings as Record<string, unknown> | null | undefined);
 
-      const targetScene = settings.pushScene === "ai" ? "MCE Presentation" : undefined;
+      if (presentationLinkMode) {
+        await publishDockStagedItemToPresentation({
+          type: "bible",
+          label: candidate.label,
+          subtitle: candidate.snippet,
+          data: {
+            book: candidate.book,
+            chapter: candidate.chapter,
+            verse: candidate.verse,
+            verseEnd: candidate.verse,
+            verseRange: String(candidate.verse),
+            referenceLabel: candidate.label,
+            translation: settings.translation,
+            verseText: candidate.snippet,
+            overlayMode: "fullscreen",
+            theme: (biblePrefs.fullscreenThemeId as string | undefined) ?? themeId,
+            bibleThemeSettings: (biblePrefs.fullscreenQuickThemeSettings as Record<string, unknown> | null | undefined) ?? quickSettings ?? null,
+            liveOverrides: null,
+            _dockLive: true,
+          },
+        });
+      } else {
+        const targetScene = settings.pushScene === "ai" ? "MCE Presentation" : undefined;
 
-      await dockObsClient.pushBible({
-        book: candidate.book,
-        chapter: candidate.chapter,
-        verse: candidate.verse,
-        translation: settings.translation,
-        referenceLabel: candidate.label,
-        verseText: candidate.snippet,
-        overlayMode,
-        theme: themeId,
-        liveOverrides: quickSettings || null,
-        targetScene,
-      });
+        await dockObsClient.pushBible({
+          book: candidate.book,
+          chapter: candidate.chapter,
+          verse: candidate.verse,
+          translation: settings.translation,
+          referenceLabel: candidate.label,
+          verseText: candidate.snippet,
+          overlayMode,
+          theme: themeId,
+          liveOverrides: quickSettings || null,
+          targetScene,
+        });
+      }
 
       if (source === "queue") {
         locallyRemovedRef.current.add(`${candidate.book}:${candidate.chapter}:${candidate.verse}`);
@@ -419,38 +477,70 @@ export default function DockLmTab() {
     } finally {
       setPushing(false);
     }
-  }, [obsStatus, settings.overlayMode, settings.translation, settings.pushScene, t]);
+  }, [obsStatus, presentationLinkMode, settings.overlayMode, settings.translation, settings.pushScene, t]);
 
-  // ── Push transcript text to OBS ──
+  // ── Show/push transcript text ──
   const pushTranscriptToOBS = useCallback(async (text: string) => {
-    if (obsStatus !== "connected") {
+    const cleanText = text.trim();
+    if (!cleanText) {
+      showToast("Nothing to push");
+      return;
+    }
+    if (!presentationLinkMode && obsStatus !== "connected") {
       showToast(t("lm.notConnected"));
       return;
     }
     setPushing(true);
     try {
-      const biblePrefs = loadBiblePrefs();
-      const overlayMode = settings.overlayMode;
-      const quickSettings = overlayMode === "fullscreen"
-        ? (biblePrefs.fullscreenQuickThemeSettings as Record<string, unknown> | null | undefined)
-        : (biblePrefs.lowerThirdQuickThemeSettings as Record<string, unknown> | null | undefined);
-
-      await dockObsClient.pushNotesLyrics({
-        sectionText: text,
-        sectionLabel: "Transcript Note",
-        songTitle: "",
-        overlayMode,
-        bibleThemeSettings: quickSettings as Record<string, unknown> | null ?? null,
-        liveOverrides: null,
+      const notesSettings = await resolveDockNotesPresentationSettings(settings.overlayMode, {
+        forceOverlayMode: true,
       });
+      const obsData = {
+        sectionText: cleanText,
+        sectionLabel: "Transcript Note",
+        songTitle: "Transcript Note",
+        overlayMode: notesSettings.overlayMode,
+        bibleThemeSettings: notesSettings.themeSettings,
+        liveOverrides: null,
+        backgroundOnly: false,
+      };
+
+      if (presentationLinkMode) {
+        await publishDockStagedItemToPresentation({
+          type: "notes",
+          label: "Transcript Note",
+          subtitle: cleanText,
+          data: {
+            ...obsData,
+            theme: notesSettings.themeId,
+            _dockLive: true,
+          },
+        });
+        showToast("Shown on presentation screen");
+        return;
+      }
+
+      const bringNotesForward = dockObsClient
+        .bringNotesOverlayForward(notesSettings.overlayMode)
+        .catch(() => { });
+
+      void bringNotesForward
+        .then(() => dockObsClient.primeNotesOverlay(obsData))
+        .catch(() => { });
+
+      await bringNotesForward.then(() => (
+        notesSettings.overlayMode === "lower-third"
+          ? dockObsClient.pushNotesOverlayFast(obsData)
+          : dockObsClient.pushNotesLyrics(obsData)
+      ));
 
       showToast("Pushed to OBS");
     } catch (err) {
-      showToast("Failed to push to OBS");
+      showToast(presentationLinkMode ? "Failed to show on presentation screen" : "Failed to push to OBS");
     } finally {
       setPushing(false);
     }
-  }, [obsStatus, settings.overlayMode, showToast, t]);
+  }, [obsStatus, presentationLinkMode, settings.overlayMode, showToast, t]);
 
   const isListening = lmStatus === "listening" || lmStatus === "connecting" || lmStatus === "requesting-mic";
 
@@ -514,12 +604,21 @@ export default function DockLmTab() {
     const isQueueItem = queue.some((q) => `${q.book}:${q.chapter}:${q.verse}` === refKey);
     const shouldAutoPush = isQueueItem ? settings.autoPushQueue : settings.autoPushSuggestions;
 
-    if (shouldAutoPush && obsStatus === "connected" && !pushing && !pushedVersesRef.current.has(refKey)) {
-      lastAutoPushRef.current = refKey;
-      lastAutoPushTimeRef.current = nowMs;
+    for (const [key, pushedAt] of Array.from(pushedVerseTimesRef.current.entries())) {
+      if (!isLmAutoPushSuppressed(pushedAt, nowMs, settings.duplicateWindowSec)) {
+        pushedVerseTimesRef.current.delete(key);
+      }
+    }
+
+    if (
+      shouldAutoPush &&
+      (presentationLinkMode || obsStatus === "connected") &&
+      !pushing &&
+      !isLmAutoPushSuppressed(pushedVerseTimesRef.current.get(refKey), nowMs, settings.duplicateWindowSec)
+    ) {
       void handlePushVerse(best);
     }
-  }, [candidates, settings.autoPushQueue, settings.autoPushSuggestions, settings.autoNavigate, obsStatus, pushing, handlePushVerse, navigateBibleDock, queue]);
+  }, [candidates, settings.autoPushQueue, settings.autoPushSuggestions, settings.autoNavigate, settings.duplicateWindowSec, obsStatus, presentationLinkMode, pushing, handlePushVerse, navigateBibleDock, queue]);
 
   const confirmStop = useCallback(() => {
     sendLmCommand("lm:stop");
@@ -547,27 +646,30 @@ export default function DockLmTab() {
 
   const currentVerse = processedQueue[0] ?? null;
   const queueVerses = processedQueue.slice(1);
+  const suggestionExpiryMs = Math.max(5, Number(settings.suggestionLifetime) || 20) * 1000;
+  const queuedVerseKeys = useMemo(() => new Set(processedQueue.map((c) => `${c.book}:${c.chapter}:${c.verse}`)), [processedQueue]);
 
   const filteredSuggestions = useMemo(() => {
     const nowMs = Date.now();
     return suggestions.filter((s) => {
       const key = `${s.book}:${s.chapter}:${s.verse}`;
+      if (queuedVerseKeys.has(key)) return false;
       const detectedAt = detectedAtRef.current.get(key) ?? nowMs;
-      if (nowMs - detectedAt > SUGGESTION_EXPIRY_MS) return false;
+      if (nowMs - detectedAt > suggestionExpiryMs) return false;
       const cooldownAt = suggestionCooldownRef.current.get(key);
       if (cooldownAt && nowMs - cooldownAt < SUGGESTION_COOLDOWN_MS) return false;
       return true;
     });
-  }, [suggestions, now]);
+  }, [queuedVerseKeys, suggestionExpiryMs, suggestions, now]);
 
   useEffect(() => {
-    const cutoff = Date.now() - SUGGESTION_EXPIRY_MS;
+    const cutoff = Date.now() - suggestionExpiryMs;
     for (const [key, time] of Array.from(detectedAtRef.current.entries())) {
       if (time < cutoff) {
         detectedAtRef.current.delete(key);
       }
     }
-  }, [filteredSuggestions, now]);
+  }, [filteredSuggestions, now, suggestionExpiryMs]);
 
   useEffect(() => {
     const cutoff = Date.now() - SUGGESTION_COOLDOWN_MS;
@@ -657,50 +759,15 @@ export default function DockLmTab() {
   }, [selectedIndices, recentEntries, handleCancelSelection]);
 
   const handlePushToNotes = useCallback(async (text: string) => {
-    const today = new Date().toLocaleDateString("en-US", {
-      month: "short", day: "numeric", year: "numeric",
-    });
-
-    const raw = localStorage.getItem(getUserScopedKey(NOTES_STORAGE_KEY));
-    const notes: DockNote[] = raw ? JSON.parse(raw) : [];
-    let note = notes.find((n) => n.title === today);
-    const now = Date.now();
-
-    if (note) {
-      note.content = note.content + "\n\n" + text;
-      note.updatedAt = now;
-    } else {
-      note = {
-        id: crypto.randomUUID?.() ?? `note-${now}`,
-        title: today,
-        content: text,
-        updatedAt: now,
-      };
-      notes.unshift(note);
-    }
-
-    localStorage.setItem(getUserScopedKey(NOTES_STORAGE_KEY), JSON.stringify(notes));
-
-    if (obsStatus !== "connected") {
-      showToast("OBS not connected");
+    const cleanText = text.trim();
+    if (!cleanText) {
+      showToast("Nothing to save");
       return;
     }
 
-    try {
-      await dockObsClient.pushNotesLyrics({
-        sectionText: text,
-        sectionLabel: "Transcript Note",
-        songTitle: today,
-        overlayMode: settings.overlayMode,
-        bibleThemeSettings: null,
-        liveOverrides: null,
-        backgroundOnly: false,
-      });
-      showToast("Pushed to Notes");
-    } catch {
-      showToast("Failed to push to OBS");
-    }
-  }, [settings.overlayMode, obsStatus, showToast]);
+    const result = appendTextToDockNotes(cleanText);
+    showToast(result ? "Saved to Notes" : "Nothing to save");
+  }, [showToast]);
 
   const handleEditPushToOBS = useCallback(() => {
     pushTranscriptToOBS(editModal.text);
@@ -708,6 +775,61 @@ export default function DockLmTab() {
   }, [editModal.text, pushTranscriptToOBS]);
 
   const maxSelectedIndex = selectedIndices.size > 0 ? Math.max(...Array.from(selectedIndices)) : -1;
+  const renderOverlayModeSwitch = useCallback((variant: "bar" | "settings" = "bar") => {
+    const options: Array<{ mode: LmOverlayMode; label: string; icon: string; title: string }> = [
+      {
+        mode: "fullscreen",
+        label: t("lm.fullscreen"),
+        icon: "fullscreen",
+        title: "Show detected scriptures as a full-screen slide",
+      },
+      {
+        mode: "lower-third",
+        label: t("lm.lowerThird"),
+        icon: "move_down",
+        title: "Show detected scriptures as a lower-third overlay",
+      },
+    ];
+
+    return (
+      <div
+        style={variant === "settings" ? S.modeSwitchPanel : S.modeSwitchBar}
+        data-testid="lm-overlay-mode-switch"
+      >
+        <div style={variant === "settings" ? S.modeSwitchLabelWide : S.modeSwitchLabel}>
+          <Icon name="slideshow" size={variant === "settings" ? 13 : 12} />
+          <span>{t("lm.overlayMode")}</span>
+        </div>
+        <div
+          style={variant === "settings" ? S.modeSegmentedWide : S.modeSegmented}
+          role="group"
+          aria-label={t("lm.overlayMode")}
+        >
+          {options.map((option) => {
+            const active = settings.overlayMode === option.mode;
+            return (
+              <button
+                key={option.mode}
+                type="button"
+                style={{
+                  ...S.modeSegmentButton,
+                  ...(variant === "settings" ? S.modeSegmentButtonWide : undefined),
+                  ...(active ? S.modeSegmentButtonActive : undefined),
+                }}
+                onClick={() => updateOverlayMode(option.mode)}
+                aria-pressed={active}
+                title={option.title}
+                data-testid={`lm-mode-${option.mode}`}
+              >
+                <Icon name={option.icon} size={12} />
+                <span>{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }, [settings.overlayMode, t, updateOverlayMode]);
 
   return (
     <div style={S.root} ref={rootRef}>
@@ -795,6 +917,8 @@ export default function DockLmTab() {
         </div>
       </div>
 
+      {!presentationLinkMode && renderOverlayModeSwitch()}
+
       <div style={S.tabBar} ref={tabBarRef}>
         {(["up-next", "transcript", "history"] as const).map((tab) => (
           <button
@@ -848,12 +972,12 @@ export default function DockLmTab() {
                     <button
                       style={S.pushBtn}
                       onClick={() => void handlePushVerse(currentVerse, "queue")}
-                      disabled={pushing || obsStatus !== "connected"}
-                      title={t("lm.pushToObsTitle")}
+                      disabled={pushing || (!presentationLinkMode && obsStatus !== "connected")}
+                      title={pushActionTitle}
                       data-onboarding="push-btn"
                     >
                       <Icon name="play" size={11} />
-                      {t("lm.pushToObs")}
+                      {pushActionLabel}
                     </button>
                   </div>
                 </div>
@@ -869,7 +993,7 @@ export default function DockLmTab() {
                         key={`pin-${key}-${i}`}
                         style={S.pinnedChip}
                         onClick={() => void handlePushVerse(c, "queue")}
-                        title="Click to push to OBS"
+                        title={presentationLinkMode ? "Click to show on the presentation screen" : "Click to push to OBS"}
                       >
                         📌 {c.label}
                         <button
@@ -929,11 +1053,11 @@ export default function DockLmTab() {
                         <button
                           style={S.pushBtn}
                           onClick={() => void handlePushVerse(c, "queue")}
-                          disabled={pushing || obsStatus !== "connected"}
-                          title={t("lm.pushToObsTitle")}
+                          disabled={pushing || (!presentationLinkMode && obsStatus !== "connected")}
+                          title={pushActionTitle}
                         >
                           <Icon name="play" size={11} />
-                          {t("lm.pushToObs")}
+                          {pushActionLabel}
                         </button>
                       </div>
                     </div>
@@ -942,6 +1066,55 @@ export default function DockLmTab() {
               })}
             </div>
           </div>
+
+          {filteredSuggestions.length > 0 && (
+            <div style={S.suggestionsSection} data-onboarding="suggestions-section">
+              <div style={S.sectionHeader}>
+                <span style={S.sectionLabel}>{t("lm.suggestions", "Suggestions")}</span>
+                <span style={S.sectionCount}>{filteredSuggestions.length}</span>
+              </div>
+              <div style={S.suggestionsScroll}>
+                {filteredSuggestions.map((c, i) => {
+                  const key = `${c.book}:${c.chapter}:${c.verse}`;
+                  const detectedAt = detectedAtRef.current.get(key) ?? Date.now();
+                  const freshness = getFreshness(detectedAt, now);
+
+                  return (
+                    <div key={`suggestion-${key}-${i}`} style={S.suggestionCard}>
+                      <div style={S.queueCardTop}>
+                        <span style={S.queueRef}>{c.label}</span>
+                        <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
+                      </div>
+                      {c.snippet && (
+                        <div style={S.verseText}>{c.snippet}</div>
+                      )}
+                      <div style={S.queueCardBottom}>
+                        <span style={S.suggestionHint}>{t("lm.manualSuggestion", "Suggested match")}</span>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <button
+                            style={S.pinBtnSmall}
+                            onClick={() => handlePinVerse(c)}
+                            title="Pin verse"
+                          >
+                            <Icon name="push_pin" size={10} />
+                          </button>
+                          <button
+                            style={S.pushBtn}
+                            onClick={() => void handlePushVerse(c, "suggestion")}
+                            disabled={pushing || (!presentationLinkMode && obsStatus !== "connected")}
+                            title={pushActionTitle}
+                          >
+                            <Icon name="play" size={11} />
+                            {pushActionLabel}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -971,7 +1144,7 @@ export default function DockLmTab() {
                       ...(showActionBar ? { paddingBottom: 0 } : {}),
                       ...(isLive ? S.transcriptItemLive : {}),
                     }}
-                    title="Click to copy · Double-click to select · Edit or Push to OBS once selected"
+                    title={`Click to copy · Double-click to select · Save to Notes or ${transcriptPushLabel} once selected`}
                     onClick={(e) => {
                       if ((e.target as HTMLElement).closest('[data-action-bar]')) return;
                       if ((e.target as HTMLElement).tagName.toLowerCase() === "input") return;
@@ -1025,10 +1198,10 @@ export default function DockLmTab() {
                           <button
                             style={S.btnAction}
                             onClick={(e) => { e.stopPropagation(); handleCopyAll(); }}
-                            title="Copy All"
+                            title="Copy selected transcript lines"
                           >
                             <Copy size={12} />
-                            <span style={S.btnText}>Copy All</span>
+                            <span style={S.btnText}>Copy</span>
                           </button>
                           <button
                             style={S.btnAction}
@@ -1050,7 +1223,7 @@ export default function DockLmTab() {
                             title="Save to Notes"
                           >
                             <StickyNote size={12} />
-                            <span style={S.btnText}>Notes</span>
+                            <span style={S.btnText}>Save to Notes</span>
                           </button>
                           <button
                             style={S.btnPrimary}
@@ -1061,11 +1234,11 @@ export default function DockLmTab() {
                               pushTranscriptToOBS(text);
                               handleCancelSelection();
                             }}
-                            title="Push to OBS"
-                            disabled={pushing || obsStatus !== "connected"}
+                            title={transcriptPushLabel}
+                            disabled={pushing || (!presentationLinkMode && obsStatus !== "connected")}
                           >
                             <MonitorUp size={12} />
-                            <span style={S.btnText}>Push OBS</span>
+                            <span style={S.btnText}>{transcriptPushShortLabel}</span>
                           </button>
                         </div>
                       </div>
@@ -1190,7 +1363,7 @@ export default function DockLmTab() {
       )}
 
       <div style={S.hintBar}>
-        <span style={S.hintText}>Click to copy a line · Double-click to select · Edit or Push to OBS once selected</span>
+        <span style={S.hintText}>Click to copy a line · Double-click to select · Save to Notes or {transcriptPushLabel}</span>
       </div>
 
       {contextMenu.visible && (
@@ -1246,9 +1419,9 @@ export default function DockLmTab() {
               }
               setContextMenu(prev => ({ ...prev, visible: false }));
             }}
-            disabled={pushing || obsStatus !== "connected"}
+            disabled={pushing || (!presentationLinkMode && obsStatus !== "connected")}
           >
-            Push to OBS
+            {transcriptPushLabel}
           </button>
           <button
             style={S.contextMenuItem}
@@ -1293,9 +1466,9 @@ export default function DockLmTab() {
               <button
                 style={S.btnPrimary}
                 onClick={() => { handleEditPushToOBS(); handleCancelSelection(); }}
-                disabled={pushing || obsStatus !== "connected"}
+                disabled={pushing || (!presentationLinkMode && obsStatus !== "connected")}
               >
-                Push to OBS
+                {transcriptPushLabel}
               </button>
             </div>
           </div>
@@ -1345,21 +1518,13 @@ export default function DockLmTab() {
                 <span style={S.settingHint}>{t("lm.autoPushSuggestionsHint")}</span>
               </div>
 
-              <div style={S.settingsGroup}>
-                <div style={S.settingsGroupLabel}>OVERLAY MODE</div>
-                <div style={S.settingRow}>
-                  <span style={S.settingLabel}>Overlay display</span>
-                  <select
-                    style={S.settingSelect}
-                    value={settings.overlayMode}
-                    onChange={(e) => updateSetting("overlayMode", e.target.value as "fullscreen" | "lower-third")}
-                  >
-                    <option value="fullscreen">Fullscreen</option>
-                    <option value="lower-third">Lower Third</option>
-                  </select>
+              {!presentationLinkMode && (
+                <div style={S.settingsGroup}>
+                  <div style={S.settingsGroupLabel}>{t("lm.overlayMode")}</div>
+                  {renderOverlayModeSwitch("settings")}
+                  <span style={S.settingHint}>{t("lm.overlayModeHint", "Choose how detected scriptures and transcript notes appear when pushed.")}</span>
                 </div>
-                <span style={S.settingHint}>Choose how pushed verses appear on screen. Fullscreen fills the entire OBS scene. Lower third shows a compact overlay at the bottom.</span>
-              </div>
+              )}
 
               <div style={S.settingsGroup}>
                 <div style={S.settingsGroupLabel}>NAVIGATION</div>
@@ -1375,20 +1540,22 @@ export default function DockLmTab() {
                 <span style={S.settingHint}>{t("lm.autoNavigateHint")}</span>
               </div>
 
-              <div style={S.settingsGroup}>
-                <div style={S.settingsGroupLabel}>PUSH TARGET</div>
-                <div style={S.settingRow}>
-                  <span style={S.settingLabel}>{t("lm.pushTarget")}</span>
-                  <select
-                    style={S.settingSelect}
-                    value={settings.pushScene}
-                    onChange={(e) => updateSetting("pushScene", e.target.value as "ai" | "main")}
-                  >
-                    <option value="ai">{t("lm.pushTargetAi")}</option>
-                    <option value="main">{t("lm.pushTargetMain")}</option>
-                  </select>
+              {!presentationLinkMode && (
+                <div style={S.settingsGroup}>
+                  <div style={S.settingsGroupLabel}>PUSH TARGET</div>
+                  <div style={S.settingRow}>
+                    <span style={S.settingLabel}>{t("lm.pushTarget")}</span>
+                    <select
+                      style={S.settingSelect}
+                      value={settings.pushScene}
+                      onChange={(e) => updateSetting("pushScene", e.target.value as "ai" | "main")}
+                    >
+                      <option value="ai">{t("lm.pushTargetAi")}</option>
+                      <option value="main">{t("lm.pushTargetMain")}</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div style={S.settingsGroup}>
                 <div style={S.settingsGroupLabel}>DEDUPLICATION</div>
@@ -1543,6 +1710,86 @@ const S: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     transition: "all 0.15s",
   },
+  modeSwitchBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "7px 10px",
+    borderBottom: "1px solid var(--dock-border, rgba(255,255,255,0.06))",
+    background: "rgba(255,255,255,0.025)",
+    flexShrink: 0,
+  },
+  modeSwitchPanel: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  modeSwitchLabel: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    minWidth: 74,
+    color: "var(--dock-text, #E2E8F0)",
+    fontSize: 10,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  },
+  modeSwitchLabelWide: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    color: "var(--dock-text, #E2E8F0)",
+    fontSize: 11,
+    fontWeight: 700,
+  },
+  modeSegmented: {
+    flex: 1,
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    minHeight: 30,
+    padding: 2,
+    borderRadius: 7,
+    border: "1px solid rgba(255,255,255,0.09)",
+    background: "rgba(0,0,0,0.16)",
+    gap: 2,
+  },
+  modeSegmentedWide: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    minHeight: 34,
+    padding: 2,
+    borderRadius: 7,
+    border: "1px solid rgba(255,255,255,0.09)",
+    background: "rgba(0,0,0,0.16)",
+    gap: 2,
+  },
+  modeSegmentButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    minWidth: 0,
+    minHeight: 26,
+    padding: "4px 6px",
+    border: "none",
+    borderRadius: 5,
+    background: "transparent",
+    color: "var(--dock-text-dim, #94A3B8)",
+    fontSize: 10,
+    fontWeight: 700,
+    fontFamily: "inherit",
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    transition: "background 0.15s, color 0.15s",
+  },
+  modeSegmentButtonWide: {
+    minHeight: 30,
+    fontSize: 11,
+  },
+  modeSegmentButtonActive: {
+    background: "#9F442B",
+    color: "#FFFFFF",
+  },
 
   tabBar: {
     display: "flex",
@@ -1570,7 +1817,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   tabActive: {
     color: "#3B82F6",
-    borderBottomColor: "#3B82F6",
+    borderBottom: "2px solid #3B82F6",
     background: "rgba(59,130,246,0.06)",
   },
   tabContent: {
@@ -1732,6 +1979,21 @@ const S: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: 6,
   },
+  suggestionsSection: {
+    flex: "0 0 auto",
+    maxHeight: "42%",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    borderTop: "1px solid var(--dock-border, rgba(255,255,255,0.06))",
+  },
+  suggestionsScroll: {
+    overflowY: "auto",
+    padding: "4px 12px 8px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
   sectionEmpty: {
     flex: 1,
     display: "flex",
@@ -1754,6 +2016,15 @@ const S: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: 4,
   },
+  suggestionCard: {
+    padding: "6px 10px",
+    borderRadius: 6,
+    border: "1px solid rgba(34,197,94,0.22)",
+    background: "rgba(34,197,94,0.05)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
   queueCardTop: {
     display: "flex",
     alignItems: "center",
@@ -1769,6 +2040,10 @@ const S: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "space-between",
     marginTop: 2,
+  },
+  suggestionHint: {
+    fontSize: 10,
+    color: "var(--dock-text-dim, #94A3B8)",
   },
 
 
@@ -1869,9 +2144,14 @@ const S: Record<string, React.CSSProperties> = {
     display: "flex",
     flexWrap: "wrap",
     alignItems: "center",
-    marginTop: 4,
-    padding: "2px 4px 2px 28px",
-    gap: 4,
+    justifyContent: "space-between",
+    marginTop: 8,
+    marginLeft: 28,
+    padding: 6,
+    gap: 8,
+    border: "1px solid rgba(59,130,246,0.22)",
+    borderRadius: 8,
+    background: "rgba(15,23,42,0.82)",
   },
   actionBarLeft: {
     display: "flex",
@@ -1884,13 +2164,13 @@ const S: Record<string, React.CSSProperties> = {
     color: "var(--dock-text, #E2E8F0)",
   },
   btnCancel: {
-    background: "none",
-    border: "none",
-    color: "#64748B",
-    fontSize: 10,
+    background: "transparent",
+    border: "1px solid rgba(148,163,184,0.18)",
+    color: "#CBD5E1",
+    fontSize: 11,
     cursor: "pointer",
-    padding: "2px 6px",
-    borderRadius: 4,
+    padding: "4px 8px",
+    borderRadius: 6,
   },
   actionBarRight: {
     display: "flex",
@@ -1900,13 +2180,13 @@ const S: Record<string, React.CSSProperties> = {
   btnAction: {
     display: "flex",
     alignItems: "center",
-    gap: 3,
-    background: "#334155",
+    gap: 4,
+    background: "#1F2937",
     color: "#E2E8F0",
-    border: "none",
-    padding: "3px 6px",
-    borderRadius: 3,
-    fontSize: 10,
+    border: "1px solid rgba(148,163,184,0.18)",
+    padding: "5px 8px",
+    borderRadius: 6,
+    fontSize: 11,
     fontWeight: 500,
     cursor: "pointer",
     whiteSpace: "nowrap",
@@ -1914,13 +2194,13 @@ const S: Record<string, React.CSSProperties> = {
   btnPrimary: {
     display: "flex",
     alignItems: "center",
-    gap: 3,
+    gap: 4,
     background: "#2563eb",
     color: "#fff",
     border: "none",
-    padding: "3px 6px",
-    borderRadius: 3,
-    fontSize: 10,
+    padding: "5px 9px",
+    borderRadius: 6,
+    fontSize: 11,
     fontWeight: 500,
     cursor: "pointer",
     whiteSpace: "nowrap",

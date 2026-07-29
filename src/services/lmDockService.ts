@@ -11,8 +11,6 @@
  * is its own line. Interim text is a separate active entry with a live indicator.
  */
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { dockBridge } from "./dockBridge";
 import { ScriptureDetectionEngine } from "./scriptureEngine";
 import { createScriptureSpeechState, resolveScriptureSpeech, type ScriptureSpeechState } from "./scriptureParser";
@@ -20,7 +18,7 @@ import { getOverlayBaseUrl } from "./overlayUrl";
 import { getSettings as getMvSettings } from "../multiview/mvStore";
 import type { VoiceBibleCandidate, TranscriptEntry, DetectionSpeed, LmDockTelemetry } from "./voiceBibleTypes";
 import { DETECTION_SPEED_CONFIG } from "./voiceBibleTypes";
-import { getVoiceBibleSettings } from "./voiceBibleSettings";
+import { hasTauriInvoke, safeTauriInvoke, safeTauriListen, type TauriUnlisten } from "./tauriSafe";
 
 /**
  * Detect hallucinated transcripts from AssemblyAI.
@@ -97,13 +95,13 @@ class LmDockService {
     suggestions: [],
     matching: false,
     inputLevel: 0,
-    detectionSpeed: "balanced",
+    detectionSpeed: "sharp",
   };
 
   // Audio refs — Rust-side AssemblyAI realtime STT (via Tauri commands)
-  private transcriptUnlisten: UnlistenFn | null = null;
-  private statusUnlisten: UnlistenFn | null = null;
-  private levelUnlisten: UnlistenFn | null = null;
+  private transcriptUnlisten: TauriUnlisten | null = null;
+  private statusUnlisten: TauriUnlisten | null = null;
+  private levelUnlisten: TauriUnlisten | null = null;
   private visibilityHandler: (() => void) | null = null;
   private focusHandler: (() => void) | null = null;
   private blurHandler: (() => void) | null = null;
@@ -119,11 +117,9 @@ class LmDockService {
   private liveQuoteSearchTimer: ReturnType<typeof setTimeout> | null = null;
   private liveQuoteSearchPendingText = "";
   private lastLiveQuoteSearchAt = 0;
-  /** Cooldown: prevent auto-push to OBS more than once every 3 seconds */
+  /** Cooldown: prevent repeated OBS pushes while keeping reference changes responsive */
   private lastAutoPushTime = 0;
-  private static readonly AUTO_PUSH_COOLDOWN_MS = 3000;
-  /** One-shot flag: auto-push to OBS only once per listening session */
-  private hasAutoPushed = false;
+  private static readonly AUTO_PUSH_COOLDOWN_MS = 750;
   /** Resolved overlay base URL (http://127.0.0.1:<port>) — set once at init */
   private overlayBaseUrl: string | null = null;
 
@@ -132,7 +128,7 @@ class LmDockService {
   private sentenceBuffer = "";
   /** Monotonically increasing search ID — discards stale results */
   private latestSearchId = 0;
-  private static readonly PAUSE_THRESHOLD_MS = 1000;
+  private static readonly PAUSE_THRESHOLD_MS = 450;
   private static readonly LIVE_QUOTE_SEARCH_WINDOW_WORDS = 18;
 
   // ── Interim provisional search ────────────────────────────────────────────
@@ -148,10 +144,10 @@ class LmDockService {
   private lastLevelNotifyAt = 0;
   private lastLevelValue = 0;
 
-  // ── Detection speed ───────────────────────────────────────────────────────
-  /** Current detection speed mode */
-  private detectionSpeed: DetectionSpeed = "balanced";
-  /** Cached detection speed config */
+  // ── Detection profile ─────────────────────────────────────────────────────
+  /** Fixed sharp detection mode. Kept as a typed field for Rust/settings compatibility. */
+  private detectionSpeed: DetectionSpeed = "sharp";
+  /** Cached sharp-profile config */
   private get speedConfig() {
     return DETECTION_SPEED_CONFIG[this.detectionSpeed];
   }
@@ -714,12 +710,8 @@ class LmDockService {
       return;
     }
 
-    // One-shot: only auto-push once per listening session
-    if (this.hasAutoPushed) {
-      return;
-    }
-
-    // Cooldown — prevent continuous pushing when ASR detects rapid-fire verses
+    // Cooldown — prevent duplicate rapid-fire pushes while allowing the next
+    // detected reference to reach OBS without waiting several seconds.
     const now = Date.now();
     if (now - this.lastAutoPushTime < LmDockService.AUTO_PUSH_COOLDOWN_MS) {
       return;
@@ -755,7 +747,6 @@ class LmDockService {
       };
 
       await bibleObsService.pushSlide(slide, null, true, false, "fullscreen");
-      this.hasAutoPushed = true;
     } catch (err) {
       console.warn("[LmDockService] Auto-push to OBS failed:", err);
     }
@@ -777,13 +768,7 @@ class LmDockService {
     this.startInFlight = true;
     const token = ++this.sessionToken;
 
-    // Load detection speed from settings
-    try {
-      const settings = await getVoiceBibleSettings();
-      this.detectionSpeed = settings.detectionSpeed;
-    } catch {
-      // Use default "balanced" if settings load fails
-    }
+    this.detectionSpeed = "sharp";
 
     // Reset telemetry for new session
     this.telemetry = {
@@ -811,10 +796,12 @@ class LmDockService {
     };
     this.scriptureEngine.reset();
     this.scriptureSpeechState = createScriptureSpeechState();
-    this.hasAutoPushed = false;
     this.pushStatus();
 
     try {
+      if (!hasTauriInvoke()) {
+        throw new Error("Speech listening must run inside the desktop app so the microphone engine can start.");
+      }
       if (token !== this.sessionToken) return;
 
       // Preload Bible data to avoid first-call latency
@@ -850,7 +837,7 @@ class LmDockService {
       }
 
       // Listen for transcript events from Rust backend
-      this.transcriptUnlisten = await listen<{
+      this.transcriptUnlisten = await safeTauriListen<{
         text: string;
         end_of_turn: boolean;
         audio_start: number;
@@ -887,10 +874,9 @@ class LmDockService {
 
           const interimRef = resolveScriptureSpeech(text, this.scriptureSpeechState, Date.now());
 
-          // Run scripture engine on interim text for live suggestions.
-          // Accurate mode waits for final/sentence text unless this is a
-          // direct reference command like "John three sixteen".
-          if (interimRef || (!this.speedConfig.requireSentenceBoundary && text.length >= 15)) {
+          // Run scripture engine on interim text for live reference commands
+          // such as "John three sixteen" while quote search continues below.
+          if (interimRef || (!this.speedConfig.requireSentenceBoundary && text.length >= 8)) {
             void this.processChunk(text, false);
           }
 
@@ -899,10 +885,8 @@ class LmDockService {
           // Uses a throttle so updates can happen during speech instead of
           // waiting for a full pause.
           //
-          // Word minimum and throttle window are controlled by detection speed mode:
-          //   fast:      3 words, 250ms throttle
-          //   balanced:  5 words, 300ms throttle
-          //   accurate:  8 words, 400ms throttle
+          // The fixed best profile searches after enough words are present
+          // and throttles updates so live speech stays responsive.
           const interimWordCount = text.split(/\s+/).filter(Boolean).length;
           const minWords = this.speedConfig.minWords;
           if (
@@ -921,7 +905,7 @@ class LmDockService {
       }
 
       // Listen for status events from Rust backend
-      this.statusUnlisten = await listen<{ status: string }>(
+      this.statusUnlisten = await safeTauriListen<{ status: string }>(
         "assemblyai-status",
         (event) => {
           if (token !== this.sessionToken) return;
@@ -945,7 +929,7 @@ class LmDockService {
       }
 
       // Listen for audio level events from Rust backend
-      this.levelUnlisten = await listen<{ level: number }>(
+      this.levelUnlisten = await safeTauriListen<{ level: number }>(
         "assemblyai-audio-level",
         (event) => {
           if (token !== this.sessionToken) return;
@@ -978,8 +962,8 @@ class LmDockService {
           const silenceMs = Date.now() - this.lastSpeechTime;
           const wordCount = this.speechBuffer.split(/\s+/).filter(Boolean).length;
 
-          // Trigger search after 500ms silence with enough content
-          if (silenceMs > 500 && (this.speechBuffer.length > 20 || wordCount > 4)) {
+          // Trigger search quickly after a short pause with enough content.
+          if (silenceMs > 180 && (this.speechBuffer.length > 8 || wordCount >= this.speedConfig.minWords)) {
             const phrase = this.speechBuffer.trim();
             this.speechBuffer = "";
             void this.processChunk(phrase, false);
@@ -999,7 +983,7 @@ class LmDockService {
       // Pass the current user gain so the Rust pipeline applies it from the start.
       const mvSettings = getMvSettings();
       const gainMultiplier = (mvSettings.inputGain ?? 100) / 100;
-      await invoke("start_assemblyai_stream", {
+      await safeTauriInvoke("start_assemblyai_stream", {
         apiKey,
         deviceId: micId || null,
         detectionSpeed: this.detectionSpeed,
@@ -1009,7 +993,7 @@ class LmDockService {
         return;
       }
       // Apply current gain (separate call so it's live-updatable)
-      await invoke("set_microphone_gain", { gain: gainMultiplier }).catch(() => { });
+      await safeTauriInvoke("set_microphone_gain", { gain: gainMultiplier }).catch(() => { });
     } catch (err) {
       if (token !== this.sessionToken) {
         return;
@@ -1074,7 +1058,7 @@ class LmDockService {
    */
   async setInputGain(gainPercent: number): Promise<void> {
     const gain = Math.max(0, Math.min(3, gainPercent / 100));
-    await invoke("set_microphone_gain", { gain }).catch(() => { });
+    await safeTauriInvoke("set_microphone_gain", { gain }).catch(() => { });
   }
 
   private cleanup(): void {
@@ -1113,7 +1097,7 @@ class LmDockService {
     }
 
     // Stop Rust-side AssemblyAI realtime STT (mic capture + transcription task)
-    invoke("stop_assemblyai_stream").catch((err) => {
+    safeTauriInvoke("stop_assemblyai_stream").catch((err) => {
       console.warn("[LmDockService] Failed to stop voice stream:", err);
     });
   }
@@ -1129,7 +1113,10 @@ class LmDockService {
     // Browser navigator.mediaDevices returns macOS Core Audio UIDs which don't
     // match cpal device names, so we must not mix the two.
     try {
-      const devices = await invoke<Array<{ id: string; name: string; is_default: boolean }>>(
+      if (!hasTauriInvoke()) {
+        return [{ id: "", label: "Default microphone" }];
+      }
+      const devices = await safeTauriInvoke<Array<{ id: string; name: string; is_default: boolean }>>(
         "list_audio_devices",
       );
       return devices.map((d) => ({ id: d.id, label: d.name }));
@@ -1200,14 +1187,15 @@ class LmDockService {
   }
 
   /**
-   * Change detection speed mode at runtime.
-   * Takes effect immediately — no restart needed.
+   * Compatibility shim for older UI/settings callers. The runtime always uses
+   * the fixed sharp profile.
    */
-  setDetectionSpeed(speed: DetectionSpeed): void {
+  setDetectionSpeed(_speed: DetectionSpeed): void {
+    const speed: DetectionSpeed = "sharp";
     this.detectionSpeed = speed;
     this.snapshot = { ...this.snapshot, detectionSpeed: speed };
     this.pushStatus();
-    invoke("set_assemblyai_stream_speed", { detectionSpeed: speed }).catch((err) => {
+    safeTauriInvoke("set_assemblyai_stream_speed", { detectionSpeed: speed }).catch((err) => {
       console.warn("[LmDockService] Failed to update AssemblyAI stream speed:", err);
     });
   }

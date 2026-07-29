@@ -7,11 +7,11 @@
  * Replaces the old SongFormModal in SongsTab.tsx.
  */
 
-import { ListX, Music, Save, Undo, Wand2, X } from "lucide-react";
+import { AlignLeft, ListX, Music, Save, Undo, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
 import { DEFAULT_THEME_SETTINGS, type BibleTheme, type BibleThemeSettings } from "../bible/types";
-import { generateSlides, parseWorshipLyricSections } from "./slideEngine";
+import { autoSplitLyricsText, generateSlides } from "./slideEngine";
 import { nextAutoSongTitle } from "./songTitleAutoGen";
 import type { Slide, Song } from "./types";
 import { saveSong } from "./worshipDb";
@@ -54,28 +54,6 @@ const LAYOUT_PRESETS = [
 const FULLSCREEN_THEMES: BibleTheme[] = BUILTIN_THEMES.filter(
   (t) => t.templateType === "fullscreen" && !t.hidden,
 );
-
-/* ── Auto-split helper ──────────────────────────────────────────────────── */
-
-/** Reformat raw lyrics text so each slide group is separated by a blank line. */
-function reformatLyrics(text: string, linesPerSlide: number): string {
-  if (!text.trim()) return text;
-  const raw = text.replace(/\n{2,}/g, "\n").trim();
-  const sections = parseWorshipLyricSections(raw, linesPerSlide);
-  if (sections.length === 0) return text;
-  const formatted = sections
-    .map((section) => {
-      const label = section.label ? `${section.label}:` : "";
-      const chunks: string[] = [];
-      for (let i = 0; i < section.lines.length; i += linesPerSlide) {
-        chunks.push(section.lines.slice(i, i + linesPerSlide).join("\n"));
-      }
-      return [label, ...chunks].filter(Boolean).join("\n\n");
-    })
-    .filter(Boolean)
-    .join("\n\n");
-  return formatted || text;
-}
 
 function capitalizeLyricsText(text: string): string {
   return text
@@ -172,10 +150,6 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  /* NOTE: reformatLyrics removed — it inserted \n\n between slide groups within
-     sections, which the Dock parser (splitting on \n\n) misinterpreted as
-     section boundaries, destroying the song structure. */
-
   /* ── Live slide generation ── */
   const slides: Slide[] = useMemo(
     () => (lyrics.trim() ? generateSlides(lyrics, linesPerSlide, autoSplit) : []),
@@ -202,7 +176,8 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
   const handleLayoutChange = useCallback(
     (preset: (typeof LAYOUT_PRESETS)[number]) => {
       if (preset.autoSplit) {
-        const formatted = reformatLyrics(lyricsRef.current, preset.linesPerSlide);
+        formatUndoRef.current = lyricsRef.current;
+        const formatted = autoSplitLyricsText(lyricsRef.current, preset.linesPerSlide);
         setLyrics(formatted);
       }
       setLinesPerSlide(preset.linesPerSlide);
@@ -423,6 +398,18 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
                     Tt
                   </button>
                 </div>
+                <button
+                  type="button"
+                  className="ws-lyrics-toolbar__btn ws-lyrics-toolbar__btn--accent"
+                  onClick={() => {
+                    setAutoSplit(true);
+                    applyLyricsTransformation((text) => autoSplitLyricsText(text, linesPerSlide), "all");
+                  }}
+                  title={`Auto split into ${linesPerSlide} line slides`}
+                >
+                  <AlignLeft size={12} />
+                  <span>Auto Split</span>
+                </button>
                 <button
                   type="button"
                   className="ws-lyrics-toolbar__btn"

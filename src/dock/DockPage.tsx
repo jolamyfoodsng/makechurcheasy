@@ -4,12 +4,14 @@
  * The dock keeps Bible, Worship, and Media production controls inside OBS.
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { dockClient, dockBridge, type DockStateMessage } from "../services/dockBridge";
 import { dockObsClient, type DockObsStatus } from "./dockObsClient";
 import { DOCK_TABS, type DockTab, type DockStagedItem } from "./dockTypes";
+import type { DockPresentationOutputTarget } from "./dockPresentationTarget";
+import { isPresentationLinkTarget } from "./dockPresentationTarget";
 import DockBibleTab from "./tabs/DockBibleTab";
 import DockMediaTab from "./tabs/DockMediaTab";
 import DockWorshipTab from "./tabs/DockWorshipTab";
@@ -39,6 +41,7 @@ import DockUploadToasts from "./DockUploadToasts";
 import { DockUpgradeModal } from "./components/DockUpgradeModal";
 import { registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
 import { fetchPlanFromOverlayServer } from "../services/entitlementClient";
+import { publishDockStagedItemToPresentation } from "../services/presentationDockBridge";
 import "./dock.css";
 import "./dock-theme.css";
 import Icon from "./DockIcon";
@@ -139,11 +142,24 @@ function getCompactDockTabLabel(tab: DockTab, t: (key: string) => string): strin
 export default function DockPage({
   externalObsSession = false,
   presentationBibleLmSplit = false,
+  presentationOutputTarget = "obs",
+  hideLowerThirdControls = false,
+  hideTickerControls = false,
+  hiddenTabs = [],
+  hideShellHeader = false,
+  onActiveTabChange,
 }: {
   externalObsSession?: boolean;
   presentationBibleLmSplit?: boolean;
+  presentationOutputTarget?: DockPresentationOutputTarget;
+  hideLowerThirdControls?: boolean;
+  hideTickerControls?: boolean;
+  hiddenTabs?: DockTab[];
+  hideShellHeader?: boolean;
+  onActiveTabChange?: (tab: DockTab) => void;
 } = {}) {
   const { t } = useTranslation();
+  const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   // Synchronous config reader (reads from cache, falls back to defaults)
   const cfg = readDesktopConfigCache() || DEFAULT_DESKTOP_CONFIG;
 
@@ -169,6 +185,13 @@ export default function DockPage({
   const [servicePlanner, setServicePlanner] = useState<ServicePlannerSnapshot | null>(null);
   const [projectionSettings, setProjectionSettings] = useState<ProjectionSettings>(() => loadProjectionSettings());
   const [upgradeModalMsg, setUpgradeModalMsg] = useState("");
+  const hiddenTabsKey = hiddenTabs.join("|");
+  const hiddenTabIds = useMemo(() => new Set<DockTab>(hiddenTabs), [hiddenTabsKey]);
+  const visibleDockTabs = useMemo(() => DOCK_TABS.filter((tab) => !hiddenTabIds.has(tab.id)), [hiddenTabIds]);
+  const navigableDockTabs = useMemo(
+    () => visibleDockTabs.filter((tab) => !disabledTabs.includes(tab.id)),
+    [disabledTabs, visibleDockTabs],
+  );
 
   // Register the upgrade modal trigger so any dock tab can show it.
   useEffect(() => {
@@ -205,6 +228,15 @@ export default function DockPage({
   useEffect(() => {
     saveDockShellPreferences({ activeTab, disabledTabs });
   }, [activeTab, disabledTabs]);
+
+  useEffect(() => {
+    onActiveTabChange?.(activeTab);
+  }, [activeTab, onActiveTabChange]);
+
+  useEffect(() => {
+    if (visibleDockTabs.some((tab) => tab.id === activeTab)) return;
+    setActiveTab(visibleDockTabs[0]?.id ?? "bible");
+  }, [activeTab, visibleDockTabs]);
 
   // Refresh plan from overlay server on every tab switch
   useEffect(() => {
@@ -317,7 +349,7 @@ export default function DockPage({
       void dockObsClient.connect();
     };
 
-    if (!externalObsSession) {
+    if (!externalObsSession && !presentationLinkMode) {
       // First attempt — immediate
       tryConnect();
 
@@ -437,15 +469,19 @@ export default function DockPage({
       unsubObs();
       unsubState();
       window.clearInterval(pingInterval);
-      if (!externalObsSession) {
+      if (!externalObsSession && !presentationLinkMode) {
         dockObsClient.disconnect();
       }
     };
-  }, [externalObsSession]);
+  }, [externalObsSession, presentationLinkMode]);
 
   const handleStage = useCallback((item: DockStagedItem | null) => {
     setStaged(item);
-  }, []);
+    if (!presentationLinkMode) return;
+    void publishDockStagedItemToPresentation(item).catch((error) => {
+      console.warn("[Dock] Failed to publish staged item to presentation link:", error);
+    });
+  }, [presentationLinkMode]);
 
   const handleManualConnect = useCallback(async () => {
     setObsError("");
@@ -547,7 +583,7 @@ export default function DockPage({
       {/* ═══ VERTICAL NAV (left side when dock is short) ═══ */}
       {verticalTabs && (
         <nav className="dock-vertical-nav" aria-label={t('page.dockSections')}>
-          {DOCK_TABS.filter((tab) => !disabledTabs.includes(tab.id)).map((tab) => (
+          {navigableDockTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
@@ -594,6 +630,7 @@ export default function DockPage({
         )}
 
         {/* ── Page Header (hamburger L, refresh R) ── */}
+        {!hideShellHeader && (
         <div
           role="button"
           tabIndex={0}
@@ -655,6 +692,7 @@ export default function DockPage({
             </button>
           )}
         </div>
+        )}
 
         {/* ── Sidebar ── */}
         {showSettingsMenu && (
@@ -731,10 +769,10 @@ export default function DockPage({
                   <Icon name={showTabVisibility ? "expand_less" : "expand_more"} size={14} />
                 </button>
                 {showTabVisibility && (() => {
-                  const toggleableTabs: Array<{ tab: DockTab; label: string; icon: string }> = [
+                  const toggleableTabs = ([
                     { tab: "multiview", label: t('page.shortcutTabMultiview'), icon: "grid_view" },
                     { tab: "ministry", label: t('page.shortcutTabMinistry'), icon: "campaign" },
-                  ];
+                  ] satisfies Array<{ tab: DockTab; label: string; icon: string }>).filter(({ tab }) => !hiddenTabIds.has(tab));
                   return (
                     <div className="dock-sidebar__subpanel">
                       {toggleableTabs.map(({ tab, label, icon }) => {
@@ -770,66 +808,72 @@ export default function DockPage({
                   );
                 })()}
 
-                <div className="dock-sidebar__divider" />
+                {!presentationLinkMode && !hideTickerControls && (
+                  <>
+                    <div className="dock-sidebar__divider" />
 
-                {/* Ticker Output */}
-                <div className="dock-sidebar__item" style={{ cursor: "default" }}>
-                  <Icon name="campaign" size={16} />
-                  <span>{t('dock.tickerOutput')}</span>
-                </div>
-                <div className="dock-sidebar__subpanel">
-                  {([
-                    { mode: "source" as const, icon: "view_module", label: t('dock.source'), desc: t('dock.insideCurrentScene') },
-                    { mode: "scene" as const, icon: "dashboard", label: t('dock.scene'), desc: t('dock.dedicatedSceneWithProgramBehind') },
-                  ]).map(({ mode, icon, label, desc }) => (
+                    {/* Ticker Output */}
+                    <div className="dock-sidebar__item" style={{ cursor: "default" }}>
+                      <Icon name="campaign" size={16} />
+                      <span>{t('dock.tickerOutput')}</span>
+                    </div>
+                    <div className="dock-sidebar__subpanel">
+                      {([
+                        { mode: "source" as const, icon: "view_module", label: t('dock.source'), desc: t('dock.insideCurrentScene') },
+                        { mode: "scene" as const, icon: "dashboard", label: t('dock.scene'), desc: t('dock.dedicatedSceneWithProgramBehind') },
+                      ]).map(({ mode, icon, label, desc }) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          className="dock-sidebar__radio"
+                          onClick={() => {
+                            setTickerOutputMode(mode);
+                            try { localStorage.setItem("dock-ticker-output-mode", mode); } catch { /* ignore */ }
+                          }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            width: "100%",
+                            padding: "6px 8px",
+                            border: "none",
+                            borderRadius: 3,
+                            background: tickerOutputMode === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
+                            color: tickerOutputMode === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            fontSize: 11,
+                            transition: "background 0.15s",
+                          }}
+                          title={t('common.confirm')}>
+                          <Icon name={icon} size={14} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600 }}>{label}</div>
+                            <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
+                          </div>
+                          {tickerOutputMode === mode && <Icon name="check" size={12} />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {!presentationLinkMode && (
+                  <>
+                    <div className="dock-sidebar__divider" />
+
+                    {/* Projection Settings */}
                     <button
-                      key={mode}
                       type="button"
-                      className="dock-sidebar__radio"
-                      onClick={() => {
-                        setTickerOutputMode(mode);
-                        try { localStorage.setItem("dock-ticker-output-mode", mode); } catch { /* ignore */ }
-                      }}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        width: "100%",
-                        padding: "6px 8px",
-                        border: "none",
-                        borderRadius: 3,
-                        background: tickerOutputMode === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                        color: tickerOutputMode === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
-                        cursor: "pointer",
-                        textAlign: "left",
-                        fontSize: 11,
-                        transition: "background 0.15s",
-                      }}
-                      title={t('common.confirm')}>
-                      <Icon name={icon} size={14} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600 }}>{label}</div>
-                        <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
-                      </div>
-                      {tickerOutputMode === mode && <Icon name="check" size={12} />}
+                      className="dock-sidebar__item"
+                      onClick={() => setShowProjectionSettings(!showProjectionSettings)}
+                      title={t('page.projectionSettings')}>
+                      <Icon name="videocam" size={16} />
+                      <span>{t('page.projectionSettings')}</span>
+                      <Icon name={showProjectionSettings ? "expand_less" : "expand_more"} size={14} />
                     </button>
-                  ))}
-                </div>
-
-                <div className="dock-sidebar__divider" />
-
-                {/* Projection Settings */}
-                <button
-                  type="button"
-                  className="dock-sidebar__item"
-                  onClick={() => setShowProjectionSettings(!showProjectionSettings)}
-                  title={t('page.projectionSettings')}>
-                  <Icon name="videocam" size={16} />
-                  <span>{t('page.projectionSettings')}</span>
-                  <Icon name={showProjectionSettings ? "expand_less" : "expand_more"} size={14} />
-                </button>
-                {showProjectionSettings && (
-                  <div className="dock-sidebar__subpanel">
+                    {showProjectionSettings && (
+                      <div className="dock-sidebar__subpanel">
                     {/* Scene Handling */}
                     <div className="dock-sidebar__section-label">{t('page.sceneHandling')}</div>
                     <div className="dock-sidebar__radio-group">
@@ -869,43 +913,47 @@ export default function DockPage({
                       ))}
                     </div>
 
-                    {/* Ticker Layer Priority */}
-                    <div className="dock-sidebar__section-label" style={{ marginTop: 8 }}>{t('dock.tickerLayerPriority')}</div>
-                    <div className="dock-sidebar__radio-group">
-                      {([
-                        { mode: "content-above" as const, icon: "flip_to_back", label: t('ministry.contentAboveTicker'), desc: t('ministry.mceContentPriority') },
-                        { mode: "ticker-above" as const, icon: "flip_to_front", label: t('ministry.tickerAboveContent'), desc: t('dock.tickerRemainsVisibleOnTop') },
-                      ]).map(({ mode, icon, label, desc }) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          className="dock-sidebar__radio"
-                          onClick={() => setProjectionSettings((s) => ({ ...s, tickerLayerPriority: mode }))}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            width: "100%",
-                            padding: "6px 8px",
-                            border: "none",
-                            borderRadius: 3,
-                            background: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                            color: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            fontSize: 11,
-                            transition: "background 0.15s",
-                          }}
-                          title={t('common.confirm')}>
-                          <Icon name={icon} size={14} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 600 }}>{label}</div>
-                            <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
-                          </div>
-                          {projectionSettings.tickerLayerPriority === mode && <Icon name="check" size={12} />}
-                        </button>
-                      ))}
-                    </div>
+                    {!hideTickerControls && (
+                      <>
+                        {/* Ticker Layer Priority */}
+                        <div className="dock-sidebar__section-label" style={{ marginTop: 8 }}>{t('dock.tickerLayerPriority')}</div>
+                        <div className="dock-sidebar__radio-group">
+                          {([
+                            { mode: "content-above" as const, icon: "flip_to_back", label: t('ministry.contentAboveTicker'), desc: t('ministry.mceContentPriority') },
+                            { mode: "ticker-above" as const, icon: "flip_to_front", label: t('ministry.tickerAboveContent'), desc: t('dock.tickerRemainsVisibleOnTop') },
+                          ]).map(({ mode, icon, label, desc }) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              className="dock-sidebar__radio"
+                              onClick={() => setProjectionSettings((s) => ({ ...s, tickerLayerPriority: mode }))}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                width: "100%",
+                                padding: "6px 8px",
+                                border: "none",
+                                borderRadius: 3,
+                                background: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
+                                color: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
+                                cursor: "pointer",
+                                textAlign: "left",
+                                fontSize: 11,
+                                transition: "background 0.15s",
+                              }}
+                              title={t('common.confirm')}>
+                              <Icon name={icon} size={14} />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 600 }}>{label}</div>
+                                <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
+                              </div>
+                              {projectionSettings.tickerLayerPriority === mode && <Icon name="check" size={12} />}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
 
                     {/* Restore Original Scene */}
                     <label
@@ -938,7 +986,9 @@ export default function DockPage({
                     <div style={{ fontSize: 10, opacity: 0.5, padding: "2px 8px 0 22px", lineHeight: 1.4 }}>
                       {t('page.presentationOnlyDesc', 'Lower thirds go to MCE Presentation only, not the Program scene')}
                     </div>
-                  </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <div className="dock-sidebar__divider" />
@@ -956,43 +1006,47 @@ export default function DockPage({
                   <span>{t('dock.history')}</span>
                 </button>
 
-                <div className="dock-sidebar__divider" />
+                {!presentationLinkMode && (
+                  <>
+                    <div className="dock-sidebar__divider" />
 
-                {/* OBS Connection */}
-                <button
-                  type="button"
-                  className="dock-sidebar__item"
-                  onClick={() => {
-                    setShowSettingsMenu(false);
-                    setShowReconnectModal(true);
-                  }}
-                  title={t('page.connection')}>
-                  <Icon name="link" size={16} />
-                  <span>{obsConnected ? t('dock.reconnectToObs') : t('dock.connectToObs')}</span>
-                </button>
+                    {/* OBS Connection */}
+                    <button
+                      type="button"
+                      className="dock-sidebar__item"
+                      onClick={() => {
+                        setShowSettingsMenu(false);
+                        setShowReconnectModal(true);
+                      }}
+                      title={t('page.connection')}>
+                      <Icon name="link" size={16} />
+                      <span>{obsConnected ? t('dock.reconnectToObs') : t('dock.connectToObs')}</span>
+                    </button>
 
-                <div className="dock-sidebar__divider" />
+                    <div className="dock-sidebar__divider" />
 
-                {/* Clear All MCE Scenes */}
-                <button
-                  type="button"
-                  className="dock-sidebar__item"
-                  onClick={() => {
-                    setShowSettingsMenu(false);
-                    setShowClearScenesConfirm(true);
-                  }}
-                  style={{ color: "var(--dock-red, #EF4444)" }}
-                  title={t('page.clearAllScenes')}>
-                  <Icon name="delete_sweep" size={16} />
-                  <span>{t('page.clearAllScenes')}</span>
-                </button>
+                    {/* Clear All MCE Scenes */}
+                    <button
+                      type="button"
+                      className="dock-sidebar__item"
+                      onClick={() => {
+                        setShowSettingsMenu(false);
+                        setShowClearScenesConfirm(true);
+                      }}
+                      style={{ color: "var(--dock-red, #EF4444)" }}
+                      title={t('page.clearAllScenes')}>
+                      <Icon name="delete_sweep" size={16} />
+                      <span>{t('page.clearAllScenes')}</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
         )}
 
         {/* ── Clear All MCE Scenes Confirmation ── */}
-        {showClearScenesConfirm && (
+        {!presentationLinkMode && showClearScenesConfirm && (
           <div className="dock-dialog-backdrop" onClick={() => { if (!clearScenesLoading) setShowClearScenesConfirm(false); }}>
             <div className="dock-dialog dock-dialog--compact" onClick={(e) => e.stopPropagation()}>
               <div className="dock-dialog__header">
@@ -1057,7 +1111,7 @@ export default function DockPage({
           </div>
         )}
 
-        {showReconnectModal && (
+        {!presentationLinkMode && showReconnectModal && (
           <div className="dock-dialog-backdrop" onClick={() => setShowReconnectModal(false)}>
             <div className="dock-dialog dock-dialog--compact" onClick={(e) => e.stopPropagation()}>
               <div className="dock-dialog__header">
@@ -1137,13 +1191,14 @@ export default function DockPage({
                       onStage={handleStage}
                       productionDefaults={productionSettings.bible}
                       appConnected={appConnected}
+                      presentationOutputTarget={presentationOutputTarget}
                       showHistory={showHistory}
                       onHistoryClose={() => setShowHistory(false)}
                     />
                   </section>
                   <section className="dock-presentation-bible-lm-pane" aria-label="Scripture assistant dock">
                     <div className="dock-presentation-bible-lm-pane__title">Scripture Assistant</div>
-                    <DockLmTab />
+                    <DockLmTab presentationOutputTarget={presentationOutputTarget} />
                   </section>
                 </div>
               ) : (
@@ -1152,6 +1207,8 @@ export default function DockPage({
                   onStage={handleStage}
                   productionDefaults={productionSettings.bible}
                   appConnected={appConnected}
+                  presentationOutputTarget={presentationOutputTarget}
+                  fullscreenOnly={hideLowerThirdControls}
                   showHistory={showHistory}
                   onHistoryClose={() => setShowHistory(false)}
                 />
@@ -1162,12 +1219,15 @@ export default function DockPage({
                 staged={staged}
                 onStage={handleStage}
                 productionDefaults={productionSettings.worship}
+                presentationOutputTarget={presentationOutputTarget}
+                fullscreenOnly={hideLowerThirdControls}
               />
             )}
             {activeTab === "media" && (
               <DockMediaTab
                 staged={staged}
                 onStage={handleStage}
+                presentationOutputTarget={presentationOutputTarget}
               />
             )}
             {activeTab === "multiview" && (
@@ -1178,6 +1238,9 @@ export default function DockPage({
                 staged={staged}
                 onStage={handleStage}
                 tickerOutputMode={tickerOutputMode}
+                presentationOutputTarget={presentationOutputTarget}
+                hideTickerControls={hideTickerControls}
+                hideLowerThirdControls={hideLowerThirdControls}
               />
             )}
           </div>
@@ -1187,7 +1250,7 @@ export default function DockPage({
       {/* ═══ HORIZONTAL TAB NAVIGATION (bottom, hidden when vertical) ═══ */}
       {!verticalTabs && (
         <nav className="dock-bottom-nav" aria-label={t('page.dockSections')}>
-          {DOCK_TABS.filter((tab) => !disabledTabs.includes(tab.id)).map((tab) => (
+          {navigableDockTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"

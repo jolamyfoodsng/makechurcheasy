@@ -154,6 +154,8 @@ const ORDINAL_MAP: Record<string, string> = {
   free: "3",      // "free" ≈ "three" (ASR confusion)
   // Abbreviated
   "1st": "1", "2nd": "2", "3rd": "3",
+  // Roman numerals as read by some ASR engines/UI text
+  i: "1", ii: "2", iii: "3",
 };
 
 /**
@@ -184,18 +186,35 @@ const NUMBERED_BOOKS: NumberedBookDef[] = [
   { base: "Thessalonians", singular: "Thessalonian", abbreviations: ["thes", "th", "thess", "thesal"] },
   { base: "Timothy", singular: "Timothy", abbreviations: ["tim", "ti", "tm"] },
   { base: "Peter", singular: "Peter", abbreviations: ["pet", "pe", "pt"] },
-  { base: "John", singular: "John", abbreviations: ["jn", "jo", "joh", "johh"] },
+  { base: "John", singular: "John", abbreviations: ["jn", "jo", "joh", "johh", "jon", "jhon", "johnn"] },
 ];
 
-/**
- * Try to match "first king", "second samuel", "won corinthians", etc.
- * Returns the canonical book name or null.
- *
- * Pattern: <ordinal-word> <book-suffix>
- */
-function resolveNumberedBook(text: string): string | null {
-  const result = resolveNumberedBookWithTokens(text);
-  return result ? result.book : null;
+function normalizeBookSuffixToken(token: string): string {
+  return token.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function numberedBookSuffixMatches(suffixToken: string, def: NumberedBookDef): boolean {
+  const suffix = normalizeBookSuffixToken(suffixToken);
+  if (!suffix) return false;
+
+  const aliases = [
+    def.base,
+    def.singular,
+    ...def.abbreviations,
+  ].map(normalizeBookSuffixToken);
+
+  if (aliases.includes(suffix)) return true;
+
+  // Only fuzzy-match meaningful suffixes. Very short abbreviations must stay
+  // exact or ordinary words after "first/second" can become false references.
+  if (suffix.length < 4) return false;
+
+  const longAliases = aliases.filter((value) => value.length >= 4);
+  return longAliases.some((aliasValue) => {
+    const dist = levenshtein(suffix, aliasValue);
+    const threshold = Math.min(3, Math.max(1, Math.floor(aliasValue.length / 3)));
+    return dist <= threshold;
+  });
 }
 
 interface NumberedBookResult {
@@ -213,13 +232,7 @@ function resolveNumberedBookWithTokens(text: string): NumberedBookResult | null 
     if (!digit) continue;
 
     for (const def of NUMBERED_BOOKS) {
-      const suffix = tokens[i + 1].toLowerCase();
-      // Match plural, singular, or abbreviation
-      if (
-        suffix === def.base.toLowerCase() ||
-        suffix === def.singular.toLowerCase() ||
-        def.abbreviations.includes(suffix)
-      ) {
+      if (numberedBookSuffixMatches(tokens[i + 1], def)) {
         return { book: `${digit} ${def.base}`, afterBookIdx: i + 2 };
       }
     }
@@ -820,13 +833,10 @@ export function parseScriptureReference(text: string): ParsedReference | null {
 
   // Fallback: numbered book resolver (handles "first king", "won corinthians", etc.)
   if (!book) {
-    const resolved = resolveNumberedBook(cleaned);
+    const resolved = resolveNumberedBookWithTokens(cleaned);
     if (resolved) {
-      book = resolved;
-      // Find how many tokens the matched phrase consumed
-      const resolvedLower = resolved.toLowerCase();
-      const tokensToConsume = resolvedLower.startsWith("1 ") || resolvedLower.startsWith("2 ") || resolvedLower.startsWith("3 ") ? 2 : 2;
-      bookEndIdx = Math.min(tokensToConsume, tokens.length);
+      book = resolved.book;
+      bookEndIdx = resolved.afterBookIdx;
     }
   }
 

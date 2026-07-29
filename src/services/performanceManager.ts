@@ -452,9 +452,9 @@ export function getPerformanceTier(): PerformanceTier | null {
 }
 
 /**
- * Returns the effective polling interval for a given base interval,
- * capped by the tier's polling cap and multiplied by the manual multiplier.
- * Never exceeds the tier cap (max 1000ms for high-end).
+ * Returns the effective polling interval for a given base interval.
+ * The tier value is a minimum floor, so performance mode never makes a
+ * fallback poll run faster than the caller requested.
  */
 export function getRecommendedPollingInterval(baseMs: number): number {
   if (!currentProfile) return baseMs;
@@ -464,7 +464,7 @@ export function getRecommendedPollingInterval(baseMs: number): number {
   const multiplier = effective.enabled ? effective.pollingMultiplier : 1;
 
   const adjusted = Math.round(baseMs * multiplier);
-  return Math.min(adjusted, currentProfile.pollingIntervalCap);
+  return Math.max(adjusted, currentProfile.pollingIntervalCap);
 }
 
 /**

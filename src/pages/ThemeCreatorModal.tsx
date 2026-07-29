@@ -2,29 +2,27 @@
  * ThemeCreatorModal.tsx — Theme Designer V3
  *
  * Full-screen editor with independent Fullscreen + Lower Third variants.
- * 3-panel layout: Theme Library | Live Preview | Property Inspector.
+ * 3-panel layout: Theme Library | Live Preview | Theme Settings.
  * Top toolbar with Undo/Redo, variant tabs, sync, and Save/Close.
  */
 
-import React, {
+import {
   useState,
   useCallback,
   useEffect,
   useMemo,
   useRef,
 } from "react";
+import type { ChangeEvent } from "react";
 import Icon from "../components/Icon";
 import {
   X,
   ChevronDown,
   Bold,
   Italic,
-  Underline,
-  Strikethrough,
   AlignLeft,
   AlignCenter,
   AlignRight,
-  AlignJustify,
   LayoutGrid,
   Plus,
   Undo2,
@@ -45,6 +43,7 @@ import type {
   BibleThemeCategory,
   BibleThemeSettings,
   BibleThemeRawTemplate,
+  LowerThirdSize,
   LowerThirdWidthPreset,
 } from "../bible/types";
 import { DEFAULT_THEME_SETTINGS } from "../bible/types";
@@ -75,21 +74,15 @@ type VariantType = "fullscreen" | "lower-third";
 type BackgroundPickerTab =
   | "my-images"
   | "my-videos"
-  | "template-videos"
-  | "images"
   | "patterns"
-  | "animations"
   | "color"
   | "transparent";
 
 type InspectorTab =
-  | "content"
-  | "typography"
+  | "text"
   | "background"
-  | "layout"
-  | "bible"
-  | "worship"
-  | "animation";
+  | "position"
+  | "effects";
 
 interface PreviewOptions {
   showVerse: boolean;
@@ -110,19 +103,9 @@ const CATEGORY_OPTIONS: Array<{ value: BibleThemeCategory; label: string; icon: 
 const FONT_FAMILIES = [
   '"CMG Sans", sans-serif',
   '"Montserrat", sans-serif',
-  '"Inter", sans-serif',
-  '"Playfair Display", serif',
+  '"Poppins", sans-serif',
   '"Lora", serif',
   '"Merriweather", serif',
-  '"Roboto", sans-serif',
-  '"Open Sans", sans-serif',
-  '"Poppins", sans-serif',
-  '"Oswald", sans-serif',
-  '"Raleway", sans-serif',
-  '"Bebas Neue", sans-serif',
-  '"DM Sans", sans-serif',
-  '"Source Serif 4", serif',
-  '"Libre Baskerville", serif',
   "Georgia, serif",
   "system-ui, sans-serif",
 ];
@@ -148,10 +131,8 @@ const FONT_FAMILY_LABELS: Record<string, string> = {
 };
 
 const BACKGROUND_PICKER_TABS: Array<{ value: BackgroundPickerTab; label: string }> = [
-  { value: "my-images", label: "My Images" },
-  { value: "my-videos", label: "My Videos" },
-  { value: "template-videos", label: "Template Videos" },
-  { value: "images", label: "Images" },
+  { value: "my-images", label: "Images" },
+  { value: "my-videos", label: "Videos" },
   { value: "patterns", label: "Patterns" },
   { value: "color", label: "Color" },
   { value: "transparent", label: "Transparent" },
@@ -179,6 +160,18 @@ const LT_WIDTHS: Array<{ value: LowerThirdWidthPreset; label: string; reduction:
   { value: "xxl", label: "XXL", reduction: 680 },
 ];
 
+const SIMPLE_LT_WIDTHS: Array<{ value: LowerThirdWidthPreset; label: string }> = [
+  { value: "full", label: "Wide" },
+  { value: "md", label: "Medium" },
+  { value: "xl", label: "Compact" },
+];
+
+const SIMPLE_LT_SIZES: Array<{ value: LowerThirdSize; label: string }> = [
+  { value: "small", label: "Small" },
+  { value: "medium", label: "Normal" },
+  { value: "big", label: "Large" },
+];
+
 const LT_WIDTH_REDUCTION = LT_WIDTHS.reduce<Record<LowerThirdWidthPreset, number>>(
   (acc, option) => {
     acc[option.value] = option.reduction;
@@ -191,13 +184,10 @@ const OBS_CANVAS_WIDTH = 1920;
 const LT_MIN_WIDTH = 480;
 
 const INSPECTOR_TABS: Array<{ key: InspectorTab; label: string }> = [
-  { key: "content", label: "Content" },
-  { key: "typography", label: "Typography" },
+  { key: "text", label: "Text" },
   { key: "background", label: "Background" },
-  { key: "layout", label: "Layout" },
-  { key: "bible", label: "Bible" },
-  { key: "worship", label: "Worship" },
-  { key: "animation", label: "Animation" },
+  { key: "position", label: "Position" },
+  { key: "effects", label: "Effects" },
 ];
 
 const SAMPLE_CONTENT: Record<
@@ -783,7 +773,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   }, [handleLoadTheme]);
 
   // ── Inspector ──
-  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("typography");
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("text");
 
   // ── Preview state ──
   const [previewOpts] = useState<PreviewOptions>(DEFAULT_PREVIEW_OPTIONS);
@@ -844,7 +834,8 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   const backgroundColorValue = activeVariant === "fullscreen" ? settings.backgroundColor : settings.boxBackground;
   const backgroundImageValue = activeVariant === "fullscreen" ? settings.backgroundImage : settings.boxBackgroundImage;
   const backgroundVideoValue = activeVariant === "fullscreen" ? settings.backgroundVideo : "";
-  const backgroundOpacityPercent = Math.round(settings.backgroundOpacity * 100);
+  const activeBackgroundOpacity = activeVariant === "fullscreen" ? settings.backgroundOpacity : settings.boxOpacity;
+  const backgroundOpacityPercent = Math.round(activeBackgroundOpacity * 100);
 
   const selectedBackgroundImageAsset = useMemo(
     () => backgroundMediaLibrary.find((item) => item.type === "image" && item.url === backgroundImageValue),
@@ -961,7 +952,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     setShowBackgroundModal(true);
   }, [backgroundColorValue, backgroundImageValue, backgroundVideoValue, backgroundMediaLibrary, refreshBackgroundMediaLibrary]);
 
-  const handleBgImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBgImportFile = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
@@ -1063,9 +1054,6 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
 
   const [fontDropdownOpen, setFontDropdownOpen] = useState(false);
 
-  const showBibleTab = categories.includes("bible");
-  const showWorshipTab = categories.includes("worship");
-
   // ════════════════════════════════════════════════════════════════════════
   // RENDER
   // ════════════════════════════════════════════════════════════════════════
@@ -1163,7 +1151,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
             <input
               value={librarySearch}
               onChange={(e) => setLibrarySearch(e.target.value)}
-              placeholder="Search themes\u2026"
+              placeholder="Search themes..."
               className="tc-library-search-input"
             />
           </div>
@@ -1262,7 +1250,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
           </div>
 
           <div className="tc-output-bar">
-            <span className="tc-output-info">1920 \u00D7 1080</span>
+            <span className="tc-output-info">1920 x 1080</span>
             <span className="tc-output-info">16:9</span>
             <div className="tc-output-separator" />
             <label className="tc-overlay-toggle">
@@ -1286,21 +1274,17 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
           </div>
         </main>
 
-        {/* Right Panel: Property Inspector */}
+        {/* Right Panel: Theme Settings */}
         <aside className="tc-inspector">
           <div className="tc-inspector-header">
-            <span className="tc-inspector-title">INSPECTOR</span>
+            <span className="tc-inspector-title">SETTINGS</span>
             <span className="tc-inspector-variant-badge">
               {activeVariant === "fullscreen" ? "Fullscreen" : "Lower Third"}
             </span>
           </div>
 
           <div className="tc-inspector-tabs">
-            {INSPECTOR_TABS.filter((t) => {
-              if (t.key === "bible" && !showBibleTab) return false;
-              if (t.key === "worship" && !showWorshipTab) return false;
-              return true;
-            }).map((t) => (
+            {INSPECTOR_TABS.map((t) => (
               <button key={t.key} className={`tc-inspector-tab${inspectorTab === t.key ? " active" : ""}`} onClick={() => setInspectorTab(t.key)}>
                 {t.label}
               </button>
@@ -1308,9 +1292,9 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
           </div>
 
           <div className="tc-inspector-content">
-            {/* Typography Tab */}
-            {inspectorTab === "typography" && (
+            {inspectorTab === "text" && (
               <div className="tc-inspector-panel">
+                <div className="tc-inspector-section-title">MAIN TEXT</div>
                 <div className="typography-row">
                   <div className="select-box" style={{ position: "relative" }} onClick={() => setFontDropdownOpen((v) => !v)}>
                     <span>{FONT_FAMILY_LABELS[settings.fontFamily] ?? "Select"}</span>
@@ -1326,155 +1310,79 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     )}
                   </div>
                   <div className="value-box" style={{ display: "flex", gap: 0, padding: 0, overflow: "hidden" }}>
-                    <button onClick={() => patch({ fontSize: Math.max(8, settings.fontSize - 2) })} style={{ background: "none", border: "none", color: "var(--on-surface)", cursor: "pointer", padding: "2px 6px", fontSize: 14, lineHeight: 1 }} title="\u2212">\u2212</button>
-                    <span style={{ fontSize: 13, minWidth: 28, textAlign: "center", lineHeight: "26px" }}>{settings.fontSize}</span>
+                    <button onClick={() => patch({ fontSize: Math.max(8, settings.fontSize - 2) })} style={{ background: "none", border: "none", color: "var(--on-surface)", cursor: "pointer", padding: "2px 6px", fontSize: 14, lineHeight: 1 }} title="Decrease font size">-</button>
+                    <span style={{ fontSize: 13, minWidth: 34, textAlign: "center", lineHeight: "26px" }}>{settings.fontSize}px</span>
                     <button onClick={() => patch({ fontSize: Math.min(200, settings.fontSize + 2) })} style={{ background: "none", border: "none", color: "var(--on-surface)", cursor: "pointer", padding: "2px 6px", fontSize: 14, lineHeight: 1 }} title="Increase font size">+</button>
                   </div>
                 </div>
+
+                <div className="typography-row" style={{ marginTop: 10 }}>
+                  <span className="tc-label-mono">COLOR</span>
+                  <label className="color-box" style={{ backgroundColor: settings.fontColor }}>
+                    <input type="color" value={settings.fontColor} onChange={(e) => patch({ fontColor: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
+                  </label>
+                </div>
+
                 <div className="format-group">
                   <button className={`format-btn${settings.fontWeight === "bold" ? " active" : ""}`} onClick={() => patch({ fontWeight: settings.fontWeight === "bold" ? "normal" : "bold" })} title="Bold"><Bold size={16} /></button>
                   <div className="format-divider" />
                   <button className={`format-btn${settings.fontStyle === "italic" ? " active" : ""}`} onClick={() => patch({ fontStyle: settings.fontStyle === "italic" ? "normal" : "italic" })} title="Italic"><Italic size={16} /></button>
-                  <div className="format-divider" />
-                  <button className="format-btn" title="Underline"><Underline size={16} /></button>
-                  <div className="format-divider" />
-                  <button className="format-btn" title="Strikethrough"><Strikethrough size={16} /></button>
                 </div>
+
                 <div className="case-group">
                   {([
-                    { value: "uppercase" as const, label: "Uppercase" },
-                    { value: "lowercase" as const, label: "lowercase" },
-                    { value: "capitalize" as const, label: "Title Case" },
+                    { value: "none" as const, label: "Normal" },
+                    { value: "uppercase" as const, label: "Upper" },
+                    { value: "capitalize" as const, label: "Title" },
                   ]).map((c) => (
-                    <button key={c.value} className={`case-btn${settings.textTransform === c.value ? " active" : ""}`} onClick={() => patch({ textTransform: settings.textTransform === c.value ? "none" : c.value })}>{c.label}</button>
+                    <button key={c.value} className={`case-btn${settings.textTransform === c.value ? " active" : ""}`} onClick={() => patch({ textTransform: c.value })}>{c.label}</button>
                   ))}
                 </div>
-                <div className="slider-row">
-                  <div className="slider-wrapper" style={{ flex: 1 }}>
-                    <span>PAD</span>
-                    <input type="range" min={0} max={120} value={settings.padding} onChange={(e) => patch({ padding: Number(e.target.value) })} />
-                    <div className="slider-val">{settings.padding}</div>
-                  </div>
-                  <div className="slider-wrapper flex-1">
-                    <span>LINE</span>
-                    <input type="range" min={1} max={3} step={0.1} value={settings.lineHeight} onChange={(e) => patch({ lineHeight: Number(e.target.value) })} />
-                  </div>
-                </div>
-                <div className="format-group" style={{ marginTop: "4px" }}>
+
+                <div className="format-group">
                   {([
                     { value: "left" as const, IconComp: AlignLeft },
                     { value: "center" as const, IconComp: AlignCenter },
                     { value: "right" as const, IconComp: AlignRight },
-                  ]).map((a, i) => (
-                    <React.Fragment key={a.value}>
-                      {i > 0 && <div className="format-divider" />}
-                      <button className={`format-btn${settings.textAlign === a.value ? " active" : ""}`} onClick={() => patch({ textAlign: a.value })}><a.IconComp size={16} /></button>
-                    </React.Fragment>
+                  ]).map((a) => (
+                    <button key={a.value} className={`format-btn${settings.textAlign === a.value ? " active" : ""}`} onClick={() => patch({ textAlign: a.value })} title={a.value}>
+                      <a.IconComp size={16} />
+                    </button>
                   ))}
-                  <div className="format-divider" />
-                  <button className="format-btn" title="Justify"><AlignJustify size={16} /></button>
                 </div>
-                <div className="slider-row" style={{ marginTop: "8px" }}>
-                  <div className="slider-wrapper" style={{ flex: 1 }}>
-                    <span>SHADOW</span>
-                    <input type="range" min={0} max={20} step={1} value={settings.textShadow !== "none" ? (Number(settings.textShadow.match(/(\d+)px/)?.[1]) || 0) : 0} onChange={(e) => { const v = Number(e.target.value); patch({ textShadow: v > 0 ? `0 2px ${v}px rgba(0,0,0,0.6)` : "none" }); }} />
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* Content Tab */}
-            {inspectorTab === "content" && (
-              <div className="tc-inspector-panel">
-                <div className="tc-inspector-section-title">REFERENCE LABEL</div>
-                <div className="case-group">
-                  {([{ value: "top" as const, label: "Above verse" }, { value: "bottom" as const, label: "Below verse" }]).map((p) => (
-                    <button key={p.value} className={`case-btn${settings.refPosition === p.value ? " active" : ""}`} onClick={() => patch({ refPosition: p.value })}>{p.label}</button>
-                  ))}
-                </div>
                 <div className="slider-row">
                   <div className="slider-wrapper" style={{ flex: 1 }}>
-                    <span>FONT SIZE</span>
-                    <input type="range" min={12} max={72} step={1} value={settings.refFontSize} onChange={(e) => patch({ refFontSize: Number(e.target.value) })} />
-                    <div className="slider-val">{settings.refFontSize}px</div>
+                    <span>LINE HEIGHT</span>
+                    <input type="range" min={1} max={3} step={0.1} value={settings.lineHeight} onChange={(e) => patch({ lineHeight: Number(e.target.value) })} />
+                    <div className="slider-val">{settings.lineHeight}</div>
                   </div>
                 </div>
-                <div className="case-group" style={{ marginTop: "8px" }}>
-                  {([{ value: "light" as const, label: "Light" }, { value: "normal" as const, label: "Normal" }, { value: "bold" as const, label: "Bold" }]).map((w) => (
-                    <button key={w.value} className={`case-btn${settings.refFontWeight === w.value ? " active" : ""}`} style={{ fontWeight: w.value === "bold" ? 700 : w.value === "light" ? 300 : 500 }} onClick={() => patch({ refFontWeight: w.value })}>{w.label}</button>
-                  ))}
-                </div>
-                <div className="typography-row" style={{ marginTop: "8px", marginBottom: "8px" }}>
-                  <span className="tc-label-mono">COLOR</span>
-                  <label className="color-box" style={{ backgroundColor: settings.refFontColor }}>
-                    <input type="color" value={settings.refFontColor} onChange={(e) => patch({ refFontColor: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
-                  </label>
-                </div>
-                <div className="case-group">
-                  {([{ value: "none" as const, label: "Normal" }, { value: "uppercase" as const, label: "UPPER" }, { value: "lowercase" as const, label: "lower" }, { value: "capitalize" as const, label: "Title" }]).map((c) => (
-                    <button key={c.value} className={`case-btn${settings.refTextTransform === c.value ? " active" : ""}`} onClick={() => patch({ refTextTransform: c.value })}>{c.label}</button>
-                  ))}
-                </div>
-                <div className="case-group">
-                  {([{ value: "match" as const, label: "Match verse" }, { value: "left" as const, label: "Left" }, { value: "center" as const, label: "Center" }, { value: "right" as const, label: "Right" }]).map((a) => (
-                    <button key={a.value} className={`case-btn${settings.refTextAlign === a.value ? " active" : ""}`} onClick={() => patch({ refTextAlign: a.value })}>{a.label}</button>
-                  ))}
-                </div>
-                <div className="slider-row" style={{ marginTop: "8px" }}>
-                  <div className="slider-wrapper" style={{ flex: 1 }}>
-                    <span>LETTER SPACING</span>
-                    <input type="range" min={0} max={10} step={0.5} value={settings.refLetterSpacing} onChange={(e) => patch({ refLetterSpacing: Number(e.target.value) })} />
-                    <div className="slider-val">{settings.refLetterSpacing}px</div>
-                  </div>
-                </div>
-                <div className="slider-row" style={{ marginTop: "8px" }}>
-                  <div className="slider-wrapper" style={{ flex: 1 }}>
-                    <span>SPACING</span>
-                    <input type="range" min={0} max={80} step={1} value={settings.refSpacing} onChange={(e) => patch({ refSpacing: Number(e.target.value) })} />
-                    <div className="slider-val">{settings.refSpacing}px</div>
-                  </div>
-                </div>
-                <div className="slider-row" style={{ marginTop: "8px" }}>
-                  <div className="slider-wrapper" style={{ flex: 1 }}>
-                    <span>OPACITY</span>
-                    <input type="range" min={10} max={100} step={1} value={Math.round(settings.refOpacity * 100)} onChange={(e) => patch({ refOpacity: Number(e.target.value) / 100 })} />
-                    <div className="slider-val">{Math.round(settings.refOpacity * 100)}%</div>
-                  </div>
-                </div>
+
                 <div className="tc-inspector-divider">
-                  <div className="tc-inspector-toggle-row">
-                    <span className="tc-label-mono">REF BACKGROUND</span>
-                    <button className="tc-toggle-switch" data-active={settings.referenceBackgroundEnabled} onClick={() => patch({ referenceBackgroundEnabled: !settings.referenceBackgroundEnabled })} title="tc-toggle-knob">
-                      <span className="tc-toggle-knob" />
-                    </button>
+                  <div className="tc-inspector-section-title">REFERENCE</div>
+                  <div className="case-group">
+                    {([{ value: "top" as const, label: "Above" }, { value: "bottom" as const, label: "Below" }]).map((p) => (
+                      <button key={p.value} className={`case-btn${settings.refPosition === p.value ? " active" : ""}`} onClick={() => patch({ refPosition: p.value })}>{p.label}</button>
+                    ))}
                   </div>
-                  {settings.referenceBackgroundEnabled && (
-                    <>
-                      <div className="typography-row" style={{ marginBottom: "8px" }}>
-                        <span className="tc-label-mono">COLOR</span>
-                        <label className="color-box" style={{ backgroundColor: settings.referenceBackgroundColor }}>
-                          <input type="color" value={settings.referenceBackgroundColor} onChange={(e) => patch({ referenceBackgroundColor: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
-                        </label>
-                      </div>
-                      <div className="case-group" style={{ marginBottom: "8px" }}>
-                        {([{ value: "solid" as const, label: "Solid" }, { value: "pill" as const, label: "Pill" }, { value: "outline" as const, label: "Outline" }]).map((s) => (
-                          <button key={s.value} className={`case-btn${settings.referenceBackgroundStyle === s.value ? " active" : ""}`} onClick={() => patch({ referenceBackgroundStyle: s.value })}>{s.label}</button>
-                        ))}
-                      </div>
-                      <div className="slider-row">
-                        <div className="slider-wrapper" style={{ flex: 1 }}>
-                          <span>ROUNDNESS</span>
-                          <input type="range" min={0} max={40} step={1} value={settings.referenceBackgroundRadius} onChange={(e) => patch({ referenceBackgroundRadius: Number(e.target.value) })} />
-                          <div className="slider-val">{settings.referenceBackgroundRadius}px</div>
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  <div className="slider-row">
+                    <div className="slider-wrapper" style={{ flex: 1 }}>
+                      <span>SIZE</span>
+                      <input type="range" min={12} max={72} step={1} value={settings.refFontSize} onChange={(e) => patch({ refFontSize: Number(e.target.value) })} />
+                      <div className="slider-val">{settings.refFontSize}px</div>
+                    </div>
+                  </div>
+                  <div className="typography-row">
+                    <span className="tc-label-mono">COLOR</span>
+                    <label className="color-box" style={{ backgroundColor: settings.refFontColor }}>
+                      <input type="color" value={settings.refFontColor} onChange={(e) => patch({ refFontColor: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
+                    </label>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Background Tab */}
             {inspectorTab === "background" && (
               <div className="tc-inspector-panel">
                 <div className="bg-row" onClick={openBackgroundModal} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openBackgroundModal(); } }}>
@@ -1488,70 +1396,48 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                   <div className="bg-info">
                     <div className="bg-title">{backgroundPreviewTypeLabel}</div>
                     <div className="bg-subtitle">{backgroundPreviewNameLabel}</div>
-                    <div className="bg-action-hint">Click to change background</div>
                   </div>
                   <button className="bg-change-btn" onClick={(e) => { e.stopPropagation(); openBackgroundModal(); }} title="Change">Change</button>
                 </div>
                 <div className="opacity-row">
                   <span>OPACITY</span>
-                  <input type="range" min={0} max={100} value={backgroundOpacityPercent} onChange={(e) => patch({ backgroundOpacity: Number(e.target.value) / 100 })} />
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={backgroundOpacityPercent}
+                    onChange={(e) => {
+                      const nextOpacity = Number(e.target.value) / 100;
+                      patch(activeVariant === "fullscreen" ? { backgroundOpacity: nextOpacity } : { boxOpacity: nextOpacity });
+                    }}
+                  />
                   <span>{backgroundOpacityPercent}%</span>
                 </div>
-                <div className="tc-inspector-divider">
-                  <div className="tc-inspector-toggle-row">
-                    <span className="tc-label-mono">READABILITY SHADE</span>
-                    <button className="tc-toggle-switch" data-active={settings.fullscreenShadeEnabled} onClick={() => patch({ fullscreenShadeEnabled: !settings.fullscreenShadeEnabled })} title="tc-toggle-knob">
-                      <span className="tc-toggle-knob" />
-                    </button>
-                  </div>
-                  {settings.fullscreenShadeEnabled && (
-                    <>
-                      <div className="typography-row" style={{ marginBottom: "8px" }}>
-                        <span className="tc-label-mono">COLOR</span>
-                        <label className="color-box" style={{ backgroundColor: settings.fullscreenShadeColor }}>
-                          <input type="color" value={settings.fullscreenShadeColor} onChange={(e) => patch({ fullscreenShadeColor: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
-                        </label>
-                      </div>
+                {activeVariant === "fullscreen" && (
+                  <div className="tc-inspector-divider">
+                    <div className="tc-inspector-toggle-row">
+                      <span className="tc-label-mono">SHADE</span>
+                      <button className="tc-toggle-switch" data-active={settings.fullscreenShadeEnabled} onClick={() => patch({ fullscreenShadeEnabled: !settings.fullscreenShadeEnabled })} title="Toggle shade">
+                        <span className="tc-toggle-knob" />
+                      </button>
+                    </div>
+                    {settings.fullscreenShadeEnabled && (
                       <div className="slider-row">
                         <div className="slider-wrapper" style={{ flex: 1 }}>
-                          <span>OPACITY</span>
+                          <span>SHADE OPACITY</span>
                           <input type="range" min={0} max={100} step={1} value={Math.round(settings.fullscreenShadeOpacity * 100)} onChange={(e) => patch({ fullscreenShadeOpacity: Number(e.target.value) / 100 })} />
                           <div className="slider-val">{Math.round(settings.fullscreenShadeOpacity * 100)}%</div>
                         </div>
                       </div>
-                    </>
-                  )}
-                </div>
-                <div className="tc-inspector-divider">
-                  <div className="tc-inspector-section-title">LOGO</div>
-                  <div className="typography-row" style={{ marginBottom: "8px" }}>
-                    <span className="tc-label-mono">URL</span>
-                    <input type="text" className="tc-text-input" value={settings.logoUrl} onChange={(e) => patch({ logoUrl: e.target.value })} placeholder="Logo URL\u2026" />
+                    )}
                   </div>
-                  {settings.logoUrl && (
-                    <>
-                      <div className="case-group">
-                        {([{ value: "top-left" as const, label: "TL" }, { value: "top-right" as const, label: "TR" }, { value: "bottom-left" as const, label: "BL" }, { value: "bottom-right" as const, label: "BR" }]).map((p) => (
-                          <button key={p.value} className={`case-btn${settings.logoPosition === p.value ? " active" : ""}`} onClick={() => patch({ logoPosition: p.value })}>{p.label}</button>
-                        ))}
-                      </div>
-                      <div className="slider-row">
-                        <div className="slider-wrapper" style={{ flex: 1 }}>
-                          <span>SIZE</span>
-                          <input type="range" min={20} max={200} step={5} value={settings.logoSize} onChange={(e) => patch({ logoSize: Number(e.target.value) })} />
-                          <div className="slider-val">{settings.logoSize}px</div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
+                )}
               </div>
             )}
 
-            {/* Layout Tab */}
-            {inspectorTab === "layout" && (
+            {inspectorTab === "position" && (
               <div className="tc-inspector-panel">
-                <div className="tc-inspector-section-title">SPACING & SAFE AREA</div>
+                <div className="tc-inspector-section-title">SCREEN SPACE</div>
                 <div className="slider-row">
                   <div className="slider-wrapper" style={{ flex: 1 }}>
                     <span>PADDING</span>
@@ -1566,95 +1452,84 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     <div className="slider-val">{settings.safeArea}px</div>
                   </div>
                 </div>
-                <div className="slider-row">
-                  <div className="slider-wrapper" style={{ flex: 1 }}>
-                    <span>BORDER RADIUS</span>
-                    <input type="range" min={0} max={40} value={settings.borderRadius} onChange={(e) => patch({ borderRadius: Number(e.target.value) })} />
-                    <div className="slider-val">{settings.borderRadius}px</div>
-                  </div>
-                </div>
+
                 {activeVariant === "lower-third" && (
-                  <>
-                    <div className="tc-inspector-divider">
-                      <div className="tc-inspector-section-title">LOWER THIRD LAYOUT</div>
-                      <div className="case-group">
-                        {([{ value: "left" as const, label: "Left" }, { value: "center" as const, label: "Center" }, { value: "right" as const, label: "Right" }]).map((p) => (
-                          <button key={p.value} className={`case-btn${settings.lowerThirdPosition === p.value ? " active" : ""}`} onClick={() => patch({ lowerThirdPosition: p.value })}>{p.label}</button>
-                        ))}
-                      </div>
-                      <div className="case-group">
-                        {LT_WIDTHS.map((w) => (
-                          <button key={w.value} className={`case-btn${settings.lowerThirdWidthPreset === w.value ? " active" : ""}`} onClick={() => patch({ lowerThirdWidthPreset: w.value })}>{w.label}</button>
-                        ))}
-                      </div>
-                      <div className="slider-row">
-                        <div className="slider-wrapper" style={{ flex: 1 }}>
-                          <span>HEIGHT</span>
-                          <input type="range" min={0} max={650} step={10} value={settings.lowerThirdHeight} onChange={(e) => patch({ lowerThirdHeight: Number(e.target.value) })} />
-                          <div className="slider-val">{settings.lowerThirdHeight || "Auto"}</div>
-                        </div>
-                      </div>
-                      <div className="slider-row">
-                        <div className="slider-wrapper" style={{ flex: 1 }}>
-                          <span>OFFSET X</span>
-                          <input type="range" min={-500} max={500} value={settings.lowerThirdOffsetX} onChange={(e) => patch({ lowerThirdOffsetX: Number(e.target.value) })} />
-                          <div className="slider-val">{settings.lowerThirdOffsetX}px</div>
-                        </div>
-                      </div>
-                      <div className="typography-row" style={{ marginBottom: "8px" }}>
-                        <span className="tc-label-mono">BOX BG</span>
-                        <label className="color-box" style={{ backgroundColor: settings.boxBackground }}>
-                          <input type="color" value={settings.boxBackground !== "transparent" ? settings.boxBackground : "#000000"} onChange={(e) => patch({ boxBackground: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
-                        </label>
-                      </div>
-                      <div className="slider-row">
-                        <div className="slider-wrapper" style={{ flex: 1 }}>
-                          <span>BOX OPACITY</span>
-                          <input type="range" min={0} max={100} step={1} value={Math.round(settings.boxOpacity * 100)} onChange={(e) => patch({ boxOpacity: Number(e.target.value) / 100 })} />
-                          <div className="slider-val">{Math.round(settings.boxOpacity * 100)}%</div>
-                        </div>
+                  <div className="tc-inspector-divider">
+                    <div className="tc-inspector-section-title">LOWER THIRD</div>
+                    <div className="case-group">
+                      {([{ value: "left" as const, label: "Left" }, { value: "center" as const, label: "Center" }, { value: "right" as const, label: "Right" }]).map((p) => (
+                        <button key={p.value} className={`case-btn${settings.lowerThirdPosition === p.value ? " active" : ""}`} onClick={() => patch({ lowerThirdPosition: p.value })}>{p.label}</button>
+                      ))}
+                    </div>
+                    <div className="case-group">
+                      {SIMPLE_LT_WIDTHS.map((w) => (
+                        <button key={w.value} className={`case-btn${settings.lowerThirdWidthPreset === w.value ? " active" : ""}`} onClick={() => patch({ lowerThirdWidthPreset: w.value })}>{w.label}</button>
+                      ))}
+                    </div>
+                    <div className="case-group">
+                      {SIMPLE_LT_SIZES.map((s) => (
+                        <button key={s.value} className={`case-btn${settings.lowerThirdSize === s.value ? " active" : ""}`} onClick={() => patch({ lowerThirdSize: s.value })}>{s.label}</button>
+                      ))}
+                    </div>
+                    <div className="slider-row">
+                      <div className="slider-wrapper" style={{ flex: 1 }}>
+                        <span>HEIGHT</span>
+                        <input type="range" min={0} max={650} step={10} value={settings.lowerThirdHeight} onChange={(e) => patch({ lowerThirdHeight: Number(e.target.value) })} />
+                        <div className="slider-val">{settings.lowerThirdHeight || "Auto"}</div>
                       </div>
                     </div>
-                  </>
+                    <div className="slider-row">
+                      <div className="slider-wrapper" style={{ flex: 1 }}>
+                        <span>CORNERS</span>
+                        <input type="range" min={0} max={40} value={settings.borderRadius} onChange={(e) => patch({ borderRadius: Number(e.target.value) })} />
+                        <div className="slider-val">{settings.borderRadius}px</div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
 
-            {/* Bible Tab */}
-            {inspectorTab === "bible" && showBibleTab && (
+            {inspectorTab === "effects" && (
               <div className="tc-inspector-panel">
-                <div className="tc-inspector-section-title">BIBLE DISPLAY</div>
-                <div className="tc-inspector-hint">Bible verse display settings. Adjust reference label in the Content tab.</div>
-                <div className="case-group">
-                  {([{ value: "top" as const, label: "Ref Above" }, { value: "bottom" as const, label: "Ref Below" }]).map((p) => (
-                    <button key={p.value} className={`case-btn${settings.refPosition === p.value ? " active" : ""}`} onClick={() => patch({ refPosition: p.value })}>{p.label}</button>
+                <div className="tc-inspector-section-title">ANIMATION</div>
+                <div className="btn-group" style={{ flexWrap: "wrap", gap: "4px" }}>
+                  {([
+                    { value: "none" as const, label: "None" },
+                    { value: "fade" as const, label: "Fade" },
+                    { value: "slide-up" as const, label: "Slide Up" },
+                  ]).map((a) => (
+                    <button key={a.value} className={`btn-tab${settings.animation === a.value ? " active" : ""}`} onClick={() => patch({ animation: a.value })}>{a.label}</button>
                   ))}
                 </div>
-                <div className="slider-row">
-                  <div className="slider-wrapper" style={{ flex: 1 }}>
-                    <span>TEXT SIZE</span>
-                    <input type="range" min={12} max={200} step={2} value={settings.fontSize} onChange={(e) => patch({ fontSize: Number(e.target.value) })} />
-                    <div className="slider-val">{settings.fontSize}px</div>
-                  </div>
+                <div className="case-group">
+                  {([
+                    { value: 250, label: "Fast" },
+                    { value: 500, label: "Normal" },
+                    { value: 800, label: "Smooth" },
+                  ]).map((d) => (
+                    <button key={d.value} className={`case-btn${Math.abs(settings.animationDuration - d.value) <= 75 ? " active" : ""}`} onClick={() => patch({ animationDuration: d.value })}>{d.label}</button>
+                  ))}
                 </div>
-                <div className="slider-row">
-                  <div className="slider-wrapper" style={{ flex: 1 }}>
-                    <span>REF SIZE</span>
-                    <input type="range" min={12} max={72} step={1} value={settings.refFontSize} onChange={(e) => patch({ refFontSize: Number(e.target.value) })} />
-                    <div className="slider-val">{settings.refFontSize}px</div>
-                  </div>
-                </div>
+
                 <div className="tc-inspector-divider">
+                  <div className="tc-inspector-section-title">READABILITY</div>
+                  <div className="slider-row">
+                    <div className="slider-wrapper" style={{ flex: 1 }}>
+                      <span>SHADOW</span>
+                      <input type="range" min={0} max={20} step={1} value={settings.textShadow !== "none" ? (Number(settings.textShadow.match(/(\d+)px/)?.[1]) || 0) : 0} onChange={(e) => { const v = Number(e.target.value); patch({ textShadow: v > 0 ? `0 2px ${v}px rgba(0,0,0,0.6)` : "none" }); }} />
+                    </div>
+                  </div>
                   <div className="tc-inspector-toggle-row">
-                    <span className="tc-label-mono">TEXT OUTLINE</span>
-                    <button className="tc-toggle-switch" data-active={settings.textOutline} onClick={() => patch({ textOutline: !settings.textOutline })} title="tc-toggle-knob">
+                    <span className="tc-label-mono">OUTLINE</span>
+                    <button className="tc-toggle-switch" data-active={settings.textOutline} onClick={() => patch({ textOutline: !settings.textOutline })} title="Toggle outline">
                       <span className="tc-toggle-knob" />
                     </button>
                   </div>
                   {settings.textOutline && (
                     <>
                       <div className="typography-row" style={{ marginBottom: "8px" }}>
-                        <span className="tc-label-mono">OUTLINE COLOR</span>
+                        <span className="tc-label-mono">COLOR</span>
                         <label className="color-box" style={{ backgroundColor: settings.textOutlineColor }}>
                           <input type="color" value={settings.textOutlineColor} onChange={(e) => patch({ textOutlineColor: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
                         </label>
@@ -1668,59 +1543,6 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                       </div>
                     </>
                   )}
-                </div>
-              </div>
-            )}
-
-            {/* Worship Tab */}
-            {inspectorTab === "worship" && showWorshipTab && (
-              <div className="tc-inspector-panel">
-                <div className="tc-inspector-section-title">WORSHIP DISPLAY</div>
-                <div className="tc-inspector-hint">Worship/lyrics display settings. Typography and layout apply globally.</div>
-                <div className="slider-row">
-                  <div className="slider-wrapper" style={{ flex: 1 }}>
-                    <span>TEXT SIZE</span>
-                    <input type="range" min={12} max={200} step={2} value={settings.fontSize} onChange={(e) => patch({ fontSize: Number(e.target.value) })} />
-                    <div className="slider-val">{settings.fontSize}px</div>
-                  </div>
-                </div>
-                <div className="slider-row">
-                  <div className="slider-wrapper" style={{ flex: 1 }}>
-                    <span>LINE HEIGHT</span>
-                    <input type="range" min={1} max={3} step={0.1} value={settings.lineHeight} onChange={(e) => patch({ lineHeight: Number(e.target.value) })} />
-                    <div className="slider-val">{settings.lineHeight}</div>
-                  </div>
-                </div>
-                <div className="case-group">
-                  {([{ value: "left" as const, label: "Left" }, { value: "center" as const, label: "Center" }, { value: "right" as const, label: "Right" }]).map((a) => (
-                    <button key={a.value} className={`case-btn${settings.textAlign === a.value ? " active" : ""}`} onClick={() => patch({ textAlign: a.value })}>{a.label}</button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Animation Tab */}
-            {inspectorTab === "animation" && (
-              <div className="tc-inspector-panel">
-                <div className="tc-inspector-section-title">ANIMATION</div>
-                <div className="btn-group" style={{ flexWrap: "wrap", gap: "4px" }}>
-                  {([
-                    { value: "none" as const, label: "None" },
-                    { value: "fade" as const, label: "Fade" },
-                    { value: "slide-up" as const, label: "Slide Up" },
-                    { value: "slide-left" as const, label: "Slide Left" },
-                    { value: "scale-in" as const, label: "Scale" },
-                    { value: "reveal-bg-then-text" as const, label: "Reveal" },
-                  ]).map((a) => (
-                    <button key={a.value} className={`btn-tab${settings.animation === a.value ? " active" : ""}`} onClick={() => patch({ animation: a.value })}>{a.label}</button>
-                  ))}
-                </div>
-                <div className="slider-row" style={{ marginTop: "10px" }}>
-                  <div className="slider-wrapper" style={{ flex: 1 }}>
-                    <span>DURATION</span>
-                    <input type="range" min={100} max={1500} step={50} value={settings.animationDuration} onChange={(e) => patch({ animationDuration: Number(e.target.value) })} />
-                    <div className="slider-val">{settings.animationDuration}ms</div>
-                  </div>
                 </div>
               </div>
             )}
@@ -1759,7 +1581,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                   <button className="tc-transparent-btn" onClick={handleBgTransparent} title="Transparent Background">Transparent Background</button>
                 </div>
               )}
-              {(bgTab === "my-images" || bgTab === "images") && (
+              {bgTab === "my-images" && (
                 <div className="tc-media-grid">
                   <button className="tc-media-thumb tc-media-thumb--import" onClick={() => bgImportInputRef.current?.click()} title="Import">
                     <Plus size={20} />
@@ -1772,10 +1594,9 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                   ))}
                 </div>
               )}
-              {(bgTab === "my-videos" || bgTab === "template-videos") && (
+              {bgTab === "my-videos" && (
                 <div className="tc-media-grid">
-                  {bgTab === "template-videos"
-                    ? templateVideoAssets.map((asset) => {
+                  {activeVariant === "fullscreen" && templateVideoAssets.map((asset) => {
                       const downloaded = findTemplateVideoDownload(asset);
                       return (
                         <div key={asset.id} className="tc-media-thumb tc-media-thumb--video">
@@ -1791,23 +1612,20 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                           )}
                         </div>
                       );
-                    })
-                    : <>
-                      <button className="tc-media-thumb tc-media-thumb--import" onClick={() => bgImportInputRef.current?.click()} title="Import">
-                        <Plus size={20} />
-                        <span>Import</span>
-                      </button>
-                      {backgroundMediaLibrary.filter((item) => item.type === "video").map((item) => (
-                        <button key={item.id} className="tc-media-thumb tc-media-thumb--video" onClick={() => handleBgSelectVideo(item.url)} title="item.thumbnailUrl ? ( ) : ( )">
-                          {item.thumbnailUrl ? (
-                            <img src={item.thumbnailUrl} alt={item.name} />
-                          ) : (
-                            <Icon name="videocam" size={24} />
-                          )}
-                        </button>
-                      ))}
-                    </>
-                  }
+                    })}
+                  <button className="tc-media-thumb tc-media-thumb--import" onClick={() => bgImportInputRef.current?.click()} title="Import">
+                    <Plus size={20} />
+                    <span>Import</span>
+                  </button>
+                  {backgroundMediaLibrary.filter((item) => item.type === "video").map((item) => (
+                    <button key={item.id} className="tc-media-thumb tc-media-thumb--video" onClick={() => handleBgSelectVideo(item.url)} title={item.name}>
+                      {item.thumbnailUrl ? (
+                        <img src={item.thumbnailUrl} alt={item.name} />
+                      ) : (
+                        <Icon name="videocam" size={24} />
+                      )}
+                    </button>
+                  ))}
                 </div>
               )}
               {bgTab === "patterns" && (

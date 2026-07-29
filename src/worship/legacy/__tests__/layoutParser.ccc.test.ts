@@ -2,10 +2,10 @@
  * Integration test: Run layoutParser on actual CCC-Hymns.pdf extracted elements.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { parseLayoutSongs, detectColumns, type TextElement } from "../layoutParser";
 
-const ELEMENTS_PATH = "/tmp/ccc_elements.json";
+const ELEMENTS_PATH = process.env.CCC_ELEMENTS_PATH || "/tmp/ccc_elements.json";
 
 function loadElements(): TextElement[] {
   const raw = readFileSync(ELEMENTS_PATH, "utf-8");
@@ -22,7 +22,9 @@ function loadElements(): TextElement[] {
   }));
 }
 
-describe("CCC-Hymns.pdf — real extraction", () => {
+const describeWithFixture = existsSync(ELEMENTS_PATH) ? describe : describe.skip;
+
+describeWithFixture("CCC-Hymns.pdf — real extraction", () => {
   it("parses 180+ songs from the full PDF", () => {
     const elements = loadElements();
     console.log(`Loaded ${elements.length} elements`);

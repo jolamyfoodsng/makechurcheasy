@@ -8,6 +8,8 @@ import { useTranslation } from "react-i18next";
 import { Upload } from "lucide-react";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
+import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
+import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import Icon from "../DockIcon";
 import type { CountdownConfig, BackgroundSettings, BackgroundType, ImageFit, MessageSettings, OBSSettings, OverlaySyncState, CountdownOverlayPayload } from "../../countdowns/types";
 // countdownDefaults removed — editBg initialized inline
@@ -21,6 +23,10 @@ import {
   DOCK_COUNTDOWN_SOURCE_NAME,
   resolveCountdownTargetScene,
 } from "./dockCountdownScene";
+import {
+  clearPresentationScreen,
+  publishCountdownToPresentation,
+} from "../../services/presentationPublish";
 
 // ── Hardcoded countdowns ───────────────────────────────────────────────────
 
@@ -227,7 +233,7 @@ function CountdownCard({
   if (theme) loadTextThemeFont(theme);
   const timerFont = theme ? theme.fontFamily : "monospace";
   const timerWeight = theme ? theme.fontWeight : 700;
-  const timerColor = theme ? theme.timerColor : "#fff";
+  const timerColor = "var(--dock-text, #F8FAFC)";
   const timerShadow = theme ? theme.timerShadow : "none";
 
   return (
@@ -343,7 +349,7 @@ function CountdownCard({
             }}
             onBlur={() => setEditingTime(false)}
             onClick={(ev) => ev.stopPropagation()}
-            style={{ fontSize: 28, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-accent, #3b82f6)", borderRadius: 4, padding: "2px 6px", width: "100%", letterSpacing: 1, lineHeight: 1, outline: "none" }}
+            style={{ fontSize: 28, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, background: "var(--dock-input-bg, rgba(0,0,0,0.3))", border: "1px solid var(--dock-accent, #3b82f6)", borderRadius: 4, padding: "2px 6px", width: "100%", letterSpacing: 1, lineHeight: 1, outline: "none" }}
           />
         ) : (
           formattedTime
@@ -502,8 +508,13 @@ function CountdownCard({
 
 // ── Main Tab ───────────────────────────────────────────────────────────────
 
-export default function DockCountdownsTab() {
+export default function DockCountdownsTab({
+  presentationOutputTarget = "obs",
+}: {
+  presentationOutputTarget?: DockPresentationOutputTarget;
+} = {}) {
   const { t } = useTranslation();
+  const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   const [countdowns, setCountdowns] = useState<CountdownConfig[]>(HARDCODED_COUNTDOWNS);
   const [liveCountdownId, setLiveCountdownId] = useState<string | null>(() => readLivePersistState()?.id ?? null);
   const livePersistRef = useRef<LivePersistState | null>(readLivePersistState());
@@ -617,6 +628,7 @@ export default function DockCountdownsTab() {
       timer.remaining <= triggerTime
     ) {
       autoSwitchTriggeredRef.current = true;
+      if (presentationLinkMode) return;
       ensureObsConnected().then(() => {
         if (dockObsClient.isConnected) {
           dockObsClient.call("SetCurrentProgramScene", { sceneName: targetScene });
@@ -625,12 +637,16 @@ export default function DockCountdownsTab() {
         console.warn("[DockCountdowns] Auto scene switch failed:", err);
       });
     }
-  }, [timer.remaining, activeCd]);
+  }, [timer.remaining, activeCd, presentationLinkMode]);
 
   // Load OBS scenes on mount so card dropdowns have data
   useEffect(() => {
+    if (presentationLinkMode) {
+      setObsScenes([]);
+      return;
+    }
     loadObsScenes().then(setObsScenes);
-  }, []);
+  }, [presentationLinkMode]);
 
   // ── OBS ─────────────────────────────────────────────────────────────────
 
@@ -638,6 +654,7 @@ export default function DockCountdownsTab() {
   const BG_SOURCE = DOCK_COUNTDOWN_BG_SOURCE_NAME;
 
   async function loadObsScenes(): Promise<string[]> {
+    if (presentationLinkMode) return [];
     try {
       await ensureObsConnected();
       if (!dockObsClient.isConnected) return [];
@@ -732,6 +749,11 @@ export default function DockCountdownsTab() {
   }
 
   const pushToObs = useCallback(async (cd: CountdownConfig, sync?: OverlaySyncState) => {
+    if (presentationLinkMode) {
+      await publishCountdownToPresentation(cd);
+      return;
+    }
+
     await ensureObsConnected();
     if (!dockObsClient.isConnected) return;
 
@@ -745,11 +767,24 @@ export default function DockCountdownsTab() {
     } catch (err) {
       console.warn("[DockCountdowns] Failed to push to OBS:", err);
     }
-  }, []);
+  }, [presentationLinkMode]);
 
   // ── Actions ─────────────────────────────────────────────────────────────
 
   const handleShowInObs = useCallback(async (cd: CountdownConfig) => {
+    if (presentationLinkMode) {
+      setActiveId(cd.id);
+      setPlaybackState("running");
+      obsControlArmedRef.current = true;
+      autoSwitchTriggeredRef.current = false;
+      const remaining = Math.floor(cd.timer.durationSeconds);
+      writeLivePersistState({ id: cd.id, remaining, running: true, savedAt: Date.now() });
+      setLiveCountdownId(cd.id);
+      await publishCountdownToPresentation(cd);
+      timer.start();
+      return;
+    }
+
     await ensureObsConnected();
     if (!dockObsClient.isConnected) return;
 
@@ -781,7 +816,7 @@ export default function DockCountdownsTab() {
     } catch (err) {
       console.warn("[DockCountdowns] Failed to show in OBS:", err);
     }
-  }, [timer, pushToObs]);
+  }, [presentationLinkMode, timer, pushToObs]);
 
   const handlePause = useCallback(async (cd: CountdownConfig) => {
     const currentRemaining = timer.pause();
@@ -816,8 +851,12 @@ export default function DockCountdownsTab() {
     setPlaybackState("running");
     const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
     try {
-      await ensureObsConnected();
-      if (dockObsClient.isConnected) {
+      if (presentationLinkMode) {
+        await clearPresentationScreen();
+      } else {
+        await ensureObsConnected();
+      }
+      if (!presentationLinkMode && dockObsClient.isConnected) {
         await hideObsSource(BG_SOURCE, targetScene);
         await hideObsSource(COUNTDOWN_SOURCE, targetScene);
       }
@@ -826,13 +865,14 @@ export default function DockCountdownsTab() {
     }
     writeLivePersistState(null);
     setLiveCountdownId(null);
-  }, [timer]);
+  }, [presentationLinkMode, timer]);
 
   const handleAdjustTime = useCallback(async (cd: CountdownConfig, deltaSeconds: number) => {
     const oldRemaining = timer.remaining;
     const newRemaining = Math.max(0, oldRemaining + deltaSeconds);
+    const updatedCd = { ...cd, timer: { ...cd.timer, durationSeconds: newRemaining } };
     setCountdowns((prev) => prev.map((c) =>
-      c.id === cd.id ? { ...c, timer: { ...c.timer, durationSeconds: newRemaining } } : c,
+      c.id === cd.id ? updatedCd : c,
     ));
     if (activeId === cd.id) {
       timer.adjustTime(deltaSeconds);
@@ -840,13 +880,14 @@ export default function DockCountdownsTab() {
         writeLivePersistState({ id: cd.id, remaining: newRemaining, running: timer.isRunning, savedAt: Date.now() });
       }
       const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(newRemaining) };
-      await pushToObs(cd, sync);
+      await pushToObs(updatedCd, sync);
     }
   }, [timer, pushToObs, liveCountdownId, activeId]);
 
   const handleSetTime = useCallback(async (cd: CountdownConfig, seconds: number) => {
+    const updatedCd = { ...cd, timer: { ...cd.timer, durationSeconds: seconds } };
     setCountdowns((prev) => prev.map((c) =>
-      c.id === cd.id ? { ...c, timer: { ...c.timer, durationSeconds: seconds } } : c,
+      c.id === cd.id ? updatedCd : c,
     ));
     if (activeId === cd.id) {
       timer.setRemainingDirect(seconds);
@@ -854,7 +895,7 @@ export default function DockCountdownsTab() {
         writeLivePersistState({ id: cd.id, remaining: seconds, running: timer.isRunning, savedAt: Date.now() });
       }
       const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(seconds) };
-      await pushToObs(cd, sync);
+      await pushToObs(updatedCd, sync);
     }
   }, [timer, pushToObs, liveCountdownId, activeId]);
 
@@ -1304,8 +1345,12 @@ export default function DockCountdownsTab() {
 
                 if (liveCountdownId === updatedCd.id) {
                   try {
-                    await ensureObsConnected();
-                    if (dockObsClient.isConnected) {
+                    if (presentationLinkMode) {
+                      await publishCountdownToPresentation(updatedCd);
+                    } else {
+                      await ensureObsConnected();
+                    }
+                    if (!presentationLinkMode && dockObsClient.isConnected) {
                       const baseUrl = getOverlayBaseUrlSync();
                       const targetScene = resolveCountdownTargetScene(updatedCd.obs.sceneName);
                       const bgPayload = { config: updatedCd, baseUrl, timestamp: Date.now() };

@@ -10,22 +10,25 @@
  * connection shared across all dock tabs).
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import type { DockStagedItem } from "../dockTypes";
+import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
+import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import Icon from "../DockIcon";
-import {
-  TICKER_THEMES,
-  generateTickerHTML,
-} from "../../components/modules/tickerThemes";
 import { LT_ALL_THEMES } from "../../lowerthirds/themes";
 import { loadDockLTFavorites, loadDockFavoriteBibleThemes, loadDockTickerFavorites } from "../dockThemeData";
+import { FAVORITE_THEMES_UPDATED_EVENT } from "../../services/favoriteThemes";
+import { dockClient } from "../../services/dockBridge";
 import type { LowerThirdTheme } from "../../lowerthirds/types";
 import type { LTSize } from "../../lowerthirds/types";
 import { LT_SIZE_LABELS, LT_SIZE_SCALE } from "../../lowerthirds/types";
 import type { BibleTheme } from "../../bible/types";
+import type { BibleThemeSettings } from "../../bible/types";
+import type { TickerThemeColors } from "../../components/modules/tickerThemes";
 import allThemesData from "../../../lower_thirds/all_themes.json";
 import DockLowerThirdEditor from "./DockLowerThirdEditor";
 import DockCountdownsTab from "./DockCountdownsTab";
@@ -34,6 +37,17 @@ import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
 import { normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
 import { loadProjectionSettings, saveProjectionSettings } from "../dockProjectionSettings";
+import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
+import {
+  clearPresentationScreen,
+  publishTickerToPresentation,
+} from "../../services/presentationPublish";
+import {
+  DEFAULT_DOCK_TICKER_THEME_OPTION,
+  getDockTickerThemeOptionsForFavorites,
+  renderDockTickerThemeHtml,
+  resolveDockTickerThemeOption,
+} from "../tickerThemeCatalog";
 
 const ALL_LT_THEMES: LowerThirdTheme[] = [
   ...LT_ALL_THEMES,
@@ -63,24 +77,71 @@ interface TickerMessage {
   active: boolean;
 }
 
+type TickerColorOverrides = Partial<TickerThemeColors>;
+type TickerColorKey = keyof TickerThemeColors;
+
 interface TickerSettings {
   speed: number;
   position: "top" | "bottom";
   loop: boolean;
   themeId: string;
   heading: string;
+  colors: TickerColorOverrides;
 }
+
+interface TickerBranding {
+  logoUrl: string;
+  brandName: string;
+  brandColor: string;
+}
+
+type BibleLtColorKey =
+  | "fontColor"
+  | "refFontColor"
+  | "backgroundColor"
+  | "boxBackground"
+  | "referenceBackgroundColor";
+type BibleLtColorOverrides = Partial<Pick<BibleThemeSettings, BibleLtColorKey>>;
+type BibleLtColorOverrideMap = Record<string, BibleLtColorOverrides>;
 
 interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
   tickerOutputMode?: "source" | "scene";
+  presentationOutputTarget?: DockPresentationOutputTarget;
+  hideTickerControls?: boolean;
+  hideLowerThirdControls?: boolean;
 }
 
 const STORAGE_KEY = "dock-ticker-messages";
 const SETTINGS_KEY = "dock-ticker-settings";
+const BIBLE_LT_COLOR_OVERRIDES_KEY = "dock-bible-lt-color-overrides";
 const MAX_CHARS = 140;
 const TICKER_HEIGHT = 80;
+const TICKER_COLOR_POPOVER_WIDTH = 270;
+const COLOR_INPUT_FALLBACK = "#1d4ed8";
+const TICKER_COLOR_INPUT_FALLBACKS: Record<TickerColorKey, string> = {
+  accent: "#1d4ed8",
+  accentText: "#ffffff",
+  barBg: "#0f172a",
+  barText: "#ffffff",
+  separator: "#f97316",
+};
+const TICKER_COLOR_CONTROLS: Array<{ key: TickerColorKey; label: string }> = [
+  { key: "accent", label: "Heading background" },
+  { key: "accentText", label: "Heading text" },
+  { key: "barText", label: "Ticker text" },
+  { key: "barBg", label: "Ticker background" },
+  { key: "separator", label: "Separator" },
+];
+const BIBLE_LT_COLOR_CONTROLS: Array<{ key: BibleLtColorKey; label: string; fallback: string }> = [
+  { key: "fontColor", label: "Text", fallback: "#ffffff" },
+  { key: "refFontColor", label: "Reference", fallback: "#f8fafc" },
+  { key: "backgroundColor", label: "Screen background", fallback: "#000000" },
+  { key: "boxBackground", label: "Lower-third bar", fallback: "#111827" },
+  { key: "referenceBackgroundColor", label: "Reference badge", fallback: "#f97316" },
+];
+const EMPTY_BIBLE_LT_OVERRIDES: BibleLtColorOverrides = {};
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -98,22 +159,107 @@ function saveMessages(msgs: TickerMessage[]) {
   try { localStorage.setItem(getUserScopedKey(STORAGE_KEY), JSON.stringify(msgs)); } catch { /* ignore */ }
 }
 
+function sanitizeCssColor(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().slice(0, 80);
+  if (!trimmed) return undefined;
+  if (/[;{}<>]/.test(trimmed)) return undefined;
+  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(trimmed)) return trimmed;
+  if (/^rgba?\(\s*(?:\d{1,3}\s*,\s*){2}\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(trimmed)) return trimmed;
+  if (/^hsla?\(\s*\d{1,3}(?:deg)?\s*,\s*\d{1,3}%\s*,\s*\d{1,3}%(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(trimmed)) return trimmed;
+  return undefined;
+}
+
+function colorInputValue(value: unknown, fallback: string = COLOR_INPUT_FALLBACK): string {
+  const color = sanitizeCssColor(value);
+  if (!color) return fallback;
+  const hex = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];
+  if (!hex) return fallback;
+  if (hex.length === 3) {
+    return `#${hex.split("").map((char) => char + char).join("")}`.toLowerCase();
+  }
+  return `#${hex}`.toLowerCase();
+}
+
+function loadTickerColorOverrides(raw: unknown): TickerColorOverrides {
+  if (!raw || typeof raw !== "object") return {};
+  const source = raw as Record<string, unknown>;
+  const next: TickerColorOverrides = {};
+  for (const { key } of TICKER_COLOR_CONTROLS) {
+    const color = sanitizeCssColor(source[key]);
+    if (color) next[key] = color;
+  }
+  return next;
+}
+
+function loadBibleLtColorOverrides(): BibleLtColorOverrideMap {
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(BIBLE_LT_COLOR_OVERRIDES_KEY));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const next: BibleLtColorOverrideMap = {};
+    for (const [themeId, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== "object") continue;
+      const source = value as Record<string, unknown>;
+      const overrides: BibleLtColorOverrides = {};
+      for (const { key } of BIBLE_LT_COLOR_CONTROLS) {
+        const color = sanitizeCssColor(source[key]);
+        if (color) overrides[key] = color;
+      }
+      if (Object.keys(overrides).length > 0) next[themeId] = overrides;
+    }
+    return next;
+  } catch {
+    return {};
+  }
+}
+
+function saveBibleLtColorOverrides(value: BibleLtColorOverrideMap) {
+  try {
+    localStorage.setItem(getUserScopedKey(BIBLE_LT_COLOR_OVERRIDES_KEY), JSON.stringify(value));
+  } catch { /* ignore */ }
+}
+
 function loadSettings(): TickerSettings {
+  const defaultTheme = DEFAULT_DOCK_TICKER_THEME_OPTION;
   try {
     const raw = localStorage.getItem(getUserScopedKey(SETTINGS_KEY));
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<TickerSettings>;
+      const parsedTheme = resolveDockTickerThemeOption(parsed.themeId) ?? defaultTheme;
+      return {
+        speed: typeof parsed.speed === "number" ? parsed.speed : 50,
+        position: parsed.position === "top" ? "top" : "bottom",
+        loop: typeof parsed.loop === "boolean" ? parsed.loop : true,
+        themeId: parsedTheme?.id ?? "",
+        heading: typeof parsed.heading === "string" && parsed.heading.trim()
+          ? parsed.heading.slice(0, 20)
+          : parsedTheme?.defaultHeading ?? "LIVE",
+        colors: loadTickerColorOverrides(parsed.colors),
+      };
+    }
   } catch { /* ignore */ }
   return {
     speed: 50,
     position: "bottom",
     loop: true,
-    themeId: TICKER_THEMES[0]?.id ?? "",
-    heading: TICKER_THEMES[0]?.defaultHeading ?? "LIVE",
+    themeId: defaultTheme?.id ?? "",
+    heading: defaultTheme?.defaultHeading ?? "LIVE",
+    colors: {},
   };
 }
 
 function saveSettings(s: TickerSettings) {
   try { localStorage.setItem(getUserScopedKey(SETTINGS_KEY), JSON.stringify(s)); } catch { /* ignore */ }
+}
+
+function loadInitialTickerBranding(): TickerBranding {
+  const settings = getSettings();
+  return {
+    logoUrl: resolveOverlayAssetUrl(settings.brandLogoPath),
+    brandName: settings.churchName || "MakeChurchEasy",
+    brandColor: settings.brandColor || "#6A34DE",
+  };
 }
 
 type MinistrySubTab = "ticker" | "lower-thirds" | "countdowns";
@@ -132,8 +278,18 @@ function loadMinistryTab(): MinistrySubTab {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function DockMinistryTab({ staged: _staged, onStage: _onStage, tickerOutputMode }: Props) {
+export default function DockMinistryTab({
+  staged: _staged,
+  onStage: _onStage,
+  tickerOutputMode,
+  presentationOutputTarget = "obs",
+  hideTickerControls = false,
+  hideLowerThirdControls = false,
+}: Props) {
   const { t } = useTranslation();
+  const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
+  const showTickerTab = !hideTickerControls;
+  const showLowerThirdTab = !hideLowerThirdControls;
   const [subTab, setSubTab] = useState<MinistrySubTab>(loadMinistryTab);
   const [messages, setMessages] = useState<TickerMessage[]>(loadMessages);
   const [newText, setNewText] = useState("");
@@ -147,7 +303,12 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [dockPlan, setDockPlan] = useState<string>(() => getDockPlan());
+  const showCountdownsTab = dockPlan !== "free";
   const [tickerFavIds, setTickerFavIds] = useState<Set<string>>(new Set());
+  const [tickerBranding, setTickerBranding] = useState<TickerBranding>(loadInitialTickerBranding);
+  const [tickerColorPopoverOpen, setTickerColorPopoverOpen] = useState(false);
+  const [tickerColorPopoverPosition, setTickerColorPopoverPosition] = useState({ top: 0, left: 0 });
+  const [bibleLtColorOverrides, setBibleLtColorOverrides] = useState<BibleLtColorOverrideMap>(loadBibleLtColorOverrides);
 
   // Lower-thirds state — mixed LowerThirdTheme + BibleTheme entries
   const [ltFavorites, setLtFavorites] = useState<MixedLTThemeEntry[]>([]);
@@ -164,12 +325,74 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const [bibleLtText, setBibleLtText] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const tickerColorPopoverRef = useRef<HTMLDivElement | null>(null);
+  const tickerColorPopoverPanelRef = useRef<HTMLDivElement | null>(null);
+  const bibleLtLiveUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+
+  const updateTickerColorPopoverPosition = useCallback(() => {
+    const anchor = tickerColorPopoverRef.current;
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    const margin = 8;
+    const viewportWidth = window.innerWidth || 320;
+    const viewportHeight = window.innerHeight || 480;
+    const left = Math.max(
+      margin,
+      Math.min(rect.right - TICKER_COLOR_POPOVER_WIDTH, viewportWidth - TICKER_COLOR_POPOVER_WIDTH - margin),
+    );
+    const estimatedHeight = 224;
+    const top = rect.bottom + estimatedHeight + margin > viewportHeight
+      ? Math.max(margin, rect.top - estimatedHeight - 4)
+      : rect.bottom + 4;
+    setTickerColorPopoverPosition({ top, left });
+  }, []);
 
   // Persist
   useEffect(() => { saveMessages(messages); }, [messages]);
   useEffect(() => { saveSettings(settings); }, [settings]);
+  useEffect(() => { saveBibleLtColorOverrides(bibleLtColorOverrides); }, [bibleLtColorOverrides]);
   useEffect(() => { try { localStorage.setItem(MINISTRY_TAB_KEY, subTab); } catch { /* ignore */ } }, [subTab]);
+  useEffect(() => {
+    const tabHidden =
+      (subTab === "ticker" && !showTickerTab) ||
+      (subTab === "lower-thirds" && !showLowerThirdTab) ||
+      (subTab === "countdowns" && !showCountdownsTab);
+    if (!tabHidden) return;
+    const fallback = showTickerTab
+      ? "ticker"
+      : showLowerThirdTab
+        ? "lower-thirds"
+        : showCountdownsTab
+          ? "countdowns"
+          : null;
+    if (fallback && fallback !== subTab) setSubTab(fallback);
+  }, [showCountdownsTab, showLowerThirdTab, showTickerTab, subTab]);
+
+  useEffect(() => {
+    if (!tickerColorPopoverOpen) return;
+    updateTickerColorPopoverPosition();
+    const closeOnPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (tickerColorPopoverRef.current?.contains(target)) return;
+      if (tickerColorPopoverPanelRef.current?.contains(target)) return;
+      setTickerColorPopoverOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTickerColorPopoverOpen(false);
+    };
+    const reposition = () => updateTickerColorPopoverPosition();
+    document.addEventListener("mousedown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      document.removeEventListener("mousedown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [tickerColorPopoverOpen, updateTickerColorPopoverPosition]);
 
   // OBS connection
   useEffect(() => {
@@ -187,6 +410,33 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       if (mountedRef.current) setDockPlan(getDockPlan());
     }, 30_000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const localBranding = loadInitialTickerBranding();
+    fetch(`/uploads/dock-branding.json?_=${Date.now()}`, { cache: "no-store" })
+      .then((res) => res.ok ? res.json() : null)
+      .then((branding: unknown) => {
+        if (cancelled || !branding || typeof branding !== "object") return;
+        const data = branding as Record<string, unknown>;
+        const logoFileName = typeof data.brandLogoFileName === "string" ? data.brandLogoFileName.trim() : "";
+        const brandLogoPath = typeof data.brandLogoPath === "string" ? data.brandLogoPath.trim() : "";
+        const logoUrl = logoFileName
+          ? resolveOverlayAssetUrl(`/uploads/${encodeURIComponent(logoFileName)}`)
+          : resolveOverlayAssetUrl(brandLogoPath || localBranding.logoUrl);
+        setTickerBranding({
+          logoUrl,
+          brandName: typeof data.churchName === "string" && data.churchName.trim()
+            ? data.churchName.trim()
+            : localBranding.brandName,
+          brandColor: typeof data.brandColor === "string" && data.brandColor.trim()
+            ? data.brandColor.trim()
+            : localBranding.brandColor,
+        });
+      })
+      .catch(() => { });
+    return () => { cancelled = true; };
   }, []);
 
   // Enforce free plan: delete MCE Ticker source from OBS when user is free/downgraded
@@ -217,14 +467,12 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     return () => clearTimeout(t);
   }, [ltFeedback]);
 
-  // Load favorite LT themes (both LowerThirdTheme and BibleTheme lower-thirds)
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      loadDockLTFavorites().catch(() => new Set<string>()),
-      loadDockFavoriteBibleThemes().catch(() => [] as BibleTheme[]),
-    ]).then(([ltIdSet, bibleThemes]) => {
-      if (cancelled) return;
+  const refreshLtFavorites = useCallback(async () => {
+    try {
+      const [ltIdSet, bibleThemes] = await Promise.all([
+        loadDockLTFavorites().catch(() => new Set<string>()),
+        loadDockFavoriteBibleThemes().catch(() => [] as BibleTheme[]),
+      ]);
       const entries: MixedLTThemeEntry[] = [];
 
       // LowerThirdTheme favorites — only show themes favorited/added to OBS
@@ -239,46 +487,157 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       }
 
       setLtFavorites(entries);
-    }).catch((err) => {
+    } catch (err) {
       console.warn("[DockMinistry] Failed to load LT favorites:", err);
-      if (!cancelled) {
-        setLtFavorites([]);
-      }
-    });
-    return () => { cancelled = true; };
+      setLtFavorites([]);
+    }
   }, []);
+
+  const refreshTickerFavorites = useCallback(async () => {
+    try {
+      const favIds = await loadDockTickerFavorites();
+      setTickerFavIds(favIds);
+      const available = getDockTickerThemeOptionsForFavorites(favIds);
+      setSettings((current) => {
+        const currentTheme = available.find((option) => option.id === current.themeId);
+        if (currentTheme) return current;
+        const fallback = available[0];
+        return fallback
+          ? { ...current, themeId: fallback.id, heading: fallback.defaultHeading }
+          : current;
+      });
+    } catch {
+      // Keep the current ticker theme list if favorites cannot be read.
+    }
+  }, []);
+
+  // Load favorite LT themes (both LowerThirdTheme and BibleTheme lower-thirds)
+  useEffect(() => {
+    void refreshLtFavorites();
+  }, [refreshLtFavorites]);
 
   // Load ticker favorites
   useEffect(() => {
-    let cancelled = false;
-    loadDockTickerFavorites().then((favIds) => {
-      if (cancelled) return;
-      setTickerFavIds(favIds);
-      const available = TICKER_THEMES.filter((t) => favIds.has(t.id));
-      const currentInList = available.some((t) => t.id === settings.themeId);
-      if (!currentInList && available.length > 0) {
-        setSettings((s) => ({ ...s, themeId: available[0].id, heading: available[0].defaultHeading }));
-      }
-    }).catch(() => { });
-    return () => { cancelled = true; };
-  }, []);
+    void refreshTickerFavorites();
+  }, [refreshTickerFavorites]);
 
-  const tickerThemeList = TICKER_THEMES.filter((t) => tickerFavIds.has(t.id));
-  const effectiveThemeList = tickerThemeList.length > 0 ? tickerThemeList : TICKER_THEMES;
-  const theme = effectiveThemeList.find((t) => t.id === settings.themeId) ?? effectiveThemeList[0];
+  useEffect(() => {
+    const refreshAll = () => {
+      void refreshLtFavorites();
+      void refreshTickerFavorites();
+    };
+    window.addEventListener(FAVORITE_THEMES_UPDATED_EVENT, refreshAll);
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key || event.key.includes("ocs-fav-")) {
+        refreshAll();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    const unsubscribe = dockClient.onState((msg) => {
+      if (msg.type === "state:favorite-themes-updated") {
+        refreshAll();
+      }
+    });
+    return () => {
+      window.removeEventListener(FAVORITE_THEMES_UPDATED_EVENT, refreshAll);
+      window.removeEventListener("storage", onStorage);
+      unsubscribe();
+    };
+  }, [refreshLtFavorites, refreshTickerFavorites]);
+
+  const effectiveThemeList = getDockTickerThemeOptionsForFavorites(tickerFavIds);
+  const selectedTickerTheme =
+    effectiveThemeList.find((option) => option.id === settings.themeId) ??
+    effectiveThemeList[0] ??
+    DEFAULT_DOCK_TICKER_THEME_OPTION;
   const activeMessages = messages.filter((m) => m.active);
 
-  // Derive branded ticker colors from the app's brand color
-  const brandedColors = (() => {
-    const brandColor = normalizeBrandColor(getSettings().brandColor);
+  const tickerColors: TickerThemeColors | undefined = (() => {
+    if (!selectedTickerTheme) return undefined;
+    const brandColor = normalizeBrandColor(tickerBranding.brandColor);
+    const baseColors: TickerThemeColors = selectedTickerTheme.source === "dock"
+      ? {
+        ...selectedTickerTheme.theme.defaultColors,
+        accent: brandColor,
+        separator: brandColor,
+      }
+      : {
+        accent: sanitizeCssColor(selectedTickerTheme.accentColor) ?? brandColor,
+        accentText: "#ffffff",
+        barBg: "#0f172a",
+        barText: "#ffffff",
+        separator: sanitizeCssColor(selectedTickerTheme.accentColor) ?? brandColor,
+      };
     return {
-      ...theme?.defaultColors ?? {},
-      accent: brandColor,
-      separator: brandColor,
+      ...baseColors,
+      ...loadTickerColorOverrides(settings.colors),
     };
   })();
+  const tickerBrandLogoUrl = selectedTickerTheme?.source === "dock"
+    ? tickerBranding.logoUrl
+    : "";
+  const tickerBrandName = tickerBranding.brandName || "MakeChurchEasy";
 
   const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? { kind: "lt" as const, theme: ALL_LT_THEMES[0], label: ALL_LT_THEMES[0]?.name ?? "Speaker" };
+  const selectedBibleLtSettings = ltSelectedEntry.kind === "bible"
+    ? (ltSelectedEntry.theme.variants?.lowerThird?.settings ?? ltSelectedEntry.theme.settings)
+    : null;
+  const selectedBibleLtOverrides = ltSelectedEntry.kind === "bible"
+    ? (bibleLtColorOverrides[ltSelectedEntry.theme.id] ?? EMPTY_BIBLE_LT_OVERRIDES)
+    : EMPTY_BIBLE_LT_OVERRIDES;
+  const selectedBibleLtEffectiveSettings = useMemo<Record<string, unknown> | null>(
+    () => selectedBibleLtSettings
+      ? {
+        ...(selectedBibleLtSettings as unknown as Record<string, unknown>),
+        ...selectedBibleLtOverrides,
+      }
+      : null,
+    [selectedBibleLtSettings, selectedBibleLtOverrides],
+  );
+  const selectedBibleLtAnimationDuration = selectedBibleLtEffectiveSettings
+    ? Number(selectedBibleLtEffectiveSettings.animationDuration) || 800
+    : 800;
+
+  useEffect(() => {
+    if (
+      !ltLive ||
+      subTab !== "lower-thirds" ||
+      ltSelectedEntry.kind !== "bible" ||
+      !bibleLtText.trim() ||
+      !selectedBibleLtEffectiveSettings
+    ) {
+      return;
+    }
+
+    if (bibleLtLiveUpdateTimerRef.current) {
+      clearTimeout(bibleLtLiveUpdateTimerRef.current);
+    }
+    bibleLtLiveUpdateTimerRef.current = setTimeout(() => {
+      void (async () => {
+        try {
+          await ensureObsConnected();
+          await dockObsClient.pushBible({
+            book: "",
+            chapter: 0,
+            verse: 0,
+            translation: "",
+            verseText: bibleLtText.trim(),
+            overlayMode: "lower-third",
+            bibleThemeSettings: selectedBibleLtEffectiveSettings,
+          });
+        } catch (err) {
+          console.warn("[DockMinistry] Bible LT live color update failed:", err);
+        }
+      })();
+    }, 180);
+
+    return () => {
+      if (bibleLtLiveUpdateTimerRef.current) {
+        clearTimeout(bibleLtLiveUpdateTimerRef.current);
+        bibleLtLiveUpdateTimerRef.current = null;
+      }
+    };
+  }, [bibleLtText, ltLive, ltSelectedEntry, selectedBibleLtEffectiveSettings, subTab]);
 
   // Reset selected index when favorites change
   useEffect(() => { setLtSelectedIdx(0); }, [ltFavorites]);
@@ -286,6 +645,38 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const handleSelectLtTheme = useCallback((entryIdx: number) => {
     if (entryIdx >= 0 && entryIdx < ltFavorites.length) setLtSelectedIdx(entryIdx);
   }, [ltFavorites]);
+
+  const setTickerColorOverride = useCallback((key: TickerColorKey, value: string) => {
+    setSettings((current) => {
+      const nextColors = { ...(current.colors ?? {}) };
+      const color = sanitizeCssColor(value);
+      if (color) {
+        nextColors[key] = color;
+      } else {
+        delete nextColors[key];
+      }
+      return { ...current, colors: nextColors };
+    });
+  }, []);
+
+  const setBibleLtColorOverride = useCallback((themeId: string, key: BibleLtColorKey, value: string) => {
+    setBibleLtColorOverrides((current) => {
+      const themeOverrides = { ...(current[themeId] ?? {}) };
+      const color = sanitizeCssColor(value);
+      if (color) {
+        themeOverrides[key] = color;
+      } else {
+        delete themeOverrides[key];
+      }
+      const next = { ...current };
+      if (Object.keys(themeOverrides).length > 0) {
+        next[themeId] = themeOverrides;
+      } else {
+        delete next[themeId];
+      }
+      return next;
+    });
+  }, []);
 
   // ── Add message ──
   const handleAdd = useCallback(async () => {
@@ -337,22 +728,39 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       setError(t("ministry.addAtLeastOne"));
       return;
     }
-    if (!theme) return;
+    if (!selectedTickerTheme) return;
     setSending(true);
     setError(null);
     setSuccess(null);
     try {
+      if (presentationLinkMode) {
+        await publishTickerToPresentation({
+          text: activeMessages.map((m) => m.text).join("   •   "),
+          position: settings.position,
+          speed: settings.speed,
+          textColor: tickerColors?.barText,
+          backgroundColor: tickerColors?.barBg,
+          paused: false,
+        });
+        setRunning(true);
+        setIsPaused(false);
+        setSuccess(t("ministry.tickerLive"));
+        return;
+      }
+
       await ensureObsConnected();
-      const html = generateTickerHTML(
-        theme,
-        brandedColors,
-        settings.heading,
-        activeMessages.map((m) => m.text),
-        settings.speed,
-        settings.position,
-        settings.loop,
-        false,
-      );
+      const html = renderDockTickerThemeHtml({
+        option: selectedTickerTheme,
+        heading: settings.heading,
+        messages: activeMessages.map((m) => m.text),
+        speed: settings.speed,
+        position: settings.position,
+        loop: settings.loop,
+        paused: false,
+        colors: tickerColors,
+        brandLogoUrl: tickerBrandLogoUrl,
+        brandName: tickerBrandName,
+      });
 
       const video = await dockObsClient.call("GetVideoSettings") as { baseWidth: number; baseHeight: number };
       const canvasW = video.baseWidth;
@@ -455,25 +863,41 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     } finally {
       setSending(false);
     }
-  }, [activeMessages, theme, settings, tickerOutputMode]);
+  }, [activeMessages, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerOutputMode]);
 
   // ── Pause ticker (stops scroll in OBS) ──
   const handlePause = useCallback(async () => {
-    if (!theme) return;
+    if (!selectedTickerTheme) return;
     setSending(true);
     setError(null);
     setSuccess(null);
     try {
-      const html = generateTickerHTML(
-        theme,
-        brandedColors,
-        settings.heading,
-        activeMessages.map((m) => m.text),
-        settings.speed,
-        settings.position,
-        settings.loop,
-        !isPaused,
-      );
+      if (presentationLinkMode) {
+        await publishTickerToPresentation({
+          text: activeMessages.map((m) => m.text).join("   •   "),
+          position: settings.position,
+          speed: settings.speed,
+          textColor: tickerColors?.barText,
+          backgroundColor: tickerColors?.barBg,
+          paused: !isPaused,
+        });
+        setIsPaused((p) => !p);
+        setSuccess(isPaused ? t("ministry.resumed") : t("ministry.paused"));
+        return;
+      }
+
+      const html = renderDockTickerThemeHtml({
+        option: selectedTickerTheme,
+        heading: settings.heading,
+        messages: activeMessages.map((m) => m.text),
+        speed: settings.speed,
+        position: settings.position,
+        loop: settings.loop,
+        paused: !isPaused,
+        colors: tickerColors,
+        brandLogoUrl: tickerBrandLogoUrl,
+        brandName: tickerBrandName,
+      });
       const video = await dockObsClient.call("GetVideoSettings") as { baseWidth: number; baseHeight: number };
       const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
       await dockObsClient.call("SetInputSettings", {
@@ -487,7 +911,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     } finally {
       setSending(false);
     }
-  }, [theme, settings, activeMessages, isPaused]);
+  }, [activeMessages, isPaused, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors]);
 
   // ── Clear ticker (hide in OBS) ──
   const handleClear = useCallback(async () => {
@@ -495,6 +919,14 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     setError(null);
     setSuccess(null);
     try {
+      if (presentationLinkMode) {
+        await clearPresentationScreen();
+        setRunning(false);
+        setIsPaused(false);
+        setSuccess(t("ministry.tickerCleared"));
+        return;
+      }
+
       // Turn off MCE Ticker wherever it lives — MCE Presentation + current program scene
       const scenesToCheck = new Set<string>();
       scenesToCheck.add("MCE Presentation");
@@ -536,7 +968,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     } finally {
       setSending(false);
     }
-  }, [tickerOutputMode]);
+  }, [presentationLinkMode, t, tickerOutputMode]);
 
   return (
     <div className="dock-mv-tab">
@@ -545,23 +977,27 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
 
       {/* ── Sub-Tab Switcher ── */}
       <div className="dock-ministry-tabs">
-        <button
-          type="button"
-          className={`dock-ministry-tab${subTab === "ticker" ? " dock-ministry-tab--active" : ""}`}
-          onClick={() => setSubTab("ticker")}
-          title={t("ministry.ticker")}>
-          <Icon name="campaign" size={12} />
-          <span>{t("ministry.ticker")}</span>
-        </button>
-        <button
-          type="button"
-          className={`dock-ministry-tab${subTab === "lower-thirds" ? " dock-ministry-tab--active" : ""}`}
-          onClick={() => setSubTab("lower-thirds")}
-          title={t("ministry.lowerThirds")}>
-          <Icon name="subtitles" size={12} />
-          <span>{t("ministry.lowerThirds")}</span>
-        </button>
-        {dockPlan !== "free" && (
+        {showTickerTab && (
+          <button
+            type="button"
+            className={`dock-ministry-tab${subTab === "ticker" ? " dock-ministry-tab--active" : ""}`}
+            onClick={() => setSubTab("ticker")}
+            title={t("ministry.ticker")}>
+            <Icon name="campaign" size={12} />
+            <span>{t("ministry.ticker")}</span>
+          </button>
+        )}
+        {showLowerThirdTab && (
+          <button
+            type="button"
+            className={`dock-ministry-tab${subTab === "lower-thirds" ? " dock-ministry-tab--active" : ""}`}
+            onClick={() => setSubTab("lower-thirds")}
+            title={t("ministry.lowerThirds")}>
+            <Icon name="subtitles" size={12} />
+            <span>{t("ministry.lowerThirds")}</span>
+          </button>
+        )}
+        {showCountdownsTab && (
           <button
             type="button"
             className={`dock-ministry-tab${subTab === "countdowns" ? " dock-ministry-tab--active" : ""}`}
@@ -574,7 +1010,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       </div>
 
       {/* ── Ticker Tab ── */}
-      {subTab === "ticker" && dockPlan === "free" && (
+      {showTickerTab && subTab === "ticker" && dockPlan === "free" && (
         <div style={{ padding: "24px 16px", textAlign: "center" }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
@@ -593,7 +1029,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
           </button>
         </div>
       )}
-      {subTab === "ticker" && dockPlan !== "free" && (
+      {showTickerTab && subTab === "ticker" && dockPlan !== "free" && (
         <>
           {/* Feedback */}
           {error && (
@@ -617,10 +1053,15 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             <div className="dock-mv-tab__section">
               <div style={{ padding: "4px 0" }}>
                 <select
-                  value={theme?.id ?? ''}
+                  value={selectedTickerTheme?.id ?? ""}
                   onChange={(e) => {
-                    const t = TICKER_THEMES.find((x) => x.id === e.target.value);
-                    setSettings((s) => ({ ...s, themeId: e.target.value, heading: t?.defaultHeading ?? s.heading }));
+                    const nextTheme = resolveDockTickerThemeOption(e.target.value);
+                    setSettings((s) => ({
+                      ...s,
+                      themeId: e.target.value,
+                      heading: nextTheme?.defaultHeading ?? s.heading,
+                      colors: {},
+                    }));
                   }}
                   style={{
                     width: "100%",
@@ -648,7 +1089,16 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
               <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "block", alignItems: "center", gap: 6 }}>
                   <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.heading")}</label>
-                  <div>
+                  <div
+                    ref={tickerColorPopoverRef}
+                    style={{
+                      position: "relative",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      zIndex: tickerColorPopoverOpen ? 1000 : "auto",
+                    }}
+                  >
                     <input
                       type="text"
                       value={settings.heading}
@@ -657,8 +1107,8 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       maxLength={20}
                       style={{
                         minHeight: '30px',
-                        width: "90%",
                         flex: 1,
+                        minWidth: 0,
                         background: "var(--dock-surface)",
                         border: "1px solid var(--dock-border)",
                         borderRadius: 3,
@@ -667,6 +1117,36 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                         color: "var(--dock-text)",
                       }}
                     />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTickerColorPopoverOpen((open) => {
+                          const next = !open;
+                          if (next) {
+                            updateTickerColorPopoverPosition();
+                            requestAnimationFrame(updateTickerColorPopoverPosition);
+                          }
+                          return next;
+                        });
+                      }}
+                      title={t("ministry.colors", "Colors")}
+                      aria-label={t("ministry.colors", "Colors")}
+                      style={{
+                        width: 30,
+                        height: 30,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        borderRadius: 3,
+                        border: "1px solid var(--dock-border)",
+                        background: tickerColorPopoverOpen ? "var(--dock-accent)" : "var(--dock-surface)",
+                        color: tickerColorPopoverOpen ? "#fff" : "var(--dock-text)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Icon name="palette" size={15} />
+                    </button>
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -891,7 +1371,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   type="button"
                   className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--primary"}`}
                   onClick={handlePush}
-                  disabled={sending || activeMessages.length === 0 || !obsConnected}
+                  disabled={sending || activeMessages.length === 0 || (!obsConnected && !presentationLinkMode)}
                   style={{ flex: 1 }}
                   title={t("ministry.goLive")}>
                   <Icon name="play_arrow" size={14} />
@@ -924,7 +1404,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   </button>
                 )}
               </div>
-              {!obsConnected && (
+              {!obsConnected && !presentationLinkMode && (
                 <div style={{ fontSize: 10, color: "var(--dock-red)", textAlign: "center" }}>
                   {t("ministry.connectToObs")}
                 </div>
@@ -935,7 +1415,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       )}
 
       {/* ── Lower Thirds Tab ── */}
-      {subTab === "lower-thirds" && (
+      {showLowerThirdTab && subTab === "lower-thirds" && (
         <>
           {/* LT Feedback */}
           {ltFeedback && (
@@ -1135,6 +1615,91 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       {t("ministry.usingCustomTheme")} {ltSelectedEntry.theme.name}
                     </div>
 
+                    {selectedBibleLtSettings && (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          padding: 8,
+                          border: "1px solid var(--dock-border)",
+                          borderRadius: 4,
+                          background: "var(--dock-surface)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 7 }}>
+                          <div>
+                            <div style={{ fontSize: 10, fontWeight: 800, color: "var(--dock-text)", textTransform: "uppercase", letterSpacing: 0.3 }}>
+                              {t("lowerThird.appearance", "Appearance")}
+                            </div>
+                            <div style={{ fontSize: 9, color: "var(--dock-text-dim)", marginTop: 2 }}>
+                              {t("lowerThird.appearanceDesc", "Adjust colors for this lower-third theme.")}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (ltSelectedEntry.kind === "bible") {
+                                setBibleLtColorOverrides((current) => {
+                                  const next = { ...current };
+                                  delete next[ltSelectedEntry.theme.id];
+                                  return next;
+                                });
+                              }
+                            }}
+                            style={{
+                              border: "1px solid var(--dock-border)",
+                              borderRadius: 3,
+                              background: "var(--dock-input-bg)",
+                              color: "var(--dock-text-dim)",
+                              cursor: "pointer",
+                              fontSize: 10,
+                              padding: "2px 6px",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {t("common.reset", "Reset")}
+                          </button>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+                          {BIBLE_LT_COLOR_CONTROLS.map((control) => {
+                            const explicitColor = selectedBibleLtOverrides[control.key] ?? "";
+                            const baseColor = String(selectedBibleLtSettings[control.key] || control.fallback);
+                            const effectiveColor = sanitizeCssColor(explicitColor) ?? sanitizeCssColor(baseColor) ?? control.fallback;
+                            return (
+                              <label
+                                key={control.key}
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr 26px",
+                                  alignItems: "center",
+                                  gap: 5,
+                                  minWidth: 0,
+                                }}
+                              >
+                                <span style={{ fontSize: 9, color: "var(--dock-text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {t(`lowerThird.color.${control.key}`, control.label)}
+                                </span>
+                                <input
+                                  type="color"
+                                  value={colorInputValue(explicitColor || effectiveColor, control.fallback)}
+                                  onChange={(event) => setBibleLtColorOverride(ltSelectedEntry.theme.id, control.key, event.target.value)}
+                                  title={control.label}
+                                  style={{
+                                    width: 26,
+                                    height: 22,
+                                    border: "1px solid var(--dock-border)",
+                                    borderRadius: 3,
+                                    background: "transparent",
+                                    padding: 0,
+                                    cursor: "pointer",
+                                  }}
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Action buttons */}
                     <div style={{ display: "flex", gap: 6, padding: "6px 0" }}>
                       <button
@@ -1154,7 +1719,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                               translation: "",
                               verseText: bibleLtText.trim(),
                               overlayMode: "lower-third",
-                              bibleThemeSettings: ltSelectedEntry.theme.settings as unknown as Record<string, unknown>,
+                              bibleThemeSettings: selectedBibleLtEffectiveSettings,
                             });
                             setLtLive(true);
                             setLtFeedbackTone("success");
@@ -1188,10 +1753,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                                 translation: "",
                                 verseText: "",
                                 overlayMode: "lower-third",
-                                bibleThemeSettings: ltSelectedEntry?.kind === "bible" ? ltSelectedEntry.theme.settings as unknown as Record<string, unknown> : null,
+                                bibleThemeSettings: selectedBibleLtEffectiveSettings,
                               });
                               // Wait for exit animation (use theme's animation duration), then disable the source
-                              const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
+                              const animDuration = selectedBibleLtAnimationDuration;
                               await new Promise((r) => setTimeout(r, animDuration + 100));
                               await dockObsClient.clearBible();
                               setLtLive(false);
@@ -1231,10 +1796,10 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                               translation: "",
                               verseText: "",
                               overlayMode: "lower-third",
-                              bibleThemeSettings: ltSelectedEntry?.kind === "bible" ? ltSelectedEntry.theme.settings as unknown as Record<string, unknown> : null,
+                              bibleThemeSettings: selectedBibleLtEffectiveSettings,
                             });
                             // Wait for exit animation (use theme's animation duration), then disable the source
-                            const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
+                            const animDuration = selectedBibleLtAnimationDuration;
                             await new Promise((r) => setTimeout(r, animDuration + 100));
                             await dockObsClient.clearBible();
                             setLtLive(false);
@@ -1265,8 +1830,104 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       )}
 
       {/* ── Countdowns Tab ── */}
-      {subTab === "countdowns" && dockPlan !== "free" && (
-        <DockCountdownsTab />
+      {showCountdownsTab && subTab === "countdowns" && (
+        <DockCountdownsTab presentationOutputTarget={presentationOutputTarget} />
+      )}
+
+      {tickerColorPopoverOpen && tickerColors && createPortal(
+        <div
+          ref={tickerColorPopoverPanelRef}
+          role="dialog"
+          aria-label={t("ministry.tickerColors", "Ticker colors")}
+          style={{
+            position: "fixed",
+            top: tickerColorPopoverPosition.top,
+            left: tickerColorPopoverPosition.left,
+            zIndex: 10000,
+            width: TICKER_COLOR_POPOVER_WIDTH,
+            padding: 10,
+            background: "var(--dock-surface-alt, #1f2937)",
+            border: "1px solid var(--dock-border, #334155)",
+            borderRadius: 4,
+            boxShadow: "0 18px 50px rgba(0,0,0,0.36)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, color: "var(--dock-text, #f8fafc)", textTransform: "uppercase", letterSpacing: 0.3 }}>
+              {t("ministry.tickerColors", "Ticker colors")}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSettings((s) => ({ ...s, colors: {} }))}
+              style={{
+                border: "1px solid var(--dock-border, #334155)",
+                borderRadius: 3,
+                background: "var(--dock-surface, #111827)",
+                color: "var(--dock-text-dim, #cbd5e1)",
+                cursor: "pointer",
+                fontSize: 10,
+                padding: "2px 6px",
+              }}
+            >
+              {t("common.reset", "Reset")}
+            </button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {TICKER_COLOR_CONTROLS.map(({ key, label }) => {
+              const explicitColor = settings.colors?.[key] ?? "";
+              const effectiveColor = sanitizeCssColor(explicitColor) ?? tickerColors[key];
+              return (
+                <label
+                  key={key}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "92px 28px 1fr",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 10,
+                    color: "var(--dock-text-dim, #cbd5e1)",
+                  }}
+                >
+                  <span>{t(`ministry.tickerColor.${key}`, label)}</span>
+                  <input
+                    type="color"
+                    value={colorInputValue(explicitColor || effectiveColor, TICKER_COLOR_INPUT_FALLBACKS[key])}
+                    onChange={(e) => setTickerColorOverride(key, e.target.value)}
+                    title={label}
+                    style={{
+                      width: 28,
+                      height: 24,
+                      border: "1px solid var(--dock-border, #334155)",
+                      borderRadius: 3,
+                      background: "transparent",
+                      padding: 0,
+                      cursor: "pointer",
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={explicitColor}
+                    onChange={(e) => setTickerColorOverride(key, e.target.value)}
+                    placeholder={effectiveColor}
+                    spellCheck={false}
+                    style={{
+                      minWidth: 0,
+                      height: 24,
+                      background: "var(--dock-surface, #111827)",
+                      border: "1px solid var(--dock-border, #334155)",
+                      borderRadius: 3,
+                      color: "var(--dock-text, #f8fafc)",
+                      fontFamily: "inherit",
+                      fontSize: 10,
+                      padding: "0 6px",
+                    }}
+                  />
+                </label>
+              );
+            })}
+          </div>
+        </div>,
+        document.body,
       )}
 
     </div>

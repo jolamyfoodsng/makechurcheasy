@@ -40,13 +40,12 @@ import { normalizePlanId } from "../src/lib/subscriptionSourceOfTruth";
 import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from "../src/lib/upgradePromo";
 
 const PRICING_URL = "https://makechurcheasy.creatorstudioslabs.stream/subscription/plans";
-const PLAN_ORDER: Array<"free" | "basic" | "growth" | "pro"> = ["free", "basic", "growth", "pro"];
+const PLAN_ORDER: Array<"free" | "basic" | "growth"> = ["free", "basic", "growth"];
 
-const PLAN_THEMES: Record<"free" | "basic" | "growth" | "pro", { accent: string; badge: string }> = {
+const PLAN_THEMES: Record<"free" | "basic" | "growth", { accent: string; badge: string }> = {
   free: { accent: "slate", badge: "Current access" },
   basic: { accent: "emerald", badge: "Best first upgrade" },
   growth: { accent: "blue", badge: "Most popular" },
-  pro: { accent: "amber", badge: "Full production suite" },
 };
 
 const METRIC_DEFS: Array<{
@@ -125,7 +124,7 @@ const PRESENTATION_UNLOCKS: Array<{ title: string; detail: string; icon: typeof 
   },
 ];
 
-function clampPlan(plan?: string): "free" | "basic" | "growth" | "pro" {
+function clampPlan(plan?: string): "free" | "basic" | "growth" {
   const normalized = normalizePlanId(plan || "free");
   return PLAN_ORDER.includes(normalized) ? normalized : "free";
 }
@@ -144,7 +143,7 @@ function formatLimit(limit: number, label: string): string {
   return `${limit.toLocaleString("en-US")} ${label}`;
 }
 
-function getNextRecommendedPlan(requiredPlan: "free" | "basic" | "growth" | "pro"): "basic" | "growth" | "pro" {
+function getNextRecommendedPlan(requiredPlan: "free" | "basic" | "growth"): "basic" | "growth" {
   if (requiredPlan === "free") return "basic";
   return requiredPlan;
 }
@@ -231,14 +230,6 @@ export default function NewUpgradeModal({
       }
     }
 
-    if (requiredPlanKey === "pro" && !currentTier.entitlements.advancedAnalytics) {
-      items.push({
-        label: "Priority support",
-        icon: Crown,
-        detail: "Highest credit allocation, priority support, and early access.",
-      });
-    }
-
     return items.slice(0, 8);
   }, [currentTier, requiredTier, requiredLabel, requiredPlanKey]);
 
@@ -252,9 +243,9 @@ export default function NewUpgradeModal({
       recurringLabel: `${formatPrice(recurring)}/mo`,
       introLabel: intro ? formatPrice(intro) : null,
       regionLabel:
-        pricing.region === "NG"
+        pricing.region === "nigeria"
           ? "Nigeria pricing"
-          : pricing.region === "AFRICA"
+          : pricing.region === "africa"
             ? "Africa pricing"
             : "Rest of world pricing",
     };

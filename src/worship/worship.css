@@ -657,7 +657,7 @@ button.worship-online-action.at-limit {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--b-text-3, #616161);
+  color: #FFFFFF;
   padding: 3px 8px;
   border: 1px solid var(--b-border, #2C2C2C);
   border-radius: var(--b-radius, 2px);
@@ -707,9 +707,9 @@ button.worship-online-action.at-limit {
 
 .worship-slide-block-text p {
   margin: 0;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.65;
-  color: var(--b-text-1, #E0E0E0);
+  color: #FFFFFF;
   white-space: pre-line;
 }
 

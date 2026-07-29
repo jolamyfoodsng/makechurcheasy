@@ -25,7 +25,6 @@ import {
   MonitorSmartphone,
   Moon,
   Music,
-  Newspaper,
   Play,
   RotateCcw,
   Sun,
@@ -56,6 +55,7 @@ import { obsService, type ConnectionStatus } from "../services/obsService";
 import { getDockBaseUrl, getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { getPlanConfig, getPlanLabel } from "../services/planConfig";
 import { getCachedSubscription } from "../services/subscriptionCache";
+import { confirmStopVoiceBibleForPresentation } from "../services/voiceBiblePresentationGuard";
 import { getAllSongs } from "../worship/worshipDb";
 import { OnboardingResumeBanner } from "./OnboardingPage";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
@@ -434,44 +434,6 @@ function PlanUpgradeBanner() {
 // ── Remote Presentation Status ─────────────────────────────────────────────
 
 
-
-// ── What's New Section ─────────────────────────────────────────────────────
-
-function WhatsNewSection() {
-  if (getEnvConfig().isTest) return null;
-
-  const { t } = useTranslation();
-  const [dismissed, setDismissed] = useState(false);
-
-  if (dismissed) return null;
-
-  return (
-    <div className="panel whatsnew-panel" data-dt-tutorial="whats-new">
-      <div className="whatsnew-header">
-        <div className="whatsnew-header-left">
-          <Newspaper size={18} className="whatsnew-icon" />
-          <h3 className="panel-title" style={{ marginBottom: 0 }}>{t("dashboard.whatsNew.title")}</h3>
-          <span className="whatsnew-badge">{t("dashboard.whatsNew.version", { version: "2.4" })}</span>
-        </div>
-        <button className="whatsnew-dismiss" onClick={() => setDismissed(true)} title={t("dashboard.whatsNew.dismiss")}>
-          ✕
-        </button>
-      </div>
-      <div className="whatsnew-body">
-        <ul className="whatsnew-list">
-          <li>{t("dashboard.monthlyUsage.title")} — track your AI and credit usage at a glance</li>
-          <li>Remote Presentation — control slides from any device</li>
-          <li>Dashboard summary cards — plan, credits, devices, renewal at a glance</li>
-        </ul>
-        <div className="whatsnew-footer">
-          <a className="whatsnew-link" href="https://github.com/MakeChurchEasy/makechurcheasy/releases" target="_blank" rel="noreferrer" title={t("dashboard.whatsNew.readMore")}>
-            {t("dashboard.whatsNew.readMore")}
-          </a>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── Feature Grid ───────────────────────────────────────────────────────────
 
@@ -971,7 +933,7 @@ export default function ProductionHomePage() {
     suggestions: [],
     matching: false,
     inputLevel: 0,
-    detectionSpeed: "balanced",
+    detectionSpeed: "sharp",
   });
 
   // ── Bible ──
@@ -1157,6 +1119,7 @@ export default function ProductionHomePage() {
   // ── Actions ──
   const handleNavigate = useCallback(
     (path: string) => {
+      if (!confirmStopVoiceBibleForPresentation(path)) return;
       navigate(path);
     },
     [navigate],

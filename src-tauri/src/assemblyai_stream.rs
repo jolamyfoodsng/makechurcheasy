@@ -41,7 +41,7 @@ const REALTIME_WS_URL: &str = "wss://streaming.assemblyai.com/v3/ws";
 const REALTIME_MODEL: &str = "universal-3-5-pro";
 const TARGET_RATE: u32 = 16_000;
 const CHUNK_MS: u64 = 50;
-const REALTIME_PROMPT: &str = "English Christian church sermon, Bible teaching, worship service, pastor speech, scripture references, Bible book names, chapters, verses, and worship phrases.";
+const REALTIME_PROMPT: &str = "English Christian church sermon, Bible teaching, worship service, pastor speech, scripture references, Bible book names, chapters, verses, worship phrases, First Corinthians, Second Corinthians, First Samuel, Second Samuel, First Kings, Second Kings, First Chronicles, Second Chronicles, First Thessalonians, Second Thessalonians, First Timothy, Second Timothy, First Peter, Second Peter, First John, Second John, Third John.";
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -62,6 +62,15 @@ struct RealtimeProfile {
 
 fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
     match detection_speed {
+        Some("sharp") => RealtimeProfile {
+            label: "sharp",
+            realtime_mode: "min_latency",
+            min_turn_silence_ms: 80,
+            max_turn_silence_ms: 500,
+            interruption_delay_ms: 0,
+            force_endpoint_min_words: Some(4),
+            force_endpoint_cooldown_ms: 500,
+        },
         Some("fast") => RealtimeProfile {
             label: "fast",
             realtime_mode: "min_latency",

@@ -1,4 +1,4 @@
-export const CANONICAL_PLAN_IDS = ["free", "basic", "growth", "pro"] as const;
+export const CANONICAL_PLAN_IDS = ["free", "basic", "growth"] as const;
 
 export type CanonicalPlanId = (typeof CANONICAL_PLAN_IDS)[number];
 export type PricingRegion = "NG" | "AFRICA" | "ROW";
@@ -234,29 +234,11 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     propresenterImport: true,
     cloudSync: true,
     lowerThirds: true,
-  },
-  pro: {
-    credits: 3000,
-    maxSongs: -1,
-    maxImages: -1,
-    maxVideos: -1,
-    maxBibleVersions: -1,
-    maxTeams: 20,
-    maxDevices: 10,
-    tickers: true,
-    multiview: true,
-    remoteControl: true,
-    mobileSupport: true,
-    presentationMode: true,
-    bulkImport: true,
-    easyWorshipImport: true,
-    propresenterImport: true,
-    cloudSync: true,
-    lowerThirds: true,
     prioritySupport: true,
     priorityFeatureRequests: true,
     earlyAccessFeatures: true,
   },
+
 };
 
 export const REGION_PRICING: Record<PricingRegion, RegionPricingProfile> = {
@@ -266,7 +248,6 @@ export const REGION_PRICING: Record<PricingRegion, RegionPricingProfile> = {
     plans: {
       basic: { introductoryMonthly: 3500, monthly: 4000, yearly: 40000 },
       growth: { introductoryMonthly: 7500, monthly: 8500, yearly: 85000 },
-      pro: { monthly: 12000, yearly: 120000 },
     },
   },
   AFRICA: {
@@ -275,7 +256,6 @@ export const REGION_PRICING: Record<PricingRegion, RegionPricingProfile> = {
     plans: {
       basic: { monthly: 4, yearly: 40 },
       growth: { monthly: 10, yearly: 100 },
-      pro: { monthly: 20, yearly: 200 },
     },
   },
   ROW: {
@@ -284,17 +264,17 @@ export const REGION_PRICING: Record<PricingRegion, RegionPricingProfile> = {
     plans: {
       basic: { monthly: 6, yearly: 60 },
       growth: { monthly: 15, yearly: 150 },
-      pro: { monthly: 30, yearly: 300 },
     },
   },
 };
 
 const LEGACY_PLAN_ALIASES: Record<string, CanonicalPlanId> = {
+  pro: "growth",
   starter: "growth",
   trial: "growth",
-  ambassador: "pro",
-  unlimited: "pro",
-  admin: "pro",
+  ambassador: "growth",
+  unlimited: "growth",
+  admin: "growth",
 };
 
 const AFRICAN_COUNTRIES = new Set([
@@ -332,6 +312,17 @@ function isExpiredAdminManagedSubscription(
   return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
 }
 
+function isExpiredStoredPaidSubscription(
+  user: EffectivePlanUserLike | null | undefined,
+  nowMs: number,
+): boolean {
+  const storedPlan = normalizePlanId(user?.plan);
+  if (storedPlan === "free") return false;
+  if (!user?.subscriptionExpiresAt) return false;
+  const expiresAtMs = new Date(user.subscriptionExpiresAt).getTime();
+  return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
+}
+
 export function normalizePlanId(plan?: string | null): CanonicalPlanId {
   const normalized = String(plan || "free").trim().toLowerCase();
   if ((CANONICAL_PLAN_IDS as readonly string[]).includes(normalized)) {
@@ -362,12 +353,15 @@ export function getEffectivePlan(
   nowMs: number = Date.now(),
 ): CanonicalPlanId {
   if (!user) return "free";
-  if (String(user.role || "").toLowerCase() === "admin") return "pro";
+  if (String(user.role || "").toLowerCase() === "admin") return "growth";
   if (isExpiredAdminTemporaryPlan(user, nowMs)) return "free";
   if (isExpiredAdminManagedSubscription(user, nowMs)) return "free";
-  if (normalizeBooleanFlag(user.ambassador?.active)) return "pro";
+  if (normalizeBooleanFlag(user.ambassador?.active)) return "growth";
+  if (isExpiredStoredPaidSubscription(user, nowMs)) return "free";
+  const storedPlan = normalizePlanId(user.plan);
+  if (storedPlan !== "free") return storedPlan;
   if (isActiveTrial(user, nowMs)) return "growth";
-  return normalizePlanId(user.plan);
+  return "free";
 }
 
 export function getCanonicalEntitlementsForUser(
@@ -418,38 +412,37 @@ export function toLegacyCompatibleEntitlements(
   planId: CanonicalPlanId,
   entitlements: CanonicalPlanEntitlements,
 ): LegacyCompatibleEntitlements {
-  const isGrowthOrHigher = planId === "growth" || planId === "pro";
-  const isPro = planId === "pro";
+  const isPaid = planId !== "free";
 
   return {
     songs: entitlements.maxSongs,
     images: entitlements.maxImages,
     videos: entitlements.maxVideos,
-    themes: planId === "free" ? 2 : isGrowthOrHigher ? -1 : 10,
+    themes: planId === "free" ? 2 : isPaid ? -1 : 10,
     lowerThirds: entitlements.lowerThirds ? -1 : 0,
     devices: entitlements.maxDevices,
     bibleVersions: entitlements.maxBibleVersions,
     multiviewTemplates: entitlements.multiview ? -1 : 0,
     tickerThemes: entitlements.tickers ? -1 : 0,
     themePresets: entitlements.lowerThirds ? -1 : 0,
-    cloudStorageGB: entitlements.cloudSync ? (isPro ? 200 : 20) : 0,
+    cloudStorageGB: entitlements.cloudSync ? 200 : 0,
     multiview: entitlements.multiview,
     tickers: entitlements.tickers,
     massImport: entitlements.bulkImport,
     easyWorshipImport: entitlements.easyWorshipImport,
     proPresenterImport: entitlements.propresenterImport,
-    translation: isGrowthOrHigher,
-    speechToScripture: isGrowthOrHigher,
-    sermonExport: isGrowthOrHigher,
-    aiFeatures: isGrowthOrHigher,
+    translation: isPaid,
+    speechToScripture: isPaid,
+    sermonExport: isPaid,
+    aiFeatures: isPaid,
     cloudSync: entitlements.cloudSync,
-    advancedAnalytics: isPro,
-    customReports: isPro,
+    advancedAnalytics: isPaid,
+    customReports: isPaid,
     mobileControl: entitlements.mobileSupport || entitlements.remoteControl,
     presentationMode: entitlements.presentationMode,
-    apiAccess: isPro,
+    apiAccess: isPaid,
     teamManagement: entitlements.maxTeams > 0,
-    campusManagement: isPro,
+    campusManagement: isPaid,
     slideshow: true,
     countdowns: planId !== "free",
   };
@@ -478,49 +471,26 @@ export function getLegacyFeatureValue(
 export function findRequiredPlanForLegacyFeature(
   feature: LegacyCompatibleFeatureKey,
 ): CanonicalPlanId {
-  const freeValue = getLegacyFeatureValue("free", feature);
-  if (typeof freeValue === "boolean") {
-    for (const planId of CANONICAL_PLAN_IDS) {
-      if (getLegacyFeatureValue(planId, feature) === true) {
-        return planId;
-      }
-    }
-    return "pro";
-  }
-
-  for (const planId of CANONICAL_PLAN_IDS.slice(1)) {
+  for (const planId of CANONICAL_PLAN_IDS) {
     const value = getLegacyFeatureValue(planId, feature);
-    if (typeof value === "number" && (value === -1 || value > freeValue)) {
+    if (typeof value === "boolean" ? value : value !== 0) {
       return planId;
     }
   }
-
-  return freeValue !== 0 ? "free" : "pro";
+  return "growth";
 }
 
 export function findRequiredPlanForCanonicalFeature(
   feature: CanonicalBooleanEntitlementKey | CanonicalLimitEntitlementKey,
 ): CanonicalPlanId {
   const featureKey = feature as keyof CanonicalPlanEntitlements;
-  const freeValue = PLAN_ENTITLEMENTS.free[featureKey] ?? 0;
-
-  if (typeof freeValue === "boolean") {
-    for (const planId of CANONICAL_PLAN_IDS) {
-      if (PLAN_ENTITLEMENTS[planId][featureKey] === true) {
-        return planId;
-      }
-    }
-    return "pro";
-  }
-
-  for (const planId of CANONICAL_PLAN_IDS.slice(1)) {
+  for (const planId of CANONICAL_PLAN_IDS) {
     const value = PLAN_ENTITLEMENTS[planId][featureKey];
-    if (typeof value === "number" && (value === -1 || value > freeValue)) {
+    if (typeof value === "boolean" ? value : value !== 0) {
       return planId;
     }
   }
-
-  return freeValue !== 0 ? "free" : "pro";
+  return "growth";
 }
 
 function buildTierConfig(
@@ -574,13 +544,9 @@ export function buildLegacyCompatiblePlanConfig(options?: {
     monthlyPlanCode: "mce_growth_monthly",
     yearlyPlanCode: "mce_growth_yearly",
   });
-  const proTier = buildTierConfig("pro", "Pro", {
-    monthlyPlanCode: "mce_pro_monthly",
-    yearlyPlanCode: "mce_pro_yearly",
-  });
 
   return {
-    version: 5,
+    version: 6,
     plans: {
       free: freeTier,
       trial: {
@@ -594,13 +560,12 @@ export function buildLegacyCompatiblePlanConfig(options?: {
       },
       basic: basicTier,
       growth: growthTier,
-      pro: proTier,
       ambassador: {
-        ...proTier,
+        ...growthTier,
         label: "Ambassador",
       },
       unlimited: {
-        ...proTier,
+        ...growthTier,
         label: "Unlimited",
         credits: -1,
       },
@@ -702,40 +667,6 @@ export function buildLegacyCompatiblePlanConfig(options?: {
         buttonText: "Get Growth",
         paystackPlanCode: "mce_growth_monthly",
         paystackAmount: { NGN: REGION_PRICING.NG.plans.growth.monthly * 100, USD: REGION_PRICING.ROW.plans.growth.monthly * 100 },
-      },
-      {
-        id: "pro",
-        name: "Pro",
-        target: "For advanced church production teams",
-        iconName: "crown",
-        styles: {
-          iconBg: "bg-amber-50",
-          iconColor: "text-amber-600",
-          border: "border-amber-200",
-          button: "bg-amber-600 text-white",
-          buttonHover: "hover:bg-amber-700",
-          checkColor: "text-amber-600",
-        },
-        pricing: {
-          NGN: {
-            monthly: formatPrice(REGION_PRICING.NG.plans.pro.monthly, "₦"),
-            yearly: formatPrice(REGION_PRICING.NG.plans.pro.yearly, "₦"),
-          },
-          USD: {
-            monthly: formatPrice(REGION_PRICING.ROW.plans.pro.monthly, "$"),
-            yearly: formatPrice(REGION_PRICING.ROW.plans.pro.yearly, "$"),
-          },
-        },
-        features: [
-          { text: "Everything in Growth" },
-          { text: "3,000 credits every month" },
-          { text: "Priority Support" },
-          { text: "Priority Feature Requests" },
-          { text: "Early Access Features" },
-        ],
-        buttonText: "Get Pro",
-        paystackPlanCode: "mce_pro_monthly",
-        paystackAmount: { NGN: REGION_PRICING.NG.plans.pro.monthly * 100, USD: REGION_PRICING.ROW.plans.pro.monthly * 100 },
       },
     ],
     featureBanners: [

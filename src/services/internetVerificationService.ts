@@ -198,7 +198,11 @@ function computeDaysOffline(): number {
   return Math.floor(msOffline / (1000 * 60 * 60 * 24));
 }
 
-function computeTier(_daysOffline: number, _settings: VerificationSettings): GracePeriodTier {
+function computeTier(daysOffline: number, settings: VerificationSettings): GracePeriodTier {
+  if (!settings.enabled) return "normal";
+  if (daysOffline >= settings.maxOfflineDays) return "locked";
+  if (daysOffline >= settings.criticalDays) return "critical";
+  if (daysOffline >= settings.warningDays) return "warning";
   return "normal";
 }
 

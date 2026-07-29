@@ -3,6 +3,7 @@ import { getDeviceId, getDeviceSecret } from "./authService";
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
 export type AnnouncementTone = "info" | "success" | "warning" | "offer" | "upgrade";
+export type DiscountBillingCycle = "monthly" | "yearly" | "lifetime";
 
 export interface DesktopAnnouncement {
   id: string;
@@ -15,6 +16,10 @@ export interface DesktopAnnouncement {
   ctaUrl?: string | null;
   imageUrl?: string | null;
   offerCode?: string | null;
+  offerDiscountPercent?: number | null;
+  offerDurationMonths?: number | null;
+  offerApplicableBillingCycles?: DiscountBillingCycle[];
+  expiresAt?: string | null;
 }
 
 function authHeaders(): Record<string, string> {

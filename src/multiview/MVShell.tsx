@@ -16,6 +16,7 @@ import { MVSceneSync } from "./pages/MVSceneSync";
 import { obsService } from "../services/obsService";
 import { ToastProvider } from "./components/MVToast";
 import { useThemeSync } from "./components/MVThemeProvider";
+import { BibleProvider } from "../bible/bibleStore";
 import "./mv.css";
 import Icon from "../components/Icon";
 
@@ -96,7 +97,7 @@ export function MVShell() {
             <Route path="new" element={<MVEditor />} />
             <Route path="scenes" element={<MVSceneSync />} />
             <Route path="templates" element={<MVTemplates />} />
-            <Route path="settings" element={<MVSettings />} />
+            <Route path="settings" element={<BibleProvider><MVSettings /></BibleProvider>} />
           </Routes>
         </main>
       </div>

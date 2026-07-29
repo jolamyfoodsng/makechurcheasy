@@ -25,6 +25,8 @@ export type PresentationTickerPosition = "top" | "bottom";
 
 export type PresentationTickerDirection = "rtl" | "ltr" | "static";
 
+export type PresentationBackgroundType = "theme" | "off" | "color" | "image" | "pattern" | "video";
+
 export interface PresentationStyleSnapshot {
   themeId?: string;
   themeName?: string;
@@ -36,8 +38,12 @@ export interface PresentationStyleSnapshot {
   textAlign: PresentationTextAlign;
   textShadow: string;
   backgroundColor: string;
+  backgroundColorEnd?: string;
+  bgGradientAngle?: number;
+  backgroundType?: PresentationBackgroundType;
   backgroundImage?: string;
   backgroundVideo?: string;
+  backgroundPattern?: string;
   backgroundOpacity: number;
   overlayColor: string;
   overlayOpacity: number;
@@ -96,6 +102,19 @@ export interface PresentationTickerPayload {
   version: number;
 }
 
+export type PresentationBibleCompareLayout = "line-by-line" | "side-by-side";
+
+export interface PresentationBibleCompareColumn {
+  reference: string;
+  translation: string;
+  text: string;
+}
+
+export interface PresentationBibleComparePayload {
+  layout: PresentationBibleCompareLayout;
+  columns: PresentationBibleCompareColumn[];
+}
+
 export interface PresentationRemoteItem {
   id: string;
   source: PresentationSource;
@@ -108,12 +127,17 @@ export interface PresentationRemoteItem {
   media?: PresentationMediaPayload;
   countdown?: PresentationCountdownPayload | { config: CountdownConfig; startedAt: number };
   ticker?: PresentationTickerPayload;
+  bibleCompare?: PresentationBibleComparePayload;
   imageUrl?: string;
   videoUrl?: string;
   meta?: {
     sequenceIndex?: number;
     sequenceTotal?: number;
     sequenceLabel?: string;
+    zoom?: number;
+    showReference?: boolean;
+    showTitle?: boolean;
+    showSubtitle?: boolean;
   };
 }
 

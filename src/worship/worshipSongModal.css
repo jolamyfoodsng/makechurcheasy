@@ -247,6 +247,19 @@
   color: var(--text-primary);
 }
 
+.ws-lyrics-toolbar__btn--accent {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.ws-lyrics-toolbar__btn--accent:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 18%, var(--surface-dark));
+  color: var(--text-primary);
+}
+
 .ws-lyrics-toolbar__btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;

@@ -88,6 +88,7 @@ export type DockStateType =
   | "state:song-limit"
   | "state:plan-update"
   | "state:countdowns"
+  | "state:favorite-themes-updated"
   | "state:pong"
   | "state:language-changed";
 
@@ -105,7 +106,11 @@ const DOCK_COMMAND_CHANNEL = "ocs-dock-commands";
 const DOCK_STATE_CHANNEL = "ocs-dock-state";
 const DOCK_STORAGE_EVENT_KEY = "ocs-dock-storage-event";
 
-type StorageEventType = "library-updated" | "songs-data" | "branding-updated";
+type StorageEventType =
+  | "library-updated"
+  | "songs-data"
+  | "branding-updated"
+  | "favorite-themes-updated";
 
 interface StorageEventPayload {
   type: StorageEventType;
@@ -242,6 +247,15 @@ class DockBridge {
     });
   }
 
+  sendFavoriteThemesUpdated(payload: Record<string, unknown> | null = null) {
+    this.sendState({
+      type: "state:favorite-themes-updated",
+      payload,
+      timestamp: Date.now(),
+    });
+    postStorageEvent("favorite-themes-updated", payload);
+  }
+
   /** Notify all dock instances that the interface language changed */
   sendLanguageChanged(code: string) {
     this.sendState({
@@ -310,6 +324,21 @@ class DockClient {
         if (event.type === "library-updated") {
           // Trigger a refresh by requesting library data
           this.sendCommand({ type: "request-library-data", timestamp: Date.now() });
+          return;
+        }
+        if (event.type === "favorite-themes-updated") {
+          const msg: DockStateMessage = {
+            type: "state:favorite-themes-updated",
+            payload: event.payload ?? null,
+            timestamp: event.timestamp,
+          };
+          for (const handler of this.handlers) {
+            try {
+              handler(msg);
+            } catch (e) {
+              console.error("[DockClient] Handler error:", e);
+            }
+          }
         }
       });
 

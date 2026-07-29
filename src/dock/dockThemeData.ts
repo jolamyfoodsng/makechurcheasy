@@ -42,6 +42,7 @@ async function loadJsonObjectArray(url: string, key: string): Promise<string[]> 
 export async function loadDockBibleFavorites(): Promise<Set<string>> {
   await hydrateFavoriteThemes().catch(() => { });
   const local = getBibleFavorites();
+  if (local.size > 0) return local;
   const remote = await loadJsonArray<string>("/uploads/dock-bible-favorites.json");
   return mergeIdSets(local, remote);
 }
@@ -50,15 +51,18 @@ export async function loadDockLTFavorites(): Promise<Set<string>> {
   await hydrateFavoriteThemes().catch(() => { });
   const localWorship = getWorshipLTFavorites();
   const localObs = getObsFavorites();
+  const local = mergeIdSets(localWorship, localObs);
+  if (local.size > 0) return local;
   const remoteLt = await loadJsonArray<string>("/uploads/dock-lt-favorites.json");
   const remoteObs = await loadJsonObjectArray("/uploads/dock-obs-favorites.json", "favoriteThemes");
-  const merged = mergeIdSets(localWorship, localObs, remoteLt, remoteObs);
+  const merged = mergeIdSets(remoteLt, remoteObs);
   return merged;
 }
 
 export async function loadDockTickerFavorites(): Promise<Set<string>> {
   await hydrateFavoriteThemes().catch(() => { });
   const local = getTickerFavorites();
+  if (local.size > 0) return local;
   const remote = await loadJsonObjectArray("/uploads/dock-ticker-favorites.json", "favoriteTickers");
   return mergeIdSets(local, remote);
 }

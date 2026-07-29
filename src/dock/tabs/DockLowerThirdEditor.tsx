@@ -54,6 +54,32 @@ interface DockLTEditorProps {
   live?: boolean;
 }
 
+type LTAppearanceColorKey = "bgColor" | "textColor" | "accentColor";
+
+const LT_APPEARANCE_COLOR_CONTROLS: Array<{ key: LTAppearanceColorKey; label: string; fallback: string }> = [
+  { key: "bgColor", label: "Background", fallback: "#111827" },
+  { key: "textColor", label: "Text", fallback: "#ffffff" },
+  { key: "accentColor", label: "Accent", fallback: "#1d4ed8" },
+];
+
+function sanitizeLtColor(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().slice(0, 80);
+  if (!trimmed || /[;{}<>]/.test(trimmed)) return undefined;
+  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(trimmed)) return trimmed;
+  if (/^rgba?\(\s*(?:\d{1,3}\s*,\s*){2}\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(trimmed)) return trimmed;
+  if (/^hsla?\(\s*\d{1,3}(?:deg)?\s*,\s*\d{1,3}%\s*,\s*\d{1,3}%(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(trimmed)) return trimmed;
+  return undefined;
+}
+
+function ltColorInputValue(value: unknown, fallback: string): string {
+  const color = sanitizeLtColor(value);
+  const hex = color?.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];
+  if (!hex) return fallback;
+  if (hex.length === 3) return `#${hex.split("").map((char) => char + char).join("")}`.toLowerCase();
+  return `#${hex}`.toLowerCase();
+}
+
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
@@ -65,8 +91,10 @@ export default function DockLowerThirdEditor({
   onSend,
   onBlank: _onBlank,
   onAnimateOut,
+  onUpdate,
   sending,
   size = "xl",
+  live = false,
 }: DockLTEditorProps) {
   const { t } = useTranslation();
 
@@ -352,6 +380,7 @@ export default function DockLowerThirdEditor({
   const suppressLiveUpdateRef = useRef(false);
   const isSavingRef = useRef(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Context menu state ──
   const [contextMenu, setContextMenu] = useState<{ slotIndex: number; x: number; y: number } | null>(null);
@@ -550,6 +579,37 @@ export default function DockLowerThirdEditor({
     );
     onAnimateOut(url);
   }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onAnimateOut]);
+
+  useEffect(() => {
+    if (!live || !onUpdate || suppressLiveUpdateRef.current) return;
+    if (liveUpdateTimerRef.current) {
+      clearTimeout(liveUpdateTimerRef.current);
+    }
+    liveUpdateTimerRef.current = setTimeout(() => {
+      const overlayExitStyle = exitStyle === "fade" ? undefined : exitStyle;
+      const url = buildOverlayUrl(
+        theme,
+        variableValues,
+        true,
+        false,
+        size,
+        customStyles,
+        undefined as LTFontSize | undefined,
+        position,
+        undefined,
+        undefined,
+        animationIn,
+        overlayExitStyle,
+      );
+      onUpdate(url);
+    }, 160);
+    return () => {
+      if (liveUpdateTimerRef.current) {
+        clearTimeout(liveUpdateTimerRef.current);
+        liveUpdateTimerRef.current = null;
+      }
+    };
+  }, [animationIn, customStyles, exitStyle, live, onUpdate, position, size, theme, variableValues]);
 
   return (
     <div className="dock-lt-editor-layout">
@@ -763,6 +823,86 @@ export default function DockLowerThirdEditor({
                       />
                     </div>
                   ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 6,
+                padding: 8,
+                border: "1px solid var(--dock-border)",
+                borderRadius: 4,
+                background: "var(--dock-surface)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 7 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: "var(--dock-text)", textTransform: "uppercase", letterSpacing: 0.3 }}>
+                    {t("lowerThird.appearance", "Appearance")}
+                  </div>
+                  <div style={{ fontSize: 9, color: "var(--dock-text-dim)", marginTop: 2 }}>
+                    {t("lowerThird.appearanceDesc", "Adjust the live lower-third colors.")}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCustomStyles((prev) => ({
+                    ...prev,
+                    bgColor: "",
+                    textColor: "",
+                    accentColor: "",
+                  }))}
+                  style={{
+                    border: "1px solid var(--dock-border)",
+                    borderRadius: 3,
+                    background: "var(--dock-input-bg)",
+                    color: "var(--dock-text-dim)",
+                    cursor: "pointer",
+                    fontSize: 10,
+                    padding: "2px 6px",
+                    flexShrink: 0,
+                  }}
+                >
+                  {t("common.reset", "Reset")}
+                </button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7 }}>
+                {LT_APPEARANCE_COLOR_CONTROLS.map((control) => {
+                  const explicitColor = customStyles[control.key] || "";
+                  const baseColor = control.key === "accentColor" ? theme.accentColor : control.fallback;
+                  const effectiveColor = sanitizeLtColor(explicitColor) ?? sanitizeLtColor(baseColor) ?? control.fallback;
+                  return (
+                    <label
+                      key={control.key}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 26px",
+                        alignItems: "center",
+                        gap: 5,
+                        minWidth: 0,
+                      }}
+                    >
+                      <span style={{ fontSize: 9, color: "var(--dock-text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {t(`lowerThird.color.${control.key}`, control.label)}
+                      </span>
+                      <input
+                        type="color"
+                        value={ltColorInputValue(explicitColor || effectiveColor, control.fallback)}
+                        onChange={(event) => setCustomStyles((prev) => ({ ...prev, [control.key]: event.target.value }))}
+                        title={control.label}
+                        style={{
+                          width: 26,
+                          height: 22,
+                          border: "1px solid var(--dock-border)",
+                          borderRadius: 3,
+                          background: "transparent",
+                          padding: 0,
+                          cursor: "pointer",
+                        }}
+                      />
+                    </label>
+                  );
+                })}
               </div>
             </div>
 

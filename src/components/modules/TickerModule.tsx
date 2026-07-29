@@ -13,6 +13,7 @@ import { obsSyncService } from "../../services/obsSyncService";
 import { getDisplaySceneName } from "../../services/obsSceneTargets";
 import { serviceStore } from "../../services/serviceStore";
 import { getSettings as getMVSettings } from "../../multiview/mvStore";
+import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
 import { lowerThirdObsService } from "../../lowerthirds/lowerThirdObsService";
 import {
   TICKER_THEMES,
@@ -29,7 +30,7 @@ import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 const TICKER_SOURCE_NAME = "⚡ MCE Ticker Overlay";
-const TICKER_HEIGHT = 74;
+const TICKER_HEIGHT = 80;
 const TICKER_MIN_DURATION_SECONDS = 30;
 const TICKER_MAX_DURATION_SECONDS = 30 * 60;
 const TICKER_DURATION_OPTIONS = [30, 60, 90, 120, 180, 300] as const;
@@ -96,6 +97,14 @@ function getTickerSystemDurationDefaults(): TickerDurationConfig {
   return {
     durationSeconds: clampTickerDuration(settings.lowerThirdDefaultDurationSec || 60),
     isInfinite: false,
+  };
+}
+
+function getTickerBranding(): { logoUrl: string; brandName: string } {
+  const settings = getMVSettings();
+  return {
+    logoUrl: resolveOverlayAssetUrl(settings.brandLogoPath),
+    brandName: settings.churchName || "MakeChurchEasy",
   };
 }
 
@@ -634,6 +643,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
     if (activeMessages.length === 0) return false;
 
     const theme = TICKER_THEMES.find((t) => t.id === settings.themeId) ?? TICKER_THEMES[0];
+    const branding = getTickerBranding();
     const html = generateTickerHTML(
       theme,
       theme.defaultColors,
@@ -642,6 +652,9 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
       settings.speed,
       settings.position,
       settings.loop,
+      false,
+      branding.logoUrl,
+      branding.brandName,
     );
     const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
 
@@ -811,6 +824,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
     if (activeMessages.length === 0) return;
 
     const theme = TICKER_THEMES.find((t) => t.id === settings.themeId) ?? TICKER_THEMES[0];
+    const branding = getTickerBranding();
     const html = generateTickerHTML(
       theme,
       theme.defaultColors,
@@ -819,6 +833,9 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
       settings.speed,
       settings.position,
       settings.loop,
+      false,
+      branding.logoUrl,
+      branding.brandName,
     );
     const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
 
@@ -955,8 +972,9 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
     : ["Welcome to the service", "Join us for worship today", "Visit our website for more info"];
 
   const previewHTML = useMemo(
-    () =>
-      generateTickerHTML(
+    () => {
+      const branding = getTickerBranding();
+      return generateTickerHTML(
         activeTheme,
         activeTheme.defaultColors,
         settings.heading,
@@ -964,7 +982,11 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
         settings.speed,
         settings.position,
         settings.loop,
-      ),
+        false,
+        branding.logoUrl,
+        branding.brandName,
+      );
+    },
     [activeTheme, settings.heading, previewMessages, settings.speed, settings.position, settings.loop],
   );
 

@@ -14,6 +14,8 @@ import { dockObsClient, type DockMediaSendOptions } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { dockClient } from "../../services/dockBridge";
 import type { DockStagedItem } from "../dockTypes";
+import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
+import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import type { MediaItem } from "../../library/libraryTypes";
 import { BACKGROUND_PATTERNS, type BackgroundPattern } from "../../library/backgroundAssets";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
@@ -27,20 +29,32 @@ import {
 import { registerDockMediaItem, uploadFileToDock } from "../dockUploadService";
 import { requireEntitlement, showUpgradeModal } from "../dockEntitlement";
 import { isSupportedMediaFile } from "../../services/mediaValidation";
+import {
+  convertDocumentToPageFiles,
+  getDocumentTypeLabel,
+  isSupportedDocumentFile,
+  type DocumentPageFile,
+} from "../documentConversion";
 import { getFeatureLimit } from "../../services/entitlementClient";
 import Icon from "../DockIcon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { isUserSelectableObsScene } from "../../services/dockSceneNames";
 import { useTranslation } from "react-i18next";
+import {
+  clearPresentationScreen,
+  publishMediaToPresentation,
+  publishTextOverlayToPresentation,
+} from "../../services/presentationPublish";
 
 interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
   isActive?: boolean;
+  presentationOutputTarget?: DockPresentationOutputTarget;
 }
 
 type DockMediaKind = "video" | "image";
-type DockMediaFilter = "all" | DockMediaKind;
+type DockMediaFilter = "all" | DockMediaKind | "document";
 type DockMediaViewMode = "uploaded" | "recent";
 type DockMediaBrowserTab = "uploads" | "animations" | "patterns" | "text";
 type DockAddMediaTab = "background" | "template-videos";
@@ -213,7 +227,7 @@ function isDockMediaBrowserTab(value: unknown): value is DockMediaBrowserTab {
 }
 
 function isDockMediaKind(value: unknown): value is DockMediaFilter {
-  return value === "video" || value === "image" || value === "all";
+  return value === "video" || value === "image" || value === "document" || value === "all";
 }
 
 function isDockTextAlign(value: unknown): value is DockTextAlign {
@@ -387,14 +401,19 @@ function canSendEntryToScene(entry: DockMediaEntry): boolean {
 
 function createLibraryEntry(item: MediaItem, overlayBaseUrl: string, originLabel: string): DockMediaEntry {
   const prefKey = `media:${item.filePath || item.diskFileName || item.id}`;
+  const isDocumentPage = item.source === "document-conversion" && item.documentPageNumber;
   return {
     key: prefKey,
     prefKey,
-    name: item.name,
+    name: isDocumentPage
+      ? `${item.documentSourceName || item.name} · Page ${item.documentPageNumber}${item.documentPageCount ? `/${item.documentPageCount}` : ""}`
+      : item.name,
     kind: item.type,
     createdAt: item.createdAt,
-    originLabel,
-    mimeLabel: item.mimeType?.split("/")[1]?.toUpperCase(),
+    originLabel: isDocumentPage ? "Document" : originLabel,
+    mimeLabel: isDocumentPage
+      ? `Page ${item.documentPageNumber}${item.documentPageCount ? `/${item.documentPageCount}` : ""}`
+      : item.mimeType?.split("/")[1]?.toUpperCase(),
     thumbnailUrl: item.thumbnailUrl,
     previewUrl: getMediaPreviewUrl(item, overlayBaseUrl),
     libraryItem: item,
@@ -486,8 +505,14 @@ function AnimationTilePreview({ src, label }: { src: string; label: string }) {
   );
 }
 
-export default function DockMediaTab({ staged: _staged, onStage: _onStage, isActive = true }: Props) {
+export default function DockMediaTab({
+  staged: _staged,
+  onStage: _onStage,
+  isActive = true,
+  presentationOutputTarget = "obs",
+}: Props) {
   const { t } = useTranslation();
+  const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   const overlayBaseUrl = getOverlayBaseUrlSync();
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -511,6 +536,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
   const [mediaPrefs, setMediaPrefs] = useState<DockMediaPreferences>(() => loadMediaPreferences());
   const [localLibrary, setLocalLibrary] = useState<MediaItem[]>(() => loadLocalMediaLibrary());
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
   const [openOptionsKey, setOpenOptionsKey] = useState<string | null>(null);
   const [previewEntry, setPreviewEntry] = useState<DockMediaEntry | null>(null);
   const [sceneSendEntry, setSceneSendEntry] = useState<DockMediaEntry | null>(null);
@@ -538,6 +564,14 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const mediaPollBusyRef = useRef(false);
   const [previewPlaying, setPreviewPlaying] = useState(false);
+
+  useEffect(() => {
+    if (!presentationLinkMode || textOverlay.background.mode !== "lower-third") return;
+    setTextOverlay((current) => ({
+      ...current,
+      background: { ...current.background, mode: "fullscreen" },
+    }));
+  }, [presentationLinkMode, textOverlay.background.mode]);
 
   // ── Video Loop / Playlist state ──
   const [selectionMode, setSelectionMode] = useState(false);
@@ -893,6 +927,33 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
 
   const playMedia = useCallback(
     async (fileName: string, options?: DockMediaSendOptions): Promise<boolean> => {
+      if (presentationLinkMode) {
+        const kind = getUploadMediaKind(fileName);
+        if (!kind) return false;
+        setSendingFile(`upload:${fileName}`);
+        try {
+          await publishMediaToPresentation({
+            id: `upload-${fileName}`,
+            name: fileName,
+            type: kind,
+            url: `/uploads/${encodeURIComponent(fileName)}`,
+            diskFileName: fileName,
+            createdAt: new Date().toISOString(),
+          });
+          setSendError(null);
+          track("media_presented");
+          trackMediaPresented("uploaded");
+          return true;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : t('media.failedToSendMedia');
+          console.warn("[DockMediaTab] Publish media to presentation link failed:", msg);
+          setSendError(msg);
+          return false;
+        } finally {
+          setSendingFile(null);
+        }
+      }
+
       try {
         await ensureObsConnected();
       } catch {
@@ -926,13 +987,31 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
         setSendingFile(null);
       }
     },
-    [resolveUploadFilePath, t]
+    [presentationLinkMode, resolveUploadFilePath, t]
   );
 
   // ── Play library media item via OBS ──
 
   const playLibraryMedia = useCallback(
     async (item: MediaItem, options?: DockMediaSendOptions): Promise<boolean> => {
+      if (presentationLinkMode) {
+        setSendingFile(`library:${item.id}`);
+        try {
+          await publishMediaToPresentation(item);
+          setSendError(null);
+          track("media_presented");
+          trackMediaPresented("library");
+          return true;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : t('media.failedToSendMedia');
+          console.warn("[DockMediaTab] Publish library media to presentation link failed:", msg);
+          setSendError(msg);
+          return false;
+        } finally {
+          setSendingFile(null);
+        }
+      }
+
       try {
         await ensureObsConnected();
       } catch {
@@ -965,10 +1044,18 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
         setSendingFile(null);
       }
     },
-    [resolveLibraryMediaFilePath, t]
+    [presentationLinkMode, resolveLibraryMediaFilePath, t]
   );
 
   const loadSceneSendChoices = useCallback(async () => {
+    if (presentationLinkMode) {
+      setSceneSendChoices([]);
+      setSceneSendSelection("");
+      setSceneSendError(null);
+      setSceneSendLoading(false);
+      return;
+    }
+
     setSceneSendChoices([]);
     setSceneSendSelection("");
     setSceneSendError(null);
@@ -1004,13 +1091,14 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     } finally {
       setSceneSendLoading(false);
     }
-  }, [t]);
+  }, [presentationLinkMode, t]);
 
   const openSceneSendDialog = useCallback(async (entry: DockMediaEntry) => {
+    if (presentationLinkMode) return;
     setOpenOptionsKey(null);
     setSceneSendEntry(entry);
     await loadSceneSendChoices();
-  }, [loadSceneSendChoices]);
+  }, [loadSceneSendChoices, presentationLinkMode]);
 
   const resetSceneSendDialog = useCallback(() => {
     setSceneSendEntry(null);
@@ -1049,6 +1137,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
   );
 
   const sendEntryToSelectedScene = useCallback(async (entry: DockMediaEntry): Promise<boolean> => {
+    if (presentationLinkMode) return false;
     if (!sceneSendSelection) return false;
 
     setSceneSendSubmitting(true);
@@ -1093,6 +1182,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     }
   }, [
     mediaPrefs,
+    presentationLinkMode,
     resolveLibraryMediaFilePath,
     resolveUploadFilePath,
     sceneSendSelection,
@@ -1201,8 +1291,15 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     [libraryEntries, mediaPrefs, uploadedEntries, viewMode],
   );
 
+  const documentEntries = useMemo(
+    () => mediaEntries.filter((entry) => entry.libraryItem?.source === "document-conversion"),
+    [mediaEntries],
+  );
   const videoEntries = useMemo(() => mediaEntries.filter((entry) => entry.kind === "video"), [mediaEntries]);
-  const imageEntries = useMemo(() => mediaEntries.filter((entry) => entry.kind === "image"), [mediaEntries]);
+  const imageEntries = useMemo(
+    () => mediaEntries.filter((entry) => entry.kind === "image" && entry.libraryItem?.source !== "document-conversion"),
+    [mediaEntries],
+  );
   const patternEntries = useMemo(() => BACKGROUND_PATTERNS.map((p) => createPatternEntry(p, t('media.pattern'))), []);
   // ── Plan-locked items: items beyond the plan limit get a blur + padlock ──
   const lockedKeys = useMemo(() => {
@@ -1264,7 +1361,13 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
   }, []);
 
   const filteredUploadEntries = useMemo(() => {
-    const pool = activeKind === "all" ? mediaEntries : activeKind === "video" ? videoEntries : imageEntries;
+    const pool = activeKind === "all"
+      ? mediaEntries
+      : activeKind === "video"
+        ? videoEntries
+        : activeKind === "document"
+          ? documentEntries
+          : imageEntries;
     const query = assetSearch.trim().toLowerCase();
     let result = !query ? pool : pool.filter((entry) => entry.name.toLowerCase().includes(query));
     // Free plan: only show the allowed items so search never reveals locked media
@@ -1272,7 +1375,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
       result = result.filter((entry) => !lockedKeys.has(entry.key));
     }
     return result;
-  }, [activeKind, assetSearch, imageEntries, isFreePlan, lockedKeys, mediaEntries, videoEntries]);
+  }, [activeKind, assetSearch, documentEntries, imageEntries, isFreePlan, lockedKeys, mediaEntries, videoEntries]);
 
   const filteredPatternEntries = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
@@ -1301,7 +1404,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     [managedEntries, openOptionsKey],
   );
   useEffect(() => {
-    if (!activeOptionsEntry || !canSendEntryToScene(activeOptionsEntry)) {
+    if (presentationLinkMode || !activeOptionsEntry || !canSendEntryToScene(activeOptionsEntry)) {
       setSceneSendChoices([]);
       setSceneSendSelection("");
       setSceneSendError(null);
@@ -1309,7 +1412,15 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
       return;
     }
     void loadSceneSendChoices();
-  }, [activeOptionsEntry, loadSceneSendChoices]);
+  }, [activeOptionsEntry, loadSceneSendChoices, presentationLinkMode]);
+
+  useEffect(() => {
+    if (!presentationLinkMode) return;
+    setSceneSendEntry(null);
+    setSceneSendChoices([]);
+    setSceneSendSelection("");
+    setSceneSendError(null);
+  }, [presentationLinkMode]);
   const previewBaseEntry = activeTargets.active;
 
   // ── Selection helpers ──
@@ -1546,13 +1657,43 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     console.log("[UPLOAD] ─── handleUploadFiles started ───");
     const allFiles = Array.from(files);
     console.log("[UPLOAD] Total files:", allFiles.length);
+
+    type UploadQueueItem = { file: File; documentPage?: DocumentPageFile };
+    const mediaFiles = allFiles.filter((f) => isSupportedMediaFile(f));
+    const documentFiles = allFiles.filter((f) => isSupportedDocumentFile(f));
+
     // Validate file types — reject unsupported files with clear error
-    const rejected = allFiles.filter((f) => !isSupportedMediaFile(f));
+    const rejected = allFiles.filter((f) => !isSupportedMediaFile(f) && !isSupportedDocumentFile(f));
     for (const f of rejected) {
-      showUpgradeModal(t('media.unsupportedFileType', { fileName: f.name }));
+      showUpgradeModal(`Unsupported file type: ${f.name}. Please upload an image, video, PDF, or DOCX file.`);
     }
-    const queue = allFiles.filter((f) => isSupportedMediaFile(f));
-    if (queue.length === 0) return;
+
+    let queueItems: UploadQueueItem[] = mediaFiles.map((file) => ({ file }));
+    if (documentFiles.length > 0) {
+      setUploading(true);
+      setUploadStatus("Preparing document pages…");
+      for (const documentFile of documentFiles) {
+        try {
+          const label = getDocumentTypeLabel(documentFile);
+          setUploadStatus(`Preparing ${label}: ${documentFile.name}…`);
+          const pages = await convertDocumentToPageFiles(documentFile, setUploadStatus);
+          queueItems = [
+            ...queueItems,
+            ...pages.map((page) => ({ file: page.file, documentPage: page })),
+          ];
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Could not prepare document.";
+          showUpgradeModal(`Could not prepare ${documentFile.name}: ${message}`);
+        }
+      }
+    }
+
+    if (queueItems.length === 0) {
+      setUploading(false);
+      setUploadStatus("");
+      return;
+    }
+    const queue = queueItems.map((item) => item.file);
 
     // ── Per-file-type quota enforcement ──
     // Resolve limits from server entitlements → localStorage → fallback
@@ -1589,27 +1730,32 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     // Both types over limit → block entirely
     if (imageQuotaExceeded && videoQuotaExceeded) {
       showUpgradeModal(t('media.mediaLimitsReached', { currentImages, imageLimit, currentVideos, videoLimit }));
+      setUploading(false);
+      setUploadStatus("");
       return;
     }
 
     // Filter queue to only allow files whose type is within quota
-    const allowedQueue = queue.filter((file) => {
+    const allowedQueueItems = queueItems.filter(({ file }) => {
       if (file.type.startsWith("image/") && imageQuotaExceeded) return false;
       if (file.type.startsWith("video/") && videoQuotaExceeded) return false;
       return true;
     });
+    const allowedQueue = allowedQueueItems.map((item) => item.file);
 
-    if (allowedQueue.length === 0) {
+    if (allowedQueueItems.length === 0) {
       // All files rejected — show upgrade modal
       const rejectedType = imageQuotaExceeded ? "images" : "videos";
       const limit = imageQuotaExceeded ? imageLimit : videoLimit;
       const current = imageQuotaExceeded ? currentImages : currentVideos;
       showUpgradeModal(t('media.typeLimitReached', { type: rejectedType, current, limit }));
+      setUploading(false);
+      setUploadStatus("");
       return;
     }
 
     // Show explanation if some files were rejected
-    const rejectedCount = queue.length - allowedQueue.length;
+    const rejectedCount = queueItems.length - allowedQueueItems.length;
     if (rejectedCount > 0) {
       const rejectedType = imageQuotaExceeded ? "images" : "videos";
       const limit = imageQuotaExceeded ? imageLimit : videoLimit;
@@ -1622,19 +1768,32 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     console.log("[UPLOAD] Limits:", { imageLimit, videoLimit, currentImages, currentVideos });
     try {
       const nextItems: MediaItem[] = [];
-      for (const file of allowedQueue) {
+      for (const { file, documentPage } of allowedQueueItems) {
         console.log("[UPLOAD] ── Uploading:", file.name, { size: file.size, type: file.type });
+        setUploadStatus(documentPage
+          ? `Saving page ${documentPage.pageNumber} of ${documentPage.pageCount}…`
+          : `Saving ${file.name}…`);
         const uploadStart = performance.now();
-        const { item, error } = await uploadFileToDock(file);
+        const { item, error } = await uploadFileToDock(file, setUploadStatus);
         const uploadMs = Math.round(performance.now() - uploadStart);
         if (error) {
           console.warn("[UPLOAD] ✗ Upload FAILED:", file.name, error, `${uploadMs}ms`);
           continue;
         }
+        if (documentPage) {
+          item.source = "document-conversion";
+          item.documentSourceName = documentPage.sourceName;
+          item.documentPageNumber = documentPage.pageNumber;
+          item.documentPageCount = documentPage.pageCount;
+          item.name = `${documentPage.sourceName} · Page ${documentPage.pageNumber}`;
+        }
         console.log("[UPLOAD] ✓ Upload OK:", file.name, { id: item.id, filePath: item.filePath, uploadMs });
         nextItems.push(item);
         console.log("[UPLOAD] Registering shared dock media item:", item.id);
         await registerDockMediaItem(item);
+        if (documentPage) {
+          updateMediaPreference(`media:${item.filePath || item.diskFileName || item.id}`, { fitMode: "contain" });
+        }
       }
       if (nextItems.length > 0) {
         // Mark excess items with old createdAt so lockedKeys puts them at the bottom
@@ -1674,9 +1833,10 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     } finally {
       console.log("[UPLOAD] Finally block — setting uploading=false");
       setUploading(false);
+      setUploadStatus("");
       if (uploadInputRef.current) uploadInputRef.current.value = "";
     }
-  }, [libraryMedia, persistLocalLibrary, refreshMedia]);
+  }, [libraryMedia, persistLocalLibrary, refreshMedia, t, updateMediaPreference]);
 
   const deleteEntry = useCallback(
     async (entry: DockMediaEntry) => {
@@ -1720,6 +1880,19 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     setSendingFile(entry.playingKey);
     try {
       if (!entry.previewUrl) return;
+      if (presentationLinkMode) {
+        await publishMediaToPresentation({
+          id: entry.key,
+          name: entry.name,
+          type: "image",
+          url: entry.previewUrl,
+          createdAt: new Date().toISOString(),
+        });
+        setActiveTargetKeys({ active: entry.key });
+        setPausedTargets({ active: false });
+        updateMediaPreference(entry.prefKey, { lastUsedAt: new Date().toISOString() });
+        return;
+      }
       await ensureObsConnected();
       await dockObsClient.pushPatternBackground(entry.previewUrl, entry.name);
       setActiveTargetKeys({ active: entry.key });
@@ -1730,7 +1903,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     } finally {
       setSendingFile(null);
     }
-  }, [updateMediaPreference]);
+  }, [presentationLinkMode, updateMediaPreference]);
 
   const findDownloadedTemplateVideo = useCallback((asset: TemplateVideoAsset) => (
     mergedLibraryItems.find((item) => (
@@ -1790,9 +1963,27 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
 
     setApplyingTextTarget(true);
     try {
-      await ensureObsConnected();
       const hasContent = Boolean(trimmedHeadline || trimmedSubline);
       const hasBg = Boolean(textOverlay.background.enabled && textOverlay.background.mode !== "text-only");
+
+      if (presentationLinkMode) {
+        if (hasContent || hasBg) {
+          await publishTextOverlayToPresentation({
+            headline: trimmedHeadline,
+            subline: trimmedSubline,
+            textColor: textOverlay.textColor,
+            align: textOverlay.align,
+            headlineSize: textOverlay.headlineSize,
+            background: bgPayload,
+          });
+        } else {
+          await clearPresentationScreen();
+        }
+        setTextOverlayTargets({ active: hasContent || hasBg });
+        return;
+      }
+
+      await ensureObsConnected();
       await dockObsClient.setMediaTextOverlay(hasContent || hasBg ? {
         headline: trimmedHeadline,
         subline: trimmedSubline || undefined,
@@ -1811,12 +2002,18 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     } finally {
       setApplyingTextTarget(null);
     }
-  }, [textOverlay, localLibrary]);
+  }, [textOverlay, localLibrary, presentationLinkMode]);
 
   const clearTextOverlayEverywhere = useCallback(async () => {
     setTextOverlay((current) => ({ ...current, headline: "", subline: "" }));
     setApplyingTextTarget(true);
     try {
+      if (presentationLinkMode) {
+        await clearPresentationScreen();
+        setTextOverlayTargets({ active: false });
+        return;
+      }
+
       await ensureObsConnected();
       await dockObsClient.setMediaTextOverlay(null);
       setTextOverlayTargets({ active: false });
@@ -1825,7 +2022,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     } finally {
       setApplyingTextTarget(null);
     }
-  }, []);
+  }, [presentationLinkMode]);
 
   // ── Auto-apply text overlay changes when overlay is already active ──
   // Without this, background setting changes (color, opacity, blur, etc.)
@@ -1885,6 +2082,14 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
   const clearMedia = useCallback(async () => {
     setClearingTarget(true);
     try {
+      if (presentationLinkMode) {
+        await clearPresentationScreen();
+        setActiveTargetKeys({ active: null });
+        setPausedTargets({ active: false });
+        setTextOverlayTargets({ active: false });
+        return;
+      }
+
       await ensureObsConnected();
 
       await dockObsClient.clearMedia();
@@ -1896,7 +2101,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
     } finally {
       setClearingTarget(null);
     }
-  }, []);
+  }, [presentationLinkMode]);
 
   const clearAllMedia = useCallback(() => {
     // Hide all entries via preferences
@@ -2024,7 +2229,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
                   <Icon name="open_in_full" size={13} />
                   {t('common.preview')}
                 </button>
-                {canSendEntryToScene(entry) && (
+                {!presentationLinkMode && canSendEntryToScene(entry) && (
                   <button
                     type="button"
                     className="dock-media-gallery-card__context-item"
@@ -2152,7 +2357,6 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
         type="file"
         className="dock-media-upload-input"
         multiple
-        accept="image/*,video/*"
         onChange={(event) => {
           const files = event.target.files;
           console.log("[UPLOAD] File picker changed", { count: files?.length ?? 0 });
@@ -2174,8 +2378,8 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
             aria-selected={browserTab === "uploads"}
             className={`dock-media-tab ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("uploads")}
-            title={t('media.upload')}>
-            {compactTabs ? <Icon name="upload" size={12} /> : t('media.tabImages')}
+            title={t('media.uploads')}>
+            {compactTabs ? <Icon name="upload" size={12} /> : t('media.uploads')}
             {!compactTabs && <span className="dock-media-tab__count">{mediaEntries.length}</span>}
           </button>
           <button
@@ -2293,6 +2497,13 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
         </div>
       )}
 
+      {uploading && uploadStatus && (
+        <div className="dock-media-send-error dock-media-send-error--info">
+          <Icon name="hourglass_top" size={13} />
+          <span>{uploadStatus}</span>
+        </div>
+      )}
+
 
       {/* ── Compact Status Row ── */}
 
@@ -2301,14 +2512,14 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
       <div className="dock-media-browser">
         {browserTab === "uploads" && (
           <>
-            {videoEntries.length === 0 && imageEntries.length === 0 && !uploadsLoading && !libraryLoading ? (
+            {mediaEntries.length === 0 && !uploadsLoading && !libraryLoading && !uploading ? (
               <div className="dock-media-empty">
                 <div className="dock-media-empty__icon">
                   <Icon name="perm_media" size={24} />
                 </div>
                 <div className="dock-media-empty__title">{t('media.noUploads')}</div>
                 <div className="dock-media-empty__text">
-                  {t('media.addImagesOrVideos')}
+                  Add images, videos, PDFs, or Word documents.
                 </div>
                 <button
                   type="button"
@@ -2352,6 +2563,16 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
                     title={t('media.tabImages')}>
                     {t('media.tabImages')}
                     <span className="dock-media-pill__count">{imageEntries.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeKind === "document"}
+                    className={`dock-media-pill${activeKind === "document" ? " dock-media-pill--active" : ""}`}
+                    onClick={() => setActiveKind("document")}
+                    title="Documents">
+                    Documents
+                    <span className="dock-media-pill__count">{documentEntries.length}</span>
                   </button>
                 </div>
 
@@ -2403,7 +2624,9 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
                         ? t('media.noUploads')
                         : activeKind === "video"
                           ? t('media.noVideos')
-                          : t('media.noImages')}
+                          : activeKind === "document"
+                            ? "No document pages yet"
+                            : t('media.noImages')}
                     </div>
                   </div>
                 ) : (
@@ -2853,7 +3076,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
                           { key: "box" as OverlayDisplayMode, label: t('media.displayBox'), icon: "square" },
                           { key: "lower-third" as OverlayDisplayMode, label: t('media.displayLowerThird'), icon: "move_down" },
                           { key: "fullscreen" as OverlayDisplayMode, label: t('media.displayFullscreen'), icon: "fullscreen" },
-                        ]).map((opt) => (
+                        ]).filter((opt) => !presentationLinkMode || opt.key !== "lower-third").map((opt) => (
                           <button
                             key={opt.key}
                             type="button"
@@ -3211,7 +3434,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
                     </div>
                     <div className="dock-media-add-modal__hero-copy">
                       <div className="dock-media-add-modal__hero-title">{t('media.addRegularMedia')}</div>
-                      <div className="dock-media-add-modal__hero-text">{t('media.uploadImagesOrVideos')}</div>
+                      <div className="dock-media-add-modal__hero-text">Upload images, videos, PDFs, or Word documents. PDFs and DOCX files become easy page cards.</div>
                     </div>
                   </div>
                   <button
@@ -3227,7 +3450,9 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
                     {uploading ? t('media.uploading') : t('media.chooseFiles')}
                   </button>
                   <div className="dock-media-card__hint">
-                    {t('media.acceptedHint')}
+                    {presentationLinkMode
+                      ? "Accepted: images, videos, PDF, DOCX. Documents become page images for the presentation screen."
+                      : "Accepted: images, videos, PDF, DOCX. Documents are converted to page images for OBS."}
                   </div>
                 </div>
               ) : (
@@ -3468,40 +3693,42 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
               </div>
 
               {/* ── Actions ── */}
-              <div className="dock-media-inspector__actions">
-                <div className="dock-media-inspector__send-row">
-                  <select
-                    className="dock-input dock-media-inspector__scene-select"
-                    value={sceneSendSelection}
-                    onChange={(event) => setSceneSendSelection(event.target.value)}
-                    disabled={sceneSendLoading || sceneSendSubmitting || sceneSendChoices.length === 0}
-                    aria-label={t('media.scene')}
-                  >
-                    {sceneSendChoices.length === 0 ? (
-                      <option value="">{sceneSendLoading ? t('media.loadingScenes') : t('media.noScenesAvailable')}</option>
-                    ) : (
-                      sceneSendChoices.map((sceneName) => (
-                        <option key={sceneName} value={sceneName}>{sceneName}</option>
-                      ))
-                    )}
-                  </select>
-                  <button
-                    type="button"
-                    className="dock-media-inspector__action-btn dock-media-inspector__action-btn--primary"
-                    onClick={() => {
-                      void (async () => {
-                        const success = await sendEntryToSelectedScene(entry);
-                        if (success) closeEntryOptions();
-                      })();
-                    }}
-                    disabled={sceneSendLoading || sceneSendSubmitting || !sceneSendSelection}
-                    title={t('media.sendToScene')}>
-                    <Icon name="send" size={14} />
-                    {sceneSendSubmitting ? t('media.sending') : t('media.sendToScene')}
-                  </button>
+              {!presentationLinkMode && (
+                <div className="dock-media-inspector__actions">
+                  <div className="dock-media-inspector__send-row">
+                    <select
+                      className="dock-input dock-media-inspector__scene-select"
+                      value={sceneSendSelection}
+                      onChange={(event) => setSceneSendSelection(event.target.value)}
+                      disabled={sceneSendLoading || sceneSendSubmitting || sceneSendChoices.length === 0}
+                      aria-label={t('media.scene')}
+                    >
+                      {sceneSendChoices.length === 0 ? (
+                        <option value="">{sceneSendLoading ? t('media.loadingScenes') : t('media.noScenesAvailable')}</option>
+                      ) : (
+                        sceneSendChoices.map((sceneName) => (
+                          <option key={sceneName} value={sceneName}>{sceneName}</option>
+                        ))
+                      )}
+                    </select>
+                    <button
+                      type="button"
+                      className="dock-media-inspector__action-btn dock-media-inspector__action-btn--primary"
+                      onClick={() => {
+                        void (async () => {
+                          const success = await sendEntryToSelectedScene(entry);
+                          if (success) closeEntryOptions();
+                        })();
+                      }}
+                      disabled={sceneSendLoading || sceneSendSubmitting || !sceneSendSelection}
+                      title={t('media.sendToScene')}>
+                      <Icon name="send" size={14} />
+                      {sceneSendSubmitting ? t('media.sending') : t('media.sendToScene')}
+                    </button>
+                  </div>
+                  {sceneSendError ? <p className="dock-dialog__error">{sceneSendError}</p> : null}
                 </div>
-                {sceneSendError ? <p className="dock-dialog__error">{sceneSendError}</p> : null}
-              </div>
+              )}
 
               {/* ── Display ── */}
               <div className="dock-media-inspector__card">
@@ -3742,7 +3969,7 @@ export default function DockMediaTab({ staged: _staged, onStage: _onStage, isAct
         )
       }
 
-      {sceneSendEntry && (
+      {!presentationLinkMode && sceneSendEntry && (
         <div className="dock-dialog-backdrop" role="presentation" onClick={closeSceneSendDialog}>
           <div
             className="dock-dialog dock-dialog--compact"

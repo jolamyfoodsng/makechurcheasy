@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { deductCreditsWithSync, fetchCreditsFromBackend } from "../services/credits";
 import { parseCccHymnDrafts } from "./cccHymnImport";
+import { detectSongs } from "./legacy/songDetector";
+import { parseWorshipLyricSections } from "./slideEngine";
 import { buildFallbackDraft } from "./smartImportService";
 import type {
   AiProcessResult,
@@ -11,21 +13,25 @@ import type {
 } from "./smartImportTypes";
 
 const API_BASE =
-  import.meta.env.VITE_AUTH_API_URL ||
+  import.meta.env?.VITE_AUTH_API_URL ||
   "https://api.creatorstudioslabs.stream";
 
 const APP_VERSION: string =
   typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
 
-const CHUNK_SIZE = 15_000;
-const CHUNK_OVERLAP = 1_500;
-const MAX_CONCURRENT_CHUNKS = 1;
+const CHUNK_SIZE = 60_000;
+const CHUNK_BREAK_WINDOW = 10_000;
+const CHUNK_OVERLAP = 500;
+const MAX_CONCURRENT_CHUNKS = 4;
 const MAX_RETRIES = 2;
 const CCC_HYMN_FAST_PATH_MIN_DRAFTS = 20;
+const LARGE_NUMBERED_HYMNAL_MIN_CHARS = 12_000;
+const LARGE_NUMBERED_HYMNAL_MIN_SONGS = 25;
+const LARGE_NUMBERED_HYMNAL_MIN_CONFIDENCE = 55;
 const LOCAL_SETUP_TIMEOUT_MS = 5_000;
 const WORSHIP_IMPORT_CREDIT_CHECK_TIMEOUT_MS = 7_000;
 const WORSHIP_IMPORT_CREDIT_DEDUCT_TIMEOUT_MS = 7_000;
-const CHUNK_STRUCTURE_TIMEOUT_MS = 45_000;
+const CHUNK_STRUCTURE_TIMEOUT_MS = 30_000;
 
 // ── Provider abstraction ──
 
@@ -93,10 +99,15 @@ function chunkText(text: string): TextChunk[] {
   let index = 0;
 
   while (startOffset < text.length) {
-    const endOffset = Math.min(startOffset + CHUNK_SIZE, text.length);
+    const idealEnd = Math.min(startOffset + CHUNK_SIZE, text.length);
+    const endOffset = findChunkBreak(text, startOffset, idealEnd);
     const chunkText = text.slice(startOffset, endOffset);
     chunks.push({ index, total: 0, text: chunkText, startOffset, endOffset });
-    startOffset += CHUNK_SIZE - CHUNK_OVERLAP;
+    if (endOffset >= text.length) {
+      startOffset = text.length;
+    } else {
+      startOffset = Math.max(endOffset - CHUNK_OVERLAP, startOffset + 1);
+    }
     index++;
   }
 
@@ -105,6 +116,25 @@ function chunkText(text: string): TextChunk[] {
   }
 
   return chunks;
+}
+
+function findChunkBreak(text: string, startOffset: number, idealEnd: number): number {
+  if (idealEnd >= text.length) return text.length;
+
+  const minSearch = Math.max(startOffset + Math.floor(CHUNK_SIZE * 0.6), idealEnd - CHUNK_BREAK_WINDOW);
+  const maxSearch = Math.min(text.length, idealEnd + CHUNK_BREAK_WINDOW);
+
+  const paragraphBreak = text.lastIndexOf("\n\n", maxSearch);
+  if (paragraphBreak >= minSearch) {
+    return paragraphBreak;
+  }
+
+  const lineBreak = text.lastIndexOf("\n", maxSearch);
+  if (lineBreak >= minSearch) {
+    return lineBreak;
+  }
+
+  return idealEnd;
 }
 
 async function processChunksWithLimit(
@@ -398,7 +428,7 @@ function estimateWorshipImportAiCredits(text: string): number {
 async function ensureWorshipImportCredits(creditsNeeded: number): Promise<void> {
   if (creditsNeeded <= 0) return;
 
-  let availableCredits = -1;
+  let availableCredits: number | null = null;
   try {
     availableCredits = await withTimeout(
       fetchCreditsFromBackend(),
@@ -406,13 +436,15 @@ async function ensureWorshipImportCredits(creditsNeeded: number): Promise<void> 
       "Credit check timed out.",
     );
   } catch (error) {
-    console.warn("[WorshipImport] Credit check timed out/unavailable. Continuing and allowing offline sync.", error);
-    return;
+    console.warn("[WorshipImport] Credit check timed out/unavailable.", error);
+    throw new Error("Could not verify AI credits. Check your connection and try again.");
   }
 
-  // -1 represents unlimited, but this function also returns -1 when the
-  // backend is unavailable. In that case we allow the operation and let the
-  // credit queue sync the deduction later.
+  if (availableCredits === null) {
+    throw new Error("Could not verify AI credits. Check your connection and try again.");
+  }
+
+  // -1 represents unlimited/admin access from the backend.
   if (availableCredits >= 0 && availableCredits < creditsNeeded) {
     throw new Error(`Not enough AI credits for this import. Required: ${creditsNeeded}, available: ${availableCredits}.`);
   }
@@ -440,13 +472,14 @@ async function deductWorshipImportCredits(
           aiChunks: stats.aiChunks,
           fallbackChunks: stats.fallbackChunks,
         },
+        { allowOffline: false },
       ),
       WORSHIP_IMPORT_CREDIT_DEDUCT_TIMEOUT_MS,
       "Credit deduction timed out.",
     );
   } catch (error) {
-    console.warn("[WorshipImport] Credit deduction timed out/unavailable after import. Continuing without blocking review.", error);
-    return;
+    console.warn("[WorshipImport] Credit deduction timed out/unavailable after import.", error);
+    throw new Error("Could not deduct AI credits. Check your connection and try again.");
   }
 
   if (!ok) {
@@ -459,6 +492,732 @@ function looksLikeCccHymnal(text: string, fileName: string): boolean {
   const nameLooksSpecific = name.includes("ccc") && /hymn|orin/.test(name);
   const markerCount = (text.match(/\b(?:Orin|Hymn)\s+\d{1,4}\b/gi) ?? []).length;
   return nameLooksSpecific || markerCount >= CCC_HYMN_FAST_PATH_MIN_DRAFTS;
+}
+
+function inferSectionNumber(label: string): string | undefined {
+  const match = label.match(/\b(\d+|[ivxlcdm]+)\b/i);
+  return match?.[1];
+}
+
+function mapSectionHeaderType(raw: string): SmartImportSectionType | null {
+  const normalized = raw.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized.startsWith("verse")) return "verse";
+  if (normalized.startsWith("chorus")) return "chorus";
+  if (normalized.startsWith("refrain")) return "refrain";
+  if (normalized.startsWith("bridge")) return "bridge";
+  if (normalized.startsWith("pre-chorus") || normalized.startsWith("prechorus")) return "pre-chorus";
+  if (normalized.startsWith("tag") || normalized.startsWith("hook") || normalized.startsWith("vamp")) return "tag";
+  if (normalized.startsWith("intro")) return "intro";
+  if (normalized.startsWith("outro") || normalized.startsWith("ending")) return "outro";
+  return null;
+}
+
+function buildFastLocalSections(lyrics: string): SmartImportSongDraft["sections"] {
+  const normalized = lyrics.replace(/\r\n?/g, "\n").trim();
+  if (!normalized) return [];
+
+  type FastLocalSection = {
+    type: SmartImportSectionType;
+    label: string;
+    number?: string;
+    lines: string[];
+  };
+
+  const sections: FastLocalSection[] = [];
+  const lines = normalized.split("\n").map((line) => line.trimEnd());
+  const state: { current: FastLocalSection | null } = { current: null };
+  let verseCount = 0;
+
+  const pushCurrent = () => {
+    if (!state.current) return;
+    const content = state.current.lines.join("\n").trim();
+    if (!content) return;
+    sections.push({ ...state.current, lines: content.split("\n") });
+  };
+
+  const startSection = (
+    type: SmartImportSectionType,
+    label: string,
+    number?: string,
+    initialLine?: string,
+  ) => {
+    pushCurrent();
+    state.current = {
+      type,
+      label,
+      number,
+      lines: initialLine?.trim() ? [initialLine.trim()] : [],
+    };
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (state.current && state.current.lines[state.current.lines.length - 1] !== "") {
+        state.current.lines.push("");
+      }
+      continue;
+    }
+
+    const sectionHeaderMatch = trimmed.match(
+      /^(verse|chorus|refrain|bridge|pre-chorus|prechorus|tag|hook|vamp|intro|outro|ending)\s*(\d+|[ivxlcdm]+)?[:.)-]?\s*(.*)$/i,
+    );
+    if (sectionHeaderMatch) {
+      const type = mapSectionHeaderType(sectionHeaderMatch[1]);
+      if (type) {
+        const number = sectionHeaderMatch[2]?.trim() || undefined;
+        const label = type === "pre-chorus"
+          ? `Pre-Chorus${number ? ` ${number}` : ""}`
+          : `${capitalize(type)}${number ? ` ${number}` : ""}`;
+        startSection(type, label, number, sectionHeaderMatch[3]);
+        continue;
+      }
+    }
+
+    const numberedVerseMatch = trimmed.match(/^(\d+|[ivxlcdm]+)[.)]\s+(.*)$/i);
+    if (numberedVerseMatch) {
+      const number = numberedVerseMatch[1].trim().toUpperCase();
+      startSection("verse", `Verse ${number}`, number, numberedVerseMatch[2]);
+      continue;
+    }
+
+    if (!state.current) {
+      verseCount += 1;
+      startSection("verse", `Verse ${verseCount}`, String(verseCount));
+    }
+
+    state.current?.lines.push(trimmed);
+  }
+
+  pushCurrent();
+
+  const mapped: SmartImportSongDraft["sections"] = sections.map((section) => ({
+    id: generateId(),
+    type: section.type,
+    label: section.label,
+    number: section.number ?? inferSectionNumber(section.label),
+    content: section.lines.join("\n").trim(),
+    warnings: [],
+  })).filter((section) => section.content.length > 0);
+
+  if (mapped.length > 1) {
+    return mapped;
+  }
+
+  const parsedSections: SmartImportSongDraft["sections"] = parseWorshipLyricSections(normalized, 2)
+    .map((section) => ({
+      id: generateId(),
+      type: section.type,
+      label: section.label,
+      number: inferSectionNumber(section.label),
+      content: section.lines.join("\n").trim(),
+      warnings: [],
+    }))
+    .filter((section) => section.content.length > 0);
+
+  if (parsedSections.length > 1) {
+    return parsedSections;
+  }
+
+  return mapped.length > 0
+    ? mapped
+    : [{
+      id: generateId(),
+      type: "verse",
+      label: "Verse 1",
+      number: "1",
+      content: normalized,
+      warnings: [],
+    }];
+}
+
+type HymnPage = {
+  pageNumber: number;
+  text: string;
+};
+
+type NumberedHymnalBlock = {
+  contentPages: HymnPage[];
+  indexPages: HymnPage[];
+  indexTitles: Map<string, string>;
+};
+
+type IndexedCollectedHymn = {
+  hymnNumber: string;
+  lines: string[];
+  recovery: "parsed" | "recovered" | "placeholder";
+  recoveryNote?: string;
+};
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function looksLikeIndexHeader(value: string): boolean {
+  const compact = value.toUpperCase().replace(/\s+/g, "");
+  return compact.includes("INDEXOFIRSTLINES") || compact.includes("INDEXOFFIRSTLINES");
+}
+
+function looksLikeIndexEntry(value: string): boolean {
+  return /^.{6,}\s+\d{1,4}$/.test(normalizeWhitespace(value));
+}
+
+function isLikelyIndexPage(pageText: string): boolean {
+  const lines = pageText.split("\n").map((line) => line.trim()).filter(Boolean);
+  const entryLike = lines.filter((line) => looksLikeIndexEntry(line)).length;
+  const verseLike = lines.filter((line) => /^\d+[.)]\s+/.test(line)).length;
+  const standaloneNumbers = lines.filter((line) => /^\d{1,4}$/.test(line)).length;
+  const longTitles = lines.filter((line) => !/^\d{1,4}$/.test(line) && line.length >= 6).length;
+  let maxStandaloneRun = 0;
+  let currentStandaloneRun = 0;
+
+  for (const line of lines) {
+    if (/^\d{1,4}$/.test(line)) {
+      currentStandaloneRun += 1;
+      maxStandaloneRun = Math.max(maxStandaloneRun, currentStandaloneRun);
+    } else {
+      currentStandaloneRun = 0;
+    }
+  }
+
+  return looksLikeIndexHeader(pageText) ||
+    (entryLike >= 18 && verseLike <= 1) ||
+    (standaloneNumbers >= 10 && longTitles >= 18 && verseLike <= 1 && maxStandaloneRun >= 8);
+}
+
+function stripTrailingPageNumber(lines: string[], pageNumber: number): string[] {
+  const next = [...lines];
+  for (let index = next.length - 1; index >= 0; index -= 1) {
+    const trimmed = next[index].trim();
+    if (!trimmed) continue;
+    if (trimmed === String(pageNumber)) {
+      next[index] = "";
+    }
+    break;
+  }
+  return next;
+}
+
+function extractIndexTitleMap(indexPages: HymnPage[]): Map<string, string> {
+  const titles = new Map<string, string>();
+
+  for (const page of indexPages) {
+    const looseTitles: string[] = [];
+    const standaloneNumbers: string[] = [];
+
+    for (const rawLine of page.text.split("\n")) {
+      const line = normalizeWhitespace(rawLine);
+      if (!line || looksLikeIndexHeader(line)) continue;
+
+      if (/^\d{1,4}$/.test(line)) {
+        standaloneNumbers.push(line);
+        continue;
+      }
+
+      const match = line.match(/^(.+?)\s+(\d{1,4})$/);
+      if (!match) {
+        looseTitles.push(line);
+        continue;
+      }
+
+      const title = normalizeWhitespace(match[1]);
+      const hymnNumber = match[2];
+      if (title.length < 3) continue;
+      if (!titles.has(hymnNumber)) {
+        titles.set(hymnNumber, title);
+      }
+    }
+
+    if (looseTitles.length > 0 && standaloneNumbers.length > 0) {
+      const pairCount = Math.min(looseTitles.length, standaloneNumbers.length);
+      for (let index = 0; index < pairCount; index += 1) {
+        const hymnNumber = standaloneNumbers[index];
+        const title = looseTitles[index];
+        if (title.length < 3) continue;
+        if (!titles.has(hymnNumber)) {
+          titles.set(hymnNumber, title);
+        }
+      }
+    }
+  }
+
+  return titles;
+}
+
+function splitNumberedHymnalBlocks(text: string): NumberedHymnalBlock[] {
+  const pages: HymnPage[] = text.split("\f").map((pageText, index) => ({
+    pageNumber: index + 1,
+    text: pageText,
+  }));
+
+  const blocks: NumberedHymnalBlock[] = [];
+  let currentContent: HymnPage[] = [];
+  let currentIndex: HymnPage[] = [];
+
+  for (const page of pages) {
+    if (isLikelyIndexPage(page.text)) {
+      currentIndex.push(page);
+      continue;
+    }
+
+    if (currentIndex.length > 0 && currentContent.length > 0) {
+      blocks.push({
+        contentPages: currentContent,
+        indexPages: currentIndex,
+        indexTitles: extractIndexTitleMap(currentIndex),
+      });
+      currentContent = [];
+      currentIndex = [];
+    } else if (currentIndex.length > 0) {
+      currentIndex = [];
+    }
+
+    currentContent.push(page);
+  }
+
+  if (currentContent.length > 0) {
+    blocks.push({
+      contentPages: currentContent,
+      indexPages: currentIndex,
+      indexTitles: extractIndexTitleMap(currentIndex),
+    });
+  }
+
+  return blocks.filter((block) => block.contentPages.length > 0);
+}
+
+function findNextNonEmptyLine(lines: string[], startIndex: number): string | null {
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function isLikelyMetadataLine(line: string): boolean {
+  const trimmed = normalizeWhitespace(line);
+  if (!trimmed) return false;
+
+  return /^(?:PAN|PANT|CAN|PH|MHB|RH|BBC|CB|GBP|CWS|PPP|CP|TPH|TCH|SGT|SOS|HCB|KB)\b/i.test(trimmed) ||
+    /^(?:Songs of Fellowship|Translation of|Apostolic Twi Hymnal|Christian As4r Ndwom Fofor|Presby As4re Dwom Nhoma)\b/i.test(trimmed);
+}
+
+function shouldStartIndexedHymn(
+  lines: string[],
+  index: number,
+  allowedNumbers: Set<string>,
+): boolean {
+  const hymnNumber = lines[index].trim();
+  if (!/^\d{1,4}$/.test(hymnNumber)) return false;
+  if (!allowedNumbers.has(hymnNumber)) return false;
+
+  const nextLine = findNextNonEmptyLine(lines, index + 1);
+  if (!nextLine) return false;
+  if (/^\d{1,4}$/.test(nextLine)) return false;
+  if (looksLikeIndexHeader(nextLine) || looksLikeIndexEntry(nextLine)) return false;
+  if (isLikelyMetadataLine(nextLine)) return false;
+
+  return true;
+}
+
+function shouldStartLooseNumberedHymn(lines: string[], index: number): boolean {
+  const hymnNumber = lines[index].trim();
+  if (!/^\d{1,4}$/.test(hymnNumber)) return false;
+
+  const nextLine = findNextNonEmptyLine(lines, index + 1);
+  if (!nextLine) return false;
+  if (/^\d{1,4}$/.test(nextLine)) return false;
+  if (looksLikeIndexHeader(nextLine) || looksLikeIndexEntry(nextLine)) return false;
+  if (isLikelyMetadataLine(nextLine)) return false;
+
+  return true;
+}
+
+function normalizeCollectedLyrics(lines: string[]): string {
+  const normalized: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (!line.trim()) {
+      if (normalized.length > 0 && normalized[normalized.length - 1] !== "") {
+        normalized.push("");
+      }
+      continue;
+    }
+    normalized.push(line.trim());
+  }
+
+  while (normalized.length > 0 && !normalized[0]) normalized.shift();
+  while (normalized.length > 0 && !normalized[normalized.length - 1]) normalized.pop();
+
+  return normalized.join("\n").trim();
+}
+
+function normalizeForLooseMatch(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sortHymnNumbers(a: string, b: string): number {
+  return Number(a) - Number(b);
+}
+
+function flattenBlockContentLines(block: NumberedHymnalBlock): string[] {
+  const lines: string[] = [];
+
+  for (const page of block.contentPages) {
+    lines.push(...stripTrailingPageNumber(page.text.split("\n"), page.pageNumber));
+    lines.push("");
+  }
+
+  return lines;
+}
+
+function looksLikeUsefulRecoveryLyrics(lines: string[]): boolean {
+  const lyrics = normalizeCollectedLyrics(lines);
+  if (!lyrics) return false;
+
+  const nonEmptyLines = lyrics.split("\n").filter((line) => line.trim().length > 0).length;
+  return nonEmptyLines >= 2 || lyrics.length >= 48;
+}
+
+function extractRecoverySlice(
+  flatLines: string[],
+  startIndex: number,
+  allowedNumbers: Set<string>,
+): string[] {
+  const collected: string[] = [];
+  let sawContent = false;
+
+  for (let index = startIndex; index < flatLines.length; index += 1) {
+    const rawLine = flatLines[index];
+    const trimmed = rawLine.trim();
+
+    if (!trimmed) {
+      if (sawContent && collected[collected.length - 1] !== "") {
+        collected.push("");
+      }
+      continue;
+    }
+
+    if (/^\d{1,4}$/.test(trimmed) && allowedNumbers.has(trimmed)) {
+      if (sawContent) break;
+      return [];
+    }
+
+    sawContent = true;
+    collected.push(rawLine.trimEnd());
+  }
+
+  return collected;
+}
+
+function recoverIndexedHymnByNumber(
+  hymnNumber: string,
+  title: string,
+  flatLines: string[],
+  allowedNumbers: Set<string>,
+): IndexedCollectedHymn | null {
+  const titleMatch = normalizeForLooseMatch(title);
+
+  for (let index = 0; index < flatLines.length; index += 1) {
+    if (flatLines[index].trim() !== hymnNumber) continue;
+
+    const candidateLines = extractRecoverySlice(flatLines, index + 1, allowedNumbers);
+    if (!looksLikeUsefulRecoveryLyrics(candidateLines)) continue;
+
+    const candidateText = normalizeForLooseMatch(candidateLines.slice(0, 6).join(" "));
+    const reviewNote = candidateText.includes(titleMatch)
+      ? "Recovered this hymn body from the local PDF text using its hymn number and title."
+      : "Recovered this hymn body from the local PDF text using its hymn number. Review the opening lines.";
+
+    return {
+      hymnNumber,
+      lines: candidateLines,
+      recovery: "recovered",
+      recoveryNote: reviewNote,
+    };
+  }
+
+  return null;
+}
+
+function recoverIndexedHymnByTitle(
+  hymnNumber: string,
+  title: string,
+  flatLines: string[],
+  allowedNumbers: Set<string>,
+): IndexedCollectedHymn | null {
+  const titleMatch = normalizeForLooseMatch(title);
+  if (!titleMatch) return null;
+
+  for (let index = 0; index < flatLines.length; index += 1) {
+    const current = normalizeForLooseMatch(flatLines[index]);
+    const next = normalizeForLooseMatch(flatLines[index + 1] ?? "");
+    const combined = normalizeWhitespace([current, next].filter(Boolean).join(" "));
+
+    if (!combined) continue;
+    if (!titleMatch.includes(combined) && !combined.includes(titleMatch)) continue;
+
+    const candidateLines = extractRecoverySlice(flatLines, index, allowedNumbers);
+    if (!looksLikeUsefulRecoveryLyrics(candidateLines)) continue;
+
+    return {
+      hymnNumber,
+      lines: candidateLines,
+      recovery: "recovered",
+      recoveryNote: "Recovered this hymn body from the local PDF text using the printed index title.",
+    };
+  }
+
+  return null;
+}
+
+function collectNumberedHymnsFromBlock(
+  block: NumberedHymnalBlock,
+  allowedNumbers?: Set<string>,
+): IndexedCollectedHymn[] {
+  const collected: IndexedCollectedHymn[] = [];
+  let current: { hymnNumber: string; lines: string[] } | null = null;
+
+  const flushCurrent = () => {
+    if (!current) return;
+    const lyrics = normalizeCollectedLyrics(current.lines);
+    if (lyrics) {
+      collected.push({
+        hymnNumber: current.hymnNumber,
+        lines: lyrics.split("\n"),
+        recovery: "parsed",
+      });
+    }
+    current = null;
+  };
+
+  for (const page of block.contentPages) {
+    const lines = stripTrailingPageNumber(page.text.split("\n"), page.pageNumber);
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const rawLine = lines[index];
+      const trimmed = rawLine.trim();
+
+      if (!trimmed) {
+        if (current && current.lines[current.lines.length - 1] !== "") {
+          current.lines.push("");
+        }
+        continue;
+      }
+
+      const startsIndexedHymn = allowedNumbers
+        ? shouldStartIndexedHymn(lines, index, allowedNumbers)
+        : shouldStartLooseNumberedHymn(lines, index);
+
+      if (startsIndexedHymn) {
+        flushCurrent();
+        current = {
+          hymnNumber: trimmed,
+          lines: [],
+        };
+        continue;
+      }
+
+      if (!current) continue;
+      current.lines.push(rawLine.trimEnd());
+    }
+  }
+
+  flushCurrent();
+
+  return collected;
+}
+
+function recoverMissingIndexedHymns(
+  block: NumberedHymnalBlock,
+  parsedHymns: IndexedCollectedHymn[],
+): IndexedCollectedHymn[] {
+  const flatLines = flattenBlockContentLines(block);
+  const allowedNumbers = new Set(block.indexTitles.keys());
+  const parsedNumbers = new Set(parsedHymns.map((entry) => entry.hymnNumber));
+  const recovered: IndexedCollectedHymn[] = [];
+
+  for (const [hymnNumber, title] of [...block.indexTitles.entries()].sort(([left], [right]) => sortHymnNumbers(left, right))) {
+    if (parsedNumbers.has(hymnNumber)) continue;
+
+    const byNumber = recoverIndexedHymnByNumber(hymnNumber, title, flatLines, allowedNumbers);
+    if (byNumber) {
+      recovered.push(byNumber);
+      continue;
+    }
+
+    const byTitle = recoverIndexedHymnByTitle(hymnNumber, title, flatLines, allowedNumbers);
+    if (byTitle) {
+      recovered.push(byTitle);
+      continue;
+    }
+
+    recovered.push({
+      hymnNumber,
+      lines: [title],
+      recovery: "placeholder",
+      recoveryNote: "Lyrics were not fully recovered from the PDF text. Review this hymn manually before importing.",
+    });
+  }
+
+  return recovered;
+}
+
+function inferMissingSequenceHymns(
+  block: NumberedHymnalBlock,
+  hymnsByNumber: Map<string, IndexedCollectedHymn>,
+): IndexedCollectedHymn[] {
+  const detectedNumbers = [...hymnsByNumber.keys()]
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value))
+    .sort((left, right) => left - right);
+
+  const maxDetectedNumber = detectedNumbers[detectedNumbers.length - 1] ?? 0;
+  if (maxDetectedNumber < LARGE_NUMBERED_HYMNAL_MIN_SONGS) return [];
+  if (detectedNumbers[0] !== 1) return [];
+
+  const density = detectedNumbers.length / maxDetectedNumber;
+  if (density < 0.96) return [];
+
+  const inferred: IndexedCollectedHymn[] = [];
+
+  for (let hymnNumber = 1; hymnNumber <= maxDetectedNumber; hymnNumber += 1) {
+    const key = String(hymnNumber);
+    if (hymnsByNumber.has(key)) continue;
+
+    inferred.push({
+      hymnNumber: key,
+      lines: [block.indexTitles.get(key) ?? `Hymn ${key}`],
+      recovery: "placeholder",
+      recoveryNote: "This hymn number was inferred from the surrounding hymn sequence. Review this hymn manually before importing.",
+    });
+  }
+
+  return inferred;
+}
+
+function buildIndexedHymnDraft(
+  block: NumberedHymnalBlock,
+  entry: IndexedCollectedHymn,
+): SmartImportSongDraft {
+  const lyrics = entry.lines.join("\n").trim();
+  const firstUsefulLine = entry.lines.find((line) => normalizeWhitespace(line).length > 0);
+  const title = block.indexTitles.get(entry.hymnNumber)
+    ?? normalizeWhitespace(firstUsefulLine ?? "")
+    ?? `Hymn ${entry.hymnNumber}`;
+  const warnings: string[] = [];
+  const reviewNotes = block.indexTitles.has(entry.hymnNumber)
+    ? ["Fast hymn-book mode used the printed index to recover titles and keep wrapped first lines stable."]
+    : ["Fast hymn-book mode recovered this hymn from numbered body pages because its printed index entry was not extracted reliably."];
+
+  if (!block.indexTitles.has(entry.hymnNumber)) {
+    warnings.push("This hymn was recovered without a printed index title. Review the title and first lines before importing.");
+  }
+
+  if (entry.recovery === "recovered" && entry.recoveryNote) {
+    reviewNotes.push(entry.recoveryNote);
+  }
+
+  if (entry.recovery === "placeholder") {
+    reviewNotes.push(entry.recoveryNote ?? "Lyrics were not fully recovered from the PDF text. Review this hymn manually before importing.");
+    warnings.push("Lyrics were not fully recovered from the PDF text.");
+  }
+
+  return {
+    id: generateId(),
+    title,
+    artist: "",
+    language: undefined,
+    hymnNumber: entry.hymnNumber,
+    method: "fallback" as const,
+    sections: buildFastLocalSections(lyrics),
+    warnings,
+    reviewNotes,
+    rawExcerpt: lyrics.slice(0, 2400),
+  };
+}
+
+function parseIndexedNumberedHymnalBlock(block: NumberedHymnalBlock): SmartImportSongDraft[] {
+  const parsedHymns = collectNumberedHymnsFromBlock(block, new Set(block.indexTitles.keys()));
+  const recoveredHymns = recoverMissingIndexedHymns(block, parsedHymns);
+  const extraHymns = collectNumberedHymnsFromBlock(block);
+  const hymnsByNumber = new Map<string, IndexedCollectedHymn>();
+
+  for (const hymn of [...parsedHymns, ...recoveredHymns, ...extraHymns]) {
+    if (!hymnsByNumber.has(hymn.hymnNumber)) {
+      hymnsByNumber.set(hymn.hymnNumber, hymn);
+    }
+  }
+
+  for (const hymn of inferMissingSequenceHymns(block, hymnsByNumber)) {
+    if (!hymnsByNumber.has(hymn.hymnNumber)) {
+      hymnsByNumber.set(hymn.hymnNumber, hymn);
+    }
+  }
+
+  return [...hymnsByNumber.keys()]
+    .sort(sortHymnNumbers)
+    .map((hymnNumber) => hymnsByNumber.get(hymnNumber))
+    .filter((entry): entry is IndexedCollectedHymn => Boolean(entry))
+    .map((entry) => buildIndexedHymnDraft(block, entry))
+    .filter((song) => song.sections.length > 0);
+}
+
+export function parseLargeNumberedHymnalDrafts(text: string): SmartImportSongDraft[] {
+  const trimmed = text.trim();
+  if (trimmed.length < LARGE_NUMBERED_HYMNAL_MIN_CHARS) return [];
+
+  const indexedCandidates = splitNumberedHymnalBlocks(trimmed)
+    .filter((block) => block.indexTitles.size >= LARGE_NUMBERED_HYMNAL_MIN_SONGS)
+    .map((block) => ({
+      block,
+      drafts: parseIndexedNumberedHymnalBlock(block),
+      maxNumber: Math.max(...[...block.indexTitles.keys()].map(Number)),
+    }))
+    .sort((left, right) => {
+      if (right.drafts.length !== left.drafts.length) {
+        return right.drafts.length - left.drafts.length;
+      }
+      if (right.maxNumber !== left.maxNumber) {
+        return right.maxNumber - left.maxNumber;
+      }
+      return right.block.indexTitles.size - left.block.indexTitles.size;
+    });
+
+  const bestIndexedCandidate = indexedCandidates[0];
+  if (bestIndexedCandidate) {
+    const indexedDrafts = bestIndexedCandidate.drafts;
+    if (indexedDrafts.length >= LARGE_NUMBERED_HYMNAL_MIN_SONGS) {
+      return indexedDrafts;
+    }
+  }
+
+  const detection = detectSongs(trimmed);
+  if (detection.pattern !== "numbered") return [];
+  if (detection.confidence < LARGE_NUMBERED_HYMNAL_MIN_CONFIDENCE) return [];
+  if (detection.songs.length < LARGE_NUMBERED_HYMNAL_MIN_SONGS) return [];
+
+  return detection.songs.map((song) => ({
+    id: generateId(),
+    title: song.title,
+    artist: "",
+    language: song.language,
+    hymnNumber: song.title.match(/\b(\d+)\b/)?.[1],
+    method: "fallback" as const,
+    sections: buildFastLocalSections(song.lyrics),
+    warnings: [],
+    reviewNotes: [
+      "Fast hymn-book mode was used to keep this import under a few minutes. Review section breaks before importing.",
+    ],
+    rawExcerpt: song.lyrics.slice(0, 2400),
+  })).filter((song) => song.sections.length > 0);
 }
 
 export function parseKnownHymnalDrafts(text: string, fileName: string): SmartImportSongDraft[] {
@@ -477,6 +1236,7 @@ export async function processDocumentLocally(
   fileName: string,
   onProgress?: ImportAiProgressCallback,
 ): Promise<AiProcessResult> {
+  const startedAt = Date.now();
   const trimmed = text.trim();
   const knownHymnalDrafts = parseKnownHymnalDrafts(text, fileName);
   if (knownHymnalDrafts.length > 0) {
@@ -495,7 +1255,31 @@ export async function processDocumentLocally(
         aiChunks: 0,
         fallbackChunks: 0,
         provider: "ccc-local",
-        durationMs: 0,
+        durationMs: Date.now() - startedAt,
+      },
+    };
+  }
+
+  const numberedHymnalDrafts = parseLargeNumberedHymnalDrafts(trimmed);
+  if (numberedHymnalDrafts.length > 0) {
+    onProgress?.({
+      completed: numberedHymnalDrafts.length,
+      total: numberedHymnalDrafts.length,
+      label: `Fast-parsed ${numberedHymnalDrafts.length} hymn${numberedHymnalDrafts.length === 1 ? "" : "s"} locally.`,
+    });
+    return {
+      songs: numberedHymnalDrafts,
+      warnings: [
+        `Large numbered hymn book detected. Used fast local parsing for ${numberedHymnalDrafts.length} hymns to avoid slow AI imports.`,
+      ],
+      aiUsed: false,
+      needsReview: true,
+      stats: {
+        totalChunks: 0,
+        aiChunks: 0,
+        fallbackChunks: 0,
+        provider: "numbered-local",
+        durationMs: Date.now() - startedAt,
       },
     };
   }

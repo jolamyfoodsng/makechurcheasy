@@ -306,9 +306,10 @@ function appendJoinedLine(previous: string, next: string): string {
 }
 
 export function normalizeExtractedLyricsText(text: string): string {
+  const pageBreakToken = "__MCE_PAGE_BREAK__";
   const normalized = normalizeNfc(text)
     .replace(/\r\n?/g, "\n")
-    .replace(/\f/g, "\n\n");
+    .replace(/\f/g, `\n${pageBreakToken}\n`);
 
   const output: string[] = [];
   let pending = "";
@@ -320,6 +321,15 @@ export function normalizeExtractedLyricsText(text: string): string {
   };
 
   for (const rawLine of normalized.split("\n")) {
+    if (rawLine === pageBreakToken) {
+      flushPending();
+      while (output.length > 0 && output[output.length - 1] === "") {
+        output.pop();
+      }
+      output.push("\f");
+      continue;
+    }
+
     const line = normalizeExtractedLine(rawLine);
 
     if (!line) {
@@ -346,6 +356,7 @@ export function normalizeExtractedLyricsText(text: string): string {
 
   return output
     .join("\n")
+    .replace(/\n*\f\n*/g, "\n\f\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

@@ -125,6 +125,7 @@
       --compare-panel-inner-padding: 38px;
       --compare-reference-verse-spacing: 10px;
       --compare-reference-align: var(--ref-text-align, center);
+      --compare-inline-align: var(--ref-align-self, center);
       --compare-reference-transform: var(--ref-text-transform, none);
     }
 
@@ -358,6 +359,7 @@
       font-style: var(--ref-font-style, normal);
       color: var(--ref-font-color);
       text-align: var(--compare-reference-align, var(--ref-text-align, var(--compare-text-align, var(--text-align))));
+      align-self: var(--compare-inline-align, center);
       margin-top: var(--compare-reference-verse-spacing, 10px);
       width: var(--ref-width);
       padding: var(--ref-bg-padding);
@@ -367,6 +369,13 @@
       opacity: var(--ref-opacity);
       text-transform: var(--compare-reference-transform, var(--ref-text-transform));
       letter-spacing: var(--ref-letter-spacing);
+    }
+
+    #compare-layout.is-line-by-line .compare-column__reference {
+      align-self: center;
+      width: fit-content;
+      max-width: 100%;
+      text-align: center;
     }
 
     .compare-column__reference.is-above {
@@ -394,8 +403,9 @@
       align-items: stretch;
       gap: 16px;
       width: 100%;
+      text-align: var(--compare-text-align, var(--text-align, center));
     }
-    .lt-compare-row .lt-compare-col {
+    .lt-compare-row .lt-compare-unit {
       flex: 1 1 0;
       min-width: 0;
     }
@@ -410,23 +420,41 @@
       flex-direction: column;
       gap: 8px;
       width: 100%;
+      text-align: var(--compare-text-align, var(--text-align, center));
     }
     .lt-compare-stack .lt-compare-divider {
       height: 1px;
       background: rgba(255,255,255,0.15);
       width: 100%;
     }
+    .lt-compare-unit {
+      display: flex;
+      flex-direction: column;
+      align-items: var(--compare-inline-align, center);
+      min-width: 0;
+    }
     .lt-compare-ref {
       display: block;
       font-size: 0.65em;
-      color: rgba(255,255,255,0.55);
-      margin-bottom: 2px;
+      color: var(--ref-font-color, rgba(255,255,255,0.55));
+      margin-bottom: var(--compare-reference-verse-spacing, 10px);
+      max-width: 100%;
+      width: fit-content;
+      padding: var(--ref-bg-padding);
+      background: var(--ref-bg-color);
+      border-radius: var(--ref-bg-radius);
+      border: var(--ref-bg-border);
+      text-align: var(--compare-reference-align, var(--ref-text-align, center));
+      text-transform: var(--compare-reference-transform, var(--ref-text-transform));
+      letter-spacing: var(--ref-letter-spacing);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .lt-compare-col {
       display: block;
+      width: 100%;
+      text-align: var(--compare-text-align, var(--text-align, center));
     }
 
     /* ══════════════════════════════════════════════════════
@@ -538,6 +566,10 @@
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
       order: 2;
+    }
+
+    #lt-bar #ref-text:empty {
+      display: none;
     }
 
     #lt-bar #ref-text.top {
@@ -831,8 +863,37 @@
           : 'above-verse';
       }
 
-      function compareMetaAlign(value, fallback) {
-        return value === 'left' || value === 'center' || value === 'right' ? value : fallback;
+      function normalizeCompareTextAlign(value, fallback) {
+        if (value === 'left' || value === 'center' || value === 'right' || value === 'justify') return value;
+        if (fallback === 'left' || fallback === 'center' || fallback === 'right') return fallback;
+        return 'center';
+      }
+
+      function compareTextAlignForReference(value) {
+        return value === 'left' || value === 'right' ? value : 'center';
+      }
+
+      function compareGridVerticalAlign(value, fallback) {
+        if (value === 'center') return 'center';
+        if (value === 'bottom') return 'end';
+        if (value === 'top') return 'start';
+        return fallback;
+      }
+
+      function compareColumnVerticalAlign(value, fallback) {
+        if (value === 'center') return 'center';
+        if (value === 'bottom') return 'flex-end';
+        if (value === 'top') return 'flex-start';
+        return fallback;
+      }
+
+      function normalizeCompareVerticalAlign(value) {
+        if (value === 'bottom') return 'bottom';
+        return 'center';
+      }
+
+      function lowerThirdContentVerticalAlign(value) {
+        return value === 'top' ? 'flex-start' : 'flex-end';
       }
 
       function applyCompareReferencePlacement(node, position, alignment) {
@@ -927,6 +988,16 @@
         return PATTERN_CSS[value] || '';
       }
 
+      function resolveBackgroundImageCss(image) {
+        let value = String(image || '').trim();
+        if (!value || value === '__BG_SOURCE__') return '';
+        if (value === '__FROM_CSS__') return readInjectedCssVar('--bg-image') || '';
+        if (value === '__FROM_LOCALSTORAGE__') value = localStorage.getItem('bible-overlay-bg-image') || '';
+        if (!value || value === 'none') return '';
+        if (/^url\(/i.test(value)) return value;
+        return `url("${value.replace(/"/g, '\\"')}")`;
+      }
+
       function clearVideoElement(videoEl) {
         if (!videoEl) return;
         try { videoEl.pause(); } catch { }
@@ -957,7 +1028,25 @@
         bgCrossfade.style.backgroundColor = 'transparent';
       }
 
+      function hasExplicitFullscreenBackground(theme) {
+        if (!theme || typeof theme !== 'object') return false;
+        return [
+          'backgroundType',
+          'backgroundColor',
+          'backgroundColorEnd',
+          'backgroundImage',
+          'backgroundPattern',
+          'backgroundVideo',
+          'backgroundOpacity',
+          'fullscreenShadeEnabled',
+          'fullscreenShadeColor',
+          'fullscreenShadeOpacity',
+        ].some((key) => Object.prototype.hasOwnProperty.call(theme, key));
+      }
+
       function applyFullscreenBackground(theme) {
+        if (!hasExplicitFullscreenBackground(theme)) return;
+
         const bgOpacity = String(theme.backgroundOpacity ?? 1);
         const bgColor = String(theme.backgroundColor || 'transparent');
         const bgColorEnd = String(theme.backgroundColorEnd || '').trim();
@@ -1230,6 +1319,72 @@
         } catch { }
       }
 
+      function unwrapCssUrlValue(value) {
+        const trimmed = String(value || '').trim();
+        if (!trimmed) return '';
+        const match = trimmed.match(/^url\((.*)\)$/i);
+        if (!match || !match[1]) return trimmed;
+        return match[1].trim().replace(/^["']|["']$/g, '');
+      }
+
+      function buildStorageSafePacket(packet) {
+        let copy = packet;
+        try {
+          copy = JSON.parse(JSON.stringify(packet));
+        } catch { }
+        if (!copy || typeof copy !== 'object' || !copy.theme || typeof copy.theme !== 'object') {
+          return copy;
+        }
+
+        const theme = Object.assign({}, copy.theme);
+        if (theme.backgroundImage === '__FROM_CSS__') {
+          const cssValue = readInjectedCssVar('--bg-image');
+          if (cssValue && cssValue !== 'none') theme.backgroundImage = unwrapCssUrlValue(cssValue);
+        }
+        if (theme.backgroundPattern === '__FROM_CSS__') {
+          const cssValue = readInjectedCssVar('--bg-pattern-data');
+          if (cssValue && cssValue !== 'none') theme.backgroundPattern = unwrapCssUrlValue(cssValue);
+        }
+        if (theme.logoUrl === '__FROM_CSS__') {
+          const cssValue = readInjectedCssVar('--logo-data-uri');
+          if (cssValue && cssValue !== 'none') theme.logoUrl = unwrapCssUrlValue(cssValue);
+        }
+        if (theme.boxBackgroundImage === '__FROM_CSS__') {
+          const cssValue = readInjectedCssVar('--box-bg-image');
+          if (cssValue && cssValue !== 'none') theme.boxBackgroundImage = unwrapCssUrlValue(cssValue);
+        }
+
+        return Object.assign({}, copy, { theme: theme });
+      }
+
+      function persistOverlayPacket(packet) {
+        if (!packet || typeof packet !== 'object' || packet.action === 'animate-out') return;
+        try {
+          const safePacket = buildStorageSafePacket(packet);
+          let nextPacket = safePacket;
+          const raw = localStorage.getItem(_storageKey);
+          const parsedExisting = raw ? JSON.parse(raw) : {};
+          const existing = parsedExisting && typeof parsedExisting === 'object' ? parsedExisting : {};
+          if (safePacket.theme && !safePacket.slide && safePacket.blanked !== true) {
+            nextPacket = Object.assign({}, existing, {
+              theme: safePacket.theme,
+              mode: safePacket.mode || existing.mode || activeMode,
+              timestamp: safePacket.timestamp || Date.now(),
+            });
+          } else if (!safePacket.theme && safePacket.slide && existing && existing.theme) {
+            nextPacket = Object.assign({}, safePacket, {
+              theme: existing.theme,
+              mode: safePacket.mode || existing.mode || activeMode,
+            });
+          }
+          localStorage.setItem(_storageKey, JSON.stringify(nextPacket));
+        } catch { }
+      }
+
+      function hasThemePayload(theme) {
+        return Boolean(theme && typeof theme === 'object' && Object.keys(theme).length > 0);
+      }
+
       /* ═══ THEME: Shared base ═══ */
       function applyThemeBase(s) {
         ensureCmgSansFont();
@@ -1299,9 +1454,11 @@
         if (compareWeight) root.style.setProperty('--compare-font-weight', compareWeight);
         else root.style.setProperty('--compare-font-weight', '');
         // Compare-specific text alignment
-        const compareAlign = s.compareTextAlignLeft || '';
-        if (compareAlign && compareAlign !== 'justify') root.style.setProperty('--compare-text-align', compareAlign);
-        else root.style.setProperty('--compare-text-align', '');
+        const compareAlign = normalizeCompareTextAlign(s.compareTextAlignLeft, s.textAlign || 'center');
+        root.style.setProperty('--compare-text-align', compareAlign);
+        const compareReferenceAlign = compareTextAlignForReference(compareAlign);
+        root.style.setProperty('--compare-reference-align', compareReferenceAlign);
+        root.style.setProperty('--compare-inline-align', mapFlexAlign(compareReferenceAlign));
         // Compare-specific font family
         const compareFontFamily = s.compareFontFamilyLeft || '';
         if (compareFontFamily) root.style.setProperty('--compare-font-family', compareFontFamily);
@@ -1328,10 +1485,8 @@
         root.style.setProperty('--compare-panel-inner-padding', baseComparePanelInnerPadding + 'px');
         root.style.setProperty('--compare-reference-verse-spacing', clampSetting(s.compareReferenceVerseSpacing, 10, 0, 80) + 'px');
         root.style.setProperty('--compare-reference-transform', mapTextTransform(s.compareReferenceTextTransformLeft || s.refTextTransform));
-        const fallbackRefAlign = s.refTextAlign && s.refTextAlign !== 'match' ? s.refTextAlign : (s.textAlign || 'center');
-        root.style.setProperty('--compare-reference-align', compareMetaAlign(s.compareReferenceAlignmentLeft, fallbackRefAlign));
-        applyCompareReferencePlacement(compareReferenceLeft, compareMetaPosition(s.compareReferencePositionLeft), compareMetaAlign(s.compareReferenceAlignmentLeft, fallbackRefAlign));
-        applyCompareReferencePlacement(compareReferenceRight, compareMetaPosition(s.compareReferencePositionRight), compareMetaAlign(s.compareReferenceAlignmentRight, fallbackRefAlign));
+        applyCompareReferencePlacement(compareReferenceLeft, compareMetaPosition(s.compareReferencePositionLeft), compareReferenceAlign);
+        applyCompareReferencePlacement(compareReferenceRight, compareMetaPosition(s.compareReferencePositionRight), compareReferenceAlign);
         if (compareLayout) {
           if (currentCompareLayout === 'line-by-line') {
             compareLayout.style.gridTemplateColumns = '1fr';
@@ -1341,20 +1496,25 @@
             compareLayout.style.gap = cg + 'px';
           }
           compareLayout.style.padding = `${outerTop}px ${outerRight}px ${outerBottom}px ${outerLeft}px`;
-          compareLayout.style.alignContent = 'center';
+          const leftVerticalAlign = normalizeCompareVerticalAlign(s.compareVerticalAlignLeft);
+          const rightVerticalAlign = normalizeCompareVerticalAlign(s.compareVerticalAlignRight || leftVerticalAlign);
+          compareLayout.style.alignContent = leftVerticalAlign === rightVerticalAlign
+            ? compareGridVerticalAlign(leftVerticalAlign, 'center')
+            : 'center';
           const compareColumns = Array.from(compareLayout.querySelectorAll('.compare-column'));
-          compareColumns.forEach((column) => {
+          compareColumns.forEach((column, index) => {
             column.style.padding = baseComparePanelInnerPadding + 'px';
-            column.style.justifyContent = 'flex-start';
+            column.style.justifyContent = compareColumnVerticalAlign(index === 1 ? rightVerticalAlign : leftVerticalAlign, 'flex-start');
           });
         }
-        root.style.setProperty('--bg-shade-gradient', buildShadeGradient(s.fullscreenShadeColor || '#000', s.fullscreenShadeOpacity ?? 0.42));
-        root.style.setProperty('--bg-shade-display', s.fullscreenShadeEnabled === false ? 'none' : 'block');
+        if (hasExplicitFullscreenBackground(s)) {
+          root.style.setProperty('--bg-shade-gradient', buildShadeGradient(s.fullscreenShadeColor || '#000', s.fullscreenShadeOpacity ?? 0.42));
+          root.style.setProperty('--bg-shade-display', s.fullscreenShadeEnabled === false ? 'none' : 'block');
+          applyFullscreenBackground(s);
+        }
         root.style.setProperty('--safe-area', (s.safeArea || 40) + 'px');
         if (s.refPosition === 'top') reference.classList.add('top'); else reference.classList.remove('top');
         root.dataset.refBgEnabled = s.referenceBackgroundEnabled === true ? 'true' : 'false';
-
-        applyFullscreenBackground(s);
       }
 
       /* ═══ THEME: Lower-third ═══ */
@@ -1367,6 +1527,13 @@
         if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.style.setProperty('--font-size', baseFontSize + 'px'); root.style.setProperty('--ref-font-size', baseRefFontSize + 'px'); }
         root.style.setProperty('--line-height', String(s.lineHeight || preset.lineHeight));
         root.style.setProperty('--ref-spacing', (s.refSpacing ?? 16) + 'px');
+        const compareAlign = normalizeCompareTextAlign(s.compareTextAlignLeft, s.textAlign || 'center');
+        root.style.setProperty('--compare-text-align', compareAlign);
+        const compareReferenceAlign = compareTextAlignForReference(compareAlign);
+        root.style.setProperty('--compare-reference-align', compareReferenceAlign);
+        root.style.setProperty('--compare-inline-align', mapFlexAlign(compareReferenceAlign));
+        root.style.setProperty('--compare-reference-transform', mapTextTransform(s.compareReferenceTextTransformLeft || s.refTextTransform));
+        root.style.setProperty('--compare-reference-verse-spacing', clampSetting(s.compareReferenceVerseSpacing, 10, 0, 80) + 'px');
         if (targetMode === 'lower-third') {
           root.style.setProperty('--lt-max-width', 'none');
         } else {
@@ -1383,6 +1550,7 @@
         root.style.setProperty('--lt-min-height', (s.lowerThirdBarMinHeight || 0) + 'px');
         root.style.setProperty('--lt-card-padding', s.lowerThirdCardPadding || `${baseBarPadding}px`);
         root.style.setProperty('--lt-card-radius', (s.lowerThirdCardRadius || 18) + 'px');
+        ltBar.style.justifyContent = lowerThirdContentVerticalAlign(s.lowerThirdCaptionPosition);
         const bb = s.boxBackground || 'rgba(0,0,0,0.65)', bo = s.boxOpacity ?? 1; let fbb = bb;
         if (bo < 1 && bb.startsWith('rgba')) fbb = bb.replace(/[\d.]+\)$/, bo + ')'); else if (bo < 1 && bb.startsWith('rgb(')) fbb = bb.replace('rgb(', 'rgba(').replace(')', ',' + bo + ')');
         root.style.setProperty('--box-background', fbb);
@@ -1390,7 +1558,31 @@
         if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
         const barBgV = String(s.backgroundVideo || '').trim();
         if (barBgV && targetMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
-        if (!barBgV && targetMode === 'lower-third') { const bgPattern = String(s.backgroundPattern || '').trim(); if (bgPattern) { const pc = resolvePatternCss(bgPattern); ltBarBg.style.background = pc || 'transparent'; ltBarBg.style.backgroundSize = 'cover'; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } else { const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent'; ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } } else ltBarBg.style.display = 'none';
+        if (!barBgV && targetMode === 'lower-third') {
+          const bgImageCss = resolveBackgroundImageCss(s.backgroundImage);
+          const bgPattern = String(s.backgroundPattern || '').trim();
+          if (bgImageCss) {
+            ltBarBg.style.background = bgImageCss;
+            ltBarBg.style.backgroundSize = 'cover';
+            ltBarBg.style.backgroundPosition = 'center';
+            ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+            ltBarBg.style.display = 'block';
+          } else if (bgPattern) {
+            const pc = resolvePatternCss(bgPattern);
+            ltBarBg.style.background = pc || 'transparent';
+            ltBarBg.style.backgroundSize = 'cover';
+            ltBarBg.style.backgroundPosition = 'center';
+            ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+            ltBarBg.style.display = 'block';
+          } else {
+            const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent';
+            ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2;
+            ltBarBg.style.backgroundSize = 'cover';
+            ltBarBg.style.backgroundPosition = 'center';
+            ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+            ltBarBg.style.display = 'block';
+          }
+        } else ltBarBg.style.display = 'none';
         if (s.refPosition === 'top') { reference.classList.add('top'); ltRefText.classList.add('top'); } else { reference.classList.remove('top'); ltRefText.classList.remove('top'); }
       }
 
@@ -1440,7 +1632,8 @@
       function processOverlayUpdate(packet) {
         if (!packet) return;
         // Apply theme even from theme-only packets (e.g., settings change without verse push)
-        if (packet.theme && (!packet.slide && !packet.blanked)) {
+        if (hasThemePayload(packet.theme) && (!packet.slide && !packet.blanked)) {
+          persistOverlayPacket(packet);
           applyThemeIfChanged(packet.theme, true, packet.mode || activeMode);
           if (packet.mode === 'fullscreen' || packet.mode === 'lower-third') {
             setActiveLayer(packet.mode);
@@ -1467,6 +1660,7 @@
         currentBibleState = packet;
         currentOverlayData = packet;
         hasReceivedLiveOverlayUpdate = true;
+        persistOverlayPacket(packet);
 
         if (packet.mode === 'fullscreen' || packet.mode === 'lower-third') {
           setActiveLayer(packet.mode);
@@ -1496,12 +1690,14 @@
           // Switch between side-by-side and line-by-line
           const clMode = sl.compareLayout || 'line-by-line';
           currentCompareLayout = clMode;
+          compareLayout.classList.toggle('is-line-by-line', clMode === 'line-by-line');
           if (clMode === 'line-by-line') {
             compareLayout.style.gridTemplateColumns = '1fr';
             compareLayout.style.gap = '16px';
           }
         }
         else {
+          compareLayout.classList.remove('is-line-by-line');
           compareLayout.classList.remove('is-visible');
           compareLayout.style.display = 'none';
           verseContainer.classList.remove('is-hidden');
@@ -1510,7 +1706,7 @@
           reference.textContent = rt;
           reference.style.display = rt ? 'block' : 'none';
         }
-        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-bible-overlay fullscreen theme error', error); }
+        try { if (hasThemePayload(data.theme)) applyThemeIfChanged(data.theme, !hasShownOnce); } catch (error) { console.error('mce-bible-overlay fullscreen theme error', error); }
         if (isCL) autoScaleCompareContent();
         else { autoScaleContent(); }
         if (!hasShownOnce) hasShownOnce = true;
@@ -1533,17 +1729,20 @@
           const rText = safeSupText(r.text || '');
           const lRef = l.reference ? `<span class="lt-compare-ref">${escapeHtml(l.reference)} (${escapeHtml(l.translation || '')})</span>` : '';
           const rRef = r.reference ? `<span class="lt-compare-ref">${escapeHtml(r.reference)} (${escapeHtml(r.translation || '')})</span>` : '';
+          const lBlock = `<div class="lt-compare-unit">${lRef}${lText ? `<span class="lt-compare-col">${lText}</span>` : ''}</div>`;
+          const rBlock = `<div class="lt-compare-unit">${rRef}${rText ? `<span class="lt-compare-col">${rText}</span>` : ''}</div>`;
           if (layoutMode === 'side-by-side') {
-            ltVerseText.innerHTML = `<div class="lt-compare-row">${lRef}${lText ? `<span class="lt-compare-col">${lText}</span>` : ''}<span class="lt-compare-divider"></span>${rRef}${rText ? `<span class="lt-compare-col">${rText}</span>` : ''}</div>`;
+            ltVerseText.innerHTML = `<div class="lt-compare-row">${lBlock}<span class="lt-compare-divider"></span>${rBlock}</div>`;
           } else {
-            ltVerseText.innerHTML = `<div class="lt-compare-stack">${lRef}${lText ? `<span class="lt-compare-col">${lText}</span>` : ''}<span class="lt-compare-divider"></span>${rRef}${rText ? `<span class="lt-compare-col">${rText}</span>` : ''}</div>`;
+            ltVerseText.innerHTML = `<div class="lt-compare-stack">${lBlock}<span class="lt-compare-divider"></span>${rBlock}</div>`;
           }
           ltRefText.textContent = '';
+          ltRefText.style.display = 'none';
         } else {
-          ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
+          ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; ltRefText.style.display = rt ? '' : 'none';
         }
 
-        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-bible-overlay lower-third theme error', error); }
+        try { if (hasThemePayload(data.theme)) applyThemeIfChanged(data.theme, !hasShownOnce); } catch (error) { console.error('mce-bible-overlay lower-third theme error', error); }
         if (!hasShownOnce) hasShownOnce = true;
       }
 
@@ -1564,7 +1763,22 @@
       function readModeFromCssVar() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = getComputedStyle(root).getPropertyValue('--display-mode').trim().replace(/^['"]|['"]$/g, ''); if (raw === 'lower-third' || raw === 'fullscreen') { setActiveLayer(raw); } } catch { } }
       function readFromUrlHash() { if (hasReceivedLiveOverlayUpdate) return; try { const h = window.location.hash; if (h && h.startsWith('#data=')) { processOverlayUpdate(JSON.parse(decodeURIComponent(h.slice(6)))); return true; } } catch { } return false; }
       function readFromUrlSearch() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = new URLSearchParams(window.location.search).get('overlayData'); if (raw) { processOverlayUpdate(JSON.parse(decodeURIComponent(raw))); return true; } } catch { } return false; }
-      function readFromLocalStorage() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = localStorage.getItem(_storageKey); if (raw) { processOverlayUpdate(JSON.parse(raw)); return true; } } catch { } return false; }
+      function readFromLocalStorage() {
+        if (hasReceivedLiveOverlayUpdate) return false;
+        try {
+          const raw = localStorage.getItem(_storageKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            const hasCachedTheme = Boolean(parsed && parsed.theme);
+            processOverlayUpdate(parsed);
+            if (!hasCachedTheme && parsed && parsed.slide) {
+              hasReceivedLiveOverlayUpdate = false;
+            }
+            return true;
+          }
+        } catch { }
+        return false;
+      }
       function applyObsBrowserEventCss(cssText) {
         if (typeof cssText !== 'string') return;
         let styleEl = document.getElementById('obs-cssoverride');

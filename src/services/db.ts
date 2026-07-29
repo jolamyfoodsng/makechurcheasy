@@ -120,7 +120,36 @@ export const USER_STORES = new Set<StoreName>([
 
 /** Returns the current authenticated user's MongoDB _id, or null. */
 export function getCurrentUserId(): string | null {
-  return getCurrentUser()?.id ?? null;
+  const currentUserId = getCurrentUser()?.id;
+  if (currentUserId) return currentUserId;
+
+  if (typeof window === "undefined") return null;
+
+  try {
+    const rawSession = window.localStorage.getItem("mce-auth-session");
+    if (rawSession) {
+      const session = JSON.parse(rawSession) as {
+        expiresAt?: number;
+        user?: { id?: unknown };
+      };
+      const sessionUserId = typeof session.user?.id === "string" ? session.user.id.trim() : "";
+      const isExpired = typeof session.expiresAt === "number" && Date.now() > session.expiresAt;
+      if (sessionUserId && !isExpired) return sessionUserId;
+    }
+  } catch {
+    // Ignore malformed browser-session cache.
+  }
+
+  const path = window.location.pathname;
+  const isDockDocument = /(?:^|\/)(dock|lm-dock)\.html$/i.test(path);
+  if (!isDockDocument) return null;
+
+  try {
+    const dockUserId = window.localStorage.getItem("mce-dock-auth-user-id")?.trim();
+    return dockUserId || null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Database singleton ───────────────────────────────────────────────────────
@@ -247,35 +276,35 @@ export function getCentralDb(): Promise<IDBPDatabase> {
               }
             }
           }
-          // Stamp userId on existing records that lack it (async, non-blocking)
+          // Stamp userId on existing records that lack it using the active
+          // versionchange transaction. Opening a normal transaction here can
+          // throw while the upgrade transaction is still running.
           if (uid) {
-            (async () => {
-              for (const storeName of USER_STORES) {
-                if (!db.objectStoreNames.contains(storeName)) continue;
-                const tx = db.transaction(storeName, "readwrite");
-                const store = tx.store as unknown as IDBObjectStore;
-                let updated = 0;
-                await new Promise<void>((resolve, reject) => {
-                  const req = store.openCursor();
-                  req.onerror = () => reject(req.error);
-                  req.onsuccess = () => {
-                    const cursor = req.result;
-                    if (!cursor) { resolve(); return; }
-                    const val = cursor.value as Record<string, unknown>;
-                    if (!val.userId) {
-                      val.userId = uid;
-                      cursor.update(val);
-                      updated++;
-                    }
-                    cursor.continue();
-                  };
-                });
-                await tx.done;
-                if (updated > 0) {
-                  console.log(`[CentralDB] v4 migration: stamped userId on ${updated} records in ${storeName}`);
+            for (const storeName of USER_STORES) {
+              if (!db.objectStoreNames.contains(storeName)) continue;
+              const store = transaction.objectStore(storeName) as unknown as IDBObjectStore;
+              let updated = 0;
+              const request = store.openCursor();
+              request.onsuccess = () => {
+                const cursor = request.result;
+                if (!cursor) {
+                  if (updated > 0) {
+                    console.log(`[CentralDB] v4 migration: stamped userId on ${updated} records in ${storeName}`);
+                  }
+                  return;
                 }
+                const value = cursor.value as Record<string, unknown>;
+                if (!value.userId) {
+                  value.userId = uid;
+                  cursor.update(value);
+                  updated += 1;
+                }
+                cursor.continue();
+              };
+              request.onerror = () => {
+                console.warn(`[CentralDB] v4 migration failed for ${storeName}:`, request.error);
               }
-            })();
+            }
           }
         }
         // Safety: ensure userId indexes exist even if v4 upgrade partially failed
@@ -315,13 +344,13 @@ export async function migrateFromLegacyDatabases(): Promise<{ migrated: string[]
   // detect that and bail out so we don't create empty databases.
   async function copyStore(
     legacyDbName: string,
-    legacyVersion: number,
+    _legacyVersion: number,
     legacyStoreName: string,
     centralStoreName: string,
   ) {
     try {
       const legacyDb = await new Promise<IDBDatabase>((resolve, reject) => {
-        const req = indexedDB.open(legacyDbName, legacyVersion);
+        const req = indexedDB.open(legacyDbName);
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
         // Intentionally NO onupgradeneeded — if the DB doesn't exist yet
@@ -355,13 +384,13 @@ export async function migrateFromLegacyDatabases(): Promise<{ migrated: string[]
   // Copy all-key store (like settings which use manual keys)
   async function copyKeyStore(
     legacyDbName: string,
-    legacyVersion: number,
+    _legacyVersion: number,
     legacyStoreName: string,
     centralStoreName: string,
   ) {
     try {
       const legacyDb = await new Promise<IDBDatabase>((resolve, reject) => {
-        const req = indexedDB.open(legacyDbName, legacyVersion);
+        const req = indexedDB.open(legacyDbName);
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       });

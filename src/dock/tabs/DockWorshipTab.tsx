@@ -8,6 +8,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { DockStagedItem, DockWorshipSection } from "../dockTypes";
+import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
+import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import { dockObsClient } from "../dockObsClient";
 import { overlayBridge } from "../dockOverlayBridge";
 import { ensureObsConnected } from "../obsConnectionGuard";
@@ -27,7 +29,7 @@ import {
   postWorshipDockSongSaveCommand,
   type WorshipDockSongSavePayload,
 } from "../../services/worshipDockInterop";
-import { generateSlides } from "../../worship/slideEngine";
+import { autoSplitLyricsText, generateSlides } from "../../worship/slideEngine";
 import type { Song } from "../../worship/types";
 import { nextAutoSongTitle } from "../../worship/songTitleAutoGen";
 import {
@@ -56,6 +58,8 @@ interface Props {
   onStage: (item: DockStagedItem | null) => void;
   productionDefaults: DockProductionModuleSettings;
   isActive?: boolean;
+  presentationOutputTarget?: DockPresentationOutputTarget;
+  fullscreenOnly?: boolean;
 }
 
 type OverlayMode = "fullscreen" | "lower-third";
@@ -83,6 +87,7 @@ interface DockWorshipPreferences {
   fullscreenQuickThemeSettings?: DockFullscreenQuickThemeSettings | null;
   lowerThirdQuickThemeSettings?: DockFullscreenQuickThemeSettings | null;
   lowerThirdQuickThemeSettingsLinkedToFullscreen?: boolean;
+  showPresentationMeta?: boolean;
   updatedAt?: string;
 }
 
@@ -108,12 +113,15 @@ interface DockSongDraft {
   title: string;
   artist: string;
   lyrics: string;
+  autoSplit?: boolean;
+  linesPerSlide?: number;
 }
 
 interface DockSongDefault extends DockSongDraft {
   importSourceName?: string;
   importSourceType?: "manual" | "online" | "document";
   importSourceUrl?: string;
+  themeId?: string;
 }
 
 type DockSongDefaults = Record<string, DockSongDefault>;
@@ -230,6 +238,9 @@ function rememberDockSongDefault(song: DockSong): void {
     importSourceName: song.importSourceName,
     importSourceType: song.importSourceType,
     importSourceUrl: song.importSourceUrl,
+    autoSplit: song.autoSplit,
+    linesPerSlide: song.linesPerSlide,
+    themeId: song.themeId,
   };
   writeDockSongDefaults(defaults);
 }
@@ -246,6 +257,9 @@ function rememberDockSongDefaults(songs: DockSong[]): void {
       importSourceName: song.importSourceName,
       importSourceType: song.importSourceType,
       importSourceUrl: song.importSourceUrl,
+      autoSplit: song.autoSplit,
+      linesPerSlide: song.linesPerSlide,
+      themeId: song.themeId,
     };
     changed = true;
   }
@@ -408,30 +422,7 @@ function applyLyricsFormat(text: string, action: LyricsFormatAction, autosplitLi
     }
     case "autosplit": {
       const linesPerChunk = Math.max(1, Math.min(6, autosplitLines ?? 3));
-      const lines = result.split("\n");
-      const sections: string[][] = [];
-      let current: string[] = [];
-      for (const line of lines) {
-        const trimmedEnd = line.trimEnd();
-        if (trimmedEnd === "") {
-          if (current.length > 0) {
-            sections.push(current);
-            current = [];
-          }
-        } else {
-          current.push(trimmedEnd);
-        }
-      }
-      if (current.length > 0) sections.push(current);
-      const output: string[] = [];
-      for (const sec of sections) {
-        for (let i = 0; i < sec.length; i += linesPerChunk) {
-          const chunk = sec.slice(i, i + linesPerChunk);
-          if (output.length > 0) output.push("");
-          output.push(...chunk);
-        }
-      }
-      result = output.join("\n");
+      result = autoSplitLyricsText(result, linesPerChunk);
       break;
     }
     case "uppercase":
@@ -747,8 +738,17 @@ function fuzzyMatch(query: string, target: string): boolean {
   return qi === q.length;
 }
 
-export default function DockWorshipTab({ staged, onStage, productionDefaults, isActive = true }: Props) {
+export default function DockWorshipTab({
+  staged,
+  onStage,
+  productionDefaults,
+  isActive = true,
+  presentationOutputTarget = "obs",
+  fullscreenOnly = false,
+}: Props) {
   const { t } = useTranslation();
+  const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
+  const fullscreenOnlyMode = presentationLinkMode || fullscreenOnly;
   const [songs, setSongs] = useState<DockSong[]>([]);
   const rawSongsRef = useRef<DockSong[]>([]);
   // Initialize from localStorage so the limit is known immediately
@@ -827,6 +827,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   const [onlineSearchError, setOnlineSearchError] = useState("");
   const [hiddenSectionIndexes, setHiddenSectionIndexes] = useState<Set<number>>(() => new Set());
   const [showWorshipBackgroundOnly, setShowWorshipBackgroundOnly] = useState(false);
+  const [showPresentationMeta, setShowPresentationMeta] = useState(false);
   const [savingSong, setSavingSong] = useState(false);
   const [toasts, setToasts] = useState<DockToast[]>([]);
   const toastTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -855,11 +856,16 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     ? songDraft.lyrics
     : (selectedSong?.lyrics ?? "");
   const effectiveLinesPerSlide = clampLinesPerSlide(
-    selectedSong?.linesPerSlide ?? linesPerSlide,
+    songEditor && typeof songDraft.linesPerSlide === "number"
+      ? songDraft.linesPerSlide
+      : selectedSong?.linesPerSlide ?? linesPerSlide,
   );
+  const effectiveAutoSplit = songEditor && typeof songDraft.autoSplit === "boolean"
+    ? songDraft.autoSplit
+    : selectedSong?.autoSplit ?? false;
   const selectedSongSections = useMemo(
-    () => (selectedSong ? parseLyricSections(effectiveLyrics, effectiveLinesPerSlide, selectedSong.autoSplit ?? false) : []),
-    [effectiveLyrics, effectiveLinesPerSlide, selectedSong],
+    () => (selectedSong ? parseLyricSections(effectiveLyrics, effectiveLinesPerSlide, effectiveAutoSplit) : []),
+    [effectiveAutoSplit, effectiveLyrics, effectiveLinesPerSlide, selectedSong],
   );
 
   const totalLyricLines = useMemo(
@@ -886,6 +892,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     fullscreenQuickThemeSettings: savedFullscreenQuickThemeSettings,
     lowerThirdQuickThemeSettings: savedLowerThirdQuickThemeSettings,
     lowerThirdQuickThemeSettingsLinkedToFullscreen,
+    showPresentationMeta,
     updatedAt: new Date().toISOString(),
   }), [
     linesPerSlide,
@@ -895,6 +902,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     savedLowerThirdQuickThemeSettings,
     selectedFSTheme.id,
     selectedLTTheme.id,
+    showPresentationMeta,
   ]);
   const visibleSectionIndexes = useMemo(
     () => selectedSongSections.map((_, index) => index).filter((index) => !hiddenSectionIndexes.has(index)),
@@ -977,6 +985,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       setSavedLowerThirdQuickThemeSettings(storedLowerThirdLinked ? null : storedLowerThirdQuickSettings);
       setLowerThirdQuickThemeSettings(storedLowerThirdLinked ? null : storedLowerThirdQuickSettings);
       setLowerThirdQuickThemeSettingsLinkedToFullscreen(storedLowerThirdLinked);
+      setShowPresentationMeta(prefs.showPresentationMeta === true);
 
       const allFavorites = await loadDockFavoriteBibleThemes();
 
@@ -1406,21 +1415,22 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       modeOnlyChangeRef.current = false;
     });
   }, [overlayMode]);
-  const activeThemePickerProps = overlayMode === "fullscreen"
+  const activeThemePickerProps = fullscreenOnlyMode || overlayMode === "fullscreen"
     ? { selectedThemeId: selectedFSTheme.id, onSelect: handleSelectFSTheme }
     : { selectedThemeId: selectedLTTheme.id, onSelect: handleSelectLTTheme };
   const resolveThemeQuickSettings = useCallback((theme: BibleTheme): DockFullscreenQuickThemeSettings => {
-    const variant = overlayMode === "lower-third"
+    const effectiveOverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayMode;
+    const variant = effectiveOverlayMode === "lower-third"
       ? theme.variants?.lowerThird
       : theme.variants?.fullscreen;
     const themeSettings = variant?.settings ?? theme.settings;
-    return overlayMode === "lower-third"
+    return effectiveOverlayMode === "lower-third"
       ? buildDefaultLowerThirdQuickThemeSettings(themeSettings, "theme")
       : {
         ...extractQuickThemeSettings(themeSettings),
         backgroundType: "theme",
       };
-  }, [overlayMode]);
+  }, [fullscreenOnlyMode, overlayMode]);
 
   useEffect(() => {
     selectedFSThemeRef.current = selectedFSTheme;
@@ -1439,15 +1449,16 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   }, [effectiveSelectedLTTheme.settings]);
 
   const buildSectionPayload = useCallback(
-    (idx: number, options?: { backgroundOnly?: boolean }) => {
+    (idx: number, options?: { backgroundOnly?: boolean; showPresentationMeta?: boolean }) => {
       if (!selectedSong) return null;
       const section = selectedSongSections[idx];
       if (!section) return null;
 
-      const liveOverlayMode = readDockWorshipOverlayMode() ?? overlayMode;
+      const liveOverlayMode = fullscreenOnlyMode ? "fullscreen" : (readDockWorshipOverlayMode() ?? overlayMode);
       const displayLabel = cleanWorshipSectionLabel(section.label);
       const theme = liveOverlayMode === "fullscreen" ? effectiveSelectedFSTheme : effectiveSelectedLTTheme;
       const backgroundOnly = options?.backgroundOnly ?? showWorshipBackgroundOnly;
+      const presentationMeta = options?.showPresentationMeta ?? showPresentationMeta;
 
       const stageData = {
         song: selectedSong,
@@ -1456,11 +1467,12 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
         sectionLabel: displayLabel,
         sectionText: section.text,
         overlayMode: liveOverlayMode,
-        linesPerSlide,
+        linesPerSlide: effectiveLinesPerSlide,
         theme: theme.id,
         bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
         liveOverrides: null,
         backgroundOnly: Boolean(backgroundOnly),
+        presentationShowMeta: presentationMeta,
       };
 
       return {
@@ -1484,18 +1496,20 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       };
     },
     [
-      linesPerSlide,
+      effectiveLinesPerSlide,
       overlayMode,
+      fullscreenOnlyMode,
       effectiveSelectedFSTheme,
       effectiveSelectedLTTheme,
       selectedSong,
       selectedSongSections,
+      showPresentationMeta,
       showWorshipBackgroundOnly,
     ],
   );
 
   const pushSection = useCallback(
-    async (idx: number, options?: { backgroundOnly?: boolean }) => {
+    async (idx: number, options?: { backgroundOnly?: boolean; showPresentationMeta?: boolean }) => {
       const payload = buildSectionPayload(idx, options);
       if (!payload) return;
 
@@ -1509,7 +1523,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
   );
 
   const goLiveSection = useCallback(
-    (idx: number, options?: { backgroundOnly?: boolean }) => {
+    (idx: number, options?: { backgroundOnly?: boolean; showPresentationMeta?: boolean }) => {
       obsAutoPushArmedRef.current = true;
       const payload = buildSectionPayload(idx, options);
       if (!payload) return;
@@ -1520,6 +1534,13 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       setVisibleIdx(idx);
 
       onStage(payload.stageItem);
+
+      if (presentationLinkMode) {
+        setWorshipOverlayVisible(true);
+        track("song_presented");
+        trackWorshipSongPresented();
+        return;
+      }
 
       const pushLive = () => payload.obsData.overlayMode === "lower-third"
         ? dockObsClient.pushWorshipOverlayFast(payload.obsData)
@@ -1553,7 +1574,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
           }
         });
     },
-    [buildSectionPayload, onStage],
+    [buildSectionPayload, onStage, presentationLinkMode],
   );
 
   const saveSongInMainApp = useCallback(
@@ -1654,8 +1675,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
         importSourceName: source?.importSourceName,
         importSourceType: source?.importSourceType ?? "manual",
         importSourceUrl: source?.importSourceUrl,
-        autoSplit: source?.autoSplit,
-        linesPerSlide: source?.linesPerSlide,
+        autoSplit: draft.autoSplit ?? source?.autoSplit,
+        linesPerSlide: draft.linesPerSlide ?? source?.linesPerSlide,
         themeId: source?.themeId,
       });
 
@@ -1678,6 +1699,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       title: song.title,
       artist: song.artist,
       lyrics: song.lyrics,
+      autoSplit: song.autoSplit,
+      linesPerSlide: song.linesPerSlide,
     });
     setActionError("");
   }, []);
@@ -1711,6 +1734,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       title: fallback.title,
       artist: fallback.artist,
       lyrics: fallback.lyrics,
+      autoSplit: fallback.autoSplit,
+      linesPerSlide: fallback.linesPerSlide,
     });
     showToast(t('worship.defaultRestored'));
   }, [showToast, songEditor]);
@@ -1727,6 +1752,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     updateDraft((draft) => {
       formatLyricsUndoRef.current[target] = draft.lyrics;
       const nextLyrics = applyLyricsFormat(draft.lyrics, action, autosplitLines);
+      if (action === "autosplit") {
+        return {
+          ...draft,
+          lyrics: nextLyrics,
+          autoSplit: true,
+          linesPerSlide: Math.max(1, Math.min(6, autosplitLines ?? DEFAULT_LINES_PER_SLIDE)),
+        };
+      }
       return { ...draft, lyrics: nextLyrics };
     });
   }, []);
@@ -1834,6 +1867,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       title: draft?.title ?? nextAutoSongTitle(),
       artist: draft?.artist ?? "",
       lyrics: draft?.lyrics ?? "",
+      autoSplit: draft?.autoSplit ?? true,
+      linesPerSlide: draft?.linesPerSlide ?? DEFAULT_LINES_PER_SLIDE,
     });
     setNewSongSource({ importSourceType: "manual" });
     setIsNewSongModalOpen(true);
@@ -2290,16 +2325,28 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     setWorshipOverlayVisible(false);
     showToast(t('worship.clearOverlay'));
 
+    if (presentationLinkMode) return;
+
     try {
       await ensureObsConnected();
       await dockObsClient.clearWorshipLyrics();
     } catch (err) {
       console.warn("[DockWorshipTab] clear worship failed:", err);
     }
-  }, [onStage, showToast]);
+  }, [onStage, presentationLinkMode, showToast, t]);
 
   const handleToggleWorshipVisibility = useCallback(async () => {
     setActionError("");
+
+    if (presentationLinkMode) {
+      if (worshipOverlayVisible) {
+        onStage(null);
+        setWorshipOverlayVisible(false);
+      } else if (activeSectionIndex !== null) {
+        await goLiveSection(activeSectionIndex);
+      }
+      return;
+    }
 
     try {
       await ensureObsConnected();
@@ -2313,7 +2360,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
       if (activeSectionIndex !== null) {
         await goLiveSection(activeSectionIndex);
       } else {
-        await dockObsClient.bringWorshipOverlayForward(overlayMode);
+        await dockObsClient.bringWorshipOverlayForward(fullscreenOnlyMode ? "fullscreen" : overlayMode);
         setWorshipOverlayVisible(true);
       }
     } catch (err) {
@@ -2324,7 +2371,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
         setActionError(message);
       }
     }
-  }, [activeSectionIndex, goLiveSection, overlayMode, worshipOverlayVisible]);
+  }, [activeSectionIndex, fullscreenOnlyMode, goLiveSection, onStage, overlayMode, presentationLinkMode, worshipOverlayVisible]);
 
   const handleShowWorshipBackgroundOnly = useCallback(async () => {
     if (activeSectionIndex === null) return;
@@ -2334,6 +2381,13 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
 
     await goLiveSection(activeSectionIndex, { backgroundOnly: nextBackgroundOnly });
   }, [activeSectionIndex, goLiveSection, showWorshipBackgroundOnly]);
+
+  const handleTogglePresentationMeta = useCallback(async () => {
+    const nextShowMeta = !showPresentationMeta;
+    setShowPresentationMeta(nextShowMeta);
+    if (!presentationLinkMode || activeSectionIndex === null) return;
+    await goLiveSection(activeSectionIndex, { showPresentationMeta: nextShowMeta });
+  }, [activeSectionIndex, goLiveSection, presentationLinkMode, showPresentationMeta]);
 
   const restageCurrent = useCallback(
     async () => {
@@ -2351,13 +2405,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     if (modeOnlyChangeRef.current) return;
     if (suppressAutoProjectionRef.current) return;
     if (!prefsReadyRef.current) return;
-    if (!obsAutoPushArmedRef.current) return;
+    if (!presentationLinkMode && !obsAutoPushArmedRef.current) return;
     if (selectedSong && activeSectionIndex !== null) {
       void restageCurrent();
     }
   }, [
     activeSectionIndex,
     overlayMode,
+    presentationLinkMode,
     restageCurrent,
     selectedSong,
   ]);
@@ -2371,13 +2426,14 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     if (modeOnlyChangeRef.current) return;
     if (suppressAutoProjectionRef.current) return;
     if (!prefsReadyRef.current) return;
-    if (!obsAutoPushArmedRef.current) return;
+    if (!presentationLinkMode && !obsAutoPushArmedRef.current) return;
     if (selectedSong && activeSectionIndex !== null) {
       void restageCurrent();
     }
   }, [
     activeSectionIndex,
     restageCurrent,
+    presentationLinkMode,
     selectedFSTheme.id,
     selectedLTTheme.id,
     selectedSong,
@@ -2394,14 +2450,16 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     if (modeOnlyChangeRef.current) return;
     if (suppressAutoProjectionRef.current) return;
     if (!prefsReadyRef.current) return;
-    if (!obsAutoPushArmedRef.current) return;
-    if (overlayMode === "fullscreen" && selectedSong && activeSectionIndex !== null) {
+    if (!presentationLinkMode && !obsAutoPushArmedRef.current) return;
+    if ((fullscreenOnlyMode || overlayMode === "fullscreen") && selectedSong && activeSectionIndex !== null) {
       void restageCurrent();
     }
   }, [
     activeSectionIndex,
     activeFullscreenQuickThemeSettings,
     overlayMode,
+    fullscreenOnlyMode,
+    presentationLinkMode,
     restageCurrent,
     selectedSong,
   ]);
@@ -2415,6 +2473,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     const changed = prevLowerThirdFsSignature.current !== nextSignature;
     prevLowerThirdFsSignature.current = nextSignature;
     if (!changed) return;
+    if (fullscreenOnlyMode) return;
     if (overlayMode !== "lower-third") return;
     if (suppressAutoProjectionRef.current) return;
     if (!prefsReadyRef.current) return;
@@ -2446,6 +2505,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
     selectedSong,
     selectedSongSections,
     showWorshipBackgroundOnly,
+    fullscreenOnlyMode,
   ]);
 
   useEffect(() => {
@@ -2513,35 +2573,11 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
 
   return (
     <div className="dock-module dock-module--worship">
-      <div className="dock-worship-subtab-bar"
-        style={{
-          display: "flex",
-          gap: 4,
-          padding: "4px 0",
-          borderBottom: "1px solid rgba(51, 65, 85, 0.3)",
-          width: "100%",
-        }}
-      >
+      <div className="dock-worship-subtab-bar">
         <button
           type="button"
           className={`dock-worship-subtab${worshipSubTab === "worship" ? " dock-worship-subtab--active" : ""}`}
           onClick={() => setWorshipSubTab("worship")}
-          style={{
-            flex: 1,
-            padding: "4px 10px",
-            fontSize: 11,
-            fontWeight: 600,
-            border: "none",
-            borderRadius: 4,
-            background: worshipSubTab === "worship" ? "#1F2937" : "transparent",
-            color: worshipSubTab === "worship" ? "#F8FAFC" : "#6B7280",
-            cursor: "pointer",
-            fontFamily: "inherit",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-          }}
         >
           <Icon name="music_note" size={13} />
           Worship
@@ -2550,24 +2586,8 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
           type="button"
           className={`dock-worship-subtab${worshipSubTab === "notes" ? " dock-worship-subtab--active" : ""}`}
           onClick={() => setWorshipSubTab("notes")}
-          style={{
-            flex: 1,
-            padding: "4px 10px",
-            fontSize: 11,
-            fontWeight: 600,
-            border: "none",
-            borderRadius: 4,
-            background: worshipSubTab === "notes" ? "#1F2937" : "transparent",
-            color: worshipSubTab === "notes" ? "#F8FAFC" : "#6B7280",
-            cursor: "pointer",
-            fontFamily: "inherit",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-          }}
         >
-          <Icon name="receipt_long" size={13} />
+          <Icon name="edit_note" size={13} />
           Notes
         </button>
       </div>
@@ -2842,7 +2862,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                         <div
                           key={section.id}
                           className={`dock-worship-slide-card${isVisible ? " dock-worship-slide-card--visible" : ""}${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}`}
-                          title="Click to view in OBS"
+                          title={presentationLinkMode ? "Click to show on presentation screen" : "Click to view in OBS"}
                         >
                           <button
                             type="button"
@@ -2917,8 +2937,9 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
 
                   <div className="dock-worship-toolbar">
                     <DockBottomToolbar
-                      overlayMode={overlayMode}
+                      overlayMode={fullscreenOnlyMode ? "fullscreen" : overlayMode}
                       onModeChange={handleOverlayModeChange}
+                      hideOverlayModeToggle={fullscreenOnlyMode}
                       clearLabel={worshipOverlayVisible
                         ? t('worship.hideLyrics', { defaultValue: 'Hide lyrics' })
                         : t('worship.showLyrics', { defaultValue: 'Show lyrics' })}
@@ -2946,6 +2967,18 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
                       >
                         <Icon name={showWorshipBackgroundOnly ? "visibility_off" : "visibility"} size={14} />
                       </button>
+
+                      {presentationLinkMode && (
+                        <button
+                          type="button"
+                          className={`dock-btm-toolbar__icon-btn${showPresentationMeta ? " dock-btm-toolbar__icon-btn--active" : ""}`}
+                          onClick={() => void handleTogglePresentationMeta()}
+                          title={showPresentationMeta ? "Hide title and section on screen" : "Show title and section on screen"}
+                          aria-label={showPresentationMeta ? "Hide title and section on presentation screen" : "Show title and section on presentation screen"}
+                        >
+                          <Icon name="title" size={14} />
+                        </button>
+                      )}
 
                       <div
                         className={`dock-line-popover dock-line-popover--toolbar${showLineCountPopover ? " is-open" : ""}`}
@@ -3332,17 +3365,17 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
         onSelect={activeThemePickerProps.onSelect}
         allowedCategories={["worship", "general"]}
         quickSettings={
-          overlayMode === "fullscreen"
+          fullscreenOnlyMode || overlayMode === "fullscreen"
             ? activeFullscreenQuickThemeSettings
             : activeLowerThirdQuickThemeSettings
         }
         defaultQuickSettings={
-          overlayMode === "fullscreen"
+          fullscreenOnlyMode || overlayMode === "fullscreen"
             ? defaultFullscreenQuickThemeSettings
             : defaultLowerThirdQuickThemeSettings
         }
         onQuickSettingsSave={(next) => {
-          if (overlayMode === "fullscreen") {
+          if (fullscreenOnlyMode || overlayMode === "fullscreen") {
             handleSaveFullscreenQuickThemeSettings(next);
           } else {
             handleSaveLowerThirdQuickThemeSettings(next);
@@ -3353,7 +3386,7 @@ export default function DockWorshipTab({ staged, onStage, productionDefaults, is
         subtitle={t('worship.adjustDescription')}
         isOpen={showThemeSettings}
         onClose={() => setShowThemeSettings(false)}
-        overlayMode={overlayMode}
+        overlayMode={fullscreenOnlyMode ? "fullscreen" : overlayMode}
         showReferences={false}
         storageScope="worship"
       />

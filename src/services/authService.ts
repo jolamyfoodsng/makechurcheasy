@@ -88,6 +88,15 @@ export interface AuthUser {
   plan?: PlanTier;
   effectivePlan?: PlanTier;
   entitlements?: Record<string, number | boolean>;
+  ambassador?: {
+    active?: boolean;
+    grantedBy?: string | null;
+    grantedAt?: string | null;
+    expiresAt?: string | null;
+    creditsGranted?: number;
+    previousPlan?: string;
+    notes?: string;
+  } | null;
   adminTemporaryPlan?: {
     active?: boolean;
     plan?: string;
@@ -141,6 +150,7 @@ interface DeviceBootstrapResponse {
       plan?: string;
       effectivePlan?: string;
       entitlements?: Record<string, number | boolean>;
+      ambassador?: AuthUser["ambassador"];
       adminTemporaryPlan?: AuthUser["adminTemporaryPlan"];
       adminManagedSubscription?: AuthUser["adminManagedSubscription"];
       subscriptionExpiresAt?: string | null;
@@ -457,6 +467,7 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
     const normalizedPlan = normalizePlanId(
       remote.effectivePlan || remote.plan || current.effectivePlan || current.plan || "free",
     ) as PlanTier;
+    const remoteHas = (key: keyof typeof remote) => Object.prototype.hasOwnProperty.call(remote, key);
 
     const updatedUser: AuthUser = {
       ...current,
@@ -468,12 +479,13 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
       churchName: remote.churchName || current.churchName,
       createdAt: remote.createdAt || current.createdAt,
       role: remote.role || current.role,
-      plan: normalizePlanId(remote.plan || current.plan || normalizedPlan) as PlanTier,
+      plan: normalizedPlan,
       effectivePlan: normalizedPlan,
       entitlements: remote.entitlements || current.entitlements,
-      adminTemporaryPlan: remote.adminTemporaryPlan ?? current.adminTemporaryPlan,
-      adminManagedSubscription: remote.adminManagedSubscription ?? current.adminManagedSubscription,
-      subscriptionExpiresAt: remote.subscriptionExpiresAt ?? current.subscriptionExpiresAt,
+      ambassador: remoteHas("ambassador") ? remote.ambassador ?? null : current.ambassador ?? null,
+      adminTemporaryPlan: remoteHas("adminTemporaryPlan") ? remote.adminTemporaryPlan ?? null : current.adminTemporaryPlan ?? null,
+      adminManagedSubscription: remoteHas("adminManagedSubscription") ? remote.adminManagedSubscription ?? null : current.adminManagedSubscription ?? null,
+      subscriptionExpiresAt: remoteHas("subscriptionExpiresAt") ? remote.subscriptionExpiresAt ?? null : current.subscriptionExpiresAt ?? null,
       trial: resolveBootstrappedTrial(remote, current),
     };
 
@@ -630,7 +642,15 @@ export async function redeemPairingCode(
         plan: data.user.plan || "free",
         role: data.user.role || "user",
         trial: data.user.trial || undefined,
+        ambassador: data.user.ambassador || undefined,
+        adminTemporaryPlan: data.user.adminTemporaryPlan || undefined,
+        adminManagedSubscription: data.user.adminManagedSubscription || undefined,
+        subscriptionExpiresAt: data.user.subscriptionExpiresAt || undefined,
       }) as PlanTier,
+      ambassador: data.user.ambassador || null,
+      adminTemporaryPlan: data.user.adminTemporaryPlan || null,
+      adminManagedSubscription: data.user.adminManagedSubscription || null,
+      subscriptionExpiresAt: data.user.subscriptionExpiresAt || null,
       trial: data.user.trial || undefined,
     };
 
@@ -705,7 +725,15 @@ export function watchPairingStatus(
         plan: data.user.plan || "free",
         role: data.user.role || "user",
         trial: data.user.trial || undefined,
+        ambassador: data.user.ambassador || undefined,
+        adminTemporaryPlan: data.user.adminTemporaryPlan || undefined,
+        adminManagedSubscription: data.user.adminManagedSubscription || undefined,
+        subscriptionExpiresAt: data.user.subscriptionExpiresAt || undefined,
       }) as PlanTier,
+      ambassador: data.user.ambassador || null,
+      adminTemporaryPlan: data.user.adminTemporaryPlan || null,
+      adminManagedSubscription: data.user.adminManagedSubscription || null,
+      subscriptionExpiresAt: data.user.subscriptionExpiresAt || null,
       trial: data.user.trial || undefined,
     };
 

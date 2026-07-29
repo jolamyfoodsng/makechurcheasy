@@ -140,6 +140,17 @@ function sortCustomThemesNewestFirst(themes: BibleTheme[]): BibleTheme[] {
   });
 }
 
+function mergeCustomThemes(apiThemes: BibleTheme[], localThemes: BibleTheme[]): BibleTheme[] {
+  const merged = new Map<string, BibleTheme>();
+  for (const theme of localThemes) {
+    merged.set(theme.id, normalizeTheme(theme));
+  }
+  for (const theme of apiThemes) {
+    merged.set(theme.id, normalizeTheme(theme));
+  }
+  return sortCustomThemesNewestFirst(Array.from(merged.values()));
+}
+
 function readCustomThemesFromLocalStorage(): BibleTheme[] {
   if (typeof window === "undefined") return [];
   try {
@@ -364,19 +375,21 @@ export async function getCustomThemes(): Promise<BibleTheme[]> {
   }
   try {
     const apiThemes = await fetchThemesFromAPI();
+    const localThemes = await getCustomThemesFromIndexedDB();
+    const mergedThemes = mergeCustomThemes(apiThemes, localThemes);
     // Update local cache in background
     (async () => {
       try {
         const db = await getDb();
         const uid = getCurrentUserId();
-        for (const theme of apiThemes) {
+        for (const theme of mergedThemes) {
           const tagged = uid ? { ...prepareThemeForStorage(theme), userId: uid } : prepareThemeForStorage(theme);
           await db.put("themes", tagged);
         }
-        writeCustomThemesToLocalStorage(apiThemes);
+        writeCustomThemesToLocalStorage(mergedThemes);
       } catch { /* cache update is best-effort */ }
     })();
-    return apiThemes;
+    return mergedThemes;
   } catch (err) {
     console.warn("[bibleDb] API fetch failed, falling back to IndexedDB:", err);
   }
@@ -396,10 +409,12 @@ async function getCustomThemesFromIndexedDB(): Promise<BibleTheme[]> {
     }
     const themes = sortCustomThemesNewestFirst(raw.map((theme) => normalizeTheme(theme)));
     try {
-      const existing = readCustomThemesFromLocalStorage();
-      if (existing.length === 0 && themes.length > 0) {
-        writeCustomThemesToLocalStorage(themes);
+      const localStorageThemes = readCustomThemesFromLocalStorage();
+      const mergedThemes = mergeCustomThemes(themes, localStorageThemes);
+      if (mergedThemes.length > 0) {
+        writeCustomThemesToLocalStorage(mergedThemes);
       }
+      return mergedThemes;
     } catch {
       // Ignore mirror errors - IndexedDB is primary storage
     }

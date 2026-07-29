@@ -3,12 +3,25 @@ import type { DockStagedItem } from "../dockTypes";
 import { dockObsClient } from "../dockObsClient";
 import { overlayBridge } from "../dockOverlayBridge";
 import { ensureObsConnected } from "../obsConnectionGuard";
-import { BUILTIN_THEMES } from "../../bible/themes/builtinThemes";
 import type { BibleTheme } from "../../bible/types";
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
 import Icon from "../DockIcon";
 import DockBottomToolbar from "../components/DockBottomToolbar";
 import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
+import {
+  DOCK_NOTES_KEY,
+  DOCK_NOTES_UPDATED_EVENT,
+  getDockNotesThemeForMode,
+  getFallbackDockNotesTheme,
+  loadDockNotes,
+  loadDockNotesPreferences,
+  resolveDockNotesTheme,
+  saveDockNotes,
+  saveDockNotesPreferences,
+  type DockNote,
+  type DockNotesPreferences,
+  type DockNotesOverlayMode,
+} from "../dockNotesStorage";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 
 interface Props {
@@ -17,58 +30,7 @@ interface Props {
   isActive?: boolean;
 }
 
-type OverlayMode = "fullscreen" | "lower-third";
-
-interface DockNote {
-  id: string;
-  title: string;
-  content: string;
-  updatedAt: number;
-}
-
-const DOCK_NOTES_KEY = "ocs-dock-notes-v1";
-const DOCK_NOTES_PREFS_KEY = "ocs-dock-notes-preferences";
-
-interface DockNotesPreferences {
-  overlayMode?: OverlayMode;
-  fullscreenThemeId?: string;
-  lowerThirdThemeId?: string;
-  fullscreenQuickSettings?: DockFullscreenQuickThemeSettings | null;
-  lowerThirdQuickSettings?: DockFullscreenQuickThemeSettings | null;
-  updatedAt?: string;
-}
-
-function loadNotes(): DockNote[] {
-  try {
-    const raw = localStorage.getItem(getUserScopedKey(DOCK_NOTES_KEY));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveNotes(items: DockNote[]): void {
-  try {
-    localStorage.setItem(getUserScopedKey(DOCK_NOTES_KEY), JSON.stringify(items));
-  } catch { }
-}
-
-function loadPreferences(): DockNotesPreferences {
-  try {
-    const raw = localStorage.getItem(getUserScopedKey(DOCK_NOTES_PREFS_KEY));
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function savePreferences(prefs: DockNotesPreferences): void {
-  try {
-    localStorage.setItem(getUserScopedKey(DOCK_NOTES_PREFS_KEY), JSON.stringify(prefs));
-  } catch { }
-}
+type OverlayMode = DockNotesOverlayMode;
 
 function generateNoteSlides(note: DockNote): { id: string; label: string; text: string }[] {
   const slides: { id: string; label: string; text: string }[] = [];
@@ -90,18 +52,29 @@ function generateNoteSlides(note: DockNote): { id: string; label: string; text: 
 type ToastTone = "info" | "success" | "error";
 
 export default function DockNotesTab({ onStage, isActive }: Props) {
-  const [notes, setNotes] = useState<DockNote[]>(() => loadNotes());
+  const initialPrefsRef = useRef<DockNotesPreferences | null>(null);
+  if (initialPrefsRef.current === null) {
+    initialPrefsRef.current = loadDockNotesPreferences();
+  }
+  const initialPrefs = initialPrefsRef.current;
+  const initialOverlayMode: OverlayMode = initialPrefs.overlayMode === "lower-third" ? "lower-third" : "fullscreen";
+
+  const [notes, setNotes] = useState<DockNote[]>(() => loadDockNotes());
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNote, setSelectedNote] = useState<DockNote | null>(null);
   const [selectedSlideIdx, setSelectedSlideIdx] = useState<number | null>(null);
   const [visibleSlideIdx, setVisibleSlideIdx] = useState<number | null>(null);
   const [overlayVisible, setOverlayVisible] = useState(true);
-  const [overlayMode, setOverlayMode] = useState<OverlayMode>(() => loadPreferences().overlayMode ?? "fullscreen");
+  const [overlayMode, setOverlayMode] = useState<OverlayMode>(initialOverlayMode);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
-  const [selectedFSTheme, setSelectedFSTheme] = useState<BibleTheme>(BUILTIN_THEMES[0]);
-  const [selectedLTTheme, setSelectedLTTheme] = useState<BibleTheme>(BUILTIN_THEMES[0]);
-  const [fullscreenQuickSettings, setFullscreenQuickSettings] = useState<DockFullscreenQuickThemeSettings | null>(() => loadPreferences().fullscreenQuickSettings ?? null);
-  const [lowerThirdQuickSettings, setLowerThirdQuickSettings] = useState<DockFullscreenQuickThemeSettings | null>(() => loadPreferences().lowerThirdQuickSettings ?? null);
+  const [selectedFSTheme, setSelectedFSTheme] = useState<BibleTheme>(() =>
+    getFallbackDockNotesTheme("fullscreen", initialPrefs.fullscreenThemeId),
+  );
+  const [selectedLTTheme, setSelectedLTTheme] = useState<BibleTheme>(() =>
+    getFallbackDockNotesTheme("lower-third", initialPrefs.lowerThirdThemeId),
+  );
+  const [fullscreenQuickSettings, setFullscreenQuickSettings] = useState<DockFullscreenQuickThemeSettings | null>(() => initialPrefs.fullscreenQuickSettings ?? null);
+  const [lowerThirdQuickSettings, setLowerThirdQuickSettings] = useState<DockFullscreenQuickThemeSettings | null>(() => initialPrefs.lowerThirdQuickSettings ?? null);
   const [showNoteEditor, setShowNoteEditor] = useState(false);
   const [editingNote, setEditingNote] = useState<DockNote | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -112,6 +85,7 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
   const obsAutoPushArmedRef = useRef(false);
   const modeOnlyChangeRef = useRef(false);
   const modeSwitchSequenceRef = useRef(0);
+  const prefsReadyRef = useRef(false);
 
   const filteredNotes = useMemo(() => {
     if (!searchQuery.trim()) return notes;
@@ -140,6 +114,53 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
     }, 1500);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const prefs = initialPrefsRef.current ?? loadDockNotesPreferences();
+
+    Promise.all([
+      resolveDockNotesTheme("fullscreen", prefs),
+      resolveDockNotesTheme("lower-third", prefs),
+    ])
+      .then(([fullscreenTheme, lowerThirdTheme]) => {
+        if (cancelled) return;
+        setSelectedFSTheme(fullscreenTheme);
+        setSelectedLTTheme(lowerThirdTheme);
+      })
+      .catch(() => {
+        // Keep the built-in fallback theme.
+      })
+      .finally(() => {
+        if (!cancelled) prefsReadyRef.current = true;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshNotes = () => {
+      const next = loadDockNotes();
+      setNotes(next);
+      setSelectedNote((current) => {
+        if (!current) return current;
+        return next.find((note) => note.id === current.id) ?? null;
+      });
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === getUserScopedKey(DOCK_NOTES_KEY)) refreshNotes();
+    };
+
+    window.addEventListener(DOCK_NOTES_UPDATED_EVENT, refreshNotes);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(DOCK_NOTES_UPDATED_EVENT, refreshNotes);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
   const openNewNote = useCallback(() => {
     setEditingNote(null);
     setDraftTitle("");
@@ -163,7 +184,7 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
       const updated: DockNote = { ...editingNote, title, content, updatedAt: now };
       const next = notes.map((n) => (n.id === updated.id ? updated : n));
       setNotes(next);
-      saveNotes(next);
+      saveDockNotes(next);
       setSelectedNote((cur) => (cur?.id === updated.id ? updated : cur));
     } else {
       const newNote: DockNote = {
@@ -174,7 +195,7 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
       };
       const next = [newNote, ...notes];
       setNotes(next);
-      saveNotes(next);
+      saveDockNotes(next);
     }
     setShowNoteEditor(false);
     setEditingNote(null);
@@ -183,7 +204,7 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
   const deleteNote = useCallback((id: string) => {
     const next = notes.filter((n) => n.id !== id);
     setNotes(next);
-    saveNotes(next);
+    saveDockNotes(next);
     if (selectedNote?.id === id) {
       setSelectedNote(null);
       setSelectedSlideIdx(null);
@@ -197,7 +218,10 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
       if (!selectedNote) return null;
       const slide = selectedNoteSlides[idx];
       if (!slide) return null;
-      const theme = overlayMode === "fullscreen" ? selectedFSTheme : selectedLTTheme;
+      const selectedTheme = overlayMode === "fullscreen" ? selectedFSTheme : selectedLTTheme;
+      const theme = getDockNotesThemeForMode(selectedTheme, overlayMode);
+      const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
+      const themeSettings = quickSettings ?? theme.settings;
       return {
         stageItem: {
           type: "notes" as const,
@@ -210,13 +234,13 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
           sectionLabel: slide.label || selectedNote.title,
           songTitle: selectedNote.title,
           overlayMode,
-          bibleThemeSettings: theme.settings as unknown as Record<string, unknown>,
+          bibleThemeSettings: themeSettings as unknown as Record<string, unknown>,
           liveOverrides: null,
           backgroundOnly: false,
         },
       };
     },
-    [selectedNote, selectedNoteSlides, overlayMode, selectedFSTheme, selectedLTTheme],
+    [selectedNote, selectedNoteSlides, overlayMode, selectedFSTheme, selectedLTTheme, fullscreenQuickSettings, lowerThirdQuickSettings],
   );
 
   const pushNoteSlide = useCallback(
@@ -281,9 +305,9 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
     modeOnlyChangeRef.current = true;
 
     setOverlayMode(nextMode);
-    const prefs = loadPreferences();
+    const prefs = loadDockNotesPreferences();
     prefs.overlayMode = nextMode;
-    savePreferences(prefs);
+    saveDockNotesPreferences(prefs);
 
     overlayBridge.publish({
       channel: "notes",
@@ -298,7 +322,10 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
       bc.postMessage({
         type: "mode-change",
         mode: nextMode,
-        theme: nextMode === "lower-third" ? selectedLTTheme.settings : selectedFSTheme.settings,
+        theme: getDockNotesThemeForMode(
+          nextMode === "lower-third" ? selectedLTTheme : selectedFSTheme,
+          nextMode,
+        ).settings,
         transitionId: modeSwitchSequenceRef.current,
         timestamp: performance.now(),
       });
@@ -321,18 +348,19 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
 
   // Persist theme preferences on change
   useEffect(() => {
-    const prefs = loadPreferences();
+    if (!prefsReadyRef.current) return;
+    const prefs = loadDockNotesPreferences();
     prefs.fullscreenThemeId = selectedFSTheme.id;
     prefs.lowerThirdThemeId = selectedLTTheme.id;
-    savePreferences(prefs);
+    saveDockNotesPreferences(prefs);
   }, [selectedFSTheme.id, selectedLTTheme.id]);
 
   // Persist quick settings on change
   useEffect(() => {
-    const prefs = loadPreferences();
+    const prefs = loadDockNotesPreferences();
     prefs.fullscreenQuickSettings = fullscreenQuickSettings;
     prefs.lowerThirdQuickSettings = lowerThirdQuickSettings;
-    savePreferences(prefs);
+    saveDockNotesPreferences(prefs);
   }, [fullscreenQuickSettings, lowerThirdQuickSettings]);
 
   // Auto-restage on mode change (only if not a fast mode-only toggle)
@@ -573,7 +601,9 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
         onClose={() => setShowThemeSettings(false)}
         overlayMode={overlayMode}
         showReferences={false}
-        quickSettings={overlayMode === "fullscreen" ? (fullscreenQuickSettings ?? selectedFSTheme.settings as unknown as DockFullscreenQuickThemeSettings) : (lowerThirdQuickSettings ?? selectedLTTheme.settings as unknown as DockFullscreenQuickThemeSettings)}
+        quickSettings={overlayMode === "fullscreen"
+          ? (fullscreenQuickSettings ?? getDockNotesThemeForMode(selectedFSTheme, "fullscreen").settings as unknown as DockFullscreenQuickThemeSettings)
+          : (lowerThirdQuickSettings ?? getDockNotesThemeForMode(selectedLTTheme, "lower-third").settings as unknown as DockFullscreenQuickThemeSettings)}
         onQuickSettingsSave={(settings) => {
           if (overlayMode === "fullscreen") setFullscreenQuickSettings(settings);
           else setLowerThirdQuickSettings(settings);

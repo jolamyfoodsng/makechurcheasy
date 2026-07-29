@@ -342,6 +342,33 @@ describe("Speech context resolver", () => {
       verse: 4,
     });
   });
+
+  it("keeps ordinals attached to every numbered book with fuzzy suffixes", () => {
+    const cases = [
+      ["1st samual 17 45", "1 Samuel 17:45"],
+      ["second samual 22 1", "2 Samuel 22:1"],
+      ["first kingz 3 9", "1 Kings 3:9"],
+      ["2nd kingz 6 17", "2 Kings 6:17"],
+      ["first chronicals 7 14", "1 Chronicles 7:14"],
+      ["second chronicals 7 14", "2 Chronicles 7:14"],
+      ["1st coritihans 13 4", "1 Corinthians 13:4"],
+      ["first coritihans 13 4", "1 Corinthians 13:4"],
+      ["second coritihans 5 17", "2 Corinthians 5:17"],
+      ["first thesalonians 5 17", "1 Thessalonians 5:17"],
+      ["second thesalonians 3 3", "2 Thessalonians 3:3"],
+      ["first timoty 4 12", "1 Timothy 4:12"],
+      ["second timoty 1 7", "2 Timothy 1:7"],
+      ["first petter 5 7", "1 Peter 5:7"],
+      ["second petter 3 9", "2 Peter 3:9"],
+      ["first jhon 4 8", "1 John 4:8"],
+      ["second jhon 1 6", "2 John 1:6"],
+      ["third jhon 1 2", "3 John 1:2"],
+    ] as const;
+
+    for (const [input, expected] of cases) {
+      expect(fmt(parseScriptureReference(input))).toBe(expected);
+    }
+  });
 });
 
 describe("Speech command matrix", () => {

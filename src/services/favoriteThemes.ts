@@ -38,22 +38,32 @@ function scopedDbKey(base: string): string {
   return uid ? `${base}:${uid}` : base;
 }
 
-let bibleFavoritesCache = readSet(scopedLocalStorageKey(BIBLE_FAVS_KEY));
-let worshipLtFavoritesCache = normalizeLtFavorites(readSet(scopedLocalStorageKey(WORSHIP_LT_FAVS_KEY)));
-let obsFavoritesCache = readSet(scopedLocalStorageKey(OBS_FAVS_KEY));
-let tickerFavoritesCache = readSet(scopedLocalStorageKey(TICKER_FAVS_KEY));
+let bibleFavoritesCacheKey = scopedLocalStorageKey(BIBLE_FAVS_KEY);
+let worshipLtFavoritesCacheKey = scopedLocalStorageKey(WORSHIP_LT_FAVS_KEY);
+let obsFavoritesCacheKey = scopedLocalStorageKey(OBS_FAVS_KEY);
+let tickerFavoritesCacheKey = scopedLocalStorageKey(TICKER_FAVS_KEY);
+let bibleFavoritesCache = readSet(bibleFavoritesCacheKey);
+let worshipLtFavoritesCache = normalizeLtFavorites(readSet(worshipLtFavoritesCacheKey));
+let obsFavoritesCache = readSet(obsFavoritesCacheKey);
+let tickerFavoritesCache = readSet(tickerFavoritesCacheKey);
 let hydrationPromise: Promise<void> | null = null;
+let hydrationScopeToken: string | null = null;
 
 // ---------------------------------------------------------------------------
 // Reset — called on logout to prevent cross-user data leakage
 // ---------------------------------------------------------------------------
 
 export function resetFavoriteThemeCaches(): void {
+  bibleFavoritesCacheKey = scopedLocalStorageKey(BIBLE_FAVS_KEY);
+  worshipLtFavoritesCacheKey = scopedLocalStorageKey(WORSHIP_LT_FAVS_KEY);
+  obsFavoritesCacheKey = scopedLocalStorageKey(OBS_FAVS_KEY);
+  tickerFavoritesCacheKey = scopedLocalStorageKey(TICKER_FAVS_KEY);
   bibleFavoritesCache = new Set();
   worshipLtFavoritesCache = new Set();
   obsFavoritesCache = new Set();
   tickerFavoritesCache = new Set();
   hydrationPromise = null;
+  hydrationScopeToken = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,9 +125,55 @@ function mergeSets(...sets: Array<Set<string>>): Set<string> {
   return merged;
 }
 
+function refreshBibleFavoritesCache(): Set<string> {
+  const key = scopedLocalStorageKey(BIBLE_FAVS_KEY);
+  const stored = readSet(key);
+  bibleFavoritesCacheKey = key;
+  bibleFavoritesCache = stored;
+  return new Set(bibleFavoritesCache);
+}
+
+function refreshWorshipLtFavoritesCache(): Set<string> {
+  const key = scopedLocalStorageKey(WORSHIP_LT_FAVS_KEY);
+  const stored = normalizeLtFavorites(readSet(key));
+  worshipLtFavoritesCacheKey = key;
+  worshipLtFavoritesCache = stored;
+  return new Set(worshipLtFavoritesCache);
+}
+
+function refreshObsFavoritesCache(): Set<string> {
+  const key = scopedLocalStorageKey(OBS_FAVS_KEY);
+  const stored = readSet(key);
+  obsFavoritesCacheKey = key;
+  obsFavoritesCache = stored;
+  return new Set(obsFavoritesCache);
+}
+
+function refreshTickerFavoritesCache(): Set<string> {
+  const key = scopedLocalStorageKey(TICKER_FAVS_KEY);
+  const stored = readSet(key);
+  tickerFavoritesCacheKey = key;
+  tickerFavoritesCache = stored;
+  return new Set(tickerFavoritesCache);
+}
+
+function refreshAllFavoriteCaches(): void {
+  refreshBibleFavoritesCache();
+  refreshWorshipLtFavoritesCache();
+  refreshObsFavoritesCache();
+  refreshTickerFavoritesCache();
+}
+
+function currentHydrationScopeToken(): string {
+  return getCurrentUserId() ?? "";
+}
+
 function emitFavoritesUpdated(): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(FAVORITE_THEMES_UPDATED_EVENT));
+  void import("./dockBridge")
+    .then(({ dockBridge }) => dockBridge.sendFavoriteThemesUpdated())
+    .catch(() => { });
 }
 
 async function readSetFromDb(key: string): Promise<Set<string>> {
@@ -139,38 +195,46 @@ async function writeSetToDb(key: string, set: Set<string>): Promise<void> {
 }
 
 function setBibleFavoritesCache(next: Set<string>, emit = true): void {
+  bibleFavoritesCacheKey = scopedLocalStorageKey(BIBLE_FAVS_KEY);
   bibleFavoritesCache = new Set(next);
-  writeSet(scopedLocalStorageKey(BIBLE_FAVS_KEY), bibleFavoritesCache);
+  writeSet(bibleFavoritesCacheKey, bibleFavoritesCache);
   if (emit) emitFavoritesUpdated();
 }
 
 function setWorshipLtFavoritesCache(next: Set<string>, emit = true): void {
+  worshipLtFavoritesCacheKey = scopedLocalStorageKey(WORSHIP_LT_FAVS_KEY);
   worshipLtFavoritesCache = normalizeLtFavorites(next);
-  writeSet(scopedLocalStorageKey(WORSHIP_LT_FAVS_KEY), worshipLtFavoritesCache);
+  writeSet(worshipLtFavoritesCacheKey, worshipLtFavoritesCache);
   if (emit) emitFavoritesUpdated();
 }
 
 function setObsFavoritesCache(next: Set<string>, emit = true): void {
+  obsFavoritesCacheKey = scopedLocalStorageKey(OBS_FAVS_KEY);
   obsFavoritesCache = new Set(next);
-  writeSet(scopedLocalStorageKey(OBS_FAVS_KEY), obsFavoritesCache);
+  writeSet(obsFavoritesCacheKey, obsFavoritesCache);
   if (emit) emitFavoritesUpdated();
 }
 
 function setTickerFavoritesCache(next: Set<string>, emit = true): void {
+  tickerFavoritesCacheKey = scopedLocalStorageKey(TICKER_FAVS_KEY);
   tickerFavoritesCache = new Set(next);
-  writeSet(scopedLocalStorageKey(TICKER_FAVS_KEY), tickerFavoritesCache);
+  writeSet(tickerFavoritesCacheKey, tickerFavoritesCache);
   if (emit) emitFavoritesUpdated();
 }
 
 function ensureHydrationStarted(): void {
-  if (hydrationPromise) return;
+  if (hydrationPromise && hydrationScopeToken === currentHydrationScopeToken()) return;
   hydrationPromise = hydrateFavoriteThemes().catch(() => { });
 }
 
 export async function hydrateFavoriteThemes(): Promise<void> {
-  if (hydrationPromise) return hydrationPromise;
+  const scopeToken = currentHydrationScopeToken();
+  if (hydrationPromise && hydrationScopeToken === scopeToken) return hydrationPromise;
 
+  hydrationScopeToken = scopeToken;
   hydrationPromise = (async () => {
+    refreshAllFavoriteCaches();
+
     const [persistedBible, persistedLt, persistedObs, persistedTicker] = await Promise.all([
       readSetFromDb(scopedDbKey(BIBLE_DB_KEY)),
       readSetFromDb(scopedDbKey(WORSHIP_LT_DB_KEY)),
@@ -222,7 +286,7 @@ export async function hydrateFavoriteThemes(): Promise<void> {
 
 export function getBibleFavorites(): Set<string> {
   ensureHydrationStarted();
-  const favorites = new Set(bibleFavoritesCache);
+  const favorites = refreshBibleFavoritesCache();
   if (favorites.size > 0) {
     syncBibleFavoritesToDock(favorites).catch(() => { });
     syncFavoriteBibleThemesToDock(favorites).catch(() => { });
@@ -231,7 +295,7 @@ export function getBibleFavorites(): Set<string> {
 }
 
 export function toggleBibleFavorite(themeId: string): Set<string> {
-  const set = new Set(bibleFavoritesCache);
+  const set = refreshBibleFavoritesCache();
   if (set.has(themeId)) {
     set.delete(themeId);
   } else {
@@ -245,7 +309,7 @@ export function toggleBibleFavorite(themeId: string): Set<string> {
 }
 
 export function addBibleFavorite(themeId: string): Set<string> {
-  const set = new Set(bibleFavoritesCache);
+  const set = refreshBibleFavoritesCache();
   if (!set.has(themeId)) {
     set.add(themeId);
     setBibleFavoritesCache(set);
@@ -258,7 +322,7 @@ export function addBibleFavorite(themeId: string): Set<string> {
 
 export function isBibleFavorite(themeId: string): boolean {
   ensureHydrationStarted();
-  return bibleFavoritesCache.has(themeId);
+  return refreshBibleFavoritesCache().has(themeId);
 }
 
 // ---------------------------------------------------------------------------
@@ -267,7 +331,7 @@ export function isBibleFavorite(themeId: string): boolean {
 
 export function getWorshipLTFavorites(): Set<string> {
   ensureHydrationStarted();
-  const normalized = new Set(worshipLtFavoritesCache);
+  const normalized = refreshWorshipLtFavoritesCache();
   if (normalized.size > 0) {
     syncLTFavoritesToDock(normalized).catch(() => { });
   }
@@ -276,7 +340,7 @@ export function getWorshipLTFavorites(): Set<string> {
 
 export function toggleWorshipLTFavorite(themeId: string): Set<string> {
   const canonicalThemeId = canonicalizeLowerThirdThemeId(themeId);
-  const set = new Set(worshipLtFavoritesCache);
+  const set = refreshWorshipLtFavoritesCache();
   if (set.has(canonicalThemeId)) {
     set.delete(canonicalThemeId);
   } else {
@@ -293,7 +357,7 @@ export function toggleWorshipLTFavorite(themeId: string): Set<string> {
 
 export function isWorshipLTFavorite(themeId: string): boolean {
   ensureHydrationStarted();
-  return worshipLtFavoritesCache.has(canonicalizeLowerThirdThemeId(themeId));
+  return refreshWorshipLtFavoritesCache().has(canonicalizeLowerThirdThemeId(themeId));
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +366,7 @@ export function isWorshipLTFavorite(themeId: string): boolean {
 
 export function getObsFavorites(): Set<string> {
   ensureHydrationStarted();
-  const favorites = new Set(obsFavoritesCache);
+  const favorites = refreshObsFavoritesCache();
   if (favorites.size > 0) {
     syncObsFavoritesToDock(favorites).catch(() => { });
   }
@@ -310,7 +374,7 @@ export function getObsFavorites(): Set<string> {
 }
 
 export function toggleObsFavorite(themeId: string): Set<string> {
-  const set = new Set(obsFavoritesCache);
+  const set = refreshObsFavoritesCache();
   if (set.has(themeId)) {
     set.delete(themeId);
   } else {
@@ -322,9 +386,25 @@ export function toggleObsFavorite(themeId: string): Set<string> {
   return new Set(set);
 }
 
+export function setObsFavorite(themeId: string, added: boolean): Set<string> {
+  const set = refreshObsFavoritesCache();
+  const hadTheme = set.has(themeId);
+  if (added) {
+    set.add(themeId);
+  } else {
+    set.delete(themeId);
+  }
+  if (set.has(themeId) !== hadTheme) {
+    setObsFavoritesCache(set);
+    writeSetToDb(scopedDbKey(OBS_DB_KEY), set).catch(() => { });
+    syncObsFavoritesToDock(set).catch(() => { });
+  }
+  return new Set(set);
+}
+
 export function isObsFavorite(themeId: string): boolean {
   ensureHydrationStarted();
-  return obsFavoritesCache.has(themeId);
+  return refreshObsFavoritesCache().has(themeId);
 }
 
 // ---------------------------------------------------------------------------
@@ -333,11 +413,11 @@ export function isObsFavorite(themeId: string): boolean {
 
 export function getTickerFavorites(): Set<string> {
   ensureHydrationStarted();
-  return new Set(tickerFavoritesCache);
+  return refreshTickerFavoritesCache();
 }
 
 export function toggleTickerFavorite(tickerId: string): Set<string> {
-  const set = new Set(tickerFavoritesCache);
+  const set = refreshTickerFavoritesCache();
   if (set.has(tickerId)) {
     set.delete(tickerId);
   } else {
@@ -349,9 +429,25 @@ export function toggleTickerFavorite(tickerId: string): Set<string> {
   return new Set(set);
 }
 
+export function setTickerFavorite(tickerId: string, added: boolean): Set<string> {
+  const set = refreshTickerFavoritesCache();
+  const hadTicker = set.has(tickerId);
+  if (added) {
+    set.add(tickerId);
+  } else {
+    set.delete(tickerId);
+  }
+  if (set.has(tickerId) !== hadTicker) {
+    setTickerFavoritesCache(set);
+    writeSetToDb(scopedDbKey(TICKER_DB_KEY), set).catch(() => { });
+    syncTickerFavoritesToDock(set).catch(() => { });
+  }
+  return new Set(set);
+}
+
 export function isTickerFavorite(tickerId: string): boolean {
   ensureHydrationStarted();
-  return tickerFavoritesCache.has(tickerId);
+  return refreshTickerFavoritesCache().has(tickerId);
 }
 
 // ---------------------------------------------------------------------------

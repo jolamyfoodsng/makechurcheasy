@@ -36,9 +36,7 @@ export type ShortcutCategory =
   | "navigation"
   | "bible"
   | "worship"
-  | "lowerthirds"
-  | "quickmerge"
-  | "ticker";
+  | "quickmerge";
 
 export const CATEGORY_LABELS: Record<ShortcutCategory, string> = {
   file: "File",
@@ -51,9 +49,7 @@ export const CATEGORY_LABELS: Record<ShortcutCategory, string> = {
   navigation: "Navigation",
   bible: "Bible",
   worship: "Worship",
-  lowerthirds: "Lower Thirds",
   quickmerge: "Quick Merge",
-  ticker: "Ticker",
 };
 
 // ---------------------------------------------------------------------------
@@ -235,18 +231,9 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: "worship-clear", label: "Clear Display", category: "worship", keys: { key: "c" }, description: "Clear lyrics from display" },
   { id: "worship-theme-cycle", label: "Switch Theme (1–4)", category: "worship", keys: { key: "1" }, description: "Quick-switch worship theme" },
 
-  // ── Lower Thirds ──
-  { id: "lt-send-all", label: "Send All", category: "lowerthirds", keys: { meta: true, key: "Enter" }, description: "Send all lower-third fields to OBS" },
-  { id: "lt-clear-all", label: "Clear All", category: "lowerthirds", keys: { key: "Escape" }, description: "Clear all lower-third outputs" },
-
   // ── Quick Merge ──
   { id: "qm-apply-preview", label: "Apply to Preview", category: "quickmerge", keys: { meta: true, shift: true, key: "p" }, description: "Build composition and load into preview" },
   { id: "qm-take-live", label: "Take Live", category: "quickmerge", keys: { meta: true, key: "Enter" }, description: "Build composition and go live" },
-
-  // ── Ticker ──
-  { id: "ticker-start-stop", label: "Start / Stop Ticker", category: "ticker", keys: { meta: true, shift: true, key: "t" }, description: "Toggle ticker on/off" },
-  { id: "ticker-add-message", label: "Add Message", category: "ticker", keys: { meta: true, key: "Enter" }, description: "Add current text to ticker queue" },
-  { id: "ticker-clear-all", label: "Clear All Messages", category: "ticker", keys: { meta: true, shift: true, key: "Backspace" }, description: "Remove all ticker messages" },
 ] as const;
 
 // ---------------------------------------------------------------------------

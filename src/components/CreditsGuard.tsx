@@ -2,10 +2,10 @@
  * CreditsGuard — Blocks page access when the user has 0 credits.
  *
  * Wraps page content and shows a full-screen blocked state with
- * an upgrade CTA when credits are exhausted. Pro users bypass this guard.
+ * an upgrade CTA when credits are exhausted. Full-access users bypass this guard.
  *
- * Fail-open: if the backend is unreachable or the user is offline,
- * the guard lets users through rather than blocking them.
+ * If the backend is unreachable or the user is offline, the guard blocks
+ * credit-gated pages until credits can be verified.
  */
 
 import { useEffect, useState } from "react";
@@ -21,49 +21,53 @@ interface CreditsGuardProps {
 
 type GuardState =
   | { phase: "loading" }
-  | { phase: "offline" }
+  | { phase: "unavailable" }
   | { phase: "blocked" }
   | { phase: "pass" };
 
 export default function CreditsGuard({ children }: CreditsGuardProps) {
   const [state, setState] = useState<GuardState>({ phase: "loading" });
-  const pro = isProUnlocked();
+  const [retryKey, setRetryKey] = useState(0);
+  const fullAccess = isProUnlocked();
 
   useEffect(() => {
-    if (pro) return;
+    if (fullAccess) return;
     let cancelled = false;
 
     // Check online status first
     if (!navigator.onLine) {
-      setState({ phase: "offline" });
+      setState({ phase: "unavailable" });
       return () => { cancelled = true; };
     }
 
     fetchCreditsFromBackend().then((credits) => {
       if (cancelled) return;
-      // -1 = admin unlimited OR backend unreachable → both pass through
-      if (credits < 0) {
+      if (credits === null) {
+        setState({ phase: "unavailable" });
+      } else if (credits < 0) {
         setState({ phase: "pass" });
       } else if (credits === 0) {
         setState({ phase: "blocked" });
       } else {
         setState({ phase: "pass" });
       }
+    }).catch(() => {
+      if (!cancelled) setState({ phase: "unavailable" });
     });
 
     // Also listen for online/offline events
     const handleOffline = () => {
-      if (!cancelled) setState({ phase: "offline" });
+      if (!cancelled) setState({ phase: "unavailable" });
     };
     window.addEventListener("offline", handleOffline);
     return () => {
       cancelled = true;
       window.removeEventListener("offline", handleOffline);
     };
-  }, [pro]);
+  }, [fullAccess, retryKey]);
 
-  // Pro users always pass
-  if (pro) return <>{children}</>;
+  // Full-access users always pass
+  if (fullAccess) return <>{children}</>;
 
   // Loading state
   if (state.phase === "loading") {
@@ -74,8 +78,34 @@ export default function CreditsGuard({ children }: CreditsGuardProps) {
     );
   }
 
-  // Offline / backend unreachable — fail open, let user through
-  if (state.phase === "offline") return <>{children}</>;
+  // Offline / backend unreachable — block until credits can be verified
+  if (state.phase === "unavailable") {
+    return (
+      <div style={styles.root}>
+        <div style={styles.card}>
+          <div style={styles.iconWrap}>
+            <Zap size={28} />
+          </div>
+          <h2 style={styles.title}>Credit Check Required</h2>
+          <p style={styles.desc}>
+            We need to verify your credits before opening transcription,
+            transcript library, or translation features. Check your connection
+            and try again.
+          </p>
+          <button
+            type="button"
+            style={styles.cta}
+            onClick={() => {
+              setState({ phase: "loading" });
+              setRetryKey((key) => key + 1);
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Credits available — pass through
   if (state.phase === "pass") return <>{children}</>;
@@ -155,6 +185,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "8px 20px",
     borderRadius: "var(--radius, 3px)",
     background: "var(--primary, #4f46e5)",
+    border: "none",
     color: "#fff",
     fontSize: 13,
     fontWeight: 600,

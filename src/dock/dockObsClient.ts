@@ -128,7 +128,7 @@ const DOCK_PREVIEW_SCENE_STATE_KEY = "ocs-dock-preview-scene-state-v1";
 const DOCK_OBS_RECONNECT_DELAY_MS = 300;
 const DOCK_OBS_RECONNECT_MAX_DELAY_MS = 8000;
 const DOCK_OBS_PARAMS_KEY = "ocs-dock-obs-params";
-const OVERLAY_HTML_VERSION = "2026-07-18-1-static-frame";
+const OVERLAY_HTML_VERSION = "2026-07-29-5-compare-line-reference-center";
 const DOCK_TICKER_CLEARANCE_FALLBACK_PX = 80;
 const DOCK_TICKER_CLEARANCE_GAP_PX = 10;
 const DOCK_TICKER_CLEARANCE_MAX_PX = 220;
@@ -178,6 +178,8 @@ type PrimeWorshipOverlayData = {
   liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
   backgroundOnly?: boolean;
 };
+
+type CssOverlayPacketTab = "bible" | "worship" | "announcements" | "sermon" | "notes";
 
 function readPersistedDockOverlayMode(
   tabType: "bible" | "worship" | "announcements" | "sermon" | "notes",
@@ -1354,39 +1356,14 @@ class DockObsClient {
   private buildBibleFullscreenSetupSignature(
     sceneName: string,
     currentProgramSceneBeforeTarget: string,
-    themeSettings: Record<string, unknown> | null,
+    _themeSettings: Record<string, unknown> | null,
   ): string {
     const def = this._fullscreenSceneDefs["bible"];
-    const canvas = this._canvasCache?.size ?? getDefaultCanvasSize();
-    const nativeBg = this._resolveNativeBackgroundSource(themeSettings, canvas);
     return JSON.stringify({
       sceneName,
       currentProgramSceneBeforeTarget,
       browserSourceName: def.browserSourceName,
       overlayFile: def.overlayFile,
-      nativeBg: nativeBg
-        ? { inputKind: nativeBg.inputKind, inputSettings: nativeBg.inputSettings }
-        : null,
-      // Keep this signature stable across verse changes. Only structural or
-      // theme changes should force the browser source to be reconfigured.
-      themeSettings: themeSettings
-        ? {
-          backgroundType: themeSettings.backgroundType ?? null,
-          backgroundColor: themeSettings.backgroundColor ?? null,
-          backgroundColorEnd: themeSettings.backgroundColorEnd ?? null,
-          backgroundImage: themeSettings.backgroundImage ?? null,
-          backgroundImageFilePath: themeSettings.backgroundImageFilePath ?? null,
-          backgroundVideo: themeSettings.backgroundVideo ?? null,
-          backgroundVideoFilePath: themeSettings.backgroundVideoFilePath ?? null,
-          backgroundPattern: themeSettings.backgroundPattern ?? null,
-          backgroundOpacity: themeSettings.backgroundOpacity ?? null,
-          bgGradientAngle: themeSettings.bgGradientAngle ?? null,
-          fullscreenShadeOpacity: themeSettings.fullscreenShadeOpacity ?? null,
-          compareEnabled: themeSettings.compareEnabled ?? null,
-          compareLayout: themeSettings.compareLayout ?? null,
-          compareTranslationWidth: themeSettings.compareTranslationWidth ?? null,
-        }
-        : null,
     });
   }
 
@@ -2527,139 +2504,6 @@ class DockObsClient {
     } catch {
       return false;
     }
-  }
-
-  /**
-   * Check if the OBS Move Transition plugin is installed.
-   * The plugin provides animated source movements via filters.
-   * Download: https://obsproject.com/forum/resources/move.913/
-   */
-  async isMovePluginInstalled(): Promise<boolean> {
-    try {
-      // GetVendorInfo doesn't work for Move Transition — it doesn't register
-      // as a vendor. Instead, check if its filter kind is available.
-      const resp = await this.call("GetSourceFilterKindList") as { sourceFilterKinds?: string[] };
-      return Array.isArray(resp.sourceFilterKinds) && resp.sourceFilterKinds.includes("move_source_filter");
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Returns platform-specific download info for the Move plugin.
-   */
-  getMovePluginDownloadInfo(): { url: string; filename: string; instructions: string } {
-    return {
-      url: "https://github.com/exeldro/obs-move-transition/releases/latest",
-      filename: "move-transition",
-      instructions: "Download the installer for your OS from the GitHub releases page, then restart MakeChurchEasy.",
-    };
-  }
-
-  /**
-   * Add a Move Source filter to a scene item for animation.
-   * Returns the filter name on success, null on failure.
-   */
-  async addMoveFilter(
-    sceneName: string,
-    sceneItemId: number,
-    filterName: string,
-  ): Promise<string | null> {
-    try {
-      const resp = await this.call("GetSceneItemList", { sceneName }) as {
-        sceneItems?: Array<{ sceneItemId: number; sourceName: string }>;
-      };
-      const item = resp.sceneItems?.find((i) => i.sceneItemId === sceneItemId);
-      if (!item) return null;
-
-      await this.call("CreateSourceFilter", {
-        sourceName: item.sourceName,
-        filterName,
-        filterKind: "move_source_filter",
-        filterSettings: {},
-      });
-      return item.sourceName;
-    } catch (err) {
-      console.warn(`[DockOBS] Failed to add Move filter "${filterName}":`, err);
-      return null;
-    }
-  }
-
-  /**
-   * Configure a Move Source filter with start/end positions.
-   * The filter animates from current (start) to target (end).
-   */
-  async configureMoveFilter(
-    sourceName: string,
-    filterName: string,
-    _startPos: { x: number; y: number },
-    endPos: { x: number; y: number },
-    _startBounds: { width: number; height: number },
-    endBounds: { width: number; height: number },
-    durationMs: number = 300,
-    easing: number = 1, // 1 = quadratic ease-out
-  ): Promise<void> {
-    await this.call("SetSourceFilterSettings", {
-      sourceName,
-      filterName,
-      filterSettings: {
-        source: "",
-        pos: {
-          x: endPos.x,
-          y: endPos.y,
-          x_sign: 1, // absolute
-          y_sign: 1, // absolute
-        },
-        bounds: {
-          x: endBounds.width,
-          y: endBounds.height,
-          x_sign: 1,
-          y_sign: 1,
-        },
-        rot: 0,
-        rot_sign: 1,
-        crop: { left: 0, top: 0, right: 0, bottom: 0 },
-        custom_duration: durationMs,
-        duration: durationMs,
-        easing_match: easing,
-        easing_function_match: easing,
-        start_trigger: 0, // Don't auto-trigger yet
-      },
-    }).catch(() => {
-      // Move filter settings format may vary by version; ignore config errors
-    });
-  }
-
-  /**
-   * Trigger a Move filter animation and wait for it to complete.
-   */
-  async triggerMoveFilter(
-    sourceName: string,
-    filterName: string,
-    durationMs: number = 300,
-  ): Promise<void> {
-    await this.call("SetSourceFilterSettings", {
-      sourceName,
-      filterName,
-      filterSettings: {
-        start_trigger: 5, // ENABLE = trigger
-      },
-    }).catch(() => { });
-
-    await this.sleep(durationMs + 50);
-  }
-
-  /**
-   * Remove a Move filter from a source.
-   */
-  async removeMoveFilter(
-    sourceName: string,
-    filterName: string,
-  ): Promise<void> {
-    await this.call("RemoveSourceFilter", {
-      sourceName,
-      filterName,
-    }).catch(() => { });
   }
 
   /**
@@ -4011,7 +3855,14 @@ class DockObsClient {
   private async setBrowserSourceUrl(inputName: string, url: string, forceReload = false, css?: string): Promise<void> {
     await browserQueue.enqueue(inputName, async () => {
       const prevUrl = this._lastBrowserSourceUrlBySource[inputName];
-      const urlChanged = prevUrl !== url;
+      let urlChanged = !this.browserSourceUrlMatchesLoadedDocument(prevUrl, url);
+      if (urlChanged && !prevUrl && !forceReload) {
+        const currentUrl = await this.readBrowserSourceUrl(inputName);
+        if (this.browserSourceUrlMatchesLoadedDocument(currentUrl, url)) {
+          this._lastBrowserSourceUrlBySource[inputName] = url;
+          urlChanged = false;
+        }
+      }
 
       if (forceReload || urlChanged) {
         // Blank → wait → set new URL → forces OBS CEF to fully reload
@@ -4041,6 +3892,82 @@ class DockObsClient {
         });
       } catch { /* ignore */ }
     }, { label: inputName, force: forceReload });
+  }
+
+  private normalizeBrowserSourceDocumentUrl(url: string | undefined): string {
+    const trimmed = String(url || "").trim();
+    if (!trimmed || trimmed === "about:blank") return "";
+    const hashIndex = trimmed.indexOf("#");
+    return hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
+  }
+
+  private browserSourceUrlMatchesLoadedDocument(currentUrl: string | undefined, nextUrl: string): boolean {
+    if (!currentUrl || !nextUrl) return false;
+    if (currentUrl === nextUrl) return true;
+    if (nextUrl.includes("#")) return false;
+    return this.normalizeBrowserSourceDocumentUrl(currentUrl) === nextUrl;
+  }
+
+  private async readBrowserSourceUrl(inputName: string): Promise<string> {
+    try {
+      const resp = await this.call("GetInputSettings", { inputName }) as {
+        inputSettings?: { url?: unknown };
+      };
+      return typeof resp.inputSettings?.url === "string" ? resp.inputSettings.url : "";
+    } catch {
+      return "";
+    }
+  }
+
+  private async hasBrowserSourceUrlChanged(inputName: string, baseUrl: string): Promise<boolean> {
+    const cachedUrl = this._lastBrowserSourceUrlBySource[inputName];
+    if (this.browserSourceUrlMatchesLoadedDocument(cachedUrl, baseUrl)) return false;
+
+    const currentUrl = await this.readBrowserSourceUrl(inputName);
+    if (this.browserSourceUrlMatchesLoadedDocument(currentUrl, baseUrl)) {
+      this._lastBrowserSourceUrlBySource[inputName] = baseUrl;
+      return false;
+    }
+
+    return true;
+  }
+
+  private async hasExistingOverlaySceneItem(sourceName: string): Promise<boolean> {
+    for (const sceneName of await this.getLikelyOverlayScenes()) {
+      const items = await this.getSceneItemListCached(sceneName).catch(() => []);
+      if (items.some((item) => item.sourceName === sourceName)) return true;
+    }
+    return false;
+  }
+
+  private async canReuseStableCssOverlaySource(sourceName: string, baseUrl: string): Promise<boolean> {
+    const urlChanged = await this.hasBrowserSourceUrlChanged(sourceName, baseUrl).catch(() => true);
+    if (urlChanged) return false;
+    return this.hasExistingOverlaySceneItem(sourceName);
+  }
+
+  private async keepLoadedCssOverlaySourceStable(
+    sourceName: string,
+    tabType: "worship" | "notes",
+    packet: Record<string, unknown>,
+    baseUrl: string,
+    themeCss = "",
+  ): Promise<boolean> {
+    const canReuseLoadedSource = await this.canReuseStableCssOverlaySource(sourceName, baseUrl).catch(() => false);
+    if (!canReuseLoadedSource) return false;
+
+    if (tabType === "worship") {
+      this._worshipInitialized = true;
+    } else {
+      this._notesInitialized = true;
+    }
+
+    const mode = packet.mode;
+    if (mode === "fullscreen" || mode === "lower-third") {
+      this._lastOverlayMode[sourceName] = mode;
+    }
+    this.rememberCssOverlayTransport(sourceName, packet, baseUrl, themeCss);
+    return true;
   }
 
   private buildCssOverlayDataCss(
@@ -4080,15 +4007,36 @@ class DockObsClient {
     }
   }
 
+  private async emitCssOverlayPacketWithFallback(
+    inputName: string,
+    tabType: CssOverlayPacketTab,
+    packet: Record<string, unknown>,
+    baseUrl: string,
+    overlayCss: string,
+    timeoutMs = 180,
+  ): Promise<void> {
+    const emitted = await this.emitBrowserOverlayPacket(tabType, packet, overlayCss);
+    if (emitted) {
+      const timestamp = Number(packet.timestamp) || Date.now();
+      const mode = typeof packet.mode === "string" ? packet.mode : "";
+      if (mode) {
+        const acked = await this.waitForOverlayRenderAck(tabType, timestamp, mode, timeoutMs).catch(() => false);
+        if (acked) return;
+      }
+    }
+
+    await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
+  }
+
   private async deliverCssOverlayPacket(
     inputName: string,
-    tabType: "bible" | "worship" | "announcements" | "sermon" | "notes",
+    tabType: CssOverlayPacketTab,
     packet: Record<string, unknown>,
     baseUrl: string,
     themeCss = "",
   ): Promise<void> {
     const overlayCss = this.buildCssOverlayDataCss(packet, themeCss);
-    const urlChanged = this._lastBrowserSourceUrlBySource[inputName] !== baseUrl;
+    const urlChanged = await this.hasBrowserSourceUrlChanged(inputName, baseUrl);
     const previousMode = this._lastCssOverlayPacketBySource[inputName]?.mode;
     const modeChanged = previousMode !== undefined && previousMode !== packet.mode;
     const previousPacket = this._lastCssOverlayPacketBySource[inputName];
@@ -4113,27 +4061,22 @@ class DockObsClient {
 
     if (modeChanged) {
       // Live event first so the running page can morph; CSS write keeps OBS state durable.
-      await this.emitBrowserOverlayPacket(tabType, packet, overlayCss);
-      await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
+      await this.emitCssOverlayPacketWithFallback(inputName, tabType, packet, baseUrl, overlayCss);
       this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
       return;
     }
 
     if (!themePayloadChanged) {
-      void browserQueue.enqueue(
-        `event:${inputName}`,
-        () => this.emitBrowserOverlayPacket(tabType, packet, overlayCss).then(() => { }),
-        { label: `${inputName} event` },
-      );
+      await this.emitCssOverlayPacketWithFallback(inputName, tabType, packet, baseUrl, overlayCss);
       this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
       return;
     }
 
     const emitted = await this.emitBrowserOverlayPacket(tabType, packet, overlayCss);
-    // Theme changes must also update the browser source CSS in OBS itself.
-    // The live browser event path is fine for high-frequency text/slide updates,
-    // but theme-only updates can otherwise leave OBS rendering stale visuals.
-    if (!emitted || themePayloadChanged) {
+    // Keep the running browser document stable. Successful live events apply
+    // and persist theme/background packets inside the overlay page, while the
+    // CSS write remains only as a fallback for unavailable browser events.
+    if (!emitted) {
       await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
     }
     this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
@@ -5237,6 +5180,10 @@ class DockObsClient {
     const sourceName = getDockResources().worshipSource;
     const baseUrl = this.buildOverlayHtmlUrl("mce-worship-overlay.html");
 
+    if (await this.keepLoadedCssOverlaySourceStable(sourceName, "worship", packet, baseUrl, themeCss)) {
+      return;
+    }
+
     this.publishFullscreenOverlayPacket({
       slide,
       theme: cleanSettings ?? null,
@@ -6072,11 +6019,16 @@ class DockObsClient {
     const resources = getDockResources();
     const sourceName = resources.worshipSource;
     const mode = "lower-third";
+    const cssOverlayBaseUrl = this.buildOverlayHtmlUrl("mce-worship-overlay.html");
 
-    if (
-      !this._worshipInitialized
-      || !this._lastBrowserSourceUrlBySource[sourceName]
-    ) {
+    if (!this._worshipInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
+      const canReuseLoadedSource = await this.canReuseStableCssOverlaySource(sourceName, cssOverlayBaseUrl);
+      if (canReuseLoadedSource) {
+        this._worshipInitialized = true;
+      }
+    }
+
+    if (!this._worshipInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
       return this.pushWorshipLyrics({
         ...data,
         overlayMode: mode,
@@ -6102,7 +6054,6 @@ class DockObsClient {
     }
 
     const slide = this.buildBibleSlide(sectionText, "");
-    const cssOverlayBaseUrl = this.buildOverlayHtmlUrl("mce-worship-overlay.html");
     const packetWithMode: Record<string, unknown> = {
       slide,
       theme: cleanTheme,
@@ -6166,6 +6117,10 @@ class DockObsClient {
     const sourceName = getDockResources().notesSource;
     const baseUrl = this.buildOverlayHtmlUrl("mce-note.html");
 
+    if (await this.keepLoadedCssOverlaySourceStable(sourceName, "notes", packet, baseUrl, themeCss)) {
+      return;
+    }
+
     this.publishFullscreenOverlayPacket({
       slide,
       theme: cleanSettings ?? null,
@@ -6189,11 +6144,16 @@ class DockObsClient {
     const resources = getDockResources();
     const sourceName = resources.notesSource;
     const mode = "lower-third";
+    const cssOverlayBaseUrl = this.buildOverlayHtmlUrl("mce-note.html");
 
-    if (
-      !this._notesInitialized
-      || !this._lastBrowserSourceUrlBySource[sourceName]
-    ) {
+    if (!this._notesInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
+      const canReuseLoadedSource = await this.canReuseStableCssOverlaySource(sourceName, cssOverlayBaseUrl);
+      if (canReuseLoadedSource) {
+        this._notesInitialized = true;
+      }
+    }
+
+    if (!this._notesInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
       return this.pushNotesLyrics({
         ...data,
         overlayMode: mode,
@@ -6219,7 +6179,6 @@ class DockObsClient {
     }
 
     const slide = this.buildBibleSlide(sectionText, "");
-    const cssOverlayBaseUrl = this.buildOverlayHtmlUrl("mce-note.html");
     const packetWithMode: Record<string, unknown> = {
       slide,
       theme: cleanTheme,
@@ -7643,6 +7602,7 @@ class DockObsClient {
     const sourcesToCheck = [
       { name: this._fullscreenSceneDefs["bible"].browserSourceName, type: "bible" as const },
       { name: DOCK_WORSHIP_SOURCE, type: "worship" as const },
+      { name: DOCK_NOTES_SOURCE, type: "notes" as const },
       { name: DOCK_LT_SOURCE, type: "lowerThird" as const },
     ];
 
@@ -7679,6 +7639,10 @@ class DockObsClient {
           inputSettings: { url?: string; css?: string };
         };
         const url = resp.inputSettings?.url || "";
+        const documentUrl = this.normalizeBrowserSourceDocumentUrl(url);
+        if (documentUrl) {
+          this._lastBrowserSourceUrlBySource[name] = documentUrl;
+        }
         const cssPacket = this.extractOverlayPacketFromCss(resp.inputSettings?.css);
         const urlPacket = url && url !== "about:blank" && url.includes("#data=")
           ? (() => {

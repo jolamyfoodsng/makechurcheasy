@@ -28,6 +28,7 @@ import DashboardSidebar from "./components/DashboardSidebar";
 import LiveStatusBar from "./components/LiveStatusBar";
 import VoiceBibleResumeBanner from "./components/VoiceBibleResumeBanner";
 import { getOverlayBaseUrlSync } from "./services/overlayUrl";
+import { confirmStopVoiceBibleForPresentation } from "./services/voiceBiblePresentationGuard";
 import type { ConnectionStatus } from "./services/obsService";
 
 
@@ -64,12 +65,11 @@ export function AppShell() {
   // ── Command Palette ──
   const [showCommandPalette, setShowCommandPalette] = useState(false);
 
-  type ShortcutsTab = "dashboard" | "bible" | "graphics" | "ticker";
+  type ShortcutsTab = "dashboard" | "bible" | "graphics";
   const SHORTCUTS_TABS: { key: ShortcutsTab; label: string; icon: string; categories: ShortcutCategory[] }[] = [
     { key: "dashboard", label: t("appShell.shortcutsTab.dashboard"), icon: "dashboard", categories: ["navigation", "file", "edit", "selection", "view", "canvas", "slots", "alignment"] },
     { key: "bible", label: t("appShell.shortcutsTab.bible"), icon: "menu_book", categories: ["bible"] },
-    { key: "graphics", label: t("appShell.shortcutsTab.graphics"), icon: "palette", categories: ["lowerthirds", "quickmerge", "worship"] },
-    { key: "ticker", label: t("appShell.shortcutsTab.ticker"), icon: "text_rotation_none", categories: ["ticker"] },
+    { key: "graphics", label: t("appShell.shortcutsTab.graphics"), icon: "palette", categories: ["quickmerge", "worship"] },
   ];
   const [shortcutsTab, setShortcutsTab] = useState<ShortcutsTab>("dashboard");
 
@@ -111,6 +111,7 @@ export function AppShell() {
 
   const handleNav = useCallback(
     (path: string) => {
+      if (!confirmStopVoiceBibleForPresentation(path)) return;
       navigate(path);
     },
     [navigate],
@@ -123,7 +124,8 @@ export function AppShell() {
     location.pathname.startsWith("/bible") ||
     location.pathname.startsWith("/hub") ||
     location.pathname.startsWith("/service-hub") ||
-    location.pathname.startsWith("/presentation/console") ||
+    location.pathname.startsWith("/presentation/link") ||
+    location.pathname.startsWith("/presentation/remote-obs") ||
     location.pathname === "/new";
 
   // ── Cancel confirmation modal ──
@@ -269,10 +271,8 @@ export function AppShell() {
                                     cat === "slots" ? t("appShell.shortcutsCategory.slots") :
                                       cat === "alignment" ? t("appShell.shortcutsCategory.alignment") :
                                         cat === "bible" ? t("appShell.shortcutsCategory.bible") :
-                                          cat === "lowerthirds" ? t("appShell.shortcutsCategory.lowerThirds") :
-                                            cat === "quickmerge" ? t("appShell.shortcutsCategory.quickMerge") :
-                                              cat === "worship" ? t("appShell.shortcutsCategory.speaker") :
-                                                cat === "ticker" ? t("appShell.shortcutsCategory.ticker") : cat
+                                          cat === "quickmerge" ? t("appShell.shortcutsCategory.quickMerge") :
+                                            cat === "worship" ? t("appShell.shortcutsCategory.speaker") : cat
                       }</h4>
                       {items.map((s) => (
                         <div className="shortcuts-modal-row" key={s.id}>

@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { generateSlides, parseWorshipLyricSections } from "./slideEngine";
+import { autoSplitLyricsText, generateSlides, parseWorshipLyricSections } from "./slideEngine";
 import {
   unicodeSearchNormalize,
   unicodeStripDiacritics,
@@ -159,6 +159,36 @@ describe("generateSlides preserves Unicode", () => {
     const allContent = slides.map((s) => s.content).join("\n");
     expect(allContent).toContain("Kyerɛ");
     expect(allContent).toContain("Owura");
+  });
+});
+
+describe("autoSplitLyricsText", () => {
+  it("splits long pasted paragraphs into slide-sized blocks", () => {
+    const formatted = autoSplitLyricsText(
+      "PRAYER POINT: MY MIND IS RECEPTIVE TO CUSTOMIZED INSTRUCTIONS AND INSIGHT AS REGARDS MY FAMILY, MY HOME, MY HUSBAND IN THE NAME OF JESUS.",
+      2,
+      { maxLineLength: 42 },
+    );
+    const blocks = formatted.split(/\n\n+/);
+    const slides = generateSlides(formatted, 2, true);
+
+    expect(blocks.length).toBeGreaterThan(1);
+    expect(slides.length).toBe(blocks.length);
+    expect(slides.every((slide) => slide.content.split("\n").length <= 2)).toBe(true);
+  });
+
+  it("preserves explicit worship section labels while splitting", () => {
+    const formatted = autoSplitLyricsText(
+      "Verse 1:\nThis is a very long lyric line that should become smaller lines for the presentation screen\nAnother line for the same verse",
+      2,
+      { maxLineLength: 36 },
+    );
+    const slides = generateSlides(formatted, 2, true);
+
+    expect(formatted).toContain("Verse 1:");
+    expect(formatted).not.toContain("Verse 2:");
+    expect(slides.length).toBeGreaterThan(1);
+    expect(slides.every((slide) => slide.label === "Verse 1")).toBe(true);
   });
 });
 

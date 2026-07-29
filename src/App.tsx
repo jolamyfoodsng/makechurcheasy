@@ -13,6 +13,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Navigate, useParams, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { OBSConnectGate } from "./components/OBSConnectGate";
 import AuthGate from "./components/AuthGate";
 import LicenseGuard from "./components/LicenseGuard";
@@ -50,6 +51,7 @@ import { applyBrandingSettingsToDom } from "./services/branding";
 import { useAppTheme } from "./hooks/useAppTheme";
 import { getAppTitle, getSplashImageSrc } from "./services/envConfig";
 import DevDashboard from "./pages/DevDashboard";
+import { getPresentationRemoteAccessInfo } from "./services/presentationRemote";
 
 import { dockBridge } from "./services/dockBridge";
 import { initDockCommandHandler } from "./services/dockCommandHandler";
@@ -96,7 +98,7 @@ import {
 import { getLiveToolsSnapshot, syncLiveToolsToDock } from "./live-tools/liveToolStore";
 import { getCountdownSnapshot } from "./countdowns/countdownStore";
 import { STORES, putRecord } from "./services/db";
-import { MEDIA_FILE_ACCEPT, saveLibraryMediaFile } from "./library/MediaTab";
+import { MEDIA_FILE_ACCEPT, isSupportedLibraryImportFile, saveLibraryMediaFile } from "./library/MediaTab";
 import {
   trackAppStarted,
   trackAppClosed,
@@ -185,7 +187,67 @@ function TranscriptDetailPageWrapper() {
   );
 }
 
+function PublicPresentationRoute() {
+  const { sessionId = "" } = useParams<{ sessionId: string }>();
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function openPresentationViewer() {
+      const cleanSessionId = sessionId.trim();
+      if (!cleanSessionId) {
+        setError("Presentation link is missing a session id.");
+        return;
+      }
+
+      try {
+        const info = await getPresentationRemoteAccessInfo(cleanSessionId);
+        const candidates = [info.localLink, info.link].filter(Boolean);
+        const currentUrl = new URL(window.location.href);
+        const target = candidates.find((candidate) => {
+          try {
+            const parsed = new URL(candidate);
+            return parsed.origin !== currentUrl.origin || parsed.pathname !== currentUrl.pathname;
+          } catch {
+            return false;
+          }
+        });
+
+        if (cancelled) return;
+        if (target) {
+          window.location.replace(target);
+          return;
+        }
+
+        const params = new URLSearchParams({ sessionId: cleanSessionId });
+        if (info.wsPort > 0) params.set("wsPort", String(info.wsPort));
+        window.location.replace(`/presentation.html?${params.toString()}`);
+      } catch (routeError) {
+        if (!cancelled) {
+          setError(routeError instanceof Error ? routeError.message : "Could not open the presentation screen.");
+        }
+      }
+    }
+
+    void openPresentationViewer();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  return (
+    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#000", color: "#f8fafc" }}>
+      <div style={{ display: "grid", gap: 10, justifyItems: "center", fontFamily: "Inter, system-ui, sans-serif" }}>
+        <Icon name={error ? "warning" : "present_to_all"} size={28} />
+        <span>{error || "Opening presentation screen..."}</span>
+      </div>
+    </div>
+  );
+}
+
 function App() {
+  const { t } = useTranslation();
   // ── Global theme (dark/light) ──
   useAppTheme();
   const { user, setUser } = useAuth();
@@ -961,7 +1023,7 @@ function App() {
   }, [user, setUser]);
 
   const handleGlobalMediaUpload = useCallback(async (files: FileList | File[]) => {
-    const queue = Array.from(files).filter((file) => file.type.startsWith("image/") || file.type.startsWith("video/"));
+    const queue = Array.from(files).filter(isSupportedLibraryImportFile);
     if (queue.length === 0) return;
     setGlobalMediaUploading(true);
     try {
@@ -1088,36 +1150,36 @@ function App() {
           <div className="force-update-modal">
             <div className="force-update-banner force-update-banner--locked">
               <Icon name="lock" size={16} />
-              <span>Version Not Supported</span>
+              <span>{t("update.versionNotSupported")}</span>
             </div>
             <div className="force-update-header">
               <Icon name="system_update" size={24} />
               <div>
-                <h2 className="force-update-title">Update Required</h2>
+                <h2 className="force-update-title">{t("update.updateRequired")}</h2>
                 <p className="force-update-subtitle">
-                  v{versionFloorBlocked.currentVersion} is no longer supported
+                  v{versionFloorBlocked.currentVersion} · {t("update.versionNoLongerSupported")}
                 </p>
               </div>
             </div>
             <div className="force-update-body">
               <p className="force-update-message">
-                This version of MakeChurchEasy is no longer supported. Please update to continue.
+                {t("update.versionBlockedMessage")}
               </p>
 
               {floorUpdateStatus === "idle" && (
                 <button
                   onClick={handleFloorUpdate}
                   className="force-update-button"
-                  title="Update now">
+                  title={t("update.updateNow")}>
                   <Icon name="system_update" size={18} />
-                  Update Now
+                  {t("update.updateNow")}
                 </button>
               )}
 
               {floorUpdateStatus === "checking" && (
                 <div className="force-update-progress-row">
                   <Icon name="sync" size={16} className="force-update-icon--spin" />
-                  <span>Checking for updates…</span>
+                  <span>{t("update.checkingForUpdates")}…</span>
                 </div>
               )}
 
@@ -1136,7 +1198,7 @@ function App() {
                   <span className="force-update-progress-text">
                     {floorUpdateProgress.contentLength
                       ? `${Math.round((floorUpdateProgress.downloaded / floorUpdateProgress.contentLength) * 100)}%`
-                      : "Downloading…"}
+                      : `${t("update.downloading")}…`}
                   </span>
                 </div>
               )}
@@ -1144,14 +1206,14 @@ function App() {
               {floorUpdateStatus === "installing" && (
                 <div className="force-update-progress-row">
                   <Icon name="sync" size={16} className="force-update-icon--spin" />
-                  <span>Installing update…</span>
+                  <span>{t("update.installingUpdate")}…</span>
                 </div>
               )}
 
               {floorUpdateStatus === "relaunching" && (
                 <div className="force-update-progress-row">
                   <Icon name="sync" size={16} className="force-update-icon--spin" />
-                  <span>Relaunching…</span>
+                  <span>{t("update.relaunching")}…</span>
                 </div>
               )}
 
@@ -1161,8 +1223,8 @@ function App() {
                   <button
                     onClick={handleFloorUpdate}
                     className="force-update-button"
-                    title="Retry">
-                    Retry
+                    title={t("updateNotification.tryAgain")}>
+                    {t("updateNotification.tryAgain")}
                   </button>
                 </div>
               )}
@@ -1224,28 +1286,40 @@ function App() {
 
       {/* 4. Main app — always rendered after splash, but blocked by force update modal */}
       {!splashVisible && (
-        <AuthGate>
-          <Routes>
-            <Route
-              path="presentation/*"
-              element={
-                <VerificationGate>
-                  <LicenseGuard>
-                    <LowerThirdProvider>
-                      <PresentationSetupPage />
-                    </LowerThirdProvider>
-                  </LicenseGuard>
-                </VerificationGate>
-              }
-            />
-            <Route
-              path="*"
-              element={
-                <OBSConnectGate>
-                  <VerificationGate>
-                    <LicenseGuard>
-                      <LowerThirdProvider>
-                        <Routes>
+        <Routes>
+          <Route path="p/:sessionId" element={<PublicPresentationRoute />} />
+          <Route
+            path="*"
+            element={
+              <AuthGate>
+                <Routes>
+                  <Route
+                    path="presentation/*"
+                    element={
+                      <VerificationGate>
+                        <LicenseGuard>
+                          <LowerThirdProvider>
+                            <Routes>
+                              <Route index element={<PresentationSetupPage />} />
+                              <Route path="link" element={<PresentationSetupPage initialView="link" />} />
+                              <Route path="console" element={<Navigate to="/presentation/link" replace />} />
+                              <Route path="remote-obs" element={<PresentationSetupPage initialView="remote-obs" />} />
+                              <Route path="setup" element={<Navigate to="/presentation/remote-obs" replace />} />
+                              <Route path="*" element={<Navigate to="/presentation" replace />} />
+                            </Routes>
+                          </LowerThirdProvider>
+                        </LicenseGuard>
+                      </VerificationGate>
+                    }
+                  />
+                  <Route
+                    path="*"
+                    element={
+                      <OBSConnectGate>
+                        <VerificationGate>
+                          <LicenseGuard>
+                            <LowerThirdProvider>
+                              <Routes>
                           {/* Onboarding — standalone layout, no sidebar */}
                           {!mceOnboardingDone && (
                             <Route path="onboarding" element={<OnboardingPage />} />
@@ -1297,15 +1371,18 @@ function App() {
                           </Route>
 
                           <Route path="*" element={<Navigate to="/" replace />} />
-                        </Routes>
-                      </LowerThirdProvider>
-                    </LicenseGuard>
-                  </VerificationGate>
-                </OBSConnectGate>
-              }
-            />
-          </Routes>
-        </AuthGate>
+                              </Routes>
+                            </LowerThirdProvider>
+                          </LicenseGuard>
+                        </VerificationGate>
+                      </OBSConnectGate>
+                    }
+                  />
+                </Routes>
+              </AuthGate>
+            }
+          />
+        </Routes>
       )}
 
       {/* 5. Trial welcome modal — overlays app after auth */}
@@ -1324,16 +1401,16 @@ function App() {
         <div className="app-global-media-drop-overlay" aria-hidden="true">
           <div className="app-global-media-drop-overlay__card">
             <Icon name="cloud_upload" size={24} />
-            <div className="app-global-media-drop-overlay__title">Drag to add</div>
+            <div className="app-global-media-drop-overlay__title">{t("library.mediaTab.dropOverlay.appTitle")}</div>
             <div className="app-global-media-drop-overlay__text">
-              Drop image or video files anywhere in the app to save them into the media library.
+              {t("library.mediaTab.dropOverlay.appText")}
             </div>
           </div>
         </div>
       )}
 
       {globalMediaUploading && !splashVisible && (
-        <div className="app-global-media-uploading">Saving media...</div>
+        <div className="app-global-media-uploading">{t("library.mediaTab.addModal.saving")}...</div>
       )}
 
       <AnnouncementModalHost />

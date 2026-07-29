@@ -34,7 +34,7 @@ describe("normalizeOfflineThemeValues", () => {
     });
 
     expect(result.logoUrl).toContain("/logos/make_church_easy_logo.png");
-    expect(result.logoUrl.startsWith("http://localhost")).toBe(true);
+    expect(result.logoUrl).toMatch(/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/logos\/make_church_easy_logo\.png$/);
   });
 
   it("generates a local QR data URI instead of relying on qrserver.com", () => {

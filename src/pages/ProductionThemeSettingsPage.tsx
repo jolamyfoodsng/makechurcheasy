@@ -16,6 +16,8 @@ import { deleteCustomTheme } from "../bible/bibleDb";
 import ThemeCreatorModal from "./ThemeCreatorModal";
 import ThemePreviewSurface from "../components/ThemePreviewSurface";
 import { dockBridge } from "../services/dockBridge";
+import { getSettings as getMVSettings } from "../multiview/mvStore";
+import { resolveOverlayAssetUrl } from "../services/overlayUrl";
 import {
   type DockProductionSettingsPayload,
   type ProductionSettings,
@@ -28,10 +30,11 @@ import {
 } from "../services/productionSettings";
 import {
   getObsFavorites,
-  toggleObsFavorite,
+  setObsFavorite,
   getTickerFavorites,
-  toggleTickerFavorite,
+  setTickerFavorite,
   hydrateFavoriteThemes,
+  FAVORITE_THEMES_UPDATED_EVENT,
 } from "../services/favoriteThemes";
 import allThemesData from "../../lower_thirds/all_themes.json";
 import { localizeLowerThirdThemeAssets } from "../lowerthirds/runtimeBranding";
@@ -233,6 +236,7 @@ interface DockTickerPreview {
 }
 
 function buildDockTickerPreviewHtml(dockTheme: TickerThemeConfig, sampleMessages: string[]): string {
+  const branding = getMVSettings();
   return generateTickerHTML(
     dockTheme,
     dockTheme.defaultColors,
@@ -242,6 +246,8 @@ function buildDockTickerPreviewHtml(dockTheme: TickerThemeConfig, sampleMessages
     "bottom",
     true,
     false,
+    resolveOverlayAssetUrl(branding.brandLogoPath),
+    branding.churchName || "MakeChurchEasy",
   );
 }
 
@@ -331,12 +337,23 @@ export default function ProductionThemeSettingsPage() {
     void refresh();
   }, [refresh]);
 
-  useEffect(() => {
-    void hydrateFavoriteThemes().then(() => {
-      setObsFavorites(getObsFavorites());
-      setTickerFavorites(getTickerFavorites());
-    });
+  const refreshFavoriteState = useCallback(() => {
+    setObsFavorites(getObsFavorites());
+    setTickerFavorites(getTickerFavorites());
   }, []);
+
+  useEffect(() => {
+    void hydrateFavoriteThemes().then(refreshFavoriteState);
+  }, [refreshFavoriteState]);
+
+  useEffect(() => {
+    window.addEventListener(FAVORITE_THEMES_UPDATED_EVENT, refreshFavoriteState);
+    window.addEventListener("storage", refreshFavoriteState);
+    return () => {
+      window.removeEventListener(FAVORITE_THEMES_UPDATED_EVENT, refreshFavoriteState);
+      window.removeEventListener("storage", refreshFavoriteState);
+    };
+  }, [refreshFavoriteState]);
 
   useEffect(() => {
     if (!status) return;
@@ -486,24 +503,32 @@ export default function ProductionThemeSettingsPage() {
   // ---------------------------------------------------------------------------
 
   const handleToggleObsFavorite = useCallback((themeId: string) => {
-    const wasFav = obsFavorites.has(themeId);
-    const next = toggleObsFavorite(themeId);
+    const shouldAdd = !obsFavorites.has(themeId);
+    const next = setObsFavorite(themeId, shouldAdd);
     setObsFavorites(next);
-    if (!wasFav) {
-      const theme = allObsThemes.find((t) => t.id === themeId);
-      showToast(t("themes.addedToFavDock", { name: theme?.name ?? t("themes.defaultThemeName") }), "success");
-    }
+    const theme = allObsThemes.find((t) => t.id === themeId);
+    const name = theme?.name ?? t("themes.defaultThemeName");
+    showToast(
+      shouldAdd
+        ? t("themes.addedNamedToOBS", { name, defaultValue: `"${name}" added to OBS` })
+        : t("themes.removedNamedFromOBS", { name, defaultValue: `"${name}" removed from OBS` }),
+      "success",
+    );
   }, [obsFavorites, allObsThemes, showToast, t]);
 
   const handleToggleTickerFavorite = useCallback((tickerId: string) => {
-    const wasFav = tickerFavorites.has(tickerId);
-    const next = toggleTickerFavorite(tickerId);
+    const shouldAdd = !tickerFavorites.has(tickerId);
+    const next = setTickerFavorite(tickerId, shouldAdd);
     setTickerFavorites(next);
-    if (!wasFav) {
-      const ticker = allTickers.find((t) => t.id === tickerId);
-      showToast(t("themes.addedToFavDock", { name: ticker?.name ?? t("themes.defaultTickerName") }), "success");
-    }
-  }, [tickerFavorites, allTickers, showToast]);
+    const ticker = allTickers.find((t) => t.id === tickerId);
+    const name = ticker?.name ?? t("themes.defaultTickerName");
+    showToast(
+      shouldAdd
+        ? t("themes.addedNamedToOBS", { name, defaultValue: `"${name}" added to OBS` })
+        : t("themes.removedNamedFromOBS", { name, defaultValue: `"${name}" removed from OBS` }),
+      "success",
+    );
+  }, [tickerFavorites, allTickers, showToast, t]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -779,7 +804,7 @@ export default function ProductionThemeSettingsPage() {
                   const isFav = obsFavorites.has(theme.id);
                   const previewSrc = buildThemePreviewHtml(theme);
                   return (
-                    <article key={theme.id} className="obs-theme-preview-card">
+                    <article key={theme.id} className={`obs-theme-preview-card${isFav ? " obs-theme-preview-card--added" : ""}`}>
                       <div className="obs-theme-preview-card__header">
                         <div className="obs-theme-preview-card__title">
                           <strong>{theme.name}</strong>
@@ -824,11 +849,12 @@ export default function ProductionThemeSettingsPage() {
                             <Icon name="open_in_full" size={14} />
                           </button>
                           <button
-                            className={`production-btn production-btn--sm ${isFav ? "production-btn--primary" : "production-btn--ghost"}`}
+                            className={`production-btn production-btn--sm ${isFav ? "production-btn--ghost" : "production-btn--primary"}`}
                             onClick={() => handleToggleObsFavorite(theme.id)}
                             data-theme-tutorial="obs-favorite"
-                            title={t("themes.toggleFavorite")}>
-                            <Icon name={isFav ? "star" : "star_border"} size={14} />
+                            title={isFav ? t("themes.removeFromOBS", "Remove from OBS") : t("themes.addToOBS")}>
+                            <Icon name={isFav ? "remove_circle" : "add_circle"} size={14} />
+                            <span>{isFav ? t("themes.removeFromOBS", "Remove from OBS") : t("themes.addToOBS")}</span>
                           </button>
                         </div>
                       </div>
@@ -857,6 +883,7 @@ export default function ProductionThemeSettingsPage() {
 
             <div className="ticker-preview-grid" data-theme-tutorial="ticker-card">
               {allTickers.map((ticker) => {
+                const isFav = tickerFavorites.has(ticker.id);
                 const previewSrc =
                   ticker.source === "dock" && ticker.dockTheme
                     ? buildDockTickerPreviewHtml(ticker.dockTheme, [t("themes.sampleTicker1"), t("themes.sampleTicker2"), t("themes.sampleTicker3")])
@@ -865,7 +892,7 @@ export default function ProductionThemeSettingsPage() {
                       : "";
 
                 return (
-                  <article key={ticker.id} className="ticker-preview-card">
+                  <article key={ticker.id} className={`ticker-preview-card${isFav ? " ticker-preview-card--added" : ""}`}>
                     <div className="ticker-preview-card__header">
                       <div className="ticker-preview-card__title">
                         <strong>{ticker.name}</strong>
@@ -885,7 +912,7 @@ export default function ProductionThemeSettingsPage() {
                         <iframe
                           className="ticker-preview-card__iframe"
                           srcDoc={previewSrc}
-                          sandbox="allow-same-origin"
+                          sandbox="allow-same-origin allow-scripts"
                           title={ticker.name}
                         />
                       ) : (
@@ -906,11 +933,12 @@ export default function ProductionThemeSettingsPage() {
                           <Icon name="open_in_full" size={14} />
                         </button>
                         <button
-                          className={`production-btn production-btn--sm ${tickerFavorites.has(ticker.id) ? "production-btn--primary" : "production-btn--ghost"}`}
+                          className={`production-btn production-btn--sm ${isFav ? "production-btn--ghost" : "production-btn--primary"}`}
                           onClick={() => handleToggleTickerFavorite(ticker.id)}
                           data-theme-tutorial="ticker-favorite"
-                          title={t("themes.toggleFavorite")}>
-                          <Icon name={tickerFavorites.has(ticker.id) ? "star" : "star_border"} size={14} />
+                          title={isFav ? t("themes.removeFromOBS", "Remove from OBS") : t("themes.addToOBS")}>
+                          <Icon name={isFav ? "remove_circle" : "add_circle"} size={14} />
+                          <span>{isFav ? t("themes.removeFromOBS", "Remove from OBS") : t("themes.addToOBS")}</span>
                         </button>
                       </div>
                     </div>
@@ -1004,11 +1032,11 @@ export default function ProductionThemeSettingsPage() {
 
               <div className="obs-preview-modal__footer">
                 <button
-                  className={`production-btn ${obsFavorites.has(previewTheme.id) ? "production-btn--primary" : "production-btn--ghost"}`}
+                  className={`production-btn ${obsFavorites.has(previewTheme.id) ? "production-btn--ghost" : "production-btn--primary"}`}
                   onClick={() => handleToggleObsFavorite(previewTheme.id)}
-                  title={t("themes.addToOBS")}>
-                  <Icon name={obsFavorites.has(previewTheme.id) ? "star" : "star_border"} size={16} />
-                  {obsFavorites.has(previewTheme.id) ? t("themes.addedToOBS") : t("themes.addToOBS")}
+                  title={obsFavorites.has(previewTheme.id) ? t("themes.removeFromOBS", "Remove from OBS") : t("themes.addToOBS")}>
+                  <Icon name={obsFavorites.has(previewTheme.id) ? "remove_circle" : "add_circle"} size={16} />
+                  {obsFavorites.has(previewTheme.id) ? t("themes.removeFromOBS", "Remove from OBS") : t("themes.addToOBS")}
                 </button>
               </div>
             </div>
@@ -1048,18 +1076,18 @@ export default function ProductionThemeSettingsPage() {
                         ? buildTickerPreviewHtml(previewTicker.permanentTheme)
                         : ""
                   }
-                  sandbox="allow-same-origin"
+                  sandbox="allow-same-origin allow-scripts"
                   title={previewTicker.name}
                 />
               </div>
 
               <div className="obs-preview-modal__footer">
                 <button
-                  className={`production-btn ${tickerFavorites.has(previewTicker.id) ? "production-btn--primary" : "production-btn--ghost"}`}
+                  className={`production-btn ${tickerFavorites.has(previewTicker.id) ? "production-btn--ghost" : "production-btn--primary"}`}
                   onClick={() => handleToggleTickerFavorite(previewTicker.id)}
-                  title={t("themes.addToOBS")}>
-                  <Icon name={tickerFavorites.has(previewTicker.id) ? "star" : "star_border"} size={16} />
-                  {tickerFavorites.has(previewTicker.id) ? t("themes.addedToOBS") : t("themes.addToOBS")}
+                  title={tickerFavorites.has(previewTicker.id) ? t("themes.removeFromOBS", "Remove from OBS") : t("themes.addToOBS")}>
+                  <Icon name={tickerFavorites.has(previewTicker.id) ? "remove_circle" : "add_circle"} size={16} />
+                  {tickerFavorites.has(previewTicker.id) ? t("themes.removeFromOBS", "Remove from OBS") : t("themes.addToOBS")}
                 </button>
                 <button
                   className="production-btn production-btn--ghost"

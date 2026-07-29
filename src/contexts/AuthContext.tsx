@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const STARTUP_GRACE_MS = 15_000;
     const DEVICE_STATE_WARNING_THRESHOLD = 4;
     const VISIBILITY_DEBOUNCE_MS = 5_000;
-    const HEARTBEAT_MS = 5 * 60 * 1000;
+    const HEARTBEAT_MS = 60 * 1000;
     const mountTimestamp = Date.now();
 
     async function refreshAccountState(): Promise<boolean> {

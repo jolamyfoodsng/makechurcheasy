@@ -94,6 +94,102 @@ function parseSectionLabelLine(line: string): { section: SectionLabel; rest: str
   return section ? { section, rest: "" } : null;
 }
 
+function wrapLyricLine(line: string, maxLineLength: number): string[] {
+  const compact = line.replace(/\s+/g, " ").trim();
+  if (!compact) return [];
+
+  const words = compact.split(" ");
+  const wrapped: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (current && Array.from(candidate).length > maxLineLength) {
+      wrapped.push(current);
+      current = word;
+      continue;
+    }
+    current = candidate;
+  }
+
+  if (current) wrapped.push(current);
+  return wrapped;
+}
+
+type AutoSplitTextSection = {
+  label: SectionLabel | null;
+  lines: string[];
+};
+
+function parseAutoSplitTextSections(rawLyrics: string): AutoSplitTextSection[] {
+  const stanzas = rawLyrics
+    .replace(/\r\n?/g, "\n")
+    .trim()
+    .split(/\n[ \t]*\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const sections: AutoSplitTextSection[] = [];
+
+  const pushSection = (section: AutoSplitTextSection) => {
+    const lines = section.lines.map((line) => line.trimEnd()).filter(Boolean);
+    if (lines.length === 0) return;
+    sections.push({ label: section.label, lines });
+  };
+
+  for (const stanza of stanzas) {
+    const stanzaLines = stanza.split("\n").map((line) => line.trimEnd()).filter(Boolean);
+    let current: AutoSplitTextSection = { label: null, lines: [] };
+
+    for (const line of stanzaLines) {
+      const detected = parseSectionLabelLine(line);
+      if (detected) {
+        pushSection(current);
+        current = {
+          label: detected.section,
+          lines: detected.rest ? [detected.rest] : [],
+        };
+        continue;
+      }
+
+      current.lines.push(line);
+    }
+
+    pushSection(current);
+  }
+
+  return sections;
+}
+
+export function autoSplitLyricsText(
+  rawLyrics: string,
+  linesPerSlide: number = 2,
+  options: { maxLineLength?: number } = {},
+): string {
+  const normalized = rawLyrics.replace(/\r\n?/g, "\n").trim();
+  if (!normalized) return rawLyrics;
+
+  const safeLinesPerSlide = Math.max(1, Math.min(12, Math.floor(linesPerSlide) || 2));
+  const maxLineLength = Math.max(24, Math.min(80, Math.floor(options.maxLineLength ?? 46)));
+  const sections = parseAutoSplitTextSections(normalized);
+  if (sections.length === 0) return rawLyrics;
+
+  const blocks: string[] = [];
+
+  for (const section of sections) {
+    const wrappedLines = section.lines.flatMap((line) => wrapLyricLine(line, maxLineLength));
+    for (let start = 0; start < wrappedLines.length; start += safeLinesPerSlide) {
+      const chunk = wrappedLines.slice(start, start + safeLinesPerSlide);
+      if (chunk.length === 0) continue;
+
+      const label = section.label?.label ? `${section.label.label}:` : "";
+      blocks.push([label, ...chunk].filter(Boolean).join("\n"));
+    }
+  }
+
+  return blocks.join("\n\n") || rawLyrics;
+}
+
 export function getSectionTypeTone(type: Slide["type"]): string {
   switch (type) {
     case "chorus":

@@ -22,6 +22,11 @@ import {
   type GalleryLayout,
   type GalleryLayoutCategory,
 } from "../multiview/galleryLayouts";
+import {
+  loadLocalAddedLayoutIds,
+  saveAddedLayoutIdsToDockData,
+  saveLocalAddedLayoutIds,
+} from "../multiview/addedLayoutStorage";
 import { obsService } from "../services/obsService";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import Icon from "../components/Icon";
@@ -42,42 +47,6 @@ function cssColorToObsInt(cssColor: string): number {
     b = parseInt(hex.slice(4, 6), 16);
   }
   return (0xFF << 24 | b << 16 | g << 8 | r) >>> 0;
-}
-
-// ── Added layout tracking ──────────────────────────────────────────────────
-
-const ADDED_IDS_KEY = "mvg-added-ids";
-
-function loadAddedIds(): Set<string> {
-  try {
-    // Migration: try unscoped key first, fall back to user-scoped key
-    let raw = localStorage.getItem(ADDED_IDS_KEY);
-    if (!raw) {
-      raw = localStorage.getItem(getUserScopedKey(ADDED_IDS_KEY));
-      if (raw) {
-        // Migrate from scoped to unscoped key
-        localStorage.setItem(ADDED_IDS_KEY, raw);
-      }
-    }
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? new Set(parsed) : new Set();
-  } catch {
-    return new Set();
-  }
-}
-
-function saveAddedIds(ids: Set<string>) {
-  try {
-    const raw = JSON.stringify([...ids]);
-    localStorage.setItem(ADDED_IDS_KEY, raw);
-    // Also persist to server so the dock (OBS CEF) can read it
-    fetch("/api/save-dock-data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "mv-added-ids", data: raw }),
-    }).catch(() => {});
-  } catch { /* ignore */ }
 }
 
 // ── Dock layout storage helpers ────────────────────────────────────────────
@@ -351,7 +320,7 @@ export default function MultiViewGalleryPage() {
   const [showDisconnected, setShowDisconnected] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const [addedIds, setAddedIds] = useState<Set<string>>(() => loadAddedIds());
+  const [addedIds, setAddedIds] = useState<Set<string>>(() => loadLocalAddedLayoutIds());
   const [, setRenderTick] = useState(0);
   const autoConnectingRef = useRef(false);
 
@@ -370,13 +339,10 @@ export default function MultiViewGalleryPage() {
 
   // ── Seed server file with any existing added IDs on mount ──
   useEffect(() => {
-    const ids = loadAddedIds();
+    const ids = loadLocalAddedLayoutIds();
+    setAddedIds(new Set(ids));
     if (ids.size > 0) {
-      fetch("/api/save-dock-data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "mv-added-ids", data: JSON.stringify([...ids]) }),
-      }).catch(() => {});
+      saveAddedLayoutIdsToDockData(ids).catch(() => {});
     }
   }, []);
 
@@ -423,10 +389,11 @@ export default function MultiViewGalleryPage() {
 
   // ── Mark layout as added and refresh ──
   const markAdded = useCallback((layoutId: string) => {
-    const ids = loadAddedIds();
+    const ids = loadLocalAddedLayoutIds();
     ids.add(layoutId);
-    saveAddedIds(ids);
-    setAddedIds(new Set(ids));
+    const savedIds = saveLocalAddedLayoutIds(ids);
+    saveAddedLayoutIdsToDockData(savedIds).catch(() => {});
+    setAddedIds(new Set(savedIds));
     setRenderTick(t => t + 1);
   }, []);
 

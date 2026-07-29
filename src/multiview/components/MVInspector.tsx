@@ -280,9 +280,6 @@ export function MVInspector() {
             <button className={`mv-content-type-btn ${contentType === "worship" ? "mv-content-type-btn--active" : ""}`} onClick={() => setContentType("worship")} title="Music">
               <Icon name="music_note" size={16} /> Worship
             </button>
-            <button className={`mv-content-type-btn ${contentType === "lower-third" ? "mv-content-type-btn--active" : ""}`} onClick={() => setContentType("lower-third")} title="Subtitles">
-              <Icon name="subtitles" size={16} /> LT
-            </button>
           </div>
         )}
       </div>

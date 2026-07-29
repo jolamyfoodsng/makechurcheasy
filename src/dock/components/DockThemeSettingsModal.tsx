@@ -38,6 +38,38 @@ interface Props {
 
 type StudioView = "closed" | "settings";
 
+function getThemeSettingsForMode(
+  theme: BibleTheme,
+  overlayMode: NonNullable<Props["overlayMode"]>,
+) {
+  const variant = overlayMode === "lower-third"
+    ? theme.variants?.lowerThird
+    : theme.variants?.fullscreen;
+  return variant?.settings ?? theme.settings;
+}
+
+function resolveFallbackThemeQuickSettings(
+  theme: BibleTheme,
+  overlayMode: NonNullable<Props["overlayMode"]>,
+  current: DockFullscreenQuickThemeSettings,
+): DockFullscreenQuickThemeSettings {
+  const settings = getThemeSettingsForMode(theme, overlayMode);
+  return {
+    ...current,
+    ...settings,
+    backgroundType: "theme",
+    backgroundImage: settings.backgroundImage ?? "",
+    backgroundImageFilePath: settings.backgroundImageFilePath ?? "",
+    backgroundPattern: settings.backgroundPattern ?? "",
+    backgroundVideo: settings.backgroundVideo ?? "",
+    backgroundVideoFilePath: settings.backgroundVideoFilePath ?? "",
+    backgroundOpacity: settings.backgroundOpacity ?? current.backgroundOpacity,
+    backgroundColor: settings.backgroundColor || current.backgroundColor,
+    backgroundColorEnd: settings.backgroundColorEnd ?? current.backgroundColorEnd,
+    bgGradientAngle: settings.bgGradientAngle ?? current.bgGradientAngle,
+  };
+}
+
 /* ── Section Divider ── */
 function SectionDivider() {
   return <div className="dtb-section-divider" />;
@@ -206,16 +238,11 @@ export default function DockThemeSettingsModal({
     setDraftSelectedTheme(theme);
     setDraftSelectedThemeId(theme.id);
     pendingBackgroundPresetRef.current = "theme";
-    onSelect(theme);
-    onBackgroundPresetChange?.("theme");
-    const nextSettings = resolveThemeQuickSettings?.(theme);
-    if (nextSettings) {
-      draftSettingsRef.current = nextSettings;
-      setDraftSettings(nextSettings);
-      return;
-    }
-    updateDraft((prev) => ({ ...prev, backgroundType: "theme" }));
-  }, [onBackgroundPresetChange, onSelect, resolveThemeQuickSettings, updateDraft]);
+    const nextSettings = resolveThemeQuickSettings?.(theme)
+      ?? resolveFallbackThemeQuickSettings(theme, overlayMode, draftSettingsRef.current);
+    draftSettingsRef.current = nextSettings;
+    setDraftSettings(nextSettings);
+  }, [overlayMode, resolveThemeQuickSettings]);
 
   const handleSave = useCallback(() => {
     const nextSettings = { ...draftSettingsRef.current };
@@ -313,7 +340,6 @@ export default function DockThemeSettingsModal({
                   sampleReference={sampleReference}
                   onBackgroundPresetChange={(preset) => {
                     pendingBackgroundPresetRef.current = preset;
-                    onBackgroundPresetChange?.(preset);
                   }}
                   showReferences={showReferences}
                   overlayMode={overlayMode}
