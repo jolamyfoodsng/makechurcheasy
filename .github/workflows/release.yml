@@ -369,8 +369,10 @@ jobs:
           ninja --version
           cmake --version
           pkg-config --modversion openssl
-          cat > /tmp/verify-openssl.cmake <<'CMAKE'
-          set(CMAKE_PREFIX_PATH "$ENV{CMAKE_PREFIX_PATH}")
+          mkdir -p /tmp/verify-openssl
+          cat > /tmp/verify-openssl/CMakeLists.txt <<'CMAKE'
+          cmake_minimum_required(VERSION 3.20)
+          project(VerifyOpenSSL LANGUAGES C)
           find_package(OpenSSL REQUIRED)
           if (NOT TARGET OpenSSL::SSL)
             message(FATAL_ERROR "OpenSSL::SSL target missing")
@@ -378,9 +380,13 @@ jobs:
           if (NOT TARGET OpenSSL::Crypto)
             message(FATAL_ERROR "OpenSSL::Crypto target missing")
           endif()
+          add_executable(verify-openssl main.c)
+          target_link_libraries(verify-openssl PRIVATE OpenSSL::SSL OpenSSL::Crypto)
           message(STATUS "OpenSSL targets verified")
           CMAKE
-          cmake -P /tmp/verify-openssl.cmake
+          printf 'int main(void) { return 0; }\n' > /tmp/verify-openssl/main.c
+          cmake -S /tmp/verify-openssl -B /tmp/verify-openssl/build -G Ninja
+          cmake --build /tmp/verify-openssl/build
 
       # ── Build + Release ──
       - name: Build and release Tauri app
