@@ -16,6 +16,7 @@ import { serializeBibleThemesForDock } from "../services/dockBibleThemeAssets";
 import { resolveOverlayAssetUrl, toStoredOverlayAssetUrl } from "../services/overlayUrl";
 import { getCurrentUserId } from "../services/db";
 import { getDeviceId } from "../services/authService";
+import { assertCompleteBibleData, formatBibleDataStats, getBibleDataStats, isCompleteBibleData } from "./bibleValidation";
 
 const DB_NAME = "sunday-switcher-bible"; // legacy name — do not change (breaks existing user data)
 const DB_VERSION = 4;
@@ -622,8 +623,23 @@ export async function saveBibleSettings(
 export async function getInstalledTranslations(): Promise<Omit<InstalledBible, "data">[]> {
   const db = await getDb();
   const all: InstalledBible[] = await db.getAll("translations");
+
+  const valid: InstalledBible[] = [];
+  for (const bible of all) {
+    if (isCompleteBibleData(bible.data)) {
+      valid.push(bible);
+      continue;
+    }
+
+    const stats = getBibleDataStats(bible.data);
+    console.warn(
+      `[bibleDb] Removing incomplete Bible translation ${bible.abbr} (${formatBibleDataStats(stats)}).`
+    );
+    await db.delete("translations", bible.abbr);
+  }
+
   // Strip the heavy data field for listing
-  return all.map(({ data: _data, ...meta }) => meta);
+  return valid.map(({ data: _data, ...meta }) => meta);
 }
 
 /**
@@ -652,6 +668,7 @@ export async function getTranslationData(
 export async function saveInstalledTranslation(
   bible: InstalledBible
 ): Promise<void> {
+  assertCompleteBibleData(bible.data, bible.abbr);
   const db = await getDb();
   await db.put("translations", bible);
   syncInstalledTranslationsToDock().catch((err) => {

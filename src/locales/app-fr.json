@@ -4936,5 +4936,13 @@
   "themes.removeFromOBS": "Retirer d’OBS",
   "themes.addedNamedToOBS": "\"{{name}}\" ajouté à OBS",
   "themes.removedNamedFromOBS": "\"{{name}}\" retiré d’OBS",
-  "themes.removedFromFavDock": "\"{{name}}\" retiré du dock"
+  "themes.removedFromFavDock": "\"{{name}}\" retiré du dock",
+  "bible.book": "Livre",
+  "bible.browse": "Parcourir",
+  "bible.browseBible": "Parcourir la Bible",
+  "bible.chapterNavigation": "Navigation des chapitres",
+  "bible.closeBibleBrowser": "Fermer le navigateur biblique",
+  "bible.nextChapter": "Chapitre suivant",
+  "bible.previousChapter": "Chapitre précédent",
+  "bible.selectBook": "Sélectionner un livre"
 }

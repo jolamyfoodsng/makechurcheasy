@@ -4936,5 +4936,13 @@
   "themes.removeFromOBS": "Wepụ na OBS",
   "themes.addedNamedToOBS": "Agbakwunyere \"{{name}}\" na OBS",
   "themes.removedNamedFromOBS": "Ewepụla \"{{name}}\" na OBS",
-  "themes.removedFromFavDock": "Ewepụla \"{{name}}\" na dock"
+  "themes.removedFromFavDock": "Ewepụla \"{{name}}\" na dock",
+  "bible.book": "Akwụkwọ",
+  "bible.browse": "Chọgharịa",
+  "bible.browseBible": "Chọgharịa Baịbụl",
+  "bible.chapterNavigation": "Nnyagharị isi",
+  "bible.closeBibleBrowser": "Mechie nchọgharị Baịbụl",
+  "bible.nextChapter": "Isi na-esote",
+  "bible.previousChapter": "Isi gara aga",
+  "bible.selectBook": "Họrọ akwụkwọ"
 }

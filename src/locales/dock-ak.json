@@ -1550,7 +1550,12 @@
     "highContrast": "Nsonsonoe a ɛkorɔn",
     "elegant": "Ɛyɛ fɛ",
     "upper": "ATIFIRI",
-    "lower": "a ɛba fam"
+    "lower": "a ɛba fam",
+    "bottomEdge": "Ase fã ano",
+    "nearVersePosition": "Bɛn nkyekyɛm no",
+    "referencePlacement": "Beae a wɔde nkyerɛwde no",
+    "topEdge": "Ɔsoro fã ano",
+    "withVerse": "Ka nkyekyɛm no ho"
   },
   "growth": {
     "defaultFeature": "Saa ade yi",
@@ -1717,5 +1722,13 @@
   "multiview.scenePickerHint": "Fa OBS scene nyinaa hyɛ beae yi mu.",
   "multiview.replaceSource": "Sesa source",
   "multiview.sourcesNoLongerSupported": "Sesa source assignments no ma ɛnyɛ OBS scenes ansa na woapush.",
-  "multiview.dragHint": "Twe preview no de sesa beae. Fa zoom yɛ crop no ketewa."
+  "multiview.dragHint": "Twe preview no de sesa beae. Fa zoom yɛ crop no ketewa.",
+  "bible.book": "Nhoma",
+  "bible.browse": "Hwehwɛ",
+  "bible.browseBible": "Hwehwɛ Bible no mu",
+  "bible.chapterNavigation": "Ti mu akwankyerɛ",
+  "bible.closeBibleBrowser": "To Bible browser no mu",
+  "bible.nextChapter": "Ti a edi hɔ",
+  "bible.previousChapter": "Ti a atwam",
+  "bible.selectBook": "Paw nhoma"
 }

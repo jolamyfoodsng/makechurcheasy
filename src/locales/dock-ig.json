@@ -1550,7 +1550,12 @@
     "highContrast": "Ọdịiche dị elu",
     "elegant": "mara mma",
     "upper": "Elu",
-    "lower": "dị ala"
+    "lower": "dị ala",
+    "bottomEdge": "Ọnụ ala",
+    "nearVersePosition": "N’akụkụ amaokwu",
+    "referencePlacement": "Ebe ntụaka",
+    "topEdge": "Ọnụ elu",
+    "withVerse": "Ya na amaokwu"
   },
   "growth": {
     "defaultFeature": "Njirimara a",
@@ -1717,5 +1722,13 @@
   "multiview.scenePickerHint": "Jiri OBS scene zuru ezu n’ime mpaghara a.",
   "multiview.replaceSource": "Dochie source",
   "multiview.sourcesNoLongerSupported": "Dochie source assignments na OBS scenes tupu izipu.",
-  "multiview.dragHint": "Dọrọ preview iji gbanwee ọnọdụ. Jiri zoom mee crop ka ọ bịaruo nso."
+  "multiview.dragHint": "Dọrọ preview iji gbanwee ọnọdụ. Jiri zoom mee crop ka ọ bịaruo nso.",
+  "bible.book": "Akwụkwọ",
+  "bible.browse": "Chọgharịa",
+  "bible.browseBible": "Chọgharịa Baịbụl",
+  "bible.chapterNavigation": "Nnyagharị isi",
+  "bible.closeBibleBrowser": "Mechie nchọgharị Baịbụl",
+  "bible.nextChapter": "Isi na-esote",
+  "bible.previousChapter": "Isi gara aga",
+  "bible.selectBook": "Họrọ akwụkwọ"
 }

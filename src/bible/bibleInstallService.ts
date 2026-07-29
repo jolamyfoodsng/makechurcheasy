@@ -4,6 +4,7 @@ import {
   getInstalledTranslations,
   saveInstalledTranslation,
 } from "./bibleDb";
+import { assertCompleteBibleData } from "./bibleValidation";
 
 export interface BibleDownloadProgress {
   catalogId: string;
@@ -69,6 +70,8 @@ export async function installBibleFromCatalog(
       status: "downloading",
     });
   });
+
+  assertCompleteBibleData(data, normalizedAbbr);
 
   onProgress?.({
     catalogId: bible.id,

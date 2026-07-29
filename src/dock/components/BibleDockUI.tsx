@@ -258,7 +258,7 @@ interface BibleDockContainerProps {
   isBookDropdownOpen: boolean;
   isChapterDropdownOpen: boolean;
   isVerseDropdownOpen: boolean;
-  availableTranslations: Array<{ value: string; label: string }>;
+  availableTranslations: Array<{ value: string; label: string; language?: string }>;
   compareEnabled?: boolean;
   onBookToggle: (event: React.MouseEvent) => void;
   onBookSelect: (book: string) => void;
@@ -268,7 +268,6 @@ interface BibleDockContainerProps {
   onVerseSelect: (verse: number) => void;
   onVersionChange: (version: string) => void;
   onGoToChapter?: () => void;
-  onTranslationsChanged?: () => void;
   abbreviateBook: (book: string) => string;
   BOOK_CHAPTERS: typeof import("../dockTypes").BOOK_CHAPTERS;
   searchSection: React.ReactNode;
@@ -301,7 +300,6 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
   onVerseSelect,
   onVersionChange,
   onGoToChapter,
-  onTranslationsChanged,
   abbreviateBook,
   BOOK_CHAPTERS,
   searchSection,
@@ -376,7 +374,6 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
             activeTranslation={activeTranslation}
             availableTranslations={_availableTranslations}
             onVersionChange={onVersionChange}
-            onTranslationsChanged={onTranslationsChanged}
             disabled={compareEnabled}
           />
           {isCompact && compactActions ? (

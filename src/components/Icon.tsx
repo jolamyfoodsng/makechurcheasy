@@ -205,6 +205,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   cancel: CircleX,
   open_in_new: Globe,
   home: Home,
+  language: Globe,
 
   /* CRUD */
   add: Plus,

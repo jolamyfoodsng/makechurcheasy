@@ -1550,7 +1550,12 @@
     "highContrast": "Alto contraste",
     "elegant": "Elegante",
     "upper": "SUPERIOR",
-    "lower": "inferior"
+    "lower": "inferior",
+    "bottomEdge": "Borde inferior",
+    "nearVersePosition": "Cerca del versículo",
+    "referencePlacement": "Ubicación de la referencia",
+    "topEdge": "Borde superior",
+    "withVerse": "Con el versículo"
   },
   "growth": {
     "defaultFeature": "Esta característica",
@@ -1717,5 +1722,13 @@
   "multiview.scenePickerHint": "Usa una escena completa de OBS dentro de esta área.",
   "multiview.replaceSource": "Reemplazar fuente",
   "multiview.sourcesNoLongerSupported": "Reemplaza las asignaciones de fuentes con escenas de OBS antes de enviar.",
-  "multiview.dragHint": "Arrastra la vista previa para cambiar la posición. Usa el zoom para un recorte más cerrado."
+  "multiview.dragHint": "Arrastra la vista previa para cambiar la posición. Usa el zoom para un recorte más cerrado.",
+  "bible.book": "Libro",
+  "bible.browse": "Explorar",
+  "bible.browseBible": "Explorar la Biblia",
+  "bible.chapterNavigation": "Navegación de capítulos",
+  "bible.closeBibleBrowser": "Cerrar explorador de Biblia",
+  "bible.nextChapter": "Capítulo siguiente",
+  "bible.previousChapter": "Capítulo anterior",
+  "bible.selectBook": "Seleccionar libro"
 }

@@ -33,6 +33,7 @@ import {
   installBibleFromCatalog,
 } from "../bibleInstallService";
 import { evictTranslationCache } from "../bibleData";
+import { assertCompleteBibleData } from "../bibleValidation";
 import Icon from "../../components/Icon";
 import { useAuth } from "../../contexts/AuthContext";
 import { getEffectivePlan } from "../../services/licenseService";
@@ -85,9 +86,9 @@ export default function BibleLibrary({
 }: BibleLibraryProps) {
   const [tab, setTab] = useState<Tab>("browse");
   const [query, setQuery] = useState("");
-  const [language, setLanguage] = useState("English");
+  const [language, setLanguage] = useState("");
   const [catalogResult, setCatalogResult] = useState<CatalogResponse | null>(
-    () => getCachedCatalogResult({ language: "English", page: 1, limit: 20 }),
+    () => getCachedCatalogResult({ page: 1, limit: 20 }),
   );
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -100,6 +101,8 @@ export default function BibleLibrary({
 
   // All languages from API
   const [allLanguages, setAllLanguages] = useState<string[]>([]);
+  const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
+  const [languageQuery, setLanguageQuery] = useState("");
 
   // Confirm-delete modal
   const [confirmDelete, setConfirmDelete] = useState<{ abbr: string; name: string } | null>(null);
@@ -109,6 +112,7 @@ export default function BibleLibrary({
   const [importStatus, setImportStatus] = useState<{ type: "idle" | "parsing" | "success" | "error"; message?: string }>({ type: "idle" });
   const [showBibleLimitModal, setShowBibleLimitModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const languageMenuRef = useRef<HTMLDivElement>(null);
 
   // ── Plan enforcement ──
   const { user: authUser } = useAuth();
@@ -143,6 +147,20 @@ export default function BibleLibrary({
       fetchAllLanguages().then(setAllLanguages).catch(console.error);
     }
   }, [open, allLanguages.length]);
+
+  const filteredLanguages = useMemo(() => {
+    const needle = languageQuery.trim().toLowerCase();
+    if (!needle) return allLanguages;
+    return allLanguages.filter((lang) => lang.toLowerCase().includes(needle));
+  }, [allLanguages, languageQuery]);
+
+  const languageLabel = language || "All languages";
+
+  const selectLanguage = useCallback((nextLanguage: string) => {
+    setLanguage(nextLanguage);
+    setLanguageQuery("");
+    setLanguageMenuOpen(false);
+  }, []);
 
   // ── Auto-download on first run ──
   useEffect(() => {
@@ -208,7 +226,7 @@ export default function BibleLibrary({
     if (open && tab === "browse" && !catalogResult) {
       doSearch(1);
     }
-  }, [open, tab]);
+  }, [open, tab, catalogResult, doSearch]);
 
   // ── Auto-search when query has 3+ characters ──
   useEffect(() => {
@@ -216,23 +234,35 @@ export default function BibleLibrary({
 
     if (autoSearchTimer.current) clearTimeout(autoSearchTimer.current);
 
-    if (query.trim().length >= 3) {
+    const trimmedQuery = query.trim();
+    if (trimmedQuery.length === 0 || trimmedQuery.length >= 3) {
       autoSearchTimer.current = setTimeout(() => {
         doSearch(1);
-      }, 350);
+      }, trimmedQuery.length === 0 ? 150 : 350);
     }
 
     return () => {
       if (autoSearchTimer.current) clearTimeout(autoSearchTimer.current);
     };
-  }, [query, open, tab]);
+  }, [query, open, tab, doSearch]);
 
   // Re-search when language changes
   useEffect(() => {
     if (open && tab === "browse") {
       doSearch(1);
     }
-  }, [language]);
+  }, [language, open, tab, doSearch]);
+
+  useEffect(() => {
+    if (!languageMenuOpen) return;
+    const handler = (event: MouseEvent) => {
+      if (!languageMenuRef.current?.contains(event.target as Node)) {
+        setLanguageMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [languageMenuOpen]);
 
   // ── Download a Bible ──
   const downloadBible = useCallback(
@@ -327,11 +357,8 @@ export default function BibleLibrary({
         const text = await file.text();
         const data = parseXmlToBibleData(text);
 
-        // Validate: must have at least a few books
+        assertCompleteBibleData(data, file.name);
         const bookCount = Object.keys(data).length;
-        if (bookCount < 1) {
-          throw new Error("No valid books found in the XML file. Ensure it uses the standard Bible XML format.");
-        }
 
         // Try to extract translation name from XML
         const parser = new DOMParser();
@@ -565,20 +592,62 @@ export default function BibleLibrary({
               )}
             </div>
 
-            {/* Language select - side by side with Bible search */}
-            <select
-              className="bible-library-lang-select"
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              aria-label="Filter by language"
-            >
-              <option value="">All Languages</option>
-              {allLanguages.map((lang) => (
-                <option key={lang} value={lang}>
-                  {lang}
-                </option>
-              ))}
-            </select>
+            <div className="bible-library-lang-menu" ref={languageMenuRef}>
+              <button
+                type="button"
+                className="bible-library-lang-trigger"
+                onClick={() => setLanguageMenuOpen((current) => !current)}
+                aria-label="Filter by language"
+                aria-expanded={languageMenuOpen}
+                title="Filter by language"
+              >
+                <Icon name="language" size={16} />
+                <span>{languageLabel}</span>
+                <Icon name={languageMenuOpen ? "expand_less" : "expand_more"} size={16} />
+              </button>
+
+              {languageMenuOpen && (
+                <div className="bible-library-lang-panel">
+                  <div className="bible-library-lang-search">
+                    <Icon name="search" size={14} />
+                    <input
+                      type="text"
+                      value={languageQuery}
+                      onChange={(event) => setLanguageQuery(event.target.value)}
+                      placeholder="Search languages..."
+                      aria-label="Search languages"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="bible-library-lang-list">
+                    <button
+                      type="button"
+                      className={`bible-library-lang-option${language === "" ? " active" : ""}`}
+                      onClick={() => selectLanguage("")}
+                    >
+                      <span>All languages</span>
+                      {language === "" && <Icon name="check" size={16} />}
+                    </button>
+
+                    {filteredLanguages.map((lang) => (
+                      <button
+                        key={lang}
+                        type="button"
+                        className={`bible-library-lang-option${language === lang ? " active" : ""}`}
+                        onClick={() => selectLanguage(lang)}
+                      >
+                        <span>{lang}</span>
+                        {language === lang && <Icon name="check" size={16} />}
+                      </button>
+                    ))}
+
+                    {filteredLanguages.length === 0 && (
+                      <div className="bible-library-lang-empty">No languages found</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Language pills */}

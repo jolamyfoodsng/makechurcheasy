@@ -4936,5 +4936,13 @@
   "themes.removeFromOBS": "Yọ kuro lati OBS",
   "themes.addedNamedToOBS": "A ti fi \"{{name}}\" kun OBS",
   "themes.removedNamedFromOBS": "A ti yọ \"{{name}}\" kuro lati OBS",
-  "themes.removedFromFavDock": "A ti yọ \"{{name}}\" kuro lati dock"
+  "themes.removedFromFavDock": "A ti yọ \"{{name}}\" kuro lati dock",
+  "bible.book": "Ìwé",
+  "bible.browse": "Ṣàwárí",
+  "bible.browseBible": "Ṣàwárí Bíbélì",
+  "bible.chapterNavigation": "Ìrìnàjò orí",
+  "bible.closeBibleBrowser": "Pa aṣàwákiri Bíbélì",
+  "bible.nextChapter": "Orí tó kàn",
+  "bible.previousChapter": "Orí tó ṣáájú",
+  "bible.selectBook": "Yan ìwé"
 }

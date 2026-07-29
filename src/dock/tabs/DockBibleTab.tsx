@@ -91,6 +91,7 @@ type OverlayMode = "fullscreen" | "lower-third";
 type DisplayMode = "single" | "compare";
 type CompareLayout = "line-by-line" | "side-by-side";
 type ThemeSettingsTab = "text" | "background" | "compare";
+type BibleTranslationOption = { value: string; label: string; language?: string };
 const DOCK_BIBLE_PREFS_KEY = "ocs-dock-bible-preferences";
 const DOCK_BIBLE_UI_PREFS_KEY = "ocs-dock-bible-ui-preferences";
 const MAX_VERSE_LINES = 4;
@@ -829,8 +830,8 @@ export default function DockBibleTab({
   const [compareLayout, setCompareLayout] = useState<CompareLayout>(initialPrefs.compareLayout ?? "line-by-line");
   const [translationA, setTranslationA] = useState(initialPrefs.translationA ?? "KJV");
   const [translationB, setTranslationB] = useState(initialPrefs.translationB ?? "NIV");
-  const [availableTranslations, setAvailableTranslations] = useState<Array<{ value: string; label: string }>>([
-    { value: "KJV", label: "King James Version" },
+  const [availableTranslations, setAvailableTranslations] = useState<BibleTranslationOption[]>([
+    { value: "KJV", label: "King James Version", language: "English" },
   ]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showRecentSearches, setShowRecentSearches] = useState(false);
@@ -1293,12 +1294,13 @@ export default function DockBibleTab({
   }, [isUtilityCollapsed]);
 
   const loadTranslations = useCallback(async () => {
-    const fallbackTranslation = { value: "KJV", label: "King James Version" };
-    const toTranslationOption = (entry: { abbr: string; name?: string }) => {
+    const fallbackTranslation: BibleTranslationOption = { value: "KJV", label: "King James Version", language: "English" };
+    const toTranslationOption = (entry: { abbr: string; name?: string; language?: string }) => {
       const value = entry.abbr.trim().toUpperCase();
       return {
         value,
         label: entry.name?.trim() || value,
+        language: entry.language?.trim() || undefined,
       };
     };
 
@@ -1325,7 +1327,7 @@ export default function DockBibleTab({
     try {
       const remote = await fetch("/uploads/dock-bible-translations.json");
       if (remote.ok) {
-        const payload = await remote.json() as Array<{ abbr: string; name: string }>;
+        const payload = await remote.json() as Array<{ abbr: string; name: string; language?: string }>;
         if (Array.isArray(payload) && payload.length > 0) {
           setAvailableTranslations([
             fallbackTranslation,
@@ -3982,7 +3984,6 @@ export default function DockBibleTab({
       onVerseSelect={handleVerseSelect}
       onVersionChange={(version) => handleQuickVersionChange(activeColumnIndex, version)}
       onGoToChapter={handleGoToChapter}
-      onTranslationsChanged={loadTranslations}
       abbreviateBook={abbreviateBibleBook}
       BOOK_CHAPTERS={BOOK_CHAPTERS}
       compactActions={

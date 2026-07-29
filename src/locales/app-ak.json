@@ -4936,5 +4936,13 @@
   "themes.removeFromOBS": "Yi fi OBS mu",
   "themes.addedNamedToOBS": "Wɔde \"{{name}}\" aka OBS ho",
   "themes.removedNamedFromOBS": "Wɔayi \"{{name}}\" afi OBS mu",
-  "themes.removedFromFavDock": "Wɔayi \"{{name}}\" afi dock no mu"
+  "themes.removedFromFavDock": "Wɔayi \"{{name}}\" afi dock no mu",
+  "bible.book": "Nhoma",
+  "bible.browse": "Hwehwɛ",
+  "bible.browseBible": "Hwehwɛ Bible no mu",
+  "bible.chapterNavigation": "Ti mu akwankyerɛ",
+  "bible.closeBibleBrowser": "To Bible browser no mu",
+  "bible.nextChapter": "Ti a edi hɔ",
+  "bible.previousChapter": "Ti a atwam",
+  "bible.selectBook": "Paw nhoma"
 }

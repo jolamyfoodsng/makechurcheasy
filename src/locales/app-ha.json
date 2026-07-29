@@ -4936,5 +4936,13 @@
   "themes.removeFromOBS": "Cire daga OBS",
   "themes.addedNamedToOBS": "An ƙara \"{{name}}\" zuwa OBS",
   "themes.removedNamedFromOBS": "An cire \"{{name}}\" daga OBS",
-  "themes.removedFromFavDock": "An cire \"{{name}}\" daga dock"
+  "themes.removedFromFavDock": "An cire \"{{name}}\" daga dock",
+  "bible.book": "Littafi",
+  "bible.browse": "Bincika",
+  "bible.browseBible": "Bincika Littafi Mai Tsarki",
+  "bible.chapterNavigation": "Kewayawar sura",
+  "bible.closeBibleBrowser": "Rufe mai binciken Littafi Mai Tsarki",
+  "bible.nextChapter": "Sura ta gaba",
+  "bible.previousChapter": "Sura da ta gabata",
+  "bible.selectBook": "Zaɓi littafi"
 }

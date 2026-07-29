@@ -1550,7 +1550,12 @@
     "highContrast": "High Itansan",
     "elegant": "yangan",
     "upper": "OKE",
-    "lower": "isalẹ"
+    "lower": "isalẹ",
+    "bottomEdge": "Eti isalẹ",
+    "nearVersePosition": "Nítòsí ẹsẹ",
+    "referencePlacement": "Ipo itọ́kasí",
+    "topEdge": "Eti òkè",
+    "withVerse": "Pẹ̀lú ẹsẹ"
   },
   "growth": {
     "defaultFeature": "Ẹya yii",
@@ -1717,5 +1722,13 @@
   "multiview.scenePickerHint": "Lo OBS scene kikun ninu agbegbe yii.",
   "multiview.replaceSource": "Rọpo source",
   "multiview.sourcesNoLongerSupported": "Rọpo source assignments pẹlu OBS scenes ṣaaju ki o to push.",
-  "multiview.dragHint": "Fa preview lati yi ipo pada. Lo zoom fun crop to sunmọ."
+  "multiview.dragHint": "Fa preview lati yi ipo pada. Lo zoom fun crop to sunmọ.",
+  "bible.book": "Ìwé",
+  "bible.browse": "Ṣàwárí",
+  "bible.browseBible": "Ṣàwárí Bíbélì",
+  "bible.chapterNavigation": "Ìrìnàjò orí",
+  "bible.closeBibleBrowser": "Pa aṣàwákiri Bíbélì",
+  "bible.nextChapter": "Orí tó kàn",
+  "bible.previousChapter": "Orí tó ṣáájú",
+  "bible.selectBook": "Yan ìwé"
 }
