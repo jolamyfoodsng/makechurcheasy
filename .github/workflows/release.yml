@@ -294,12 +294,37 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install macOS native build dependencies
+        id: macos-deps
+        shell: bash
+        run: |
+          brew install ninja openssl@3 pkg-config
+          OPENSSL_ROOT="$(brew --prefix openssl@3)"
+          echo "openssl_root=$OPENSSL_ROOT" >> "$GITHUB_OUTPUT"
+          echo "OPENSSL_ROOT_DIR=$OPENSSL_ROOT" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=$OPENSSL_ROOT" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=$OPENSSL_ROOT/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "CMAKE_GENERATOR=Ninja" >> "$GITHUB_ENV"
+          echo "OpenSSL root: $OPENSSL_ROOT"
+          test -f "$OPENSSL_ROOT/lib/libssl.dylib"
+          test -f "$OPENSSL_ROOT/lib/libcrypto.dylib"
+
       # ── Rust cache ──
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
           cache-on-failure: true
+
+      # ── Clean stale CMake cache for llama-cpp-sys-2 ──
+      - name: Clean llama.cpp CMake cache
+        shell: bash
+        working-directory: src-tauri
+        run: |
+          cargo clean -p llama-cpp-sys-2 || true
+          rm -rf target/${{ matrix.target }}/release/build/llama-cpp-sys-2-* target/release/build/llama-cpp-sys-2-* || true
+          find target -path "*/llama-cpp-sys-2-*/out/build" -type d -prune -exec rm -rf {} + || true
+          find target -name CMakeCache.txt -path "*/llama-cpp-sys-2-*" -delete || true
 
       # ── Install frontend deps ──
       - name: Install dependencies
@@ -338,6 +363,25 @@ jobs:
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
           "
 
+      - name: Verify macOS native build tools
+        shell: bash
+        run: |
+          ninja --version
+          cmake --version
+          pkg-config --modversion openssl
+          cat > /tmp/verify-openssl.cmake <<'CMAKE'
+          set(CMAKE_PREFIX_PATH "$ENV{CMAKE_PREFIX_PATH}")
+          find_package(OpenSSL REQUIRED)
+          if (NOT TARGET OpenSSL::SSL)
+            message(FATAL_ERROR "OpenSSL::SSL target missing")
+          endif()
+          if (NOT TARGET OpenSSL::Crypto)
+            message(FATAL_ERROR "OpenSSL::Crypto target missing")
+          endif()
+          message(STATUS "OpenSSL targets verified")
+          CMAKE
+          cmake -P /tmp/verify-openssl.cmake
+
       # ── Build + Release ──
       - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -356,6 +400,11 @@ jobs:
           VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
           VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OPENSSL_ROOT_DIR: ${{ steps.macos-deps.outputs.openssl_root }}
+          CMAKE_PREFIX_PATH: ${{ steps.macos-deps.outputs.openssl_root }}
+          PKG_CONFIG_PATH: ${{ steps.macos-deps.outputs.openssl_root }}/lib/pkgconfig
+          CMAKE_GENERATOR: Ninja
+          BUILD_DEBUG: 1
         with:
           tauriScript: npx tauri
           args: --target ${{ matrix.target }}
