@@ -3872,6 +3872,24 @@ export default function DockBibleTab({
     }, 150);
   }, [selectedBook, selectedChapter]);
 
+  const handleChapterJump = useCallback((delta: -1 | 1) => {
+    if (!selectedBook || !selectedChapter) return;
+    const maxChapter = BOOK_CHAPTERS[selectedBook] ?? selectedChapter;
+    const nextChapter = selectedChapter + delta;
+    if (nextChapter < 1 || nextChapter > maxChapter) return;
+
+    setIsBookDropdownOpen(false);
+    setIsChapterDropdownOpen(false);
+    setIsVerseDropdownOpen(false);
+    setSelectedChapter(nextChapter);
+    setSelectedVerse(null);
+    selectedVerseRef.current = null;
+    setHighlightVerse(null);
+    setActionError("");
+    pendingScrollVerseRef.current = null;
+    verseGridRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [selectedBook, selectedChapter]);
+
   useEffect(() => {
     const pendingVerseToReveal = pendingScrollVerseRef.current;
     const verseToReveal = pendingVerseToReveal ?? selectedVerse;
@@ -3965,6 +3983,8 @@ export default function DockBibleTab({
   const currentChapterLabel =
     selectedBook && selectedChapter ? `${selectedBook} ${selectedChapter}` : t("bible.defaultTitle");
   const chapterCount = selectedBook ? BOOK_CHAPTERS[selectedBook] ?? 0 : 0;
+  const canGoPreviousChapter = Boolean(selectedBook && selectedChapter && selectedChapter > 1);
+  const canGoNextChapter = Boolean(selectedBook && selectedChapter && chapterCount > 0 && selectedChapter < chapterCount);
   const activePassage = chapterPassages[activeColumnIndex] ?? null;
   const activeChapterError = chapterErrors[activeColumnIndex] ?? "";
   const comparePassageA = comparePassages.translationA;
@@ -4297,6 +4317,25 @@ export default function DockBibleTab({
 
               {showRecentSearches && !searchQuery.trim() && (
                 <div className="dock-search-dropdown dock-search-dropdown--recent">
+                  {recentSearches.length > 0 && (
+                    <>
+                      <div className="dock-search-dropdown__heading">{t("bible.recentSearches")}</div>
+                      {recentSearches.map((item) => (
+                        <button
+                          type="button"
+                          key={item}
+                          className="dock-search-dropdown__item dock-search-dropdown__item--recent"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => applyRecentBibleSearch(item)}
+                          title={t("common.search")}>
+                          <Icon name="refresh" size={13} style={{ opacity: 0.5 }} />
+                          <span className="dock-search-dropdown__content">
+                            <span className="dock-search-dropdown__label">{item}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </>
+                  )}
                   {favoritePassages.length > 0 && (
                     <>
                       <div className="dock-search-dropdown__heading">{t("bible.favorites", "Favorites")}</div>
@@ -4312,25 +4351,6 @@ export default function DockBibleTab({
                           <Icon name="star" size={13} style={{ opacity: 0.7 }} />
                           <span className="dock-search-dropdown__content">
                             <span className="dock-search-dropdown__label">{passage.reference}</span>
-                          </span>
-                        </button>
-                      ))}
-                    </>
-                  )}
-                  {recentSearches.length > 0 && (
-                    <>
-                      <div className="dock-search-dropdown__heading">{t("bible.recentSearches")}</div>
-                      {recentSearches.map((item) => (
-                        <button
-                          type="button"
-                          key={item}
-                          className="dock-search-dropdown__item dock-search-dropdown__item--recent"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => applyRecentBibleSearch(item)}
-                          title={t("common.search")}>
-                          <Icon name="refresh" size={13} style={{ opacity: 0.5 }} />
-                          <span className="dock-search-dropdown__content">
-                            <span className="dock-search-dropdown__label">{item}</span>
                           </span>
                         </button>
                       ))}
@@ -4357,8 +4377,41 @@ export default function DockBibleTab({
         <div className="dock-bible-reader" ref={verseGridRef} onClick={handleVerseRowDelegated} onKeyDown={handleVerseRowDelegated}>
           {hasReaderVerses && (
             <div className="dock-bible-reader__ref-header">
-              <div>
+              <div className="dock-bible-reader__ref-header-start">
                 <span className="dock-bible-reader__ref-header-label">{t("bible.reading")}</span>
+                <div
+                  className="dock-bible-reader__chapter-nav"
+                  aria-label={t("bible.chapterNavigation", "Chapter navigation")}
+                >
+                  <button
+                    type="button"
+                    className="dock-bible-reader__chapter-nav-btn"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleChapterJump(-1);
+                    }}
+                    disabled={!canGoPreviousChapter}
+                    title={t("bible.previousChapter", "Previous chapter")}
+                    aria-label={t("bible.previousChapter", "Previous chapter")}
+                  >
+                    <Icon name="chevron_left" size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="dock-bible-reader__chapter-nav-btn"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleChapterJump(1);
+                    }}
+                    disabled={!canGoNextChapter}
+                    title={t("bible.nextChapter", "Next chapter")}
+                    aria-label={t("bible.nextChapter", "Next chapter")}
+                  >
+                    <Icon name="chevron_right" size={12} />
+                  </button>
+                </div>
               </div>
               <span className="dock-bible-reader__ref-header-reference">{currentReferenceLabel}</span>
               {compareEnabled ? (

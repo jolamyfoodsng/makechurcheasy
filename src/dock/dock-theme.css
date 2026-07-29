@@ -45,6 +45,7 @@ body {
   --dock-text: #0F172A;
   --dock-text-secondary: #334155;
   --dock-text-dim: #64748B;
+  --dock-text-muted: #64748B;
   --dock-text-disabled: #94A3B8;
   --dock-accent: #1D4ED8;
   --dock-accent-hover: #2563EB;
@@ -232,6 +233,42 @@ body {
 :root.light .dock-search-dropdown,
 :root.light .dock-theme-dropdown-list {
   box-shadow: none;
+}
+
+:root.light .dock-search-dropdown {
+  background: #FFFFFF;
+  border-color: #CBD5E1;
+  color: #0F172A;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+}
+
+:root.light .dock-search-dropdown__heading {
+  color: #334155;
+}
+
+:root.light .dock-search-dropdown__heading:not(:first-child) {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #E2E8F0;
+}
+
+:root.light .dock-search-dropdown__item {
+  color: #0F172A;
+}
+
+:root.light .dock-search-dropdown__item:hover,
+:root.light .dock-search-dropdown__item--active,
+:root.light .dock-search-dropdown__item--favorite:hover {
+  background: rgba(29, 78, 216, 0.08);
+  color: #0F172A;
+}
+
+:root.light .dock-search-dropdown__item svg {
+  color: #64748B;
+}
+
+:root.light .dock-search-dropdown__label {
+  color: inherit;
 }
 
 :root.light .dock-input,

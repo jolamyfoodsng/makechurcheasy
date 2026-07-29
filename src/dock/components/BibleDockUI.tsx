@@ -70,17 +70,20 @@ export function BibleControls({
           disabled={!selectedBook}
           aria-haspopup="listbox"
           aria-expanded={isBookDropdownOpen}
-          aria-label={t("bible.chooseBook")}
-          title="Choose Book">
-          <span className="dock-bible-controls__book-label"></span>
+          aria-label={t("bible.chooseBook", "Choose book")}
+          title={t("bible.chooseBook", "Choose book")}>
+          <span className="dock-bible-controls__book-label">{t("bible.book", "Book")}</span>
           <span className="dock-bible-controls__book-name">
-            {selectedBook ?? t("bible.chooseBook")}
+            {selectedBook ?? t("bible.chooseBook", "Choose book")}
           </span>
           <Icon name="expand_more" size={14} />
         </button>
 
         {isBookDropdownOpen && (
-          <div className="dock-bible-controls__book-dropdown" role="listbox" aria-label="Bible books" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="dock-bible-controls__book-dropdown" role="listbox" aria-label={t("bible.bibleBooks", "Bible books")} onMouseDown={(e) => e.stopPropagation()}>
+            <div className="dock-bible-controls__dropdown-header">
+              <span>{t("bible.selectBook", "Select book")}</span>
+            </div>
             <div className="dock-bible-grid dock-bible-grid--console">
               {Object.keys(BOOK_CHAPTERS).map((book) => {
                 const isActive = book === selectedBook;
@@ -92,6 +95,7 @@ export function BibleControls({
                     onClick={() => onBookSelect(book)}
                     role="option"
                     aria-selected={isActive}
+                    aria-label={book}
                     title={book}
                   >
                     <span className="dock-bible-book-btn__abbr">{abbreviateBook(book)}</span>
@@ -212,23 +216,28 @@ interface BibleTopbarProps {
   selectedBook: string | null;
   onToggle: () => void;
   headerActions?: React.ReactNode;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 export function BibleTopbar({ isExpanded, selectedBook: _selectedBook, onToggle, headerActions, children }: BibleTopbarProps) {
   const { t } = useTranslation();
+  const toggleLabel = isExpanded
+    ? t("bible.closeBibleBrowser", "Close Bible browser")
+    : t("bible.browseBible", "Browse Bible");
+
   return (
     <section className={`dock-bible-topbar${isExpanded ? " dock-bible-topbar--expanded" : ""}`}>
       <div className="dock-bible-topbar__header">
         <button
           type="button"
-          className="dock-bible-topbar__toggle-btn"
+          className={`dock-bible-topbar__toggle-btn${isExpanded ? " dock-bible-topbar__toggle-btn--active" : ""}`}
           onClick={onToggle}
-          aria-label={isExpanded ? t("bible.closeOptions") : t("bible.options")}
-          title={isExpanded ? t("bible.closeOptions") : t("bible.options")}
+          aria-label={toggleLabel}
+          title={toggleLabel}
         >
-          <Icon name="book_open" size={14} />
-          {/* <Icon name={isExpanded ? "expand_less" : "expand_more"} size={14} /> */}
+          <Icon name="menu_book" size={14} />
+          <span className="dock-bible-topbar__toggle-label">{t("bible.browse", "Browse")}</span>
+          <Icon name={isExpanded ? "expand_less" : "expand_more"} size={12} />
         </button>
         {headerActions}
       </div>
@@ -325,6 +334,28 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
     "dock-module--bible",
     isCompact ? "dock-module--bible--compact" : "",
   ].filter(Boolean).join(" ");
+  const browseControls = (
+    <BibleControls
+      selectedBook={selectedBook}
+      selectedChapter={selectedChapter}
+      selectedVerse={selectedVerse}
+      chapterCount={chapterCount}
+      verseCount={verseCount}
+      isBookDropdownOpen={isBookDropdownOpen}
+      isChapterDropdownOpen={isChapterDropdownOpen}
+      isVerseDropdownOpen={isVerseDropdownOpen}
+      onBookToggle={onBookToggle}
+      onBookSelect={onBookSelect}
+      onChapterToggle={onChapterToggle}
+      onChapterSelect={onChapterSelect}
+      onVerseToggle={onVerseToggle}
+      onVerseSelect={onVerseSelect}
+      onOptionsClick={onOptionsClick}
+      onGoToChapter={onGoToChapter}
+      abbreviateBook={abbreviateBook}
+      BOOK_CHAPTERS={BOOK_CHAPTERS}
+    />
+  );
 
   return (
     <div ref={ref} className={rootClass}>
@@ -360,36 +391,17 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
               selectedBook={selectedBook}
               onToggle={() => setIsTopbarExpanded((prev: boolean) => !prev)}
               headerActions={headerActions}
-            >
-              <BibleControls
-                selectedBook={selectedBook}
-                selectedChapter={selectedChapter}
-                selectedVerse={selectedVerse}
-                chapterCount={chapterCount}
-                verseCount={verseCount}
-                isBookDropdownOpen={isBookDropdownOpen}
-                isChapterDropdownOpen={isChapterDropdownOpen}
-                isVerseDropdownOpen={isVerseDropdownOpen}
-                onBookToggle={onBookToggle}
-                onBookSelect={onBookSelect}
-                onChapterToggle={onChapterToggle}
-                onChapterSelect={onChapterSelect}
-                onVerseToggle={onVerseToggle}
-                onVerseSelect={onVerseSelect}
-                onOptionsClick={onOptionsClick}
-                onGoToChapter={onGoToChapter}
-                abbreviateBook={abbreviateBook}
-                BOOK_CHAPTERS={BOOK_CHAPTERS}
-              />
-            </BibleTopbar>
+            />
           )}
         </div>
-
-
-
       </div>
 
-      {/* Topbar with toggle */}
+      {!isCompact && isTopbarExpanded && (
+        <div className="dock-bible-controls-panel">
+          {browseControls}
+        </div>
+      )}
+
       {/* Main content area */}
       {children}
     </div>

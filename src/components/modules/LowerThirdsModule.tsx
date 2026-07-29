@@ -40,6 +40,13 @@ import { getDisplaySceneName } from "../../services/obsSceneTargets";
 import { serviceStore } from "../../services/serviceStore";
 import { getSettings, MV_SETTINGS_UPDATED_EVENT, type MVSettings } from "../../multiview/mvStore";
 import { applyRuntimeBranding, isLogoVariable } from "../../lowerthirds/runtimeBranding";
+import {
+  REMOTE_PRODUCTION_THEMES_UPDATED_EVENT,
+  fetchRemoteProductionThemes,
+  getCachedRemoteProductionThemes,
+  mergeRemoteLowerThirdThemes,
+  type RemoteProductionTheme,
+} from "../../services/remoteProductionThemes";
 import { useServiceGate } from "../../hooks/useServiceGate";
 import { ObsScenesPanel } from "../shared/ObsScenesPanel";
 import { ltDurationStore } from "../../lowerthirds/ltDurationStore";
@@ -399,6 +406,7 @@ export interface LowerThirdsModuleProps {
 export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
   const {
     state,
+    dispatch,
     selectTheme,
     setValue,
     setValues,
@@ -423,6 +431,25 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
 
   // ── Theme picker dropdown ──
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
+  const [remoteProductionThemes, setRemoteProductionThemes] = useState<RemoteProductionTheme[]>(() => getCachedRemoteProductionThemes());
+  const availableLtThemes = useMemo(
+    () => mergeRemoteLowerThirdThemes(LT_ALL_THEMES, remoteProductionThemes),
+    [remoteProductionThemes],
+  );
+  const findAvailableLtTheme = useCallback(
+    (themeId: string) => availableLtThemes.find((theme) => theme.id === themeId) ?? getLTThemeById(themeId),
+    [availableLtThemes],
+  );
+  const selectAvailableLtTheme = useCallback(
+    (themeId: string) => {
+      const theme = findAvailableLtTheme(themeId);
+      if (theme) {
+        dispatch({ type: "SELECT_THEME", theme });
+      }
+      return theme;
+    },
+    [dispatch, findAvailableLtTheme],
+  );
 
   // ── Version History ──
   const [showVersionPanel, setShowVersionPanel] = useState(false);
@@ -457,6 +484,14 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
       window.removeEventListener(MV_SETTINGS_UPDATED_EVENT, onSettingsUpdated as EventListener);
       window.removeEventListener("storage", onStorage);
     };
+  }, []);
+
+  useEffect(() => {
+    const syncCachedRemoteThemes = () => setRemoteProductionThemes(getCachedRemoteProductionThemes());
+    syncCachedRemoteThemes();
+    void fetchRemoteProductionThemes().then(setRemoteProductionThemes);
+    window.addEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
+    return () => window.removeEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
   }, []);
 
   // Service gate (no-op — service gate concept removed)
@@ -528,7 +563,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
     const last = ltDurationStore.getLastShown();
     if (!last.themeId) return;
     // Restore last-shown theme + values and re-send
-    selectTheme(last.themeId);
+    selectAvailableLtTheme(last.themeId);
     for (const [k, v] of Object.entries(last.values)) {
       setValue(k, v);
     }
@@ -549,7 +584,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
         setToast({ msg: "Failed to re-show", type: "error" });
       }
     }, 50);
-  }, [selectTheme, setValue, sendToAll, ltPresets]);
+  }, [selectAvailableLtTheme, setValue, sendToAll, ltPresets]);
 
   const handleNowShowingClear = useCallback(async () => {
     try {
@@ -874,7 +909,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
   // Restore a version snapshot
   const handleRestoreVersion = useCallback(
     (snapshot: LTVersionSnapshot) => {
-      const restoredTheme = getLTThemeById(snapshot.themeId);
+      const restoredTheme = findAvailableLtTheme(snapshot.themeId);
       if (!restoredTheme) {
         setToast({ msg: "Could not restore version theme", type: "error" });
         return;
@@ -882,7 +917,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
       const restoredValues = { ...snapshot.values };
 
       // Apply full snapshot so preview + center input fields stay in sync.
-      selectTheme(restoredTheme.id);
+      dispatch({ type: "SELECT_THEME", theme: restoredTheme });
       setValues(restoredValues);
 
       if (selectedPresetId) {
@@ -916,7 +951,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
       setShowVersionPanel(false);
       setToast({ msg: "Version restored", type: "success" });
     },
-    [selectTheme, setValues, durationConfig, selectedPresetId],
+    [dispatch, findAvailableLtTheme, setValues, durationConfig, selectedPresetId],
   );
 
   // ── Active preset's category (derived, needed by callbacks below) ──
@@ -984,7 +1019,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
     const newP: LTPreset = {
       id: createLTPresetId(),
       label,
-      themeId: state.selectedTheme?.id ?? LT_THEMES[0]?.id ?? "",
+      themeId: state.selectedTheme?.id ?? availableLtThemes[0]?.id ?? LT_THEMES[0]?.id ?? "",
       values: { ...state.values },
     };
     setLtPresets((prev) => [...prev, newP]);
@@ -993,15 +1028,17 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
     setPresetError("");
     setShowPresetPicker(false);
     setToast({ msg: `Preset "${label}" created`, type: "success" });
-  }, [newPresetLabel, ltPresets, state.selectedTheme, state.values]);
+  }, [newPresetLabel, ltPresets, state.selectedTheme, state.values, availableLtThemes]);
 
   /** Create a new preset from a selected category tile */
   const handlePickCategory = useCallback((catId: LTPresetCategoryId) => {
     const cat = getPresetCategory(catId);
     if (!cat) return;
-    const themes = getThemesForCategory(catId);
-    const defaultThemeId = cat.defaultThemeId || themes[0]?.id || LT_THEMES[0]?.id || "";
-    const resolvedDefaultTheme = getLTThemeById(defaultThemeId);
+    const bundledCategoryThemes = getThemesForCategory(catId);
+    const bundledCategoryIds = new Set(bundledCategoryThemes.map((theme) => theme.id));
+    const themes = availableLtThemes.filter((theme) => String(theme.category) === catId || bundledCategoryIds.has(theme.id));
+    const defaultThemeId = cat.defaultThemeId || themes[0]?.id || availableLtThemes[0]?.id || LT_THEMES[0]?.id || "";
+    const resolvedDefaultTheme = findAvailableLtTheme(defaultThemeId);
     const chosenTheme = (
       resolvedDefaultTheme && themes.some((theme) => theme.id === resolvedDefaultTheme.id)
         ? resolvedDefaultTheme
@@ -1034,7 +1071,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
     const newP: LTPreset = {
       id: createLTPresetId(),
       label: cat.label,
-      themeId: defaultThemeId,
+      themeId: chosenTheme?.id ?? defaultThemeId,
       values: themeValues,
       categoryId: catId,
       categoryValues: initialCategoryValues,
@@ -1046,13 +1083,17 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
     setShowPresetPicker(false);
 
     // Load theme + values into the editor
-    selectTheme(defaultThemeId);
+    if (chosenTheme) {
+      dispatch({ type: "SELECT_THEME", theme: chosenTheme });
+    } else {
+      selectTheme(defaultThemeId);
+    }
     for (const [k, v] of Object.entries(themeValues)) {
       setValue(k, v);
     }
 
     setToast({ msg: `"${cat.label}" preset created`, type: "success" });
-  }, [selectTheme, setValue]);
+  }, [availableLtThemes, dispatch, findAvailableLtTheme, selectTheme, setValue]);
 
   // ── Delete preset ──
   const handleDeletePreset = useCallback(
@@ -1064,7 +1105,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
           const fallback: LTPreset = {
             id: createLTPresetId(),
             label: "Announcement",
-            themeId: LT_THEMES[0]?.id ?? "",
+            themeId: availableLtThemes[0]?.id ?? LT_THEMES[0]?.id ?? "",
             values: {},
           };
           return [fallback];
@@ -1078,7 +1119,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
         });
       }
     },
-    [selectedPresetId],
+    [selectedPresetId, availableLtThemes],
   );
 
   // ── Duplicate preset ──
@@ -1115,14 +1156,19 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
   }, []);
 
   const themePickerThemes = useMemo(
-    () => (activeCategoryId ? getThemesForCategory(activeCategoryId) : LT_ALL_THEMES),
-    [activeCategoryId],
+    () => {
+      if (!activeCategoryId) return availableLtThemes;
+      const bundledCategoryThemes = getThemesForCategory(activeCategoryId);
+      const bundledCategoryIds = new Set(bundledCategoryThemes.map((theme) => theme.id));
+      return availableLtThemes.filter((theme) => String(theme.category) === activeCategoryId || bundledCategoryIds.has(theme.id));
+    },
+    [activeCategoryId, availableLtThemes],
   );
 
   const handleThemeSelectFromDropdown = useCallback((nextThemeId: string) => {
-    const nextTheme = getLTThemeById(nextThemeId);
+    const nextTheme = findAvailableLtTheme(nextThemeId);
     if (!nextTheme) return;
-    selectTheme(nextTheme.id);
+    dispatch({ type: "SELECT_THEME", theme: nextTheme });
 
     if (activeCategoryId && activePreset?.categoryValues) {
       const mapped = mapCategoryFieldsToThemeValues(activeCategoryId, activePreset.categoryValues, nextTheme);
@@ -1148,7 +1194,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
     }
 
     setThemeDropdownOpen(false);
-  }, [selectTheme, activeCategoryId, activePreset?.categoryValues, setValue, selectedPresetId]);
+  }, [dispatch, findAvailableLtTheme, activeCategoryId, activePreset?.categoryValues, setValue, selectedPresetId]);
 
   // Group variables by group label
   const groupedVars = useMemo(() => {
@@ -1352,7 +1398,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
           <div className="lt-page-theme-list">
             {ltPresets.map((p) => {
               const isActive = selectedPresetId === p.id;
-              const matchedTheme = getLTThemeById(p.themeId);
+              const matchedTheme = findAvailableLtTheme(p.themeId);
               const cat = p.categoryId ? getPresetCategory(p.categoryId) : undefined;
               return (
                 <button

@@ -17,9 +17,20 @@ import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
 import { lowerThirdObsService } from "../../lowerthirds/lowerThirdObsService";
 import {
   TICKER_THEMES,
-  generateTickerHTML,
-  type TickerThemeConfig,
+  type TickerThemeColors,
 } from "./tickerThemes";
+import {
+  REMOTE_PRODUCTION_THEMES_UPDATED_EVENT,
+  fetchRemoteProductionThemes,
+  getCachedRemoteProductionThemes,
+  type RemoteProductionTheme,
+} from "../../services/remoteProductionThemes";
+import {
+  DEFAULT_DOCK_TICKER_THEME_OPTION,
+  getAllDockTickerThemeOptions,
+  renderDockTickerThemeHtml,
+  type DockTickerThemeOption,
+} from "../../dock/tickerThemeCatalog";
 import { ObsScenesPanel } from "../shared/ObsScenesPanel";
 import { checkEntitlementSync } from "../../services/entitlementClient";
 import { useAuth } from "../../contexts/AuthContext";
@@ -106,6 +117,26 @@ function getTickerBranding(): { logoUrl: string; brandName: string } {
     logoUrl: resolveOverlayAssetUrl(settings.brandLogoPath),
     brandName: settings.churchName || "MakeChurchEasy",
   };
+}
+
+function getTickerOptionColors(option: DockTickerThemeOption): TickerThemeColors {
+  if (option.source === "dock" || option.source === "remote") {
+    return option.theme.defaultColors;
+  }
+  return {
+    accent: option.accentColor,
+    accentText: "#FFFFFF",
+    barBg: "#0F172A",
+    barText: "#F8FAFC",
+    separator: option.accentColor,
+  };
+}
+
+function getTickerOptionFontFamily(option: DockTickerThemeOption): string {
+  if (option.source === "dock" || option.source === "remote") {
+    return option.theme.fontFamily;
+  }
+  return "'Inter', 'Segoe UI', sans-serif";
 }
 
 function resolveDurationConfig(settings: Pick<TickerSettings, "durationSeconds" | "useSystemDefaults" | "isInfinite">): TickerDurationConfig {
@@ -204,6 +235,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
   const [showTemplates, setShowTemplates] = useState(false);
   const [templateLabel, setTemplateLabel] = useState("");
   const [settings, setSettings] = useState<TickerSettings>(loadSettings);
+  const [remoteProductionThemes, setRemoteProductionThemes] = useState<RemoteProductionTheme[]>(() => getCachedRemoteProductionThemes());
   const [themeOpen, setThemeOpen] = useState(false);
   const [scenes, setScenes] = useState<string[]>([]);
   const [programScene, setProgramScene] = useState("");
@@ -235,11 +267,34 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
   const [autoStopRemainingSeconds, setAutoStopRemainingSeconds] = useState<number | null>(null);
   const [activeDurationTotalSeconds, setActiveDurationTotalSeconds] = useState(0);
   const [activeDurationInfinite, setActiveDurationInfinite] = useState(false);
+  const availableTickerThemes = useMemo(() => {
+    return getAllDockTickerThemeOptions(remoteProductionThemes);
+  }, [remoteProductionThemes]);
 
   // Persist messages
   useEffect(() => { saveMessages(messages); }, [messages]);
   // Persist settings
   useEffect(() => { saveSettings(settings); }, [settings]);
+
+  useEffect(() => {
+    const syncCachedRemoteThemes = () => setRemoteProductionThemes(getCachedRemoteProductionThemes());
+    syncCachedRemoteThemes();
+    void fetchRemoteProductionThemes().then(setRemoteProductionThemes);
+    window.addEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
+    return () => window.removeEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
+  }, []);
+
+  useEffect(() => {
+    setSettings((current) => {
+      if (availableTickerThemes.some((theme) => theme.id === current.themeId)) return current;
+      const fallback = availableTickerThemes[0] ?? DEFAULT_DOCK_TICKER_THEME_OPTION;
+      return {
+        ...current,
+        themeId: fallback.id,
+        heading: current.heading || fallback.defaultHeading,
+      };
+    });
+  }, [availableTickerThemes]);
 
   // OBS connection status
   useEffect(() => {
@@ -642,20 +697,19 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
     const activeMessages = messages.filter((m) => m.active).map((m) => m.text);
     if (activeMessages.length === 0) return false;
 
-    const theme = TICKER_THEMES.find((t) => t.id === settings.themeId) ?? TICKER_THEMES[0];
+    const theme = availableTickerThemes.find((t) => t.id === settings.themeId) ?? availableTickerThemes[0] ?? DEFAULT_DOCK_TICKER_THEME_OPTION;
     const branding = getTickerBranding();
-    const html = generateTickerHTML(
-      theme,
-      theme.defaultColors,
-      settings.heading,
-      activeMessages,
-      settings.speed,
-      settings.position,
-      settings.loop,
-      false,
-      branding.logoUrl,
-      branding.brandName,
-    );
+    const html = renderDockTickerThemeHtml({
+      option: theme,
+      heading: settings.heading,
+      messages: activeMessages,
+      speed: settings.speed,
+      position: settings.position,
+      loop: settings.loop,
+      paused: false,
+      brandLogoUrl: branding.logoUrl,
+      brandName: branding.brandName,
+    });
     const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
 
     try {
@@ -725,7 +779,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
       console.error(`[TickerModule] Failed to start ticker in "${sceneName}":`, err);
       return false;
     }
-  }, [obsConnected, messages, applyActiveDurationMode, settings]);
+  }, [obsConnected, messages, applyActiveDurationMode, settings, availableTickerThemes]);
 
   const sendTickerToScene = useCallback(async (
     sceneName: string,
@@ -823,20 +877,19 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
     const activeMessages = messages.filter((m) => m.active).map((m) => m.text);
     if (activeMessages.length === 0) return;
 
-    const theme = TICKER_THEMES.find((t) => t.id === settings.themeId) ?? TICKER_THEMES[0];
+    const theme = availableTickerThemes.find((t) => t.id === settings.themeId) ?? availableTickerThemes[0] ?? DEFAULT_DOCK_TICKER_THEME_OPTION;
     const branding = getTickerBranding();
-    const html = generateTickerHTML(
-      theme,
-      theme.defaultColors,
-      settings.heading,
-      activeMessages,
-      settings.speed,
-      settings.position,
-      settings.loop,
-      false,
-      branding.logoUrl,
-      branding.brandName,
-    );
+    const html = renderDockTickerThemeHtml({
+      option: theme,
+      heading: settings.heading,
+      messages: activeMessages,
+      speed: settings.speed,
+      position: settings.position,
+      loop: settings.loop,
+      paused: false,
+      brandLogoUrl: branding.logoUrl,
+      brandName: branding.brandName,
+    });
     const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
 
     // Debounce updates slightly to avoid hammering OBS on rapid slider changes
@@ -870,7 +923,7 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [running, obsConnected, settings.themeId, settings.heading, settings.speed, settings.position, settings.loop, messages]);
+  }, [running, obsConnected, settings.themeId, settings.heading, settings.speed, settings.position, settings.loop, messages, availableTickerThemes]);
 
   // ── Cleanup: stop ticker when component unmounts ──
   useEffect(() => {
@@ -884,10 +937,12 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
   }, [clearAutoStopTimers]);
 
   // ── Theme helpers ──
-  const activeTheme: TickerThemeConfig =
-    TICKER_THEMES.find((t) => t.id === settings.themeId) ?? TICKER_THEMES[0];
+  const activeTheme: DockTickerThemeOption =
+    availableTickerThemes.find((t) => t.id === settings.themeId) ?? availableTickerThemes[0] ?? DEFAULT_DOCK_TICKER_THEME_OPTION;
+  const activeThemeColors = getTickerOptionColors(activeTheme);
+  const activeThemeFontFamily = getTickerOptionFontFamily(activeTheme);
 
-  const handleSelectTheme = useCallback((theme: TickerThemeConfig) => {
+  const handleSelectTheme = useCallback((theme: DockTickerThemeOption) => {
     setSettings((prev) => ({
       ...prev,
       themeId: theme.id,
@@ -974,18 +1029,17 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
   const previewHTML = useMemo(
     () => {
       const branding = getTickerBranding();
-      return generateTickerHTML(
-        activeTheme,
-        activeTheme.defaultColors,
-        settings.heading,
-        previewMessages,
-        settings.speed,
-        settings.position,
-        settings.loop,
-        false,
-        branding.logoUrl,
-        branding.brandName,
-      );
+      return renderDockTickerThemeHtml({
+        option: activeTheme,
+        heading: settings.heading,
+        messages: previewMessages,
+        speed: settings.speed,
+        position: settings.position,
+        loop: settings.loop,
+        paused: false,
+        brandLogoUrl: branding.logoUrl,
+        brandName: branding.brandName,
+      });
     },
     [activeTheme, settings.heading, previewMessages, settings.speed, settings.position, settings.loop],
   );
@@ -1312,13 +1366,13 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                 <div>
                   <label className="ticker-field-label">Ticker Theme</label>
                   <div className="ticker-theme-selector" onClick={() => setThemeOpen((open) => !open)}>
-                    <div className="ticker-theme-preview" style={{ background: activeTheme.defaultColors.barBg }}>
+                    <div className="ticker-theme-preview" style={{ background: activeThemeColors.barBg }}>
                       <div
                         className="ticker-theme-preview-heading"
                         style={{
-                          background: activeTheme.defaultColors.accent,
-                          color: activeTheme.defaultColors.accentText,
-                          fontFamily: activeTheme.fontFamily,
+                          background: activeThemeColors.accent,
+                          color: activeThemeColors.accentText,
+                          fontFamily: activeThemeFontFamily,
                         }}
                       >
                         {settings.heading || activeTheme.defaultHeading}
@@ -1326,8 +1380,8 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                       <div
                         className="ticker-theme-preview-scroll"
                         style={{
-                          color: activeTheme.defaultColors.barText,
-                          fontFamily: activeTheme.fontFamily,
+                          color: activeThemeColors.barText,
+                          fontFamily: activeThemeFontFamily,
                         }}
                       >
                         Sample announcement text...
@@ -1338,43 +1392,47 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                   </div>
                   {themeOpen && (
                     <div className="ticker-theme-dropdown">
-                      {TICKER_THEMES.map((theme) => (
-                        <button
-                          key={theme.id}
-                          type="button"
-                          className={`ticker-theme-option${settings.themeId === theme.id ? " is-active" : ""}`}
-                          onClick={() => handleSelectTheme(theme)}
-                        >
-                          <div className="ticker-theme-preview" style={{ background: theme.defaultColors.barBg }}>
-                            <div
-                              className="ticker-theme-preview-heading"
-                              style={{
-                                background: theme.defaultColors.accent,
-                                color: theme.defaultColors.accentText,
-                                fontFamily: theme.fontFamily,
-                              }}
-                            >
-                              {theme.defaultHeading}
+                      {availableTickerThemes.map((theme) => {
+                        const colors = getTickerOptionColors(theme);
+                        const fontFamily = getTickerOptionFontFamily(theme);
+                        return (
+                          <button
+                            key={theme.id}
+                            type="button"
+                            className={`ticker-theme-option${settings.themeId === theme.id ? " is-active" : ""}`}
+                            onClick={() => handleSelectTheme(theme)}
+                          >
+                            <div className="ticker-theme-preview" style={{ background: colors.barBg }}>
+                              <div
+                                className="ticker-theme-preview-heading"
+                                style={{
+                                  background: colors.accent,
+                                  color: colors.accentText,
+                                  fontFamily,
+                                }}
+                              >
+                                {theme.defaultHeading}
+                              </div>
+                              <div
+                                className="ticker-theme-preview-scroll"
+                                style={{
+                                  color: colors.barText,
+                                  fontFamily,
+                                }}
+                              >
+                                {theme.name} sample text...
+                              </div>
                             </div>
-                            <div
-                              className="ticker-theme-preview-scroll"
-                              style={{
-                                color: theme.defaultColors.barText,
-                                fontFamily: theme.fontFamily,
-                              }}
-                            >
-                              {theme.name} sample text...
+                            <div className="ticker-theme-info">
+                              <div className="ticker-theme-name">{theme.name}</div>
+                              <div className="ticker-theme-desc">{theme.description}</div>
                             </div>
-                          </div>
-                          <div className="ticker-theme-info">
-                            <div className="ticker-theme-name">{theme.name}</div>
-                            <div className="ticker-theme-desc">{theme.description}</div>
-                          </div>
-                          {settings.themeId === theme.id && (
-                            <Icon name="check_circle" size={20} className="ticker-theme-card-check" />
-                          )}
-                        </button>
-                      ))}
+                            {settings.themeId === theme.id && (
+                              <Icon name="check_circle" size={20} className="ticker-theme-card-check" />
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

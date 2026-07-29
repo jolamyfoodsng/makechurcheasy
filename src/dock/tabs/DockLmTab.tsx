@@ -23,6 +23,7 @@ import {
   appendTextToDockNotes,
   resolveDockNotesPresentationSettings,
 } from "../dockNotesStorage";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 type LmStatus = "idle" | "requesting-mic" | "connecting" | "listening" | "error";
 type LmOverlayMode = "fullscreen" | "lower-third";
@@ -34,6 +35,8 @@ const MAX_HISTORY = 50;
 const MAX_TRANSCRIPT_LINES = 40;
 const MAX_QUEUE_SIZE = 3;
 const SUGGESTION_COOLDOWN_MS = 60_000;
+const LM_RELAY_POLL_MS = 2_000;
+const LM_RELAY_HIDDEN_POLL_MS = 10_000;
 
 interface DockLmTabProps {
   presentationOutputTarget?: DockPresentationOutputTarget;
@@ -355,20 +358,38 @@ export default function DockLmTab({
         relayBusyRef.current = false;
       }
     };
+    const getRelayPollInterval = () =>
+      document.visibilityState === "hidden"
+        ? getRecommendedPollingInterval(LM_RELAY_HIDDEN_POLL_MS)
+        : getRecommendedPollingInterval(LM_RELAY_POLL_MS);
+    let relayTimer: number | null = null;
+    let stopped = false;
+    const scheduleRelayPoll = () => {
+      if (stopped) return;
+      relayTimer = window.setTimeout(async () => {
+        relayTimer = null;
+        await pollRelay();
+        scheduleRelayPoll();
+      }, getRelayPollInterval());
+    };
+
     pollRelayRef.current = pollRelay;
     void pollRelay();
-    const relayInterval = setInterval(pollRelay, 2000);
+    scheduleRelayPoll();
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible" && pollRelayRef.current) {
+        if (relayTimer) window.clearTimeout(relayTimer);
         void pollRelayRef.current();
+        scheduleRelayPoll();
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
+      stopped = true;
       unsub();
-      clearInterval(relayInterval);
+      if (relayTimer) window.clearTimeout(relayTimer);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
@@ -383,10 +404,14 @@ export default function DockLmTab({
     }
   }, [queue, suggestions]);
 
+  const hasFreshnessItems = queue.length > 0 || suggestions.length > 0;
+
   useEffect(() => {
+    if (!hasFreshnessItems) return;
+    setNow(Date.now());
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [hasFreshnessItems]);
 
   useEffect(() => {
     if (settings.autoScroll && transcriptRef.current) {

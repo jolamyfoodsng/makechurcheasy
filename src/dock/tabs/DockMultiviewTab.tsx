@@ -2034,7 +2034,10 @@ export default function DockMultiviewTab() {
     console.log("[MV] effect running — calling refreshObsScenes");
     mountedRef.current = true;
     refreshObsScenes();
-    const interval = setInterval(() => { refreshObsScenes(); }, getRecommendedPollingInterval(5000));
+    const interval = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      refreshObsScenes();
+    }, getRecommendedPollingInterval(15000));
     return () => { console.log("[MV] effect cleanup"); mountedRef.current = false; clearInterval(interval); };
   }, [obsReady, refreshObsScenes]);
 

@@ -48,6 +48,13 @@ import {
   renderDockTickerThemeHtml,
   resolveDockTickerThemeOption,
 } from "../tickerThemeCatalog";
+import {
+  REMOTE_PRODUCTION_THEMES_UPDATED_EVENT,
+  fetchRemoteProductionThemes,
+  getCachedRemoteProductionThemes,
+  mergeRemoteLowerThirdThemes,
+  type RemoteProductionTheme,
+} from "../../services/remoteProductionThemes";
 
 const ALL_LT_THEMES: LowerThirdTheme[] = [
   ...LT_ALL_THEMES,
@@ -305,6 +312,7 @@ export default function DockMinistryTab({
   const [dockPlan, setDockPlan] = useState<string>(() => getDockPlan());
   const showCountdownsTab = dockPlan !== "free";
   const [tickerFavIds, setTickerFavIds] = useState<Set<string>>(new Set());
+  const [remoteProductionThemes, setRemoteProductionThemes] = useState<RemoteProductionTheme[]>(() => getCachedRemoteProductionThemes());
   const [tickerBranding, setTickerBranding] = useState<TickerBranding>(loadInitialTickerBranding);
   const [tickerColorPopoverOpen, setTickerColorPopoverOpen] = useState(false);
   const [tickerColorPopoverPosition, setTickerColorPopoverPosition] = useState({ top: 0, left: 0 });
@@ -329,6 +337,10 @@ export default function DockMinistryTab({
   const tickerColorPopoverPanelRef = useRef<HTMLDivElement | null>(null);
   const bibleLtLiveUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const availableLtThemes = useMemo(
+    () => mergeRemoteLowerThirdThemes(ALL_LT_THEMES, remoteProductionThemes),
+    [remoteProductionThemes],
+  );
 
   const updateTickerColorPopoverPosition = useCallback(() => {
     const anchor = tickerColorPopoverRef.current;
@@ -439,6 +451,16 @@ export default function DockMinistryTab({
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    const syncCachedRemoteThemes = () => setRemoteProductionThemes(getCachedRemoteProductionThemes());
+    syncCachedRemoteThemes();
+    void fetchRemoteProductionThemes().then((themes) => {
+      if (mountedRef.current) setRemoteProductionThemes(themes);
+    });
+    window.addEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
+    return () => window.removeEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
+  }, []);
+
   // Enforce free plan: delete MCE Ticker source from OBS when user is free/downgraded
   useEffect(() => {
     if (dockPlan !== "free") return;
@@ -476,7 +498,7 @@ export default function DockMinistryTab({
       const entries: MixedLTThemeEntry[] = [];
 
       // LowerThirdTheme favorites — only show themes favorited/added to OBS
-      const ltThemes = ALL_LT_THEMES.filter((t) => ltIdSet.has(t.id));
+      const ltThemes = availableLtThemes.filter((t) => ltIdSet.has(t.id));
       for (const t of ltThemes) {
         entries.push({ kind: "lt", theme: t, label: t.name });
       }
@@ -491,13 +513,13 @@ export default function DockMinistryTab({
       console.warn("[DockMinistry] Failed to load LT favorites:", err);
       setLtFavorites([]);
     }
-  }, []);
+  }, [availableLtThemes]);
 
   const refreshTickerFavorites = useCallback(async () => {
     try {
       const favIds = await loadDockTickerFavorites();
       setTickerFavIds(favIds);
-      const available = getDockTickerThemeOptionsForFavorites(favIds);
+      const available = getDockTickerThemeOptionsForFavorites(favIds, remoteProductionThemes);
       setSettings((current) => {
         const currentTheme = available.find((option) => option.id === current.themeId);
         if (currentTheme) return current;
@@ -509,7 +531,7 @@ export default function DockMinistryTab({
     } catch {
       // Keep the current ticker theme list if favorites cannot be read.
     }
-  }, []);
+  }, [remoteProductionThemes]);
 
   // Load favorite LT themes (both LowerThirdTheme and BibleTheme lower-thirds)
   useEffect(() => {
@@ -545,7 +567,7 @@ export default function DockMinistryTab({
     };
   }, [refreshLtFavorites, refreshTickerFavorites]);
 
-  const effectiveThemeList = getDockTickerThemeOptionsForFavorites(tickerFavIds);
+  const effectiveThemeList = getDockTickerThemeOptionsForFavorites(tickerFavIds, remoteProductionThemes);
   const selectedTickerTheme =
     effectiveThemeList.find((option) => option.id === settings.themeId) ??
     effectiveThemeList[0] ??
@@ -555,7 +577,7 @@ export default function DockMinistryTab({
   const tickerColors: TickerThemeColors | undefined = (() => {
     if (!selectedTickerTheme) return undefined;
     const brandColor = normalizeBrandColor(tickerBranding.brandColor);
-    const baseColors: TickerThemeColors = selectedTickerTheme.source === "dock"
+    const baseColors: TickerThemeColors = selectedTickerTheme.source === "dock" || selectedTickerTheme.source === "remote"
       ? {
         ...selectedTickerTheme.theme.defaultColors,
         accent: brandColor,
@@ -573,12 +595,13 @@ export default function DockMinistryTab({
       ...loadTickerColorOverrides(settings.colors),
     };
   })();
-  const tickerBrandLogoUrl = selectedTickerTheme?.source === "dock"
+  const tickerBrandLogoUrl = selectedTickerTheme?.source === "dock" || selectedTickerTheme?.source === "remote"
     ? tickerBranding.logoUrl
     : "";
   const tickerBrandName = tickerBranding.brandName || "MakeChurchEasy";
 
-  const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? { kind: "lt" as const, theme: ALL_LT_THEMES[0], label: ALL_LT_THEMES[0]?.name ?? "Speaker" };
+  const fallbackLtTheme = (availableLtThemes[0] ?? ALL_LT_THEMES[0]) as LowerThirdTheme;
+  const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? { kind: "lt" as const, theme: fallbackLtTheme, label: fallbackLtTheme?.name ?? "Speaker" };
   const selectedBibleLtSettings = ltSelectedEntry.kind === "bible"
     ? (ltSelectedEntry.theme.variants?.lowerThird?.settings ?? ltSelectedEntry.theme.settings)
     : null;
@@ -1055,7 +1078,7 @@ export default function DockMinistryTab({
                 <select
                   value={selectedTickerTheme?.id ?? ""}
                   onChange={(e) => {
-                    const nextTheme = resolveDockTickerThemeOption(e.target.value);
+                    const nextTheme = resolveDockTickerThemeOption(e.target.value, remoteProductionThemes);
                     setSettings((s) => ({
                       ...s,
                       themeId: e.target.value,

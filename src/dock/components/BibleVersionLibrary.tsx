@@ -262,7 +262,10 @@ export default function BibleVersionLibrary({
   ]);
 
   return (
-    <div className="bible-version-library" ref={panelRef}>
+    <div
+      className={`bible-version-library${isOpen ? " bible-version-library--open" : ""}`}
+      ref={panelRef}
+    >
       {/* Trigger Button */}
       <button
         className="bible-version-library__trigger"

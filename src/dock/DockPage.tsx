@@ -4,7 +4,7 @@
  * The dock keeps Bible, Worship, and Media production controls inside OBS.
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { dockClient, dockBridge, type DockStateMessage } from "../services/dockBridge";
@@ -12,13 +12,6 @@ import { dockObsClient, type DockObsStatus } from "./dockObsClient";
 import { DOCK_TABS, type DockTab, type DockStagedItem } from "./dockTypes";
 import type { DockPresentationOutputTarget } from "./dockPresentationTarget";
 import { isPresentationLinkTarget } from "./dockPresentationTarget";
-import DockBibleTab from "./tabs/DockBibleTab";
-import DockMediaTab from "./tabs/DockMediaTab";
-import DockWorshipTab from "./tabs/DockWorshipTab";
-import DockPlannerTab from "./tabs/DockPlannerTab";
-import DockMultiviewTab from "./tabs/DockMultiviewTab";
-import DockMinistryTab from "./tabs/DockMinistryTab";
-import DockLmTab from "./tabs/DockLmTab";
 import { useAppTheme } from "../hooks/useAppTheme";
 import {
   type DockProductionSettingsPayload,
@@ -28,8 +21,6 @@ import {
 import type { ServicePlannerSnapshot } from "../service-planner/types";
 import { installDockTextShortcuts } from "./dockTextShortcuts";
 import { useKeyboardShortcuts, type ShortcutDefinition, type ShortcutCategory, formatShortcut } from "./useKeyboardShortcuts";
-import BibleCommandPalette from "../components/BibleCommandPalette";
-import { BibleProvider } from "../bible/bibleStore";
 import { useDockDragDrop } from "./useDockDragDrop";
 import { useDockUpload } from "./useDockUpload";
 import { ensureObsConnected } from "./obsConnectionGuard";
@@ -45,6 +36,15 @@ import { publishDockStagedItemToPresentation } from "../services/presentationDoc
 import "./dock.css";
 import "./dock-theme.css";
 import Icon from "./DockIcon";
+
+const DockBibleTab = lazy(() => import("./tabs/DockBibleTab"));
+const DockMediaTab = lazy(() => import("./tabs/DockMediaTab"));
+const DockWorshipTab = lazy(() => import("./tabs/DockWorshipTab"));
+const DockPlannerTab = lazy(() => import("./tabs/DockPlannerTab"));
+const DockMultiviewTab = lazy(() => import("./tabs/DockMultiviewTab"));
+const DockMinistryTab = lazy(() => import("./tabs/DockMinistryTab"));
+const DockLmTab = lazy(() => import("./tabs/DockLmTab"));
+const DockBibleCommandPaletteHost = lazy(() => import("./DockBibleCommandPaletteHost"));
 
 const DOCK_SHELL_PREFS_KEY = "ocs-dock-shell-preferences";
 const DOCK_STAGED_ITEM_KEY = "ocs-dock-staged-item";
@@ -1174,75 +1174,77 @@ export default function DockPage({
         <div className="dock-content">
 
           <div className="dock-content-main">
-            {activeTab === "planner" && (
-              <DockPlannerTab
-                staged={staged}
-                onStage={handleStage}
-                initialSnapshot={servicePlanner}
-              />
-            )}
-            {activeTab === "bible" && (
-              presentationBibleLmSplit ? (
-                <div className="dock-presentation-bible-lm-split">
-                  <section className="dock-presentation-bible-lm-pane" aria-label="Bible dock">
-                    <div className="dock-presentation-bible-lm-pane__title">Bible</div>
-                    <DockBibleTab
-                      staged={staged}
-                      onStage={handleStage}
-                      productionDefaults={productionSettings.bible}
-                      appConnected={appConnected}
-                      presentationOutputTarget={presentationOutputTarget}
-                      showHistory={showHistory}
-                      onHistoryClose={() => setShowHistory(false)}
-                    />
-                  </section>
-                  <section className="dock-presentation-bible-lm-pane" aria-label="Scripture assistant dock">
-                    <div className="dock-presentation-bible-lm-pane__title">Scripture Assistant</div>
-                    <DockLmTab presentationOutputTarget={presentationOutputTarget} />
-                  </section>
-                </div>
-              ) : (
-                <DockBibleTab
+            <Suspense fallback={<div className="dock-tab-loading">{t('common.loading')}</div>}>
+              {activeTab === "planner" && (
+                <DockPlannerTab
                   staged={staged}
                   onStage={handleStage}
-                  productionDefaults={productionSettings.bible}
-                  appConnected={appConnected}
+                  initialSnapshot={servicePlanner}
+                />
+              )}
+              {activeTab === "bible" && (
+                presentationBibleLmSplit ? (
+                  <div className="dock-presentation-bible-lm-split">
+                    <section className="dock-presentation-bible-lm-pane" aria-label="Bible dock">
+                      <div className="dock-presentation-bible-lm-pane__title">Bible</div>
+                      <DockBibleTab
+                        staged={staged}
+                        onStage={handleStage}
+                        productionDefaults={productionSettings.bible}
+                        appConnected={appConnected}
+                        presentationOutputTarget={presentationOutputTarget}
+                        showHistory={showHistory}
+                        onHistoryClose={() => setShowHistory(false)}
+                      />
+                    </section>
+                    <section className="dock-presentation-bible-lm-pane" aria-label="Scripture assistant dock">
+                      <div className="dock-presentation-bible-lm-pane__title">Scripture Assistant</div>
+                      <DockLmTab presentationOutputTarget={presentationOutputTarget} />
+                    </section>
+                  </div>
+                ) : (
+                  <DockBibleTab
+                    staged={staged}
+                    onStage={handleStage}
+                    productionDefaults={productionSettings.bible}
+                    appConnected={appConnected}
+                    presentationOutputTarget={presentationOutputTarget}
+                    fullscreenOnly={hideLowerThirdControls}
+                    showHistory={showHistory}
+                    onHistoryClose={() => setShowHistory(false)}
+                  />
+                )
+              )}
+              {activeTab === "worship" && (
+                <DockWorshipTab
+                  staged={staged}
+                  onStage={handleStage}
+                  productionDefaults={productionSettings.worship}
                   presentationOutputTarget={presentationOutputTarget}
                   fullscreenOnly={hideLowerThirdControls}
-                  showHistory={showHistory}
-                  onHistoryClose={() => setShowHistory(false)}
                 />
-              )
-            )}
-            {activeTab === "worship" && (
-              <DockWorshipTab
-                staged={staged}
-                onStage={handleStage}
-                productionDefaults={productionSettings.worship}
-                presentationOutputTarget={presentationOutputTarget}
-                fullscreenOnly={hideLowerThirdControls}
-              />
-            )}
-            {activeTab === "media" && (
-              <DockMediaTab
-                staged={staged}
-                onStage={handleStage}
-                presentationOutputTarget={presentationOutputTarget}
-              />
-            )}
-            {activeTab === "multiview" && (
-              <DockMultiviewTab />
-            )}
-            {activeTab === "ministry" && (
-              <DockMinistryTab
-                staged={staged}
-                onStage={handleStage}
-                tickerOutputMode={tickerOutputMode}
-                presentationOutputTarget={presentationOutputTarget}
-                hideTickerControls={hideTickerControls}
-                hideLowerThirdControls={hideLowerThirdControls}
-              />
-            )}
+              )}
+              {activeTab === "media" && (
+                <DockMediaTab
+                  staged={staged}
+                  onStage={handleStage}
+                  presentationOutputTarget={presentationOutputTarget}
+                />
+              )}
+              {activeTab === "multiview" && (
+                <DockMultiviewTab />
+              )}
+              {activeTab === "ministry" && (
+                <DockMinistryTab
+                  staged={staged}
+                  onStage={handleStage}
+                  tickerOutputMode={tickerOutputMode}
+                  presentationOutputTarget={presentationOutputTarget}
+                  hideTickerControls={hideTickerControls}
+                  hideLowerThirdControls={hideLowerThirdControls}
+                />
+              )}
+            </Suspense>
           </div>
         </div>
       </div>
@@ -1349,15 +1351,17 @@ export default function DockPage({
       )}
 
       {/* ── Command Palette ── */}
-      <BibleProvider>
-        <BibleCommandPalette
-          open={showCommandPalette}
-          initialQuery={commandPaletteInitialQuery}
-          onClose={() => setShowCommandPalette(false)}
-          onSelectBibleVerse={handleCommandPaletteSelectBibleVerse}
-          onSelectTemplate={handleCommandPaletteSelectTemplate}
-        />
-      </BibleProvider>
+      {showCommandPalette && (
+        <Suspense fallback={null}>
+          <DockBibleCommandPaletteHost
+            open={showCommandPalette}
+            initialQuery={commandPaletteInitialQuery}
+            onClose={() => setShowCommandPalette(false)}
+            onSelectBibleVerse={handleCommandPaletteSelectBibleVerse}
+            onSelectTemplate={handleCommandPaletteSelectTemplate}
+          />
+        </Suspense>
+      )}
 
       {/* ── Global drag-and-drop overlay ── */}
       <DockDropOverlay visible={isDragging} />

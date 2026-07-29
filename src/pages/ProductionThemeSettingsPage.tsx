@@ -44,6 +44,15 @@ import {
   generateTickerHTML,
   type TickerThemeConfig,
 } from "../components/modules/tickerThemes";
+import {
+  REMOTE_PRODUCTION_THEMES_UPDATED_EVENT,
+  fetchRemoteProductionThemes,
+  getCachedRemoteProductionThemes,
+  remoteThemeToLowerThird,
+  remoteThemeToPermanentTickerTheme,
+  remoteThemeToTickerConfig,
+  type RemoteProductionTheme,
+} from "../services/remoteProductionThemes";
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan } from "../services/licenseService";
@@ -230,7 +239,7 @@ interface DockTickerPreview {
   name: string;
   description: string;
   accentColor: string;
-  source: "dock" | "permanent";
+  source: "dock" | "permanent" | "remote";
   dockTheme?: TickerThemeConfig;
   permanentTheme?: TickerTheme;
 }
@@ -279,12 +288,21 @@ export default function ProductionThemeSettingsPage() {
   const [obsSearch, setObsSearch] = useState("");
   const [previewTheme, setPreviewTheme] = useState<ObsTheme | null>(null);
   const [previewTicker, setPreviewTicker] = useState<DockTickerPreview | null>(null);
+  const [remoteProductionThemes, setRemoteProductionThemes] = useState<RemoteProductionTheme[]>(() => getCachedRemoteProductionThemes());
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const allObsThemes: ObsTheme[] = useMemo(
-    () => ((allThemesData as { themes: ObsTheme[] }).themes ?? []).map((theme) => localizeLowerThirdThemeAssets(theme)),
-    [],
-  );
+  const allObsThemes: ObsTheme[] = useMemo(() => {
+    const bundledThemes = ((allThemesData as { themes: ObsTheme[] }).themes ?? [])
+      .map((theme) => localizeLowerThirdThemeAssets(theme));
+    const remoteLowerThirds = remoteProductionThemes
+      .map(remoteThemeToLowerThird)
+      .filter((theme): theme is NonNullable<ReturnType<typeof remoteThemeToLowerThird>> => !!theme)
+      .map((theme) => localizeLowerThirdThemeAssets(theme as unknown as ObsTheme));
+    const merged = new Map<string, ObsTheme>();
+    for (const theme of bundledThemes) merged.set(theme.id, theme);
+    for (const theme of remoteLowerThirds) merged.set(theme.id, theme);
+    return [...merged.values()];
+  }, [remoteProductionThemes]);
 
   // Combined dock + permanent tickers for the Tickers tab
   const allTickers: DockTickerPreview[] = useMemo(() => {
@@ -304,8 +322,37 @@ export default function ProductionThemeSettingsPage() {
       source: "permanent" as const,
       permanentTheme: pt,
     }));
-    return [...dockTickers, ...permanentTickers];
-  }, []);
+    const remoteTickers: DockTickerPreview[] = [];
+    for (const remoteTheme of remoteProductionThemes) {
+      const permanentTheme = remoteThemeToPermanentTickerTheme(remoteTheme);
+      if (permanentTheme) {
+        remoteTickers.push({
+          id: permanentTheme.id,
+          name: permanentTheme.name,
+          description: permanentTheme.description,
+          accentColor: permanentTheme.accentColor,
+          source: "remote" as const,
+          permanentTheme,
+        });
+        continue;
+      }
+      const theme = remoteThemeToTickerConfig(remoteTheme);
+      if (!theme) continue;
+      remoteTickers.push({
+        id: theme.id,
+        name: theme.name,
+        description: theme.description,
+        accentColor: theme.defaultColors.accent,
+        source: "remote" as const,
+        dockTheme: theme,
+      });
+    }
+    const merged = new Map<string, DockTickerPreview>();
+    for (const ticker of [...dockTickers, ...permanentTickers, ...remoteTickers]) {
+      merged.set(ticker.id, ticker);
+    }
+    return [...merged.values()];
+  }, [remoteProductionThemes]);
 
   const translatedCategoryFilters = useMemo(() => OBS_CATEGORY_FILTERS.map((f) => ({
     ...f,
@@ -336,6 +383,14 @@ export default function ProductionThemeSettingsPage() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const syncCachedRemoteThemes = () => setRemoteProductionThemes(getCachedRemoteProductionThemes());
+    syncCachedRemoteThemes();
+    void fetchRemoteProductionThemes().then(setRemoteProductionThemes);
+    window.addEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
+    return () => window.removeEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
+  }, []);
 
   const refreshFavoriteState = useCallback(() => {
     setObsFavorites(getObsFavorites());
@@ -885,7 +940,7 @@ export default function ProductionThemeSettingsPage() {
               {allTickers.map((ticker) => {
                 const isFav = tickerFavorites.has(ticker.id);
                 const previewSrc =
-                  ticker.source === "dock" && ticker.dockTheme
+                  (ticker.source === "dock" || ticker.source === "remote") && ticker.dockTheme
                     ? buildDockTickerPreviewHtml(ticker.dockTheme, [t("themes.sampleTicker1"), t("themes.sampleTicker2"), t("themes.sampleTicker3")])
                     : ticker.permanentTheme
                       ? buildTickerPreviewHtml(ticker.permanentTheme)
@@ -897,7 +952,11 @@ export default function ProductionThemeSettingsPage() {
                       <div className="ticker-preview-card__title">
                         <strong>{ticker.name}</strong>
                         <span className="ticker-preview-card__source">
-                          {ticker.source === "dock" ? t("themes.sourceDock") : t("themes.sourcePermanent")}
+                          {ticker.source === "remote"
+                            ? "Admin"
+                            : ticker.source === "dock"
+                              ? t("themes.sourceDock")
+                              : t("themes.sourcePermanent")}
                         </span>
                       </div>
                       <span
@@ -1054,7 +1113,11 @@ export default function ProductionThemeSettingsPage() {
                 <div>
                   <h3>{previewTicker.name}</h3>
                   <span className="obs-preview-modal__subtitle">
-                    {previewTicker.source === "dock" ? t("themes.dockTicker") : t("themes.permanentTicker")}
+                    {previewTicker.source === "remote"
+                      ? "Admin ticker"
+                      : previewTicker.source === "dock"
+                        ? t("themes.dockTicker")
+                        : t("themes.permanentTicker")}
                     {previewTicker.permanentTheme ? ` · ${previewTicker.permanentTheme.speed} ${t("themes.speed")}` : ""}
                   </span>
                 </div>
@@ -1070,7 +1133,7 @@ export default function ProductionThemeSettingsPage() {
                 <iframe
                   className="obs-preview-modal__iframe"
                   srcDoc={
-                    previewTicker.source === "dock" && previewTicker.dockTheme
+                    (previewTicker.source === "dock" || previewTicker.source === "remote") && previewTicker.dockTheme
                       ? buildDockTickerPreviewHtml(previewTicker.dockTheme, [t("themes.sampleTicker1"), t("themes.sampleTicker2"), t("themes.sampleTicker3")])
                       : previewTicker.permanentTheme
                         ? buildTickerPreviewHtml(previewTicker.permanentTheme)

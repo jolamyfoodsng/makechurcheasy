@@ -5,6 +5,11 @@ import {
   type TickerThemeConfig,
 } from "../components/modules/tickerThemes";
 import { defaultTickerThemes, type TickerTheme as PermanentTickerTheme } from "../data/tickerThemes";
+import {
+  remoteThemeToPermanentTickerTheme,
+  remoteThemeToTickerConfig,
+  type RemoteProductionTheme,
+} from "../services/remoteProductionThemes";
 
 export type DockTickerThemeOption =
   | {
@@ -15,6 +20,24 @@ export type DockTickerThemeOption =
       accentColor: string;
       source: "dock";
       theme: TickerThemeConfig;
+    }
+  | {
+      id: string;
+      name: string;
+      description: string;
+      defaultHeading: string;
+      accentColor: string;
+      source: "remote";
+      theme: TickerThemeConfig;
+    }
+  | {
+      id: string;
+      name: string;
+      description: string;
+      defaultHeading: string;
+      accentColor: string;
+      source: "remote-template";
+      theme: PermanentTickerTheme;
     }
   | {
       id: string;
@@ -63,22 +86,64 @@ const ALL_DOCK_TICKER_THEME_OPTIONS: DockTickerThemeOption[] = [
 export const DEFAULT_DOCK_TICKER_THEME_OPTION =
   ALL_DOCK_TICKER_THEME_OPTIONS[0];
 
+export function getAllDockTickerThemeOptions(
+  remoteThemes: RemoteProductionTheme[] = [],
+): DockTickerThemeOption[] {
+  const merged = new Map<string, DockTickerThemeOption>();
+  for (const option of ALL_DOCK_TICKER_THEME_OPTIONS) {
+    merged.set(option.id, option);
+  }
+
+  for (const remoteTheme of remoteThemes) {
+    const permanentTheme = remoteThemeToPermanentTickerTheme(remoteTheme);
+    if (permanentTheme) {
+      merged.set(permanentTheme.id, {
+        id: permanentTheme.id,
+        name: permanentTheme.name,
+        description: permanentTheme.description,
+        defaultHeading: permanentTheme.badge || permanentTheme.name,
+        accentColor: permanentTheme.accentColor,
+        source: "remote-template",
+        theme: permanentTheme,
+      });
+      continue;
+    }
+
+    const theme = remoteThemeToTickerConfig(remoteTheme);
+    if (!theme) continue;
+    merged.set(theme.id, {
+      id: theme.id,
+      name: theme.name,
+      description: theme.description,
+      defaultHeading: theme.defaultHeading,
+      accentColor: theme.defaultColors.accent,
+      source: "remote",
+      theme,
+    });
+  }
+
+  return [...merged.values()];
+}
+
 export function resolveDockTickerThemeOption(
   themeId: string | null | undefined,
+  remoteThemes: RemoteProductionTheme[] = [],
 ): DockTickerThemeOption | undefined {
   if (!themeId) return undefined;
-  return ALL_DOCK_TICKER_THEME_OPTIONS.find((option) => option.id === themeId);
+  return getAllDockTickerThemeOptions(remoteThemes).find((option) => option.id === themeId);
 }
 
 export function getDockTickerThemeOptionsForFavorites(
   favorites: ReadonlySet<string> | null | undefined,
+  remoteThemes: RemoteProductionTheme[] = [],
 ): DockTickerThemeOption[] {
+  const allOptions = getAllDockTickerThemeOptions(remoteThemes);
   if (!favorites || favorites.size === 0) {
-    return ALL_DOCK_TICKER_THEME_OPTIONS;
+    return allOptions;
   }
 
-  const filtered = ALL_DOCK_TICKER_THEME_OPTIONS.filter((option) => favorites.has(option.id));
-  return filtered.length > 0 ? filtered : ALL_DOCK_TICKER_THEME_OPTIONS;
+  const filtered = allOptions.filter((option) => favorites.has(option.id));
+  return filtered.length > 0 ? filtered : allOptions;
 }
 
 export function renderDockTickerThemeHtml({
@@ -96,7 +161,7 @@ export function renderDockTickerThemeHtml({
   const safeMessages = messages.map((message) => message.trim()).filter(Boolean);
   const resolvedHeading = heading.trim() || option.defaultHeading;
 
-  if (option.source === "dock") {
+  if (option.source === "dock" || option.source === "remote") {
     return generateTickerHTML(
       option.theme,
       colors ?? option.theme.defaultColors,

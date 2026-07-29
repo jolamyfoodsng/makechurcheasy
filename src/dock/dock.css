@@ -2203,7 +2203,7 @@
   background: var(--dock-surface);
   border: 1px solid var(--dock-border);
   border-radius: 16px;
-  z-index: 200;
+  z-index: 90;
   max-height: 500px;
   overflow-y: auto;
   padding: 4px;
@@ -6188,6 +6188,11 @@
 .dock-bible-browser__book-picker {
   position: relative;
   min-width: 0;
+  z-index: 1;
+}
+
+.dock-bible-browser__book-picker--open {
+  z-index: 80;
 }
 
 .dock-bible-browser__book-trigger {
@@ -6233,7 +6238,7 @@
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  z-index: 7;
+  z-index: 90;
   width: min(360px, 64vw);
   max-height: 260px;
   overflow: auto;
@@ -6248,6 +6253,12 @@
 .dock-bible-browser__verse-picker {
   position: relative;
   flex: 0 0 auto;
+  z-index: 1;
+}
+
+.dock-bible-browser__chapter-picker--open,
+.dock-bible-browser__verse-picker--open {
+  z-index: 80;
 }
 
 .dock-bible-browser__chapter-trigger,
@@ -6290,7 +6301,7 @@
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  z-index: 6;
+  z-index: 90;
   width: min(268px, 52vw);
   max-height: 230px;
   overflow: auto;
@@ -6428,6 +6439,46 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   flex-shrink: 0;
+}
+
+.dock-bible-reader__ref-header-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.dock-bible-reader__chapter-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.dock-bible-reader__chapter-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 88%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dock-surface-alt) 74%, var(--dock-surface));
+  color: var(--dock-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.dock-bible-reader__chapter-nav-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--dock-accent) 32%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-surface-hover) 72%, transparent);
+  color: var(--dock-text);
+}
+
+.dock-bible-reader__chapter-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .dock-bible-reader__ref-header-reference {
@@ -11501,11 +11552,14 @@
   flex-direction: column;
   background: var(--dock-surface);
   flex-shrink: 0;
+  position: relative;
+  z-index: 3;
 }
 
 .dock-bible-topbar__header {
   display: flex;
   align-items: center;
+  gap: 4px;
   /* padding: 8px 8px; */
 }
 
@@ -11525,9 +11579,27 @@
   white-space: nowrap;
 }
 
-.dock-bible-topbar__toggle-btn:hover {
+.dock-bible-topbar__toggle-btn:hover,
+.dock-bible-topbar__toggle-btn--active {
   background: var(--dock-surface-hover);
   border-color: var(--dock-border-active);
+}
+
+.dock-bible-topbar__toggle-label {
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 360px) {
+  .dock-bible-topbar__toggle-btn {
+    gap: 4px;
+    padding: 4px 6px;
+  }
+
+  .dock-bible-topbar__toggle-label {
+    display: none;
+  }
 }
 
 .dock-bible-topbar__book-short {
@@ -11542,32 +11614,47 @@
 .dock-bible-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 8px;
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 9999;
+  gap: 6px;
+  padding: 6px 8px;
+  position: relative;
+  z-index: 40;
   background: var(--dock-surface);
   border-bottom: 1px solid var(--dock-border);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   pointer-events: auto;
+}
+
+.dock-bible-controls-panel {
+  position: relative;
+  z-index: 40;
+  flex-shrink: 0;
+  background: var(--dock-surface);
+  border-bottom: 1px solid var(--dock-border);
+}
+
+.dock-bible-controls-panel .dock-bible-controls {
+  border-bottom: 0;
 }
 
 .dock-bible-controls__book-card {
   position: relative;
-  flex: 1 1 auto;
+  flex: 0 1 190px;
+  width: 190px;
+  max-width: 220px;
   min-width: 0;
+  z-index: 1;
+}
+
+.dock-bible-controls__book-card--open {
+  z-index: 80;
 }
 
 .dock-bible-controls__book-trigger {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   width: 100%;
-  min-height: 35px;
-  padding: 0 10px;
+  min-height: 34px;
+  padding: 0 8px;
   border: 1px solid color-mix(in srgb, var(--dock-accent) 32%, var(--dock-border));
   border-radius: 4px;
   background: color-mix(in srgb, var(--dock-accent-soft) 42%, var(--dock-surface));
@@ -11590,10 +11677,10 @@
 }
 
 .dock-bible-controls__book-label {
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--dock-text-dim);
   flex-shrink: 0;
 }
@@ -11613,15 +11700,67 @@
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  z-index: 7;
-  width: min(360px, 72vw);
-  max-height: 260px;
+  z-index: 90;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(204px, 50vh);
   overflow: auto;
-  padding: 8px;
+  padding: 6px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
   border-radius: 4px;
   background: color-mix(in srgb, var(--dock-surface) 98%, transparent);
 
+}
+
+.dock-bible-controls__dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  padding: 0 6px 5px;
+  color: var(--dock-text-dim);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dock-bible-controls__book-dropdown .dock-bible-grid--console {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.dock-bible-controls__book-dropdown .dock-bible-book-btn {
+  display: flex;
+  min-height: 30px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 5px 7px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dock-bible-controls__book-dropdown .dock-bible-book-btn__abbr {
+  width: 38px;
+  flex: 0 0 38px;
+  overflow: hidden;
+  color: #93C5FD;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+}
+
+.dock-bible-controls__book-dropdown .dock-bible-book-btn__name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dock-text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dock-bible-controls__compact {
@@ -11660,6 +11799,12 @@
 .dock-bible-controls__chapter-picker,
 .dock-bible-controls__verse-picker {
   position: relative;
+  z-index: 1;
+}
+
+.dock-bible-controls__chapter-picker--open,
+.dock-bible-controls__verse-picker--open {
+  z-index: 80;
 }
 
 .dock-bible-controls__chapter-trigger,
@@ -11712,7 +11857,7 @@
   position: absolute;
   top: calc(100% + 4px);
   left: -137px;
-  z-index: 6;
+  z-index: 90;
   width: min(200px, 60vw);
   max-height: 200px;
   overflow: auto;
@@ -11791,6 +11936,11 @@
 
 .bible-version-library {
   position: relative;
+  z-index: 1;
+}
+
+.bible-version-library--open {
+  z-index: 80;
 }
 
 .bible-version-library__trigger {
@@ -11828,7 +11978,7 @@
   border: 1px solid var(--dock-border);
   border-radius: 4px;
 
-  z-index: 1000;
+  z-index: 90;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -12143,7 +12293,7 @@
   }
 
   .dock-bible-controls__book-card {
-    flex: 1 1 auto;
+    flex: 0 1 190px;
   }
 
   .dock-bible-controls__compact {
@@ -12165,7 +12315,7 @@
   }
 
   .dock-bible-controls__book-card {
-    flex: 1 1 auto;
+    flex: 0 1 190px;
     width: auto;
   }
 
@@ -12207,6 +12357,7 @@
   .dock-bible-controls__book-card {
     flex: 1 1 auto;
     width: auto;
+    max-width: none;
   }
 
   .dock-bible-controls__compact {
@@ -12249,6 +12400,7 @@
   .dock-bible-controls__book-card {
     flex: 1 1 auto;
     min-width: 0;
+    max-width: none;
   }
 
   .dock-bible-controls__compact {
@@ -12673,11 +12825,19 @@
   border-bottom: 1px solid var(--dock-border);
   flex-shrink: 0;
   position: relative;
+  z-index: 30;
+  overflow: visible;
+}
+
+.dock-bible-search-row:focus-within {
+  z-index: 70;
 }
 
 .dock-bible-search-row__input {
   flex: 1;
   min-width: 0;
+  position: relative;
+  overflow: visible;
 }
 
 .dock-bible-search-row__input .dock-bible-search-bar {
@@ -12698,6 +12858,8 @@
   grid-template-columns: repeat(2, min-content);
   gap: 4px;
   margin-right: 12px;
+  position: relative;
+  z-index: 2;
   /* width: 80px; */
 }
 
@@ -29594,8 +29756,9 @@ min-height:100px;
 
 /* ── Bible topbar expanded ── */
 .dock-bible-topbar--expanded {
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--dock-border-soft, rgba(51, 65, 85, 0.3));
+  padding-bottom: 0;
+  border-bottom: 0;
+  z-index: 50;
 }
 
 /* ── Bible compact standalone ── */
@@ -29900,6 +30063,19 @@ min-height:100px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+}
+
+.dock-tab-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  padding: 24px;
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 /* ── Section description ── */
