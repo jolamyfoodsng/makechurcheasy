@@ -29,7 +29,13 @@
  */
 
 import { getUserScopedKey } from "./userScopedStorage";
-import { getDeviceId, getDeviceSecret, getSession } from "./authService";
+import {
+  getDeviceApiBaseCandidates,
+  getDeviceId,
+  getDeviceSecret,
+  getSession,
+  rememberSessionApiBase,
+} from "./authService";
 import { checkEntitlementSync, type FeatureKey } from "./entitlementClient";
 import { normalizePlanId } from "../lib/subscriptionSourceOfTruth";
 
@@ -192,20 +198,29 @@ function emit(): void {
 // ── Internet Detection ───────────────────────────────────────────────────────
 
 async function checkInternet(): Promise<boolean> {
-  try {
-    // Use a lightweight HEAD request to the API server
+  const candidates = Array.from(new Set([API_BASE, ...getDeviceApiBaseCandidates()]));
+
+  for (const apiBase of candidates) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`${API_BASE}/api/health`, {
-      method: "HEAD",
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    clearTimeout(timeout);
-    return res.ok || res.status < 500;
-  } catch {
-    return false;
+    try {
+      // Use a lightweight HEAD request to the API server
+      const res = await fetch(`${apiBase}/api/health`, {
+        method: "HEAD",
+        signal: controller.signal,
+        cache: "no-store",
+      });
+      if (res.ok || res.status < 500) {
+        return true;
+      }
+    } catch {
+      // Try the next API candidate.
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+
+  return false;
 }
 
 // ── Backend Verification ─────────────────────────────────────────────────────
@@ -217,47 +232,72 @@ async function fetchLicenseFromBackend(): Promise<LicenseFetchResult> {
     return { ok: false, lockReason: "device_removed", transient: false };
   }
 
-  try {
-    const res = await fetch(
-      `${API_BASE}/api/device/license?deviceId=${encodeURIComponent(deviceId)}`,
-      {
-        headers: {
-          "X-App-Version": APP_VERSION,
-          "X-Device-Secret": getDeviceSecret() || "",
+  const candidates = getDeviceApiBaseCandidates();
+  let sawDeviceMissing = false;
+
+  for (const apiBase of candidates) {
+    try {
+      const res = await fetch(
+        `${apiBase}/api/device/license?deviceId=${encodeURIComponent(deviceId)}`,
+        {
+          headers: {
+            "X-App-Version": APP_VERSION,
+            "X-Device-Secret": getDeviceSecret() || "",
+          },
         },
-      },
-    );
+      );
 
-    if (!res.ok) {
-      let error = "";
-      try {
-        const data = await res.clone().json();
-        error = typeof data?.error === "string" ? data.error : "";
-      } catch {
-        // keep status-only handling
+      if (!res.ok) {
+        let error = "";
+        try {
+          const data = await res.clone().json();
+          error = typeof data?.error === "string" ? data.error : "";
+        } catch {
+          // keep status-only handling
+        }
+
+        console.warn(`[licenseGuard] Backend returned ${res.status}${error ? `: ${error}` : ""}`);
+
+        if (
+          (res.status === 401 || res.status === 404) &&
+          apiBase !== candidates[candidates.length - 1]
+        ) {
+          sawDeviceMissing = true;
+          console.warn(
+            "[licenseGuard] Device not found on %s; retrying license check on production API.",
+            apiBase,
+          );
+          continue;
+        }
+
+        if (res.status === 401 || res.status === 404) {
+          return { ok: false, lockReason: "device_removed", transient: false };
+        }
+        if (res.status === 403 && /version/i.test(error)) {
+          return { ok: false, lockReason: "forced_upgrade", transient: false };
+        }
+
+        return { ok: false, lockReason: "internet_required", transient: true };
       }
 
-      console.warn(`[licenseGuard] Backend returned ${res.status}${error ? `: ${error}` : ""}`);
-
-      if (res.status === 401 || res.status === 404) {
-        return { ok: false, lockReason: "device_removed", transient: false };
+      const data = await res.json();
+      if (!data?.license) {
+        return { ok: false, lockReason: "internet_required", transient: true };
       }
-      if (res.status === 403 && /version/i.test(error)) {
-        return { ok: false, lockReason: "forced_upgrade", transient: false };
+      if (sawDeviceMissing || candidates[0] !== apiBase) {
+        await rememberSessionApiBase(apiBase);
       }
-
+      return { ok: true, payload: data.license };
+    } catch (err) {
+      console.warn("[licenseGuard] Backend fetch failed:", err);
+      if (apiBase !== candidates[candidates.length - 1]) {
+        continue;
+      }
       return { ok: false, lockReason: "internet_required", transient: true };
     }
-
-    const data = await res.json();
-    if (!data?.license) {
-      return { ok: false, lockReason: "internet_required", transient: true };
-    }
-    return { ok: true, payload: data.license };
-  } catch (err) {
-    console.warn("[licenseGuard] Backend fetch failed:", err);
-    return { ok: false, lockReason: "internet_required", transient: true };
   }
+
+  return { ok: false, lockReason: "device_removed", transient: false };
 }
 
 // ── License Normalization ────────────────────────────────────────────────────

@@ -130,6 +130,7 @@ interface AuthSession {
   user: AuthUser;
   deviceId: string;
   deviceSecret?: string;
+  apiBase?: string;
   expiresAt: number;
 }
 
@@ -270,6 +271,31 @@ export function getDeviceId(): string | null {
 
 export function getDeviceSecret(): string | null {
   return _session?.deviceSecret ?? null;
+}
+
+export function resolveDeviceApiBaseCandidates(sessionApiBase?: string | null): string[] {
+  const primary = normalizeApiBase(sessionApiBase || API_BASE);
+  return primary === PRODUCTION_API_BASE
+    ? [primary]
+    : [primary, PRODUCTION_API_BASE];
+}
+
+export function getSessionApiBase(): string {
+  return normalizeApiBase(_session?.apiBase || API_BASE);
+}
+
+export function getDeviceApiBaseCandidates(): string[] {
+  return resolveDeviceApiBaseCandidates(_session?.apiBase);
+}
+
+export async function rememberSessionApiBase(apiBase: string): Promise<void> {
+  if (!_session) return;
+  const normalized = normalizeApiBase(apiBase);
+  if (_session.apiBase === normalized) return;
+  await saveSession({
+    ..._session,
+    apiBase: normalized,
+  });
 }
 
 export async function clearDeviceSecretForRecovery(): Promise<void> {
@@ -415,31 +441,62 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
   }
 
   try {
-    const bootstrapUrl = `${API_BASE}/api/device/bootstrap?deviceId=${encodeURIComponent(_session.deviceId)}`;
-    const requestBootstrap = (deviceSecret?: string, dedupeSuffix = "primary") =>
-      requestJsonWithRetry<DeviceBootstrapResponse>(bootstrapUrl, {
-        dedupeKey: `account-bootstrap:${_session?.deviceId}:${dedupeSuffix}`,
-        headers: {
-          "X-App-Version": APP_VERSION,
-          ...(deviceSecret ? { "X-Device-Secret": deviceSecret } : {}),
-        },
-        retryDelaysMs: [1000, 3000],
-      });
+    const candidates = getDeviceApiBaseCandidates();
+    let response: Response | null = null;
+    let data: DeviceBootstrapResponse | null = null;
+    let successfulApiBase = "";
 
-    let { response, data } = await requestBootstrap(_session.deviceSecret, "primary");
+    for (const apiBase of candidates) {
+      const bootstrapUrl = `${apiBase}/api/device/bootstrap?deviceId=${encodeURIComponent(_session.deviceId)}`;
+      const requestBootstrap = (deviceSecret?: string, dedupeSuffix = "primary") =>
+        requestJsonWithRetry<DeviceBootstrapResponse>(bootstrapUrl, {
+          dedupeKey: `account-bootstrap:${apiBase}:${_session?.deviceId}:${dedupeSuffix}`,
+          headers: {
+            "X-App-Version": APP_VERSION,
+            ...(deviceSecret ? { "X-Device-Secret": deviceSecret } : {}),
+          },
+          retryDelaysMs: [1000, 3000],
+        });
 
-    if (response.status === 401 && _session.deviceSecret) {
-      const message = typeof data?.error === "string" ? data.error : "";
-      if (/invalid device secret/i.test(message)) {
-        const retry = await requestBootstrap(undefined, "secret-recovery");
-        if (retry.response.ok) {
-          await clearDeviceSecretForRecovery();
-          response = retry.response;
-          data = retry.data;
-        } else if (retry.response.status >= 500) {
-          return { status: "network_error" };
+      const primary = await requestBootstrap(_session.deviceSecret, "primary");
+      response = primary.response;
+      data = primary.data;
+
+      if (response.status === 401 && _session.deviceSecret) {
+        const message = typeof data?.error === "string" ? data.error : "";
+        if (/invalid device secret/i.test(message)) {
+          const retry = await requestBootstrap(undefined, "secret-recovery");
+          if (retry.response.ok) {
+            await clearDeviceSecretForRecovery();
+            response = retry.response;
+            data = retry.data;
+          } else if (retry.response.status >= 500) {
+            return { status: "network_error" };
+          }
         }
       }
+
+      if (response.ok) {
+        successfulApiBase = apiBase;
+        break;
+      }
+
+      if (
+        (response.status === 401 || response.status === 404) &&
+        apiBase !== candidates[candidates.length - 1]
+      ) {
+        console.warn(
+          "[authService] Device not found on %s; retrying account bootstrap on production API.",
+          apiBase,
+        );
+        continue;
+      }
+
+      break;
+    }
+
+    if (!response) {
+      return { status: "network_error" };
     }
 
     if (response.status === 403) {
@@ -453,7 +510,7 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
       return { status: "device_removed" };
     }
 
-    if (!response.ok) {
+    if (!response.ok || !data) {
       return { status: "network_error" };
     }
 
@@ -501,8 +558,11 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
       );
       await saveSession({
         ..._session,
+        apiBase: successfulApiBase || getSessionApiBase(),
         user: updatedUser,
       });
+    } else if (successfulApiBase) {
+      await rememberSessionApiBase(successfulApiBase);
     }
 
     if (typeof remoteAccount?.credits?.remaining === "number") {
@@ -658,6 +718,7 @@ export async function redeemPairingCode(
       user: authUser,
       deviceId: data.deviceId,
       deviceSecret: data.deviceSecret || undefined,
+      apiBase: _activePairingApiBase,
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
     });
 
@@ -741,6 +802,7 @@ export function watchPairingStatus(
       user: authUser,
       deviceId: data.deviceId,
       deviceSecret: data.deviceSecret || undefined,
+      apiBase: _activePairingApiBase,
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
     });
 
