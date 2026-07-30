@@ -39,7 +39,7 @@ import {
 import { normalizePlanId } from "../src/lib/subscriptionSourceOfTruth";
 import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from "../src/lib/upgradePromo";
 
-const PRICING_URL = "https://makechurcheasy.creatorstudioslabs.stream/subscription/plans";
+const PRICING_URL = "https://makechurcheazy.com/subscription/plans";
 const PLAN_ORDER: Array<"free" | "basic" | "growth"> = ["free", "basic", "growth"];
 
 const PLAN_THEMES: Record<"free" | "basic" | "growth", { accent: string; badge: string }> = {

@@ -143,6 +143,7 @@ export default function DockPage({
   externalObsSession = false,
   presentationBibleLmSplit = false,
   presentationOutputTarget = "obs",
+  enablePresentationAssistantMicControls = false,
   hideLowerThirdControls = false,
   hideTickerControls = false,
   hiddenTabs = [],
@@ -152,6 +153,7 @@ export default function DockPage({
   externalObsSession?: boolean;
   presentationBibleLmSplit?: boolean;
   presentationOutputTarget?: DockPresentationOutputTarget;
+  enablePresentationAssistantMicControls?: boolean;
   hideLowerThirdControls?: boolean;
   hideTickerControls?: boolean;
   hiddenTabs?: DockTab[];
@@ -812,44 +814,39 @@ export default function DockPage({
                   <>
                     <div className="dock-sidebar__divider" />
 
-                    {/* Ticker Output */}
+                    {/* Ticker Preview */}
                     <div className="dock-sidebar__item" style={{ cursor: "default" }}>
                       <Icon name="campaign" size={16} />
-                      <span>{t('dock.tickerOutput')}</span>
+                      <span>{t('dock.tickerPreviewBehavior', 'Ticker Preview')}</span>
                     </div>
                     <div className="dock-sidebar__subpanel">
                       {([
-                        { mode: "source" as const, icon: "view_module", label: t('dock.source'), desc: t('dock.insideCurrentScene') },
-                        { mode: "scene" as const, icon: "dashboard", label: t('dock.scene'), desc: t('dock.dedicatedSceneWithProgramBehind') },
+                        {
+                          mode: "source" as const,
+                          icon: "monitor",
+                          label: t('dock.keepCurrentPreview', 'Keep current preview'),
+                          desc: t('dock.keepCurrentPreviewDesc', 'Send ticker without changing OBS Preview.'),
+                        },
+                        {
+                          mode: "scene" as const,
+                          icon: "dashboard",
+                          label: t('dock.showTickerPreview', 'Show ticker preview'),
+                          desc: t('dock.showTickerPreviewDesc', 'Open MCE Presentation in Preview so you can transition it live.'),
+                        },
                       ]).map(({ mode, icon, label, desc }) => (
                         <button
                           key={mode}
                           type="button"
-                          className="dock-sidebar__radio"
+                          className={`dock-sidebar__radio${tickerOutputMode === mode ? " dock-sidebar__radio--active" : ""}`}
                           onClick={() => {
                             setTickerOutputMode(mode);
                             try { localStorage.setItem("dock-ticker-output-mode", mode); } catch { /* ignore */ }
                           }}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            width: "100%",
-                            padding: "6px 8px",
-                            border: "none",
-                            borderRadius: 3,
-                            background: tickerOutputMode === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                            color: tickerOutputMode === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            fontSize: 11,
-                            transition: "background 0.15s",
-                          }}
-                          title={t('common.confirm')}>
+                          title={label}>
                           <Icon name={icon} size={14} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 600 }}>{label}</div>
-                            <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
+                          <div className="dock-sidebar__radio-copy">
+                            <div className="dock-sidebar__radio-title">{label}</div>
+                            <div className="dock-sidebar__radio-desc">{desc}</div>
                           </div>
                           {tickerOutputMode === mode && <Icon name="check" size={12} />}
                         </button>
@@ -862,130 +859,82 @@ export default function DockPage({
                   <>
                     <div className="dock-sidebar__divider" />
 
-                    {/* Projection Settings */}
+                    {/* Advanced OBS Output */}
                     <button
                       type="button"
                       className="dock-sidebar__item"
                       onClick={() => setShowProjectionSettings(!showProjectionSettings)}
-                      title={t('page.projectionSettings')}>
+                      title={t('page.advancedObsOutput', 'Advanced OBS Output')}>
                       <Icon name="videocam" size={16} />
-                      <span>{t('page.projectionSettings')}</span>
+                      <span>{t('page.advancedObsOutput', 'Advanced OBS Output')}</span>
                       <Icon name={showProjectionSettings ? "expand_less" : "expand_more"} size={14} />
                     </button>
                     {showProjectionSettings && (
                       <div className="dock-sidebar__subpanel">
-                    {/* Scene Handling */}
-                    <div className="dock-sidebar__section-label">{t('page.sceneHandling')}</div>
-                    <div className="dock-sidebar__radio-group">
-                      {([
-                        { mode: "auto-duplicate" as const, icon: "content_copy", label: t('page.autoDuplicateProgramScene'), desc: t('page.dedicatedSceneWithProgramBehind') },
-                        { mode: "reference" as const, icon: "link", label: t('page.referenceProgramScene'), desc: t('page.liveSceneSourceMirrorsProgram') },
-                        { mode: "no-clone" as const, icon: "block", label: t('page.dontCloneProgramScene'), desc: t('page.projectsDirectlyWithoutDuplicating') },
-                      ]).map(({ mode, icon, label, desc }) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          className="dock-sidebar__radio"
-                          onClick={() => setProjectionSettings((s) => ({ ...s, sceneMode: mode }))}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            width: "100%",
-                            padding: "6px 8px",
-                            border: "none",
-                            borderRadius: 3,
-                            background: projectionSettings.sceneMode === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                            color: projectionSettings.sceneMode === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            fontSize: 11,
-                            transition: "background 0.15s",
-                          }}
-                          title={t('common.confirm')}>
-                          <Icon name={icon} size={14} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 600 }}>{label}</div>
-                            <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
-                          </div>
-                          {projectionSettings.sceneMode === mode && <Icon name="check" size={12} />}
-                        </button>
-                      ))}
-                    </div>
-
-                    {!hideTickerControls && (
-                      <>
-                        {/* Ticker Layer Priority */}
-                        <div className="dock-sidebar__section-label" style={{ marginTop: 8 }}>{t('dock.tickerLayerPriority')}</div>
+                        {/* Scene Routing */}
+                        <div className="dock-sidebar__section-label">{t('page.sceneRouting', 'Scene Routing')}</div>
                         <div className="dock-sidebar__radio-group">
                           {([
-                            { mode: "content-above" as const, icon: "flip_to_back", label: t('ministry.contentAboveTicker'), desc: t('ministry.mceContentPriority') },
-                            { mode: "ticker-above" as const, icon: "flip_to_front", label: t('ministry.tickerAboveContent'), desc: t('dock.tickerRemainsVisibleOnTop') },
+                            {
+                              mode: "auto-duplicate" as const,
+                              icon: "shield",
+                              label: t('page.safePreviewScene', 'Safe preview scene'),
+                              desc: t('page.safePreviewSceneDesc', 'Use MCE Presentation with your Program scene behind it. Recommended.'),
+                            },
+                            {
+                              mode: "reference" as const,
+                              icon: "link",
+                              label: t('page.mirrorProgram', 'Mirror Program'),
+                              desc: t('page.mirrorProgramDesc', 'MCE Presentation follows changes in the current Program scene.'),
+                            },
+                            {
+                              mode: "no-clone" as const,
+                              icon: "block",
+                              label: t('page.directProgram', 'Direct Program'),
+                              desc: t('page.directProgramDesc', 'Place MCE overlays directly into the current Program scene.'),
+                            },
                           ]).map(({ mode, icon, label, desc }) => (
                             <button
                               key={mode}
                               type="button"
-                              className="dock-sidebar__radio"
-                              onClick={() => setProjectionSettings((s) => ({ ...s, tickerLayerPriority: mode }))}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 8,
-                                width: "100%",
-                                padding: "6px 8px",
-                                border: "none",
-                                borderRadius: 3,
-                                background: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent-bg, rgba(99,102,241,0.12))" : "transparent",
-                                color: projectionSettings.tickerLayerPriority === mode ? "var(--dock-accent, #3B82F6)" : "var(--dock-text, #E2E8F0)",
-                                cursor: "pointer",
-                                textAlign: "left",
-                                fontSize: 11,
-                                transition: "background 0.15s",
-                              }}
-                              title={t('common.confirm')}>
+                              className={`dock-sidebar__radio${projectionSettings.sceneMode === mode ? " dock-sidebar__radio--active" : ""}`}
+                              onClick={() => setProjectionSettings((s) => ({ ...s, sceneMode: mode }))}
+                              title={label}>
                               <Icon name={icon} size={14} />
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontWeight: 600 }}>{label}</div>
-                                <div style={{ fontSize: 10, opacity: 0.6 }}>{desc}</div>
+                              <div className="dock-sidebar__radio-copy">
+                                <div className="dock-sidebar__radio-title">{label}</div>
+                                <div className="dock-sidebar__radio-desc">{desc}</div>
                               </div>
-                              {projectionSettings.tickerLayerPriority === mode && <Icon name="check" size={12} />}
+                              {projectionSettings.sceneMode === mode && <Icon name="check" size={12} />}
                             </button>
                           ))}
                         </div>
-                      </>
-                    )}
 
-                    {/* Restore Original Scene */}
-                    <label
-                      className="dock-sidebar__check"
-                      style={{ marginTop: 8, cursor: "pointer" }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={projectionSettings.restoreOriginalScene}
-                        onChange={(e) => setProjectionSettings((s) => ({ ...s, restoreOriginalScene: e.target.checked }))}
-                      />
-                      <span>{t('page.restoreSceneAfterProjection')}</span>
-                    </label>
-                    <div style={{ fontSize: 10, opacity: 0.5, padding: "2px 8px 0 22px", lineHeight: 1.4 }}>
-                      {t('page.returnsObsToPreviousState')}
-                    </div>
+                        <div className="dock-sidebar__section-label dock-sidebar__section-label--spaced">{t('page.sendBehavior', 'Send Behavior')}</div>
 
-                    {/* Lower Thirds → Presentation Only */}
-                    <label
-                      className="dock-sidebar__check"
-                      style={{ marginTop: 8, cursor: "pointer" }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={projectionSettings.presentationOnly}
-                        onChange={(e) => setProjectionSettings((s) => ({ ...s, presentationOnly: e.target.checked }))}
-                      />
-                      <span>{t('page.presentationOnly', 'Lower Thirds in Presentation')}</span>
-                    </label>
-                    <div style={{ fontSize: 10, opacity: 0.5, padding: "2px 8px 0 22px", lineHeight: 1.4 }}>
-                      {t('page.presentationOnlyDesc', 'Lower thirds go to MCE Presentation only, not the Program scene')}
-                    </div>
+                        <label className="dock-sidebar__check dock-sidebar__check--stacked">
+                          <input
+                            type="checkbox"
+                            checked={projectionSettings.hideOtherMceSourcesOnSend}
+                            onChange={(e) => setProjectionSettings((s) => ({ ...s, hideOtherMceSourcesOnSend: e.target.checked }))}
+                          />
+                          <span className="dock-sidebar__check-copy">
+                            <span>{t('page.clearOtherMceOverlays', 'Hide other MCE overlays when sending')}</span>
+                            <small>{t('page.clearOtherMceOverlaysDesc', 'Keeps only the new item and ticker visible when you send content.')}</small>
+                          </span>
+                        </label>
+
+                        <label className="dock-sidebar__check dock-sidebar__check--stacked">
+                          <input
+                            type="checkbox"
+                            checked={projectionSettings.restoreOriginalScene}
+                            onChange={(e) => setProjectionSettings((s) => ({ ...s, restoreOriginalScene: e.target.checked }))}
+                          />
+                          <span className="dock-sidebar__check-copy">
+                            <span>{t('page.returnToPreviousScene', 'Return to previous Program scene after clear')}</span>
+                            <small>{t('page.returnToPreviousSceneDesc', 'When MCE clears its overlay, OBS goes back to the scene that was live before.')}</small>
+                          </span>
+                        </label>
                       </div>
                     )}
                   </>
@@ -1199,7 +1148,10 @@ export default function DockPage({
                     </section>
                     <section className="dock-presentation-bible-lm-pane" aria-label="Scripture assistant dock">
                       <div className="dock-presentation-bible-lm-pane__title">Scripture Assistant</div>
-                      <DockLmTab presentationOutputTarget={presentationOutputTarget} />
+                      <DockLmTab
+                        presentationOutputTarget={presentationOutputTarget}
+                        enablePresentationMicControls={enablePresentationAssistantMicControls}
+                      />
                     </section>
                   </div>
                 ) : (

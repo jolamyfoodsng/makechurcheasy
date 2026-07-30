@@ -153,6 +153,11 @@ const MEDIA_PREFS_STORAGE_KEY = "ocs-dock-media-preferences-v1";
 const MEDIA_LOCAL_LIBRARY_STORAGE_KEY = "ocs-dock-media-library-v1";
 const MEDIA_SESSION_STORAGE_KEY = "ocs-dock-media-session-v1";
 const INTERNAL_UPLOAD_PREFIXES = ["dock_theme_bg_", "dock_theme_box_bg_", "dock_theme_logo_"];
+const TEXT_OVERLAY_HEADLINE_MIN_SIZE = 24;
+const TEXT_OVERLAY_SUBLINE_MIN_SIZE = 14;
+const TEXT_OVERLAY_MAX_FONT_SIZE = 250;
+const TEXT_OVERLAY_PADDING_MIN = 0;
+const TEXT_OVERLAY_PADDING_MAX = 250;
 
 const DEFAULT_BACKGROUND_SETTINGS: OverlayBackgroundSettings = {
   enabled: false,
@@ -234,6 +239,11 @@ function isDockTextAlign(value: unknown): value is DockTextAlign {
   return value === "left" || value === "center" || value === "right";
 }
 
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
 function parseBackgroundSettings(raw: unknown): OverlayBackgroundSettings {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_BACKGROUND_SETTINGS };
   const obj = raw as Record<string, unknown>;
@@ -254,7 +264,7 @@ function parseBackgroundSettings(raw: unknown): OverlayBackgroundSettings {
     blur: typeof obj.blur === "number" ? obj.blur : DEFAULT_BACKGROUND_SETTINGS.blur,
     scale: typeof obj.scale === "number" ? obj.scale : DEFAULT_BACKGROUND_SETTINGS.scale,
     radius: typeof obj.radius === "number" ? obj.radius : DEFAULT_BACKGROUND_SETTINGS.radius,
-    padding: typeof obj.padding === "number" ? obj.padding : DEFAULT_BACKGROUND_SETTINGS.padding,
+    padding: clampNumber(obj.padding, TEXT_OVERLAY_PADDING_MIN, TEXT_OVERLAY_PADDING_MAX, DEFAULT_BACKGROUND_SETTINGS.padding),
     width,
   };
 }
@@ -312,8 +322,8 @@ function loadMediaSessionState(): DockMediaSessionState {
         align: isDockTextAlign(parsed.textOverlay?.align) ? parsed.textOverlay.align : fallback.textOverlay.align,
         verticalPos: (parsed.textOverlay?.verticalPos === "top" || parsed.textOverlay?.verticalPos === "center" || parsed.textOverlay?.verticalPos === "bottom")
           ? parsed.textOverlay.verticalPos : fallback.textOverlay.verticalPos,
-        headlineSize: typeof parsed.textOverlay?.headlineSize === "number" ? parsed.textOverlay.headlineSize : fallback.textOverlay.headlineSize,
-        sublineSize: typeof parsed.textOverlay?.sublineSize === "number" ? parsed.textOverlay.sublineSize : fallback.textOverlay.sublineSize,
+        headlineSize: clampNumber(parsed.textOverlay?.headlineSize, TEXT_OVERLAY_HEADLINE_MIN_SIZE, TEXT_OVERLAY_MAX_FONT_SIZE, fallback.textOverlay.headlineSize),
+        sublineSize: clampNumber(parsed.textOverlay?.sublineSize, TEXT_OVERLAY_SUBLINE_MIN_SIZE, TEXT_OVERLAY_MAX_FONT_SIZE, fallback.textOverlay.sublineSize),
         animation: parsed.textOverlay && (["none", "fade", "fade-up", "slide-up", "slide-down", "zoom"] as DockTextAnimation[]).includes(parsed.textOverlay.animation as DockTextAnimation)
           ? parsed.textOverlay.animation as DockTextAnimation : fallback.textOverlay.animation,
         animationDuration: typeof parsed.textOverlay?.animationDuration === "number" ? parsed.textOverlay.animationDuration : fallback.textOverlay.animationDuration,
@@ -2005,7 +2015,6 @@ export default function DockMediaTab({
   }, [textOverlay, localLibrary, presentationLinkMode]);
 
   const clearTextOverlayEverywhere = useCallback(async () => {
-    setTextOverlay((current) => ({ ...current, headline: "", subline: "" }));
     setApplyingTextTarget(true);
     try {
       if (presentationLinkMode) {
@@ -2023,35 +2032,6 @@ export default function DockMediaTab({
       setApplyingTextTarget(null);
     }
   }, [presentationLinkMode]);
-
-  // ── Auto-apply text overlay changes when overlay is already active ──
-  // Without this, background setting changes (color, opacity, blur, etc.)
-  // are saved to localStorage but never pushed to OBS until the user
-  // manually clicks "Show" on the Content tab.
-  const lastAppliedRef = useRef<string>("");
-  useEffect(() => {
-    if (!textOverlayTargets.active) return;
-    const hasContent = textOverlay.headline.trim() || textOverlay.subline.trim();
-    const hasBg = textOverlay.background.enabled && textOverlay.background.mode !== "text-only";
-    if (!hasContent && !hasBg) return;
-
-    const snapshot = JSON.stringify(textOverlay);
-
-    // Skip initial mount to avoid pushing to OBS when merely switching to the text tab
-    if (lastAppliedRef.current === "") {
-      lastAppliedRef.current = snapshot;
-      return;
-    }
-
-    if (snapshot === lastAppliedRef.current) return;
-
-    const timer = setTimeout(() => {
-      lastAppliedRef.current = snapshot;
-      void applyTextOverlay();
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [textOverlay, textOverlayTargets.active, applyTextOverlay]);
 
   const triggerAnimPreview = useCallback(() => {
     setAnimatingPreview(true);
@@ -2291,6 +2271,151 @@ export default function DockMediaTab({
     : browserTab === "patterns"
       ? t('media.searchTemplates')
       : t('media.searchPlaceholderShort');
+
+  const updateOverlayFontSize = (
+    key: "headlineSize" | "sublineSize",
+    nextValue: number,
+    min: number,
+    max: number,
+  ) => {
+    const clamped = clampNumber(nextValue, min, max, min);
+    setTextOverlay((current) => ({ ...current, [key]: clamped }));
+  };
+
+  const renderOverlayFontSizeControl = (
+    key: "headlineSize" | "sublineSize",
+    value: number,
+    min: number,
+    max: number,
+    step: number,
+    ariaLabel: string,
+  ) => (
+    <div className="dock-overlay-size-control">
+      <div className="dock-overlay-size-control__header">
+        <span>{t('media.fontSize')}</span>
+        <strong>{value}<small>px</small></strong>
+      </div>
+      <div className="dock-overlay-size-control__row">
+        <button
+          type="button"
+          className="dock-overlay-size-control__step"
+          onClick={() => updateOverlayFontSize(key, value - step, min, max)}
+          aria-label={`${t('common.remove')} ${ariaLabel}`}
+          title={t('common.remove')}>
+          <Icon name="remove" size={12} />
+        </button>
+        <input
+          type="range"
+          className="dock-overlay-size-control__range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => updateOverlayFontSize(key, Number(e.target.value), min, max)}
+          aria-label={ariaLabel}
+        />
+        <button
+          type="button"
+          className="dock-overlay-size-control__step"
+          onClick={() => updateOverlayFontSize(key, value + step, min, max)}
+          aria-label={`${t('common.add')} ${ariaLabel}`}
+          title={t('common.add')}>
+          <Icon name="add" size={12} />
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderOverlayPreview = () => (
+    <div className="dock-overlay-canvas">
+      <div className="dock-overlay-canvas__bg">
+        {previewBaseEntry?.kind === "image" && previewBaseEntry.previewUrl ? (
+          <img src={previewBaseEntry.previewUrl} alt="" />
+        ) : previewBaseEntry?.thumbnailUrl ? (
+          <img src={previewBaseEntry.thumbnailUrl} alt="" />
+        ) : previewBaseEntry?.previewUrl ? (
+          <video src={previewBaseEntry.previewUrl} muted playsInline loop autoPlay />
+        ) : (
+          <div className="dock-overlay-canvas__placeholder">
+            <Icon name="theaters" size={24} />
+          </div>
+        )}
+      </div>
+
+      {textOverlay.background.enabled && textOverlay.background.mode !== "text-only" && (
+        <div className={`dock-overlay-canvas__bg-preview dock-overlay-canvas__bg-preview--${textOverlay.background.mode}`}>
+          {(() => {
+            const bg = textOverlay.background;
+            let bgImageStyle = "none";
+            if (bg.bgType === "image" && bg.imageId) {
+              const img = localLibrary.find((item) => item.id === bg.imageId && item.type === "image");
+              if (img) bgImageStyle = `url(${img.thumbnailUrl || img.url})`;
+            } else if (bg.bgType === "pattern" && bg.patternId) {
+              const pat = BACKGROUND_PATTERNS.find((p) => p.label === bg.patternId);
+              if (pat) bgImageStyle = `url(${pat.src})`;
+            }
+            return (
+              <div
+                className="dock-overlay-canvas__bg-fill"
+                style={{
+                  backgroundColor: bg.color,
+                  backgroundImage: bgImageStyle !== "none" ? bgImageStyle : undefined,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  opacity: bg.opacity,
+                  filter: bg.blur > 0 ? `blur(${Math.min(bg.blur / 2, 8)}px)` : undefined,
+                  borderRadius: bg.mode === "lower-third" ? `${bg.radius}px ${bg.radius}px 0 0` : bg.mode === "box" ? `${bg.radius}px` : "0",
+                }}
+              />
+            );
+          })()}
+        </div>
+      )}
+
+      <div className="dock-overlay-canvas__guides">
+        <div className="dock-overlay-canvas__guide--h" />
+        <div className="dock-overlay-canvas__guide--v" />
+        <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--tl" />
+        <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--tr" />
+        <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--bl" />
+        <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--br" />
+      </div>
+
+      <div
+        className={`dock-overlay-canvas__text ${getAnimationClass()}`}
+        style={{ ...getVerticalPosStyle(), "--overlay-anim-duration": `${textOverlay.animationDuration}s`, color: textOverlay.textColor } as React.CSSProperties}
+      >
+        <div className={`dock-overlay-canvas__text-inner dock-overlay-canvas__text-inner--${textOverlay.align}`}>
+          {textOverlay.headline.trim() && (
+            <div
+              className="dock-overlay-canvas__headline"
+              style={{ fontSize: `${Math.max(12, Math.min(48, Math.round(textOverlay.headlineSize / 5)))}px` }}
+            >
+              {textOverlay.headline}
+            </div>
+          )}
+          {textOverlay.subline.trim() && (
+            <div
+              className="dock-overlay-canvas__subline"
+              style={{ fontSize: `${Math.max(10, Math.min(36, Math.round(textOverlay.sublineSize / 6)))}px` }}
+            >
+              {textOverlay.subline}
+            </div>
+          )}
+          {!textOverlay.headline.trim() && !textOverlay.subline.trim() && (
+            <div className="dock-overlay-canvas__empty-hint">{t('media.overlayTextPlaceholder')}</div>
+          )}
+        </div>
+      </div>
+
+      <div className="dock-overlay-canvas__controls">
+        <span className="dock-overlay-canvas__safe-badge">
+          <Icon name="crop_free" size={10} />
+          {t('media.safeArea')}
+        </span>
+      </div>
+    </div>
+  );
 
   // ── Render ──
 
@@ -2760,6 +2885,8 @@ export default function DockMediaTab({
           <div className="dock-overlay-composer">
             {/* ── Status Header ── */}
 
+            {renderOverlayPreview()}
+
             {/* ── Inner Tab Bar ── */}
             <div className="dock-overlay-tabs" role="tablist" aria-label={t('media.textOverlayTabs')}>
               <button
@@ -2787,95 +2914,6 @@ export default function DockMediaTab({
             {/* ── Content Tab ── */}
             {textTab === "content" && (
               <>
-                {/* ── Live Preview Canvas ── */}
-                <div className="dock-overlay-canvas">
-                  <div className="dock-overlay-canvas__bg">
-                    {previewBaseEntry?.kind === "image" && previewBaseEntry.previewUrl ? (
-                      <img src={previewBaseEntry.previewUrl} alt="" />
-                    ) : previewBaseEntry?.thumbnailUrl ? (
-                      <img src={previewBaseEntry.thumbnailUrl} alt="" />
-                    ) : previewBaseEntry?.previewUrl ? (
-                      <video src={previewBaseEntry.previewUrl} muted playsInline loop autoPlay />
-                    ) : (
-                      <div className="dock-overlay-canvas__placeholder">
-                        <Icon name="theaters" size={24} />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Background Preview Overlay */}
-                  {textOverlay.background.enabled && textOverlay.background.mode !== "text-only" && (
-                    <div className={`dock-overlay-canvas__bg-preview dock-overlay-canvas__bg-preview--${textOverlay.background.mode}`}>
-                      {(() => {
-                        const bg = textOverlay.background;
-                        let bgImageStyle = "none";
-                        if (bg.bgType === "image" && bg.imageId) {
-                          const img = localLibrary.find((item) => item.id === bg.imageId && item.type === "image");
-                          if (img) bgImageStyle = `url(${img.thumbnailUrl || img.url})`;
-                        } else if (bg.bgType === "pattern" && bg.patternId) {
-                          const pat = BACKGROUND_PATTERNS.find((p) => p.label === bg.patternId);
-                          if (pat) bgImageStyle = `url(${pat.src})`;
-                        }
-                        return (
-                          <div
-                            className="dock-overlay-canvas__bg-fill"
-                            style={{
-                              backgroundColor: bg.color,
-                              backgroundImage: bgImageStyle !== "none" ? bgImageStyle : undefined,
-                              backgroundSize: "cover",
-                              backgroundPosition: "center",
-                              opacity: bg.opacity,
-                              filter: bg.blur > 0 ? `blur(${Math.min(bg.blur / 2, 8)}px)` : undefined,
-                              borderRadius: bg.mode === "lower-third" ? `${bg.radius}px ${bg.radius}px 0 0` : bg.mode === "box" ? `${bg.radius}px` : "0",
-                            }}
-                          />
-                        );
-                      })()}
-                    </div>
-                  )}
-
-                  {/* Safe Area Guides */}
-                  <div className="dock-overlay-canvas__guides">
-                    <div className="dock-overlay-canvas__guide--h" />
-                    <div className="dock-overlay-canvas__guide--v" />
-                    <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--tl" />
-                    <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--tr" />
-                    <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--bl" />
-                    <div className="dock-overlay-canvas__corner dock-overlay-canvas__corner--br" />
-                  </div>
-
-                  {/* Text Overlay */}
-                  <div
-                    className={`dock-overlay-canvas__text ${getAnimationClass()}`}
-                    style={{ ...getVerticalPosStyle(), "--overlay-anim-duration": `${textOverlay.animationDuration}s`, color: textOverlay.textColor } as React.CSSProperties}
-                  >
-                    <div className={`dock-overlay-canvas__text-inner dock-overlay-canvas__text-inner--${textOverlay.align}`}>
-                      {textOverlay.headline.trim() && (
-                        <div className="dock-overlay-canvas__headline" style={{ fontSize: "16px" }}>
-                          {textOverlay.headline}
-                        </div>
-                      )}
-                      {textOverlay.subline.trim() && (
-                        <div className="dock-overlay-canvas__subline" style={{ fontSize: "12px" }}>
-                          {textOverlay.subline}
-                        </div>
-                      )}
-                      {!textOverlay.headline.trim() && !textOverlay.subline.trim() && (
-                        <div className="dock-overlay-canvas__empty-hint">{t('media.overlayTextPlaceholder')}</div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Canvas Controls */}
-                  <div className="dock-overlay-canvas__controls">
-
-                    <span className="dock-overlay-canvas__safe-badge">
-                      <Icon name="crop_free" size={10} />
-                      {t('media.safeArea')}
-                    </span>
-                  </div>
-                </div>
-
                 {/* ── Animation Bar ── */}
                 <div className="dock-overlay-anim-bar">
                   <button type="button" className="dock-overlay-anim-bar__preview" onClick={triggerAnimPreview} title={t('media.addAnimation')}>
@@ -2913,53 +2951,31 @@ export default function DockMediaTab({
 
                 {/* ── Text Controls ── */}
                 <div className="dock-overlay-text-controls">
-                  <div className="dock-overlay-text-controls__row">
-                    <div className="dock-overlay-text-controls__field">
-                      <label className="dock-overlay-text-controls__label">{t('media.headline')}</label>
-                      <input
-                        type="text"
-                        className="dock-overlay-text-controls__input"
-                        value={textOverlay.headline}
-                        onChange={(e) => setTextOverlay((c) => ({ ...c, headline: e.target.value }))}
-                        placeholder={t('media.mainOverlayText')}
-                      />
-                    </div>
-                    <div className="dock-overlay-text-controls__size">
-                      <label className="dock-overlay-text-controls__label">{t('media.fontSize')}</label>
-                      <div className="dock-overlay-text-controls__size-ctrl">
-                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, headlineSize: Math.max(24, c.headlineSize - 4) }))} title={t('common.remove')}>
-                          <Icon name="remove" size={12} />
-                        </button>
-                        <span className="dock-overlay-text-controls__size-value">{textOverlay.headlineSize}<small>px</small></span>
-                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, headlineSize: Math.min(120, c.headlineSize + 4) }))} title={t('common.add')}>
-                          <Icon name="add" size={12} />
-                        </button>
-                      </div>
-                    </div>
+                  <div className="dock-overlay-text-controls__field">
+                    <label className="dock-overlay-text-controls__label" htmlFor="dock-media-overlay-headline">{t('media.headline')}</label>
+                    <textarea
+                      id="dock-media-overlay-headline"
+                      className="dock-overlay-text-controls__textarea dock-overlay-text-controls__textarea--headline"
+                      value={textOverlay.headline}
+                      onChange={(e) => setTextOverlay((c) => ({ ...c, headline: e.target.value }))}
+                      placeholder={t('media.mainOverlayText')}
+                      rows={2}
+                    />
+                    {renderOverlayFontSizeControl("headlineSize", textOverlay.headlineSize, TEXT_OVERLAY_HEADLINE_MIN_SIZE, TEXT_OVERLAY_MAX_FONT_SIZE, 2, `${t('media.headline')} ${t('media.fontSize')}`)}
                   </div>
-                  <div className="dock-overlay-text-controls__row">
-                    <div className="dock-overlay-text-controls__field">
-                      <label className="dock-overlay-text-controls__label">{t('media.subline')} <span className="dock-overlay-text-controls__optional">{t('common.optional')}</span></label>
-                      <input
-                        type="text"
-                        className="dock-overlay-text-controls__input"
-                        value={textOverlay.subline}
-                        onChange={(e) => setTextOverlay((c) => ({ ...c, subline: e.target.value }))}
-                        placeholder={t('media.sublinePlaceholder')}
-                      />
-                    </div>
-                    <div className="dock-overlay-text-controls__size">
-                      <label className="dock-overlay-text-controls__label">{t('media.fontSize')}</label>
-                      <div className="dock-overlay-text-controls__size-ctrl">
-                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, sublineSize: Math.max(14, c.sublineSize - 2) }))} title={t('common.remove')}>
-                          <Icon name="remove" size={12} />
-                        </button>
-                        <span className="dock-overlay-text-controls__size-value">{textOverlay.sublineSize}<small>px</small></span>
-                        <button type="button" className="dock-overlay-text-controls__size-btn" onClick={() => setTextOverlay((c) => ({ ...c, sublineSize: Math.min(60, c.sublineSize + 2) }))} title={t('common.add')}>
-                          <Icon name="add" size={12} />
-                        </button>
-                      </div>
-                    </div>
+                  <div className="dock-overlay-text-controls__field">
+                    <label className="dock-overlay-text-controls__label" htmlFor="dock-media-overlay-subline">
+                      {t('media.subline')} <span className="dock-overlay-text-controls__optional">{t('common.optional')}</span>
+                    </label>
+                    <textarea
+                      id="dock-media-overlay-subline"
+                      className="dock-overlay-text-controls__textarea dock-overlay-text-controls__textarea--subline"
+                      value={textOverlay.subline}
+                      onChange={(e) => setTextOverlay((c) => ({ ...c, subline: e.target.value }))}
+                      placeholder={t('media.sublinePlaceholder')}
+                      rows={1}
+                    />
+                    {renderOverlayFontSizeControl("sublineSize", textOverlay.sublineSize, TEXT_OVERLAY_SUBLINE_MIN_SIZE, TEXT_OVERLAY_MAX_FONT_SIZE, 2, `${t('media.subline')} ${t('media.fontSize')}`)}
                   </div>
                 </div>
 
@@ -3021,27 +3037,6 @@ export default function DockMediaTab({
                   </div>
                 </div>
 
-                {/* ── Action Bar ── */}
-                <div className="dock-overlay-actions">
-                  <button
-                    type="button"
-                    className="dock-overlay-actions__btn dock-overlay-actions__btn--show"
-                    onClick={() => void applyTextOverlay()}
-                    disabled={applyingTextTarget !== null}
-                    title={t('media.applying')}>
-                    <Icon name="visibility" size={14} />
-                    {applyingTextTarget ? t('media.applying') : t('media.show')}
-                  </button>
-                  <button
-                    type="button"
-                    className="dock-overlay-actions__btn dock-overlay-actions__btn--clear"
-                    onClick={() => void clearTextOverlayEverywhere()}
-                    disabled={applyingTextTarget !== null}
-                    title={t('common.clear')}>
-                    <Icon name="delete" size={14} />
-                    {t('common.clear')}
-                  </button>
-                </div>
               </>
             )}
 
@@ -3317,13 +3312,16 @@ export default function DockMediaTab({
                       <input
                         type="range"
                         className="dock-overlay-bg-slider"
-                        min={8}
-                        max={80}
-                        step={4}
+                        min={TEXT_OVERLAY_PADDING_MIN}
+                        max={TEXT_OVERLAY_PADDING_MAX}
+                        step={2}
                         value={textOverlay.background.padding}
                         onChange={(e) => setTextOverlay((c) => ({
                           ...c,
-                          background: { ...c.background, padding: parseInt(e.target.value, 10) },
+                          background: {
+                            ...c.background,
+                            padding: clampNumber(Number(e.target.value), TEXT_OVERLAY_PADDING_MIN, TEXT_OVERLAY_PADDING_MAX, DEFAULT_BACKGROUND_SETTINGS.padding),
+                          },
                         }))}
                       />
                     </div>
@@ -3356,31 +3354,29 @@ export default function DockMediaTab({
                   </>
                 )}
 
-                {/* ── Apply Button (Background tab) ── */}
-                <div className="dock-overlay-actions">
-                  <button
-                    type="button"
-                    className="dock-overlay-actions__btn dock-overlay-actions__btn--show"
-                    onClick={() => void applyTextOverlay()}
-                    disabled={applyingTextTarget !== null}
-                    title={t('media.applying')}>
-                    <Icon name="visibility" size={14} />
-                    {applyingTextTarget ? t('media.applying') : t('media.apply')}
-                  </button>
-                  <button
-                    type="button"
-                    className="dock-overlay-actions__btn dock-overlay-actions__btn--clear"
-                    onClick={() => void clearTextOverlayEverywhere()}
-                    disabled={applyingTextTarget !== null}
-                    title={t('common.clear')}>
-                    <Icon name="delete" size={14} />
-                    {t('common.clear')}
-                  </button>
-                </div>
               </>
             )}
 
-            {/* ── Footer Status ── */}
+            <div className="dock-overlay-actions dock-overlay-actions--shared">
+              <button
+                type="button"
+                className="dock-overlay-actions__btn dock-overlay-actions__btn--show"
+                onClick={() => void applyTextOverlay()}
+                disabled={applyingTextTarget !== null}
+                title={textOverlayTargets.active ? t('media.apply') : t('media.show')}>
+                <Icon name="visibility" size={14} />
+                {applyingTextTarget ? t('media.applying') : textOverlayTargets.active ? t('media.apply') : t('media.show')}
+              </button>
+              <button
+                type="button"
+                className="dock-overlay-actions__btn dock-overlay-actions__btn--clear"
+                onClick={() => void clearTextOverlayEverywhere()}
+                disabled={applyingTextTarget !== null || !textOverlayTargets.active}
+                title={t('common.clear')}>
+                <Icon name="delete" size={14} />
+                {t('common.clear')}
+              </button>
+            </div>
 
           </div>
         )}

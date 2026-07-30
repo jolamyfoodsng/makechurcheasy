@@ -1342,29 +1342,6 @@ export default function DockCountdownsTab({
                 };
                 setCountdowns((prev) => prev.map((c) => c.id === editingCd.id ? updatedCd : c));
                 setEditingCd(null);
-
-                if (liveCountdownId === updatedCd.id) {
-                  try {
-                    if (presentationLinkMode) {
-                      await publishCountdownToPresentation(updatedCd);
-                    } else {
-                      await ensureObsConnected();
-                    }
-                    if (!presentationLinkMode && dockObsClient.isConnected) {
-                      const baseUrl = getOverlayBaseUrlSync();
-                      const targetScene = resolveCountdownTargetScene(updatedCd.obs.sceneName);
-                      const bgPayload = { config: updatedCd, baseUrl, timestamp: Date.now() };
-                      const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
-                      await ensureObsSource(BG_SOURCE, bgUrl, targetScene, { setTransform: true });
-                      const sync: OverlaySyncState = { paused: playbackState === "paused", remaining: Math.floor(timer.remaining) };
-                      const payload: CountdownOverlayPayload = { config: updatedCd, baseUrl, timestamp: Date.now(), sync };
-                      const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
-                      await ensureObsSource(COUNTDOWN_SOURCE, contentUrl, targetScene, { setTransform: true });
-                    }
-                  } catch (err) {
-                    console.warn("[DockCountdowns] Failed to update OBS after edit:", err);
-                  }
-                }
               }} style={{ fontSize: 11 }}>
                 {t("common.save", "Save")}
               </button>

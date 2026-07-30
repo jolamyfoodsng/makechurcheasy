@@ -890,7 +890,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
             <p>{t("library.mediaTab.limitReached.upgradeHint")} {UPGRADE_PROMO_FALLBACK}</p>
             <div className="lib-confirm-actions">
               <button className="lib-confirm-cancel" onClick={() => setShowMediaLimitModal(false)} title={t("common.close")}>{t("common.close")}</button>
-              <a href="https://makechurcheasy.creatorstudioslabs.stream/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
+              <a href="https://makechurcheazy.com/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
                 {t("library.mediaTab.limitReached.upgradePlan")}
               </a>
             </div>

@@ -52,6 +52,7 @@ static OVERLAY_PORT: AtomicU16 = AtomicU16::new(0);
 /// Written by POST /api/auth/session, read by GET /api/auth/status.
 /// Avoids file-sync race conditions on app startup.
 static AUTH_SESSION: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+static DOCK_NOTES_COMMAND_QUEUE: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 
 fn dev_window_icon() -> Option<Image<'static>> {
     None
@@ -4607,6 +4608,108 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 }
 
                 // GET — drain all pending commands
+                let json = if let Ok(mut q) = queue.lock() {
+                    let cmds: Vec<String> = q.drain(..).collect();
+                    serde_json::to_string(&cmds).unwrap_or_else(|_| "[]".to_string())
+                } else {
+                    "[]".to_string()
+                };
+                let resp = tiny_http::Response::from_string(json)
+                    .with_header(header)
+                    .with_header(cors);
+                let _ = request.respond(resp);
+                continue;
+            }
+
+            // API: Dock notes command relay — POST enqueues an append command,
+            // GET drains all pending commands. Used when LM and Notes docks run
+            // in separate browser processes or localhost origins.
+            if clean == "api/dock-notes-command" {
+                let queue = DOCK_NOTES_COMMAND_QUEUE.get_or_init(|| Mutex::new(Vec::new()));
+                let header = tiny_http::Header::from_bytes(
+                    "Content-Type",
+                    "application/json; charset=utf-8",
+                )
+                .unwrap();
+                let cors =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
+
+                if request.method() == &tiny_http::Method::Options {
+                    let resp = tiny_http::Response::from_string("")
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                if request.method() == &tiny_http::Method::Post {
+                    let mut body = String::new();
+                    if request.as_reader().read_to_string(&mut body).is_err() {
+                        let resp =
+                            tiny_http::Response::from_string("Bad Request").with_status_code(400);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+
+                    match serde_json::from_str::<serde_json::Value>(&body) {
+                        Ok(value) => {
+                            let has_command_id = value
+                                .get("commandId")
+                                .and_then(|v| v.as_str())
+                                .map(|v| !v.trim().is_empty())
+                                .unwrap_or(false);
+                            let has_text = value
+                                .get("text")
+                                .and_then(|v| v.as_str())
+                                .map(|v| !v.trim().is_empty())
+                                .unwrap_or(false);
+
+                            if !has_command_id || !has_text {
+                                let resp = tiny_http::Response::from_string(
+                                    r#"{"error":"Invalid dock notes command"}"#,
+                                )
+                                .with_status_code(400)
+                                .with_header(header)
+                                .with_header(cors);
+                                let _ = request.respond(resp);
+                                continue;
+                            }
+
+                            if let Ok(mut q) = queue.lock() {
+                                if q.len() < 100 {
+                                    q.push(body);
+                                }
+                            }
+                            let resp = tiny_http::Response::from_string(r#"{"ok":true}"#)
+                                .with_header(header)
+                                .with_header(cors);
+                            let _ = request.respond(resp);
+                            continue;
+                        }
+                        Err(_) => {
+                            let resp = tiny_http::Response::from_string(r#"{"error":"Invalid JSON"}"#)
+                                .with_status_code(400)
+                                .with_header(header)
+                                .with_header(cors);
+                            let _ = request.respond(resp);
+                            continue;
+                        }
+                    }
+                }
+
                 let json = if let Ok(mut q) = queue.lock() {
                     let cmds: Vec<String> = q.drain(..).collect();
                     serde_json::to_string(&cmds).unwrap_or_else(|_| "[]".to_string())

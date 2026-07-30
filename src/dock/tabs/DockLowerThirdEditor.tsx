@@ -48,10 +48,8 @@ interface DockLTEditorProps {
   onSend: (url: string) => void;
   onBlank: (url: string) => void;
   onAnimateOut?: (url: string) => void;
-  onUpdate?: (url: string) => void;
   sending: boolean;
   size?: LTSize;
-  live?: boolean;
 }
 
 type LTAppearanceColorKey = "bgColor" | "textColor" | "accentColor";
@@ -80,6 +78,53 @@ function ltColorInputValue(value: unknown, fallback: string): string {
   return `#${hex}`.toLowerCase();
 }
 
+function getLtAppearanceColor(styles: LTCustomStyle, key: LTAppearanceColorKey): string {
+  if (key === "bgColor") return styles.bgColor || styles.bgColor1 || styles.bgColor2 || "";
+  if (key === "textColor") return styles.textColor || styles.nameColor || styles.infoColor || "";
+  return styles.accentColor || styles.borderColor1 || styles.borderColor2 || "";
+}
+
+function withLtAppearanceColor(styles: LTCustomStyle, key: LTAppearanceColorKey, value: string): LTCustomStyle {
+  const color = sanitizeLtColor(value) ?? "";
+  if (key === "bgColor") {
+    return {
+      ...styles,
+      bgColor: color,
+      bgColor1: color,
+      bgColor2: color,
+    };
+  }
+  if (key === "textColor") {
+    return {
+      ...styles,
+      textColor: color,
+      nameColor: color,
+      infoColor: color,
+    };
+  }
+  return {
+    ...styles,
+    accentColor: color,
+    borderColor1: color,
+    borderColor2: color,
+  };
+}
+
+function withoutLtAppearanceColors(styles: LTCustomStyle): LTCustomStyle {
+  return {
+    ...styles,
+    bgColor: "",
+    bgColor1: "",
+    bgColor2: "",
+    textColor: "",
+    nameColor: "",
+    infoColor: "",
+    accentColor: "",
+    borderColor1: "",
+    borderColor2: "",
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
@@ -91,10 +136,8 @@ export default function DockLowerThirdEditor({
   onSend,
   onBlank: _onBlank,
   onAnimateOut,
-  onUpdate,
   sending,
   size = "xl",
-  live = false,
 }: DockLTEditorProps) {
   const { t } = useTranslation();
 
@@ -377,10 +420,8 @@ export default function DockLowerThirdEditor({
   const [slots, setSlots] = useState<(ContentSlot | null)[]>(() => loadSlots(theme.id, "default"));
   const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(0);
   const skipFirstSaveRef = useRef(true);
-  const suppressLiveUpdateRef = useRef(false);
   const isSavingRef = useRef(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const liveUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Context menu state ──
   const [contextMenu, setContextMenu] = useState<{ slotIndex: number; x: number; y: number } | null>(null);
@@ -395,7 +436,6 @@ export default function DockLowerThirdEditor({
 
   // ── Slot handlers ──
   const handleRecallSlot = useCallback((slot: ContentSlot) => {
-    suppressLiveUpdateRef.current = true;
     const resolved = resolveSlotState(slot);
     setVariableValues({ ...resolved.variableValues });
     setCustomStyles({ ...resolved.customStyles });
@@ -403,7 +443,6 @@ export default function DockLowerThirdEditor({
     setAnimationIn(resolved.animationIn);
     setExitStyle(resolved.exitStyle);
     setActiveSlotIndex(slot.index);
-    requestAnimationFrame(() => { suppressLiveUpdateRef.current = false; });
   }, []);
 
   const handleDeleteSlot = useCallback((index: number) => {
@@ -579,37 +618,6 @@ export default function DockLowerThirdEditor({
     );
     onAnimateOut(url);
   }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onAnimateOut]);
-
-  useEffect(() => {
-    if (!live || !onUpdate || suppressLiveUpdateRef.current) return;
-    if (liveUpdateTimerRef.current) {
-      clearTimeout(liveUpdateTimerRef.current);
-    }
-    liveUpdateTimerRef.current = setTimeout(() => {
-      const overlayExitStyle = exitStyle === "fade" ? undefined : exitStyle;
-      const url = buildOverlayUrl(
-        theme,
-        variableValues,
-        true,
-        false,
-        size,
-        customStyles,
-        undefined as LTFontSize | undefined,
-        position,
-        undefined,
-        undefined,
-        animationIn,
-        overlayExitStyle,
-      );
-      onUpdate(url);
-    }, 160);
-    return () => {
-      if (liveUpdateTimerRef.current) {
-        clearTimeout(liveUpdateTimerRef.current);
-        liveUpdateTimerRef.current = null;
-      }
-    };
-  }, [animationIn, customStyles, exitStyle, live, onUpdate, position, size, theme, variableValues]);
 
   return (
     <div className="dock-lt-editor-layout">
@@ -846,12 +854,7 @@ export default function DockLowerThirdEditor({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setCustomStyles((prev) => ({
-                    ...prev,
-                    bgColor: "",
-                    textColor: "",
-                    accentColor: "",
-                  }))}
+                  onClick={() => setCustomStyles((prev) => withoutLtAppearanceColors(prev))}
                   style={{
                     border: "1px solid var(--dock-border)",
                     borderRadius: 3,
@@ -868,7 +871,7 @@ export default function DockLowerThirdEditor({
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7 }}>
                 {LT_APPEARANCE_COLOR_CONTROLS.map((control) => {
-                  const explicitColor = customStyles[control.key] || "";
+                  const explicitColor = getLtAppearanceColor(customStyles, control.key);
                   const baseColor = control.key === "accentColor" ? theme.accentColor : control.fallback;
                   const effectiveColor = sanitizeLtColor(explicitColor) ?? sanitizeLtColor(baseColor) ?? control.fallback;
                   return (
@@ -888,7 +891,7 @@ export default function DockLowerThirdEditor({
                       <input
                         type="color"
                         value={ltColorInputValue(explicitColor || effectiveColor, control.fallback)}
-                        onChange={(event) => setCustomStyles((prev) => ({ ...prev, [control.key]: event.target.value }))}
+                        onChange={(event) => setCustomStyles((prev) => withLtAppearanceColor(prev, control.key, event.target.value))}
                         title={control.label}
                         style={{
                           width: 26,

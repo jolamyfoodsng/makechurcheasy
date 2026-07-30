@@ -315,6 +315,16 @@ export interface BibleThemeSettings {
   lowerThirdOffsetX: number;
   /** Lower-third vertical caption position — "bottom" anchors text at bottom (default), "top" anchors at top */
   lowerThirdCaptionPosition: "top" | "bottom";
+  /** Screen edge where the lower-third bar is placed. */
+  lowerThirdEdge?: "bottom" | "top" | "left" | "right";
+  /** CSS padding for the lower-third text card. Accepts CSS padding syntax, e.g. "18px 28px". */
+  lowerThirdCardPadding?: string;
+  /** When true, the dock controls vertical and horizontal lower-third text padding together. */
+  lowerThirdPaddingLinked?: boolean;
+  /** Rounded corner radius for the lower-third text card. */
+  lowerThirdCardRadius?: number;
+  /** Optional text inversion for lower-third bars, useful for side/top projection layouts. */
+  lowerThirdTextDirection?: "normal" | "inverted";
 
   // Compare Translation layout
   /** Width percentage of each translation panel in compare mode (30–50, default 40) */
@@ -383,6 +393,11 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   lowerThirdWidthPreset: "md",
   lowerThirdOffsetX: 0,
   lowerThirdCaptionPosition: "bottom",
+  lowerThirdEdge: "bottom",
+  lowerThirdCardPadding: "18px 28px",
+  lowerThirdPaddingLinked: false,
+  lowerThirdCardRadius: 18,
+  lowerThirdTextDirection: "normal",
 
   compareTranslationWidth: 40,
   compareTranslationGap: 40,

@@ -445,6 +445,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   podcasts: Podcast,
   record_voice_over: Podcast,
   wifi: Wifi,
+  wifi_off: WifiOff,
   wifi_tethering: WifiOff,
 
   /* Specialised */

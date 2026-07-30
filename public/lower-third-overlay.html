@@ -703,8 +703,32 @@
      * Apply custom style overrides from payload.
      * Injects CSS custom properties + direct overrides.
      */
+    function safeCssColor(value) {
+      var trimmed = String(value || "").trim().slice(0, 80);
+      if (!trimmed || /[;{}<>]/.test(trimmed)) return "";
+      if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(trimmed)) return trimmed;
+      if (/^rgba?\(\s*(?:\d{1,3}\s*,\s*){2}\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(trimmed)) return trimmed;
+      if (/^hsla?\(\s*\d{1,3}(?:deg)?\s*,\s*\d{1,3}%\s*,\s*\d{1,3}%(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(trimmed)) return trimmed;
+      return "";
+    }
+
+    function colorMix(color, amount) {
+      return "color-mix(in srgb, " + color + " " + amount + "%, transparent)";
+    }
+
     function applyCustomStyles(root, data) {
-      const { bgColor, textColor, accentColor, bgImage, bgImageOpacity, logoScale } = data;
+      const bgColor = safeCssColor(data.bgColor);
+      const bgColor1 = safeCssColor(data.bgColor1) || bgColor;
+      const bgColor2 = safeCssColor(data.bgColor2) || bgColor1;
+      const textColor = safeCssColor(data.textColor);
+      const nameColor = safeCssColor(data.nameColor) || textColor;
+      const infoColor = safeCssColor(data.infoColor) || textColor || nameColor;
+      const resolvedTextColor = textColor || nameColor || infoColor;
+      const accentColor = safeCssColor(data.accentColor);
+      const borderColor1 = safeCssColor(data.borderColor1) || accentColor;
+      const borderColor2 = safeCssColor(data.borderColor2) || borderColor1;
+      const resolvedBorderColor = borderColor1 || borderColor2 || accentColor;
+      const { bgImage, bgImageOpacity, logoScale } = data;
 
       // Inject a dynamic style block for custom overrides
       let styleEl = document.getElementById("custom-overrides");
@@ -714,24 +738,99 @@
         document.head.appendChild(styleEl);
       }
 
-      let css = "#overlay-root,\n#overlay-bg-buffer {\n";
-      if (bgColor) css += `  --lt-custom-bg: ${bgColor};\n`;
-      if (textColor) css += `  --lt-custom-text: ${textColor};\n`;
-      if (accentColor) css += `  --lt-custom-accent: ${accentColor};\n`;
+      let css = ":root,\n#overlay-root,\n#overlay-root *,\n#overlay-bg-buffer,\n#overlay-bg-buffer * {\n";
+      if (bgColor1) {
+        css += `  --lt-custom-bg: ${bgColor1} !important;\n`;
+        css += `  --lt-brand-bg: ${bgColor1} !important;\n`;
+        css += `  --lt-brand-surface: ${bgColor1} !important;\n`;
+        css += `  --bg: ${bgColor1} !important;\n`;
+        css += `  --bg1: ${bgColor1} !important;\n`;
+      }
+      if (bgColor2) css += `  --bg2: ${bgColor2} !important;\n`;
+      if (resolvedTextColor) {
+        css += `  --lt-custom-text: ${resolvedTextColor} !important;\n`;
+        css += `  --lt-brand-text: ${resolvedTextColor} !important;\n`;
+        css += `  --fg: ${resolvedTextColor} !important;\n`;
+        css += `  --text: ${resolvedTextColor} !important;\n`;
+        css += `  --foreground: ${resolvedTextColor} !important;\n`;
+      }
+      if (infoColor) {
+        css += `  --lt-brand-subtext: ${infoColor} !important;\n`;
+        css += `  --sub: ${infoColor} !important;\n`;
+        css += `  --muted: ${infoColor} !important;\n`;
+        css += `  --secondary: ${infoColor} !important;\n`;
+      }
+      if (accentColor) {
+        css += `  --lt-custom-accent: ${accentColor} !important;\n`;
+        css += `  --lt-brand-primary: ${accentColor} !important;\n`;
+        css += `  --accent: ${accentColor} !important;\n`;
+        css += `  --glow: ${colorMix(accentColor, 24)} !important;\n`;
+        css += `  --lt-brand-glow: ${colorMix(accentColor, 18)} !important;\n`;
+      }
+      if (resolvedBorderColor) {
+        css += `  --lt-brand-border: ${resolvedBorderColor} !important;\n`;
+        css += `  --bd: ${resolvedBorderColor} !important;\n`;
+        css += `  --border: ${resolvedBorderColor} !important;\n`;
+      }
       if (logoScale && Number(logoScale) > 0) css += `  --lt-logo-scale: ${Number(logoScale)} !important;\n`;
       css += "}\n";
 
-      // Override background colors on common elements
-      if (bgColor) {
+      // Override background colors on common panel elements, including older Tailwind-style themes.
+      if (bgColor1) {
+        const bgFill = bgColor2 && bgColor2 !== bgColor1
+          ? `linear-gradient(135deg, ${bgColor1}, ${bgColor2})`
+          : bgColor1;
         css += `#overlay-root > .lt-fit-frame > div:first-child,
 #overlay-root > .lt-fit-frame > div:first-child > div,
+#overlay-root .panel,
+#overlay-root .speaker-panel,
+#overlay-root .quote-panel,
+#overlay-root .announce-panel,
+#overlay-root .keyword-panel,
+#overlay-root .date-shell,
+#overlay-root .social-row,
+#overlay-root .info-panel,
+#overlay-root .g-panel,
+#overlay-root .g-cell,
+#overlay-root .g-split-right,
+#overlay-root .c-shell,
+#overlay-root .y-shell,
+#overlay-root .s5-panel,
+#overlay-root .s5-triple,
+#overlay-root .s5-rotate,
+#overlay-root .s5-stack,
+#overlay-root .s5-minimal,
+#overlay-root .lt53-wrap,
+#overlay-root .lt54-wrap,
+#overlay-root .ticker-shell,
 #overlay-root [style*="background"],
 #overlay-root [class*="bg-"],
 #overlay-bg-buffer > .lt-fit-frame > div:first-child,
 #overlay-bg-buffer > .lt-fit-frame > div:first-child > div,
+#overlay-bg-buffer .panel,
+#overlay-bg-buffer .speaker-panel,
+#overlay-bg-buffer .quote-panel,
+#overlay-bg-buffer .announce-panel,
+#overlay-bg-buffer .keyword-panel,
+#overlay-bg-buffer .date-shell,
+#overlay-bg-buffer .social-row,
+#overlay-bg-buffer .info-panel,
+#overlay-bg-buffer .g-panel,
+#overlay-bg-buffer .g-cell,
+#overlay-bg-buffer .g-split-right,
+#overlay-bg-buffer .c-shell,
+#overlay-bg-buffer .y-shell,
+#overlay-bg-buffer .s5-panel,
+#overlay-bg-buffer .s5-triple,
+#overlay-bg-buffer .s5-rotate,
+#overlay-bg-buffer .s5-stack,
+#overlay-bg-buffer .s5-minimal,
+#overlay-bg-buffer .lt53-wrap,
+#overlay-bg-buffer .lt54-wrap,
+#overlay-bg-buffer .ticker-shell,
 #overlay-bg-buffer [style*="background"],
 #overlay-bg-buffer [class*="bg-"] {
-  background: ${bgColor} !important;
+  background: ${bgFill} !important;
   background-image: none !important;
 }\n`;
         // Don't override icon boxes in social loops
@@ -743,27 +842,156 @@
 }\n`;
       }
       // Override text color
-      if (textColor) {
+      if (resolvedTextColor) {
         css += `#overlay-root,
-#overlay-root *:not(.fa):not(.fab):not(.fas):not(.far):not(.fal):not(.fad):not(.sl-icon-box):not(.sl-icon-box *),
+#overlay-root *:not(.material-icons):not(.material-icons-outlined):not(.material-icons-round):not(.material-icons-sharp):not(.material-icons-two-tone):not(.material-symbols-outlined):not(.material-symbols-rounded):not(.material-symbols-sharp):not(.fa):not(.fab):not(.fas):not(.far):not(.fal):not(.fad):not(.sl-icon-box):not(.sl-icon-box *),
 #overlay-bg-buffer,
-#overlay-bg-buffer *:not(.fa):not(.fab):not(.fas):not(.far):not(.fal):not(.fad):not(.sl-icon-box):not(.sl-icon-box *) {
-  color: ${textColor} !important;
+#overlay-bg-buffer *:not(.material-icons):not(.material-icons-outlined):not(.material-icons-round):not(.material-icons-sharp):not(.material-icons-two-tone):not(.material-symbols-outlined):not(.material-symbols-rounded):not(.material-symbols-sharp):not(.fa):not(.fab):not(.fas):not(.far):not(.fal):not(.fad):not(.sl-icon-box):not(.sl-icon-box *) {
+  color: ${resolvedTextColor} !important;
+}\n`;
+      }
+      if (nameColor) {
+        css += `#overlay-root .headline,
+#overlay-root .name-line,
+#overlay-root .keyword-main,
+#overlay-root .c-title,
+#overlay-root .g-title,
+#overlay-root .g-title-condensed,
+#overlay-root .lt53-name,
+#overlay-root .lt54-handle,
+#overlay-root .y-line1,
+#overlay-root .y-speaker-name,
+#overlay-root .y-key-main,
+#overlay-root .y-scripture-main,
+#overlay-root .y-quote-main,
+#overlay-root .title,
+#overlay-bg-buffer .headline,
+#overlay-bg-buffer .name-line,
+#overlay-bg-buffer .keyword-main,
+#overlay-bg-buffer .c-title,
+#overlay-bg-buffer .g-title,
+#overlay-bg-buffer .g-title-condensed,
+#overlay-bg-buffer .lt53-name,
+#overlay-bg-buffer .lt54-handle,
+#overlay-bg-buffer .y-line1,
+#overlay-bg-buffer .y-speaker-name,
+#overlay-bg-buffer .y-key-main,
+#overlay-bg-buffer .y-scripture-main,
+#overlay-bg-buffer .y-quote-main,
+#overlay-bg-buffer .title {
+  color: ${nameColor} !important;
+}\n`;
+      }
+      if (infoColor) {
+        css += `#overlay-root .subline,
+#overlay-root .role-line,
+#overlay-root .keyword-sub,
+#overlay-root .line-list,
+#overlay-root .c-sub,
+#overlay-root .g-sub,
+#overlay-root .g-scroll,
+#overlay-root .g-cell-line,
+#overlay-root .lt53-title,
+#overlay-root .y-line2,
+#overlay-root .y-speaker-role,
+#overlay-root .y-key-sub,
+#overlay-root .y-scripture-ref,
+#overlay-root .y-quote-ref,
+#overlay-root .text,
+#overlay-root .c-date,
+#overlay-root .y-pill-context,
+#overlay-bg-buffer .subline,
+#overlay-bg-buffer .role-line,
+#overlay-bg-buffer .keyword-sub,
+#overlay-bg-buffer .line-list,
+#overlay-bg-buffer .c-sub,
+#overlay-bg-buffer .g-sub,
+#overlay-bg-buffer .g-scroll,
+#overlay-bg-buffer .g-cell-line,
+#overlay-bg-buffer .lt53-title,
+#overlay-bg-buffer .y-line2,
+#overlay-bg-buffer .y-speaker-role,
+#overlay-bg-buffer .y-key-sub,
+#overlay-bg-buffer .y-scripture-ref,
+#overlay-bg-buffer .y-quote-ref,
+#overlay-bg-buffer .text,
+#overlay-bg-buffer .c-date,
+#overlay-bg-buffer .y-pill-context {
+  color: ${infoColor} !important;
 }\n`;
       }
       // Override accent (borders, icons, highlights)
       if (accentColor) {
         css += `#overlay-root [style*="C8102E"],
 #overlay-root [style*="c8102e"],
-#overlay-root .text-red-500,
-#overlay-root .text-red-700,
-#overlay-root .border-red-500,
+#overlay-root [class*="text-[#"],
+#overlay-root [class*="text-red"],
+#overlay-root [class*="border-[#"],
+#overlay-root [class*="border-red"],
+#overlay-root .kicker,
+#overlay-root .g-kicker,
+#overlay-root .c-kicker,
+#overlay-root .y-kicker,
+#overlay-root .meta,
+#overlay-root .g-meta,
+#overlay-root .c-meta,
+#overlay-root .y-meta,
+#overlay-root .platform-pill,
+#overlay-root .g-cell-title,
+#overlay-root .lt54-platform,
+#overlay-root .pill-label,
+#overlay-root .y-pill-label,
 #overlay-bg-buffer [style*="C8102E"],
 #overlay-bg-buffer [style*="c8102e"],
-#overlay-bg-buffer .text-red-500,
-#overlay-bg-buffer .text-red-700,
-#overlay-bg-buffer .border-red-500 {
+#overlay-bg-buffer [class*="text-[#"],
+#overlay-bg-buffer [class*="text-red"],
+#overlay-bg-buffer [class*="border-[#"],
+#overlay-bg-buffer [class*="border-red"],
+#overlay-bg-buffer .kicker,
+#overlay-bg-buffer .g-kicker,
+#overlay-bg-buffer .c-kicker,
+#overlay-bg-buffer .y-kicker,
+#overlay-bg-buffer .meta,
+#overlay-bg-buffer .g-meta,
+#overlay-bg-buffer .c-meta,
+#overlay-bg-buffer .y-meta,
+#overlay-bg-buffer .platform-pill,
+#overlay-bg-buffer .g-cell-title,
+#overlay-bg-buffer .lt54-platform,
+#overlay-bg-buffer .pill-label,
+#overlay-bg-buffer .y-pill-label {
   color: ${accentColor} !important;
+  border-color: ${accentColor} !important;
+}\n`;
+        css += `#overlay-root .v-divider,
+#overlay-root .lt53-divider,
+#overlay-root .g-left-line,
+#overlay-root .tag-box,
+#overlay-root .ticker-badge,
+#overlay-root .g-pill,
+#overlay-root .g-badge,
+#overlay-root .c-pill,
+#overlay-root .s5-label,
+#overlay-root .s5-chip,
+#overlay-root .y-tag,
+#overlay-root .y-dot,
+#overlay-root .y-vline,
+#overlay-root .live-dot,
+#overlay-bg-buffer .v-divider,
+#overlay-bg-buffer .lt53-divider,
+#overlay-bg-buffer .g-left-line,
+#overlay-bg-buffer .tag-box,
+#overlay-bg-buffer .ticker-badge,
+#overlay-bg-buffer .g-pill,
+#overlay-bg-buffer .g-badge,
+#overlay-bg-buffer .c-pill,
+#overlay-bg-buffer .s5-label,
+#overlay-bg-buffer .s5-chip,
+#overlay-bg-buffer .y-tag,
+#overlay-bg-buffer .y-dot,
+#overlay-bg-buffer .y-vline,
+#overlay-bg-buffer .live-dot {
+  background: ${accentColor} !important;
   border-color: ${accentColor} !important;
 }\n`;
       }
@@ -820,6 +1048,14 @@
         customX: data.customX != null ? data.customX : 2.5,
         customY: data.customY != null ? data.customY : 92,
         bgColor: data.bgColor || "",
+        bgColor1: data.bgColor1 || "",
+        bgColor2: data.bgColor2 || "",
+        textColor: data.textColor || "",
+        nameColor: data.nameColor || "",
+        infoColor: data.infoColor || "",
+        accentColor: data.accentColor || "",
+        borderColor1: data.borderColor1 || "",
+        borderColor2: data.borderColor2 || "",
         bgImage: data.bgImage || "",
         bgImageOpacity: data.bgImageOpacity != null ? data.bgImageOpacity : 0.3,
       });

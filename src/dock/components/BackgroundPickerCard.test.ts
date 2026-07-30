@@ -3,6 +3,7 @@ import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuic
 import type { BibleThemeSettings } from "../../bible/types";
 import overlayHtml from "../../../public/mce-bible-overlay.html?raw";
 import backgroundOverlayHtml from "../../../public/bible-overlay-bg.html?raw";
+import noteOverlayHtml from "../../../public/mce-note.html?raw";
 import backgroundPickerSource from "./BackgroundPickerCard.tsx?raw";
 import dockThemeSettingsModalSource from "./DockThemeSettingsModal.tsx?raw";
 import dockBibleTabSource from "../tabs/DockBibleTab.tsx?raw";
@@ -453,13 +454,146 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(backgroundPickerSource).not.toContain("label=\"Layout preset\"");
   });
 
-  it("centers Bible compare content by default while keeping the lower-third caption position setting", () => {
+  it("keeps compare-only quick settings compact without the single Compare tab or theme presets", () => {
+    const comparePanelStart = backgroundPickerSource.indexOf("function CompareSettingsPanel");
+    const comparePanelEnd = backgroundPickerSource.indexOf("/* ── Inline Color Picker ── */", comparePanelStart);
+    const comparePanelSource = backgroundPickerSource.slice(comparePanelStart, comparePanelEnd);
+
+    expect(backgroundPickerSource).toContain('const compareOnlyMode = hideBackgroundOnCompare && displayMode === "compare"');
+    expect(backgroundPickerSource).toContain('{!compareOnlyMode && (');
+    expect(backgroundPickerSource).toContain("dtb-bg-picker--compare-only");
+    expect(backgroundPickerSource).toContain("const COMPARE_BG_OPTIONS = BG_OPTIONS.filter((option) => option.id !== \"theme\")");
+    expect(comparePanelSource).toContain("resolvedCompareBackdropValue");
+    expect(comparePanelSource).toContain("COMPARE_BG_OPTIONS.map");
+    expect(comparePanelSource).not.toContain("<ThemeSection");
+  });
+
+  it("exposes lower-third bar placement and direction controls inside compare settings", () => {
+    const comparePanelStart = backgroundPickerSource.indexOf("function CompareSettingsPanel");
+    const comparePanelEnd = backgroundPickerSource.indexOf("/* ── Inline Color Picker ── */", comparePanelStart);
+    const comparePanelSource = backgroundPickerSource.slice(comparePanelStart, comparePanelEnd);
+
+    expect(comparePanelSource).toContain('overlayMode === "lower-third"');
+    expect(comparePanelSource).toContain("compareLowerThirdTextDirection");
+    expect(comparePanelSource).toContain("lowerThirdEdge: edge");
+    expect(comparePanelSource).toContain("lowerThirdTextDirection: direction");
+    expect(comparePanelSource).toContain("bgPicker.lowerThirdBar");
+    expect(comparePanelSource).toContain("bgPicker.lowerThirdPlacement");
+    expect(comparePanelSource).toContain("bgPicker.textDirection");
+    expect(overlayHtml).toContain("const isCompare = sl.layout === 'compare' && cc.length === 2");
+    expect(overlayHtml).toContain("ltBar.classList.add('lt-edge-' + edge)");
+    expect(overlayHtml).toContain("ltBar.classList.toggle('lt-text-inverted'");
+  });
+
+  it("places compare font weight and text alignment side by side with compact icon controls", () => {
+    const comparePanelStart = backgroundPickerSource.indexOf("function CompareSettingsPanel");
+    const comparePanelEnd = backgroundPickerSource.indexOf("/* ── Inline Color Picker ── */", comparePanelStart);
+    const comparePanelSource = backgroundPickerSource.slice(comparePanelStart, comparePanelEnd);
+
+    expect(comparePanelSource).toContain('className="dtb-compare-style-grid"');
+    expect(comparePanelSource).toContain('label="Font weight"');
+    expect(comparePanelSource).toContain('label="Text alignment"');
+    expect(comparePanelSource).toContain("getCompareWeightOptions()");
+    expect(comparePanelSource).toContain("getCompareAlignOptions()");
+  });
+
+  it("keeps text weight, line height, and text case in the Text typography section", () => {
+    const textSectionStart = backgroundPickerSource.indexOf("{/* ── Text Section ── */}");
+    const referenceSectionStart = backgroundPickerSource.indexOf("{/* ── Reference Section ── */}", textSectionStart);
+    const textSectionSource = backgroundPickerSource.slice(textSectionStart, referenceSectionStart);
+
+    expect(textSectionSource).toContain("dtb-control-section--nested");
+    expect(textSectionSource).toContain("sermon.typography");
+    expect(textSectionSource).toContain("fontWeight: w");
+    expect(textSectionSource).toContain("lineHeight: Number(e.target.value)");
+    expect(textSectionSource).toContain("textTransform: tc");
+    expect(textSectionSource).toContain("IconSegmentedControl<CompactFontWeight>");
+    expect(textSectionSource).toContain("IconSegmentedControl<CompactTextCase>");
+    expect(textSectionSource).not.toContain("common.moreOptions");
+  });
+
+  it("adds a Layout tab and groups text layout controls there", () => {
+    const tabNavigationStart = backgroundPickerSource.indexOf("{/* Tab Navigation */}");
+    const backgroundTabStart = backgroundPickerSource.indexOf("{/* Background Tab */}", tabNavigationStart);
+    const tabNavigationSource = backgroundPickerSource.slice(tabNavigationStart, backgroundTabStart);
+
+    expect(tabNavigationSource).toContain('setActiveTab("layout")');
+    expect(tabNavigationSource).toContain('activeTab === "layout"');
+    expect(tabNavigationSource).toContain("bgPicker.layout");
+
+    const layoutSectionStart = backgroundPickerSource.indexOf("{/* Layout Tab */}");
+    const compareTabStart = backgroundPickerSource.indexOf("{/* Compare Tab */}", layoutSectionStart);
+    const layoutSectionSource = backgroundPickerSource.slice(layoutSectionStart, compareTabStart);
+    const layoutIndex = layoutSectionSource.indexOf("bgPicker.layout");
+    const textAlignIndex = layoutSectionSource.indexOf("textAlign: a");
+    const lowerThirdBarIndex = layoutSectionSource.indexOf("bgPicker.lowerThirdBar");
+    const spacingIndex = layoutSectionSource.indexOf("bgPicker.spacingAndShape");
+
+    expect(layoutSectionSource).toContain('activeTab === "layout"');
+    expect(layoutIndex).toBeGreaterThan(-1);
+    expect(textAlignIndex).toBeGreaterThan(layoutIndex);
+    expect(lowerThirdBarIndex).toBeGreaterThan(textAlignIndex);
+    expect(spacingIndex).toBeGreaterThan(lowerThirdBarIndex);
+    expect(layoutSectionSource).toContain("setSpacingShapeOpen");
+    expect(layoutSectionSource).toContain("dtb-control-section--collapsible");
+  });
+
+  it("keeps reference typography in Text and moves reference layout controls into Layout", () => {
+    const referenceSectionStart = backgroundPickerSource.indexOf("function ReferenceSection");
+    const referenceSectionEnd = backgroundPickerSource.indexOf("/* ── Reference Layout Section ── */", referenceSectionStart);
+    const referenceSectionSource = backgroundPickerSource.slice(referenceSectionStart, referenceSectionEnd);
+    const colorIndex = referenceSectionSource.indexOf("refFontColor: v");
+    const fontSizeIndex = referenceSectionSource.indexOf("Reference Font Size");
+    const weightIndex = referenceSectionSource.indexOf("refFontWeight: w");
+    const textCaseIndex = referenceSectionSource.indexOf("refTextTransform: tc");
+    const moreOptionsIndex = referenceSectionSource.indexOf("common.moreOptions");
+
+    expect(colorIndex).toBeGreaterThan(-1);
+    expect(fontSizeIndex).toBeGreaterThan(-1);
+    expect(fontSizeIndex).toBeGreaterThan(colorIndex);
+    expect(weightIndex).toBeGreaterThan(fontSizeIndex);
+    expect(textCaseIndex).toBeGreaterThan(weightIndex);
+    expect(referenceSectionSource).toContain("IconSegmentedControl<CompactFontWeight>");
+    expect(referenceSectionSource).toContain("IconSegmentedControl<CompactTextCase>");
+    expect(moreOptionsIndex).toBeGreaterThan(textCaseIndex);
+    expect(referenceSectionSource).not.toContain("refTextAlign: a");
+    expect(referenceSectionSource).not.toContain("setReferencePlacement");
+    expect(referenceSectionSource).not.toContain("Reference Placement");
+    expect(referenceSectionSource).not.toContain("Reference Spacing");
+    expect(referenceSectionSource).not.toContain("bgPicker.nearVersePosition");
+    expect(referenceSectionSource).not.toContain("Near verse");
+
+    const referenceLayoutStart = backgroundPickerSource.indexOf("function ReferenceLayoutSection");
+    const referenceLayoutEnd = backgroundPickerSource.indexOf("/* ── Reference Background ── */", referenceLayoutStart);
+    const referenceLayoutSource = backgroundPickerSource.slice(referenceLayoutStart, referenceLayoutEnd);
+    const alignmentIndex = referenceLayoutSource.indexOf("refTextAlign: a");
+    const placementIndex = referenceLayoutSource.indexOf("Reference Placement");
+    const spacingIndex = referenceLayoutSource.indexOf("Reference Spacing");
+
+    expect(referenceLayoutSource).toContain("bgPicker.reference");
+    expect(referenceLayoutSource).toContain("bgPicker.layout");
+    expect(referenceLayoutSource).toContain("IconSegmentedControl<CompactTextAlign>");
+    expect(alignmentIndex).toBeGreaterThan(-1);
+    expect(placementIndex).toBeGreaterThan(alignmentIndex);
+    expect(spacingIndex).toBeGreaterThan(placementIndex);
+    expect(referenceLayoutSource).toContain("setReferencePlacement");
+    expect(referenceLayoutSource).toContain('"above-verse"');
+    expect(referenceLayoutSource).toContain('"below-verse"');
+    expect(referenceLayoutSource).toContain('"top-edge"');
+    expect(referenceLayoutSource).toContain('"bottom-edge"');
+  });
+
+  it("centers Bible compare content by default while keeping edge-aware lower-third placement", () => {
     expect(overlayHtml).toContain("#compare-layout");
     expect(overlayHtml).toContain("align-content: center");
     expect(overlayHtml).toContain("function normalizeCompareVerticalAlign");
     expect(overlayHtml).toContain("compareGridVerticalAlign(leftVerticalAlign, 'center')");
     expect(overlayHtml).toContain("compareColumnVerticalAlign(index === 1 ? rightVerticalAlign : leftVerticalAlign, 'flex-start')");
-    expect(overlayHtml).toContain("ltBar.style.justifyContent = lowerThirdContentVerticalAlign(s.lowerThirdCaptionPosition)");
+    expect(overlayHtml).toContain("const edge = s.lowerThirdEdge === 'top' || s.lowerThirdEdge === 'left' || s.lowerThirdEdge === 'right' ? s.lowerThirdEdge : 'bottom'");
+    expect(overlayHtml).toContain("ltBar.classList.add('lt-edge-' + edge)");
+    expect(overlayHtml).toContain("ltBar.style.justifyContent = edge === 'left' || edge === 'right'");
+    expect(overlayHtml).toContain("lowerThirdContentVerticalAlign(s.lowerThirdCaptionPosition)");
+    expect(backgroundPickerSource).toContain('storageScope === "bible" || storageScope === "worship" || storageScope === "notes"');
   });
 
   it("renders compare reference and bible version as one label", () => {
@@ -533,14 +667,18 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(gradientIndex).toBeLessThan(imageIndex);
   });
 
-  it("sends the active theme with Bible full/lower-third mode changes", () => {
-    const modeChangeStart = dockBibleTabSource.indexOf("const handleOverlayModeChange");
-    const modeChangeEnd = dockBibleTabSource.indexOf("const handleToggleFavoritePassage", modeChangeStart);
-    const modeChangeBlock = dockBibleTabSource.slice(modeChangeStart, modeChangeEnd);
+  it("keeps notes lower-third pattern background behavior aligned with worship", () => {
+    expect(noteOverlayHtml).toContain("function applyThemeLowerThird");
+    expect(noteOverlayHtml).toContain("const bgPattern = String(s.backgroundPattern || '').trim()");
+    expect(noteOverlayHtml).toContain("const pc = resolvePatternCss(bgPattern)");
+    expect(noteOverlayHtml).toContain("ltBarBg.style.background = pc || 'transparent'");
+  });
 
-    expect(modeChangeBlock).toContain("fullscreenLiveOverrides");
-    expect(modeChangeBlock).toContain("theme: modeTheme");
-    expect(modeChangeBlock).toContain("existing.theme = modeTheme");
+  it("sends the active theme with Bible full/lower-third staged payloads", () => {
+    expect(dockBibleTabSource).toContain('theme: liveOverlayMode === "fullscreen" ? effectiveSelectedBibleTheme.id : selectedLowerThirdTheme.id');
+    expect(dockBibleTabSource).toContain("liveOverlayMode === \"fullscreen\"\n              ? effectiveSelectedBibleTheme.settings\n              : effectiveSelectedLowerThirdTheme.settings");
+    expect(dockBibleTabSource).toContain("fullscreenLiveOverrides as Record<string, unknown> | null");
+    expect(dockBibleTabSource).toContain("saveDockBibleOverlayMode(nextMode)");
   });
 
   it("keeps theme/background draft changes local until the theme settings save commit", () => {

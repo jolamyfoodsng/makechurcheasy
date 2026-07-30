@@ -92,6 +92,10 @@ export interface LicenseCache {
   cachedAt: number;
 }
 
+type LicenseFetchResult =
+  | { ok: true; payload: LicensePayload }
+  | { ok: false; lockReason: LockReason; transient: boolean };
+
 export interface LicenseGuardState {
   unlocked: boolean;
   lockReason: LockReason;
@@ -206,10 +210,12 @@ async function checkInternet(): Promise<boolean> {
 
 // ── Backend Verification ─────────────────────────────────────────────────────
 
-async function fetchLicenseFromBackend(): Promise<LicensePayload | null> {
+async function fetchLicenseFromBackend(): Promise<LicenseFetchResult> {
   const session = getSession();
   const deviceId = getDeviceId();
-  if (!session?.user?.id || !deviceId) return null;
+  if (!session?.user?.id || !deviceId) {
+    return { ok: false, lockReason: "device_removed", transient: false };
+  }
 
   try {
     const res = await fetch(
@@ -223,15 +229,34 @@ async function fetchLicenseFromBackend(): Promise<LicensePayload | null> {
     );
 
     if (!res.ok) {
-      console.warn(`[licenseGuard] Backend returned ${res.status}`);
-      return null;
+      let error = "";
+      try {
+        const data = await res.clone().json();
+        error = typeof data?.error === "string" ? data.error : "";
+      } catch {
+        // keep status-only handling
+      }
+
+      console.warn(`[licenseGuard] Backend returned ${res.status}${error ? `: ${error}` : ""}`);
+
+      if (res.status === 401 || res.status === 404) {
+        return { ok: false, lockReason: "device_removed", transient: false };
+      }
+      if (res.status === 403 && /version/i.test(error)) {
+        return { ok: false, lockReason: "forced_upgrade", transient: false };
+      }
+
+      return { ok: false, lockReason: "internet_required", transient: true };
     }
 
     const data = await res.json();
-    return data?.license ?? null;
+    if (!data?.license) {
+      return { ok: false, lockReason: "internet_required", transient: true };
+    }
+    return { ok: true, payload: data.license };
   } catch (err) {
     console.warn("[licenseGuard] Backend fetch failed:", err);
-    return null;
+    return { ok: false, lockReason: "internet_required", transient: true };
   }
 }
 
@@ -525,8 +550,14 @@ export async function verify(): Promise<boolean> {
     }
 
     // Online — fetch from backend
-    const payload = await fetchLicenseFromBackend();
-    if (!payload) {
+    const licenseResult = await fetchLicenseFromBackend();
+    if (!licenseResult.ok) {
+      if (!licenseResult.transient) {
+        _lockReason = licenseResult.lockReason;
+        emit();
+        return false;
+      }
+
       // Backend unreachable or invalid response — keep existing cache if valid
       if (_cache) {
         const offlineReason = evaluateOfflineValidity(_cache);
@@ -540,7 +571,7 @@ export async function verify(): Promise<boolean> {
     }
 
     // Normalize before caching — convert billing expiry to free plan
-    const normalizedPayload = normalizeLicensePayload(payload);
+    const normalizedPayload = normalizeLicensePayload(licenseResult.payload);
     _cache = {
       payload: normalizedPayload,
       cachedAt: Date.now(),

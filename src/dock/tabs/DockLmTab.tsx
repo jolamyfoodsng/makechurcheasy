@@ -14,6 +14,7 @@ import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 import { getEnvConfig } from "../../services/envConfig";
+import type { LmDockSnapshot } from "../../services/lmDockService";
 import BibleAiOnboarding, {
   isBibleAiOnboardingCompleted,
   resetBibleAiOnboarding,
@@ -23,29 +24,49 @@ import {
   appendTextToDockNotes,
   resolveDockNotesPresentationSettings,
 } from "../dockNotesStorage";
+import {
+  createDockNotesAppendCommand,
+  postDockNotesAppendCommand,
+} from "../../services/dockNotesInterop";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 type LmStatus = "idle" | "requesting-mic" | "connecting" | "listening" | "error";
 type LmOverlayMode = "fullscreen" | "lower-third";
 
 const LM_DOCK_SETTINGS_KEY = "ocs-lm-dock-settings";
+const PREFERRED_MIC_STORAGE_KEY = "ocs-speech-to-scripture-mic-id";
 const DOCK_BIBLE_PREFS_KEY = "ocs-dock-bible-preferences";
 const HISTORY_STORAGE_KEY = "ocs-lm-dock-history";
 const MAX_HISTORY = 50;
 const MAX_TRANSCRIPT_LINES = 40;
 const MAX_QUEUE_SIZE = 3;
+const LM_QUEUE_RETENTION_MS = 90_000;
+const LM_LIVE_VERSE_STORAGE_KEY = "ocs-lm-dock-live-verse";
 const SUGGESTION_COOLDOWN_MS = 60_000;
 const LM_RELAY_POLL_MS = 2_000;
 const LM_RELAY_HIDDEN_POLL_MS = 10_000;
 
+async function loadLmDockService() {
+  const module = await import("../../services/lmDockService");
+  return module.lmDockService;
+}
+
 interface DockLmTabProps {
   presentationOutputTarget?: DockPresentationOutputTarget;
+  enablePresentationMicControls?: boolean;
 }
 
 interface FreshnessInfo {
   label: string;
   color: string;
   level: "fresh" | "warning" | "stale";
+}
+
+export interface RetainedLmCandidate {
+  key: string;
+  candidate: VoiceBibleCandidate;
+  detectedAt: number;
+  lastSeenAt: number;
 }
 
 function getFreshness(detectedAt: number, now: number): FreshnessInfo {
@@ -56,26 +77,20 @@ function getFreshness(detectedAt: number, now: number): FreshnessInfo {
 }
 
 interface LmDockSettings {
-  autoPushQueue: boolean;
-  autoPushSuggestions: boolean;
   autoNavigate: boolean;
   translation: string;
   overlayMode: LmOverlayMode;
   autoScroll: boolean;
   pushScene: "ai" | "main";
-  duplicateWindowSec: number;
   suggestionLifetime: number;
 }
 
 const DEFAULT_SETTINGS: LmDockSettings = {
-  autoPushQueue: true,
-  autoPushSuggestions: false,
   autoNavigate: false,
   translation: "KJV",
   overlayMode: "fullscreen",
   autoScroll: true,
   pushScene: "ai",
-  duplicateWindowSec: 15,
   suggestionLifetime: 20,
 };
 
@@ -93,6 +108,36 @@ export function isLmAutoPushSuppressed(
   return windowMs > 0 && nowMs - lastPushedAt < windowMs;
 }
 
+export function getLmCandidateKey(candidate: Pick<VoiceBibleCandidate, "book" | "chapter" | "verse">): string {
+  return `${candidate.book}:${candidate.chapter}:${candidate.verse}`;
+}
+
+export function mergeRetainedLmQueue(
+  current: RetainedLmCandidate[],
+  incoming: VoiceBibleCandidate[],
+  nowMs: number,
+  retentionMs = LM_QUEUE_RETENTION_MS,
+): RetainedLmCandidate[] {
+  const next = new Map<string, RetainedLmCandidate>();
+  for (const item of current) {
+    if (nowMs - item.lastSeenAt <= retentionMs) {
+      next.set(item.key, item);
+    }
+  }
+  for (const candidate of incoming) {
+    const key = getLmCandidateKey(candidate);
+    next.set(key, {
+      key,
+      candidate,
+      detectedAt: nowMs,
+      lastSeenAt: nowMs,
+    });
+  }
+  return Array.from(next.values())
+    .sort((a, b) => b.detectedAt - a.detectedAt)
+    .slice(0, 20);
+}
+
 function loadSettings(): LmDockSettings {
   const globalDefaults = getSettings();
   const fallbackOverlayMode = normalizeLmOverlayMode(globalDefaults.defaultBibleOverlayMode);
@@ -104,7 +149,6 @@ function loadSettings(): LmDockSettings {
     return {
       ...merged,
       overlayMode: normalizeLmOverlayMode(merged.overlayMode, fallbackOverlayMode),
-      duplicateWindowSec: Math.max(0, Number(merged.duplicateWindowSec) || DEFAULT_SETTINGS.duplicateWindowSec),
       suggestionLifetime: Math.max(5, Number(merged.suggestionLifetime) || DEFAULT_SETTINGS.suggestionLifetime),
     };
   } catch {
@@ -115,6 +159,20 @@ function loadSettings(): LmDockSettings {
 function saveSettings(settings: LmDockSettings): void {
   try {
     localStorage.setItem(getUserScopedKey(LM_DOCK_SETTINGS_KEY), JSON.stringify(settings));
+  } catch { }
+}
+
+function loadPreferredMicId(): string {
+  try {
+    return localStorage.getItem(getUserScopedKey(PREFERRED_MIC_STORAGE_KEY)) || "";
+  } catch {
+    return "";
+  }
+}
+
+function savePreferredMicId(micId: string): void {
+  try {
+    localStorage.setItem(getUserScopedKey(PREFERRED_MIC_STORAGE_KEY), micId);
   } catch { }
 }
 
@@ -142,16 +200,41 @@ function saveHistory(history: string[]): void {
   } catch { }
 }
 
+function loadLiveVerse(): VoiceBibleCandidate | null {
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(LM_LIVE_VERSE_STORAGE_KEY));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed as VoiceBibleCandidate : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLiveVerse(candidate: VoiceBibleCandidate | null): void {
+  try {
+    if (candidate) {
+      localStorage.setItem(getUserScopedKey(LM_LIVE_VERSE_STORAGE_KEY), JSON.stringify(candidate));
+    } else {
+      localStorage.removeItem(getUserScopedKey(LM_LIVE_VERSE_STORAGE_KEY));
+    }
+  } catch { }
+}
+
 
 export default function DockLmTab({
   presentationOutputTarget = "obs",
+  enablePresentationMicControls = false,
 }: DockLmTabProps = {}) {
   const { t } = useTranslation();
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
+  const allowLocalMicControls = presentationLinkMode && enablePresentationMicControls;
   const isTestEnv = getEnvConfig().isTest;
   const openAppToStartText = isTestEnv
     ? "Open Speech to Scripture in MakeChurchEasy Test on this computer to start listening."
-    : t("lm.openAppToStart");
+    : allowLocalMicControls
+      ? "Choose a microphone in settings, then start listening from this presentation page."
+      : t("lm.openAppToStart");
   const pushActionLabel = presentationLinkMode ? "Show" : t("lm.pushToObs");
   const pushActionTitle = presentationLinkMode
     ? "Show this scripture on the presentation screen"
@@ -204,22 +287,44 @@ export default function DockLmTab({
   const [lmStatus, setLmStatus] = useState<LmStatus>("idle");
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [candidates, setCandidates] = useState<VoiceBibleCandidate[]>([]);
-  const [queue, setQueue] = useState<VoiceBibleCandidate[]>([]);
+  const [retainedQueue, setRetainedQueue] = useState<RetainedLmCandidate[]>([]);
   const [suggestions, setSuggestions] = useState<VoiceBibleCandidate[]>([]);
   const [matching, setMatching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mics, setMics] = useState<Array<{ id: string; label: string }>>([]);
+  const [selectedMic, setSelectedMic] = useState(() => loadPreferredMicId());
+  const [micLoading, setMicLoading] = useState(false);
+  const [micError, setMicError] = useState("");
 
-  const pushedVerseTimesRef = useRef<Map<string, number>>(new Map());
   const pollRelayRef = useRef<(() => Promise<void>) | null>(null);
   const relayBusyRef = useRef(false);
 
   const [activeTab, setActiveTab] = useState<"up-next" | "transcript" | "history">("up-next");
   const [history, setHistory] = useState<string[]>(() => loadHistory());
+  const [liveVerse, setLiveVerseState] = useState<VoiceBibleCandidate | null>(() => loadLiveVerse());
   const [showStopConfirm, setShowStopConfirm] = useState(false);
 
   const detectedAtRef = useRef<Map<string, number>>(new Map());
-  const locallyRemovedRef = useRef<Set<string>>(new Set());
   const suggestionCooldownRef = useRef<Map<string, number>>(new Map());
+  const liveVerseRef = useRef<VoiceBibleCandidate | null>(liveVerse);
+  const lastRepublishedOverlayModeRef = useRef<LmOverlayMode>(settings.overlayMode);
+
+  const setLiveVerse = useCallback((candidate: VoiceBibleCandidate | null) => {
+    liveVerseRef.current = candidate;
+    setLiveVerseState(candidate);
+    saveLiveVerse(candidate);
+    if (candidate) {
+      detectedAtRef.current.set(getLmCandidateKey(candidate), Date.now());
+    }
+  }, []);
+
+  const syncQueueSnapshot = useCallback((incoming: VoiceBibleCandidate[]) => {
+    const nowMs = Date.now();
+    setRetainedQueue((current) => mergeRetainedLmQueue(current, incoming, nowMs));
+    for (const candidate of incoming) {
+      detectedAtRef.current.set(getLmCandidateKey(candidate), nowMs);
+    }
+  }, []);
 
   // ── Pinned verses ──
   const PINNED_STORAGE_KEY = "ocs-lm-dock-pinned";
@@ -232,6 +337,45 @@ export default function DockLmTab({
   const savePinned = useCallback((verses: VoiceBibleCandidate[]) => {
     try { localStorage.setItem(getUserScopedKey(PINNED_STORAGE_KEY), JSON.stringify(verses)); } catch { }
   }, []);
+
+  const applyLmSnapshot = useCallback((snapshot: LmDockSnapshot) => {
+    setAppConnected(true);
+    setLmStatus(snapshot.status);
+    setEntries(snapshot.entries);
+    setCandidates(snapshot.candidates);
+    syncQueueSnapshot(snapshot.queue);
+    setSuggestions(snapshot.suggestions);
+    setMatching(snapshot.matching);
+    setError(snapshot.error ?? null);
+  }, [syncQueueSnapshot]);
+
+  const selectPresentationMic = useCallback((micId: string) => {
+    setSelectedMic(micId);
+    savePreferredMicId(micId);
+  }, []);
+
+  const refreshPresentationMics = useCallback(async () => {
+    if (!allowLocalMicControls) return;
+    setMicLoading(true);
+    setMicError("");
+    try {
+      const service = await loadLmDockService();
+      const devices = await service.getMics();
+      setMics(devices);
+      if (devices.length > 0) {
+        const savedMic = loadPreferredMicId();
+        const selectedStillAvailable = selectedMic && devices.some((device) => device.id === selectedMic);
+        const savedStillAvailable = savedMic && devices.some((device) => device.id === savedMic);
+        if (!selectedStillAvailable) {
+          selectPresentationMic(savedStillAvailable ? savedMic : devices[0].id);
+        }
+      }
+    } catch (err) {
+      setMicError(err instanceof Error ? err.message : "Could not load microphones.");
+    } finally {
+      setMicLoading(false);
+    }
+  }, [allowLocalMicControls, selectPresentationMic, selectedMic]);
 
   const handlePinVerse = useCallback((c: VoiceBibleCandidate) => {
     setPinnedVerses((prev) => {
@@ -331,7 +475,7 @@ export default function DockLmTab({
           suggestions?: VoiceBibleCandidate[];
         };
         setCandidates(payload.candidates);
-        if (payload.queue) setQueue(payload.queue);
+        if (payload.queue) syncQueueSnapshot(payload.queue);
         if (payload.suggestions) setSuggestions(payload.suggestions);
       }
     });
@@ -349,7 +493,7 @@ export default function DockLmTab({
           setMatching(state.matching ?? false);
           setError(state.error ?? null);
           if (state.candidates) setCandidates(state.candidates);
-          if (state.queue) setQueue(state.queue);
+          if (state.queue) syncQueueSnapshot(state.queue);
           if (state.suggestions) setSuggestions(state.suggestions);
         }
       } catch (err) {
@@ -392,19 +536,40 @@ export default function DockLmTab({
       if (relayTimer) window.clearTimeout(relayTimer);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, []);
+  }, [syncQueueSnapshot]);
 
   useEffect(() => {
-    const all = [...queue, ...suggestions];
+    if (!allowLocalMicControls) return undefined;
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+
+    void loadLmDockService().then((service) => {
+      if (cancelled) return;
+      unsubscribe = service.subscribe(applyLmSnapshot);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [allowLocalMicControls, applyLmSnapshot]);
+
+  useEffect(() => {
+    if (!allowLocalMicControls) return;
+    void refreshPresentationMics();
+  }, [allowLocalMicControls, refreshPresentationMics]);
+
+  useEffect(() => {
+    const all = [...retainedQueue.map((item) => item.candidate), ...suggestions];
     for (const c of all) {
-      const key = `${c.book}:${c.chapter}:${c.verse}`;
+      const key = getLmCandidateKey(c);
       if (!detectedAtRef.current.has(key)) {
         detectedAtRef.current.set(key, Date.now());
       }
     }
-  }, [queue, suggestions]);
+  }, [retainedQueue, suggestions]);
 
-  const hasFreshnessItems = queue.length > 0 || suggestions.length > 0;
+  const hasFreshnessItems = retainedQueue.length > 0 || suggestions.length > 0 || liveVerse !== null;
 
   useEffect(() => {
     if (!hasFreshnessItems) return;
@@ -419,6 +584,97 @@ export default function DockLmTab({
     }
   }, [entries, settings.autoScroll]);
 
+  const pushBibleCandidateToOutput = useCallback(async (
+    candidate: VoiceBibleCandidate,
+    overlayMode: LmOverlayMode,
+  ) => {
+    const biblePrefs = loadBiblePrefs();
+    const themeId = overlayMode === "fullscreen"
+      ? (biblePrefs.fullscreenThemeId as string || undefined)
+      : (biblePrefs.lowerThirdThemeId as string || undefined);
+
+    const quickSettings = overlayMode === "fullscreen"
+      ? (biblePrefs.fullscreenQuickThemeSettings as Record<string, unknown> | null | undefined)
+      : (biblePrefs.lowerThirdQuickThemeSettings as Record<string, unknown> | null | undefined);
+
+    if (presentationLinkMode) {
+      await publishDockStagedItemToPresentation({
+        type: "bible",
+        label: candidate.label,
+        subtitle: candidate.snippet,
+        data: {
+          book: candidate.book,
+          chapter: candidate.chapter,
+          verse: candidate.verse,
+          verseEnd: candidate.verse,
+          verseRange: String(candidate.verse),
+          referenceLabel: candidate.label,
+          translation: settings.translation,
+          verseText: candidate.snippet,
+          overlayMode,
+          theme: themeId,
+          bibleThemeSettings: quickSettings ?? null,
+          liveOverrides: null,
+          _dockLive: true,
+        },
+      });
+      return;
+    }
+
+    const targetScene = settings.pushScene === "ai" ? "MCE Presentation" : undefined;
+    const stageData: Parameters<typeof dockObsClient.pushBible>[0] = {
+      book: candidate.book,
+      chapter: candidate.chapter,
+      verse: candidate.verse,
+      translation: settings.translation,
+      referenceLabel: candidate.label,
+      verseText: candidate.snippet,
+      overlayMode,
+      theme: themeId,
+      liveOverrides: quickSettings || null,
+      targetScene,
+    };
+    const lowerThirdPayload = {
+      verseText: candidate.snippet,
+      referenceText: `${candidate.label} (${settings.translation})`,
+      verseRange: String(candidate.verse),
+      bibleThemeSettings: quickSettings || null,
+      liveOverrides: null,
+      themeId,
+    };
+    const pushLive = () => overlayMode === "lower-third"
+      ? dockObsClient.pushBibleOverlayFast(lowerThirdPayload)
+      : dockObsClient.pushBible(stageData);
+    const bringBibleOverlayForward = dockObsClient
+      .bringBibleOverlayForward(overlayMode)
+      .catch(() => { });
+
+    void bringBibleOverlayForward
+      .then(() => dockObsClient.primeBibleOverlay(stageData))
+      .catch(() => { });
+
+    await bringBibleOverlayForward.then(pushLive);
+  }, [presentationLinkMode, settings.pushScene, settings.translation]);
+
+  useEffect(() => {
+    if (lastRepublishedOverlayModeRef.current === settings.overlayMode) return;
+    lastRepublishedOverlayModeRef.current = settings.overlayMode;
+    const live = liveVerseRef.current;
+    if (!live) return;
+    if (!presentationLinkMode && obsStatus !== "connected") return;
+
+    setPushError(null);
+    void pushBibleCandidateToOutput(live, settings.overlayMode)
+      .then(() => {
+        setLiveVerse(live);
+        setPushSuccess(settings.overlayMode === "lower-third" ? "Switched to LT" : "Switched to Full");
+        setTimeout(() => setPushSuccess(null), 1600);
+      })
+      .catch((err) => {
+        setPushError(err instanceof Error ? err.message : String(err));
+      });
+  }, [obsStatus, presentationLinkMode, pushBibleCandidateToOutput, setLiveVerse, settings.overlayMode]);
+
   // ── Show/push detected scripture ──
   const handlePushVerse = useCallback(async (candidate: VoiceBibleCandidate, source?: "queue" | "suggestion") => {
     if (!presentationLinkMode && obsStatus !== "connected") {
@@ -426,67 +682,17 @@ export default function DockLmTab({
       return;
     }
 
-    const refKey = `${candidate.book}:${candidate.chapter}:${candidate.verse}`;
-    pushedVerseTimesRef.current.set(refKey, Date.now());
-
     setPushing(true);
     setPushError(null);
     setPushSuccess(null);
     try {
-      const biblePrefs = loadBiblePrefs();
       const overlayMode = settings.overlayMode;
-      const themeId = overlayMode === "fullscreen"
-        ? (biblePrefs.fullscreenThemeId as string || undefined)
-        : (biblePrefs.lowerThirdThemeId as string || undefined);
-
-      const quickSettings = overlayMode === "fullscreen"
-        ? (biblePrefs.fullscreenQuickThemeSettings as Record<string, unknown> | null | undefined)
-        : (biblePrefs.lowerThirdQuickThemeSettings as Record<string, unknown> | null | undefined);
-
-      if (presentationLinkMode) {
-        await publishDockStagedItemToPresentation({
-          type: "bible",
-          label: candidate.label,
-          subtitle: candidate.snippet,
-          data: {
-            book: candidate.book,
-            chapter: candidate.chapter,
-            verse: candidate.verse,
-            verseEnd: candidate.verse,
-            verseRange: String(candidate.verse),
-            referenceLabel: candidate.label,
-            translation: settings.translation,
-            verseText: candidate.snippet,
-            overlayMode: "fullscreen",
-            theme: (biblePrefs.fullscreenThemeId as string | undefined) ?? themeId,
-            bibleThemeSettings: (biblePrefs.fullscreenQuickThemeSettings as Record<string, unknown> | null | undefined) ?? quickSettings ?? null,
-            liveOverrides: null,
-            _dockLive: true,
-          },
-        });
-      } else {
-        const targetScene = settings.pushScene === "ai" ? "MCE Presentation" : undefined;
-
-        await dockObsClient.pushBible({
-          book: candidate.book,
-          chapter: candidate.chapter,
-          verse: candidate.verse,
-          translation: settings.translation,
-          referenceLabel: candidate.label,
-          verseText: candidate.snippet,
-          overlayMode,
-          theme: themeId,
-          liveOverrides: quickSettings || null,
-          targetScene,
-        });
-      }
-
-      if (source === "queue") {
-        locallyRemovedRef.current.add(`${candidate.book}:${candidate.chapter}:${candidate.verse}`);
-      }
+      await pushBibleCandidateToOutput(candidate, overlayMode);
+      setLiveVerse(candidate);
+      setRetainedQueue((current) => mergeRetainedLmQueue(current, [candidate], Date.now()));
 
       if (source === "suggestion") {
-        suggestionCooldownRef.current.set(`${candidate.book}:${candidate.chapter}:${candidate.verse}`, Date.now());
+        suggestionCooldownRef.current.set(getLmCandidateKey(candidate), Date.now());
       }
 
       setHistory((prev) => {
@@ -502,7 +708,7 @@ export default function DockLmTab({
     } finally {
       setPushing(false);
     }
-  }, [obsStatus, presentationLinkMode, settings.overlayMode, settings.translation, settings.pushScene, t]);
+  }, [obsStatus, presentationLinkMode, pushBibleCandidateToOutput, setLiveVerse, settings.overlayMode, t]);
 
   // ── Show/push transcript text ──
   const pushTranscriptToOBS = useCallback(async (text: string) => {
@@ -569,6 +775,24 @@ export default function DockLmTab({
 
   const isListening = lmStatus === "listening" || lmStatus === "connecting" || lmStatus === "requesting-mic";
 
+  const handlePresentationListeningToggle = useCallback(async () => {
+    if (!allowLocalMicControls) return;
+    if (isListening) {
+      setShowStopConfirm(true);
+      return;
+    }
+    setMicError("");
+    try {
+      if (mics.length === 0) {
+        await refreshPresentationMics();
+      }
+      const service = await loadLmDockService();
+      await service.startListening(selectedMic || undefined);
+    } catch (err) {
+      setMicError(err instanceof Error ? err.message : "Could not start listening.");
+    }
+  }, [allowLocalMicControls, isListening, mics.length, refreshPresentationMics, selectedMic]);
+
   const sendLmCommand = useCallback((type: DockCommandType, payload?: unknown) => {
     const cmd = { type, payload: payload ?? {}, timestamp: Date.now() };
     dockClient.sendCommand(cmd);
@@ -613,71 +837,48 @@ export default function DockLmTab({
     return () => ro.disconnect();
   }, []);
 
-  // ── Auto-push and auto-navigate ──
+  // ── Auto-navigate inside the dock only ──
   useEffect(() => {
+    if (!settings.autoNavigate) return;
     if (candidates.length === 0) return;
     const best = candidates[0];
     if (!best) return;
 
-    const refKey = `${best.book}:${best.chapter}:${best.verse}`;
-    const nowMs = Date.now();
-
-    if (settings.autoNavigate) {
-      navigateBibleDock(best);
-    }
-
-    const isQueueItem = queue.some((q) => `${q.book}:${q.chapter}:${q.verse}` === refKey);
-    const shouldAutoPush = isQueueItem ? settings.autoPushQueue : settings.autoPushSuggestions;
-
-    for (const [key, pushedAt] of Array.from(pushedVerseTimesRef.current.entries())) {
-      if (!isLmAutoPushSuppressed(pushedAt, nowMs, settings.duplicateWindowSec)) {
-        pushedVerseTimesRef.current.delete(key);
-      }
-    }
-
-    if (
-      shouldAutoPush &&
-      (presentationLinkMode || obsStatus === "connected") &&
-      !pushing &&
-      !isLmAutoPushSuppressed(pushedVerseTimesRef.current.get(refKey), nowMs, settings.duplicateWindowSec)
-    ) {
-      void handlePushVerse(best);
-    }
-  }, [candidates, settings.autoPushQueue, settings.autoPushSuggestions, settings.autoNavigate, settings.duplicateWindowSec, obsStatus, presentationLinkMode, pushing, handlePushVerse, navigateBibleDock, queue]);
+    navigateBibleDock(best);
+  }, [candidates, settings.autoNavigate, navigateBibleDock]);
 
   const confirmStop = useCallback(() => {
-    sendLmCommand("lm:stop");
+    if (allowLocalMicControls) {
+      void loadLmDockService().then((service) => service.stopListening());
+    } else {
+      sendLmCommand("lm:stop");
+    }
     setShowStopConfirm(false);
-  }, [sendLmCommand]);
+  }, [allowLocalMicControls, sendLmCommand]);
 
   const processedQueue = useMemo(() => {
     const seen = new Set<string>();
     const result: VoiceBibleCandidate[] = [];
-    for (let i = queue.length - 1; i >= 0; i--) {
-      const item = queue[i];
-      const key = `${item.book}:${item.chapter}:${item.verse}`;
-      if (locallyRemovedRef.current.has(key)) continue;
+    for (const retained of retainedQueue) {
+      const item = retained.candidate;
+      const key = retained.key;
+      detectedAtRef.current.set(key, retained.detectedAt);
       if (seen.has(key)) continue;
       seen.add(key);
       result.push(item);
     }
-    result.sort((a, b) => {
-      const ka = `${a.book}:${a.chapter}:${a.verse}`;
-      const kb = `${b.book}:${b.chapter}:${b.verse}`;
-      return (detectedAtRef.current.get(kb) ?? 0) - (detectedAtRef.current.get(ka) ?? 0);
-    });
     return result.slice(0, MAX_QUEUE_SIZE);
-  }, [queue]);
+  }, [retainedQueue]);
 
-  const currentVerse = processedQueue[0] ?? null;
-  const queueVerses = processedQueue.slice(1);
+  const currentVerse = liveVerse;
+  const queueVerses = processedQueue;
   const suggestionExpiryMs = Math.max(5, Number(settings.suggestionLifetime) || 20) * 1000;
-  const queuedVerseKeys = useMemo(() => new Set(processedQueue.map((c) => `${c.book}:${c.chapter}:${c.verse}`)), [processedQueue]);
+  const queuedVerseKeys = useMemo(() => new Set(processedQueue.map((c) => getLmCandidateKey(c))), [processedQueue]);
 
   const filteredSuggestions = useMemo(() => {
     const nowMs = Date.now();
     return suggestions.filter((s) => {
-      const key = `${s.book}:${s.chapter}:${s.verse}`;
+      const key = getLmCandidateKey(s);
       if (queuedVerseKeys.has(key)) return false;
       const detectedAt = detectedAtRef.current.get(key) ?? nowMs;
       if (nowMs - detectedAt > suggestionExpiryMs) return false;
@@ -688,7 +889,7 @@ export default function DockLmTab({
   }, [queuedVerseKeys, suggestionExpiryMs, suggestions, now]);
 
   useEffect(() => {
-    const cutoff = Date.now() - suggestionExpiryMs;
+    const cutoff = Date.now() - Math.max(suggestionExpiryMs, LM_QUEUE_RETENTION_MS);
     for (const [key, time] of Array.from(detectedAtRef.current.entries())) {
       if (time < cutoff) {
         detectedAtRef.current.delete(key);
@@ -790,8 +991,22 @@ export default function DockLmTab({
       return;
     }
 
-    const result = appendTextToDockNotes(cleanText);
-    showToast(result ? "Saved to Notes" : "Nothing to save");
+    const command = createDockNotesAppendCommand(cleanText);
+    const result = appendTextToDockNotes(cleanText, undefined, { sourceId: command.commandId });
+    const relayCommand = {
+      ...command,
+      ...(result?.note.title ? { title: result.note.title } : {}),
+    };
+    dockClient.sendCommand({
+      type: "notes:append",
+      payload: relayCommand,
+      commandId: relayCommand.commandId,
+      timestamp: Date.now(),
+    });
+    void postDockNotesAppendCommand(relayCommand).catch((err) => {
+      console.warn("[DockLmTab] Notes relay failed:", err);
+    });
+    showToast(result ? "Saved in Notes" : "Nothing to save");
   }, [showToast]);
 
   const handleEditPushToOBS = useCallback(() => {
@@ -801,17 +1016,17 @@ export default function DockLmTab({
 
   const maxSelectedIndex = selectedIndices.size > 0 ? Math.max(...Array.from(selectedIndices)) : -1;
   const renderOverlayModeSwitch = useCallback((variant: "bar" | "settings" = "bar") => {
-    const options: Array<{ mode: LmOverlayMode; label: string; icon: string; title: string }> = [
+    const options: Array<{ mode: LmOverlayMode; label: string; ariaLabel: string; title: string }> = [
       {
         mode: "fullscreen",
-        label: t("lm.fullscreen"),
-        icon: "fullscreen",
+        label: "Full",
+        ariaLabel: t("lm.fullscreen"),
         title: "Show detected scriptures as a full-screen slide",
       },
       {
         mode: "lower-third",
-        label: t("lm.lowerThird"),
-        icon: "move_down",
+        label: "LT",
+        ariaLabel: t("lm.lowerThird"),
         title: "Show detected scriptures as a lower-third overlay",
       },
     ];
@@ -843,10 +1058,10 @@ export default function DockLmTab({
                 }}
                 onClick={() => updateOverlayMode(option.mode)}
                 aria-pressed={active}
+                aria-label={option.ariaLabel}
                 title={option.title}
                 data-testid={`lm-mode-${option.mode}`}
               >
-                <Icon name={option.icon} size={12} />
                 <span>{option.label}</span>
               </button>
             );
@@ -980,7 +1195,7 @@ export default function DockLmTab({
                 <div style={S.currentBottom}>
                   <span style={S.currentTime}>
                     {(() => {
-                      const k = `${currentVerse.book}:${currentVerse.chapter}:${currentVerse.verse}`;
+                      const k = getLmCandidateKey(currentVerse);
                       const d = detectedAtRef.current.get(k) ?? Date.now();
                       return getFreshness(d, now).label;
                     })()}
@@ -1012,7 +1227,7 @@ export default function DockLmTab({
               {pinnedVerses.length > 0 && (
                 <div style={S.pinnedRow}>
                   {pinnedVerses.map((c, i) => {
-                    const key = `${c.book}:${c.chapter}:${c.verse}`;
+                    const key = getLmCandidateKey(c);
                     return (
                       <div
                         key={`pin-${key}-${i}`}
@@ -1045,7 +1260,7 @@ export default function DockLmTab({
               )}
             </div>
             <div style={S.queueScroll}>
-              {!currentVerse && queueVerses.length === 0 && pinnedVerses.length === 0 && (
+              {queueVerses.length === 0 && pinnedVerses.length === 0 && (
                 <div style={S.sectionEmpty}>
                   <span style={S.sectionEmptyText}>
                     {appConnected ? t("lm.waitingForDetection") : openAppToStartText}
@@ -1053,7 +1268,7 @@ export default function DockLmTab({
                 </div>
               )}
               {queueVerses.map((c, i) => {
-                const key = `${c.book}:${c.chapter}:${c.verse}`;
+                const key = getLmCandidateKey(c);
                 const detectedAt = detectedAtRef.current.get(key) ?? Date.now();
                 const freshness = getFreshness(detectedAt, now);
 
@@ -1100,7 +1315,7 @@ export default function DockLmTab({
               </div>
               <div style={S.suggestionsScroll}>
                 {filteredSuggestions.map((c, i) => {
-                  const key = `${c.book}:${c.chapter}:${c.verse}`;
+                  const key = getLmCandidateKey(c);
                   const detectedAt = detectedAtRef.current.get(key) ?? Date.now();
                   const freshness = getFreshness(detectedAt, now);
 
@@ -1169,7 +1384,7 @@ export default function DockLmTab({
                       ...(showActionBar ? { paddingBottom: 0 } : {}),
                       ...(isLive ? S.transcriptItemLive : {}),
                     }}
-                    title={`Click to copy · Double-click to select · Save to Notes or ${transcriptPushLabel} once selected`}
+                    title={`Click to copy · Double-click to select · Save in Notes or ${transcriptPushLabel} once selected`}
                     onClick={(e) => {
                       if ((e.target as HTMLElement).closest('[data-action-bar]')) return;
                       if ((e.target as HTMLElement).tagName.toLowerCase() === "input") return;
@@ -1245,10 +1460,10 @@ export default function DockLmTab({
                               handlePushToNotes(text);
                               handleCancelSelection();
                             }}
-                            title="Save to Notes"
+                            title="Save in Notes tab"
                           >
                             <StickyNote size={12} />
-                            <span style={S.btnText}>Save to Notes</span>
+                            <span style={S.btnText}>Save in Notes</span>
                           </button>
                           <button
                             style={S.btnPrimary}
@@ -1370,7 +1585,7 @@ export default function DockLmTab({
         </div>
       )}
 
-      {!isListening && entries.length === 0 && candidates.length === 0 && queue.length === 0 && suggestions.length === 0 && (
+      {!isListening && entries.length === 0 && candidates.length === 0 && retainedQueue.length === 0 && suggestions.length === 0 && !liveVerse && (
         <div style={S.emptyState}>
           <Icon name="mic" size={32} style={{ opacity: 0.15 }} />
           <span style={S.emptyText}>
@@ -1388,7 +1603,7 @@ export default function DockLmTab({
       )}
 
       <div style={S.hintBar}>
-        <span style={S.hintText}>Click to copy a line · Double-click to select · Save to Notes or {transcriptPushLabel}</span>
+        <span style={S.hintText}>Click to copy a line · Double-click to select · Save in Notes or {transcriptPushLabel}</span>
       </div>
 
       {contextMenu.visible && (
@@ -1458,7 +1673,7 @@ export default function DockLmTab({
               setContextMenu(prev => ({ ...prev, visible: false }));
             }}
           >
-            Save to Notes
+            Save in Notes
           </button>
         </div>
       )}
@@ -1486,7 +1701,7 @@ export default function DockLmTab({
             <div style={S.editModalFooter}>
               <button style={S.modalBtnGhost} onClick={() => { setEditModal({ visible: false, text: "" }); handleCancelSelection(); }}>Cancel</button>
               <button style={S.btnSecondary} onClick={() => { void handlePushToNotes(editModal.text); setEditModal({ visible: false, text: "" }); handleCancelSelection(); }}>
-                <StickyNote size={14} /> Save to Notes
+                <StickyNote size={14} /> Save in Notes
               </button>
               <button
                 style={S.btnPrimary}
@@ -1518,36 +1733,65 @@ export default function DockLmTab({
             </div>
 
             <div style={S.settingsBody}>
-              <div style={S.settingsGroup}>
-                <div style={S.settingsGroupLabel}>AUTO PUSH</div>
-                <label style={S.settingRow} data-onboarding="auto-push-setting">
-                  <span style={S.settingLabel}>{t("lm.autoPushQueue")}</span>
-                  <input
-                    type="checkbox"
-                    checked={settings.autoPushQueue}
-                    onChange={(e) => updateSetting("autoPushQueue", e.target.checked)}
-                    style={S.settingCheckbox}
-                  />
-                </label>
-                <span style={S.settingHint}>{t("lm.autoPushQueueHint")}</span>
-
-                <label style={S.settingRow}>
-                  <span style={S.settingLabel}>{t("lm.autoPushSuggestions")}</span>
-                  <input
-                    type="checkbox"
-                    checked={settings.autoPushSuggestions}
-                    onChange={(e) => updateSetting("autoPushSuggestions", e.target.checked)}
-                    style={S.settingCheckbox}
-                  />
-                </label>
-                <span style={S.settingHint}>{t("lm.autoPushSuggestionsHint")}</span>
-              </div>
-
               {!presentationLinkMode && (
                 <div style={S.settingsGroup}>
                   <div style={S.settingsGroupLabel}>{t("lm.overlayMode")}</div>
                   {renderOverlayModeSwitch("settings")}
                   <span style={S.settingHint}>{t("lm.overlayModeHint", "Choose how detected scriptures and transcript notes appear when pushed.")}</span>
+                </div>
+              )}
+
+              {allowLocalMicControls && (
+                <div style={S.settingsGroup}>
+                  <div style={S.settingsGroupLabel}>MICROPHONE</div>
+                  <div style={S.settingRow}>
+                    <span style={S.settingLabel}>Default mic</span>
+                    <button
+                      type="button"
+                      style={S.settingGhostButton}
+                      onClick={() => void refreshPresentationMics()}
+                      disabled={micLoading || isListening}
+                    >
+                      {micLoading ? "Loading..." : "Refresh"}
+                    </button>
+                  </div>
+                  <select
+                    style={{ ...S.settingSelect, ...S.settingSelectFull }}
+                    value={selectedMic}
+                    onChange={(e) => selectPresentationMic(e.target.value)}
+                    disabled={micLoading || isListening}
+                    aria-label="Default microphone"
+                  >
+                    {mics.length === 0 ? (
+                      <option value="">{micLoading ? "Loading microphones..." : "Default microphone"}</option>
+                    ) : (
+                      mics.map((mic) => (
+                        <option key={mic.id || mic.label} value={mic.id}>{mic.label}</option>
+                      ))
+                    )}
+                  </select>
+                  <button
+                    type="button"
+                    style={{
+                      ...S.presentationMicButton,
+                      ...(isListening ? S.presentationMicButtonActive : null),
+                    }}
+                    onClick={() => void handlePresentationListeningToggle()}
+                    disabled={lmStatus === "connecting" || lmStatus === "requesting-mic"}
+                  >
+                    <Icon name={isListening ? "stop" : "mic"} size={13} />
+                    <span>
+                      {lmStatus === "requesting-mic"
+                        ? "Requesting mic..."
+                        : lmStatus === "connecting"
+                          ? "Connecting..."
+                          : isListening
+                            ? "Stop listening"
+                            : "Start listening"}
+                    </span>
+                  </button>
+                  <span style={S.settingHint}>Start Scripture Assistant from this presentation page without opening Verse AI.</span>
+                  {micError && <span style={S.settingError}>{micError}</span>}
                 </div>
               )}
 
@@ -1581,23 +1825,6 @@ export default function DockLmTab({
                   </div>
                 </div>
               )}
-
-              <div style={S.settingsGroup}>
-                <div style={S.settingsGroupLabel}>DEDUPLICATION</div>
-                <div style={S.settingRow}>
-                  <span style={S.settingLabel}>{t("lm.dedupWindow")}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={120}
-                    value={settings.duplicateWindowSec}
-                    onChange={(e) => updateSetting("duplicateWindowSec", Math.max(0, Number(e.target.value) || 0))}
-                    style={S.settingNumber}
-                  />
-                  <span style={S.settingUnit}>sec</span>
-                </div>
-                <span style={S.settingHint}>{t("lm.dedupHint")}</span>
-              </div>
 
               <div style={S.settingsGroup}>
                 <div style={S.settingsGroupLabel}>SUGGESTION LIFETIME</div>
@@ -2605,6 +2832,14 @@ const S: Record<string, React.CSSProperties> = {
     color: "var(--dock-text-dim, #64748B)",
     marginTop: -2,
     marginBottom: 6,
+    display: "block",
+  },
+  settingError: {
+    display: "block",
+    marginTop: 6,
+    color: "#EF4444",
+    fontSize: 10,
+    lineHeight: 1.35,
   },
   settingCheckbox: {
     width: 14,
@@ -2619,6 +2854,45 @@ const S: Record<string, React.CSSProperties> = {
     background: "rgba(255,255,255,0.06)",
     color: "var(--dock-text, #E2E8F0)",
     outline: "none",
+  },
+  settingSelectFull: {
+    width: "100%",
+    minHeight: 30,
+    marginBottom: 8,
+  },
+  settingGhostButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 24,
+    padding: "0 8px",
+    borderRadius: 5,
+    border: "1px solid rgba(148,163,184,0.24)",
+    background: "rgba(15,23,42,0.35)",
+    color: "var(--dock-text-dim, #94A3B8)",
+    fontSize: 10,
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  presentationMicButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    width: "100%",
+    minHeight: 32,
+    marginBottom: 8,
+    borderRadius: 6,
+    border: "1px solid rgba(29,78,216,0.55)",
+    background: "#1D4ED8",
+    color: "#F8FAFC",
+    fontSize: 11,
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  presentationMicButtonActive: {
+    borderColor: "rgba(239,68,68,0.7)",
+    background: "#991B1B",
   },
   settingNumber: {
     width: 50,

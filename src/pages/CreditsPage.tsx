@@ -42,7 +42,7 @@ import {
   formatCredits,
   type PlanConfig,
 } from "../services/planConfig";
-import { getDeviceId } from "../services/authService";
+import { getDeviceId, getDeviceSecret } from "../services/authService";
 import "./CreditsPage.css";
 
 // ── Feature icon mapping ─────────────────────────────────────────────────
@@ -65,7 +65,8 @@ function getFeatureIcon(name: string): typeof Zap {
 
 interface UsageDay {
   date: string;
-  creditsUsed: number;
+  creditsUsed?: number;
+  amount?: number;
 }
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
@@ -73,7 +74,9 @@ const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudio
 function authHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   const deviceId = getDeviceId();
+  const deviceSecret = getDeviceSecret();
   if (deviceId) headers["X-Device-Id"] = deviceId;
+  if (deviceSecret) headers["X-Device-Secret"] = deviceSecret;
   return headers;
 }
 
@@ -84,7 +87,11 @@ async function fetchUsageTimeline(days: number): Promise<UsageDay[]> {
     });
     if (!res.ok) return [];
     const data = await res.json();
-    return Array.isArray(data.usage) ? data.usage : [];
+    if (!Array.isArray(data.usage)) return [];
+    return data.usage.map((day: UsageDay) => ({
+      date: day.date,
+      creditsUsed: Number(day.creditsUsed ?? day.amount ?? 0),
+    }));
   } catch {
     return [];
   }
@@ -276,7 +283,7 @@ export default function CreditsPage() {
     if (usageTimeline.length === 0) return [];
     return usageTimeline.map((day) => ({
       date: formatChartDate(day.date),
-      credits: day.creditsUsed,
+      credits: day.creditsUsed ?? day.amount ?? 0,
     }));
   }, [usageTimeline]);
 
@@ -322,7 +329,7 @@ export default function CreditsPage() {
   // ── Handlers ──
   const handleComparePlans = useCallback(() => {
     window.open(
-      "https://makechurcheasy.creatorstudioslabs.stream/subscription/plans",
+      "https://makechurcheazy.com/subscription/plans",
       "_blank",
       "noopener,noreferrer"
     );
@@ -330,7 +337,7 @@ export default function CreditsPage() {
 
   const handleTopUp = useCallback(() => {
     window.open(
-      "https://makechurcheasy.creatorstudioslabs.stream/credits",
+      "https://makechurcheazy.com/credits",
       "_blank",
       "noopener,noreferrer"
     );
@@ -338,7 +345,7 @@ export default function CreditsPage() {
 
   const handleViewAll = useCallback(() => {
     window.open(
-      "https://makechurcheasy.creatorstudioslabs.stream/billing/history?type=credits",
+      "https://makechurcheazy.com/billing/history?type=credits",
       "_blank",
       "noopener,noreferrer"
     );

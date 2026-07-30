@@ -52,7 +52,7 @@ import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from '../lib/upgradeP
 
 /* ── Helpers ── */
 
-const CREDITS_URL = 'https://makechurcheasy.creatorstudioslabs.stream/credits';
+const CREDITS_URL = 'https://makechurcheazy.com/credits';
 
 async function openCreditsPage(): Promise<void> {
   try {

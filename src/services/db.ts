@@ -140,8 +140,8 @@ export function getCurrentUserId(): string | null {
     // Ignore malformed browser-session cache.
   }
 
-  const path = window.location.pathname;
-  const isDockDocument = /(?:^|\/)(dock|lm-dock)\.html$/i.test(path);
+  const path = window.location.pathname.replace(/^\/+|\/+$/g, "");
+  const isDockDocument = /^(dock|lm-dock)(?:\.html)?$/i.test(path);
   if (!isDockDocument) return null;
 
   try {

@@ -388,7 +388,7 @@ function PlanUpgradeBanner() {
   if (!trialActive && !isFree) return null;
 
   const handleUpgrade = () => {
-    openUrl("https://makechurcheasy.creatorstudioslabs.stream/subscription/plans");
+    openUrl("https://makechurcheazy.com/subscription/plans");
   };
 
   if (trialActive) {

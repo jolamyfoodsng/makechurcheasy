@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { DockStagedItem } from "../dockTypes";
 import { dockObsClient } from "../dockObsClient";
-import { overlayBridge } from "../dockOverlayBridge";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import type { BibleTheme } from "../../bible/types";
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
@@ -10,7 +9,9 @@ import DockBottomToolbar from "../components/DockBottomToolbar";
 import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
 import {
   DOCK_NOTES_KEY,
+  DOCK_NOTES_BROADCAST_CHANNEL,
   DOCK_NOTES_UPDATED_EVENT,
+  appendTextToDockNotes,
   getDockNotesThemeForMode,
   getFallbackDockNotesTheme,
   loadDockNotes,
@@ -23,6 +24,19 @@ import {
   type DockNotesOverlayMode,
 } from "../dockNotesStorage";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import {
+  loadDockNotesAppendCommands,
+  type DockNotesAppendCommand,
+} from "../../services/dockNotesInterop";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
+import { dockClient } from "../../services/dockBridge";
+import {
+  NOTE_TEXT_TOOL_BUTTONS,
+  autoSplitNoteText,
+  formatNoteText,
+  getNoteContentSections,
+  type NoteTextToolAction,
+} from "../noteTextTools";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -50,6 +64,90 @@ function generateNoteSlides(note: DockNote): { id: string; label: string; text: 
 }
 
 type ToastTone = "info" | "success" | "error";
+
+function DockNotesTextTools({
+  className,
+  buttonClassName,
+  onAction,
+}: {
+  className: string;
+  buttonClassName: string;
+  onAction: (action: NoteTextToolAction, linesPerSlide?: number) => void;
+}) {
+  const [autoSplitOpen, setAutoSplitOpen] = useState(false);
+  const autoSplitRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!autoSplitOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!autoSplitRef.current?.contains(event.target as Node)) setAutoSplitOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [autoSplitOpen]);
+
+  return (
+    <div className={className} role="toolbar" aria-label="Note text tools" onClick={(event) => event.stopPropagation()}>
+      {NOTE_TEXT_TOOL_BUTTONS.map((tool) => {
+        if (tool.action === "autosplit") {
+          return (
+            <div key={tool.action} className="dock-notes-text-tools__autosplit" ref={autoSplitRef}>
+              <button
+                type="button"
+                className={`${buttonClassName} dock-notes-text-tools__btn--accent${autoSplitOpen ? " dock-notes-text-tools__btn--active" : ""}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setAutoSplitOpen((open) => !open);
+                }}
+                title={tool.title}
+                aria-label={tool.title}
+                aria-haspopup="menu"
+                aria-expanded={autoSplitOpen}
+              >
+                <Icon name={tool.icon ?? "format_align_left"} size={12} />
+                <span className="dock-lyrics-toolbar__caret">▾</span>
+              </button>
+              {autoSplitOpen && (
+                <div className="dock-notes-text-tools__menu" role="menu" aria-label="Auto split options">
+                  {[2, 3, 4].map((lines) => (
+                    <button
+                      key={lines}
+                      type="button"
+                      className="dock-notes-text-tools__menu-option"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onAction("autosplit", lines);
+                        setAutoSplitOpen(false);
+                      }}
+                    >
+                      {lines} lines
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        return (
+          <button
+            key={tool.action}
+            type="button"
+            className={buttonClassName}
+            onClick={(event) => {
+              event.stopPropagation();
+              onAction(tool.action);
+            }}
+            title={tool.title}
+            aria-label={tool.title}
+          >
+            {tool.icon ? <Icon name={tool.icon} size={12} /> : <span>{tool.label}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function DockNotesTab({ onStage, isActive }: Props) {
   const initialPrefsRef = useRef<DockNotesPreferences | null>(null);
@@ -82,10 +180,8 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [actionError, setActionError] = useState("");
   const [toasts, setToasts] = useState<{ id: string; message: string; tone: ToastTone }[]>([]);
-  const obsAutoPushArmedRef = useRef(false);
-  const modeOnlyChangeRef = useRef(false);
-  const modeSwitchSequenceRef = useRef(0);
   const prefsReadyRef = useRef(false);
+  const processedAppendCommandIdsRef = useRef<Set<string>>(new Set());
 
   const filteredNotes = useMemo(() => {
     if (!searchQuery.trim()) return notes;
@@ -114,6 +210,24 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
     }, 1500);
   }, []);
 
+  const refreshNotes = useCallback((incomingNotes?: DockNote[]) => {
+    const next = Array.isArray(incomingNotes) ? incomingNotes : loadDockNotes();
+    setNotes(next);
+    setSelectedNote((current) => {
+      if (!current) return current;
+      return next.find((note) => note.id === current.id) ?? null;
+    });
+  }, []);
+
+  const applyAppendCommand = useCallback((command: DockNotesAppendCommand) => {
+    const commandId = command.commandId.trim();
+    if (!commandId || processedAppendCommandIdsRef.current.has(commandId)) return;
+    processedAppendCommandIdsRef.current.add(commandId);
+
+    const result = appendTextToDockNotes(command.text, command.title, { sourceId: commandId });
+    if (result) refreshNotes(result.notes);
+  }, [refreshNotes]);
+
   useEffect(() => {
     let cancelled = false;
     const prefs = initialPrefsRef.current ?? loadDockNotesPreferences();
@@ -140,26 +254,77 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
   }, []);
 
   useEffect(() => {
-    const refreshNotes = () => {
-      const next = loadDockNotes();
-      setNotes(next);
-      setSelectedNote((current) => {
-        if (!current) return current;
-        return next.find((note) => note.id === current.id) ?? null;
-      });
-    };
-
     const handleStorage = (event: StorageEvent) => {
       if (event.key === getUserScopedKey(DOCK_NOTES_KEY)) refreshNotes();
     };
+    const handleNotesUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ notes?: DockNote[] }>).detail;
+      refreshNotes(detail?.notes);
+    };
 
-    window.addEventListener(DOCK_NOTES_UPDATED_EVENT, refreshNotes);
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel(DOCK_NOTES_BROADCAST_CHANNEL);
+      bc.onmessage = (event: MessageEvent<{ type?: string; notes?: DockNote[] }>) => {
+        if (event.data?.type === "notes-updated") refreshNotes(event.data.notes);
+      };
+    } catch {
+      bc = null;
+    }
+
+    window.addEventListener(DOCK_NOTES_UPDATED_EVENT, handleNotesUpdated);
     window.addEventListener("storage", handleStorage);
     return () => {
-      window.removeEventListener(DOCK_NOTES_UPDATED_EVENT, refreshNotes);
+      window.removeEventListener(DOCK_NOTES_UPDATED_EVENT, handleNotesUpdated);
       window.removeEventListener("storage", handleStorage);
+      bc?.close();
     };
-  }, []);
+  }, [refreshNotes]);
+
+  useEffect(() => {
+    if (isActive) refreshNotes();
+  }, [isActive, refreshNotes]);
+
+  useEffect(() => {
+    const unsubscribe = dockClient.onState((msg) => {
+      if (msg.type !== "state:notes-updated") return;
+      const payload = msg.payload as { notes?: DockNote[] } | null;
+      refreshNotes(payload?.notes);
+    });
+    return unsubscribe;
+  }, [refreshNotes]);
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    let disposed = false;
+    let inFlight = false;
+
+    const pollAppendCommands = async () => {
+      if (disposed || inFlight) return;
+      inFlight = true;
+      try {
+        const commands = await loadDockNotesAppendCommands();
+        if (disposed || commands.length === 0) return;
+        commands.forEach(applyAppendCommand);
+      } catch {
+        // The overlay relay is a fallback; local storage/broadcast still work.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void pollAppendCommands();
+    const timer = window.setInterval(
+      () => void pollAppendCommands(),
+      getRecommendedPollingInterval(750),
+    );
+
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [applyAppendCommand, isActive]);
 
   const openNewNote = useCallback(() => {
     setEditingNote(null);
@@ -173,6 +338,10 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
     setDraftTitle(note.title);
     setDraftContent(note.content);
     setShowNoteEditor(true);
+  }, []);
+
+  const applyDraftTextTool = useCallback((action: NoteTextToolAction, linesPerSlide?: number) => {
+    setDraftContent((current) => formatNoteText(current, action, linesPerSlide));
   }, []);
 
   const saveNoteDraft = useCallback(() => {
@@ -213,6 +382,54 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
     showToast("Note deleted", "info");
   }, [notes, selectedNote, showToast]);
 
+  const updateNoteContent = useCallback((noteId: string, nextContent: string) => {
+    const now = Date.now();
+    let updatedNote: DockNote | null = null;
+    const next = notes.map((note) => {
+      if (note.id !== noteId) return note;
+      updatedNote = { ...note, content: nextContent, updatedAt: now };
+      return updatedNote;
+    });
+    if (!updatedNote) return;
+
+    setNotes(next);
+    saveDockNotes(next);
+    setSelectedNote((current) => current?.id === noteId ? updatedNote : current);
+  }, [notes]);
+
+  const applySlideTextTool = useCallback((note: DockNote, slideIndex: number, action: NoteTextToolAction, linesPerSlide?: number) => {
+    const sections = getNoteContentSections(note.content, note.title);
+    const currentText = sections[slideIndex];
+    if (currentText === undefined) return;
+
+    if (action === "autosplit") {
+      const splitSections = autoSplitNoteText(currentText, linesPerSlide)
+        .split(/\n\n+/)
+        .map((section) => section.trim())
+        .filter(Boolean);
+      sections.splice(slideIndex, 1, ...(splitSections.length > 0 ? splitSections : [currentText]));
+    } else {
+      sections[slideIndex] = formatNoteText(currentText, action, linesPerSlide);
+    }
+
+    updateNoteContent(note.id, sections.join("\n\n"));
+    setSelectedSlideIdx((current) => {
+      if (current === null) return slideIndex;
+      return Math.min(current, sections.length - 1);
+    });
+    setVisibleSlideIdx((current) => {
+      if (current === null) return current;
+      return Math.min(current, sections.length - 1);
+    });
+    showToast("Slide updated", "success");
+  }, [showToast, updateNoteContent]);
+
+  const applySelectedSlideTextTool = useCallback((action: NoteTextToolAction, linesPerSlide?: number) => {
+    if (!selectedNote || selectedNoteSlides.length === 0) return;
+    const targetIndex = activeSlideIndex ?? 0;
+    applySlideTextTool(selectedNote, targetIndex, action, linesPerSlide);
+  }, [activeSlideIndex, applySlideTextTool, selectedNote, selectedNoteSlides.length]);
+
   const buildNoteObsPayload = useCallback(
     (idx: number) => {
       if (!selectedNote) return null;
@@ -245,7 +462,6 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
 
   const pushNoteSlide = useCallback(
     (idx: number) => {
-      obsAutoPushArmedRef.current = true;
       const payload = buildNoteObsPayload(idx);
       if (!payload) return;
       setActionError("");
@@ -294,56 +510,13 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
     }
   }, [overlayVisible, activeSlideIndex, pushNoteSlide]);
 
-  const restageCurrent = useCallback(async () => {
-    if (activeSlideIndex === null) return;
-    await pushNoteSlide(activeSlideIndex);
-  }, [activeSlideIndex, pushNoteSlide]);
-
   const handleOverlayModeChange = useCallback((nextMode: OverlayMode) => {
     if (nextMode === overlayMode) return;
-
-    modeOnlyChangeRef.current = true;
 
     setOverlayMode(nextMode);
     const prefs = loadDockNotesPreferences();
     prefs.overlayMode = nextMode;
     saveDockNotesPreferences(prefs);
-
-    overlayBridge.publish({
-      channel: "notes",
-      type: "mode-change",
-      mode: nextMode,
-      transitionId: ++modeSwitchSequenceRef.current,
-      timestamp: performance.now(),
-    });
-
-    try {
-      const bc = new BroadcastChannel("obs-church-studio-notes-overlay");
-      bc.postMessage({
-        type: "mode-change",
-        mode: nextMode,
-        theme: getDockNotesThemeForMode(
-          nextMode === "lower-third" ? selectedLTTheme : selectedFSTheme,
-          nextMode,
-        ).settings,
-        transitionId: modeSwitchSequenceRef.current,
-        timestamp: performance.now(),
-      });
-      bc.close();
-    } catch { /* browser may not support BroadcastChannel */ }
-
-    try {
-      const raw = localStorage.getItem("notes-overlay-data");
-      if (raw) {
-        const existing = JSON.parse(raw);
-        existing.mode = nextMode;
-        localStorage.setItem("notes-overlay-data", JSON.stringify(existing));
-      }
-    } catch { /* ignore */ }
-
-    requestAnimationFrame(() => {
-      modeOnlyChangeRef.current = false;
-    });
   }, [overlayMode]);
 
   // Persist theme preferences on change
@@ -362,19 +535,6 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
     prefs.lowerThirdQuickSettings = lowerThirdQuickSettings;
     saveDockNotesPreferences(prefs);
   }, [fullscreenQuickSettings, lowerThirdQuickSettings]);
-
-  // Auto-restage on mode change (only if not a fast mode-only toggle)
-  const prevOverlayMode = useRef(overlayMode);
-  useEffect(() => {
-    const changed = prevOverlayMode.current !== overlayMode;
-    prevOverlayMode.current = overlayMode;
-    if (!changed) return;
-    if (modeOnlyChangeRef.current) return;
-    if (!obsAutoPushArmedRef.current) return;
-    if (selectedNote && activeSlideIndex !== null) {
-      void restageCurrent();
-    }
-  }, [overlayMode, selectedNote, activeSlideIndex, restageCurrent]);
 
   // Escape key handler
   useEffect(() => {
@@ -471,7 +631,7 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
             ) : (
               <div className="dock-console-list dock-worship-workspace__list">
                 {filteredNotes.map((note) => (
-                  <div key={note.id} className="dock-card dock-card--console dock-song-card">
+                  <div key={note.id} className="dock-card dock-card--console dock-song-card dock-notes-card">
                     <button
                       type="button"
                       className="dock-song-card__main"
@@ -488,7 +648,7 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
                       </span>
                     </button>
                     <button type="button" className="dock-song-card__edit" onClick={() => openEditNote(note)} aria-label="Edit" title="Edit">
-                      <Icon name="edit" size={13} />
+                      <Icon name="edit" size={12} />
                     </button>
                   </div>
                 ))}
@@ -527,6 +687,13 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
                 </button>
               </div>
             </div>
+            {selectedNoteSlides.length > 0 && (
+              <DockNotesTextTools
+                className="dock-notes-text-tools dock-notes-text-tools--selected"
+                buttonClassName="dock-notes-text-tools__btn"
+                onAction={applySelectedSlideTextTool}
+              />
+            )}
           </section>
 
           <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace">
@@ -635,6 +802,11 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
                 </span>
                 <input className="dock-input" value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} placeholder="Note title" />
               </label>
+              <DockNotesTextTools
+                className="dock-notes-text-tools dock-notes-text-tools--editor"
+                buttonClassName="dock-notes-text-tools__btn"
+                onAction={applyDraftTextTool}
+              />
               <label className="dock-dialog-field">
                 <span className="dock-dialog-field__label">
                   <span>Content</span>

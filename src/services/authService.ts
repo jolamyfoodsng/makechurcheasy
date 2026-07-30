@@ -12,7 +12,7 @@ import {
 import { requestJsonWithRetry } from "./requestDedup";
 
 const PRODUCTION_API_BASE = "https://api.creatorstudioslabs.stream";
-const PRODUCTION_DASHBOARD_BASE = "https://makechurcheasy.creatorstudioslabs.stream";
+const PRODUCTION_DASHBOARD_BASE = "https://makechurcheazy.com";
 const LOCAL_DASHBOARD_BASE = "http://localhost:4000";
 
 function normalizeApiBase(value: string | undefined): string {

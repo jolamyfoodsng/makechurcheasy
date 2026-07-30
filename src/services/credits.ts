@@ -23,7 +23,7 @@ export { isProUnlocked };
 import { getPlanConfig } from "./planConfig";
 import { getUserScopedKey } from "./userScopedStorage";
 import type { PlanConfig } from "./planConfig";
-import { getDeviceId } from "./authService";
+import { getDeviceId, getDeviceSecret } from "./authService";
 import { requestJsonWithRetry } from "./requestDedup";
 import {
   queueDeduction,
@@ -64,7 +64,9 @@ const REMOTE_CACHE_TTL_MS = 5 * 60 * 1000;
 function authHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   const deviceId = getDeviceId();
+  const deviceSecret = getDeviceSecret();
   if (deviceId) headers["X-Device-Id"] = deviceId;
+  if (deviceSecret) headers["X-Device-Secret"] = deviceSecret;
   return headers;
 }
 

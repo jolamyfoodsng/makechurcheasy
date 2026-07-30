@@ -95,6 +95,8 @@ import {
   saveWorshipDockSongSaveResult,
   type WorshipDockSongSavePayload,
 } from "./services/worshipDockInterop";
+import { appendTextToDockNotes } from "./dock/dockNotesStorage";
+import type { DockNotesAppendCommand } from "./services/dockNotesInterop";
 import { getLiveToolsSnapshot, syncLiveToolsToDock } from "./live-tools/liveToolStore";
 import { getCountdownSnapshot } from "./countdowns/countdownStore";
 import { STORES, putRecord } from "./services/db";
@@ -512,6 +514,27 @@ function App() {
           await putRecord(STORES.APP_SETTINGS, payload, DOCK_WORSHIP_PREFS_APP_KEY);
         } catch (err) {
           console.warn("[App] Failed to save dock Worship preferences:", err);
+        }
+      }
+
+      if (cmd.type === "notes:append") {
+        try {
+          const payload = cmd.payload as DockNotesAppendCommand | null;
+          if (!payload?.commandId || !payload.text?.trim()) {
+            throw new Error("Invalid notes payload.");
+          }
+          const result = appendTextToDockNotes(payload.text, payload.title, {
+            sourceId: payload.commandId,
+          });
+          if (result) {
+            dockBridge.sendState({
+              type: "state:notes-updated",
+              payload: { notes: result.notes, commandId: payload.commandId },
+              timestamp: Date.now(),
+            });
+          }
+        } catch (err) {
+          console.warn("[App] Failed to append dock note:", err);
         }
       }
 
@@ -1007,7 +1030,7 @@ function App() {
     setShowTrialModal(false);
     if (user) {
       try {
-        const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheasy.creatorstudioslabs.stream";
+        const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
         const deviceId = getDeviceId();
         await fetch(`${API_BASE}/api/auth/trial-welcome`, {
           method: "POST",

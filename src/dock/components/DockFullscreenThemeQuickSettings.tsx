@@ -48,6 +48,11 @@ export type DockFullscreenQuickThemeSettings = Pick<
   | "lowerThirdWidthPreset"
   | "lowerThirdOffsetX"
   | "lowerThirdCaptionPosition"
+  | "lowerThirdEdge"
+  | "lowerThirdCardPadding"
+  | "lowerThirdPaddingLinked"
+  | "lowerThirdCardRadius"
+  | "lowerThirdTextDirection"
   // Compare Translation layout
   | "compareTranslationWidth"
   | "compareTranslationGap"
@@ -116,6 +121,11 @@ const PRESETS: ThemePreset[] = [
       lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,
       lowerThirdCaptionPosition: "bottom",
+      lowerThirdEdge: "bottom",
+      lowerThirdCardPadding: "18px 28px",
+      lowerThirdPaddingLinked: false,
+      lowerThirdCardRadius: 18,
+      lowerThirdTextDirection: "normal",
       compareTranslationWidth: 40,
       compareTranslationGap: 40,
     },
@@ -163,6 +173,11 @@ const PRESETS: ThemePreset[] = [
       lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,
       lowerThirdCaptionPosition: "bottom",
+      lowerThirdEdge: "bottom",
+      lowerThirdCardPadding: "18px 28px",
+      lowerThirdPaddingLinked: false,
+      lowerThirdCardRadius: 18,
+      lowerThirdTextDirection: "normal",
       compareTranslationWidth: 40,
       compareTranslationGap: 40,
     },
@@ -210,6 +225,11 @@ const PRESETS: ThemePreset[] = [
       lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,
       lowerThirdCaptionPosition: "bottom",
+      lowerThirdEdge: "bottom",
+      lowerThirdCardPadding: "18px 28px",
+      lowerThirdPaddingLinked: false,
+      lowerThirdCardRadius: 18,
+      lowerThirdTextDirection: "normal",
       compareTranslationWidth: 40,
       compareTranslationGap: 40,
     },
@@ -257,6 +277,11 @@ const PRESETS: ThemePreset[] = [
       lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,
       lowerThirdCaptionPosition: "bottom",
+      lowerThirdEdge: "bottom",
+      lowerThirdCardPadding: "18px 28px",
+      lowerThirdPaddingLinked: false,
+      lowerThirdCardRadius: 18,
+      lowerThirdTextDirection: "normal",
       compareTranslationWidth: 40,
       compareTranslationGap: 40,
     },

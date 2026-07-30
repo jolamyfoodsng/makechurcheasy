@@ -215,7 +215,7 @@ Nothing else. No email fields. No password fields.
 1. User opens MakeChurchEasy for the first time
 2. Shows: `Welcome to MakeChurchEasy [ Continue in Browser ]`
 3. Click generates a temporary pairing code (e.g. `ABCD-1234`)
-4. Opens browser to `https://makechurcheasy.app/device`
+4. Opens browser to `https://makechurcheazy.com/device`
 5. User signs into their MakeChurchEasy account
 6. Website asks: `Authorize this device? Device: MakeChurchEasy Code: ABCD-1234 [ Authorize ]`
 7. User clicks Authorize

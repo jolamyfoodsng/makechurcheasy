@@ -128,7 +128,7 @@ const DOCK_PREVIEW_SCENE_STATE_KEY = "ocs-dock-preview-scene-state-v1";
 const DOCK_OBS_RECONNECT_DELAY_MS = 300;
 const DOCK_OBS_RECONNECT_MAX_DELAY_MS = 8000;
 const DOCK_OBS_PARAMS_KEY = "ocs-dock-obs-params";
-const OVERLAY_HTML_VERSION = "2026-07-29-6-stable-autofit";
+const OVERLAY_HTML_VERSION = "2026-07-30-3-bible-reference-fit-width";
 const DOCK_TICKER_CLEARANCE_FALLBACK_PX = 80;
 const DOCK_TICKER_CLEARANCE_GAP_PX = 10;
 const DOCK_TICKER_CLEARANCE_MAX_PX = 220;
@@ -142,6 +142,7 @@ type PrimeBibleOverlayData = {
   verseEnd?: number;
   verseRange?: string;
   referenceLabel?: string;
+  displayReferenceLabel?: string;
   translation: string;
   verseText?: string;
   overlayMode?: DockOverlayMode;
@@ -425,6 +426,9 @@ class DockObsClient {
   private _announcementMutationTail: Promise<void> = Promise.resolve();
   /** Serialize presentation-scene structural mutations to avoid duplicate scene-source inserts. */
   private _presentationMutationTail: Promise<void> = Promise.resolve();
+  /** Manual deletion of MCE Presentation can leave obs-websocket unsettled briefly. */
+  private _presentationSceneDeletedAt = 0;
+  private _presentationSceneRepairPromise: Promise<void> | null = null;
   private _lastAnnouncementPushSignature = "";
   private _announcementInitialized = false;
   private _notesMutationTail: Promise<void> = Promise.resolve();
@@ -742,6 +746,7 @@ class DockObsClient {
           if (this._sceneItemListCache?.sceneName === sceneName) this._sceneItemListCache = null;
           if (this._programSceneCache?.name === sceneName) this._programSceneCache = null;
           if (sceneName === DOCK_PRESENTATION_SCENE) {
+            this._presentationSceneDeletedAt = Date.now();
             this.resetPresentationSceneState();
           }
         });
@@ -758,6 +763,7 @@ class DockObsClient {
           this._sceneItemListCache = null;
           if (this._programSceneCache?.name === oldSceneName) this._programSceneCache = null;
           if (oldSceneName === DOCK_PRESENTATION_SCENE) {
+            this._presentationSceneDeletedAt = Date.now();
             this.resetPresentationSceneState();
           }
         });
@@ -858,7 +864,7 @@ class DockObsClient {
         mode: bibleMode,
       } as const;
 
-      await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE).catch(() => { });
+      await this.ensurePresentationSceneReady().catch(() => { });
       await this.ensureProgramSceneAsSourceInPresentation(true).catch(() => { });
 
       const bibleSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
@@ -1157,9 +1163,24 @@ class DockObsClient {
     if (this._sceneItemListCache && this._sceneItemListCache.sceneName === sceneName && this._sceneItemListCache.expiresAt > now) {
       return this._sceneItemListCache.items;
     }
-    const resp = await this.call("GetSceneItemList", { sceneName }) as {
-      sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number; sceneItemEnabled: boolean }>;
-    };
+    let resp: { sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number; sceneItemEnabled: boolean }> };
+    try {
+      resp = await this.call("GetSceneItemList", { sceneName }) as {
+        sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number; sceneItemEnabled: boolean }>;
+      };
+    } catch (err) {
+      if (sceneName !== DOCK_PRESENTATION_SCENE || !this.isMissingObsSceneError(err)) {
+        throw err;
+      }
+
+      this._knownScenes.delete(sceneName);
+      this.invalidateSceneItemListCache(sceneName);
+      this.resetPresentationSceneState();
+      await this.ensurePresentationSceneReady();
+      resp = await this.call("GetSceneItemList", { sceneName }) as {
+        sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number; sceneItemEnabled: boolean }>;
+      };
+    }
     const items = resp.sceneItems ?? [];
     if (items.length > 20) {
       console.warn(`[DockOBS] Scene "${sceneName}" has ${items.length} items — this may cause slow rendering on older hardware.`);
@@ -2057,7 +2078,7 @@ class DockObsClient {
     const studioMode = await this.isStudioModeEnabled(true).catch(() => false);
     if (!studioMode) return false;
 
-    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE).catch(() => { });
+    await this.ensurePresentationSceneReady().catch(() => { });
 
     const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
     if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
@@ -2106,7 +2127,7 @@ class DockObsClient {
       return;
     }
 
-    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
+    await this.ensurePresentationSceneReady();
 
     const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
     if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
@@ -2159,7 +2180,7 @@ class DockObsClient {
         }
 
         const presentationScene = DOCK_PRESENTATION_SCENE;
-        await this.ensureDedicatedScene(presentationScene);
+        await this.ensurePresentationSceneReady();
 
         const existing = await this.collapseDuplicateSceneItems(presentationScene, programScene);
 
@@ -2220,7 +2241,7 @@ class DockObsClient {
       try {
         if (!sceneName || sceneName === DOCK_PRESENTATION_SCENE) return;
 
-        await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
+        await this.ensurePresentationSceneReady();
 
         const existing = await this.collapseDuplicateSceneItems(sceneName, DOCK_PRESENTATION_SCENE);
 
@@ -2367,7 +2388,7 @@ class DockObsClient {
   async applyProjectionSettings(options: { allowSceneMutation?: boolean } = {}): Promise<void> {
     if (!options.allowSceneMutation) return;
 
-    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE).catch(() => { });
+    await this.ensurePresentationSceneReady().catch(() => { });
 
     if (this.readSceneMode() === "no-clone") {
       const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
@@ -2648,7 +2669,7 @@ class DockObsClient {
     if (!trimmedSceneName) return false;
 
     if (trimmedSceneName === DOCK_PRESENTATION_SCENE) {
-      await this.ensureDedicatedScene(trimmedSceneName).catch((err) => {
+      await this.ensurePresentationSceneReady().catch((err) => {
         console.warn(`[DockOBS] Failed to ensure preview scene "${trimmedSceneName}":`, err);
       });
     }
@@ -2680,7 +2701,7 @@ class DockObsClient {
           trimmedSceneName === DOCK_PRESENTATION_SCENE &&
           /No source was found|not found|does not exist/i.test(message)
         ) {
-          await this.ensureDedicatedScene(trimmedSceneName).catch(() => { });
+          await this.ensurePresentationSceneReady().catch(() => { });
           await new Promise((resolve) => setTimeout(resolve, 120));
           continue;
         }
@@ -2769,7 +2790,7 @@ class DockObsClient {
     tabId?: DockPreviewTab,
     options?: { activate?: boolean },
   ): Promise<{ sceneName: string; studioMode: boolean }> {
-    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
+    await this.ensurePresentationSceneReady();
 
     const studioMode = await this.isStudioModeEnabled().catch(() => false);
     const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
@@ -3004,7 +3025,9 @@ class DockObsClient {
     enable = true,
   ): Promise<number> {
     // Ensure the target scene exists before querying it
-    if (!await this.hasObsScene(sceneName).catch(() => false)) {
+    if (sceneName === DOCK_PRESENTATION_SCENE) {
+      await this.ensurePresentationSceneReady();
+    } else if (!await this.hasObsScene(sceneName).catch(() => false)) {
       try {
         await this.call("CreateScene", { sceneName });
         this._knownScenes.add(sceneName);
@@ -3029,7 +3052,9 @@ class DockObsClient {
       if (sceneName === DOCK_PRESENTATION_SCENE) {
         this.resetPresentationSceneState();
       }
-      await this.ensureDedicatedScene(sceneName);
+      await (sceneName === DOCK_PRESENTATION_SCENE
+        ? this.ensurePresentationSceneReady()
+        : this.ensureDedicatedScene(sceneName));
       this.invalidateSceneItemListCache(sceneName);
       items = await this.getSceneItemListCached(sceneName);
     }
@@ -3260,6 +3285,50 @@ class DockObsClient {
     }
 
     return trimmedSceneName;
+  }
+
+  private isMissingObsSceneError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /No source was found|No scene was found|scene.*not found|source.*not found|not found|does not exist|was not found/i.test(message);
+  }
+
+  private async waitForPresentationSceneDeletionToSettle(): Promise<void> {
+    if (!this._presentationSceneDeletedAt) return;
+    const elapsed = Date.now() - this._presentationSceneDeletedAt;
+    const remaining = 1200 - elapsed;
+    if (remaining > 0) {
+      await this.sleep(remaining);
+    }
+  }
+
+  private async ensurePresentationSceneReady(): Promise<string> {
+    if (!this._presentationSceneDeletedAt && await this.hasObsScene(DOCK_PRESENTATION_SCENE).catch(() => false)) {
+      return DOCK_PRESENTATION_SCENE;
+    }
+
+    if (this._presentationSceneRepairPromise) {
+      await this._presentationSceneRepairPromise;
+      return DOCK_PRESENTATION_SCENE;
+    }
+
+    const repairPromise = (async () => {
+      await this.waitForPresentationSceneDeletionToSettle();
+      this._knownScenes.delete(DOCK_PRESENTATION_SCENE);
+      this.invalidateSceneItemListCache(DOCK_PRESENTATION_SCENE);
+      await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
+      this._knownScenes.add(DOCK_PRESENTATION_SCENE);
+      this._presentationSceneDeletedAt = 0;
+      await this.sleep(160);
+    })();
+
+    this._presentationSceneRepairPromise = repairPromise.finally(() => {
+      if (this._presentationSceneRepairPromise === repairPromise) {
+        this._presentationSceneRepairPromise = null;
+      }
+    });
+
+    await this._presentationSceneRepairPromise;
+    return DOCK_PRESENTATION_SCENE;
   }
 
   private getTargetFullscreenBgSourceName(
@@ -5086,13 +5155,33 @@ class DockObsClient {
     };
   }
 
+  private formatBibleReferenceDisplayText(
+    reference: string,
+    translation: string,
+    displayReferenceLabel?: string,
+  ): string {
+    if (typeof displayReferenceLabel === "string") {
+      return displayReferenceLabel;
+    }
+    const ref = String(reference || "").trim();
+    const version = String(translation || "").trim().toUpperCase();
+    if (ref && version) {
+      const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp(`\\(${escapedVersion}\\)$`).test(ref)) return ref;
+      return `${ref} (${version})`;
+    }
+    return ref || version;
+  }
+
   async primeBibleOverlay(data: PrimeBibleOverlayData): Promise<void> {
     const mode = data.overlayMode ?? "fullscreen";
     const verseRange = data.verseRange ?? String(data.verse);
     const ref = data.referenceLabel ?? `${data.book} ${data.chapter}:${verseRange}`;
     const backgroundOnly = Boolean(data.backgroundOnly);
     const primaryText = backgroundOnly ? "" : (data.verseText || ref);
-    const referenceText = backgroundOnly ? "" : `${ref} (${data.translation})`;
+    const referenceText = backgroundOnly
+      ? ""
+      : this.formatBibleReferenceDisplayText(ref, data.translation, data.displayReferenceLabel);
     const displayVerseRange = backgroundOnly ? "" : verseRange;
     const compareEnabled = Boolean(data.compareEnabled || data.compare?.enabled);
     const compareLayout = data.compare?.layout ?? data.compareLayout ?? "line-by-line";
@@ -5291,6 +5380,7 @@ class DockObsClient {
     verseEnd?: number;
     verseRange?: string;
     referenceLabel?: string;
+    displayReferenceLabel?: string;
     translation: string;
     theme?: string;
     verseText?: string;
@@ -5420,7 +5510,9 @@ class DockObsClient {
       const ref = data.referenceLabel ?? `${data.book} ${data.chapter}:${verseRange}`;
       const backgroundOnly = Boolean(data.backgroundOnly);
       const primaryText = backgroundOnly ? "" : (data.verseText || ref);
-      const referenceText = backgroundOnly ? "" : `${ref} (${data.translation})`;
+      const referenceText = backgroundOnly
+        ? ""
+        : this.formatBibleReferenceDisplayText(ref, data.translation, data.displayReferenceLabel);
       const displayVerseRange = backgroundOnly ? "" : verseRange;
       const compareEnabled = Boolean(data.compareEnabled || data.compare?.enabled);
       const compareLayout = data.compare?.layout ?? data.compareLayout ?? "line-by-line";
@@ -5896,6 +5988,7 @@ class DockObsClient {
         verse: 1,
         verseRange,
         referenceLabel: refText.replace(/\s\(.*\)$/, ""),
+        displayReferenceLabel: refText,
         translation: "KJV",
         theme: data.themeId,
         verseText: data.verseText,
@@ -5927,6 +6020,7 @@ class DockObsClient {
         verse: 1,
         verseRange,
         referenceLabel: refText.replace(/\s\(.*\)$/, ""),
+        displayReferenceLabel: refText,
         translation: "KJV",
         theme: data.themeId,
         verseText: data.verseText,
@@ -8961,7 +9055,7 @@ class DockObsClient {
     const sourceSignature = `${overlayUrl}|${canvas.width}x${canvas.height}`;
 
     // Ensure MCE Presentation exists
-    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
+    await this.ensurePresentationSceneReady();
 
     // Ensure browser source exists inside MCE Presentation
     let browserItemId: number | null = null;

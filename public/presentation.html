@@ -451,6 +451,10 @@
       let pollTimer = null;
       let countdownTimer = null;
       let lastResolvedState = undefined;
+      const initialParams = new URLSearchParams(window.location.search);
+      const isPreviewFrame = initialParams.get("preview") === "1";
+      const PREVIEW_MAX_FONT_SIZE = 75;
+      const PREVIEW_DEFAULT_FONT_SIZE = 50;
 
 
 
@@ -599,6 +603,18 @@
         return `clamp(${Math.round(minPx * zoom)}px, ${(viewportVw * zoom).toFixed(2)}vw, ${Math.round(maxPx * zoom)}px)`;
       }
 
+      function getPreviewTextFontSize(value) {
+        const raw = Number(value);
+        if (!isPreviewFrame) return raw;
+        if (!Number.isFinite(raw) || raw <= 0) return PREVIEW_DEFAULT_FONT_SIZE;
+        return Math.max(24, Math.min(PREVIEW_MAX_FONT_SIZE, raw));
+      }
+
+      function formatScaledTextSize(size, zoom) {
+        const scaled = Math.round(size * zoom);
+        return `${isPreviewFrame ? Math.min(PREVIEW_MAX_FONT_SIZE, scaled) : scaled}px`;
+      }
+
       function getBibleCompareColumns(item) {
         const compare = item && item.bibleCompare;
         if (!compare || !Array.isArray(compare.columns)) return [];
@@ -639,24 +655,30 @@
         const zoom = getPresentationZoom(item) * viewportScale;
         const meta = item.meta || {};
         const alignClass = `align-${style.textAlign || "center"}`;
-        const baseBodySize = style.fontSize ? Math.max(68, Number(style.fontSize) * 1.45) : 0;
+        const rawFontSize = Number(style.fontSize || 0);
+        const effectiveFontSize = isPreviewFrame ? getPreviewTextFontSize(rawFontSize) : rawFontSize;
+        const baseBodySize = effectiveFontSize
+          ? isPreviewFrame
+            ? effectiveFontSize
+            : Math.max(68, effectiveFontSize * 1.45)
+          : 0;
         const isBible = item.source === "bible";
-        const bodySize = baseBodySize ? `${Math.round(baseBodySize * zoom)}px` : "";
+        const bodySize = baseBodySize ? formatScaledTextSize(baseBodySize, zoom) : "";
         const titleSize = baseBodySize
-          ? `${Math.round(Math.max(42, baseBodySize * 0.58) * zoom)}px`
+          ? formatScaledTextSize(Math.max(42, baseBodySize * 0.58), zoom)
           : zoomClamp(46, 4, 90, zoom);
         const subtitleSize = baseBodySize
-          ? `${Math.round(Math.max(28, baseBodySize * 0.34) * zoom)}px`
+          ? formatScaledTextSize(Math.max(28, baseBodySize * 0.34), zoom)
           : zoomClamp(30, 2.4, 48, zoom);
         const referenceSize = baseBodySize
-          ? `${Math.round(Math.max(24, baseBodySize * 0.28) * zoom)}px`
+          ? formatScaledTextSize(Math.max(24, baseBodySize * 0.28), zoom)
           : zoomClamp(28, 2.2, 42, zoom);
-        const rawFontSize = Number(style.fontSize || 0);
-        const compareBodySize = rawFontSize
-          ? `${Math.round(Math.max(28, Math.min(54, rawFontSize)) * zoom)}px`
+        const compareFontSize = effectiveFontSize || rawFontSize;
+        const compareBodySize = compareFontSize
+          ? formatScaledTextSize(Math.max(28, Math.min(54, compareFontSize)), zoom)
           : zoomClamp(28, 3, 54, zoom);
-        const compareReferenceSize = rawFontSize
-          ? `${Math.round(Math.max(18, Math.min(28, rawFontSize * 0.52)) * zoom)}px`
+        const compareReferenceSize = compareFontSize
+          ? formatScaledTextSize(Math.max(18, Math.min(28, compareFontSize * 0.52)), zoom)
           : referenceSize;
         const contentPadding = Math.max(4, Math.round(Number(style.safeArea || style.padding || 48) * viewportScale));
         const bodyColor = style.textColor || "#ffffff";

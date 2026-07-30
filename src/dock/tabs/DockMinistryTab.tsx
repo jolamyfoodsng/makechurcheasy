@@ -335,7 +335,6 @@ export default function DockMinistryTab({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const tickerColorPopoverRef = useRef<HTMLDivElement | null>(null);
   const tickerColorPopoverPanelRef = useRef<HTMLDivElement | null>(null);
-  const bibleLtLiveUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
   const availableLtThemes = useMemo(
     () => mergeRemoteLowerThirdThemes(ALL_LT_THEMES, remoteProductionThemes),
@@ -620,47 +619,6 @@ export default function DockMinistryTab({
   const selectedBibleLtAnimationDuration = selectedBibleLtEffectiveSettings
     ? Number(selectedBibleLtEffectiveSettings.animationDuration) || 800
     : 800;
-
-  useEffect(() => {
-    if (
-      !ltLive ||
-      subTab !== "lower-thirds" ||
-      ltSelectedEntry.kind !== "bible" ||
-      !bibleLtText.trim() ||
-      !selectedBibleLtEffectiveSettings
-    ) {
-      return;
-    }
-
-    if (bibleLtLiveUpdateTimerRef.current) {
-      clearTimeout(bibleLtLiveUpdateTimerRef.current);
-    }
-    bibleLtLiveUpdateTimerRef.current = setTimeout(() => {
-      void (async () => {
-        try {
-          await ensureObsConnected();
-          await dockObsClient.pushBible({
-            book: "",
-            chapter: 0,
-            verse: 0,
-            translation: "",
-            verseText: bibleLtText.trim(),
-            overlayMode: "lower-third",
-            bibleThemeSettings: selectedBibleLtEffectiveSettings,
-          });
-        } catch (err) {
-          console.warn("[DockMinistry] Bible LT live color update failed:", err);
-        }
-      })();
-    }, 180);
-
-    return () => {
-      if (bibleLtLiveUpdateTimerRef.current) {
-        clearTimeout(bibleLtLiveUpdateTimerRef.current);
-        bibleLtLiveUpdateTimerRef.current = null;
-      }
-    };
-  }, [bibleLtText, ltLive, ltSelectedEntry, selectedBibleLtEffectiveSettings, subTab]);
 
   // Reset selected index when favorites change
   useEffect(() => { setLtSelectedIdx(0); }, [ltFavorites]);
@@ -1540,7 +1498,6 @@ export default function DockMinistryTab({
                     }}
                     sending={ltSending}
                     size={ltSize}
-                    live={ltLive}
                     onSend={async (url) => {
                       if (!(await requireEntitlement("lowerThirds", 0))) return;
                       setLtSending(true);
@@ -1560,17 +1517,6 @@ export default function DockMinistryTab({
                         setLtFeedback(err instanceof Error ? err.message : t("ministry.sendFailed"));
                       } finally {
                         setLtSending(false);
-                      }
-                    }}
-                    onUpdate={async (url) => {
-                      try {
-                        await ensureObsConnected();
-                        await dockObsClient.call("SetInputSettings", {
-                          inputName: "MCE Lower Third",
-                          inputSettings: { url },
-                        });
-                      } catch (err) {
-                        console.warn("[DockMinistry] LT update failed:", err);
                       }
                     }}
                     onBlank={async (url) => {

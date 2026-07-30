@@ -55,6 +55,7 @@ import { getEffectivePlan } from "../services/licenseService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService } from "../services/obsService";
 import { loadData } from "../services/store";
+import { getUserScopedKey } from "../services/userScopedStorage";
 import { trackVoiceSessionCompleted, trackVoiceSessionStarted } from "../services/tracking";
 import type { VoiceBibleCandidate } from "../services/voiceBibleTypes";
 import { MATCH_SOURCE_LABEL } from "../services/voiceBibleTypes";
@@ -65,6 +66,7 @@ import { isConfirmedAppClose } from "../services/appCloseGuard";
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
   "https://api.creatorstudioslabs.stream";
+const PREFERRED_MIC_STORAGE_KEY = "ocs-speech-to-scripture-mic-id";
 
 // ── Connectivity hook ──
 function useOnlineStatus(): boolean {
@@ -109,6 +111,27 @@ function formatTimestamp(entry: { startTime?: number }, elapsed: number): string
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function loadPreferredMicId(): string {
+  if (typeof localStorage === "undefined") return "";
+  try {
+    return localStorage.getItem(getUserScopedKey(PREFERRED_MIC_STORAGE_KEY))?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function savePreferredMicId(micId: string): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const key = getUserScopedKey(PREFERRED_MIC_STORAGE_KEY);
+    const trimmed = micId.trim();
+    if (trimmed) localStorage.setItem(key, trimmed);
+    else localStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures in restricted browser contexts.
+  }
 }
 
 export default function SpeechToScripturePage() {
@@ -181,7 +204,7 @@ export default function SpeechToScripturePage() {
   // ── LM state ──
   const [snapshot, setSnapshot] = useState<LmDockSnapshot>(lmDockService.getSnapshot());
   const [mics, setMics] = useState<Array<{ id: string; label: string }>>([]);
-  const [selectedMic, setSelectedMic] = useState("");
+  const [selectedMic, setSelectedMic] = useState(() => loadPreferredMicId());
   const [micLoading, setMicLoading] = useState(false);
   const [micDropdownOpen, setMicDropdownOpen] = useState(false);
   const micDropdownRef = useRef<HTMLDivElement>(null);
@@ -193,6 +216,11 @@ export default function SpeechToScripturePage() {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 1500);
     } catch { /* ignore */ }
+  }, []);
+
+  const selectMic = useCallback((micId: string) => {
+    setSelectedMic(micId);
+    savePreferredMicId(micId);
   }, []);
 
   // ── OBS ──
@@ -214,15 +242,21 @@ export default function SpeechToScripturePage() {
     try {
       const devices = await lmDockService.getMics();
       setMics(devices);
-      if (devices.length > 0 && !selectedMic) {
-        setSelectedMic(devices[0].id);
+      if (devices.length > 0) {
+        const savedMic = loadPreferredMicId();
+        const currentStillAvailable = selectedMic && devices.some((device) => device.id === selectedMic);
+        const savedStillAvailable = savedMic && devices.some((device) => device.id === savedMic);
+        if (!currentStillAvailable) {
+          const nextMicId = savedStillAvailable ? savedMic : devices[0].id;
+          selectMic(nextMicId);
+        }
       }
     } catch (err) {
       console.warn("[SpeechToScripture] Failed to enumerate mics:", err);
     } finally {
       setMicLoading(false);
     }
-  }, [selectedMic]);
+  }, [selectMic, selectedMic]);
 
   useEffect(() => {
     void enumerateMics();
@@ -1071,7 +1105,7 @@ export default function SpeechToScripturePage() {
                         className={`sts3-mic-dropdown-item${mic.id === selectedMic ? " sts3-mic-dropdown-item--active" : ""}`}
                         onClick={() => {
                           track("sts_mic_changed", { mic: mic.id });
-                          setSelectedMic(mic.id);
+                          selectMic(mic.id);
                           setMicDropdownOpen(false);
                         }}
                       >

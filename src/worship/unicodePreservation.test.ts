@@ -190,6 +190,26 @@ describe("autoSplitLyricsText", () => {
     expect(slides.length).toBeGreaterThan(1);
     expect(slides.every((slide) => slide.label === "Verse 1")).toBe(true);
   });
+
+  it("reflows the same original lyrics when changing line counts", () => {
+    const original = [
+      "Line one",
+      "Line two",
+      "Line three",
+      "Line four",
+      "Line five",
+      "Line six",
+      "Line seven",
+      "Line eight",
+    ].join("\n");
+
+    const fourLineBlocks = autoSplitLyricsText(original, 4, { maxLineLength: 80 }).split(/\n\n+/);
+    const twoLineBlocks = autoSplitLyricsText(original, 2, { maxLineLength: 80 }).split(/\n\n+/);
+
+    expect(fourLineBlocks).toHaveLength(2);
+    expect(twoLineBlocks).toHaveLength(4);
+    expect(twoLineBlocks[0]).toBe("Line one\nLine two");
+  });
 });
 
 // ── Search normalization Unicode tests ───────────────────────────────────────

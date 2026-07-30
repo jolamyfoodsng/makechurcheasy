@@ -10,7 +10,7 @@ import {
 } from "@/services/authService";
 import { resetFavoriteThemeCaches } from "@/services/favoriteThemes";
 import { clearAllUserScopedStorage } from "@/services/userScopedStorage";
-import { resetLicenseGuard } from "@/services/licenseGuard";
+import { resetLicenseGuard, subscribe as subscribeLicenseGuard } from "@/services/licenseGuard";
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -69,6 +69,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserState(null);
     setAuthenticated(false);
   }
+
+  useEffect(() => {
+    if (!authenticated) return;
+
+    return subscribeLicenseGuard((state) => {
+      if (state.lockReason !== "device_removed") return;
+      console.warn("[AuthContext] license guard reported device_removed — clearing stale local session");
+      logout();
+    });
+  }, [authenticated]);
 
   // Verify device still exists on server + keep lastSeen fresh
   useEffect(() => {

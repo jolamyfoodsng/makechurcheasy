@@ -2174,7 +2174,7 @@ export function WorshipModule({
               </button>
               <a
                 className="ssm-btn-upgrade"
-                href="https://makechurcheasy.creatorstudioslabs.stream/subscription/plans"
+                href="https://makechurcheazy.com/subscription/plans"
                 target="_blank"
                 rel="noopener noreferrer"
               >

@@ -1559,7 +1559,7 @@ export function MVSettings() {
                           </div>
                         </div>
                       </div>
-                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => window.open("https://makechurcheasy.creatorstudioslabs.stream/subscription/plans", "_blank", "noopener,noreferrer")} title={t("mvSettings.credits.upgrade")}>
+                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => window.open("https://makechurcheazy.com/subscription/plans", "_blank", "noopener,noreferrer")} title={t("mvSettings.credits.upgrade")}>
                         <ExternalLink size={12} /> {t("mvSettings.credits.upgrade")}
                       </button>
                     </div>

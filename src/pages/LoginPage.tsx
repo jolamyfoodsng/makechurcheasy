@@ -435,7 +435,7 @@ export default function LoginPage() {
               }}
             >
               Get a pairing code from{" "}
-              <span style={{ color: "#9898a8" }}>makechurcheasy.creatorstudioslabs.stream/devices</span>
+              <span style={{ color: "#9898a8" }}>makechurcheazy.com/devices</span>
             </p>
 
           </div>

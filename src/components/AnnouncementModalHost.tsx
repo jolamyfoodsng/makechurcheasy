@@ -29,7 +29,7 @@ function withOfferCode(url: string, offerCode?: string | null): string {
   try {
     const parsed = url.startsWith("http")
       ? new URL(url)
-      : new URL(url, "https://makechurcheasy.creatorstudioslabs.stream");
+      : new URL(url, "https://makechurcheazy.com");
     if (!parsed.searchParams.has("promo") && !parsed.searchParams.has("code")) {
       parsed.searchParams.set("promo", offerCode);
     }
@@ -161,7 +161,7 @@ export function AnnouncementModalHost() {
       window.open(url, "_blank", "noopener,noreferrer");
       return;
     }
-    window.open(`https://makechurcheasy.creatorstudioslabs.stream${url}`, "_blank", "noopener,noreferrer");
+    window.open(`https://makechurcheazy.com${url}`, "_blank", "noopener,noreferrer");
   }
 
   if (!announcement) return null;

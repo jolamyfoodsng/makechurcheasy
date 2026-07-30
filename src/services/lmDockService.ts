@@ -57,7 +57,7 @@ export interface LmDockSnapshot {
   status: LmServiceStatus;
   entries: TranscriptEntry[];
   candidates: VoiceBibleCandidate[];
-  queue: VoiceBibleCandidate[];      // Auto-pushed to OBS (reference commands)
+  queue: VoiceBibleCandidate[];      // High-confidence detections waiting for explicit user action
   suggestions: VoiceBibleCandidate[]; // Manual push only (quote matches)
   matching: boolean;
   error?: string;
@@ -117,9 +117,6 @@ class LmDockService {
   private liveQuoteSearchTimer: ReturnType<typeof setTimeout> | null = null;
   private liveQuoteSearchPendingText = "";
   private lastLiveQuoteSearchAt = 0;
-  /** Cooldown: prevent repeated OBS pushes while keeping reference changes responsive */
-  private lastAutoPushTime = 0;
-  private static readonly AUTO_PUSH_COOLDOWN_MS = 750;
   /** Resolved overlay base URL (http://127.0.0.1:<port>) — set once at init */
   private overlayBaseUrl: string | null = null;
 
@@ -482,11 +479,11 @@ class LmDockService {
     if (result.matches.length > 0) {
       const newCandidates = result.matches.map((m) => m.candidate);
 
-      // Confidence routing:
-      // - source=reference OR confidence >= 0.90 → auto-push (queue)
-      // - navigationOnly (chapter-only open) → suggestions only (no auto-push)
-      // - confidence >= 0.75 → suggestion
-      // - confidence < 0.75 → low-confidence suggestion
+        // Confidence routing:
+        // - source=reference OR confidence >= 0.90 → queue for explicit push
+        // - navigationOnly (chapter-only open) → suggestions only (no auto-push)
+        // - confidence >= 0.75 → suggestion
+        // - confidence < 0.75 → low-confidence suggestion
       const isReferenceCommand = result.matches.some((m) => m.source === "reference");
       const highConfidence = result.matches.some((m) => m.confidence >= 0.90);
       const isNavigationOnly = result.matches.some((m) => m.navigationOnly === true);
@@ -495,9 +492,9 @@ class LmDockService {
         const existingQueueKeys = new Set(this.snapshot.queue.map((c) => `${c.book}:${c.chapter}:${c.verse}`));
         const uniqueNew = newCandidates.filter((c) => !existingQueueKeys.has(`${c.book}:${c.chapter}:${c.verse}`));
 
-        // Always place the newest match at the front so auto-push targets the
-        // most recent navigation result, even if the verse already existed in
-        // the queue (e.g. navigating back then forward again).
+        // Always place the newest match at the front so the user's Push click
+        // targets the most recent navigation result, even if the verse already
+        // existed in the queue (e.g. navigating back then forward again).
         const queue = [...uniqueNew, ...this.snapshot.queue].slice(0, 20);
         // Remove duplicates that snuck in via the old queue
         const dedupedQueue = queue.filter(
@@ -515,10 +512,6 @@ class LmDockService {
         this.snapshot = { ...this.snapshot, queue: dedupedQueue.slice(0, 20) };
 
 
-        // Only auto-push when a NEW verse was added to the queue
-        if (uniqueNew.length > 0) {
-          void this.autoPushToObs(this.snapshot.queue[0]);
-        }
       } else {
         // REPLACE suggestions — same principle as runQuoteSearchWithText.
         // Each new match result represents the latest detection, not an
@@ -693,62 +686,6 @@ class LmDockService {
       if (this.snapshot.status !== "idle") {
         this.pushStatus();
       }
-    }
-  }
-
-  // ── Auto-push to OBS ─────────────────────────────────────────────────────
-
-  /**
-   * Auto-push a verse to OBS when a reference command is detected.
-   * Loads the full chapter and pushes surrounding context (up to 10 preceding
-   * verses + the target verse) so the broadcast shows passage context, not
-   * just the single target verse.
-   */
-  private async autoPushToObs(candidate: VoiceBibleCandidate): Promise<void> {
-    // Don't push to OBS if listening has stopped
-    if (this.snapshot.status !== "listening") {
-      return;
-    }
-
-    // Cooldown — prevent duplicate rapid-fire pushes while allowing the next
-    // detected reference to reach OBS without waiting several seconds.
-    const now = Date.now();
-    if (now - this.lastAutoPushTime < LmDockService.AUTO_PUSH_COOLDOWN_MS) {
-      return;
-    }
-    this.lastAutoPushTime = now;
-
-    try {
-      const { bibleObsService } = await import("../bible/bibleObsService");
-      const { getChapter } = await import("../bible/bibleData");
-
-      // Load the full chapter to get surrounding verse context
-      const passage = await getChapter(candidate.book, candidate.chapter, candidate.translation);
-      const targetVerse = candidate.verse;
-
-      // Select a window: up to 10 preceding verses + target verse
-      const targetIdx = passage.verses.findIndex((v) => v.verse === targetVerse);
-      const startIdx = Math.max(0, targetIdx - 10);
-      const selectedVerses = passage.verses.slice(startIdx, targetIdx + 1);
-
-      const verseText = selectedVerses
-        .map((v) => `${candidate.book} ${candidate.chapter}:${v.verse}  ${v.text}`)
-        .join("\n\n");
-
-      const slide = {
-        id: `speech-${candidate.book}-${candidate.chapter}-${candidate.verse}`,
-        text: verseText || candidate.snippet || `${candidate.book} ${candidate.chapter}:${candidate.verse}`,
-        reference: `${candidate.label} (${candidate.translation})`,
-        verseRange: selectedVerses.length > 1
-          ? `${selectedVerses[0].verse}-${selectedVerses[selectedVerses.length - 1].verse}`
-          : String(targetVerse),
-        index: 0,
-        total: selectedVerses.length,
-      };
-
-      await bibleObsService.pushSlide(slide, null, true, false, "fullscreen");
-    } catch (err) {
-      console.warn("[LmDockService] Auto-push to OBS failed:", err);
     }
   }
 

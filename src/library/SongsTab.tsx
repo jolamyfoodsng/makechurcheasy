@@ -979,7 +979,7 @@ export function SongsTab() {
               <button
                 className="ssm-btn-upgrade"
                 onClick={() => {
-                  window.open("https://makechurcheasy.creatorstudioslabs.stream/subscription/plans", "_blank");
+                  window.open("https://makechurcheazy.com/subscription/plans", "_blank");
                   setShowSongLimitModal(false);
                 }}
                 title="Upgrade to Growth">

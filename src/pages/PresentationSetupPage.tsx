@@ -103,6 +103,18 @@ function clampPresentationPanelZoom(value: number): number {
   return Math.max(0.8, Math.min(1.8, Math.round(value * 100) / 100));
 }
 
+function buildPresentationPreviewLink(link: string): string {
+  try {
+    const base = typeof window === "undefined" ? "http://localhost" : window.location.href;
+    const url = new URL(link, base);
+    url.searchParams.set("preview", "1");
+    return url.toString();
+  } catch {
+    const separator = link.includes("?") ? "&" : "?";
+    return `${link}${separator}preview=1`;
+  }
+}
+
 function getFallbackVideoPlayback(): PresentationMediaPlaybackState {
   return {
     playing: true,
@@ -532,6 +544,7 @@ function PresentationLinkPanel({
   const [zoom, setZoom] = useState(() => readPresentationScreenZoom());
   const previewStageRef = useRef<HTMLDivElement | null>(null);
   const [previewScale, setPreviewScale] = useState(0.25);
+  const previewLink = useMemo(() => buildPresentationPreviewLink(session.presentationLink), [session.presentationLink]);
 
   const currentItem = remoteState?.fullscreen ?? null;
   const currentVideoItem =
@@ -720,7 +733,7 @@ function PresentationLinkPanel({
           <iframe
             key={session.sessionId}
             className="remote-link-preview-frame"
-            src={session.presentationLink}
+            src={previewLink}
             title="Presentation screen live preview"
             style={{
               width: PRESENTATION_PREVIEW_WIDTH,
@@ -1010,6 +1023,7 @@ export default function PresentationSetupPage({
             <DockPage
               presentationBibleLmSplit
               presentationOutputTarget="link"
+              enablePresentationAssistantMicControls
               hideLowerThirdControls
               hideTickerControls
               hiddenTabs={["multiview"]}

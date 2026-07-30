@@ -419,6 +419,54 @@
       transition: opacity var(--anim-duration, 152ms) ease;
     }
 
+    #lt-bar.lt-edge-bottom {
+      top: auto;
+      right: auto;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100vw - var(--lt-h-margin, 120px));
+      height: auto;
+      max-width: var(--lt-max-width, 1680px);
+      max-height: var(--lt-max-height, 600px);
+    }
+
+    #lt-bar.lt-edge-top {
+      top: 0;
+      right: auto;
+      bottom: auto;
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100vw - var(--lt-h-margin, 120px));
+      height: auto;
+      max-width: var(--lt-max-width, 1680px);
+      max-height: var(--lt-max-height, 600px);
+    }
+
+    #lt-bar.lt-edge-left,
+    #lt-bar.lt-edge-right {
+      top: 50%;
+      bottom: auto;
+      width: var(--lt-side-width, 168px);
+      height: calc(100vh - var(--lt-v-margin, 0px));
+      max-width: none;
+      max-height: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #lt-bar.lt-edge-left {
+      right: auto;
+      left: 0;
+      transform: translateY(-50%);
+    }
+
+    #lt-bar.lt-edge-right {
+      right: 0;
+      left: auto;
+      transform: translateY(-50%);
+    }
+
     /* ══════════════════════════════════════════════════════
        OVERLAY STAGE: fixed full-canvas parent container
        ══════════════════════════════════════════════════════ */
@@ -481,6 +529,45 @@
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
       text-transform: var(--text-transform);
+      transform-origin: center;
+    }
+
+    #lt-bar.lt-edge-left #lt-verse-text,
+    #lt-bar.lt-edge-right #lt-verse-text {
+      width: max-content;
+      max-width: calc(100vh - 120px);
+      white-space: nowrap;
+      text-align: center;
+      line-height: 1;
+    }
+
+    #lt-bar.lt-edge-left #lt-verse-text {
+      transform: rotate(90deg);
+    }
+
+    #lt-bar.lt-edge-right #lt-verse-text {
+      transform: rotate(-90deg);
+    }
+
+    #lt-bar.lt-text-inverted.lt-edge-bottom #lt-verse-text,
+    #lt-bar.lt-text-inverted.lt-edge-top #lt-verse-text,
+    #lt-bar.lt-text-inverted.lt-edge-bottom #ref-text,
+    #lt-bar.lt-text-inverted.lt-edge-top #ref-text {
+      transform: rotate(180deg);
+      transform-origin: center;
+    }
+
+    #lt-bar.lt-edge-left.lt-text-inverted #lt-verse-text {
+      transform: rotate(-90deg);
+    }
+
+    #lt-bar.lt-edge-right.lt-text-inverted #lt-verse-text {
+      transform: rotate(90deg);
+    }
+
+    #lt-bar.lt-edge-left #ref-text,
+    #lt-bar.lt-edge-right #ref-text {
+      display: none;
     }
 
     #lt-bar #ref-text {
@@ -1327,7 +1414,15 @@
         root.style.setProperty('--lt-max-height', barMaxHeight + 'px');
         root.style.setProperty('--lt-min-height', (s.lowerThirdBarMinHeight || 0) + 'px');
         root.style.setProperty('--lt-card-padding', s.lowerThirdCardPadding || `${baseBarPadding}px`);
-        root.style.setProperty('--lt-card-radius', (s.lowerThirdCardRadius || 18) + 'px');
+        const cardRadius = Math.max(0, Math.min(64, Number(s.lowerThirdCardRadius ?? 18)));
+        root.style.setProperty('--lt-card-radius', cardRadius + 'px');
+        const edge = s.lowerThirdEdge === 'top' || s.lowerThirdEdge === 'left' || s.lowerThirdEdge === 'right' ? s.lowerThirdEdge : 'bottom';
+        const sideWidth = Math.max(96, Math.min(360, Number(s.lowerThirdSideWidth) || Math.round((Number(s.fontSize) || preset.fontSize) + (baseBarPadding * 2) + 36)));
+        root.style.setProperty('--lt-side-width', sideWidth + 'px');
+        root.style.setProperty('--lt-v-margin', (s.lowerThirdVMargin || 0) + 'px');
+        ltBar.classList.remove('lt-edge-top', 'lt-edge-bottom', 'lt-edge-left', 'lt-edge-right');
+        ltBar.classList.add('lt-edge-' + edge);
+        ltBar.classList.toggle('lt-text-inverted', s.lowerThirdTextDirection === 'inverted' || s.lowerThirdTextInverted === true || s.textInverted === true);
         const bb = s.boxBackground || 'rgba(0,0,0,0.65)', bo = s.boxOpacity ?? 1; let fbb = bb;
         if (bo < 1 && bb.startsWith('rgba')) fbb = bb.replace(/[\d.]+\)$/, bo + ')'); else if (bo < 1 && bb.startsWith('rgb(')) fbb = bb.replace('rgb(', 'rgba(').replace(')', ',' + bo + ')');
         root.style.setProperty('--box-background', fbb);
@@ -1335,7 +1430,7 @@
         if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
         const barBgV = String(s.backgroundVideo || '').trim();
         if (barBgV && targetMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
-        if (!barBgV && targetMode === 'lower-third') { const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent'; ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } else ltBarBg.style.display = 'none';
+        if (!barBgV && targetMode === 'lower-third') { const bgPattern = String(s.backgroundPattern || '').trim(); if (bgPattern) { const pc = resolvePatternCss(bgPattern); ltBarBg.style.background = pc || 'transparent'; ltBarBg.style.backgroundSize = 'cover'; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } else { const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent'; ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } } else ltBarBg.style.display = 'none';
         if (s.refPosition === 'top') { reference.classList.add('top'); ltRefText.classList.add('top'); } else { reference.classList.remove('top'); ltRefText.classList.remove('top'); }
       }
 
@@ -1454,7 +1549,7 @@
           reference.textContent = rt;
           reference.style.display = rt ? 'block' : 'none';
         }
-        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-note-overlay fullscreen theme error', error); }
+        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce, 'fullscreen'); } catch (error) { console.error('mce-note-overlay fullscreen theme error', error); }
         if (isCL) autoScaleCompareContent();
         else { autoScaleContent(); }
         if (!hasShownOnce) hasShownOnce = true;
@@ -1486,7 +1581,7 @@
           ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
         }
 
-        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-note-overlay lower-third theme error', error); }
+        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce, 'lower-third'); } catch (error) { console.error('mce-note-overlay lower-third theme error', error); }
         if (!hasShownOnce) hasShownOnce = true;
       }
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MakeChurchEasy",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "identifier": "com.makechurcheasy.desktop",
   "build": {
     "beforeDevCommand": "node scripts/prepare-bundle-assets.cjs && npm run dev",
@@ -32,6 +32,8 @@
     "resources": [
       "../dist/mce-bible-overlay.html",
       "../dist/mce-worship-overlay.html",
+      "../dist/mce-note.html",
+      "../dist/mce-media-overlay.html",
       "../dist/bible-overlay-bg.html",
       "../dist/bible-kjv.json",
       "../dist/lower-third-overlay.html",

@@ -140,6 +140,7 @@ const USER_SCOPED_KEY_PREFIXES = [
   // Misc user state
   "ocs-song-title-counter-v1",
   "ocs-dock-lt-speaker-hint-seen",
+  "ocs-speech-to-scripture-mic-id",
   "bible-skip-layout-confirm",
   "dtb-bg-picker-type",
   "voice-bible-settings",

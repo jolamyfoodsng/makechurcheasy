@@ -40,6 +40,8 @@ export type DockCommandType =
   | "worship:clear-lyrics"
   | "worship:song-save"
   | "worship:save-preferences"
+  // Notes
+  | "notes:append"
   // Media
   | "media:save"
   | "media:delete"
@@ -75,6 +77,7 @@ export type DockStateType =
   | "state:library-updated"
   | "state:songs-data"
   | "state:worship-song-save-result"
+  | "state:notes-updated"
   | "state:service-plans"
   | "state:service-plan-save-result"
   | "state:live-tools"

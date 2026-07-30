@@ -13,7 +13,7 @@ import { Zap, ExternalLink } from "lucide-react";
 import { fetchCreditsFromBackend, isProUnlocked } from "../services/credits";
 
 const CREDITS_URL =
-  "https://makechurcheasy.creatorstudioslabs.stream/credits";
+  "https://makechurcheazy.com/credits";
 
 interface CreditsGuardProps {
   children: React.ReactNode;

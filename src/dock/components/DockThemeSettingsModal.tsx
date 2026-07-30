@@ -29,7 +29,7 @@ interface Props {
   showReferences?: boolean;
   /** Active display mode — controls whether Compare Layout section is visible */
   displayMode?: "single" | "compare";
-  initialTab?: "text" | "background" | "compare";
+  initialTab?: "text" | "layout" | "background" | "compare";
   /** Keeps BackgroundPickerCard local styles separate per dock section */
   storageScope?: "bible" | "worship" | "notes" | "global";
   /** When true and displayMode is "compare", BackgroundPickerCard shows only the Compare tab */

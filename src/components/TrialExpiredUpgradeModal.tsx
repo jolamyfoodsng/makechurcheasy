@@ -5,7 +5,7 @@ import { getEffectivePlan, isTrialExpired } from "../services/licenseService";
 import "./TrialExpiredUpgradeModal.css";
 
 const TRIAL_EXPIRED_CHECKOUT_URL =
-  "https://makechurcheasy.creatorstudioslabs.stream/subscription/plans?checkout=growth&billingCycle=monthly&reason=trial_expired";
+  "https://makechurcheazy.com/subscription/plans?checkout=growth&billingCycle=monthly&reason=trial_expired";
 const DISMISS_SESSION_KEY = "trial_expired_dismissed";
 
 async function openCheckout() {
