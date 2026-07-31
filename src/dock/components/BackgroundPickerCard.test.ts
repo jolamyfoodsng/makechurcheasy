@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
 import type { BibleThemeSettings } from "../../bible/types";
 import overlayHtml from "../../../public/mce-bible-overlay.html?raw";
+import worshipOverlayHtml from "../../../public/mce-worship-overlay.html?raw";
 import backgroundOverlayHtml from "../../../public/bible-overlay-bg.html?raw";
 import noteOverlayHtml from "../../../public/mce-note.html?raw";
 import backgroundPickerSource from "./BackgroundPickerCard.tsx?raw";
@@ -510,6 +511,13 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(textSectionSource).toContain("IconSegmentedControl<CompactFontWeight>");
     expect(textSectionSource).toContain("IconSegmentedControl<CompactTextCase>");
     expect(textSectionSource).not.toContain("common.moreOptions");
+  });
+
+  it("applies worship text case directly in the overlay renderer", () => {
+    expect(worshipOverlayHtml).toContain("function applyDisplayTextTransform");
+    expect(worshipOverlayHtml).toContain("case 'uppercase': return value.toLocaleUpperCase()");
+    expect(worshipOverlayHtml).toContain("safeSupText(applyDisplayTextTransform(sl.text, data.theme && data.theme.textTransform))");
+    expect(worshipOverlayHtml).toContain("safeSupText(applyDisplayTextTransform(l.text || '', textTransform))");
   });
 
   it("adds a Layout tab and groups text layout controls there", () => {

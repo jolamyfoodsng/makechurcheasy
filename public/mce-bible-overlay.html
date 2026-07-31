@@ -378,6 +378,14 @@
       pointer-events: auto;
     }
 
+    #compare-layout.is-line-by-line {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      justify-items: center;
+    }
+
     .compare-column {
       display: flex;
       flex-direction: column;
@@ -441,6 +449,85 @@
       align-self: center;
       width: fit-content;
       max-width: 100%;
+      text-align: center;
+    }
+
+    #compare-layout.is-line-by-line .compare-column {
+      align-items: stretch;
+      justify-content: center;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+
+    #compare-layout.is-line-by-line .compare-column__text-wrap {
+      align-items: stretch;
+      justify-content: stretch;
+      width: 100%;
+    }
+
+    #compare-layout.is-line-by-line .compare-column__verse {
+      width: 100%;
+      max-width: none;
+      text-align: center;
+    }
+
+    #compare-layout.is-line-by-line .compare-column--line-hidden {
+      display: none;
+    }
+
+    .compare-line-list {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(14px, 2.4vh, 28px);
+      width: 100%;
+      max-width: none;
+    }
+
+    .compare-line-unit {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.34em;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .compare-line-unit__translation {
+      align-self: center;
+      width: fit-content;
+      max-width: 100%;
+      padding: var(--ref-bg-padding);
+      background: var(--ref-bg-color);
+      border: var(--ref-bg-border);
+      border-radius: var(--ref-bg-radius);
+      color: var(--ref-font-color);
+      font-family: var(--compare-font-family, var(--ref-font-family));
+      font-size: max(12px, calc(var(--compare-ref-font-size, 20px) * 0.72));
+      font-weight: var(--ref-font-weight);
+      font-style: var(--ref-font-style, normal);
+      letter-spacing: var(--ref-letter-spacing);
+      line-height: 1;
+      opacity: var(--ref-opacity);
+      overflow: hidden;
+      text-align: center;
+      text-overflow: ellipsis;
+      text-shadow: none;
+      text-transform: var(--compare-reference-transform, var(--ref-text-transform));
+      white-space: nowrap;
+      -webkit-text-stroke: 0 transparent;
+    }
+
+    .compare-line-unit__text {
+      width: 100%;
+      max-width: none;
+      min-width: 0;
+      text-align: var(--compare-text-align, var(--text-align));
+    }
+
+    #compare-layout.is-line-by-line .compare-line-unit__text {
       text-align: center;
     }
 
@@ -1128,6 +1215,28 @@
         return ref || version;
       }
 
+      function formatUnifiedCompareReference(leftColumn, rightColumn) {
+        const ref = String(leftColumn?.reference || rightColumn?.reference || '').trim();
+        return ref;
+      }
+
+      function renderCompareLineUnit(column) {
+        const translation = String(column?.translation || '').trim().toUpperCase();
+        const text = renderVerseLines(String(column?.text || ''));
+        if (!translation && !text) return '';
+        const label = translation
+          ? `<span class="compare-line-unit__translation">${escapeHtml(translation)}</span>`
+          : '';
+        const body = text
+          ? `<div class="compare-line-unit__text" dir="auto">${text}</div>`
+          : '';
+        return `<div class="compare-line-unit">${label}${body}</div>`;
+      }
+
+      function renderCompareLineByLineContent(leftColumn, rightColumn) {
+        return `<div class="compare-line-list">${renderCompareLineUnit(leftColumn)}${renderCompareLineUnit(rightColumn)}</div>`;
+      }
+
       function isTransparentBackgroundColor(color) {
         const value = String(color || '').trim().toLowerCase();
         return !value ||
@@ -1382,6 +1491,61 @@
         ].join('|');
       }
 
+      function normalizeCompareLayoutMode(value) {
+        return value === 'side-by-side' ? 'side-by-side' : 'line-by-line';
+      }
+
+      function resolveCompareLayoutMode(data, slide) {
+        return normalizeCompareLayoutMode(
+          slide?.compareLayout ??
+          data?.compareLayout ??
+          data?.compare?.layout
+        );
+      }
+
+      function applyFullscreenCompareLayoutMode(layoutMode) {
+        const mode = normalizeCompareLayoutMode(layoutMode);
+        currentCompareLayout = mode;
+        if (!compareLayout) return mode;
+        const compareColumns = Array.from(compareLayout.querySelectorAll('.compare-column'));
+        if (compareColumns[1]) {
+          compareColumns[1].classList.toggle('compare-column--line-hidden', mode === 'line-by-line');
+        }
+        compareColumns.forEach((column, index) => {
+          if (mode === 'line-by-line' && index === 0) {
+            column.style.width = '100%';
+            column.style.maxWidth = 'none';
+            column.style.margin = '0';
+            column.style.paddingLeft = '0px';
+            column.style.paddingRight = '0px';
+          } else {
+            column.style.width = '';
+            column.style.maxWidth = '';
+            column.style.margin = '';
+            column.style.paddingLeft = '';
+            column.style.paddingRight = '';
+          }
+        });
+        compareLayout.classList.toggle('is-line-by-line', mode === 'line-by-line');
+        if (mode === 'line-by-line') {
+          compareLayout.style.gridTemplateColumns = '1fr';
+          compareLayout.style.gap = '16px';
+          compareLayout.style.alignContent = 'center';
+          compareLayout.style.alignItems = 'center';
+          compareLayout.style.justifyItems = 'center';
+          return mode;
+        }
+        const rootStyle = getComputedStyle(root);
+        const leftWidth = rootStyle.getPropertyValue('--compare-left-width').trim() || '40fr';
+        const rightWidth = rootStyle.getPropertyValue('--compare-right-width').trim() || '40fr';
+        const gap = rootStyle.getPropertyValue('--compare-gap').trim() || '40px';
+        compareLayout.style.gridTemplateColumns = `minmax(0,${leftWidth}) minmax(0,${rightWidth})`;
+        compareLayout.style.gap = gap;
+        compareLayout.style.alignItems = '';
+        compareLayout.style.justifyItems = '';
+        return mode;
+      }
+
       /* ── Seamless video loop ── */
       const seamlessLoopControllers = new WeakMap();
       function getSeamlessLoopController(el) {
@@ -1491,6 +1655,13 @@
         compareLayout.style.padding = `${Math.round(baseCompareLayoutPadding.top)}px ${Math.round(baseCompareLayoutPadding.right)}px ${Math.round(baseCompareLayoutPadding.bottom)}px ${Math.round(baseCompareLayoutPadding.left)}px`;
         compareLayout.querySelectorAll('.compare-column').forEach((column) => {
           column.style.padding = Math.round(baseComparePanelInnerPadding) + 'px';
+          if (currentCompareLayout === 'line-by-line' && !column.classList.contains('compare-column--line-hidden')) {
+            column.style.width = '100%';
+            column.style.maxWidth = 'none';
+            column.style.margin = '0';
+            column.style.paddingLeft = '0px';
+            column.style.paddingRight = '0px';
+          }
         });
         [compareTextLeft, compareTextRight].forEach((node) => {
           if (!node) return;
@@ -1785,22 +1956,29 @@
         applyCompareReferencePlacement(compareReferenceLeft, compareMetaPosition(s.compareReferencePositionLeft), compareReferenceAlign);
         applyCompareReferencePlacement(compareReferenceRight, compareMetaPosition(s.compareReferencePositionRight), compareReferenceAlign);
         if (compareLayout) {
-          if (currentCompareLayout === 'line-by-line') {
-            compareLayout.style.gridTemplateColumns = '1fr';
-            compareLayout.style.gap = '16px';
-          } else {
-            compareLayout.style.gridTemplateColumns = `minmax(0,${leftWidth}fr) minmax(0,${rightWidth}fr)`;
-            compareLayout.style.gap = cg + 'px';
-          }
+          applyFullscreenCompareLayoutMode(currentCompareLayout);
           compareLayout.style.padding = `${outerTop}px ${outerRight}px ${outerBottom}px ${outerLeft}px`;
           const leftVerticalAlign = normalizeCompareVerticalAlign(s.compareVerticalAlignLeft);
           const rightVerticalAlign = normalizeCompareVerticalAlign(s.compareVerticalAlignRight || leftVerticalAlign);
-          compareLayout.style.alignContent = leftVerticalAlign === rightVerticalAlign
-            ? compareGridVerticalAlign(leftVerticalAlign, 'center')
-            : 'center';
+          compareLayout.style.alignContent = currentCompareLayout === 'line-by-line'
+            ? 'center'
+            : leftVerticalAlign === rightVerticalAlign
+              ? compareGridVerticalAlign(leftVerticalAlign, 'center')
+              : 'center';
+          if (currentCompareLayout === 'line-by-line') {
+            compareLayout.style.alignItems = 'center';
+            compareLayout.style.justifyItems = 'center';
+          }
           const compareColumns = Array.from(compareLayout.querySelectorAll('.compare-column'));
           compareColumns.forEach((column, index) => {
             column.style.padding = baseComparePanelInnerPadding + 'px';
+            if (currentCompareLayout === 'line-by-line' && index === 0) {
+              column.style.width = '100%';
+              column.style.maxWidth = 'none';
+              column.style.margin = '0';
+              column.style.paddingLeft = '0px';
+              column.style.paddingRight = '0px';
+            }
             column.style.justifyContent = compareColumnVerticalAlign(index === 1 ? rightVerticalAlign : leftVerticalAlign, 'flex-start');
           });
         }
@@ -1997,22 +2175,23 @@
           compareLayout.classList.add('is-visible');
           verseContainer.classList.add('is-hidden');
           const [l, r] = cc;
-          compareReferenceLeft.textContent = formatCompareReference(l.reference, l.translation);
-          compareReferenceRight.textContent = formatCompareReference(r.reference, r.translation);
+          const layoutMode = applyFullscreenCompareLayoutMode(resolveCompareLayoutMode(data, sl));
           compareTranslationLeft.textContent = '';
           compareTranslationRight.textContent = '';
-          compareTextLeft.innerHTML = renderVerseLines(l.text);
-          compareTextRight.innerHTML = renderVerseLines(r.text);
-          // Switch between side-by-side and line-by-line
-          const clMode = sl.compareLayout || 'line-by-line';
-          currentCompareLayout = clMode;
-          compareLayout.classList.toggle('is-line-by-line', clMode === 'line-by-line');
-          if (clMode === 'line-by-line') {
-            compareLayout.style.gridTemplateColumns = '1fr';
-            compareLayout.style.gap = '16px';
+          if (layoutMode === 'line-by-line') {
+            compareReferenceLeft.textContent = formatUnifiedCompareReference(l, r);
+            compareReferenceRight.textContent = '';
+            compareTextLeft.innerHTML = renderCompareLineByLineContent(l, r);
+            compareTextRight.innerHTML = '';
+          } else {
+            compareReferenceLeft.textContent = formatCompareReference(l.reference, l.translation);
+            compareReferenceRight.textContent = formatCompareReference(r.reference, r.translation);
+            compareTextLeft.innerHTML = renderVerseLines(l.text);
+            compareTextRight.innerHTML = renderVerseLines(r.text);
           }
         }
         else {
+          applyFullscreenCompareLayoutMode('side-by-side');
           compareLayout.classList.remove('is-line-by-line');
           compareLayout.classList.remove('is-visible');
           compareLayout.style.display = 'none';
@@ -2040,7 +2219,7 @@
         const isCompare = sl.layout === 'compare' && cc.length === 2;
         if (isCompare) {
           const [l, r] = cc;
-          const layoutMode = sl.compareLayout || 'line-by-line';
+          const layoutMode = resolveCompareLayoutMode(data, sl);
           const lText = renderVerseLines(l.text || '');
           const rText = renderVerseLines(r.text || '');
           const lRefText = formatCompareReference(l.reference, l.translation);

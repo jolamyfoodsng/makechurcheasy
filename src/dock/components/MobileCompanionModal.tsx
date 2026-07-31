@@ -11,8 +11,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { X, Smartphone, Wifi, WifiOff, RefreshCw } from "lucide-react";
 
 interface PairingInfo {
+  version?: number;
   ip: string;
   port: number;
+  wsPort?: number;
+  apiPort?: number;
   pairingToken: string;
 }
 
@@ -110,8 +113,15 @@ export default function MobileCompanionModal({ onClose }: MobileCompanionModalPr
     return () => clearInterval(interval);
   }, [fetchPairingInfo, fetchStatus]);
 
-  const wsUrl = pairing ? `ws://${pairing.ip}:${pairing.port}` : "";
-  const pairingUrl = pairing ? `${wsUrl}?token=${pairing.pairingToken}` : "";
+  const wsPort = pairing?.wsPort ?? pairing?.port ?? 8765;
+  const wsUrl = pairing ? `ws://${pairing.ip}:${wsPort}` : "";
+  const pairingPayload = pairing ? JSON.stringify({
+    version: pairing.version ?? 1,
+    ip: pairing.ip,
+    wsPort,
+    apiPort: pairing.apiPort ?? 45678,
+    pairingToken: pairing.pairingToken,
+  }) : "";
 
   return (
     <div className="mc-modal-backdrop" onMouseDown={onClose}>
@@ -156,7 +166,7 @@ export default function MobileCompanionModal({ onClose }: MobileCompanionModalPr
                 <p className="mc-qr-instruction">
                   {t("dock.mobileCompanion.scanQrInstruction")}
                 </p>
-                <QrCodeDisplay value={pairingUrl} size={180} />
+                <QrCodeDisplay value={pairingPayload} size={180} />
                 <button className="mc-btn-refresh" onClick={fetchPairingInfo} title={t("dock.mobileCompanion.generateNewCode")}>
                   <RefreshCw size={14} />
                   {t("dock.mobileCompanion.newCode")}

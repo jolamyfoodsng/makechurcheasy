@@ -28,7 +28,13 @@ import {
   saveAddedLayoutIdsToDockData,
   saveLocalAddedLayoutIds,
 } from "../../multiview/addedLayoutStorage";
-import { saveToDisk, getSafeFileName } from "../dockUploadService";
+import type { MediaItem } from "../../library/libraryTypes";
+import {
+  dedupeMediaItems,
+  loadLocalLibrary,
+  registerDockMediaItem,
+  uploadFileToDock,
+} from "../dockUploadService";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 // ---------------------------------------------------------------------------
@@ -38,6 +44,9 @@ import { getRecommendedPollingInterval } from "../../services/performanceManager
 const STORAGE_KEY = "dock-mv-saved";
 const CANVAS_W = 1920;
 const CANVAS_H = 1080;
+const DEFAULT_SLOT_FRAMING = { displayMode: "fit" as const, zoom: 1, focalX: 0.5, focalY: 0.5 };
+const BACKGROUND_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]);
+const BACKGROUND_VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv", "flv"]);
 
 const CONTENT_TYPE_INFO: Record<string, { labelKey: string; icon: string; color: string }> = {
   camera: { labelKey: "multiview.camera", icon: "videocam", color: "#0078d4" },
@@ -49,6 +58,14 @@ const CONTENT_TYPE_INFO: Record<string, { labelKey: string; icon: string; color:
 };
 
 const SCENE_TYPES = new Set(["camera", "scripture", "translation", "lower-third"]);
+
+function areStringListsEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) return false;
+  }
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Data Model
@@ -415,6 +432,24 @@ function nextObsSceneName(list: SavedMultiView[]): string {
   return `MV: Multiview ${n}`;
 }
 
+function normalizeLoadedMultiView(item: SavedMultiView): SavedMultiView {
+  const assignments = item.assignments ?? {};
+  const slotModes = item.slotModes ?? {};
+  const slotThumbnails = item.slotThumbnails ?? {};
+  const slotFraming = { ...(item.slotFraming ?? {}) };
+  let changed = !item.assignments || !item.slotModes || !item.slotFraming || !item.slotThumbnails;
+
+  for (const slotId of Object.keys(assignments)) {
+    const framing = slotFraming[slotId];
+    if (!framing || framing.displayMode === "fill") {
+      slotFraming[slotId] = DEFAULT_SLOT_FRAMING;
+      changed = true;
+    }
+  }
+
+  return changed ? { ...item, assignments, slotModes, slotFraming, slotThumbnails } : item;
+}
+
 // ---------------------------------------------------------------------------
 // Storage helpers
 // ---------------------------------------------------------------------------
@@ -424,7 +459,7 @@ function loadSaved(): SavedMultiView[] {
     const raw = localStorage.getItem(getUserScopedKey(STORAGE_KEY));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? (parsed as SavedMultiView[]).map(normalizeLoadedMultiView) : [];
   } catch { return []; }
 }
 
@@ -441,6 +476,163 @@ function saveSaved(items: SavedMultiView[]) {
 function getBackgroundMediaLabel(filePath: string): string {
   const parts = filePath.split(/[/\\]/);
   return parts[parts.length - 1] || filePath;
+}
+
+function getMediaItemPreviewSrc(item: MediaItem): string {
+  if (item.thumbnailUrl) return item.thumbnailUrl;
+  if (item.diskFileName) return `/uploads/${encodeURIComponent(item.diskFileName)}`;
+  return item.url;
+}
+
+function formatMediaItemMeta(item: MediaItem): string {
+  const parts: string[] = [];
+  if (item.mimeType) {
+    parts.push(item.mimeType.split("/").pop()?.toUpperCase() || item.type.toUpperCase());
+  } else {
+    parts.push(item.type === "video" ? "VIDEO" : "IMAGE");
+  }
+  if (item.fileSize && Number.isFinite(item.fileSize)) {
+    const mb = item.fileSize / (1024 * 1024);
+    parts.push(mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`);
+  }
+  return parts.join(" · ");
+}
+
+function getUploadBackgroundMediaType(fileName: string): "image" | "video" | null {
+  const ext = fileName.split(".").pop()?.toLowerCase() || "";
+  if (BACKGROUND_IMAGE_EXTENSIONS.has(ext)) return "image";
+  if (BACKGROUND_VIDEO_EXTENSIONS.has(ext)) return "video";
+  return null;
+}
+
+function createUploadMediaItem(fileName: string): MediaItem | null {
+  const type = getUploadBackgroundMediaType(fileName);
+  if (!type) return null;
+  return {
+    id: `upload:${fileName}`,
+    name: fileName,
+    type,
+    url: `/uploads/${encodeURIComponent(fileName)}`,
+    diskFileName: fileName,
+    createdAt: "0001-01-01T00:00:00.000Z",
+    source: "local",
+  };
+}
+
+function dedupeBackgroundMediaItems(items: MediaItem[]): MediaItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.type}:${item.filePath || item.diskFileName || item.url || item.name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function isMediaItemSelectedForBackground(item: MediaItem, filePath: string): boolean {
+  if (!filePath) return false;
+  const selectedName = getBackgroundMediaLabel(filePath);
+  return item.filePath === filePath ||
+    item.url === filePath ||
+    item.diskFileName === selectedName ||
+    item.name === selectedName;
+}
+
+function isSelectableBackgroundMediaItem(item: MediaItem, type: "image" | "video"): boolean {
+  return item.type === type && item.source !== "document-conversion";
+}
+
+function isMultiviewManagedSceneName(sceneName: string): boolean {
+  return /^MV:\s*Multiview\b/i.test(sceneName.trim());
+}
+
+async function loadBackgroundMediaLibrary(): Promise<MediaItem[]> {
+  const sources: MediaItem[][] = [];
+
+  try {
+    const { getAllMedia } = await import("../../library/libraryDb");
+    const indexedItems = await getAllMedia();
+    if (indexedItems.length > 0) sources.push(indexedItems);
+  } catch (err) {
+    console.warn("[DockMultiview] Unable to read IndexedDB media library", err);
+  }
+
+  try {
+    const res = await fetch("/uploads/dock-media-library.json");
+    if (res.ok) {
+      const jsonItems = await res.json();
+      if (Array.isArray(jsonItems)) sources.push(jsonItems as MediaItem[]);
+    }
+  } catch (err) {
+    console.warn("[DockMultiview] Unable to read dock media library file", err);
+  }
+
+  try {
+    const res = await fetch("/api/uploads");
+    if (res.ok) {
+      const files = await res.json();
+      if (Array.isArray(files)) {
+        sources.push(files
+          .filter((file): file is string => typeof file === "string")
+          .map(createUploadMediaItem)
+          .filter((item): item is MediaItem => Boolean(item)));
+      }
+    }
+  } catch (err) {
+    console.warn("[DockMultiview] Unable to read uploads folder media", err);
+  }
+
+  sources.push(loadLocalLibrary());
+  return dedupeBackgroundMediaItems(dedupeMediaItems(sources.flat()));
+}
+
+async function getUploadsDirectory(): Promise<string> {
+  const res = await fetch("/api/uploads-dir");
+  if (!res.ok) throw new Error(`uploads-dir failed: ${res.status}`);
+  const data = await res.json();
+  if (!data.path) throw new Error("Uploads directory was not returned.");
+  return String(data.path);
+}
+
+async function resolveBackgroundMediaFilePath(item: MediaItem): Promise<string> {
+  if (item.filePath) return item.filePath;
+
+  if (item.url?.startsWith("data:")) {
+    const response = await fetch("/api/save-media", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileName: item.diskFileName || item.name, dataUrl: item.url }),
+    });
+    if (!response.ok) throw new Error(`save-media failed: ${response.status}`);
+    const data = await response.json();
+    if (!data.path) throw new Error("Saved media path was not returned.");
+    return String(data.path);
+  }
+
+  const fileName = item.diskFileName || decodeURIComponent(item.url?.split("/").pop() || item.name);
+  if (!fileName) throw new Error("Media file name is missing.");
+  const dir = await getUploadsDirectory();
+  const sep = dir.includes("\\") ? "\\" : "/";
+  return `${dir}${sep}${fileName}`;
+}
+
+async function captureMvSourceThumbnail(sourceName: string): Promise<string | null> {
+  if (!sourceName || !dockObsClient.isConnected) return null;
+  try {
+    const resp = await dockObsClient.call("GetSourceScreenshot", {
+      sourceName,
+      imageFormat: "jpeg",
+      imageWidth: 320,
+      imageHeight: 180,
+      imageCompressionQuality: 60,
+    }) as { imageData?: string };
+    const data = resp.imageData;
+    if (!data) return null;
+    return data.startsWith("data:") ? data : `data:image/jpeg;base64,${data}`;
+  } catch (err) {
+    console.warn("[DockMultiview] Thumbnail capture failed", { sourceName, err });
+    return null;
+  }
 }
 
 function resolveLayout(layoutId: string): GalleryLayout | undefined {
@@ -462,6 +654,15 @@ function cssColorToObsInt(cssColor: string): number {
   return (0xFF << 24 | b << 16 | g << 8 | r) >>> 0;
 }
 
+function formatMvContentLabel(value: string): string {
+  const clean = value.trim();
+  if (!clean) return clean;
+  if (/^MCE(?: Browser)?\s*-\s*Worship$/i.test(clean) || /^MCE Worship$/i.test(clean)) return "Worship";
+  if (/^MCE(?: Browser)?\s*-\s*Bible$/i.test(clean) || /^MCE Bible$/i.test(clean)) return "Bible";
+  if (/^MCE Presentation$/i.test(clean)) return "Presentation";
+  return clean.replace(/^MCE(?: Browser)?\s*-\s*/i, "").replace(/^MCE\s+/i, "");
+}
+
 function getMvBg(mv: SavedMultiView): MVBackground {
   return mv.background ?? DEFAULT_MV_BG;
 }
@@ -480,9 +681,10 @@ function SlotTypeIcon({ contentType }: { contentType: GallerySlot["contentType"]
   );
 }
 
-function LayoutMiniPreview({ layout, thumbnails, frameId, slotFrames, frameThickness, frameCornerRadius, frameOpacity, frameColor }: {
+function LayoutMiniPreview({ layout, thumbnails, slotFraming, frameId, slotFrames, frameThickness, frameCornerRadius, frameOpacity, frameColor }: {
   layout: GalleryLayout;
   thumbnails?: Record<string, string>;
+  slotFraming?: SavedMultiView["slotFraming"];
   frameId?: string | null;
   slotFrames?: Record<string, string>;
   frameThickness?: number;
@@ -507,13 +709,32 @@ function LayoutMiniPreview({ layout, thumbnails, frameId, slotFrames, frameThick
       {hasThumbs && layout.slots.map((slot) => {
         const thumb = thumbnails?.[slot.id];
         if (!thumb) return null;
+        const framing = slotFraming?.[slot.id] ?? DEFAULT_SLOT_FRAMING;
+        const tx = calculateSlotTransform(
+          320,
+          180,
+          slot,
+          { mode: framing.displayMode, focalX: framing.focalX ?? 0.5, focalY: framing.focalY ?? 0.5, zoom: framing.zoom ?? 1 },
+        );
         return (
-          <img key={slot.id} src={thumb} alt=""
+          <div key={slot.id}
             style={{
               position: "absolute", left: `${slot.x * scaleX}%`, top: `${slot.y * scaleY}%`,
               width: `${slot.width * scaleX}%`, height: `${slot.height * scaleY}%`,
-              objectFit: "cover", display: "block",
-            }} />
+              overflow: "hidden",
+            }}
+          >
+            <img src={thumb} alt=""
+              style={{
+                position: "absolute",
+                left: `${((tx.positionX - slot.x) / slot.width) * 100}%`,
+                top: `${((tx.positionY - slot.y) / slot.height) * 100}%`,
+                width: `${(tx.renderedWidth / slot.width) * 100}%`,
+                height: `${(tx.renderedHeight / slot.height) * 100}%`,
+                objectFit: "fill",
+                display: "block",
+              }} />
+          </div>
         );
       })}
       {/* SVG overlay: unassigned slot outlines + frame layer borders */}
@@ -711,19 +932,23 @@ export function calculateSlotTransform(
     focalX: framing.focalX,
     focalY: framing.focalY,
   });
-  const fitScale = Math.min(slot.width / sourceSize.width, slot.height / sourceSize.height);
   const fillScale = Math.max(slot.width / sourceSize.width, slot.height / sourceSize.height);
 
   if (safeFraming.displayMode === "fit") {
-    const scale = fitScale;
-    const renderedWidth = sourceSize.width * scale;
-    const renderedHeight = sourceSize.height * scale;
+    const scaleX = slot.width / sourceSize.width;
+    const scaleY = slot.height / sourceSize.height;
     return {
-      scale,
-      renderedWidth,
-      renderedHeight,
-      positionX: slot.x + (slot.width - renderedWidth) / 2,
-      positionY: slot.y + (slot.height - renderedHeight) / 2,
+      scale: Math.max(scaleX, scaleY),
+      scaleX,
+      scaleY,
+      renderedWidth: slot.width,
+      renderedHeight: slot.height,
+      positionX: slot.x,
+      positionY: slot.y,
+      cropLeft: 0,
+      cropRight: 0,
+      cropTop: 0,
+      cropBottom: 0,
     };
   }
 
@@ -737,6 +962,8 @@ export function calculateSlotTransform(
 
   return {
     scale,
+    scaleX: scale,
+    scaleY: scale,
     renderedWidth,
     renderedHeight,
     positionX: slot.x - hCrop * safeFraming.focalX,
@@ -1008,14 +1235,6 @@ function FramingEditor({
               <p className="dock-mv-framing-editor__drag-hint">
                 {t('multiview.dragHint', 'Drag the preview to reposition. Use zoom for a tighter crop.')}
               </p>
-
-              <button
-                type="button"
-                className="dock-btn dock-btn--sm"
-                onClick={() => setDraft(prev => normalizeSlotFraming({ ...prev, focalX: 0.5, focalY: 0.5, zoom: 1 }))}
-              >
-                {t('multiview.resetCenter')}
-              </button>
             </div>
           )}
 
@@ -1028,6 +1247,17 @@ function FramingEditor({
         </div>
 
         <div className="dock-mv-framing-editor__actions">
+          {isCustom && (
+            <button
+              type="button"
+              className="dock-mv-framing-editor__reset"
+              onClick={() => setDraft(prev => normalizeSlotFraming({ ...prev, focalX: 0.5, focalY: 0.5, zoom: 1 }))}
+              title={t('multiview.resetCenter')}
+              aria-label={t('multiview.resetCenter')}
+            >
+              <Icon name="restart_alt" size={14} />
+            </button>
+          )}
           <button type="button" className="dock-btn dock-btn--sm" onClick={onClose}>
             {t('common.cancel')}
           </button>
@@ -1088,6 +1318,7 @@ function SlotControl({
   const hasValue = Boolean(value);
   const isLegacySource = mode === "source";
   const valueExistsInObs = hasValue && (mode === "scene" ? obsScenes.includes(value) : obsSources.includes(value));
+  const displayValue = formatMvContentLabel(value);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -1114,14 +1345,11 @@ function SlotControl({
           )}
           {hasValue && (
             <>
-              <span className={`dock-mv-slot-row__selected-type dock-mv-slot-row__selected-type--${mode}`}>
-                {mode === "scene" ? t('multiview.scene', 'Scene') : t('multiview.replaceSource', 'Replace source')}
-              </span>
               <span
                 className={`dock-mv-slot-row__selected-name${valueExistsInObs ? "" : " dock-mv-slot-row__selected-name--unknown"}`}
                 title={valueExistsInObs ? value : `${value} (${t('multiview.notSeenInObs', 'not seen in current OBS scan')})`}
               >
-                {value}
+                {displayValue}
               </span>
               {!isLegacySource && (
                 <button
@@ -1284,20 +1512,60 @@ function BackgroundSection({
   const imgInputRef = useRef<HTMLInputElement>(null);
   const vidInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
+  const [libraryMedia, setLibraryMedia] = useState<MediaItem[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [mediaLibraryError, setMediaLibraryError] = useState("");
+  const [resolvingMediaId, setResolvingMediaId] = useState<string | null>(null);
   const [draggingType, setDraggingType] = useState<string | null>(null);
+  const [mediaQuery, setMediaQuery] = useState("");
 
   const hasBg = background.type !== "color" || (background.color !== "#0F172A" && background.color !== "transparent") || background.filePath || background.sceneName;
 
+  const isMediaType = background.type === "image" || background.type === "video";
+  const mediaType = background.type === "video" ? "video" : "image";
+
+  const refreshMediaLibrary = useCallback(async () => {
+    setLibraryLoading(true);
+    setMediaLibraryError("");
+    try {
+      const items = await loadBackgroundMediaLibrary();
+      setLibraryMedia(items);
+    } catch (err) {
+      console.warn("[DockMultiview] Failed to load background media library", err);
+      setMediaLibraryError("Could not load saved media.");
+      setLibraryMedia([]);
+    } finally {
+      setLibraryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open || !isMediaType) return;
+    void refreshMediaLibrary();
+  }, [isMediaType, open, refreshMediaLibrary]);
+
+  useEffect(() => {
+    setMediaQuery("");
+  }, [mediaType]);
+
   const handleFileUpload = useCallback(async (file: File, type: "image" | "video") => {
     setUploading(true);
+    setUploadStatus("");
+    setMediaLibraryError("");
     try {
-      const safeName = getSafeFileName(`mv-bg-${Date.now()}-${file.name}`);
-      const diskPath = await saveToDisk(file, safeName);
-      onChange({ ...background, type, filePath: diskPath });
+      const { item, error } = await uploadFileToDock(file, setUploadStatus);
+      if (error) throw new Error(error);
+      await registerDockMediaItem(item);
+      setLibraryMedia((current) => dedupeMediaItems([item, ...current]));
+      const diskPath = await resolveBackgroundMediaFilePath(item);
+      onChange({ ...background, type, filePath: diskPath, sceneName: "" });
     } catch (err) {
-      onChange({ ...background, type, filePath: file.name });
+      console.warn("[DockMultiview] Background upload failed", err);
+      setMediaLibraryError(err instanceof Error ? err.message : "Could not save media.");
     } finally {
       setUploading(false);
+      setUploadStatus("");
     }
   }, [background, onChange]);
 
@@ -1321,6 +1589,21 @@ function BackgroundSection({
     void handleFileUpload(file, type);
   }, [handleFileUpload, uploading]);
 
+  const handleSelectLibraryMedia = useCallback(async (item: MediaItem) => {
+    if (uploading || resolvingMediaId) return;
+    setResolvingMediaId(item.id);
+    setMediaLibraryError("");
+    try {
+      const diskPath = await resolveBackgroundMediaFilePath(item);
+      onChange({ ...background, type: item.type, filePath: diskPath, sceneName: "" });
+    } catch (err) {
+      console.warn("[DockMultiview] Failed to use library media as background", err);
+      setMediaLibraryError(err instanceof Error ? err.message : "Could not use this media file.");
+    } finally {
+      setResolvingMediaId(null);
+    }
+  }, [background, onChange, resolvingMediaId, uploading]);
+
   const bgLabel = background.type === "color" ? t('multiview.bgColor')
     : background.type === "image" ? t('multiview.bgImage')
       : background.type === "video" ? t('multiview.bgVideo')
@@ -1332,14 +1615,18 @@ function BackgroundSection({
       : background.filePath ? getBackgroundMediaLabel(background.filePath)
         : "";
 
-  const isMediaType = background.type === "image" || background.type === "video";
-  const mediaType = background.type === "video" ? "video" : "image";
   const selectedMediaName = background.filePath ? getBackgroundMediaLabel(background.filePath) : "";
   const hasSelectedMedia = selectedMediaName.length > 0;
   const mediaTitle = mediaType === "image" ? "Choose background image" : "Choose background video";
   const mediaHint = mediaType === "image"
     ? "Drop an image here or click to browse. PNG, JPG, WEBP, SVG."
     : "Drop a video here or click to browse. MP4, MOV, WEBM, M4V.";
+  const mediaLibraryItems = libraryMedia.filter((item) => isSelectableBackgroundMediaItem(item, mediaType));
+  const normalizedMediaQuery = mediaQuery.trim().toLowerCase();
+  const visibleMediaLibraryItems = normalizedMediaQuery
+    ? mediaLibraryItems.filter((item) => item.name.toLowerCase().includes(normalizedMediaQuery))
+    : mediaLibraryItems;
+  const selectableObsScenes = obsScenes.filter((sceneName) => !isMultiviewManagedSceneName(sceneName));
 
   return (
     <div className="dock-mv-property">
@@ -1406,6 +1693,70 @@ function BackgroundSection({
 
             {isMediaType && (
               <div className="dock-mv-bg-editor__media">
+                <div className="dock-mv-bg-editor__library-head">
+                  <span>
+                    {mediaType === "image" ? "Saved images" : "Saved videos"} · {mediaLibraryItems.length}
+                  </span>
+                  <button type="button" onClick={() => void refreshMediaLibrary()} disabled={libraryLoading}>
+                    <Icon name="refresh" size={12} />
+                    <span>{libraryLoading ? "Loading" : "Refresh"}</span>
+                  </button>
+                </div>
+                {mediaLibraryItems.length > 8 && (
+                  <div className="dock-mv-bg-editor__library-search">
+                    <Icon name="search" size={13} />
+                    <input
+                      type="search"
+                      value={mediaQuery}
+                      onChange={(event) => setMediaQuery(event.target.value)}
+                      placeholder={mediaType === "image" ? "Search saved images..." : "Search saved videos..."}
+                    />
+                  </div>
+                )}
+                {libraryLoading ? (
+                  <div className="dock-mv-bg-editor__library-status" role="status">
+                    <Icon name="hourglass_top" size={14} />
+                    <span>Loading saved media...</span>
+                  </div>
+                ) : visibleMediaLibraryItems.length > 0 ? (
+                  <div className="dock-mv-bg-editor__library-grid">
+                    {visibleMediaLibraryItems.map((item) => {
+                      const selected = isMediaItemSelectedForBackground(item, background.filePath);
+                      const resolving = resolvingMediaId === item.id;
+                      const previewSrc = getMediaItemPreviewSrc(item);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`dock-mv-bg-editor__library-item${selected ? " dock-mv-bg-editor__library-item--selected" : ""}`}
+                          onClick={() => void handleSelectLibraryMedia(item)}
+                          disabled={uploading || resolvingMediaId !== null}
+                          title={item.name}
+                        >
+                          <span className="dock-mv-bg-editor__library-thumb">
+                            {item.type === "image" ? (
+                              <img src={previewSrc} alt="" loading="lazy" />
+                            ) : (
+                              <video src={previewSrc} muted playsInline preload="metadata" />
+                            )}
+                          </span>
+                          <span className="dock-mv-bg-editor__library-copy">
+                            <span className="dock-mv-bg-editor__library-name">{item.name}</span>
+                            <span className="dock-mv-bg-editor__library-meta">{resolving ? "Selecting..." : formatMediaItemMeta(item)}</span>
+                          </span>
+                          <span className="dock-mv-bg-editor__library-check">
+                            <Icon name={selected ? "check" : "arrow_forward"} size={13} />
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="dock-mv-bg-editor__library-status">
+                    <Icon name={mediaType === "image" ? "image" : "movie"} size={14} />
+                    <span>{mediaLibraryItems.length > 0 ? "No media matches that search." : mediaType === "image" ? "No saved images yet." : "No saved videos yet."}</span>
+                  </div>
+                )}
                 <label
                   className={[
                     "dock-mv-bg-editor__media-card",
@@ -1427,7 +1778,7 @@ function BackgroundSection({
                   </div>
                   <div className="dock-mv-bg-editor__media-copy">
                     <div className="dock-mv-bg-editor__media-title">
-                      {uploading ? "Saving media..." : hasSelectedMedia ? `${t('multiview.bgImageSelected')}: ${selectedMediaName}` : mediaTitle}
+                      {uploading ? (uploadStatus || "Saving original media...") : hasSelectedMedia ? `${t('multiview.bgMediaSelected', 'Selected')}: ${selectedMediaName}` : mediaTitle}
                     </div>
                     <div className="dock-mv-bg-editor__media-hint">{hasSelectedMedia ? "" : mediaHint}</div>
                   </div>
@@ -1451,6 +1802,9 @@ function BackgroundSection({
                     {t('common.clear')}
                   </button>
                 )}
+                {mediaLibraryError && (
+                  <div className="dock-mv-bg-editor__library-error">{mediaLibraryError}</div>
+                )}
               </div>
             )}
 
@@ -1462,7 +1816,7 @@ function BackgroundSection({
                   onChange={(e) => onChange({ ...background, sceneName: e.target.value })}
                 >
                   <option value="">— {t('multiview.selectScene')} —</option>
-                  {obsScenes.map(s => <option key={s} value={s}>{s}</option>)}
+                  {selectableObsScenes.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
             )}
@@ -1690,7 +2044,7 @@ function MVCard({
       </div>
 
       {/* Layout Preview — shown below template */}
-      {layout && <LayoutMiniPreview layout={layout} thumbnails={mv.slotThumbnails} frameId={mv.layoutFrameId} slotFrames={mv.slotFrames} frameThickness={mv.frameThickness} frameCornerRadius={mv.frameCornerRadius} frameOpacity={mv.frameOpacity} frameColor={mv.frameColor} />}
+      {layout && <LayoutMiniPreview layout={layout} thumbnails={mv.slotThumbnails} slotFraming={mv.slotFraming} frameId={mv.layoutFrameId} slotFrames={mv.slotFrames} frameThickness={mv.frameThickness} frameCornerRadius={mv.frameCornerRadius} frameOpacity={mv.frameOpacity} frameColor={mv.frameColor} />}
 
       {/* Frames — compact property row */}
       <div className="dock-mv-property">
@@ -1789,7 +2143,7 @@ function MVCard({
         {layout.slots.map((slot, slotIdx) => {
           const val = mv.assignments[slot.id] ?? "";
           const mode = mv.slotModes?.[slot.id] ?? "scene";
-          const framing = mv.slotFraming?.[slot.id] ?? { displayMode: "fill", zoom: 1, focalX: 0.5, focalY: 0.5 };
+          const framing = mv.slotFraming?.[slot.id] ?? DEFAULT_SLOT_FRAMING;
           return (
             <div key={slot.id}>
               <SlotControl
@@ -1887,6 +2241,11 @@ export default function DockMultiviewTab() {
   const mountedRef = useRef(true);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const obsScanBusyRef = useRef(false);
+  const obsContentLoadedRef = useRef(false);
+  const obsSceneSignatureRef = useRef("");
+  const thumbnailRefreshSignatureRef = useRef("");
+  const thumbnailRefreshAtRef = useRef(0);
+  const savedListRef = useRef<SavedMultiView[]>([]);
 
   // Show layouts that are added via gallery OR in use by saved cards
   const [addedLayoutIds, setAddedLayoutIds] = useState<Set<string>>(() => loadLocalAddedLayoutIds());
@@ -1933,8 +2292,9 @@ export default function DockMultiviewTab() {
     mergeLocalIds();
     refreshFromDockData();
     const interval = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
       refreshFromDockData();
-    }, 5000);
+    }, 30000);
     window.addEventListener("storage", handleStorage);
     window.addEventListener(MULTIVIEW_ADDED_LAYOUTS_CHANGED_EVENT, handleAddedLayoutsChanged);
     return () => {
@@ -1996,12 +2356,94 @@ export default function DockMultiviewTab() {
 
   const obsReady = useDockObsReady();
 
+  useEffect(() => {
+    savedListRef.current = savedList;
+  }, [savedList]);
+
+  useEffect(() => {
+    obsContentLoadedRef.current = obsContentLoaded;
+  }, [obsContentLoaded]);
+
+  const refreshAssignedThumbnails = useCallback(async (
+    availableSceneNames: string[],
+    options?: { force?: boolean },
+  ) => {
+    if (!dockObsClient.isConnected) return;
+    const available = new Set(availableSceneNames);
+    const snapshot = savedListRef.current;
+    const targetKeys = new Set<string>();
+    const captureSources = new Set<string>();
+
+    for (const mv of snapshot) {
+      for (const [slotId, sourceName] of Object.entries(mv.assignments ?? {})) {
+        if (!sourceName) continue;
+        const mode = mv.slotModes?.[slotId] ?? "scene";
+        if (mode !== "scene") continue;
+        targetKeys.add(`${mv.id}:${slotId}:${sourceName}`);
+        if (available.has(sourceName)) {
+          captureSources.add(sourceName);
+        }
+      }
+    }
+
+    if (targetKeys.size === 0) return;
+
+    const captureSourceNames = [...captureSources].sort();
+    const signature = `${[...targetKeys].sort().join("|")}::${captureSourceNames.join("|")}`;
+    const now = Date.now();
+    if (!options?.force && signature === thumbnailRefreshSignatureRef.current && now - thumbnailRefreshAtRef.current < 60000) {
+      return;
+    }
+    thumbnailRefreshSignatureRef.current = signature;
+    thumbnailRefreshAtRef.current = now;
+
+    const captures = new Map<string, string | null>();
+    await Promise.all(captureSourceNames.map(async (sourceName) => {
+      captures.set(sourceName, await captureMvSourceThumbnail(sourceName));
+    }));
+
+    if (!mountedRef.current) return;
+
+    setSavedList((current) => {
+      let changed = false;
+      const next = current.map((mv) => {
+        const currentThumbs = mv.slotThumbnails ?? {};
+        let nextThumbs = currentThumbs;
+
+        for (const [slotId, sourceName] of Object.entries(mv.assignments ?? {})) {
+          const key = `${mv.id}:${slotId}:${sourceName}`;
+          if (!targetKeys.has(key)) continue;
+          const mode = mv.slotModes?.[slotId] ?? "scene";
+          if (mode !== "scene") continue;
+
+          const nextUrl = available.has(sourceName) ? captures.get(sourceName) ?? null : null;
+          if (nextUrl) {
+            if (nextThumbs[slotId] !== nextUrl) {
+              if (nextThumbs === currentThumbs) nextThumbs = { ...currentThumbs };
+              nextThumbs[slotId] = nextUrl;
+              changed = true;
+            }
+          } else if (nextThumbs[slotId]) {
+            if (nextThumbs === currentThumbs) nextThumbs = { ...currentThumbs };
+            delete nextThumbs[slotId];
+            changed = true;
+          }
+        }
+
+        return nextThumbs === currentThumbs ? mv : { ...mv, slotThumbnails: nextThumbs };
+      });
+
+      if (changed) saveSaved(next);
+      return changed ? next : current;
+    });
+  }, []);
+
   // ── Single GetSceneList + GetInputList call ──
-  const refreshObsScenes = useCallback(async () => {
-    if (!mountedRef.current) { console.log("[MV] refreshObsScenes bailed — not mounted"); return; }
-    if (obsScanBusyRef.current) { console.log("[MV] refreshObsScenes bailed — scan busy"); return; }
+  const refreshObsScenes = useCallback(async (options?: { forceThumbnails?: boolean }) => {
+    if (!mountedRef.current) return;
+    if (obsScanBusyRef.current) return;
     obsScanBusyRef.current = true;
-    setObsContentLoading(true);
+    if (!obsContentLoadedRef.current) setObsContentLoading(true);
     try {
       const result = await Promise.race([
         Promise.all([
@@ -2016,10 +2458,15 @@ export default function DockMultiviewTab() {
       const scenes = sceneResp.scenes ?? [];
       const inputs = inputResp.inputs ?? [];
       if (!mountedRef.current) return;
-      console.log("[MV] refreshObsScenes OK", { sceneCount: scenes.length, scenes: scenes.map(s => s.sceneName), inputCount: inputs.length });
-      setObsScenes(scenes.map(s => s.sceneName));
-      setObsSources(inputs.map(i => i.inputName));
+      const sceneNames = scenes.map(s => s.sceneName);
+      const sourceNames = inputs.map(i => i.inputName);
+      const sceneSignature = sceneNames.join("\n");
+      const scenesChanged = sceneSignature !== obsSceneSignatureRef.current;
+      obsSceneSignatureRef.current = sceneSignature;
+      setObsScenes(current => areStringListsEqual(current, sceneNames) ? current : sceneNames);
+      setObsSources(current => areStringListsEqual(current, sourceNames) ? current : sourceNames);
       setObsContentLoaded(true);
+      void refreshAssignedThumbnails(sceneNames, { force: Boolean(options?.forceThumbnails) || scenesChanged });
     } catch (err) {
       console.warn("[MV] refreshObsScenes FAILED", err);
       if (mountedRef.current) setObsContentLoaded(true);
@@ -2027,18 +2474,17 @@ export default function DockMultiviewTab() {
       obsScanBusyRef.current = false;
       if (mountedRef.current) setObsContentLoading(false);
     }
-  }, []);
+  }, [refreshAssignedThumbnails]);
 
   useEffect(() => {
-    if (!obsReady) { console.log("[MV] effect bailed — obsReady is false"); return; }
-    console.log("[MV] effect running — calling refreshObsScenes");
+    if (!obsReady) return;
     mountedRef.current = true;
-    refreshObsScenes();
+    refreshObsScenes({ forceThumbnails: true });
     const interval = setInterval(() => {
       if (document.visibilityState === "hidden") return;
       refreshObsScenes();
     }, getRecommendedPollingInterval(15000));
-    return () => { console.log("[MV] effect cleanup"); mountedRef.current = false; clearInterval(interval); };
+    return () => { mountedRef.current = false; clearInterval(interval); };
   }, [obsReady, refreshObsScenes]);
 
   // ── Show feedback briefly ──
@@ -2065,6 +2511,7 @@ export default function DockMultiviewTab() {
       assignments: {},
       slotModes: {},
       slotFraming: {},
+      slotThumbnails: {},
       updatedAt: new Date().toISOString(),
     } : m);
     setSavedList(next);
@@ -2075,36 +2522,30 @@ export default function DockMultiviewTab() {
     const now = new Date().toISOString();
     const next = savedList.map(m => {
       if (m.id !== id) return m;
+      const slotThumbnails = { ...(m.slotThumbnails ?? {}) };
+      delete slotThumbnails[slotId];
       return {
         ...m,
         assignments: { ...m.assignments, [slotId]: val },
         slotModes: { ...m.slotModes, [slotId]: mode },
+        slotFraming: m.slotFraming?.[slotId] ? m.slotFraming : { ...m.slotFraming, [slotId]: DEFAULT_SLOT_FRAMING },
+        slotThumbnails,
         updatedAt: now,
       };
     });
     setSavedList(next);
     saveSaved(next);
-    // Capture screenshot of assigned scene/source for thumbnail preview.
     if (dockObsClient.isConnected && val) {
-      dockObsClient.call("GetSourceScreenshot", {
-        sourceName: val,
-        imageFormat: "jpeg",
-        imageWidth: 320,
-        imageHeight: 180,
-        imageCompressionQuality: 60,
-      }).then((resp: unknown) => {
-        const data = (resp as { imageData?: string })?.imageData;
-        if (data) {
-          const url = data.startsWith("data:") ? data : `data:image/jpeg;base64,${data}`;
-          setSavedList(prev => {
-            const updated = prev.map(m => {
-              if (m.id !== id) return m;
-              return { ...m, slotThumbnails: { ...m.slotThumbnails, [slotId]: url } };
-            });
-            saveSaved(updated);
-            return updated;
+      captureMvSourceThumbnail(val).then((url) => {
+        if (!url) return;
+        setSavedList(prev => {
+          const updated = prev.map(m => {
+            if (m.id !== id || m.assignments?.[slotId] !== val) return m;
+            return { ...m, slotThumbnails: { ...(m.slotThumbnails ?? {}), [slotId]: url } };
           });
-        }
+          saveSaved(updated);
+          return updated;
+        });
       }).catch(() => { });
     }
   }, [savedList]);
@@ -2127,7 +2568,9 @@ export default function DockMultiviewTab() {
       delete modes[slotId];
       const framing = { ...m.slotFraming };
       delete framing[slotId];
-      return { ...m, assignments: assigns, slotModes: modes, slotFraming: framing, updatedAt: new Date().toISOString() };
+      const slotThumbnails = { ...(m.slotThumbnails ?? {}) };
+      delete slotThumbnails[slotId];
+      return { ...m, assignments: assigns, slotModes: modes, slotFraming: framing, slotThumbnails, updatedAt: new Date().toISOString() };
     });
     setSavedList(next);
     saveSaved(next);
@@ -2368,7 +2811,7 @@ export default function DockMultiviewTab() {
         } else {
           const slot = layout.slots.find(s => s.id === entry.slotId);
           if (!slot) continue;
-          const framing = mv.slotFraming?.[entry.slotId] ?? { displayMode: "fill", zoom: 1, focalX: 0.5, focalY: 0.5 };
+          const framing = mv.slotFraming?.[entry.slotId] ?? DEFAULT_SLOT_FRAMING;
           const sourceSize = entry.sourceSize ?? normalizeSourceSize();
           const tx = calculateSlotTransform(
             sourceSize.width, sourceSize.height,
@@ -2382,8 +2825,8 @@ export default function DockMultiviewTab() {
             sceneItemTransform: {
               positionX: hasCrop ? slot.x : tx.positionX,
               positionY: hasCrop ? slot.y : tx.positionY,
-              scaleX: tx.scale,
-              scaleY: tx.scale,
+              scaleX: tx.scaleX ?? tx.scale,
+              scaleY: tx.scaleY ?? tx.scale,
               rotation: 0,
               boundsType: "OBS_BOUNDS_NONE",
               cropLeft: Math.round(tx.cropLeft ?? 0),
@@ -2427,7 +2870,7 @@ export default function DockMultiviewTab() {
       try { await dockObsClient.call("SetCurrentPreviewScene", { sceneName }); } catch { }
 
       showFeedback("success", `"${sceneName}" pushed to OBS`);
-      refreshObsScenes();
+      refreshObsScenes({ forceThumbnails: true });
     } catch (err) {
       showFeedback("error", err instanceof Error ? err.message : t('multiview.pushFailed'));
     } finally {
@@ -2462,7 +2905,7 @@ export default function DockMultiviewTab() {
       } catch { }
 
       showFeedback("success", `"${sceneName}" cleared`);
-      refreshObsScenes();
+      refreshObsScenes({ forceThumbnails: true });
     } catch { /* ignore */ }
     finally { if (mountedRef.current) setClearingId(null); }
   }, [refreshObsScenes, showFeedback]);

@@ -671,7 +671,8 @@ fn overlay_auth_status_json() -> String {
             if let Some(obj) = value.as_object_mut() {
                 obj.insert("authenticated".to_string(), serde_json::Value::Bool(true));
             }
-            serde_json::to_string(&value).unwrap_or_else(|_| r#"{"authenticated":true}"#.to_string())
+            serde_json::to_string(&value)
+                .unwrap_or_else(|_| r#"{"authenticated":true}"#.to_string())
         }
         None => r#"{"authenticated":false,"deviceId":null}"#.to_string(),
     }
@@ -684,7 +685,28 @@ fn overlay_has_active_auth_session() -> bool {
 fn overlay_is_allowed_app_document(clean_path: &str) -> bool {
     matches!(
         clean_path,
-        "" | "index.html" | "dock" | "dock.html" | "lm-dock" | "lm-dock.html"
+        ""
+            | "index.html"
+            | "dock"
+            | "dock.html"
+            | "lm-dock"
+            | "lm-dock.html"
+            // OBS/projection renderers must load even before the dock auth
+            // session is restored. They receive content through local overlay
+            // packets; blocking their HTML turns browser sources into a 401.
+            | "mce-bible-overlay.html"
+            | "mce-worship-overlay.html"
+            | "mce-note.html"
+            | "mce-media-overlay.html"
+            | "lower-third-overlay.html"
+            | "bible-overlay-bg.html"
+            | "bible-overlay-lower-third.html"
+            | "countdown-overlay.html"
+            | "countdown-bg-overlay.html"
+            | "pre-service-countdown.html"
+            | "pre-service-media.html"
+            | "live-tool-overlay.html"
+            | "presentation.html"
     )
 }
 
@@ -1232,7 +1254,11 @@ fn prepare_remote_media_url(
     let safe_name = source_path
         .file_name()
         .and_then(|value| value.to_str())
-        .or_else(|| Path::new(file_name.trim()).file_name().and_then(|value| value.to_str()))
+        .or_else(|| {
+            Path::new(file_name.trim())
+                .file_name()
+                .and_then(|value| value.to_str())
+        })
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| "Could not determine media file name".to_string())?
         .replace(['/', '\\'], "_");
@@ -4070,8 +4096,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
     };
 
     // Use a fixed port so the OBS dock / overlay URL never changes
-    let server = match tiny_http::Server::http("0.0.0.0:45678")
-    {
+    let server = match tiny_http::Server::http("0.0.0.0:45678") {
         Ok(s) => s,
         Err(e) => {
             eprintln!("[Overlay Server] Failed to start: {}. Overlay URLs will fall back to window.location.origin.", e);
@@ -4700,10 +4725,11 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                             continue;
                         }
                         Err(_) => {
-                            let resp = tiny_http::Response::from_string(r#"{"error":"Invalid JSON"}"#)
-                                .with_status_code(400)
-                                .with_header(header)
-                                .with_header(cors);
+                            let resp =
+                                tiny_http::Response::from_string(r#"{"error":"Invalid JSON"}"#)
+                                    .with_status_code(400)
+                                    .with_header(header)
+                                    .with_header(cors);
                             let _ = request.respond(resp);
                             continue;
                         }
@@ -5325,8 +5351,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 let resp = tiny_http::Response::from_string("Not Found")
                     .with_status_code(404)
                     .with_header(
-                        tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*")
-                            .unwrap(),
+                        tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap(),
                     );
                 let _ = request.respond(resp);
             } else {
@@ -5445,7 +5470,10 @@ mod app_icon {
             // project root
             {
                 for icon_name in &icon_names {
-                    let path = project_root.join("public").join("app_icons").join(icon_name);
+                    let path = project_root
+                        .join("public")
+                        .join("app_icons")
+                        .join(icon_name);
                     println!(
                         "[AppIcon] Checking dev fallback: {:?} exists={}",
                         path,
@@ -5514,20 +5542,41 @@ async fn set_app_icon(_icon_name: String) -> Result<bool, String> {
 
 // ── Mobile Companion Commands ───────────────────────────────────────────────
 
-/// Generate a new pairing token and return pairing info for the QR code.
+/// Return stable pairing info for the QR code.
 #[tauri::command]
 async fn get_mobile_pairing_info() -> Result<serde_json::Value, String> {
-    let token = mobile_companion::generate_new_pairing_token().await;
+    let token = mobile_companion::get_or_create_pairing_token().await;
     let port = mobile_companion::mobile_server_port();
 
     // Get local IP addresses
     let local_ip = get_local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
 
     Ok(serde_json::json!({
+        "version": 1,
         "ip": local_ip,
         "port": port,
+        "wsPort": port,
+        "apiPort": OVERLAY_PORT.load(Ordering::Relaxed),
         "pairingToken": token,
     }))
+}
+
+#[tauri::command]
+async fn complete_mobile_command(
+    command_id: String,
+    ok: bool,
+    payload: Option<serde_json::Value>,
+    error: Option<String>,
+) -> Result<(), String> {
+    mobile_companion::complete_mobile_command(
+        command_id,
+        mobile_companion::MobileCommandCompletion {
+            ok,
+            payload: payload.unwrap_or(serde_json::Value::Null),
+            error,
+        },
+    )
+    .await
 }
 
 /// Called by the dock when it connects to OBS — provides credentials
@@ -5798,8 +5847,7 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     if let Err(error) =
-                        app_icon::set_app_icon(app_handle, "app_icon_general.png".to_string())
-                            .await
+                        app_icon::set_app_icon(app_handle, "app_icon_general.png".to_string()).await
                     {
                         eprintln!("[AppIcon] Failed to apply dev startup icon: {}", error);
                     }
@@ -5813,8 +5861,12 @@ pub fn run() {
 
             // Start the mobile companion WebSocket server
             let mobile_port = 8765u16;
+            let mobile_app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = mobile_companion::start_mobile_server(mobile_port).await {
+                let _ = mobile_companion::get_or_create_pairing_token().await;
+                if let Err(e) =
+                    mobile_companion::start_mobile_server(mobile_port, mobile_app_handle).await
+                {
                     eprintln!("[MobileCompanion] Server failed: {}", e);
                 }
             });
@@ -5882,6 +5934,7 @@ pub fn run() {
             local_llm::install_local_llm_model,
             local_llm::generate_local_llm_text,
             get_mobile_pairing_info,
+            complete_mobile_command,
             save_obs_connection_for_mobile,
             get_mobile_server_status,
             get_presentation_remote_info,

@@ -9,10 +9,8 @@
 import type { MediaItem } from "../library/libraryTypes";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { dockClient } from "../services/dockBridge";
-import { compressImage, compressVideo } from "./mediaCompression";
 import { isSupportedMediaFile } from "../services/mediaValidation";
 import { getUserScopedKey } from "../services/userScopedStorage";
-import { getDefaultImageTargetBytes, getDefaultVideoTargetBytes, isCompressionEnabled } from "../services/desktopConfig";
 
 const LOCAL_LIBRARY_KEY = "ocs-dock-media-library-v1";
 
@@ -242,7 +240,7 @@ export interface UploadResult {
 
 export async function uploadFileToDock(
   file: File,
-  onProgress?: (status: string) => void,
+  _onProgress?: (status: string) => void,
 ): Promise<UploadResult> {
   console.log("[UPLOAD] uploadFileToDock: start", { name: file.name, size: file.size, type: file.type });
   if (!isSupportedMediaFile(file)) {
@@ -251,34 +249,10 @@ export async function uploadFileToDock(
   }
   const category = file.type.startsWith("video/") ? "video" : "image";
 
-  // Compress before saving (respects admin compression toggle)
-  let processedFile: File = file;
-  if (isCompressionEnabled()) {
-    try {
-      if (category === "image") {
-        if (file.size > getDefaultImageTargetBytes()) {
-          console.log("[UPLOAD] Compressing image…");
-          onProgress?.("Compressing image…");
-          processedFile = await compressImage(file);
-          console.log("[UPLOAD] Image compressed:", processedFile.size);
-        }
-      } else {
-        if (file.size > getDefaultVideoTargetBytes()) {
-          console.log("[UPLOAD] Compressing video…");
-          onProgress?.("Compressing video…");
-          processedFile = await compressVideo(file);
-          console.log("[UPLOAD] Video compressed:", processedFile.size);
-        }
-      }
-    } catch (err) {
-      console.warn("[UPLOAD] Compression failed, using original:", err);
-    }
-  }
-
-  const safeName = `media_${Date.now()}_${getSafeFileName(processedFile.name)}`;
+  const safeName = `media_${Date.now()}_${getSafeFileName(file.name)}`;
   const overlayBaseUrl = getOverlayBaseUrlSync();
   const previewUrl = `${overlayBaseUrl}/uploads/${encodeURIComponent(safeName)}`;
-  const objectUrl = URL.createObjectURL(processedFile);
+  const objectUrl = URL.createObjectURL(file);
 
   let thumbnailUrl = "";
   let durationSec: number | undefined;
@@ -298,7 +272,7 @@ export async function uploadFileToDock(
   }
 
   console.log("[UPLOAD] Saving to disk:", { safeName });
-  const diskPath = await saveToDisk(processedFile, safeName);
+  const diskPath = await saveToDisk(file, safeName);
   console.log("[UPLOAD] Disk save returned:", diskPath);
 
   const item: MediaItem = {
@@ -310,8 +284,8 @@ export async function uploadFileToDock(
     diskFileName: safeName,
     thumbnailUrl: thumbnailUrl || undefined,
     durationSec: durationSec ? Math.round(durationSec) : undefined,
-    fileSize: processedFile.size,
-    mimeType: processedFile.type,
+    fileSize: file.size,
+    mimeType: file.type,
     createdAt: new Date().toISOString(),
   };
 

@@ -107,6 +107,39 @@ export interface LegacyCompatiblePlanTierConfig {
   entitlements: LegacyCompatibleEntitlements;
 }
 
+export interface LegacyCompatibleSpecialOffer {
+  id: string;
+  enabled: boolean;
+  name: string;
+  description: string;
+  badgeText?: string;
+  ctaText?: string;
+  kind: "one_time" | "discounted_subscription";
+  plan: Exclude<CanonicalPlanId, "free">;
+  billingCycle: "monthly" | "yearly" | "lifetime";
+  price: {
+    NGN?: number;
+    USD?: number;
+    [currency: string]: number | undefined;
+  };
+  discountPercent?: number | null;
+  discountDurationMonths?: number | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  eligibility?: {
+    minAccountAgeDays?: number | null;
+    maxAccountAgeDays?: number | null;
+    allowedPlans?: string[];
+    eligibleUserIds?: string[];
+    eligibleEmails?: string[];
+    includeTrialUsers?: boolean;
+    excludeActivePaidUsers?: boolean;
+  };
+  sortOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface LegacyCompatiblePlanConfig {
   version: number;
   plans: Record<string, LegacyCompatiblePlanTierConfig>;
@@ -166,6 +199,7 @@ export interface LegacyCompatiblePlanConfig {
     bg: string;
     color: string;
   }>;
+  specialOffers?: LegacyCompatibleSpecialOffer[];
   updatedAt: string;
 }
 
@@ -546,7 +580,7 @@ export function buildLegacyCompatiblePlanConfig(options?: {
   });
 
   return {
-    version: 6,
+    version: 7,
     plans: {
       free: freeTier,
       trial: {
@@ -695,6 +729,7 @@ export function buildLegacyCompatiblePlanConfig(options?: {
         color: "text-amber-600",
       },
     ],
+    specialOffers: [],
     updatedAt,
   };
 }

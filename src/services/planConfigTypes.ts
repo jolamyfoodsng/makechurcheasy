@@ -86,12 +86,46 @@ export interface CreditCostConfig {
   description: string;
 }
 
+export interface SpecialOfferConfig {
+  id: string;
+  enabled: boolean;
+  name: string;
+  description: string;
+  badgeText?: string;
+  ctaText?: string;
+  kind: "one_time" | "discounted_subscription";
+  plan: "basic" | "growth";
+  billingCycle: "monthly" | "yearly" | "lifetime";
+  price: {
+    NGN?: number;
+    USD?: number;
+    [currency: string]: number | undefined;
+  };
+  discountPercent?: number | null;
+  discountDurationMonths?: number | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  eligibility?: {
+    minAccountAgeDays?: number | null;
+    maxAccountAgeDays?: number | null;
+    allowedPlans?: string[];
+    eligibleUserIds?: string[];
+    eligibleEmails?: string[];
+    includeTrialUsers?: boolean;
+    excludeActivePaidUsers?: boolean;
+  };
+  sortOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface PlanConfig {
   _id?: unknown;
   version: number;
   plans: Record<string, PlanTierConfig>;
   creditCosts: CreditCostConfig[];
   translationWordsPerCredit: number;
+  specialOffers?: SpecialOfferConfig[];
   updatedAt: string;
 }
 

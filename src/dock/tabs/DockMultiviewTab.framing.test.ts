@@ -5,7 +5,7 @@ import { calculateSlotTransform } from "./DockMultiviewTab";
 const slot = { x: 0, y: 0, width: 924, height: 980 };
 
 describe("DockMultiviewTab framing transform", () => {
-  it("fits a source inside the slot without cropping", () => {
+  it("stretches a source to the selected slot without cropping", () => {
     const tx = calculateSlotTransform(1920, 1080, slot, {
       mode: "fit",
       focalX: 0.5,
@@ -13,11 +13,13 @@ describe("DockMultiviewTab framing transform", () => {
       zoom: 1,
     });
 
-    expect(tx.scale).toBeCloseTo(0.48125, 5);
+    expect(tx.scale).toBeCloseTo(0.907407, 5);
+    expect(tx.scaleX).toBeCloseTo(0.48125, 5);
+    expect(tx.scaleY).toBeCloseTo(0.907407, 5);
     expect(tx.renderedWidth).toBeCloseTo(924, 5);
-    expect(tx.renderedHeight).toBeCloseTo(519.75, 5);
+    expect(tx.renderedHeight).toBeCloseTo(980, 5);
     expect(tx.positionX).toBeCloseTo(0, 5);
-    expect(tx.positionY).toBeCloseTo(230.125, 5);
+    expect(tx.positionY).toBeCloseTo(0, 5);
     expect(tx.cropLeft ?? 0).toBe(0);
   });
 

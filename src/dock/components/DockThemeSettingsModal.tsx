@@ -7,6 +7,11 @@ import BackgroundPickerCard from "./BackgroundPickerCard";
 import type { DockBackgroundPreset } from "../dockConsoleTheme";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
 
+export interface DockThemeSettingsSaveContext {
+  backgroundPreset?: DockBackgroundPreset | null;
+  selectedTheme?: BibleTheme | null;
+}
+
 interface Props {
   selectedThemeId: string | null;
   onSelect: (theme: BibleTheme) => void;
@@ -15,7 +20,10 @@ interface Props {
   sampleReference?: string;
   quickSettings: DockFullscreenQuickThemeSettings;
   defaultQuickSettings?: DockFullscreenQuickThemeSettings;
-  onQuickSettingsSave: (settings: DockFullscreenQuickThemeSettings) => void | Promise<void>;
+  onQuickSettingsSave: (
+    settings: DockFullscreenQuickThemeSettings,
+    context?: DockThemeSettingsSaveContext,
+  ) => void | Promise<void>;
   resolveThemeQuickSettings?: (theme: BibleTheme) => DockFullscreenQuickThemeSettings;
   title: string;
   subtitle: string;
@@ -188,7 +196,10 @@ export default function DockThemeSettingsModal({
         console.warn("[DockThemeSettingsModal] pre-save apply failed:", error);
       }
 
-      void Promise.resolve(onQuickSettingsSave(nextSettings))
+      void Promise.resolve(onQuickSettingsSave(nextSettings, {
+        backgroundPreset: nextPreset,
+        selectedTheme: nextTheme,
+      }))
         .catch((error) => console.warn("[DockThemeSettingsModal] quick settings save failed:", error))
         .finally(() => setSaving(false));
     };

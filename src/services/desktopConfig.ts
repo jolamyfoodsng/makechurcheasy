@@ -144,38 +144,6 @@ export function getDefaultOBSPort(): string {
 }
 
 /**
- * Synchronous helper to get the image compression target size in bytes.
- */
-export function getDefaultImageTargetBytes(): number {
-  const cached = readCache();
-  return cached?.storage.imageTargetSizeBytes ?? DEFAULT_DESKTOP_CONFIG.storage.imageTargetSizeBytes;
-}
-
-/**
- * Synchronous helper to get the video compression target size in bytes.
- */
-export function getDefaultVideoTargetBytes(): number {
-  const cached = readCache();
-  return cached?.storage.videoTargetSizeBytes ?? DEFAULT_DESKTOP_CONFIG.storage.videoTargetSizeBytes;
-}
-
-/**
- * Synchronous helper to get the image max dimension (width/height cap).
- */
-export function getDefaultImageMaxDimension(): number {
-  const cached = readCache();
-  return cached?.storage.imageMaxDimension ?? DEFAULT_DESKTOP_CONFIG.storage.imageMaxDimension;
-}
-
-/**
- * Synchronous helper to get the video max width.
- */
-export function getDefaultVideoMaxWidth(): number {
-  const cached = readCache();
-  return cached?.storage.videoMaxWidth ?? DEFAULT_DESKTOP_CONFIG.storage.videoMaxWidth;
-}
-
-/**
  * Synchronous helper to get allowed image extensions.
  */
 export function getDefaultImageExtensions(): string[] {
@@ -189,14 +157,6 @@ export function getDefaultImageExtensions(): string[] {
 export function getDefaultVideoExtensions(): string[] {
   const cached = readCache();
   return cached?.storage.allowedVideoExtensions ?? DEFAULT_DESKTOP_CONFIG.storage.allowedVideoExtensions;
-}
-
-/**
- * Synchronous helper to check if compression is enabled.
- */
-export function isCompressionEnabled(): boolean {
-  const cached = readCache();
-  return cached?.storage.compressionEnabled ?? DEFAULT_DESKTOP_CONFIG.storage.compressionEnabled;
 }
 
 // ── Theme sync helpers ──────────────────────────────────────────────────────

@@ -42,6 +42,13 @@ import {
   type MVSettings as MVSettingsType,
   type SpeakerProfileSetting
 } from "../mvStore";
+import {
+  checkForUpdate,
+  downloadAndInstallFromGitHub,
+  downloadAndInstallUpdate,
+  type DownloadProgress,
+  type Update,
+} from "../../services/updateService";
 
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -93,6 +100,9 @@ const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
 type SettingsTab = "general" | "obs" | "mobile" | "appearance" | "branding" | "bible" | "usage" | "audio";
 
 const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "", imageUrl: "" };
+const CHURCH_PROFILE_URL = "https://makechurcheazy.com/church-profile";
+
+type ManualUpdateStatus = "idle" | "checking" | "available" | "downloading" | "installing" | "relaunching" | "up-to-date" | "error";
 
 /* ── Helpers ── */
 function resolveLogoPreviewSrc(path: string): string {
@@ -127,6 +137,13 @@ function resolveSpeakerProfiles(settings: MVSettingsType): SpeakerProfileSetting
   return parseLegacyPastorNames(settings.pastorNames);
 }
 
+function formatUpdateBytes(bytes: number): string {
+  if (bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /* ── Main Component ── */
 export function MVSettings() {
   const { t } = useTranslation();
@@ -155,6 +172,11 @@ export function MVSettings() {
   });
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [brandingProfileFound, setBrandingProfileFound] = useState<boolean | null>(null);
+  const [manualUpdateStatus, setManualUpdateStatus] = useState<ManualUpdateStatus>("idle");
+  const [manualUpdateMessage, setManualUpdateMessage] = useState("");
+  const [manualUpdate, setManualUpdate] = useState<Update | null>(null);
+  const [manualUpdateProgress, setManualUpdateProgress] = useState<DownloadProgress>({ contentLength: 0, downloaded: 0 });
 
   // ── Bible settings state ──
   const { state: bibleState, dispatch: bibleDispatch, setTheme: bibleSetTheme } = useBible();
@@ -288,6 +310,15 @@ export function MVSettings() {
   const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => getResolvedInterfaceLanguage());
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
+  const manualUpdateBusy =
+    manualUpdateStatus === "checking" ||
+    manualUpdateStatus === "downloading" ||
+    manualUpdateStatus === "installing" ||
+    manualUpdateStatus === "relaunching";
+  const manualUpdatePercent =
+    manualUpdateProgress.contentLength > 0
+      ? Math.round((manualUpdateProgress.downloaded / manualUpdateProgress.contentLength) * 100)
+      : 0;
 
   // ── Toast system ──
   const [toasts, setToasts] = useState<Array<{ id: number; message: string; type: "success" | "accent" }>>([]);
@@ -421,6 +452,7 @@ export function MVSettings() {
     try {
       const { syncChurchProfile } = await import("../../services/churchProfileSync");
       const result = await syncChurchProfile();
+      setBrandingProfileFound(result.profileFound);
       // Re-read settings after sync to reflect updated values
       const fresh = db.getSettings();
       setSettings(fresh);
@@ -428,6 +460,7 @@ export function MVSettings() {
       setSpeakerProfiles(profiles.length > 0 ? profiles : [{ ...EMPTY_SPEAKER_PROFILE }]);
       setSyncStatus(result.message);
     } catch {
+      setBrandingProfileFound(false);
       setSyncStatus("Sync failed unexpectedly.");
     } finally {
       setSyncing(false);
@@ -516,6 +549,70 @@ export function MVSettings() {
     _setBrandLogoStatus(null);
     triggerToast(t("mvSettings.toast.brandingSettingsReset"), "success");
   };
+
+  const handleOpenChurchProfile = useCallback(() => {
+    window.open(CHURCH_PROFILE_URL, "_blank", "noopener,noreferrer");
+  }, []);
+
+  const handleCheckForUpdates = useCallback(async () => {
+    setManualUpdateStatus("checking");
+    setManualUpdateMessage("");
+    setManualUpdate(null);
+    setManualUpdateProgress({ contentLength: 0, downloaded: 0 });
+    triggerToast(t("mvSettings.toast.checkingForUpdates"), "accent");
+
+    const result = await checkForUpdate();
+    if (result.available && result.update) {
+      setManualUpdate(result.update);
+      setManualUpdateStatus("available");
+      setManualUpdateMessage(
+        t("mvSettings.general.updateAvailableMessage", {
+          version: result.version ?? "latest",
+        }),
+      );
+      triggerToast(t("mvSettings.toast.updateAvailable"), "success");
+      return;
+    }
+
+    if (result.error) {
+      setManualUpdateStatus("error");
+      setManualUpdateMessage(result.error);
+      triggerToast(t("mvSettings.toast.updateCheckFailed"), "accent");
+      return;
+    }
+
+    setManualUpdateStatus("up-to-date");
+    setManualUpdateMessage(t("mvSettings.general.upToDateMessage"));
+    triggerToast(t("mvSettings.toast.upToDate"), "success");
+  }, [t, triggerToast]);
+
+  const handleInstallUpdate = useCallback(async () => {
+    if (manualUpdateBusy) return;
+    setManualUpdateStatus("downloading");
+    setManualUpdateMessage("");
+    setManualUpdateProgress({ contentLength: 0, downloaded: 0 });
+
+    try {
+      if (manualUpdate) {
+        await downloadAndInstallUpdate(
+          manualUpdate,
+          (progress) => setManualUpdateProgress(progress),
+          (status) => setManualUpdateStatus(status),
+        );
+        return;
+      }
+
+      await downloadAndInstallFromGitHub(
+        (progress) => setManualUpdateProgress(progress),
+        (status) => setManualUpdateStatus(status),
+      );
+    } catch (err) {
+      console.error("[MVSettings] Manual update failed:", err);
+      setManualUpdateStatus("error");
+      setManualUpdateMessage(err instanceof Error ? err.message : t("mvSettings.general.updateFailedMessage"));
+      triggerToast(t("mvSettings.toast.updateInstallFailed"), "accent");
+    }
+  }, [manualUpdate, manualUpdateBusy, t, triggerToast]);
 
   const handleResetChurchOnboarding = useCallback(() => {
     update({ churchProfileOnboardingCompleted: false });
@@ -608,11 +705,12 @@ export function MVSettings() {
   const mobilePairingPayload = useMemo(() => {
     if (!mobilePairingInfo) return "";
     return JSON.stringify({
+      version: 1,
       desktopName: settings.mobileDesktopName || "My Church",
       ip: mobilePairingInfo.ip,
       wsPort: mobilePairingInfo.port,
       apiPort: 45678,
-      pairingCode: mobilePairingInfo.pairingToken,
+      pairingToken: mobilePairingInfo.pairingToken,
     });
   }, [mobilePairingInfo, settings.mobileDesktopName]);
 
@@ -814,36 +912,6 @@ export function MVSettings() {
                   </div>
 
                   {/* ── Global Module Defaults ── */}
-                  <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <div className="section-header">
-                      <h3 className="section-title">{t("mvSettings.general.globalModuleDefaults")}</h3>
-                      <p className="section-desc">{t("mvSettings.general.globalModuleDefaultsDesc")}</p>
-                    </div>
-                    <div className="settings-card fields-rows-stack">
-                      <div className="flex-between-center">
-                        <div className="switch-left">
-                          <span className="switch-title">{t("mvSettings.general.defaultSpeakerSize")}</span>
-                          <span className="switch-subtitle">{t("mvSettings.general.defaultSpeakerSizeDesc")}</span>
-                        </div>
-                        <div className="form-select-container" style={{ width: "180px" }}>
-                          <select
-                            className="custom-select"
-                            value={settings.defaultSpeakerSize}
-                            onChange={(e) => update({ defaultSpeakerSize: e.target.value })}
-                          >
-                            <option value="s">{t("mvSettings.general.smallS")}</option>
-                            <option value="m">{t("mvSettings.general.mediumM")}</option>
-                            <option value="l">{t("mvSettings.general.largeL")}</option>
-                            <option value="xl">{t("mvSettings.general.extraLargeXL")}</option>
-                            <option value="2xl">{t("mvSettings.general.xxl")}</option>
-                            <option value="3xl">{t("mvSettings.general.xxxl")}</option>
-                          </select>
-                          <span className="select-arrow"><ChevronDown size={14} /></span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* About */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <div className="section-header">
@@ -861,6 +929,64 @@ export function MVSettings() {
                         {t("mvSettings.general.aboutDescription")}
                       </p>
                       <p style={{ color: "var(--text-muted)", fontSize: 12 }}>{t("mvSettings.general.aboutBuiltWith")}</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
+                        <button
+                          className="action-btn"
+                          onClick={handleCheckForUpdates}
+                          disabled={manualUpdateBusy}
+                          title={t("mvSettings.general.checkForUpdates")}
+                        >
+                          <RefreshCw size={14} className={manualUpdateStatus === "checking" ? "animate-spin" : ""} />
+                          <span>
+                            {manualUpdateStatus === "checking"
+                              ? t("mvSettings.general.checkingForUpdates")
+                              : t("mvSettings.general.checkForUpdates")}
+                          </span>
+                        </button>
+                        {manualUpdateStatus === "available" && (
+                          <button
+                            className="action-btn btn-primary"
+                            onClick={handleInstallUpdate}
+                            title={t("mvSettings.general.installUpdate")}
+                          >
+                            <ExternalLink size={14} />
+                            <span>{t("mvSettings.general.installUpdate")}</span>
+                          </button>
+                        )}
+                      </div>
+                      {manualUpdateMessage && (
+                        <p style={{
+                          color: manualUpdateStatus === "error" ? "var(--danger-color)" : "var(--text-muted)",
+                          fontSize: 12,
+                          margin: "10px 0 0",
+                        }}>
+                          {manualUpdateMessage}
+                        </p>
+                      )}
+                      {(manualUpdateStatus === "downloading" || manualUpdateStatus === "installing" || manualUpdateStatus === "relaunching") && (
+                        <div className="progress-container">
+                          <div className="progress-info">
+                            <span>
+                              {manualUpdateStatus === "downloading"
+                                ? t("mvSettings.general.downloadingUpdate")
+                                : manualUpdateStatus === "installing"
+                                  ? t("mvSettings.general.installingUpdate")
+                                  : t("mvSettings.general.relaunchingUpdate")}
+                            </span>
+                            <span>
+                              {manualUpdateStatus === "downloading"
+                                ? `${manualUpdatePercent}% · ${formatUpdateBytes(manualUpdateProgress.downloaded)} / ${formatUpdateBytes(manualUpdateProgress.contentLength)}`
+                                : ""}
+                            </span>
+                          </div>
+                          <div className="progress-track-bg">
+                            <div
+                              className="progress-track-fill"
+                              style={{ width: manualUpdateStatus === "downloading" ? `${manualUpdatePercent}%` : "100%" }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1399,8 +1525,23 @@ export function MVSettings() {
                     )}
                     {!syncing && syncStatus && (
                       <>
-                        <CheckCircle size={14} style={{ color: "var(--accent, #10B981)", flexShrink: 0 }} />
+                        {brandingProfileFound === false ? (
+                          <ExternalLink size={14} style={{ color: "var(--warning-color, #F59E0B)", flexShrink: 0 }} />
+                        ) : (
+                          <CheckCircle size={14} style={{ color: "var(--accent, #10B981)", flexShrink: 0 }} />
+                        )}
                         <span style={{ fontSize: 12, color: "var(--text-muted)", flex: 1 }}>{syncStatus}</span>
+                        {brandingProfileFound === false && (
+                          <button
+                            className="action-btn"
+                            onClick={handleOpenChurchProfile}
+                            style={{ fontSize: 11, padding: "4px 10px", gap: 4, flexShrink: 0 }}
+                            title={t("mvSettings.branding.fillChurchProfile")}
+                          >
+                            <ExternalLink size={12} />
+                            {t("mvSettings.branding.fillChurchProfile")}
+                          </button>
+                        )}
                         <button
                           className="btn btn-ghost"
                           onClick={runSync}

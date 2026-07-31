@@ -16,6 +16,14 @@ const PREMIUM_FEATURES = [
   "Priority app updates",
 ];
 
+const INITIAL_REFRESH_DELAY_MS = 1500;
+const FALLBACK_POLL_INTERVAL_MS = 5 * 60 * 1000;
+const FOCUS_REFRESH_THROTTLE_MS = 60 * 1000;
+
+function isAppVisible(): boolean {
+  return typeof document === "undefined" || document.visibilityState !== "hidden";
+}
+
 function toneLabel(tone: DesktopAnnouncement["tone"]) {
   if (tone === "upgrade") return "Upgrade";
   if (tone === "offer") return "Offer";
@@ -113,16 +121,26 @@ export function AnnouncementModalHost() {
 
   useEffect(() => {
     let cancelled = false;
+    let lastRefreshAt = 0;
 
     const refreshIfActive = async () => {
+      if (!isAppVisible()) return;
+      lastRefreshAt = Date.now();
       const next = await fetchNextDesktopAnnouncement().catch(() => null);
       if (!cancelled) setAnnouncement(next);
     };
+    const refreshIfStale = () => {
+      if (Date.now() - lastRefreshAt < FOCUS_REFRESH_THROTTLE_MS) return;
+      void refreshIfActive();
+    };
 
-    const timer = window.setTimeout(() => void refreshIfActive(), 1500);
-    const handleOnline = () => void refreshIfActive();
-    const handleFocus = () => void refreshIfActive();
-    const interval = window.setInterval(() => void refreshIfActive(), 30_000);
+    const timer = window.setTimeout(() => void refreshIfActive(), INITIAL_REFRESH_DELAY_MS);
+    const handleOnline = refreshIfStale;
+    const handleFocus = refreshIfStale;
+    const handleVisibilityChange = () => {
+      if (isAppVisible()) refreshIfStale();
+    };
+    const interval = window.setInterval(() => void refreshIfActive(), FALLBACK_POLL_INTERVAL_MS);
 
     // Real-time SSE listener for instant delivery
     let eventSource: EventSource | null = null;
@@ -136,6 +154,7 @@ export function AnnouncementModalHost() {
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
@@ -143,6 +162,7 @@ export function AnnouncementModalHost() {
       if (eventSource) eventSource.close();
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 

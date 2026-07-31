@@ -607,6 +607,9 @@ export function updateSettings(patch: Partial<MVSettings>): MVSettings {
     patch.brandLogoAssets !== undefined ||
     patch.brandColor !== undefined ||
     patch.brandSecondaryColor !== undefined ||
+    patch.brandAccentColor !== undefined ||
+    patch.brandFontFamily !== undefined ||
+    patch.brandFaviconUrl !== undefined ||
     patch.churchName !== undefined ||
     patch.mainPastorName !== undefined
   ) {

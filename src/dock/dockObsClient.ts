@@ -128,7 +128,7 @@ const DOCK_PREVIEW_SCENE_STATE_KEY = "ocs-dock-preview-scene-state-v1";
 const DOCK_OBS_RECONNECT_DELAY_MS = 300;
 const DOCK_OBS_RECONNECT_MAX_DELAY_MS = 8000;
 const DOCK_OBS_PARAMS_KEY = "ocs-dock-obs-params";
-const OVERLAY_HTML_VERSION = "2026-07-30-3-bible-reference-fit-width";
+const OVERLAY_HTML_VERSION = "2026-07-31-7-compare-line-labels-ref-style";
 const DOCK_TICKER_CLEARANCE_FALLBACK_PX = 80;
 const DOCK_TICKER_CLEARANCE_GAP_PX = 10;
 const DOCK_TICKER_CLEARANCE_MAX_PX = 220;
@@ -180,7 +180,7 @@ type PrimeWorshipOverlayData = {
   backgroundOnly?: boolean;
 };
 
-type CssOverlayPacketTab = "bible" | "worship" | "announcements" | "sermon" | "notes";
+type CssOverlayPacketTab = "bible" | "worship" | "announcements" | "sermon" | "notes" | "lower-third";
 
 function readPersistedDockOverlayMode(
   tabType: "bible" | "worship" | "announcements" | "sermon" | "notes",
@@ -370,6 +370,7 @@ function matchesThemeHints(theme: ThemeLike, hints: string[]): boolean {
 // ---------------------------------------------------------------------------
 
 class DockObsClient {
+  private static readonly NO_CLONE_UNDERLAY_CACHE_KEY = "__no-clone__";
   private obs = new OBSWebSocket();
   private _status: DockObsStatus = "disconnected";
   private _error = "";
@@ -426,6 +427,8 @@ class DockObsClient {
   private _announcementMutationTail: Promise<void> = Promise.resolve();
   /** Serialize presentation-scene structural mutations to avoid duplicate scene-source inserts. */
   private _presentationMutationTail: Promise<void> = Promise.resolve();
+  /** Short cache for the Program scene already placed under MCE Presentation. */
+  private _presentationProgramUnderlayCache: { programScene: string; expiresAt: number } | null = null;
   /** Manual deletion of MCE Presentation can leave obs-websocket unsettled briefly. */
   private _presentationSceneDeletedAt = 0;
   private _presentationSceneRepairPromise: Promise<void> | null = null;
@@ -515,6 +518,7 @@ class DockObsClient {
     this._lastCssOverlayPacketBySource = {};
     this._lastCssOverlayBaseUrlBySource = {};
     this._lastCssOverlayThemeCssBySource = {};
+    this._lastFastOverlayPrepAtBySource = {};
     this._lastBiblePushSignature = "";
     this._lastWorshipPushSignature = "";
     this._lastAnnouncementPushSignature = "";
@@ -522,6 +526,7 @@ class DockObsClient {
     this._lastBibleFullscreenSetupSignature = "";
     this._activeFullscreenBgSignature = {};
     this._activeMceOverlayStateByScene = {};
+    this._presentationProgramUnderlayCache = null;
     this._activeLtBgSignature = {};
     this._activeLtBgInputKind = {};
     this._bgActiveSlot = {};
@@ -1568,6 +1573,8 @@ class DockObsClient {
     sourceName: string,
     fitSource: (sceneName: string) => Promise<void>,
   ): Promise<void> {
+    await this.promotePresentationScene(tabId).catch(() => { });
+
     const key = `${tabId}:${sourceName}`;
     const now = Date.now();
     if (this._lastFastOverlayPrepAtBySource[key] && now - this._lastFastOverlayPrepAtBySource[key] < 10_000) {
@@ -1580,7 +1587,6 @@ class DockObsClient {
       await fitSource(target.sceneName).catch(() => { });
       await this.ensureTickerAboveSource(target.sceneName, sourceName).catch(() => { });
     }
-    await this.promotePresentationScene(tabId).catch(() => { });
     await fitSource(PRESENTATION_SCENE_NAME).catch(() => { });
     await this.ensureTickerAboveSource(PRESENTATION_SCENE_NAME, sourceName).catch(() => { });
   }
@@ -1925,10 +1931,10 @@ class DockObsClient {
   }
 
   /**
-   * Fade out every visible scene item in `sceneName` to opacity 0, then disable them.
-   * Used by multiview clear to animate the entire scene out before removal.
+   * Disable every visible scene item in `sceneName` immediately.
+   * Multiview clear should be instant and low-CPU, not a filter animation.
    */
-  async fadeOutAllSceneItems(sceneName: string, durationMs = 300): Promise<void> {
+  async fadeOutAllSceneItems(sceneName: string, _durationMs = 0): Promise<void> {
     let items: Array<{ sceneItemId: number; sourceName: string; sceneItemEnabled: boolean }> = [];
     try {
       const resp = await this.call("GetSceneItemList", { sceneName }) as {
@@ -1939,43 +1945,6 @@ class DockObsClient {
 
     if (items.length === 0) return;
 
-    const steps = 12;
-    const stepDelay = durationMs / steps;
-    const filterName = "__dock_fade_out";
-
-    for (const item of items) {
-      try {
-        await this.call("CreateSourceFilter", {
-          sourceName: item.sourceName,
-          filterName,
-          filterKind: "color_filter_v2",
-          filterSettings: { opacity: 1.0 },
-        });
-      } catch {
-        try {
-          await this.call("SetSourceFilterSettings", {
-            sourceName: item.sourceName,
-            filterName,
-            filterSettings: { opacity: 1.0 },
-          });
-        } catch { /* ignore */ }
-      }
-    }
-
-    for (let step = 1; step <= steps; step++) {
-      const opacity = Math.max(0, 1 - step / steps);
-      await Promise.all(items.map(async (item) => {
-        try {
-          await this.call("SetSourceFilterSettings", {
-            sourceName: item.sourceName,
-            filterName,
-            filterSettings: { opacity },
-          });
-        } catch { /* ignore */ }
-      }));
-      if (step < steps) await this.sleep(stepDelay);
-    }
-
     await Promise.all(items.map(async (item) => {
       try {
         await this.call("SetSceneItemEnabled", {
@@ -1983,9 +1952,6 @@ class DockObsClient {
           sceneItemId: item.sceneItemId,
           sceneItemEnabled: false,
         });
-      } catch { /* ignore */ }
-      try {
-        await this.call("RemoveSourceFilter", { sourceName: item.sourceName, filterName });
       } catch { /* ignore */ }
     }));
   }
@@ -2040,7 +2006,7 @@ class DockObsClient {
       return false;
     }
 
-    // In "Don't Clone" mode, clean up the embedded MCE Presentation from Program
+    // Overlay-only mode also cleans up any legacy direct Program insertion.
     if (this.readSceneMode() === "no-clone") {
       const currentScene = await this.getCurrentProgramSceneName().catch(() => "");
       if (currentScene) {
@@ -2083,21 +2049,16 @@ class DockObsClient {
     const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
     if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
       this.rememberUserScene(currentProgramScene, tabId);
-      await this.ensureProgramSceneAsSourceInPresentation(true).catch(() => { });
+      if (this.readSceneMode() === "no-clone") {
+        await this.ensureNoProgramSceneUnderlayInPresentation().catch(() => { });
+      } else {
+        await this.ensureProgramSceneAsSourceInPresentation(true).catch(() => { });
+      }
     }
 
     const currentPreviewScene = await this.getCurrentPreviewSceneName().catch(() => "");
     // If the preview is already MCE Presentation, nothing to do
     if (currentPreviewScene === DOCK_PRESENTATION_SCENE) return true;
-
-    // Check if we've previously set the preview — if so, the user must have
-    // manually changed it. Respect that and don't override.
-    const existingState = tabId
-      ? this.getStoredPreviewSceneStateForTab(tabId)
-      : this.getStoredPreviewSceneState();
-    if (existingState && existingState.previewSceneName === DOCK_PRESENTATION_SCENE) {
-      return false;
-    }
 
     const originalPreviewScene = currentPreviewScene || currentProgramScene;
     if (originalPreviewScene && originalPreviewScene !== DOCK_PRESENTATION_SCENE) {
@@ -2116,11 +2077,12 @@ class DockObsClient {
   }
 
   /**
-   * Make MCE Presentation visible without replacing the user's Program scene.
+   * Make MCE Presentation visible after an explicit dock send.
    *
    * Studio Mode: put MCE Presentation in Preview only.
-   * Non-Studio Mode: embed MCE Presentation as a scene source inside the
-   * current Program scene so the live scene name does not change.
+   * Non-Studio Mode: switch Program to MCE Presentation after the scene is
+   * populated. Program-background-on places the previous Program scene below
+   * the overlays; no-clone keeps MCE Presentation overlay-only.
    */
   private async promotePresentationScene(tabId?: DockPreviewTab): Promise<void> {
     if (await this.ensurePresentationPreviewActive(tabId).catch(() => false)) {
@@ -2129,16 +2091,28 @@ class DockObsClient {
 
     await this.ensurePresentationSceneReady();
 
-    const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
+    const currentProgramScene = await this.getCurrentProgramSceneName(true).catch(() => "");
     if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
       this.rememberUserScene(currentProgramScene, tabId);
     }
 
     if (currentProgramScene === DOCK_PRESENTATION_SCENE) return;
 
-    if (currentProgramScene) {
-      await this.ensureMCEPresentationInScene(currentProgramScene).catch(() => { });
+    if (this.readSceneMode() === "no-clone") {
+      await this.ensureNoProgramSceneUnderlayInPresentation().catch(() => { });
+      if (currentProgramScene) {
+        await this.removeMCEPresentationFromScene(currentProgramScene).catch(() => { });
+      }
+    } else if (currentProgramScene) {
+      await this.ensureProgramSceneAsSourceInPresentation(true, {
+        allowWithoutStudioMode: true,
+        programSceneName: currentProgramScene,
+      }).catch(() => { });
     }
+
+    await this.call("SetCurrentProgramScene", { sceneName: DOCK_PRESENTATION_SCENE });
+    this._programSceneCache = null;
+    await this.waitForSceneMatch("program", DOCK_PRESENTATION_SCENE).catch(() => { });
   }
 
   /**
@@ -2147,31 +2121,46 @@ class DockObsClient {
    * This makes the live broadcast content visible behind overlays in Studio Mode,
    * where MCE Presentation is only placed in Preview.
    *
-   * Non-Studio Mode embeds MCE Presentation into the user's Program scene instead,
-   * so do not also nest Program inside MCE Presentation.
+   * Non-Studio Mode can call this with an explicit pre-switch Program scene
+   * when Program-background-on needs that scene under MCE Presentation.
    * Skips if the program scene IS MCE Presentation (circular reference).
    */
-  private async ensureProgramSceneAsSourceInPresentation(force = false): Promise<void> {
+  private async ensureProgramSceneAsSourceInPresentation(
+    _force = false,
+    options: { allowWithoutStudioMode?: boolean; programSceneName?: string } = {},
+  ): Promise<void> {
     return this.runSerializedPresentationMutation(async () => {
       try {
-        const studioMode = await this.isStudioModeEnabled().catch(() => false);
+        const studioMode = options.allowWithoutStudioMode
+          ? true
+          : await this.isStudioModeEnabled().catch(() => false);
         if (!studioMode) return;
 
-        // In "Don't Clone" mode, MCE Presentation is already inside the Program scene
-        // (reversed direction). Adding Program inside MCE Presentation would create a
-        // circular reference (Program → Presentation → Program), so skip.
-        if (!force && this.readSceneMode() === "no-clone") return;
+        if (this.readSceneMode() === "no-clone") {
+          await this.ensureNoProgramSceneUnderlayInPresentation(_force);
+          return;
+        }
 
-        const programScene = await this.getCurrentProgramSceneName().catch(() => "");
-        if (!programScene || programScene === DOCK_PRESENTATION_SCENE) return;
+        const programScene = (options.programSceneName || await this.getCurrentProgramSceneName(true).catch(() => "")).trim();
+        if (!programScene || programScene === DOCK_PRESENTATION_SCENE) {
+          await this.removeProgramSceneUnderlaysFromPresentation();
+          this._presentationProgramUnderlayCache = null;
+          return;
+        }
 
-        const sceneMode = this.readSceneMode();
+        if (DockObsClient.isManagedMultiviewSceneName(programScene)) {
+          await this.removeProgramSceneUnderlaysFromPresentation();
+          this._presentationProgramUnderlayCache = null;
+          return;
+        }
+
+        const cached = this._presentationProgramUnderlayCache;
+        if (!_force && cached?.programScene === programScene && cached.expiresAt > Date.now()) {
+          return;
+        }
+
         const programContainsPresentation = await this.sceneContainsSource(programScene, DOCK_PRESENTATION_SCENE);
         if (programContainsPresentation) {
-          if (sceneMode === "no-clone") {
-            return;
-          }
-
           console.warn(
             `[DockOBS] Removing stale "${DOCK_PRESENTATION_SCENE}" source from "${programScene}" before rebuilding presentation.`,
           );
@@ -2181,6 +2170,7 @@ class DockObsClient {
 
         const presentationScene = DOCK_PRESENTATION_SCENE;
         await this.ensurePresentationSceneReady();
+        await this.removeProgramSceneUnderlaysFromPresentation(programScene);
 
         const existing = await this.collapseDuplicateSceneItems(presentationScene, programScene);
 
@@ -2193,12 +2183,14 @@ class DockObsClient {
               sceneItemIndex: 0,
             }).catch(() => { });
           }
-          // Ensure enabled
-          await this.call("SetSceneItemEnabled", {
-            sceneName: presentationScene,
-            sceneItemId: existing.sceneItemId,
-            sceneItemEnabled: true,
-          }).catch(() => { });
+          if (existing.sceneItemEnabled === false) {
+            await this.call("SetSceneItemEnabled", {
+              sceneName: presentationScene,
+              sceneItemId: existing.sceneItemId,
+              sceneItemEnabled: true,
+            }).catch(() => { });
+          }
+          this._presentationProgramUnderlayCache = { programScene, expiresAt: Date.now() + 3000 };
           return;
         }
 
@@ -2223,6 +2215,7 @@ class DockObsClient {
           sceneItemId,
           sceneItemIndex: 0,
         }).catch(() => { });
+        this._presentationProgramUnderlayCache = { programScene, expiresAt: Date.now() + 3000 };
 
       } catch (err) {
         console.warn("[DockOBS] Failed to add program scene as source in presentation:", err);
@@ -2230,59 +2223,57 @@ class DockObsClient {
     });
   }
 
-  /**
-   * Ensure MCE Presentation exists as a Scene Source inside the given scene,
-   * positioned at the top of the z-order (above all other content).
-   * Used in "Don't Clone" mode: MCE Presentation is embedded inside the user's
-   * Program scene so overlays appear directly within it without needing a clone.
-   */
-  private async ensureMCEPresentationInScene(sceneName: string): Promise<void> {
-    return this.runSerializedPresentationMutation(async () => {
-      try {
-        if (!sceneName || sceneName === DOCK_PRESENTATION_SCENE) return;
+  private async removeProgramSceneUnderlaysFromPresentation(keepSceneName?: string): Promise<void> {
+    try {
+      await this.ensurePresentationSceneReady();
+      const sceneResp = await this.call("GetSceneList") as {
+        scenes: Array<{ sceneName: string }>;
+      };
+      const obsSceneNames = new Set(
+        (sceneResp.scenes ?? [])
+          .map((scene) => scene.sceneName)
+          .filter((sceneName) => sceneName && sceneName !== DOCK_PRESENTATION_SCENE),
+      );
+      if (obsSceneNames.size === 0) return;
 
-        await this.ensurePresentationSceneReady();
-
-        const existing = await this.collapseDuplicateSceneItems(sceneName, DOCK_PRESENTATION_SCENE);
-
-        if (existing) {
-          // Already present — ensure it's on top and enabled
-          this.invalidateSceneItemListCache(sceneName);
-          const refreshedItems = await this.getSceneItemListCached(sceneName);
-          const maxIndex = Math.max(0, refreshedItems.length - 1);
-          if (existing.sceneItemIndex !== maxIndex) {
-            await this.call("SetSceneItemIndex", {
-              sceneName,
-              sceneItemId: existing.sceneItemId,
-              sceneItemIndex: maxIndex,
-            }).catch(() => { });
-          }
-          await this.call("SetSceneItemEnabled", {
-            sceneName,
-            sceneItemId: existing.sceneItemId,
-            sceneItemEnabled: true,
-          }).catch(() => { });
-          return;
-        }
-
-        // Add MCE Presentation as a source to the scene
-        const created = await this.call("CreateSceneItem", {
-          sceneName,
-          sourceName: DOCK_PRESENTATION_SCENE,
-          sceneItemEnabled: true,
-        }) as { sceneItemId: number };
-
-        await this.sleep(120);
-        const stableItem = await this.collapseDuplicateSceneItems(sceneName, DOCK_PRESENTATION_SCENE);
-        const sceneItemId = stableItem?.sceneItemId ?? created.sceneItemId;
-
-        // Fit to canvas
-        await this.fitSceneItemToCanvas(sceneName, sceneItemId);
-
-      } catch (err) {
-        console.warn("[DockOBS] Failed to add MCE Presentation as scene source:", err);
+      this.invalidateSceneItemListCache(DOCK_PRESENTATION_SCENE);
+      const items = await this.getSceneItemListCached(DOCK_PRESENTATION_SCENE);
+      let removed = false;
+      for (const item of items) {
+        if (!obsSceneNames.has(item.sourceName)) continue;
+        if (keepSceneName && item.sourceName === keepSceneName) continue;
+        await this.call("RemoveSceneItem", {
+          sceneName: DOCK_PRESENTATION_SCENE,
+          sceneItemId: item.sceneItemId,
+        }).catch(() => { });
+        removed = true;
       }
-    });
+      if (removed) {
+        this.invalidateSceneItemListCache(DOCK_PRESENTATION_SCENE);
+      }
+      if (removed || !keepSceneName) {
+        this._presentationProgramUnderlayCache = null;
+      }
+    } catch (err) {
+      console.warn("[DockOBS] Failed to remove Program scene underlay from MCE Presentation:", err);
+    }
+  }
+
+  private async ensureNoProgramSceneUnderlayInPresentation(force = false): Promise<void> {
+    const cached = this._presentationProgramUnderlayCache;
+    if (
+      !force &&
+      cached?.programScene === DockObsClient.NO_CLONE_UNDERLAY_CACHE_KEY &&
+      cached.expiresAt > Date.now()
+    ) {
+      return;
+    }
+
+    await this.removeProgramSceneUnderlaysFromPresentation();
+    this._presentationProgramUnderlayCache = {
+      programScene: DockObsClient.NO_CLONE_UNDERLAY_CACHE_KEY,
+      expiresAt: Date.now() + 3000,
+    };
   }
 
   private async sceneContainsSource(sceneName: string, sourceName: string): Promise<boolean> {
@@ -2329,8 +2320,8 @@ class DockObsClient {
 
   /**
    * Remove MCE Presentation as a Scene Source from the given scene.
-   * Used in "Don't Clone" mode cleanup — removes the embedded presentation
-   * when overlays are cleared or projection ends.
+   * Used by routing cleanup when an older mode embedded the managed
+   * presentation scene inside the user's Program scene.
    */
   private async removeMCEPresentationFromScene(sceneName: string): Promise<void> {
     try {
@@ -2393,8 +2384,9 @@ class DockObsClient {
     if (this.readSceneMode() === "no-clone") {
       const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
       if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
-        await this.ensureMCEPresentationInScene(currentProgramScene).catch(() => { });
+        await this.removeMCEPresentationFromScene(currentProgramScene).catch(() => { });
       }
+      await this.ensureNoProgramSceneUnderlayInPresentation(true).catch(() => { });
     } else {
       await this.ensureProgramSceneAsSourceInPresentation(true).catch(() => { });
     }
@@ -2496,9 +2488,9 @@ class DockObsClient {
     } catch { /* ignore */ }
   }
 
-  private async getCurrentProgramSceneName(): Promise<string> {
+  private async getCurrentProgramSceneName(forceRefresh = false): Promise<string> {
     const now = Date.now();
-    if (this._programSceneCache && this._programSceneCache.expiresAt > now) {
+    if (!forceRefresh && this._programSceneCache && this._programSceneCache.expiresAt > now) {
       return this._programSceneCache.name;
     }
     const resp = await this.call("GetCurrentProgramScene") as { currentProgramSceneName?: string; sceneName?: string };
@@ -2580,9 +2572,9 @@ class DockObsClient {
     const trimmed = expectedSceneName.trim();
     if (!trimmed) return false;
 
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
       const current = mode === "program"
-        ? await this.getCurrentProgramSceneName().catch(() => "")
+        ? await this.getCurrentProgramSceneName(true).catch(() => "")
         : await this.getCurrentPreviewSceneName().catch(() => "");
       if (current === trimmed) return true;
       await this.sleep(delayMs);
@@ -2747,7 +2739,7 @@ class DockObsClient {
    * Returns { sceneName, studioMode }.
    */
   private async getTargetScene(tabId?: DockPreviewTab, options?: { skipClone?: boolean }): Promise<{ sceneName: string; studioMode: boolean }> {
-    const studioMode = await this.isStudioModeEnabled();
+    const studioMode = await this.isStudioModeEnabled(true);
 
     // Bible fullscreen adds its scene directly to the user's scene — no clone needed.
     if (options?.skipClone) {
@@ -2759,21 +2751,12 @@ class DockObsClient {
     if (studioMode) {
       const sceneMode = this.readSceneMode();
 
-      // "no-clone" mode: embed MCE Presentation as a Scene Source inside the
-      // user's Program scene, then return MCE Presentation as the target so
-      // overlays go into it — no separate clone scene is created.
       if (sceneMode === "no-clone") {
         const sceneName = await this.getCurrentProgramSceneName().catch(() => "");
-        if (!sceneName) return { sceneName: "", studioMode: true };
         this.rememberUserScene(sceneName, tabId);
-
-        // Add MCE Presentation on top of the user's scene
-        await this.ensureMCEPresentationInScene(sceneName);
-
-        // Set Program as Preview so the user sees the result before going live
-        await this.setCurrentPreviewScene(sceneName);
-
-        // Return MCE Presentation as target — overlays will be placed there
+        await this.ensureNoProgramSceneUnderlayInPresentation();
+        await this.setCurrentPreviewScene(DOCK_PRESENTATION_SCENE);
+        await this.waitForSceneMatch("preview", DOCK_PRESENTATION_SCENE).catch(() => { });
         return { sceneName: DOCK_PRESENTATION_SCENE, studioMode: true };
       }
 
@@ -2792,14 +2775,19 @@ class DockObsClient {
   ): Promise<{ sceneName: string; studioMode: boolean }> {
     await this.ensurePresentationSceneReady();
 
-    const studioMode = await this.isStudioModeEnabled().catch(() => false);
-    const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
+    const studioMode = await this.isStudioModeEnabled(true).catch(() => false);
+    const currentProgramScene = await this.getCurrentProgramSceneName(true).catch(() => "");
     const activate = options?.activate !== false;
+    const sceneMode = this.readSceneMode();
 
     if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
       this.rememberUserScene(currentProgramScene, tabId);
       if (studioMode) {
-        await this.ensureProgramSceneAsSourceInPresentation(true);
+        if (sceneMode === "no-clone") {
+          await this.ensureNoProgramSceneUnderlayInPresentation();
+        } else {
+          await this.ensureProgramSceneAsSourceInPresentation(true);
+        }
       }
     }
 
@@ -2820,7 +2808,18 @@ class DockObsClient {
       await this.setCurrentPreviewScene(DOCK_PRESENTATION_SCENE);
       await this.waitForSceneMatch("preview", DOCK_PRESENTATION_SCENE).catch(() => { });
     } else if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
-      await this.ensureMCEPresentationInScene(currentProgramScene).catch(() => { });
+      if (sceneMode === "no-clone") {
+        await this.ensureNoProgramSceneUnderlayInPresentation().catch(() => { });
+        await this.removeMCEPresentationFromScene(currentProgramScene).catch(() => { });
+      } else {
+        await this.ensureProgramSceneAsSourceInPresentation(true, {
+          allowWithoutStudioMode: true,
+          programSceneName: currentProgramScene,
+        }).catch(() => { });
+      }
+      await this.call("SetCurrentProgramScene", { sceneName: DOCK_PRESENTATION_SCENE });
+      this._programSceneCache = null;
+      await this.waitForSceneMatch("program", DOCK_PRESENTATION_SCENE).catch(() => { });
     }
 
     return { sceneName: DOCK_PRESENTATION_SCENE, studioMode };
@@ -2828,13 +2827,12 @@ class DockObsClient {
   /**
    * Read the user's chosen scene creation mode from projection settings.
    *
-   * - "auto-duplicate" (default): snapshot — each source is individually copied with its
-   *   transform so the clone is an independent copy of the program scene.
-   * - "reference": live — the program scene is embedded as a single Scene Source that
-   *   automatically mirrors any changes to the original.
-   * - "no-clone": the dock works directly on the user's program scene without cloning.
+   * - "auto-duplicate": put the current Program scene underneath
+   *   MCE Presentation as a scene source.
+   * - "no-clone" (default): keep MCE Presentation overlay-only and remove Program
+   *   scene underlays from it.
    */
-  private readSceneMode(): "auto-duplicate" | "reference" | "no-clone" {
+  private readSceneMode(): "auto-duplicate" | "no-clone" {
     return loadProjectionSettings().sceneMode;
   }
 
@@ -2847,8 +2845,8 @@ class DockObsClient {
   }
 
   async deleteClone(sceneNameOrTab?: string, tabId?: DockPreviewTab): Promise<void> {
-    // In "Don't Clone" mode, there is no clone scene to delete.
-    // Instead, remove the embedded MCE Presentation from the user's Program scene.
+    // Overlay-only mode has no Program underlay to delete; also clean up any
+    // legacy direct Program insertion from the previous routing behavior.
     if (this.readSceneMode() === "no-clone") {
       const programScene = await this.getCurrentProgramSceneName().catch(() => "");
       if (programScene) {
@@ -3523,6 +3521,10 @@ class DockObsClient {
     return false;
   }
 
+  private static isManagedMultiviewSceneName(name: string): boolean {
+    return /^MV:\s*Multiview\b/i.test(name.trim());
+  }
+
   /**
    * Delete every scene and source that MakeChurchEasy created in OBS.
    *
@@ -4052,7 +4054,7 @@ class DockObsClient {
   }
 
   private async emitBrowserOverlayPacket(
-    tabType: "bible" | "worship" | "announcements" | "sermon" | "notes",
+    tabType: CssOverlayPacketTab,
     packet: Record<string, unknown>,
     overlayCss: string,
   ): Promise<boolean> {
@@ -4737,16 +4739,17 @@ class DockObsClient {
   }
 
   private getOverlayRenderAckStorageKey(
-    tabType: "bible" | "worship" | "announcements" | "sermon" | "notes" = "bible",
+    tabType: CssOverlayPacketTab = "bible",
   ): string {
     if (tabType === "notes") return "notes-overlay-render-ack";
+    if (tabType === "lower-third") return "lower-third-overlay-render-ack";
     return tabType === "worship" || tabType === "announcements"
       ? "worship-overlay-render-ack"
       : "bible-overlay-render-ack";
   }
 
   private async waitForOverlayRenderAck(
-    tabType: "bible" | "worship" | "announcements" | "sermon" | "notes",
+    tabType: CssOverlayPacketTab,
     timestamp: number,
     mode: string,
     timeoutMs = 250,
@@ -5459,12 +5462,10 @@ class DockObsClient {
 
       if (!sceneName) throw new Error("Could not determine the current OBS scene.");
 
-      // Initial setup/recovery must wire the live program scene behind MCE
-      // overlays. Repeated fullscreen verse clicks skip this expensive scene
-      // graph check and only update the browser source content.
-      if (mode !== "fullscreen" || !this._lastBibleFullscreenSetupSignature) {
-        await this.ensureProgramSceneAsSourceInPresentation();
-      }
+      // Keep OBS routing in sync on every explicit verse click. The routing
+      // helper has a short cache, so rapid repeated clicks do not rebuild
+      // scene items, but a changed Program scene is picked up immediately.
+      await this.ensureProgramSceneAsSourceInPresentation();
 
       const pushSignature = this.buildBiblePushSignature(sceneName, currentProgramSceneBeforeTarget, data);
       if (pushSignature === this._lastBiblePushSignature) {
@@ -5503,6 +5504,7 @@ class DockObsClient {
           await this.fitSceneSourceToOverlayMode(sourceScene, browserSrc, mode).catch(() => { });
           await this.ensureTickerAboveSource(sceneName, browserSrc).catch(() => { });
         }
+        await this.promotePresentationScene("bible").catch(() => { });
         return;
       }
 
@@ -6503,8 +6505,88 @@ class DockObsClient {
         restart_when_active: false,
       },
     });
+    this._lastBrowserSourceUrlBySource[resources.ltSource] = url;
+    const parsed = this.parseOverlayPayloadUrl(url);
+    if (parsed) {
+      this._lastCssOverlayPacketBySource[resources.ltSource] = parsed.payload;
+      this._lastCssOverlayBaseUrlBySource[resources.ltSource] = parsed.baseUrl;
+      this._lastCssOverlayThemeCssBySource[resources.ltSource] = "";
+    }
 
     await this.ensureTickerAboveSource(sceneName, resources.ltSource).catch(() => { });
+  }
+
+  /**
+   * Replace a live Ministry lower-third without reloading the OBS browser source.
+   * The overlay page queues the new packet while the old one exits, then plays
+   * the new entry animation from the same browser document.
+   */
+  async replaceLiveLowerThirdOverlayUrl(
+    url: string,
+    options?: { sourceWidth?: number; sourceHeight?: number },
+    waitMs = FULLSCREEN_CLEAR_WAIT_MS,
+  ): Promise<void> {
+    const resources = getDockResources();
+    const target = await this.getPresentationTargetScene("lower-third");
+    const sceneName = target.sceneName;
+    if (!sceneName) throw new Error("Could not determine the MCE Presentation scene.");
+
+    await this.ensureProgramSceneAsSourceInPresentation();
+
+    const parsed = this.parseOverlayPayloadUrl(url);
+    const existing = await this.getSceneItemBySource(sceneName, resources.ltSource).catch(() => null);
+    if (!parsed || !existing) {
+      if (existing) {
+        await this.animateLowerThirdOverlayUrlOut("", waitMs, { restoreProgram: false });
+      }
+      await this.pushLowerThirdOverlayUrl(url, options);
+      return;
+    }
+
+    await this.call("SetSceneItemEnabled", {
+      sceneName,
+      sceneItemId: existing.sceneItemId,
+      sceneItemEnabled: true,
+    }).catch(() => { });
+    await this.ensureTickerAboveSource(sceneName, resources.ltSource).catch(() => { });
+
+    const nextPacket = {
+      ...parsed.payload,
+      live: true,
+      blanked: false,
+      timestamp: Date.now(),
+    };
+    const overlayCss = this.buildCssOverlayDataCss(nextPacket, "");
+
+    let delivered = false;
+    try {
+      const exitDelivered = await this.emitBrowserOverlayPacket("lower-third", {
+        action: "animate-out",
+        timestamp: Date.now(),
+      }, "");
+      nextPacket.timestamp = Date.now();
+      delivered = exitDelivered && await this.emitBrowserOverlayPacket("lower-third", nextPacket, overlayCss);
+    } catch {
+      delivered = false;
+    }
+
+    if (!delivered) {
+      await this.animateLowerThirdOverlayUrlOut("", waitMs, { restoreProgram: false });
+      await this.pushLowerThirdOverlayUrl(url, options);
+      return;
+    }
+
+    try {
+      await this.call("SetInputSettings", {
+        inputName: resources.ltSource,
+        inputSettings: { css: overlayCss },
+      });
+    } catch { /* keep the live event result */ }
+
+    this._lastBrowserSourceUrlBySource[resources.ltSource] = url;
+    this._lastCssOverlayPacketBySource[resources.ltSource] = nextPacket;
+    this._lastCssOverlayBaseUrlBySource[resources.ltSource] = parsed.baseUrl;
+    this._lastCssOverlayThemeCssBySource[resources.ltSource] = "";
   }
 
   /**
@@ -6846,12 +6928,13 @@ class DockObsClient {
   }
 
   /**
-   * Animate the dock lower-third source out with a prepared blanked URL, then
-   * hide/remove it after the theme's exit duration.
+   * Animate the dock lower-third source out using the currently loaded
+   * payload, then hide/remove it after the theme's exit duration.
    */
   async animateLowerThirdOverlayUrlOut(
-    url: string,
+    _url: string,
     waitMs = FULLSCREEN_CLEAR_WAIT_MS,
+    options?: { restoreProgram?: boolean },
   ): Promise<void> {
     const resources = getDockResources();
     const scenes = new Set<string>();
@@ -6867,22 +6950,36 @@ class DockObsClient {
 
     let delivered = false;
     try {
-      await this.call("SetInputSettings", {
-        inputName: resources.ltSource,
-        inputSettings: {
-          url,
-          bgcolor: "#00000000",
-          shutdown: false,
-          restart_when_active: false,
-          fps_custom: true,
-          fps: 60,
-        },
-      });
-      this._lastBrowserSourceUrlBySource[resources.ltSource] = url;
-      delivered = true;
+      delivered = await this.emitBrowserOverlayPacket("lower-third", {
+        action: "animate-out",
+        timestamp: Date.now(),
+      }, "");
     } catch {
-      await this.clearLowerThirds(waitMs);
-      return;
+      delivered = false;
+    }
+
+    if (!delivered) {
+      try {
+        const exitUrl = await this.buildBlankedOverlayUrlFromCurrentSource(resources.ltSource, "");
+        if (!exitUrl) {
+          throw new Error("No current lower-third payload is available for exit animation.");
+        }
+        await this.call("SetInputSettings", {
+          inputName: resources.ltSource,
+          inputSettings: {
+            url: exitUrl,
+            bgcolor: "#00000000",
+            shutdown: false,
+            restart_when_active: false,
+            fps_custom: true,
+            fps: 60,
+          },
+        });
+        this._lastBrowserSourceUrlBySource[resources.ltSource] = exitUrl;
+        delivered = true;
+      } catch {
+        delivered = false;
+      }
     }
 
     if (delivered) {
@@ -6897,7 +6994,7 @@ class DockObsClient {
       }
     }
 
-    await this.sleep(waitMs);
+    await this.sleep(delivered ? waitMs : 0);
 
     for (const sceneName of scenes) {
       await this.hideOverlaySource(sceneName, resources.ltSource);
@@ -6912,7 +7009,9 @@ class DockObsClient {
     delete this._lastCssOverlayBaseUrlBySource[resources.ltSource];
     delete this._lastCssOverlayThemeCssBySource[resources.ltSource];
 
-    await this.restoreProgramSceneBeforePush("lower-third");
+    if (options?.restoreProgram !== false) {
+      await this.restoreProgramSceneBeforePush("lower-third");
+    }
   }
 
   // ── Worship lyrics overlay ──
@@ -7058,6 +7157,7 @@ class DockObsClient {
 
         await this.deliverCssOverlayPacket(sourceName, tab, packet, cssOverlayBaseUrl, themeCss);
         await this.fitSceneSourceToCanvas(resources.worshipScene, sourceName).catch(() => { });
+        await this.promotePresentationScene(tab).catch(() => { });
         this._lastOverlayMode[sourceName] = mode;
         setLastPushSignature("");
         return;
@@ -7129,9 +7229,7 @@ class DockObsClient {
           await this.fitSceneSourceToLowerThirdWindow(recoveryScene, sourceName).catch(() => { });
         }
 
-        if (mode === "lower-third") {
-          await this.promotePresentationScene(tab).catch(() => { });
-        }
+        await this.promotePresentationScene(tab).catch(() => { });
         return;
       }
 

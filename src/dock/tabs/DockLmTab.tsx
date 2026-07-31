@@ -1975,6 +1975,7 @@ const S: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: 8,
+    marginBottom: 6,
   },
   modeSwitchLabel: {
     display: "inline-flex",
@@ -2830,9 +2831,10 @@ const S: Record<string, React.CSSProperties> = {
   settingHint: {
     fontSize: 10,
     color: "var(--dock-text-dim, #64748B)",
-    marginTop: -2,
+    marginTop: 6,
     marginBottom: 6,
     display: "block",
+    lineHeight: 1.35,
   },
   settingError: {
     display: "block",

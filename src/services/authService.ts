@@ -116,6 +116,9 @@ export interface AuthUser {
     paymentReference?: string;
   } | null;
   subscriptionExpiresAt?: string | null;
+  purchaseKind?: "subscription" | "one_time";
+  oneTimeOfferId?: string | null;
+  oneTimeOfferName?: string | null;
   trial?: {
     active?: boolean;
     status?: string;
@@ -155,6 +158,9 @@ interface DeviceBootstrapResponse {
       adminTemporaryPlan?: AuthUser["adminTemporaryPlan"];
       adminManagedSubscription?: AuthUser["adminManagedSubscription"];
       subscriptionExpiresAt?: string | null;
+      purchaseKind?: AuthUser["purchaseKind"];
+      oneTimeOfferId?: string | null;
+      oneTimeOfferName?: string | null;
       trial?: AuthUser["trial"];
     };
     credits: {
@@ -543,6 +549,9 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
       adminTemporaryPlan: remoteHas("adminTemporaryPlan") ? remote.adminTemporaryPlan ?? null : current.adminTemporaryPlan ?? null,
       adminManagedSubscription: remoteHas("adminManagedSubscription") ? remote.adminManagedSubscription ?? null : current.adminManagedSubscription ?? null,
       subscriptionExpiresAt: remoteHas("subscriptionExpiresAt") ? remote.subscriptionExpiresAt ?? null : current.subscriptionExpiresAt ?? null,
+      purchaseKind: remoteHas("purchaseKind") ? remote.purchaseKind ?? "subscription" : current.purchaseKind ?? "subscription",
+      oneTimeOfferId: remoteHas("oneTimeOfferId") ? remote.oneTimeOfferId ?? null : current.oneTimeOfferId ?? null,
+      oneTimeOfferName: remoteHas("oneTimeOfferName") ? remote.oneTimeOfferName ?? null : current.oneTimeOfferName ?? null,
       trial: resolveBootstrappedTrial(remote, current),
     };
 

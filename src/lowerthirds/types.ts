@@ -50,10 +50,14 @@ export type LTCategory = "bible" | "worship" | "general" | "speaker";
 // Size Options
 // ---------------------------------------------------------------------------
 
-export type LTSize = "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "x2" | "x3";
+export type LTSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "x2" | "x3";
+
+// Keep OBS viewport sizing stable while rendering lower thirds at half their previous visual footprint.
+export const LT_VISUAL_OUTPUT_SCALE = 0.5;
 
 /** Scale factor for each size option (used for transform fallback) */
 export const LT_SIZE_SCALE: Record<LTSize, number> = {
+  xs: 0.6,
   sm: 0.75,
   md: 0.9,
   lg: 1.1,
@@ -66,6 +70,7 @@ export const LT_SIZE_SCALE: Record<LTSize, number> = {
 
 /** Width percentage for each size — how much of the 1920px canvas the LT fills */
 export const LT_SIZE_WIDTH: Record<LTSize, number> = {
+  xs: 32,
   sm: 40,
   md: 55,
   lg: 70,
@@ -78,6 +83,7 @@ export const LT_SIZE_WIDTH: Record<LTSize, number> = {
 
 /** Font scale factor for each size — multiplied against base font sizes */
 export const LT_SIZE_FONT_SCALE: Record<LTSize, number> = {
+  xs: 0.7,
   sm: 0.85,
   md: 1.0,
   lg: 1.15,
@@ -90,9 +96,10 @@ export const LT_SIZE_FONT_SCALE: Record<LTSize, number> = {
 
 /** Display labels for size options */
 export const LT_SIZE_LABELS: Record<LTSize, string> = {
-  sm: "S",
-  md: "M",
-  lg: "L",
+  xs: "XS",
+  sm: "SM",
+  md: "MD",
+  lg: "LG",
   xl: "XL",
   "2xl": "2XL",
   "3xl": "3XL",

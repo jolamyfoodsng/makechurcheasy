@@ -65,11 +65,6 @@ export interface DesktopConfig {
     enableCloudSync: boolean;
     maxUploadSizeMB: number;
     allowedFileTypes: string;
-    compressionEnabled: boolean;
-    imageTargetSizeBytes: number;
-    videoTargetSizeBytes: number;
-    imageMaxDimension: number;
-    videoMaxWidth: number;
     allowedImageExtensions: string[];
     allowedVideoExtensions: string[];
     maximumBackgroundVideoSizeMB: number;
@@ -180,11 +175,6 @@ export const DEFAULT_DESKTOP_CONFIG: DesktopConfig = {
     enableCloudSync: true,
     maxUploadSizeMB: 50,
     allowedFileTypes: "jpg,png,gif,mp4,pdf,docx",
-    compressionEnabled: true,
-    imageTargetSizeBytes: 1024 * 1024,
-    videoTargetSizeBytes: 1024 * 1024,
-    imageMaxDimension: 1920,
-    videoMaxWidth: 854,
     allowedImageExtensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"],
     allowedVideoExtensions: ["mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv", "flv"],
     maximumBackgroundVideoSizeMB: 500,

@@ -55,6 +55,7 @@ import { getPresentationRemoteAccessInfo } from "./services/presentationRemote";
 
 import { dockBridge } from "./services/dockBridge";
 import { initDockCommandHandler } from "./services/dockCommandHandler";
+import { initMobileRemoteCommandBridge } from "./services/mobileRemoteCommandBridge";
 import { getUserScopedKey } from "./services/userScopedStorage";
 import { lmDockService } from "./services/lmDockService";
 import { obsService } from "./services/obsService";
@@ -67,7 +68,7 @@ import { getEffectivePlan } from "./services/licenseService";
 import type { Song } from "./worship/types";
 import type { MediaItem } from "./library/libraryTypes";
 import { deleteMedia, getAllMedia, saveMedia } from "./library/libraryDb";
-import { syncInstalledTranslationsToDock } from "./bible/bibleDb";
+import { syncCustomThemesToDock, syncInstalledTranslationsToDock } from "./bible/bibleDb";
 import ResourcesPage from "./pages/ResourcesPage";
 import ProductionHomePage from "./pages/ProductionHomePage";
 import MultiViewGalleryPage from "./pages/MultiViewGalleryPage";
@@ -318,6 +319,15 @@ function App() {
 
     // Wire up dock commands → OBS actions (bible:go-live, speaker:go-live, etc.)
     const unsubDockCmd = initDockCommandHandler();
+
+    let unsubMobileRemote: (() => void) | null = null;
+    void initMobileRemoteCommandBridge()
+      .then((unsub) => {
+        unsubMobileRemote = unsub;
+      })
+      .catch((error) => {
+        console.warn("[MobileRemote] Command bridge unavailable:", error);
+      });
 
     // Wire up LM dock mic capture + AssemblyAI streaming
     const unsubLmDock = lmDockService.init();
@@ -626,6 +636,7 @@ function App() {
       unsubSvc();
       unsubCmd();
       unsubDockCmd();
+      unsubMobileRemote?.();
       unsubLmDock();
       unsubAppStatus();
     };
@@ -839,6 +850,7 @@ function App() {
 
     // Sync dock-first production data to dock JSON files on startup.
     syncSongsToDock().catch(() => { });
+    syncCustomThemesToDock().catch(() => { });
     syncInstalledTranslationsToDock().catch(() => { });
     syncProductionSettingsToDock().catch(() => { });
     syncLiveToolsToDock().catch(() => { });

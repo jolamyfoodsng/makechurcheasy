@@ -852,9 +852,30 @@
       }
 
       function mapTextTransform(t) {
-        if (!t || t === 'none') return 'none';
+        const normalized = normalizeTextTransform(t);
+        return normalized || 'none';
+      }
+
+      function normalizeTextTransform(t) {
+        if (!t || t === 'none') return '';
         var m = { 'uppercase': 'uppercase', 'upper': 'uppercase', 'lowercase': 'lowercase', 'lower': 'lowercase', 'capitalize': 'capitalize', 'title': 'capitalize' };
-        return m[t.toLowerCase()] || 'none';
+        return m[String(t).toLowerCase()] || '';
+      }
+
+      function capitalizeDisplayText(text) {
+        return String(text).replace(/\b([A-Za-z])([A-Za-z'’-]*)/g, function (_, first, rest) {
+          return first.toLocaleUpperCase() + rest.toLocaleLowerCase();
+        });
+      }
+
+      function applyDisplayTextTransform(text, transform) {
+        const value = typeof text === 'string' ? text : '';
+        switch (normalizeTextTransform(transform)) {
+          case 'uppercase': return value.toLocaleUpperCase();
+          case 'lowercase': return value.toLocaleLowerCase();
+          case 'capitalize': return capitalizeDisplayText(value);
+          default: return value;
+        }
       }
 
       function ensureCmgSansFont() {
@@ -1491,8 +1512,8 @@
           compareReferenceRight.textContent = formatCompareReference(r.reference, r.translation);
           compareTranslationLeft.textContent = '';
           compareTranslationRight.textContent = '';
-          compareTextLeft.innerHTML = safeSupText(l.text);
-          compareTextRight.innerHTML = safeSupText(r.text);
+          compareTextLeft.innerHTML = safeSupText(applyDisplayTextTransform(l.text, data.theme && data.theme.textTransform));
+          compareTextRight.innerHTML = safeSupText(applyDisplayTextTransform(r.text, data.theme && data.theme.textTransform));
           const clMode = sl.compareLayout || 'line-by-line';
           currentCompareLayout = clMode;
           if (clMode === 'line-by-line') {
@@ -1504,7 +1525,7 @@
           compareLayout.classList.remove('is-visible');
           compareLayout.style.display = 'none';
           verseContainer.classList.remove('is-hidden');
-          verseText.innerHTML = safeSupText(sl.text);
+          verseText.innerHTML = safeSupText(applyDisplayTextTransform(sl.text, data.theme && data.theme.textTransform));
           const rt = typeof sl.reference === 'string' ? sl.reference.trim() : '';
           reference.textContent = rt;
           reference.style.display = rt ? 'block' : 'none';
@@ -1527,8 +1548,9 @@
         if (isCompare) {
           const [l, r] = cc;
           const layoutMode = sl.compareLayout || 'line-by-line';
-          const lText = safeSupText(l.text || '');
-          const rText = safeSupText(r.text || '');
+          const textTransform = data.theme && data.theme.textTransform;
+          const lText = safeSupText(applyDisplayTextTransform(l.text || '', textTransform));
+          const rText = safeSupText(applyDisplayTextTransform(r.text || '', textTransform));
           const lRef = l.reference ? `<span class="lt-compare-ref">${escapeHtml(l.reference)} (${escapeHtml(l.translation || '')})</span>` : '';
           const rRef = r.reference ? `<span class="lt-compare-ref">${escapeHtml(r.reference)} (${escapeHtml(r.translation || '')})</span>` : '';
           if (layoutMode === 'side-by-side') {
@@ -1538,7 +1560,7 @@
           }
           ltRefText.textContent = '';
         } else {
-          ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
+          ltVerseText.innerHTML = safeSupText(applyDisplayTextTransform(sl.text, data.theme && data.theme.textTransform)); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
         }
 
         try { applyThemeIfChanged(data.theme || {}, !hasShownOnce, 'lower-third'); } catch (error) { console.error('mce-worship-overlay lower-third theme error', error); }

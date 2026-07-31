@@ -634,7 +634,9 @@
 
     let currentThemeId = null;
     let currentThemePayload = null;
+    let pendingThemePayload = null;
     let isVisible = false;
+    let isExiting = false;
     let fitRafId = 0;
 
     // ── XSS prevention ────────────────────────────────────────────────────────
@@ -674,7 +676,7 @@
      * Font scaling sets the <html> root font-size so Tailwind rem-based
      * classes (text-2xl, text-sm, etc.) all scale proportionally.
      */
-    function applySize(root, widthPct, fontScale, fontSizeScale, heightPx) {
+    function applySize(root, widthPct, fontScale, fontSizeScale, heightPx, visualScale) {
 
       if (widthPct) {
         let new_one = Math.max(0, widthPct);
@@ -697,6 +699,10 @@
       } else {
         root.style.removeProperty("--lt-height");
       }
+
+      var safeVisualScale = Number(visualScale);
+      if (!isFinite(safeVisualScale) || safeVisualScale <= 0) safeVisualScale = 1;
+      root.style.setProperty("--lt-visual-scale", String(safeVisualScale));
     }
 
     /**
@@ -1104,16 +1110,20 @@
       var frame = getFitFrame(root);
       if (!root || !frame) return;
       frame.style.transform = "scale(1)";
+      var visualScale = Number(root.style.getPropertyValue("--lt-visual-scale")) || 1;
+      if (!isFinite(visualScale) || visualScale <= 0) visualScale = 1;
       var rootWidth = root.clientWidth || window.innerWidth || 1920;
       var rootHeight = root.clientHeight || window.innerHeight || 1080;
       var frameRect = frame.getBoundingClientRect();
-      if (!frameRect.width || !frameRect.height) return;
-
-      var availableWidth = Math.max(220, rootWidth - 8);
-      var availableHeight = Math.max(120, rootHeight - 8);
-      var scale = Math.min(1, availableWidth / frameRect.width, availableHeight / frameRect.height);
-      if (!isFinite(scale) || scale <= 0) scale = 1;
-      frame.style.transform = scale < 0.999 ? "scale(" + scale.toFixed(4) + ")" : "scale(1)";
+      var fitScale = 1;
+      if (frameRect.width && frameRect.height) {
+        var availableWidth = Math.max(220, rootWidth - 8);
+        var availableHeight = Math.max(120, rootHeight - 8);
+        fitScale = Math.min(1, availableWidth / (frameRect.width * visualScale), availableHeight / (frameRect.height * visualScale));
+        if (!isFinite(fitScale) || fitScale <= 0) fitScale = 1;
+      }
+      var finalScale = visualScale * fitScale;
+      frame.style.transform = Math.abs(finalScale - 1) > 0.0005 ? "scale(" + finalScale.toFixed(4) + ")" : "scale(1)";
     }
 
     function scheduleFitOverlay(root) {
@@ -1441,11 +1451,14 @@
      * Show using the theme's own "in" animation state.
      */
     function showOverlay(root, data) {
+      injectThemeCss(data);
       var widthPct = Math.max(0, data.widthPct || 80);
       root.innerHTML = wrapThemeHtml(data.html || "", data.values || {}, "in");
       root.className = "";
       root.classList.remove("exit-fading");
-      applySize(root, widthPct, data.fontScale, data.fontSizeScale, data.heightPx);
+      isExiting = false;
+      pendingThemePayload = null;
+      applySize(root, widthPct, data.fontScale, data.fontSizeScale, data.heightPx, data.visualScale);
       applyCustomStyles(root, data);
       applyPosition(root, data);
       scheduleFitOverlay(root);
@@ -1460,18 +1473,23 @@
      * Hide using the theme's own "out" animation state.
      */
     function hideOverlay(root, payloadForExit, callback) {
+      if (isExiting) {
+        return;
+      }
       if (!isVisible) {
         if (!callback) clearBackgroundSnapshot();
         if (callback) callback();
         return;
       }
+      isExiting = true;
 
       var payload = payloadForExit || currentThemePayload;
       if (payload && payload.html) {
+        injectThemeCss(payload);
         var widthPct = Math.max(0, payload.widthPct || 80);
         root.innerHTML = wrapThemeHtml(payload.html || "", payload.values || {}, "out");
         root.className = "";
-        applySize(root, widthPct, payload.fontScale, payload.fontSizeScale, payload.heightPx);
+        applySize(root, widthPct, payload.fontScale, payload.fontSizeScale, payload.heightPx, payload.visualScale);
         applyCustomStyles(root, payload);
         applyPosition(root, payload);
         scheduleFitOverlay(root);
@@ -1483,7 +1501,15 @@
           root.innerHTML = "";
           root.className = "hidden-state";
           isVisible = false;
+          isExiting = false;
           currentThemePayload = null;
+          var pendingPayload = pendingThemePayload;
+          pendingThemePayload = null;
+          if (pendingPayload) {
+            currentThemeId = pendingPayload.themeId || null;
+            showOverlay(root, pendingPayload);
+            return;
+          }
           if (!callback) clearBackgroundSnapshot();
           if (callback) callback();
         }, exitDuration);
@@ -1493,9 +1519,90 @@
       root.innerHTML = "";
       root.className = "hidden-state";
       isVisible = false;
+      isExiting = false;
       currentThemePayload = null;
+      var pendingPayload = pendingThemePayload;
+      pendingThemePayload = null;
+      if (pendingPayload) {
+        currentThemeId = pendingPayload.themeId || null;
+        showOverlay(root, pendingPayload);
+        return;
+      }
       if (!callback) clearBackgroundSnapshot();
       if (callback) callback();
+    }
+
+    function animateCurrentOverlayOut() {
+      const root = document.getElementById("overlay-root");
+      if (!root) return false;
+      if (isExiting) return true;
+      if (isVisible && currentThemePayload) {
+        hideOverlay(root, currentThemePayload);
+        return true;
+      }
+      if (root.classList.contains("hidden-state") || root.children.length === 0) return false;
+      isExiting = true;
+      root.classList.add("exit-fading");
+      var exitDuration = resolveThemeExitDuration(root);
+      setTimeout(() => {
+        root.innerHTML = "";
+        root.className = "hidden-state";
+        isVisible = false;
+        isExiting = false;
+        currentThemePayload = null;
+        var pendingPayload = pendingThemePayload;
+        pendingThemePayload = null;
+        if (pendingPayload) {
+          currentThemeId = pendingPayload.themeId || null;
+          showOverlay(root, pendingPayload);
+          return;
+        }
+        clearBackgroundSnapshot();
+      }, exitDuration);
+      return true;
+    }
+
+    function injectThemeCss(data) {
+      const cssEl = document.getElementById("theme-css");
+      if (cssEl && data && data.css) {
+        cssEl.textContent = compactEntryMotionCss(data.css);
+      }
+    }
+
+    function readCssOverlayData() {
+      try {
+        const rawValue = getComputedStyle(document.documentElement).getPropertyValue("--overlay-data");
+        let encoded = String(rawValue || "").trim();
+        if (!encoded) return null;
+        if ((encoded.startsWith('"') && encoded.endsWith('"')) || (encoded.startsWith("'") && encoded.endsWith("'"))) {
+          encoded = encoded.slice(1, -1);
+        }
+        encoded = encoded.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        const parsed = JSON.parse(decodeURIComponent(encoded));
+        if (!parsed || typeof parsed !== "object") return null;
+        return parsed;
+      } catch {
+        return null;
+      }
+    }
+
+    function newerThemePayload(a, b) {
+      if (!a) return b || null;
+      if (!b) return a || null;
+      const aTime = Number(a.timestamp) || 0;
+      const bTime = Number(b.timestamp) || 0;
+      return bTime > aTime ? b : a;
+    }
+
+    function writeRenderAck(packet, mode) {
+      try {
+        const timestamp = Number(packet && packet.timestamp) || Date.now();
+        localStorage.setItem("lower-third-overlay-render-ack", JSON.stringify({
+          timestamp: timestamp,
+          mode: mode || "lower-third",
+          transitionId: packet && packet.transitionId,
+        }));
+      } catch { }
     }
 
     /**
@@ -1503,13 +1610,14 @@
      */
     function applyTheme(data) {
       const root = document.getElementById("overlay-root");
-      const cssEl = document.getElementById("theme-css");
 
       if (!data) {
+        pendingThemePayload = null;
         clearBackgroundSnapshot();
         root.innerHTML = "";
         root.className = "hidden-state";
         isVisible = false;
+        isExiting = false;
         currentThemeId = null;
         currentThemePayload = null;
         return;
@@ -1517,33 +1625,33 @@
 
       const { themeId, html, css, values, live, blanked } = data;
 
-      // Always inject CSS before any out/blanked path. OBS may reload the
-      // browser source directly into a blanked URL, and the exit animation
-      // still needs the theme's [data-state="out"] rules.
-      if (css) {
-        cssEl.textContent = compactEntryMotionCss(css);
-      }
-
-      // Handle animate-out command — set data-state="out" on existing elements
-      // The theme's CSS exit animation fires automatically via the attribute selector
       if (data.action === "animate-out") {
-        var ltEls = root.querySelectorAll(".lt[data-state='in']");
-        for (var i = 0; i < ltEls.length; i++) {
-          ltEls[i].setAttribute("data-state", "out");
-        }
+        pendingThemePayload = null;
+        animateCurrentOverlayOut();
         return;
       }
+
+      if (!blanked && isExiting) {
+        pendingThemePayload = {
+          ...data,
+          values: { ...(values || {}) },
+        };
+        return;
+      }
+
+      injectThemeCss(data);
 
       // Handle blanked state — use theme-defined "out" state
       // Visibility is controlled by OBS scene-item enabled state, not the live flag
       if (blanked) {
+        pendingThemePayload = null;
         if (isVisible) {
           hideOverlay(root, data);
         } else if (data && data.html) {
           // Fresh load (OBS reloaded the page) — render exit animation from scratch
           root.innerHTML = wrapThemeHtml(data.html || "", data.values || {}, "out");
           root.className = "";
-          applySize(root, data.widthPct, data.fontScale, data.fontSizeScale, data.heightPx);
+          applySize(root, data.widthPct, data.fontScale, data.fontSizeScale, data.heightPx, data.visualScale);
           applyCustomStyles(root, data);
           applyPosition(root, data);
           scheduleFitOverlay(root);
@@ -1635,7 +1743,7 @@
         }
         root.innerHTML = wrapThemeHtml(html || "", values || {}, "in");
         root.className = "";
-        applySize(root, data.widthPct, data.fontScale, data.fontSizeScale, data.heightPx);
+        applySize(root, data.widthPct, data.fontScale, data.fontSizeScale, data.heightPx, data.visualScale);
         applyCustomStyles(root, data);
         applyPosition(root, data);
         scheduleFitOverlay(root);
@@ -1700,7 +1808,7 @@
 
     // Initial load
     window.addEventListener("DOMContentLoaded", () => {
-      const data = parseHashData();
+      const data = newerThemePayload(parseHashData(), readCssOverlayData());
       if (data) {
         applyTheme(data);
       }
@@ -1882,11 +1990,7 @@
       const bc = new BroadcastChannel("ocs-lower-third");
       bc.onmessage = (e) => {
         if (e.data && e.data.type === "animate-out") {
-          var root = document.getElementById("overlay-root");
-          var ltEls = root.querySelectorAll(".lt[data-state='in']");
-          for (var i = 0; i < ltEls.length; i++) {
-            ltEls[i].setAttribute("data-state", "out");
-          }
+          animateCurrentOverlayOut();
           return;
         }
         if (e.data && e.data.type === "lt-update") {
@@ -1897,14 +2001,32 @@
       // BroadcastChannel not available in all contexts
     }
 
+    function readFromObsBrowserEvent(event) {
+      try {
+        const detail = event && typeof event.detail === "object" ? event.detail : null;
+        const data = detail && typeof detail.event_data === "object" ? detail.event_data : detail;
+        if (!data || typeof data !== "object") return false;
+        if (data.tab && data.tab !== "lower-third") return false;
+        const packet = data.packet || data.overlayData || data.data;
+        if (!packet || typeof packet !== "object") return false;
+        if (packet.action === "animate-out") {
+          const handled = animateCurrentOverlayOut();
+          writeRenderAck(packet, "animate-out");
+          return handled;
+        }
+        applyTheme(packet);
+        writeRenderAck(packet, "lower-third");
+        return true;
+      } catch { }
+      return false;
+    }
+
+    window.addEventListener("mce-overlay-packet", readFromObsBrowserEvent);
+
     // Listen for animate-out via window.postMessage (for iframe/parent communication)
     window.addEventListener("message", (e) => {
       if (e.data && e.data.action === "animate-out") {
-        var root = document.getElementById("overlay-root");
-        var ltEls = root.querySelectorAll(".lt[data-state='in']");
-        for (var i = 0; i < ltEls.length; i++) {
-          ltEls[i].setAttribute("data-state", "out");
-        }
+        animateCurrentOverlayOut();
       }
     });
 

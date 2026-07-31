@@ -39,6 +39,9 @@ describe("dockObsClient background reflection stress", () => {
   let sceneItems: Map<string, Map<string, SceneItemState>>;
   let nextSceneItemId: number;
   let callLog: Array<{ method: string; payload: Record<string, unknown> }>;
+  let currentProgramSceneName: string;
+  let currentPreviewSceneName: string;
+  let studioModeEnabled: boolean;
 
   const fullscreenVariants = [
     {
@@ -152,25 +155,35 @@ describe("dockObsClient background reflection stress", () => {
       deliverCssOverlayPacket: client.deliverCssOverlayPacket,
       getPresentationTargetScene: client.getPresentationTargetScene,
       fitSceneSourceToLowerThirdWindow: client.fitSceneSourceToLowerThirdWindow,
+      ensureTickerAboveSource: client.ensureTickerAboveSource,
       promotePresentationScene: client.promotePresentationScene,
       ensurePresentationPreviewActive: client.ensurePresentationPreviewActive,
+      ensurePresentationSceneReady: client.ensurePresentationSceneReady,
       ensureDedicatedScene: client.ensureDedicatedScene,
       getCurrentProgramSceneName: client.getCurrentProgramSceneName,
-      ensureMCEPresentationInScene: client.ensureMCEPresentationInScene,
       waitForSceneMatch: client.waitForSceneMatch,
       prepareFastOverlayScene: client.prepareFastOverlayScene,
       pushWorshipLyrics: client.pushWorshipLyrics,
       pushNotesLyrics: client.pushNotesLyrics,
+      readSceneMode: client.readSceneMode,
+      isStudioModeEnabled: client.isStudioModeEnabled,
+      sleep: client.sleep,
+      _status: client._status,
     };
 
     inputs = new Map();
     sceneItems = new Map();
     nextSceneItemId = 1;
     callLog = [];
+    currentProgramSceneName = "Main";
+    currentPreviewSceneName = "Preview";
+    studioModeEnabled = false;
 
     client.resetPresentationSceneState();
+    client._status = "connected";
 
     client.getCanvasSize = vi.fn(async () => ({ width: 1920, height: 1080 }));
+    client.sleep = vi.fn(async () => {});
     client.buildOverlayHtmlUrl = vi.fn((file: string) => `http://overlay.test/${file}`);
     client.invalidateSceneItemListCache = vi.fn();
     client.getSceneItemListCached = vi.fn(async (sceneName: string) => {
@@ -220,12 +233,34 @@ describe("dockObsClient background reflection stress", () => {
           const items = Array.from(sceneItems.get(String(payload.sceneName))?.values() ?? []);
           return {
             sceneItems: items.map((item) => ({
-              sourceName: item.sourceName,
-              sceneItemId: item.sceneItemId,
-              sceneItemIndex: item.sceneItemIndex,
-            })),
-          };
+            sourceName: item.sourceName,
+            sceneItemId: item.sceneItemId,
+            sceneItemIndex: item.sceneItemIndex,
+            sceneItemEnabled: item.enabled,
+          })),
+        };
         }
+        case "GetSceneList":
+          return {
+            scenes: Array.from(sceneItems.keys()).map((sceneName) => ({ sceneName })),
+          };
+        case "CreateScene":
+          if (!sceneItems.has(String(payload.sceneName))) {
+            sceneItems.set(String(payload.sceneName), new Map());
+          }
+          return {};
+        case "GetStudioModeEnabled":
+          return { studioModeEnabled };
+        case "GetCurrentProgramScene":
+          return { currentProgramSceneName };
+        case "SetCurrentProgramScene":
+          currentProgramSceneName = String(payload.sceneName);
+          return {};
+        case "GetCurrentPreviewScene":
+          return { currentPreviewSceneName };
+        case "SetCurrentPreviewScene":
+          currentPreviewSceneName = String(payload.sceneName);
+          return {};
         case "CreateSceneItem": {
           const sceneName = String(payload.sceneName);
           const sourceName = String(payload.sourceName);
@@ -294,20 +329,177 @@ describe("dockObsClient background reflection stress", () => {
     }
   });
 
-  it("does not switch Program to MCE Presentation when promoting dock Bible output", async () => {
-    client.ensurePresentationPreviewActive = vi.fn(async () => false);
-    client.ensureDedicatedScene = vi.fn(async () => {});
-    client.getCurrentProgramSceneName = vi.fn(async () => "Pastor Camera");
-    client.ensureMCEPresentationInScene = vi.fn(async () => {});
-    client.waitForSceneMatch = vi.fn(async () => {});
+  it("switches OBS Preview to MCE Presentation when Studio Mode is enabled", async () => {
+    studioModeEnabled = true;
+    currentProgramSceneName = "Pastor Camera";
+    currentPreviewSceneName = "Offering";
+    sceneItems.set("MCE Presentation", new Map());
+    sceneItems.set("Pastor Camera", new Map());
+    client.ensurePresentationSceneReady = vi.fn(async () => {});
+    client.readSceneMode = vi.fn(() => "no-clone");
 
     await client.promotePresentationScene("bible");
 
-    expect(client.ensureMCEPresentationInScene).toHaveBeenCalledWith("Pastor Camera");
+    expect(callLog).toContainEqual({
+      method: "SetCurrentPreviewScene",
+      payload: { sceneName: "MCE Presentation" },
+    });
     expect(callLog).not.toContainEqual({
       method: "SetCurrentProgramScene",
       payload: { sceneName: "MCE Presentation" },
     });
+  });
+
+  it("switches OBS Program to MCE Presentation when Studio Mode is disabled", async () => {
+    studioModeEnabled = false;
+    currentProgramSceneName = "Pastor Camera";
+    currentPreviewSceneName = "";
+    sceneItems.set("MCE Presentation", new Map([
+      ["MCE Worship", { sourceName: "MCE Worship", sceneItemId: 10, sceneItemIndex: 1, enabled: true }],
+    ]));
+    sceneItems.set("Pastor Camera", new Map());
+    client.ensurePresentationSceneReady = vi.fn(async () => {});
+    client.readSceneMode = vi.fn(() => "auto-duplicate");
+
+    await client.promotePresentationScene("worship");
+
+    expect(sceneItems.get("MCE Presentation")?.has("Pastor Camera")).toBe(true);
+    expect(callLog).toContainEqual({
+      method: "SetCurrentProgramScene",
+      payload: { sceneName: "MCE Presentation" },
+    });
+    expect(callLog.some((entry) => (
+      entry.method === "CreateSceneItem" &&
+      entry.payload.sceneName === "Pastor Camera" &&
+      entry.payload.sourceName === "MCE Presentation"
+    ))).toBe(false);
+  });
+
+  it("removes Program scene nesting when Program background is turned off", async () => {
+    sceneItems.set("MCE Presentation", new Map([
+      ["Pastor Camera", { sourceName: "Pastor Camera", sceneItemId: 10, sceneItemIndex: 0, enabled: true }],
+      ["MCE Worship", { sourceName: "MCE Worship", sceneItemId: 11, sceneItemIndex: 1, enabled: true }],
+    ]));
+    sceneItems.set("Pastor Camera", new Map([
+      ["MCE Presentation", { sourceName: "MCE Presentation", sceneItemId: 20, sceneItemIndex: 3, enabled: true }],
+    ]));
+    client.readSceneMode = vi.fn(() => "no-clone");
+    client.ensurePresentationSceneReady = vi.fn(async () => {});
+    client.getCurrentProgramSceneName = vi.fn(async () => "Pastor Camera");
+
+    await client.applyProjectionSettings({ allowSceneMutation: true });
+
+    expect(sceneItems.get("MCE Presentation")?.has("Pastor Camera")).toBe(false);
+    expect(sceneItems.get("MCE Presentation")?.has("MCE Worship")).toBe(true);
+    expect(sceneItems.get("Pastor Camera")?.has("MCE Presentation")).toBe(false);
+  });
+
+  it("replaces the previous Program scene underlay instead of stacking program scenes", async () => {
+    sceneItems.set("MCE Presentation", new Map([
+      ["Pastor Camera", { sourceName: "Pastor Camera", sceneItemId: 10, sceneItemIndex: 0, enabled: true }],
+      ["MCE Worship", { sourceName: "MCE Worship", sceneItemId: 11, sceneItemIndex: 1, enabled: true }],
+    ]));
+    sceneItems.set("Pastor Camera", new Map());
+    sceneItems.set("Camera 2", new Map());
+    client.readSceneMode = vi.fn(() => "auto-duplicate");
+    client.isStudioModeEnabled = vi.fn(async () => true);
+    client.ensurePresentationSceneReady = vi.fn(async () => {});
+    client.getCurrentProgramSceneName = vi.fn(async () => "Camera 2");
+
+    await client.ensureProgramSceneAsSourceInPresentation(true);
+
+    const presentationItems = sceneItems.get("MCE Presentation");
+    expect(presentationItems?.has("Pastor Camera")).toBe(false);
+    expect(presentationItems?.has("Camera 2")).toBe(true);
+    expect(presentationItems?.has("MCE Worship")).toBe(true);
+    expect(Array.from(presentationItems?.values() ?? []).filter((item) => (
+      item.sourceName === "Pastor Camera" || item.sourceName === "Camera 2"
+    ))).toHaveLength(1);
+  });
+
+  it("reuses the current Program scene underlay when it is already correct", async () => {
+    sceneItems.set("MCE Presentation", new Map([
+      ["Camera 2", { sourceName: "Camera 2", sceneItemId: 10, sceneItemIndex: 0, enabled: true }],
+      ["MCE Worship", { sourceName: "MCE Worship", sceneItemId: 11, sceneItemIndex: 1, enabled: true }],
+    ]));
+    sceneItems.set("Camera 2", new Map());
+    client.readSceneMode = vi.fn(() => "auto-duplicate");
+    client.isStudioModeEnabled = vi.fn(async () => true);
+    client.ensurePresentationSceneReady = vi.fn(async () => {});
+    client.getCurrentProgramSceneName = vi.fn(async () => "Camera 2");
+
+    await client.ensureProgramSceneAsSourceInPresentation();
+    const callsAfterFirstPass = callLog.length;
+    await client.ensureProgramSceneAsSourceInPresentation();
+
+    const presentationItems = sceneItems.get("MCE Presentation");
+    expect(presentationItems?.has("Camera 2")).toBe(true);
+    expect(presentationItems?.has("MCE Worship")).toBe(true);
+    expect(callLog.some((entry) => (
+      entry.method === "CreateSceneItem" &&
+      entry.payload.sceneName === "MCE Presentation" &&
+      entry.payload.sourceName === "Camera 2"
+    ))).toBe(false);
+    expect(callLog.some((entry) => (
+      entry.method === "RemoveSceneItem" &&
+      entry.payload.sceneName === "MCE Presentation" &&
+      entry.payload.sceneItemId === 10
+    ))).toBe(false);
+    expect(callLog).toHaveLength(callsAfterFirstPass);
+  });
+
+  it("keeps routing live on repeated fast overlay sends while layout prep stays cached", async () => {
+    const fitSource = vi.fn(async () => {});
+    client.promotePresentationScene = vi.fn(async () => {});
+    client.ensureTickerAboveSource = vi.fn(async () => {});
+    client.getPresentationTargetScene = vi.fn(async () => ({ sceneName: "MCE Presentation" }));
+
+    await client.prepareFastOverlayScene("bible", "MCE Browser - Bible", fitSource);
+    await client.prepareFastOverlayScene("bible", "MCE Browser - Bible", fitSource);
+
+    expect(client.promotePresentationScene).toHaveBeenCalledTimes(2);
+    expect(fitSource).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not copy managed multiview Program scenes into MCE Presentation", async () => {
+    sceneItems.set("MCE Presentation", new Map([
+      ["Pastor Camera", { sourceName: "Pastor Camera", sceneItemId: 10, sceneItemIndex: 0, enabled: true }],
+      ["MCE Worship", { sourceName: "MCE Worship", sceneItemId: 11, sceneItemIndex: 1, enabled: true }],
+    ]));
+    sceneItems.set("Pastor Camera", new Map());
+    sceneItems.set("MV: Multiview 1", new Map());
+    client.readSceneMode = vi.fn(() => "auto-duplicate");
+    client.isStudioModeEnabled = vi.fn(async () => true);
+    client.ensurePresentationSceneReady = vi.fn(async () => {});
+    client.getCurrentProgramSceneName = vi.fn(async () => "MV: Multiview 1");
+
+    await client.ensureProgramSceneAsSourceInPresentation(true);
+
+    const presentationItems = sceneItems.get("MCE Presentation");
+    expect(presentationItems?.has("Pastor Camera")).toBe(false);
+    expect(presentationItems?.has("MV: Multiview 1")).toBe(false);
+    expect(presentationItems?.has("MCE Worship")).toBe(true);
+    expect(callLog.some((entry) => (
+      entry.method === "CreateSceneItem" &&
+      entry.payload.sceneName === "MCE Presentation" &&
+      entry.payload.sourceName === "MV: Multiview 1"
+    ))).toBe(false);
+  });
+
+  it("turns multiview scenes off immediately without fade filters", async () => {
+    sceneItems.set("MV: Multiview 1", new Map([
+      ["mv_a", { sourceName: "mv_a", sceneItemId: 10, sceneItemIndex: 0, enabled: true }],
+      ["mv_b", { sourceName: "mv_b", sceneItemId: 11, sceneItemIndex: 1, enabled: true }],
+    ]));
+
+    await client.fadeOutAllSceneItems("MV: Multiview 1");
+
+    expect(Array.from(sceneItems.get("MV: Multiview 1")?.values() ?? []).every((item) => item.enabled === false)).toBe(true);
+    expect(callLog.some((entry) => (
+      entry.method === "CreateSourceFilter" ||
+      entry.method === "SetSourceFilterSettings" ||
+      entry.method === "RemoveSourceFilter"
+    ))).toBe(false);
   });
 
   it("does not rewrite the Bible browser URL when OBS already has the overlay document loaded", async () => {
@@ -623,5 +815,34 @@ describe("dockObsClient background reflection stress", () => {
       variant.assertTheme(theme);
       expect(packet!.mode).toBe("lower-third");
     }
+  });
+
+  it("preserves Worship lower-third text case through the fast overlay path", async () => {
+    const sourceName = "MCE Worship";
+    client._worshipInitialized = true;
+    client._lastOverlayMode[sourceName] = "lower-third";
+    client._lastBrowserSourceUrlBySource[sourceName] = "http://overlay.test/existing";
+    client.publishFullscreenOverlayPacket = vi.fn();
+    const packets: Array<Record<string, unknown>> = [];
+    client.deliverCssOverlayPacket = vi.fn(async (_source: string, _type: string, packet: Record<string, unknown>) => {
+      packets.push(packet);
+    });
+    client.fitSceneSourceToLowerThirdWindow = vi.fn(async () => {});
+
+    await client.pushWorshipOverlayFast({
+      sectionText: "saved by grace",
+      sectionLabel: "Chorus",
+      songTitle: "Case Test",
+      bibleThemeSettings: makeBackgroundTheme({
+        textTransform: "uppercase",
+        fontColor: "#ffffff",
+        fontSize: 56,
+      }),
+    });
+
+    const packet = packets[packets.length - 1];
+    expect(packet).toBeTruthy();
+    expect((packet!.theme as Record<string, unknown>).textTransform).toBe("uppercase");
+    expect((packet!.slide as Record<string, unknown>).text).toBe("saved by grace");
   });
 });

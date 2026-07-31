@@ -139,6 +139,13 @@ function getCompactDockTabLabel(tab: DockTab, t: (key: string) => string): strin
   }
 }
 
+function formatDockObsError(message: string): string {
+  if (/No source was found.*MCE Presentation.*within the canvas/i.test(message)) {
+    return "Please refresh the dock, or check that MakeChurchEasy is running.";
+  }
+  return message;
+}
+
 export default function DockPage({
   externalObsSession = false,
   presentationBibleLmSplit = false,
@@ -172,9 +179,6 @@ export default function DockPage({
   const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() => shellPreferences.disabledTabs ?? []);
   const [dockHeight, setDockHeight] = useState(0);
   const verticalTabs = dockHeight > 0 && dockHeight < 550;
-  const [tickerOutputMode, setTickerOutputMode] = useState<"source" | "scene">(() => {
-    try { return (localStorage.getItem("dock-ticker-output-mode") as "source" | "scene") || "scene"; } catch { return "scene"; }
-  });
   const [obsConnected, setObsConnected] = useState(false);
   const [obsError, setObsError] = useState("");
   const [staged, setStaged] = useState<DockStagedItem | null>(() => loadDockStagedItem());
@@ -194,6 +198,17 @@ export default function DockPage({
     () => visibleDockTabs.filter((tab) => !disabledTabs.includes(tab.id)),
     [disabledTabs, visibleDockTabs],
   );
+
+  const updateProjectionSceneMode = useCallback((sceneMode: ProjectionSettings["sceneMode"]) => {
+    setProjectionSettings((current) => {
+      const next = { ...current, sceneMode };
+      saveProjectionSettings(next);
+      void dockObsClient.applyProjectionSettings({ allowSceneMutation: true }).catch((error) => {
+        console.warn("[Dock] Failed to apply OBS output routing:", error);
+      });
+      return next;
+    });
+  }, []);
 
   // Register the upgrade modal trigger so any dock tab can show it.
   useEffect(() => {
@@ -361,7 +376,7 @@ export default function DockPage({
 
     const unsubObs = dockObsClient.onStatusChange((status: DockObsStatus, err?: string) => {
       setObsConnected(status === "connected");
-      setObsError(status === "error" ? (err || t('dock.connectionFailed')) : "");
+      setObsError(status === "error" ? formatDockObsError(err || t('dock.connectionFailed')) : "");
 
       if (status === "connected") {
         // Stop auto-reconnect — we're connected
@@ -492,7 +507,7 @@ export default function DockPage({
       setObsUrlInput(obsUrl);
       await ensureObsConnected(obsUrl, obsPwInput || undefined);
     } catch (err) {
-      setObsError(err instanceof Error ? err.message : t('dock.connectionFailed'));
+      setObsError(formatDockObsError(err instanceof Error ? err.message : t('dock.connectionFailed')));
     }
   }, [obsPwInput, obsUrlInput]);
 
@@ -810,51 +825,6 @@ export default function DockPage({
                   );
                 })()}
 
-                {!presentationLinkMode && !hideTickerControls && (
-                  <>
-                    <div className="dock-sidebar__divider" />
-
-                    {/* Ticker Preview */}
-                    <div className="dock-sidebar__item" style={{ cursor: "default" }}>
-                      <Icon name="campaign" size={16} />
-                      <span>{t('dock.tickerPreviewBehavior', 'Ticker Preview')}</span>
-                    </div>
-                    <div className="dock-sidebar__subpanel">
-                      {([
-                        {
-                          mode: "source" as const,
-                          icon: "monitor",
-                          label: t('dock.keepCurrentPreview', 'Keep current preview'),
-                          desc: t('dock.keepCurrentPreviewDesc', 'Send ticker without changing OBS Preview.'),
-                        },
-                        {
-                          mode: "scene" as const,
-                          icon: "dashboard",
-                          label: t('dock.showTickerPreview', 'Show ticker preview'),
-                          desc: t('dock.showTickerPreviewDesc', 'Open MCE Presentation in Preview so you can transition it live.'),
-                        },
-                      ]).map(({ mode, icon, label, desc }) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          className={`dock-sidebar__radio${tickerOutputMode === mode ? " dock-sidebar__radio--active" : ""}`}
-                          onClick={() => {
-                            setTickerOutputMode(mode);
-                            try { localStorage.setItem("dock-ticker-output-mode", mode); } catch { /* ignore */ }
-                          }}
-                          title={label}>
-                          <Icon name={icon} size={14} />
-                          <div className="dock-sidebar__radio-copy">
-                            <div className="dock-sidebar__radio-title">{label}</div>
-                            <div className="dock-sidebar__radio-desc">{desc}</div>
-                          </div>
-                          {tickerOutputMode === mode && <Icon name="check" size={12} />}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-
                 {!presentationLinkMode && (
                   <>
                     <div className="dock-sidebar__divider" />
@@ -877,28 +847,23 @@ export default function DockPage({
                           {([
                             {
                               mode: "auto-duplicate" as const,
-                              icon: "shield",
-                              label: t('page.safePreviewScene', 'Safe preview scene'),
-                              desc: t('page.safePreviewSceneDesc', 'Use MCE Presentation with your Program scene behind it. Recommended.'),
-                            },
-                            {
-                              mode: "reference" as const,
-                              icon: "link",
-                              label: t('page.mirrorProgram', 'Mirror Program'),
-                              desc: t('page.mirrorProgramDesc', 'MCE Presentation follows changes in the current Program scene.'),
+                              icon: "visibility",
+                              label: t('page.programBackgroundOn', 'Program background on'),
+                              desc: t('page.programBackgroundOnDesc', 'Put the current Program scene under MCE Presentation immediately.'),
                             },
                             {
                               mode: "no-clone" as const,
-                              icon: "block",
-                              label: t('page.directProgram', 'Direct Program'),
-                              desc: t('page.directProgramDesc', 'Place MCE overlays directly into the current Program scene.'),
+                              icon: "visibility_off",
+                              label: t('page.programBackgroundOff', 'Program background off'),
+                              desc: t('page.programBackgroundOffDesc', 'Do not place the Program scene inside MCE Presentation.'),
                             },
                           ]).map(({ mode, icon, label, desc }) => (
                             <button
                               key={mode}
                               type="button"
                               className={`dock-sidebar__radio${projectionSettings.sceneMode === mode ? " dock-sidebar__radio--active" : ""}`}
-                              onClick={() => setProjectionSettings((s) => ({ ...s, sceneMode: mode }))}
+                              aria-pressed={projectionSettings.sceneMode === mode}
+                              onClick={() => updateProjectionSceneMode(mode)}
                               title={label}>
                               <Icon name={icon} size={14} />
                               <div className="dock-sidebar__radio-copy">
@@ -1190,7 +1155,6 @@ export default function DockPage({
                 <DockMinistryTab
                   staged={staged}
                   onStage={handleStage}
-                  tickerOutputMode={tickerOutputMode}
                   presentationOutputTarget={presentationOutputTarget}
                   hideTickerControls={hideTickerControls}
                   hideLowerThirdControls={hideLowerThirdControls}

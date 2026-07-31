@@ -114,6 +114,20 @@ function writeLocalSettings(settings: ProductionSettings): void {
   }
 }
 
+async function readSettingsFromDockData(): Promise<Partial<ProductionSettings> | null> {
+  if (!canSyncDockData()) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const raw = await invoke<string>("load_dock_data", { name: "dock-production-settings" });
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed as Partial<ProductionSettings>;
+  } catch {
+    // Dock data is a recovery fallback only.
+  }
+  return null;
+}
+
 function normalizeModuleSettings(
   value: Partial<ProductionModuleSettings> | undefined,
   fallback: ProductionModuleSettings = DEFAULT_MODULE_SETTINGS,
@@ -234,7 +248,17 @@ export async function getProductionSettings(): Promise<ProductionSettings> {
     }
   }
 
+  if (!resolved) {
+    const dockSettings = await readSettingsFromDockData();
+    if (dockSettings) {
+      resolved = dockSettings;
+    }
+  }
+
   const normalized = normalizeProductionSettings(resolved);
+  await putRecord(STORES.APP_SETTINGS, normalized, scopedDbKey()).catch((err) => {
+    console.warn("[productionSettings] Failed to restore production settings to IndexedDB:", err);
+  });
   writeLocalSettings(normalized);
   return normalized;
 }

@@ -14,7 +14,7 @@ import { syncFavoriteBibleThemesToDock } from "../services/favoriteThemes";
 import { trackThemeCreated } from "../services/tracking";
 import { serializeBibleThemesForDock } from "../services/dockBibleThemeAssets";
 import { resolveOverlayAssetUrl, toStoredOverlayAssetUrl } from "../services/overlayUrl";
-import { getCurrentUserId } from "../services/db";
+import { deleteRecord, getAll, getByKey, getCurrentUserId, putRecord, STORES } from "../services/db";
 import { getDeviceId } from "../services/authService";
 import { assertCompleteBibleData, formatBibleDataStats, getBibleDataStats, isCompleteBibleData } from "./bibleValidation";
 
@@ -150,6 +150,177 @@ function mergeCustomThemes(apiThemes: BibleTheme[], localThemes: BibleTheme[]): 
     merged.set(theme.id, normalizeTheme(theme));
   }
   return sortCustomThemesNewestFirst(Array.from(merged.values()));
+}
+
+function getTranslationKey(abbr: string): string {
+  return abbr.trim().toUpperCase();
+}
+
+function installedBibleTime(bible: InstalledBible): number {
+  return new Date(bible.downloadedAt || 0).getTime();
+}
+
+function mergeInstalledBibles(...groups: InstalledBible[][]): InstalledBible[] {
+  const merged = new Map<string, InstalledBible>();
+  for (const group of groups) {
+    for (const bible of group) {
+      if (!bible?.abbr) continue;
+      const key = getTranslationKey(bible.abbr);
+      const current = merged.get(key);
+      if (!current || installedBibleTime(bible) >= installedBibleTime(current)) {
+        merged.set(key, { ...bible, abbr: key });
+      }
+    }
+  }
+  return Array.from(merged.values()).sort((left, right) => left.abbr.localeCompare(right.abbr));
+}
+
+async function readCustomThemesFromCentralDb(): Promise<BibleTheme[]> {
+  try {
+    const raw = await getAll<BibleTheme>(STORES.BIBLE_THEMES);
+    return sortCustomThemesNewestFirst(raw.map((theme) => normalizeTheme(theme)));
+  } catch {
+    return [];
+  }
+}
+
+async function writeCustomThemeToCentralDb(theme: BibleTheme): Promise<void> {
+  try {
+    await putRecord(STORES.BIBLE_THEMES, prepareThemeForStorage(theme));
+  } catch (err) {
+    console.warn("[bibleDb] Failed to mirror custom theme to central IndexedDB:", err);
+  }
+}
+
+async function deleteCustomThemeFromCentralDb(id: string): Promise<void> {
+  try {
+    await deleteRecord(STORES.BIBLE_THEMES, id);
+  } catch (err) {
+    console.warn("[bibleDb] Failed to delete custom theme from central IndexedDB:", err);
+  }
+}
+
+function canLoadDockData(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+async function loadDockDataJson<T>(name: string): Promise<T | null> {
+  if (!canLoadDockData()) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const raw = await invoke<string>("load_dock_data", { name });
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function readCustomThemesFromDockData(): Promise<BibleTheme[]> {
+  const raw = await loadDockDataJson<unknown>("dock-bible-themes");
+  if (!Array.isArray(raw)) return [];
+  return sortCustomThemesNewestFirst(raw
+    .filter((theme): theme is BibleTheme => !!theme && typeof theme === "object" && "id" in theme)
+    .map((theme) => normalizeTheme(theme)));
+}
+
+async function readInstalledTranslationsFromDockData(): Promise<InstalledBible[]> {
+  const metadata = await loadDockDataJson<Array<Omit<InstalledBible, "data">>>("dock-bible-translations");
+  if (!Array.isArray(metadata) || metadata.length === 0) return [];
+
+  const recovered: InstalledBible[] = [];
+  for (const entry of metadata) {
+    if (!entry?.abbr) continue;
+    const abbr = getTranslationKey(entry.abbr);
+    const data = await loadDockDataJson<RawBibleData>(`dock-bible-translation-${abbr.toLowerCase()}`);
+    if (!data || !isCompleteBibleData(data)) continue;
+    recovered.push({
+      id: entry.id,
+      abbr,
+      name: entry.name,
+      language: entry.language,
+      downloadedAt: entry.downloadedAt,
+      filesize: entry.filesize,
+      data,
+    });
+  }
+  return recovered;
+}
+
+async function readInstalledTranslationsFromCentralDb(): Promise<InstalledBible[]> {
+  try {
+    return await getAll<InstalledBible>(STORES.BIBLE_TRANSLATIONS);
+  } catch {
+    return [];
+  }
+}
+
+async function writeInstalledTranslationToCentralDb(bible: InstalledBible): Promise<void> {
+  try {
+    await putRecord(STORES.BIBLE_TRANSLATIONS, { ...bible, abbr: getTranslationKey(bible.abbr) });
+  } catch (err) {
+    console.warn("[bibleDb] Failed to mirror Bible translation to central IndexedDB:", err);
+  }
+}
+
+async function deleteInstalledTranslationFromCentralDb(abbr: string): Promise<void> {
+  try {
+    await deleteRecord(STORES.BIBLE_TRANSLATIONS, getTranslationKey(abbr));
+    if (abbr !== getTranslationKey(abbr)) {
+      await deleteRecord(STORES.BIBLE_TRANSLATIONS, abbr);
+    }
+  } catch (err) {
+    console.warn("[bibleDb] Failed to delete Bible translation from central IndexedDB:", err);
+  }
+}
+
+async function backfillCustomThemes(themes: BibleTheme[]): Promise<void> {
+  if (themes.length === 0) return;
+  try {
+    const db = await getDb();
+    const uid = getCurrentUserId();
+    await Promise.all(themes.map(async (theme) => {
+      const stored = prepareThemeForStorage(theme);
+      await db.put("themes", uid ? { ...stored, userId: uid } : stored);
+      await writeCustomThemeToCentralDb(stored);
+    }));
+    writeCustomThemesToLocalStorage(themes);
+  } catch (err) {
+    console.warn("[bibleDb] Failed to backfill custom themes:", err);
+  }
+}
+
+async function backfillInstalledTranslations(
+  legacyTranslations: InstalledBible[],
+  centralTranslations: InstalledBible[],
+  translations: InstalledBible[],
+): Promise<void> {
+  if (translations.length === 0) return;
+  try {
+    const db = await getDb();
+    const legacyKeys = new Set(
+      legacyTranslations
+        .filter((bible) => isCompleteBibleData(bible.data))
+        .map((bible) => getTranslationKey(bible.abbr)),
+    );
+    const centralKeys = new Set(
+      centralTranslations
+        .filter((bible) => isCompleteBibleData(bible.data))
+        .map((bible) => getTranslationKey(bible.abbr)),
+    );
+
+    await Promise.all(translations.map(async (bible) => {
+      const normalized = { ...bible, abbr: getTranslationKey(bible.abbr) };
+      if (!legacyKeys.has(normalized.abbr)) {
+        await db.put("translations", normalized);
+      }
+      if (!centralKeys.has(normalized.abbr)) {
+        await writeInstalledTranslationToCentralDb(normalized);
+      }
+    }));
+  } catch (err) {
+    console.warn("[bibleDb] Failed to backfill Bible translations:", err);
+  }
 }
 
 function readCustomThemesFromLocalStorage(): BibleTheme[] {
@@ -386,6 +557,7 @@ export async function getCustomThemes(): Promise<BibleTheme[]> {
         for (const theme of mergedThemes) {
           const tagged = uid ? { ...prepareThemeForStorage(theme), userId: uid } : prepareThemeForStorage(theme);
           await db.put("themes", tagged);
+          await writeCustomThemeToCentralDb(tagged);
         }
         writeCustomThemesToLocalStorage(mergedThemes);
       } catch { /* cache update is best-effort */ }
@@ -409,20 +581,41 @@ async function getCustomThemesFromIndexedDB(): Promise<BibleTheme[]> {
       raw = await db.getAll("themes") as BibleTheme[];
     }
     const themes = sortCustomThemesNewestFirst(raw.map((theme) => normalizeTheme(theme)));
+    const [centralThemes, dockThemes] = await Promise.all([
+      readCustomThemesFromCentralDb(),
+      readCustomThemesFromDockData(),
+    ]);
     try {
       const localStorageThemes = readCustomThemesFromLocalStorage();
-      const mergedThemes = mergeCustomThemes(themes, localStorageThemes);
+      const mergedThemes = mergeCustomThemes(
+        mergeCustomThemes(mergeCustomThemes(themes, centralThemes), dockThemes),
+        localStorageThemes,
+      );
       if (mergedThemes.length > 0) {
+        backfillCustomThemes(mergedThemes).catch(() => { });
         writeCustomThemesToLocalStorage(mergedThemes);
       }
       return mergedThemes;
     } catch {
       // Ignore mirror errors - IndexedDB is primary storage
     }
-    return themes;
+    const mergedThemes = mergeCustomThemes(mergeCustomThemes(themes, centralThemes), dockThemes);
+    if (mergedThemes.length > 0) {
+      backfillCustomThemes(mergedThemes).catch(() => { });
+    }
+    return mergedThemes;
   } catch (err) {
     console.warn("[bibleDb] Failed to load custom themes from IndexedDB, falling back to localStorage:", err);
-    return readCustomThemesFromLocalStorage();
+    const [centralThemes, dockThemes, localStorageThemes] = await Promise.all([
+      readCustomThemesFromCentralDb(),
+      readCustomThemesFromDockData(),
+      Promise.resolve(readCustomThemesFromLocalStorage()),
+    ]);
+    const mergedThemes = mergeCustomThemes(mergeCustomThemes(centralThemes, dockThemes), localStorageThemes);
+    if (mergedThemes.length > 0) {
+      backfillCustomThemes(mergedThemes).catch(() => { });
+    }
+    return mergedThemes;
   }
 }
 
@@ -449,6 +642,7 @@ export async function saveCustomTheme(theme: BibleTheme): Promise<void> {
   } catch (err) {
     console.warn("[bibleDb] Failed to save custom theme to IndexedDB, falling back to localStorage:", err);
   }
+  await writeCustomThemeToCentralDb(tagged);
 
   const savedToLocalStorage = upsertCustomThemeInLocalStorage(tagged);
   if (!savedToDb && !savedToLocalStorage) {
@@ -487,6 +681,7 @@ export async function deleteCustomTheme(id: string): Promise<void> {
   } catch (err) {
     console.warn("[bibleDb] Failed to delete custom theme from IndexedDB, falling back to localStorage:", err);
   }
+  await deleteCustomThemeFromCentralDb(id);
 
   const deletedFromLocalStorage = removeCustomThemeFromLocalStorage(id);
   if (!deletedFromDb && !deletedFromLocalStorage) {
@@ -621,8 +816,18 @@ export async function saveBibleSettings(
  * Get all installed / downloaded translations (metadata only — no data field).
  */
 export async function getInstalledTranslations(): Promise<Omit<InstalledBible, "data">[]> {
-  const db = await getDb();
-  const all: InstalledBible[] = await db.getAll("translations");
+  let legacyTranslations: InstalledBible[] = [];
+  try {
+    const db = await getDb();
+    legacyTranslations = await db.getAll("translations") as InstalledBible[];
+  } catch (err) {
+    console.warn("[bibleDb] Failed to read Bible translations from legacy IndexedDB:", err);
+  }
+  const [centralTranslations, dockTranslations] = await Promise.all([
+    readInstalledTranslationsFromCentralDb(),
+    readInstalledTranslationsFromDockData(),
+  ]);
+  const all = mergeInstalledBibles(legacyTranslations, centralTranslations, dockTranslations);
 
   const valid: InstalledBible[] = [];
   for (const bible of all) {
@@ -633,10 +838,10 @@ export async function getInstalledTranslations(): Promise<Omit<InstalledBible, "
 
     const stats = getBibleDataStats(bible.data);
     console.warn(
-      `[bibleDb] Removing incomplete Bible translation ${bible.abbr} (${formatBibleDataStats(stats)}).`
+      `[bibleDb] Ignoring incomplete Bible translation ${bible.abbr} (${formatBibleDataStats(stats)}).`
     );
-    await db.delete("translations", bible.abbr);
   }
+  backfillInstalledTranslations(legacyTranslations, centralTranslations, valid).catch(() => { });
 
   // Strip the heavy data field for listing
   return valid.map(({ data: _data, ...meta }) => meta);
@@ -648,8 +853,43 @@ export async function getInstalledTranslations(): Promise<Omit<InstalledBible, "
 export async function getInstalledTranslation(
   abbr: string
 ): Promise<InstalledBible | undefined> {
-  const db = await getDb();
-  return db.get("translations", abbr);
+  const key = getTranslationKey(abbr);
+  let db: IDBPDatabase | null = null;
+  let legacy: InstalledBible | undefined;
+  try {
+    db = await getDb();
+    legacy = (await db.get("translations", key)) as InstalledBible | undefined;
+    if (legacy && isCompleteBibleData(legacy.data)) {
+      writeInstalledTranslationToCentralDb(legacy).catch(() => { });
+      return { ...legacy, abbr: key };
+    }
+  } catch (err) {
+    console.warn("[bibleDb] Failed to read Bible translation from legacy IndexedDB:", err);
+  }
+
+  const central = await getByKey<InstalledBible>(STORES.BIBLE_TRANSLATIONS, key).catch(() => undefined);
+  if (central && isCompleteBibleData(central.data)) {
+    db?.put("translations", { ...central, abbr: key }).catch(() => { });
+    return { ...central, abbr: key };
+  }
+
+  const dockTranslations = await readInstalledTranslationsFromDockData();
+  const dock = dockTranslations.find((entry) => getTranslationKey(entry.abbr) === key);
+  if (dock && isCompleteBibleData(dock.data)) {
+    db?.put("translations", { ...dock, abbr: key }).catch(() => { });
+    writeInstalledTranslationToCentralDb(dock).catch(() => { });
+    return { ...dock, abbr: key };
+  }
+
+  const fallbackLegacy = key === abbr || !db ? undefined : (await db.get("translations", abbr)) as InstalledBible | undefined;
+  if (fallbackLegacy && isCompleteBibleData(fallbackLegacy.data)) {
+    const normalized = { ...fallbackLegacy, abbr: key };
+    db?.put("translations", normalized).catch(() => { });
+    writeInstalledTranslationToCentralDb(normalized).catch(() => { });
+    return normalized;
+  }
+
+  return undefined;
 }
 
 /**
@@ -669,8 +909,14 @@ export async function saveInstalledTranslation(
   bible: InstalledBible
 ): Promise<void> {
   assertCompleteBibleData(bible.data, bible.abbr);
-  const db = await getDb();
-  await db.put("translations", bible);
+  const normalized = { ...bible, abbr: getTranslationKey(bible.abbr) };
+  try {
+    const db = await getDb();
+    await db.put("translations", normalized);
+  } catch (err) {
+    console.warn("[bibleDb] Failed to save Bible translation to legacy IndexedDB:", err);
+  }
+  await writeInstalledTranslationToCentralDb(normalized);
   syncInstalledTranslationsToDock().catch((err) => {
     console.warn("[bibleDb] Failed to sync installed translations after save:", err);
   });
@@ -682,8 +928,17 @@ export async function saveInstalledTranslation(
 export async function deleteInstalledTranslation(
   abbr: string
 ): Promise<void> {
-  const db = await getDb();
-  await db.delete("translations", abbr);
+  const key = getTranslationKey(abbr);
+  try {
+    const db = await getDb();
+    await db.delete("translations", key);
+    if (key !== abbr) {
+      await db.delete("translations", abbr);
+    }
+  } catch (err) {
+    console.warn("[bibleDb] Failed to delete Bible translation from legacy IndexedDB:", err);
+  }
+  await deleteInstalledTranslationFromCentralDb(abbr);
   syncInstalledTranslationsToDock().catch((err) => {
     console.warn("[bibleDb] Failed to sync installed translations after delete:", err);
   });
@@ -695,9 +950,7 @@ export async function deleteInstalledTranslation(
 export async function isTranslationInstalled(
   abbr: string
 ): Promise<boolean> {
-  const db = await getDb();
-  const item = await db.get("translations", abbr);
-  return !!item;
+  return !!(await getInstalledTranslation(abbr));
 }
 
 // ---------------------------------------------------------------------------
@@ -709,7 +962,6 @@ export async function isTranslationInstalled(
  * (no translations have ever been downloaded).
  */
 export async function isFirstRun(): Promise<boolean> {
-  const db = await getDb();
-  const count = await db.count("translations");
-  return count === 0;
+  const installed = await getInstalledTranslations();
+  return installed.length === 0;
 }

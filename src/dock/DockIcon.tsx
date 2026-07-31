@@ -255,6 +255,7 @@ const ICONS: Record<string, IconDef> = {
   code: { component: Code },
   collections_bookmark: { component: Library },
   content_copy: { component: Copy },
+  crop: { component: Crop },
   crop_free: { component: Crosshair },
   dashboard: { component: LayoutDashboard },
   delete: { component: Trash },

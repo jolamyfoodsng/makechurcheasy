@@ -78,6 +78,13 @@ interface BibleThemeEntry {
 }
 type MixedLTThemeEntry = LTThemeEntry | BibleThemeEntry;
 
+const MINISTRY_LT_SIZE_OPTIONS: LTSize[] = ["xs", "sm", "md", "lg"];
+const DEFAULT_MINISTRY_LT_SIZE: LTSize = "sm";
+
+function resolveMinistryLtSize(value: unknown): LTSize {
+  return MINISTRY_LT_SIZE_OPTIONS.includes(value as LTSize) ? (value as LTSize) : DEFAULT_MINISTRY_LT_SIZE;
+}
+
 interface TickerMessage {
   id: string;
   text: string;
@@ -114,7 +121,6 @@ type BibleLtColorOverrideMap = Record<string, BibleLtColorOverrides>;
 interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
-  tickerOutputMode?: "source" | "scene";
   presentationOutputTarget?: DockPresentationOutputTarget;
   hideTickerControls?: boolean;
   hideLowerThirdControls?: boolean;
@@ -288,7 +294,6 @@ function loadMinistryTab(): MinistrySubTab {
 export default function DockMinistryTab({
   staged: _staged,
   onStage: _onStage,
-  tickerOutputMode,
   presentationOutputTarget = "obs",
   hideTickerControls = false,
   hideLowerThirdControls = false,
@@ -326,7 +331,7 @@ export default function DockMinistryTab({
   const [ltFeedbackTone, setLtFeedbackTone] = useState<"success" | "error">("success");
   const [ltSize, setLtSize] = useState<LTSize>(() => {
     const saved = getSettings().defaultSpeakerSize;
-    return (saved && LT_SIZE_LABELS[saved as LTSize]) ? (saved as LTSize) : "xl";
+    return resolveMinistryLtSize(saved);
   });
   const [ltLive, setLtLive] = useState(false);
   // BibleTheme lower-third text input (used when a BibleTheme is selected)
@@ -761,16 +766,6 @@ export default function DockMinistryTab({
         await new Promise((r) => setTimeout(r, 100));
       }
 
-      // In scene mode, switch preview to MCE Presentation for user to transition
-      const currentProgramScene = (await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string }).currentProgramSceneName;
-      if (tickerOutputMode === "scene") {
-        try { localStorage.setItem("dock-ticker-original-scene", currentProgramScene); } catch { /* ignore */ }
-        const studioMode = await dockObsClient.call("GetStudioModeEnabled").then((r: unknown) => (r as { studioModeEnabled: boolean }).studioModeEnabled).catch(() => false);
-        if (studioMode) {
-          await dockObsClient.call("SetCurrentPreviewScene", { sceneName: presentationSceneName });
-        }
-      }
-
       // Create or update MCE Ticker browser source in target scene
       const inputs = await dockObsClient.call("GetInputList") as { inputs: Array<{ inputName: string }> };
       const inputExists = inputs.inputs.some((i) => i.inputName === sourceName);
@@ -837,14 +832,14 @@ export default function DockMinistryTab({
 
       setRunning(true);
       setIsPaused(false);
-      setSuccess(tickerOutputMode === "scene" ? t("ministry.tickerLiveScene") : t("ministry.tickerLive"));
+      setSuccess(t("ministry.tickerLive"));
     } catch (err) {
       console.warn("[DockMinistry] Push failed:", err);
       setError(err instanceof Error ? err.message : t("ministry.pushFailed"));
     } finally {
       setSending(false);
     }
-  }, [activeMessages, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerOutputMode]);
+  }, [activeMessages, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors]);
 
   // ── Pause ticker (stops scroll in OBS) ──
   const handlePause = useCallback(async () => {
@@ -931,16 +926,6 @@ export default function DockMinistryTab({
       }
       await dockObsClient.syncLowerThirdTickerClearance("MCE Presentation").catch(() => { });
 
-      // Restore original scene in preview if we had switched away
-      if (tickerOutputMode === "scene") {
-        let originalScene = "";
-        try { originalScene = localStorage.getItem("dock-ticker-original-scene") || ""; } catch { /* ignore */ }
-        if (originalScene) {
-          await dockObsClient.call("SetCurrentPreviewScene", { sceneName: originalScene }).catch(() => { });
-        }
-        try { localStorage.removeItem("dock-ticker-original-scene"); } catch { /* ignore */ }
-      }
-
       setRunning(false);
       setIsPaused(false);
       setSuccess(t("ministry.tickerCleared"));
@@ -949,7 +934,7 @@ export default function DockMinistryTab({
     } finally {
       setSending(false);
     }
-  }, [presentationLinkMode, t, tickerOutputMode]);
+  }, [presentationLinkMode, t]);
 
   return (
     <div className="dock-mv-tab">
@@ -1462,7 +1447,7 @@ export default function DockMinistryTab({
                   <div className="dock-mv-tab__section-label">{t("ministry.size")}</div>
                   <div className="dock-mv-tab__section-desc">{t("ministry.sizeDesc")}</div>
                   <div style={{ padding: "4px 0", display: "flex", gap: 4 }}>
-                    {(["xl", "x2"] as LTSize[]).map((s) => (
+                    {MINISTRY_LT_SIZE_OPTIONS.map((s) => (
                       <button
                         key={s}
                         type="button"
@@ -1505,10 +1490,16 @@ export default function DockMinistryTab({
                       try {
                         await ensureObsConnected();
                         const scale = LT_SIZE_SCALE[ltSize] ?? 1;
-                        await dockObsClient.pushLowerThirdOverlayUrl(url, {
+                        const sourceSize = {
                           sourceWidth: Math.round(1920 / scale),
                           sourceHeight: Math.round(1080 / scale),
-                        });
+                        };
+                        if (ltLive) {
+                          const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
+                          await dockObsClient.replaceLiveLowerThirdOverlayUrl(url, sourceSize, exitDuration);
+                        } else {
+                          await dockObsClient.pushLowerThirdOverlayUrl(url, sourceSize);
+                        }
                         setLtLive(true);
                         setLtFeedbackTone("success");
                         setLtFeedback(t("ministry.lowerThirdLive"));

@@ -57,6 +57,17 @@ export async function dismissDesktopAnnouncement(deliveryId: string, clicked = f
   }).catch(() => {});
 }
 
+const REFRESH_STREAM_TYPES = new Set(["announcement_published", "announcement_restarted"]);
+
+function shouldRefreshFromStream(event: MessageEvent): boolean {
+  try {
+    const body = JSON.parse(event.data) as { type?: string };
+    return Boolean(body.type && REFRESH_STREAM_TYPES.has(body.type));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Opens an SSE connection receiving real-time announcement events.
  * Returns an EventSource — caller closes it on cleanup.
@@ -75,7 +86,9 @@ export function subscribeToAnnouncementStream(
   if (deviceSecret) url.searchParams.set("deviceSecret", deviceSecret);
 
   const es = new EventSource(url.toString());
-  es.addEventListener("message", () => onEvent());
+  es.addEventListener("message", (event) => {
+    if (shouldRefreshFromStream(event)) onEvent();
+  });
   es.addEventListener("open", () => console.log("[Announcements] SSE connected"));
 
   return es;

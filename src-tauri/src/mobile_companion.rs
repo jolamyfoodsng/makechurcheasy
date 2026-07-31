@@ -12,12 +12,17 @@
  */
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::OnceLock;
+use tauri::Emitter;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
 use tokio::time::Duration;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
+use uuid::Uuid;
 
 // ── Public state shared with the rest of the app ────────────────────────────
 
@@ -57,9 +62,26 @@ fn state_broadcast() -> &'static broadcast::Sender<String> {
     })
 }
 
+fn pending_commands() -> &'static Mutex<HashMap<String, oneshot::Sender<MobileCommandCompletion>>> {
+    static STORE: OnceLock<Mutex<HashMap<String, oneshot::Sender<MobileCommandCompletion>>>> =
+        OnceLock::new();
+    STORE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn app_data_dir() -> Result<PathBuf, String> {
+    let base = dirs::data_dir().ok_or("Could not determine app data directory")?;
+    let dir = base.join("MakeChurchEasy");
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create app data directory: {}", e))?;
+    Ok(dir)
+}
+
+fn pairing_token_path() -> Result<PathBuf, String> {
+    Ok(app_data_dir()?.join("mobile-pairing-token.txt"))
+}
+
 // ── Messages from Flutter ───────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MobileCommand {
     Auth {
@@ -71,11 +93,37 @@ pub enum MobileCommand {
         translation: Option<String>,
         #[serde(default)]
         verse_text: Option<String>,
+        #[serde(default)]
+        display_reference_label: Option<String>,
+        #[serde(default)]
+        overlay_mode: Option<String>,
+        #[serde(default)]
+        compare_enabled: Option<bool>,
+        #[serde(default)]
+        compare_layout: Option<String>,
+        #[serde(default)]
+        translation_a: Option<String>,
+        #[serde(default)]
+        translation_b: Option<String>,
+        #[serde(default)]
+        compare_verse_text_a: Option<String>,
+        #[serde(default)]
+        compare_verse_text_b: Option<String>,
     },
     ClearScripture,
     ShowSlide {
         song_id: String,
         slide_index: usize,
+        #[serde(default)]
+        song_title: Option<String>,
+        #[serde(default)]
+        artist: Option<String>,
+        #[serde(default)]
+        slide_text: Option<String>,
+        #[serde(default)]
+        section_label: Option<String>,
+        #[serde(default)]
+        overlay_mode: Option<String>,
     },
     NextSlide,
     PrevSlide,
@@ -85,6 +133,26 @@ pub enum MobileCommand {
         title: String,
     },
     ClearLowerThird,
+    GetBibleTranslations,
+    GetBibleChapter {
+        book: String,
+        chapter: usize,
+        translation: String,
+    },
+    GetCurrentState,
+    GetScenes,
+    SwitchScene {
+        scene_name: String,
+    },
+    SetPreviewScene {
+        scene_name: String,
+    },
+    ToggleStreaming,
+    ToggleRecording,
+    ToggleMic,
+    ExecuteAutomation {
+        macro_id: String,
+    },
     Ping,
 }
 
@@ -108,6 +176,28 @@ pub enum MobileResponse {
     Error {
         message: String,
     },
+    CommandResult {
+        command_id: String,
+        ok: bool,
+        payload: serde_json::Value,
+        error: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileCommandEvent {
+    pub command_id: String,
+    pub command: MobileCommand,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MobileCommandCompletion {
+    pub ok: bool,
+    #[serde(default)]
+    pub payload: serde_json::Value,
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 // ── Global state broadcast to all connected mobile clients ───────────────────
@@ -186,7 +276,36 @@ pub async fn generate_new_pairing_token() -> String {
     let token = generate_pairing_token();
     let mut stored = pairing_token_store().write().await;
     *stored = Some(token.clone());
+    if let Ok(path) = pairing_token_path() {
+        if let Err(error) = fs::write(path, &token) {
+            eprintln!(
+                "[MobileCompanion] Failed to persist pairing token: {}",
+                error
+            );
+        }
+    }
     token
+}
+
+pub async fn get_or_create_pairing_token() -> String {
+    if let Some(token) = get_pairing_token().await {
+        if !token.trim().is_empty() {
+            return token;
+        }
+    }
+
+    if let Ok(path) = pairing_token_path() {
+        if let Ok(token) = fs::read_to_string(path) {
+            let token = token.trim().to_string();
+            if !token.is_empty() {
+                let mut stored = pairing_token_store().write().await;
+                *stored = Some(token.clone());
+                return token;
+            }
+        }
+    }
+
+    generate_new_pairing_token().await
 }
 
 pub async fn get_pairing_token() -> Option<String> {
@@ -201,153 +320,79 @@ pub async fn set_obs_connection(info: ObsConnectionInfo) {
     println!("[MobileCompanion] OBS connection details updated");
 }
 
-// ── OBS WebSocket client (connects to OBS to forward commands) ──────────────
-
-async fn forward_command_to_obs(
-    command: &MobileCommand,
-    obs_url: &str,
-    obs_password: &str,
+pub async fn complete_mobile_command(
+    command_id: String,
+    completion: MobileCommandCompletion,
 ) -> Result<(), String> {
-    let (ws_stream, _) = tokio_tungstenite::connect_async(obs_url)
+    let sender = pending_commands()
+        .lock()
         .await
-        .map_err(|e| format!("Failed to connect to OBS: {}", e))?;
+        .remove(&command_id)
+        .ok_or_else(|| "Mobile command is no longer pending".to_string())?;
 
-    let (mut write, mut read) = ws_stream.split();
+    sender
+        .send(completion)
+        .map_err(|_| "Mobile command receiver is gone".to_string())
+}
 
-    // Authenticate with OBS
-    let auth_msg = serde_json::json!({
-        "op": 1,
-        "d": { "rpcVersion": 1, "authentication": obs_password }
-    });
-    write
-        .send(Message::Text(auth_msg.to_string().into()))
+async fn dispatch_command_to_desktop(
+    app_handle: &tauri::AppHandle,
+    command_id: String,
+    command: MobileCommand,
+) -> MobileResponse {
+    let (tx, rx) = oneshot::channel();
+    pending_commands()
+        .lock()
         .await
-        .map_err(|e| format!("Failed to send auth: {}", e))?;
+        .insert(command_id.clone(), tx);
 
-    // Wait for auth response
-    if let Some(Ok(Message::Text(text))) = read.next().await {
-        let _: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| format!("Failed to parse auth response: {}", e))?;
-    }
-
-    // Send the actual command as an OBS WebSocket request (op 6 = Request)
-    let rpc_msg = match command {
-        MobileCommand::ShowScripture {
-            reference,
-            translation,
-            verse_text,
-        } => {
-            serde_json::json!({
-                "op": 6,
-                "d": {
-                    "requestType": "SetSceneItemEnabled",
-                    "requestData": {
-                        "sceneName": "MCE Presentation",
-                        "sceneItemId": 0,
-                        "sceneItemEnabled": true,
-                    }
-                },
-                "mce": {
-                    "action": "show_scripture",
-                    "reference": reference,
-                    "translation": translation.as_deref().unwrap_or("KJV"),
-                    "verseText": verse_text.as_deref().unwrap_or(""),
-                    "overlayMode": "fullscreen"
-                }
-            })
-        }
-        MobileCommand::ClearScripture => {
-            serde_json::json!({
-                "op": 6,
-                "d": {
-                    "requestType": "SetSceneItemEnabled",
-                    "requestData": {
-                        "sceneName": "MCE Presentation",
-                        "sceneItemId": 0,
-                        "sceneItemEnabled": false
-                    }
-                },
-                "mce": { "action": "clear_bible" }
-            })
-        }
-        MobileCommand::ShowSlide {
-            song_id,
-            slide_index,
-        } => {
-            serde_json::json!({
-                "op": 6,
-                "d": {
-                    "requestType": "SetSceneItemEnabled",
-                    "requestData": {
-                        "sceneName": "MCE Presentation",
-                        "sceneItemId": 0,
-                        "sceneItemEnabled": true
-                    }
-                },
-                "mce": {
-                    "action": "show_slide",
-                    "songId": song_id,
-                    "slideIndex": slide_index
-                }
-            })
-        }
-        MobileCommand::NextSlide => {
-            serde_json::json!({
-                "op": 6,
-                "d": { "requestType": "GetSceneList" },
-                "mce": { "action": "next_slide" }
-            })
-        }
-        MobileCommand::PrevSlide => {
-            serde_json::json!({
-                "op": 6,
-                "d": { "requestType": "GetSceneList" },
-                "mce": { "action": "prev_slide" }
-            })
-        }
-        MobileCommand::ClearWorship => {
-            serde_json::json!({
-                "op": 6,
-                "d": { "requestType": "GetSceneList" },
-                "mce": { "action": "clear_worship" }
-            })
-        }
-        MobileCommand::ShowLowerThird { name, title } => {
-            serde_json::json!({
-                "op": 6,
-                "d": { "requestType": "GetSceneList" },
-                "mce": {
-                    "action": "show_lower_third",
-                    "name": name,
-                    "title": title
-                }
-            })
-        }
-        MobileCommand::ClearLowerThird => {
-            serde_json::json!({
-                "op": 6,
-                "d": { "requestType": "GetSceneList" },
-                "mce": { "action": "clear_lower_third" }
-            })
-        }
-        MobileCommand::Ping | MobileCommand::Auth { .. } => {
-            return Ok(());
-        }
+    let event = MobileCommandEvent {
+        command_id: command_id.clone(),
+        command,
     };
 
-    write
-        .send(Message::Text(rpc_msg.to_string().into()))
-        .await
-        .map_err(|e| format!("Failed to send command to OBS: {}", e))?;
+    if let Err(error) = app_handle.emit("mobile-companion-command", event) {
+        pending_commands().lock().await.remove(&command_id);
+        return MobileResponse::CommandResult {
+            command_id,
+            ok: false,
+            payload: serde_json::Value::Null,
+            error: Some(format!("Failed to dispatch to desktop: {}", error)),
+        };
+    }
 
-    // Brief wait for response
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    Ok(())
+    match tokio::time::timeout(Duration::from_secs(12), rx).await {
+        Ok(Ok(completion)) => MobileResponse::CommandResult {
+            command_id,
+            ok: completion.ok,
+            payload: completion.payload,
+            error: completion.error,
+        },
+        Ok(Err(_)) => MobileResponse::CommandResult {
+            command_id,
+            ok: false,
+            payload: serde_json::Value::Null,
+            error: Some("Desktop command handler disconnected".into()),
+        },
+        Err(_) => {
+            pending_commands().lock().await.remove(&command_id);
+            MobileResponse::CommandResult {
+                command_id,
+                ok: false,
+                payload: serde_json::Value::Null,
+                error: Some("Desktop command timed out".into()),
+            }
+        }
+    }
 }
 
 // ── Handle a single mobile client WebSocket connection ──────────────────────
 
-async fn handle_mobile_client(stream: TcpStream, state_tx: broadcast::Sender<String>) {
+async fn handle_mobile_client(
+    stream: TcpStream,
+    state_tx: broadcast::Sender<String>,
+    app_handle: tauri::AppHandle,
+) {
     let ws = match accept_async(stream).await {
         Ok(ws) => ws,
         Err(e) => {
@@ -361,15 +406,33 @@ async fn handle_mobile_client(stream: TcpStream, state_tx: broadcast::Sender<Str
     let mut authenticated = false;
 
     let pairing_token = get_pairing_token().await.unwrap_or_default();
-    let obs_conn = obs_connection_store().read().await.clone();
-
     loop {
         tokio::select! {
             // Messages from the mobile client
             msg = read.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        let cmd: MobileCommand = match serde_json::from_str(&text) {
+                        let raw: serde_json::Value = match serde_json::from_str(&text) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                let _ = write.send(Message::Text(
+                                    serde_json::to_string(&MobileResponse::Error {
+                                        message: format!("Invalid JSON: {}", e),
+                                    })
+                                    .unwrap()
+                                    .into(),
+                                )).await;
+                                continue;
+                            }
+                        };
+
+                        let command_id = raw
+                            .get("command_id")
+                            .and_then(|v| v.as_str())
+                            .map(|v| v.to_string())
+                            .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+                        let cmd: MobileCommand = match serde_json::from_value(raw) {
                             Ok(c) => c,
                             Err(e) => {
                                 let _ = write.send(Message::Text(
@@ -435,56 +498,41 @@ async fn handle_mobile_client(stream: TcpStream, state_tx: broadcast::Sender<Str
                                 )).await;
                             }
                             _ => {
-                                if let Some(ref conn) = obs_conn {
-                                    match forward_command_to_obs(&cmd, &conn.url, &conn.password).await {
-                                        Ok(()) => {
-                                            set_obs_connected(true).await;
-                                            // Update local state based on command
-                                            match &cmd {
-                                                MobileCommand::ShowScripture { reference, .. } => {
-                                                    set_current_scripture(Some(reference.clone())).await;
-                                                    set_current_song(None).await;
-                                                    set_current_slide(None).await;
-                                                }
-                                                MobileCommand::ClearScripture => {
-                                                    set_current_scripture(None).await;
-                                                }
-                                                MobileCommand::ShowSlide { slide_index, .. } => {
-                                                    set_current_slide(Some(*slide_index)).await;
-                                                }
-                                                MobileCommand::ClearWorship => {
-                                                    set_current_song(None).await;
-                                                    set_current_slide(None).await;
-                                                }
-                                                MobileCommand::ShowLowerThird { name, .. } => {
-                                                    set_current_lower_third(Some(name.clone())).await;
-                                                }
-                                                MobileCommand::ClearLowerThird => {
-                                                    set_current_lower_third(None).await;
-                                                }
-                                                _ => {}
-                                            }
+                                let response = dispatch_command_to_desktop(&app_handle, command_id, cmd.clone()).await;
+                                let ok = matches!(&response, MobileResponse::CommandResult { ok: true, .. });
+                                if ok {
+                                    set_obs_connected(true).await;
+                                    match &cmd {
+                                        MobileCommand::ShowScripture { reference, .. } => {
+                                            set_current_scripture(Some(reference.clone())).await;
+                                            set_current_song(None).await;
+                                            set_current_slide(None).await;
                                         }
-                                        Err(e) => {
-                                            set_obs_connected(false).await;
-                                            let _ = write.send(Message::Text(
-                                                serde_json::to_string(&MobileResponse::Error {
-                                                    message: format!("OBS command failed: {}", e),
-                                                })
-                                                .unwrap()
-                                                .into(),
-                                            )).await;
+                                        MobileCommand::ClearScripture => {
+                                            set_current_scripture(None).await;
                                         }
+                                        MobileCommand::ShowSlide { slide_index, .. } => {
+                                            set_current_slide(Some(*slide_index)).await;
+                                        }
+                                        MobileCommand::ClearWorship => {
+                                            set_current_song(None).await;
+                                            set_current_slide(None).await;
+                                        }
+                                        MobileCommand::ShowLowerThird { name, .. } => {
+                                            set_current_lower_third(Some(name.clone())).await;
+                                        }
+                                        MobileCommand::ClearLowerThird => {
+                                            set_current_lower_third(None).await;
+                                        }
+                                        _ => {}
                                     }
                                 } else {
-                                    let _ = write.send(Message::Text(
-                                        serde_json::to_string(&MobileResponse::Error {
-                                            message: "OBS not connected to desktop".into(),
-                                        })
-                                        .unwrap()
-                                        .into(),
-                                    )).await;
+                                    set_obs_connected(false).await;
                                 }
+
+                                let _ = write.send(Message::Text(
+                                    serde_json::to_string(&response).unwrap().into(),
+                                )).await;
                             }
                         }
                     }
@@ -549,7 +597,7 @@ async fn run_discovery_beacon(ws_port: u16) {
 
 // ── Main server loop ────────────────────────────────────────────────────────
 
-pub async fn start_mobile_server(port: u16) -> Result<(), String> {
+pub async fn start_mobile_server(port: u16, app_handle: tauri::AppHandle) -> Result<(), String> {
     let addr = format!("0.0.0.0:{}", port);
     let listener = TcpListener::bind(&addr)
         .await
@@ -568,8 +616,9 @@ pub async fn start_mobile_server(port: u16) -> Result<(), String> {
             Ok((stream, peer)) => {
                 println!("[MobileCompanion] New connection from {}", peer);
                 let tx = state_tx.clone();
+                let handle = app_handle.clone();
                 tokio::spawn(async move {
-                    handle_mobile_client(stream, tx).await;
+                    handle_mobile_client(stream, tx, handle).await;
                 });
             }
             Err(e) => {

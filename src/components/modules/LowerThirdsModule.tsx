@@ -76,6 +76,10 @@ interface LTPreset {
 
 const LT_PRESETS_STORAGE_KEY = "service-hub.lt.presets";
 
+function isHexColor(value: string | null | undefined): value is string {
+  return /^#[0-9a-fA-F]{6}$/.test((value ?? "").trim());
+}
+
 function createLTPresetId(): string {
   return `lt-preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -466,6 +470,14 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
   const isDragging = useRef(false);
   const [previewScale, setPreviewScale] = useState(0.3);
   const [brandingSettings, setBrandingSettings] = useState<MVSettings>(() => getSettings());
+  const churchBrandColorOptions = useMemo(
+    () => [
+      { label: "Church Primary", value: brandingSettings.brandColor },
+      { label: "Church Secondary", value: brandingSettings.brandSecondaryColor },
+      { label: "Church Accent", value: brandingSettings.brandAccentColor },
+    ].filter((option): option is { label: string; value: string } => isHexColor(option.value)),
+    [brandingSettings.brandAccentColor, brandingSettings.brandColor, brandingSettings.brandSecondaryColor],
+  );
 
   // Keep module-level branding defaults in sync with Settings page updates.
   useEffect(() => {
@@ -614,7 +626,10 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
   useEffect(() => {
     if (!state.selectedTheme) return;
     const runtime = applyRuntimeBranding(state.selectedTheme, state.values, brandingSettings);
-    if (state.customStyles.accentColor !== runtime.brandColor) {
+    const shouldUseDefaultBrandColor =
+      !state.customStyles.accentColor ||
+      state.customStyles.accentColor === state.selectedTheme.accentColor;
+    if (shouldUseDefaultBrandColor && state.customStyles.accentColor !== runtime.brandColor) {
       setCustomStyle({ accentColor: runtime.brandColor });
     }
 
@@ -982,6 +997,16 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
     [selectedPresetId, setValue, activeCategoryId, state.selectedTheme, state.values],
   );
 
+  const applyChurchBrandAccent = useCallback((color: string) => {
+    if (!color) {
+      setCustomStyle({ accentColor: "" });
+      return;
+    }
+    if (!isHexColor(color)) return;
+    setCustomStyle({ accentColor: color });
+    setToast({ msg: "Church brand color applied", type: "success" });
+  }, [setCustomStyle]);
+
   const handleThemeQrUpload = useCallback(
     (fieldKey: string, file: File | null) => {
       if (!file) return;
@@ -1274,20 +1299,40 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
             separator={v.separator || " • "}
           />
         ) : v.type === "color" ? (
-          <div className="lt-customize-color-row">
-            <input
-              type="color"
-              className="lt-customize-swatch"
-              value={currentValue || "#ffffff"}
-              onChange={(e) => handleThemeVariableChange(v.key, e.target.value)}
-            />
-            <input
-              type="text"
-              className="lt-page-form-input lt-customize-hex"
-              value={currentValue}
-              onChange={(e) => handleThemeVariableChange(v.key, e.target.value)}
-              placeholder="#hex"
-            />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div className="lt-customize-color-row">
+              <input
+                type="color"
+                className="lt-customize-swatch"
+                value={currentValue || "#ffffff"}
+                onChange={(e) => handleThemeVariableChange(v.key, e.target.value)}
+              />
+              <input
+                type="text"
+                className="lt-page-form-input lt-customize-hex"
+                value={currentValue}
+                onChange={(e) => handleThemeVariableChange(v.key, e.target.value)}
+                placeholder="#hex"
+              />
+            </div>
+            {churchBrandColorOptions.length > 0 && (
+              <select
+                className="lt-page-form-input lt-brand-color-select"
+                value=""
+                onChange={(e) => {
+                  const color = e.target.value;
+                  if (color) handleThemeVariableChange(v.key, color);
+                }}
+                aria-label={`Use church brand color for ${label}`}
+              >
+                <option value="">Use church brand color...</option>
+                {churchBrandColorOptions.map((option) => (
+                  <option key={`${v.key}-${option.label}-${option.value}`} value={option.value}>
+                    {option.label} ({option.value})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         ) : v.type === "select" && v.options ? (
           <select
@@ -1876,6 +1921,32 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                         </div>
                       )}
                     </div>
+
+                    {churchBrandColorOptions.length > 0 && (
+                      <div className="lt-duration-section">
+                        <div className="lt-duration-header">
+                          <h4>
+                            <Icon name="palette" size={14} />
+                            Church Brand
+                          </h4>
+                        </div>
+                        <div className="lt-duration-row">
+                          <label className="lt-duration-label">Accent</label>
+                          <select
+                            className="lt-duration-select"
+                            value={churchBrandColorOptions.some((option) => option.value === state.customStyles.accentColor) ? state.customStyles.accentColor : ""}
+                            onChange={(e) => applyChurchBrandAccent(e.target.value)}
+                          >
+                            <option value="">Theme default</option>
+                            {churchBrandColorOptions.map((option) => (
+                              <option key={`${option.label}-${option.value}`} value={option.value}>
+                                {option.label} ({option.value})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
 
                     {/* ── Duration + Auto-Clear Controls ── */}
                     <div className="lt-duration-section">

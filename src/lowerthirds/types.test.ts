@@ -1,0 +1,31 @@
+import { describe, expect, it } from "vitest";
+import ministrySource from "../dock/tabs/DockMinistryTab.tsx?raw";
+import lowerThirdOverlayHtml from "../../public/lower-third-overlay.html?raw";
+import lowerThirdObsServiceSource from "./lowerThirdObsService.ts?raw";
+import { LT_SIZE_FONT_SCALE, LT_SIZE_SCALE, LT_SIZE_WIDTH, LT_VISUAL_OUTPUT_SCALE } from "./types";
+
+describe("lower-third size presets", () => {
+  it("keeps size presets intact and applies a separate half-size output scale", () => {
+    expect(LT_VISUAL_OUTPUT_SCALE).toBeCloseTo(0.5);
+    expect(LT_SIZE_SCALE.xs).toBeCloseTo(0.6);
+    expect(LT_SIZE_WIDTH.xs).toBeCloseTo(32);
+    expect(LT_SIZE_FONT_SCALE.xs).toBeCloseTo(0.7);
+    expect(LT_SIZE_SCALE.xl).toBeCloseTo(1.35);
+    expect(LT_SIZE_WIDTH.xl).toBeCloseTo(82);
+    expect(LT_SIZE_FONT_SCALE.xl).toBeCloseTo(1.35);
+    expect(LT_SIZE_WIDTH.x2).toBeCloseTo(100);
+    expect(LT_SIZE_FONT_SCALE.x2).toBeCloseTo(2);
+  });
+
+  it("sends the half-size output scale to the overlay renderer", () => {
+    expect(lowerThirdObsServiceSource).toContain("visualScale: LT_VISUAL_OUTPUT_SCALE");
+    expect(lowerThirdOverlayHtml).toContain("--lt-visual-scale");
+    expect(lowerThirdOverlayHtml).toContain("var finalScale = visualScale * fitScale");
+  });
+
+  it("limits the Ministry lower-third picker to XS, SM, MD, and LG", () => {
+    expect(ministrySource).toContain('const MINISTRY_LT_SIZE_OPTIONS: LTSize[] = ["xs", "sm", "md", "lg"];');
+    expect(ministrySource).toContain("return resolveMinistryLtSize(saved);");
+    expect(ministrySource).not.toContain('(["xl", "x2"] as LTSize[])');
+  });
+});
