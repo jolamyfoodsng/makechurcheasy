@@ -8,6 +8,25 @@
  * immediately after the request completes.
  */
 
+/* OBS 31 uses Microsoft's _udiv128 intrinsic in its Windows x64 headers.
+ * clang-cl supports the same calling convention but does not declare that
+ * intrinsic, so provide the equivalent operation for the Clang build only. */
+#if defined(_WIN32) && defined(__clang__) && defined(_MSC_VER) && defined(_M_X64)
+static inline unsigned __int64 mce_compat_udiv128(unsigned __int64 high,
+									  unsigned __int64 low,
+									  unsigned __int64 divisor,
+									  unsigned __int64 *remainder)
+{
+	unsigned __int128 dividend = ((unsigned __int128)high << 64) | low;
+	unsigned __int128 quotient = dividend / divisor;
+	if (remainder)
+		*remainder = (unsigned __int64)(dividend % divisor);
+	return (unsigned __int64)quotient;
+}
+
+#define _udiv128 mce_compat_udiv128
+#endif
+
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 #include <obs-source.h>
