@@ -184,6 +184,17 @@ function hasNinja() {
   }
 }
 
+function hasCommand(command) {
+  try {
+    execFileSync(process.platform === "win32" ? "where" : "which", [command], {
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function stagePlugin(platform, builtLibrary, fingerprint) {
   const platformDir = path.join(outputRoot, platform);
   fs.rmSync(platformDir, { recursive: true, force: true });
@@ -243,6 +254,12 @@ async function main() {
   const buildRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mce-obs-bridge-build-"));
   try {
     const generatorArgs = hasNinja() ? ["-G", "Ninja"] : ["-G", "Unix Makefiles"];
+    // OBS's Windows headers use MSVC intrinsics such as _udiv128. clang-cl
+    // provides the MSVC-compatible frontend and headers; GNU-style clang does
+    // not, even though it may define _MSC_VER for the Windows target.
+    const compilerArgs = platform === "win32" && hasCommand("clang-cl")
+      ? ["-DCMAKE_C_COMPILER=clang-cl"]
+      : [];
     execFileSync(
       "cmake",
       [
@@ -251,6 +268,7 @@ async function main() {
         "-B",
         buildRoot,
         ...generatorArgs,
+        ...compilerArgs,
         "-DCMAKE_BUILD_TYPE=Release",
         `-DOBS_SOURCE_DIR=${obsSourceRoot}`,
         `-DMCE_SIMDE_INCLUDE_DIR=${simdeIncludeRoot}`,

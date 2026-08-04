@@ -48,13 +48,6 @@ set_target_properties(
 
 if(WIN32)
   target_compile_definitions(mce-obs-bridge PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-  # GitHub's Windows runner uses GNU-style LLVM Clang for this small module.
-  # That compiler defines _MSC_VER while not exposing MSVC's _udiv128
-  # intrinsic, causing OBS's util_uint64.h to select the wrong code path.
-  # Let OBS use its portable arithmetic fallback for this toolchain only.
-  if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
-    target_compile_options(mce-obs-bridge PRIVATE "-U_MSC_VER")
-  endif()
 elseif(APPLE)
   set_target_properties(mce-obs-bridge PROPERTIES SUFFIX ".dylib")
   target_link_options(mce-obs-bridge PRIVATE "-Wl,-undefined,dynamic_lookup")
