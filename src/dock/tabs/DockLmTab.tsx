@@ -81,6 +81,9 @@ interface LmDockSettings {
   translation: string;
   overlayMode: LmOverlayMode;
   autoScroll: boolean;
+  autoPushQueue: boolean;
+  autoPushSuggestions: boolean;
+  autoPushDedupWindow: number;
   pushScene: "ai" | "main";
   suggestionLifetime: number;
 }
@@ -90,6 +93,9 @@ const DEFAULT_SETTINGS: LmDockSettings = {
   translation: "KJV",
   overlayMode: "fullscreen",
   autoScroll: true,
+  autoPushQueue: false,
+  autoPushSuggestions: false,
+  autoPushDedupWindow: 15,
   pushScene: "ai",
   suggestionLifetime: 20,
 };
@@ -146,9 +152,15 @@ function loadSettings(): LmDockSettings {
     if (!raw) return { ...DEFAULT_SETTINGS, overlayMode: fallbackOverlayMode };
     const parsed = JSON.parse(raw);
     const merged = { ...DEFAULT_SETTINGS, ...parsed };
+    const autoPushDedupWindow = Number(merged.autoPushDedupWindow);
     return {
       ...merged,
       overlayMode: normalizeLmOverlayMode(merged.overlayMode, fallbackOverlayMode),
+      autoPushQueue: merged.autoPushQueue === true,
+      autoPushSuggestions: merged.autoPushSuggestions === true,
+      autoPushDedupWindow: Number.isFinite(autoPushDedupWindow)
+        ? Math.max(0, autoPushDedupWindow)
+        : DEFAULT_SETTINGS.autoPushDedupWindow,
       suggestionLifetime: Math.max(5, Number(merged.suggestionLifetime) || DEFAULT_SETTINGS.suggestionLifetime),
     };
   } catch {
@@ -306,6 +318,9 @@ export default function DockLmTab({
 
   const detectedAtRef = useRef<Map<string, number>>(new Map());
   const suggestionCooldownRef = useRef<Map<string, number>>(new Map());
+  const autoPushedKeysRef = useRef<Set<string>>(new Set());
+  const autoPushInFlightRef = useRef<Set<string>>(new Set());
+  const autoPushLastPushedAtRef = useRef<Map<string, number>>(new Map());
   const liveVerseRef = useRef<VoiceBibleCandidate | null>(liveVerse);
   const lastRepublishedOverlayModeRef = useRef<LmOverlayMode>(settings.overlayMode);
 
@@ -323,6 +338,18 @@ export default function DockLmTab({
     setRetainedQueue((current) => mergeRetainedLmQueue(current, incoming, nowMs));
     for (const candidate of incoming) {
       detectedAtRef.current.set(getLmCandidateKey(candidate), nowMs);
+    }
+  }, []);
+
+  const syncSuggestionSnapshot = useCallback((
+    incoming: VoiceBibleCandidate[],
+    clearEmpty = false,
+  ) => {
+    // A relay poll can briefly return the previous empty state while a new
+    // search result is being posted. Do not erase a clickable suggestion
+    // during an active listening session; explicit session resets may clear.
+    if (incoming.length > 0 || clearEmpty) {
+      setSuggestions(incoming);
     }
   }, []);
 
@@ -344,10 +371,13 @@ export default function DockLmTab({
     setEntries(snapshot.entries);
     setCandidates(snapshot.candidates);
     syncQueueSnapshot(snapshot.queue);
-    setSuggestions(snapshot.suggestions);
+    syncSuggestionSnapshot(
+      snapshot.suggestions,
+      snapshot.status === "idle" || snapshot.status === "requesting-mic" || snapshot.status === "connecting",
+    );
     setMatching(snapshot.matching);
     setError(snapshot.error ?? null);
-  }, [syncQueueSnapshot]);
+  }, [syncQueueSnapshot, syncSuggestionSnapshot]);
 
   const selectPresentationMic = useCallback((micId: string) => {
     setSelectedMic(micId);
@@ -458,11 +488,18 @@ export default function DockLmTab({
         const payload = msg.payload as {
           status: LmStatus;
           entries?: TranscriptEntry[];
+          suggestions?: VoiceBibleCandidate[];
           matching: boolean;
           error?: string;
         };
         setLmStatus(payload.status);
         if (payload.entries) setEntries(payload.entries);
+        if (payload.suggestions) {
+          syncSuggestionSnapshot(
+            payload.suggestions,
+            payload.status === "idle" || payload.status === "requesting-mic" || payload.status === "connecting",
+          );
+        }
         setMatching(payload.matching);
         setError(payload.error ?? null);
       } else if (msg.type === "state:lm-transcript") {
@@ -476,7 +513,7 @@ export default function DockLmTab({
         };
         setCandidates(payload.candidates);
         if (payload.queue) syncQueueSnapshot(payload.queue);
-        if (payload.suggestions) setSuggestions(payload.suggestions);
+        if (payload.suggestions) syncSuggestionSnapshot(payload.suggestions);
       }
     });
 
@@ -494,7 +531,12 @@ export default function DockLmTab({
           setError(state.error ?? null);
           if (state.candidates) setCandidates(state.candidates);
           if (state.queue) syncQueueSnapshot(state.queue);
-          if (state.suggestions) setSuggestions(state.suggestions);
+          if (state.suggestions) {
+            syncSuggestionSnapshot(
+              state.suggestions,
+              state.status === "idle" || state.status === "requesting-mic" || state.status === "connecting",
+            );
+          }
         }
       } catch (err) {
         console.warn("[DockLmTab] pollRelay FAILED:", err);
@@ -536,7 +578,7 @@ export default function DockLmTab({
       if (relayTimer) window.clearTimeout(relayTimer);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [syncQueueSnapshot]);
+  }, [syncQueueSnapshot, syncSuggestionSnapshot]);
 
   useEffect(() => {
     if (!allowLocalMicControls) return undefined;
@@ -887,6 +929,80 @@ export default function DockLmTab({
       return true;
     });
   }, [queuedVerseKeys, suggestionExpiryMs, suggestions, now]);
+
+  useEffect(() => {
+    const visibleAutoPushKeys = new Set<string>();
+    for (const c of queueVerses) visibleAutoPushKeys.add(`queue:${getLmCandidateKey(c)}`);
+    for (const c of filteredSuggestions) visibleAutoPushKeys.add(`suggestion:${getLmCandidateKey(c)}`);
+
+    for (const key of Array.from(autoPushedKeysRef.current)) {
+      if (!visibleAutoPushKeys.has(key)) autoPushedKeysRef.current.delete(key);
+    }
+  }, [filteredSuggestions, queueVerses]);
+
+  useEffect(() => {
+    if (!settings.autoPushQueue && !settings.autoPushSuggestions) return;
+    if (!presentationLinkMode && obsStatus !== "connected") return;
+    if (autoPushInFlightRef.current.size > 0) return;
+
+    const candidatesToPush: Array<{
+      key: string;
+      source: "queue" | "suggestion";
+      candidate: VoiceBibleCandidate;
+    }> = [];
+
+    if (settings.autoPushQueue) {
+      for (const candidate of queueVerses) {
+        candidatesToPush.push({
+          key: `queue:${getLmCandidateKey(candidate)}`,
+          source: "queue",
+          candidate,
+        });
+      }
+    }
+
+    if (settings.autoPushSuggestions) {
+      for (const candidate of filteredSuggestions) {
+        candidatesToPush.push({
+          key: `suggestion:${getLmCandidateKey(candidate)}`,
+          source: "suggestion",
+          candidate,
+        });
+      }
+    }
+
+    const unseen = candidatesToPush.filter(({ key }) => (
+      !autoPushedKeysRef.current.has(key) && !autoPushInFlightRef.current.has(key)
+    ));
+    if (unseen.length === 0) return;
+
+    for (const item of unseen) autoPushedKeysRef.current.add(item.key);
+
+    const nowMs = Date.now();
+    const target = unseen.find(({ key }) => (
+      !isLmAutoPushSuppressed(
+        autoPushLastPushedAtRef.current.get(key),
+        nowMs,
+        settings.autoPushDedupWindow,
+      )
+    ));
+    if (!target) return;
+
+    autoPushInFlightRef.current.add(target.key);
+    autoPushLastPushedAtRef.current.set(target.key, nowMs);
+    void handlePushVerse(target.candidate, target.source).finally(() => {
+      autoPushInFlightRef.current.delete(target.key);
+    });
+  }, [
+    filteredSuggestions,
+    handlePushVerse,
+    obsStatus,
+    presentationLinkMode,
+    queueVerses,
+    settings.autoPushDedupWindow,
+    settings.autoPushQueue,
+    settings.autoPushSuggestions,
+  ]);
 
   useEffect(() => {
     const cutoff = Date.now() - Math.max(suggestionExpiryMs, LM_QUEUE_RETENTION_MS);
@@ -1794,6 +1910,49 @@ export default function DockLmTab({
                   {micError && <span style={S.settingError}>{micError}</span>}
                 </div>
               )}
+
+              <div style={S.settingsGroup}>
+                <div style={S.settingsGroupLabel}>AUTO-PUSH</div>
+                <label style={S.settingRow}>
+                  <span style={S.settingLabel}>{t("lm.autoPushQueue")}</span>
+                  <input
+                    type="checkbox"
+                    checked={settings.autoPushQueue}
+                    onChange={(e) => updateSetting("autoPushQueue", e.target.checked)}
+                    style={S.settingCheckbox}
+                  />
+                </label>
+                <span style={S.settingHint}>{t("lm.autoPushQueueHint")}</span>
+
+                <label style={S.settingRow}>
+                  <span style={S.settingLabel}>{t("lm.autoPushSuggestions")}</span>
+                  <input
+                    type="checkbox"
+                    checked={settings.autoPushSuggestions}
+                    onChange={(e) => updateSetting("autoPushSuggestions", e.target.checked)}
+                    style={S.settingCheckbox}
+                  />
+                </label>
+                <span style={S.settingHint}>{t("lm.autoPushSuggestionsHint")}</span>
+
+                {(settings.autoPushQueue || settings.autoPushSuggestions) && (
+                  <>
+                    <div style={S.settingRow}>
+                      <span style={S.settingLabel}>{t("lm.dedupWindow")}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={300}
+                        value={settings.autoPushDedupWindow}
+                        onChange={(e) => updateSetting("autoPushDedupWindow", Math.max(0, Number(e.target.value) || 0))}
+                        style={S.settingNumber}
+                      />
+                      <span style={S.settingUnit}>sec</span>
+                    </div>
+                    <span style={S.settingHint}>{t("lm.dedupHint")}</span>
+                  </>
+                )}
+              </div>
 
               <div style={S.settingsGroup}>
                 <div style={S.settingsGroupLabel}>NAVIGATION</div>

@@ -73,6 +73,20 @@ export interface DockMediaSendOptions {
   imageAudioInputName?: string | null;
   looping?: boolean;
   fitMode?: "cover" | "contain" | "stretch";
+  transition?: "cut" | "fade";
+  document?: DockDocumentMediaOptions;
+}
+
+export interface DockDocumentMediaOptions {
+  pageNumber: number;
+  pageCount: number;
+  showBackground: boolean;
+  showPageLabel: boolean;
+  alignment: "left" | "center" | "right";
+  zoom: number;
+  offsetX: number;
+  offsetY: number;
+  legacyCanvas?: boolean;
 }
 
 interface DockPreviewSceneState {
@@ -2142,9 +2156,15 @@ class DockObsClient {
         }
 
         const programScene = (options.programSceneName || await this.getCurrentProgramSceneName(true).catch(() => "")).trim();
-        if (!programScene || programScene === DOCK_PRESENTATION_SCENE) {
-          await this.removeProgramSceneUnderlaysFromPresentation();
+        if (!programScene) {
           this._presentationProgramUnderlayCache = null;
+          return;
+        }
+
+        if (programScene === DOCK_PRESENTATION_SCENE) {
+          // MCE Presentation can become Program after a studio transition. In
+          // that state the existing nested scene is still the intended live
+          // background, so do not run the stale-underlay cleanup here.
           return;
         }
 
@@ -8359,8 +8379,17 @@ class DockObsClient {
     fileName: string,
     options: DockMediaSendOptions = {},
   ): Promise<void> {
-    const ext = fileName.split(".").pop()?.toLowerCase() || "";
-    const isImage = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"].includes(ext);
+    const getExtension = (value: string): string => {
+      const cleanValue = value.split(/[?#]/)[0].trim();
+      return cleanValue.match(/\.([a-z0-9]+)(?:\s+·\s+page(?:\s+\d+(?:\/\d+)?)?)?$/i)?.[1]?.toLowerCase() || "";
+    };
+    const imageExtensions = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"];
+    const pathExtension = getExtension(filePath);
+    const nameExtension = getExtension(fileName);
+    const ext = imageExtensions.includes(pathExtension) || ["mp4", "webm", "mov", "mkv", "avi", "m4v"].includes(pathExtension)
+      ? pathExtension
+      : nameExtension;
+    const isImage = imageExtensions.includes(ext);
 
     const mediaVideoSource = "MCE Media - Video";
     const mediaImageSource = "MCE Media - Image";
@@ -8376,10 +8405,29 @@ class DockObsClient {
     // Ensure the live program scene is visible behind overlays in MCE Presentation
     await this.ensureProgramSceneAsSourceInPresentation();
 
-    // Hide the sources we DON'T need — only hide the opposite type with animation
+    // Fade transitions use the browser media source so the old native media can
+    // remain underneath while the new page fades in. Cut keeps the native path.
     const mediaSource = isImage ? mediaImageSource : mediaVideoSource;
+    const isDocument = Boolean(options.document);
     const hidePromises: Promise<void>[] = [];
-    if (isImage) {
+    if (options.transition === "fade" && !isDocument) {
+      hidePromises.push(this.hideOverlaySource(sceneName, mediaPatternSource).catch(() => { }));
+      hidePromises.push(this.hideOverlaySource(sceneName, mediaImageAudioSource).catch(() => { }));
+    } else if (isDocument) {
+      // Document pages always use the browser overlay. Disable any older
+      // native media in one OBS batch instead of animating it out twice.
+      hidePromises.push((async () => {
+        try {
+          const requests = await this._buildHideBatchRequests(sceneName, [
+            mediaVideoSource,
+            mediaImageSource,
+            mediaPatternSource,
+            mediaImageAudioSource,
+          ]);
+          if (requests.length > 0) await this.callBatch(requests);
+        } catch { /* stale media sources are optional */ }
+      })());
+    } else if (isImage) {
       // Switching to image: hide video with animation, just disable the rest
       hidePromises.push(this.hideMediaSourceWithAnimation(sceneName, mediaVideoSource));
       hidePromises.push(this.hideOverlaySource(sceneName, mediaPatternSource).catch(() => { }));
@@ -8395,10 +8443,12 @@ class DockObsClient {
     }
     await Promise.allSettled(hidePromises);
 
-    if (this.isRemotePresentationSession()) {
-      await this.hideMediaSourceWithAnimation(sceneName, mediaVideoSource).catch(() => { });
-      await this.hideMediaSourceWithAnimation(sceneName, mediaImageSource).catch(() => { });
-      await this.hideOverlaySource(sceneName, mediaImageAudioSource).catch(() => { });
+    if (this.isRemotePresentationSession() || options.transition === "fade" || options.document) {
+      if (options.transition !== "fade" && !isDocument) {
+        await this.hideMediaSourceWithAnimation(sceneName, mediaVideoSource).catch(() => { });
+        await this.hideMediaSourceWithAnimation(sceneName, mediaImageSource).catch(() => { });
+        await this.hideOverlaySource(sceneName, mediaImageAudioSource).catch(() => { });
+      }
 
       const mediaUrl = await this.toRemoteServedMediaUrl(filePath, fileName);
       if (!mediaUrl) {
@@ -8420,11 +8470,15 @@ class DockObsClient {
         fitMode: options.fitMode ?? "cover",
         looping: options.looping ?? true,
         muted: isImage ? true : options.muted ?? true,
+        transition: options.transition ?? "cut",
+        document: options.document,
         timestamp: Date.now(),
       };
       const overlayUrl = `${this.buildOverlayHtmlUrl("mce-media-overlay.html")}#data=${encodeURIComponent(JSON.stringify(packet))}`;
 
-      await this.setBrowserSourceUrl(remoteMediaSource, overlayUrl, true);
+      // Hash changes are enough for the document overlay to render the next
+      // page. Avoid blanking/reloading CEF, which adds visible latency.
+      await this.setBrowserSourceUrl(remoteMediaSource, overlayUrl, !isDocument);
       await this.applyMediaFitMode(sceneName, sceneItemId, options.fitMode ?? "cover");
 
       if (!isImage) {
@@ -8436,15 +8490,27 @@ class DockObsClient {
         } catch { /* ignore */ }
       }
 
-      await this.animateMediaSceneItem(sceneName, sceneItemId, "in");
+      if (options.transition === "fade") {
+        if (!isDocument) {
+          await this.sleep(150);
+          await Promise.allSettled([
+            this.hideMediaSourceWithAnimation(sceneName, mediaVideoSource),
+            this.hideMediaSourceWithAnimation(sceneName, mediaImageSource),
+          ]);
+        }
+      } else if (!isDocument) {
+        await this.animateMediaSceneItem(sceneName, sceneItemId, "in");
+      }
 
-      try {
-        await this.bringSceneSourceToFront(sceneName, mediaTextSource);
-      } catch { /* ignore */ }
+      if (!isDocument) {
+        try {
+          await this.bringSceneSourceToFront(sceneName, mediaTextSource);
+        } catch { /* ignore */ }
 
-      try {
-        await this.ensureTickerAboveSource(sceneName, remoteMediaSource);
-      } catch { /* ignore */ }
+        try {
+          await this.ensureTickerAboveSource(sceneName, remoteMediaSource);
+        } catch { /* ignore */ }
+      }
 
       return;
     }

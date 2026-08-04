@@ -5,6 +5,7 @@ import {
   mergeRetainedLmQueue,
   normalizeLmOverlayMode,
 } from "./DockLmTab";
+import { retainSuggestionsUntilReplacement } from "../../services/lmDockService";
 import dockLmTabSource from "./DockLmTab.tsx?raw";
 import type { VoiceBibleCandidate } from "../../services/voiceBibleTypes";
 
@@ -56,8 +57,25 @@ describe("DockLmTab settings helpers", () => {
     expect(expired).toHaveLength(0);
   });
 
+  it("keeps a suggestion through a temporary empty live-search result", () => {
+    const first = candidate("Psalms", 91, 1);
+    const replacement = candidate("Psalms", 91, 2);
+
+    expect(retainSuggestionsUntilReplacement([first], [])).toEqual([first]);
+    expect(retainSuggestionsUntilReplacement([first], [replacement])).toEqual([replacement]);
+  });
+
   it("tracks actual pushed verses as the live card source", () => {
     expect(dockLmTabSource).toContain("setLiveVerse(candidate)");
     expect(dockLmTabSource).toContain("pushBibleCandidateToOutput(live, settings.overlayMode)");
+  });
+
+  it("renders and wires the auto-push controls", () => {
+    expect(dockLmTabSource).toContain("AUTO-PUSH");
+    expect(dockLmTabSource).toContain('t("lm.autoPushQueue")');
+    expect(dockLmTabSource).toContain('updateSetting("autoPushQueue", e.target.checked)');
+    expect(dockLmTabSource).toContain('t("lm.autoPushSuggestions")');
+    expect(dockLmTabSource).toContain('updateSetting("autoPushSuggestions", e.target.checked)');
+    expect(dockLmTabSource).toContain("isLmAutoPushSuppressed");
   });
 });

@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { dockObsClient, type DockMediaSendOptions } from "../dockObsClient";
+import { dockObsClient, type DockDocumentMediaOptions, type DockMediaSendOptions } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { dockClient } from "../../services/dockBridge";
 import type { DockStagedItem } from "../dockTypes";
@@ -112,6 +112,30 @@ interface DockMediaEntry {
   uploadFile?: string;
 }
 
+interface DockDocumentDeck {
+  key: string;
+  documentId: string;
+  name: string;
+  mimeLabel: string;
+  pages: DockMediaEntry[];
+  pageCount: number;
+  createdAt: string;
+  coverPage: DockMediaEntry;
+}
+
+type DockDocumentTransition = "cut" | "fade";
+type DockDocumentAlignment = DockDocumentMediaOptions["alignment"];
+
+interface DockDocumentDisplayState {
+  fitMode: "cover" | "contain";
+  showBackground: boolean;
+  showPageLabel: boolean;
+  alignment: DockDocumentAlignment;
+  zoom: number;
+  offsetX: number;
+  offsetY: number;
+}
+
 interface ActiveMediaTargets {
   active: DockMediaEntry | null;
 }
@@ -158,6 +182,15 @@ const TEXT_OVERLAY_SUBLINE_MIN_SIZE = 14;
 const TEXT_OVERLAY_MAX_FONT_SIZE = 250;
 const TEXT_OVERLAY_PADDING_MIN = 0;
 const TEXT_OVERLAY_PADDING_MAX = 250;
+const DEFAULT_DOCUMENT_DISPLAY: DockDocumentDisplayState = {
+  fitMode: "contain",
+  showBackground: true,
+  showPageLabel: true,
+  alignment: "center",
+  zoom: 1,
+  offsetX: 0,
+  offsetY: 0,
+};
 
 const DEFAULT_BACKGROUND_SETTINGS: OverlayBackgroundSettings = {
   enabled: false,
@@ -433,6 +466,11 @@ function createLibraryEntry(item: MediaItem, overlayBaseUrl: string, originLabel
   };
 }
 
+function getDocumentImportDate(createdAt: string | undefined): string {
+  if (!createdAt || createdAt.startsWith("0001-")) return "";
+  return createdAt;
+}
+
 function createPatternEntry(pattern: BackgroundPattern, originLabel: string): DockMediaEntry {
   const key = `pattern:${pattern.label}`;
   return {
@@ -549,6 +587,14 @@ export default function DockMediaTab({
   const [uploadStatus, setUploadStatus] = useState("");
   const [openOptionsKey, setOpenOptionsKey] = useState<string | null>(null);
   const [previewEntry, setPreviewEntry] = useState<DockMediaEntry | null>(null);
+  const [documentDeck, setDocumentDeck] = useState<DockDocumentDeck | null>(null);
+  const [documentPageIndex, setDocumentPageIndex] = useState(0);
+  const [documentTransition, setDocumentTransition] = useState<DockDocumentTransition>("cut");
+  const [documentDisplay, setDocumentDisplay] = useState<DockDocumentDisplayState>(DEFAULT_DOCUMENT_DISPLAY);
+  const [documentDisplayDraft, setDocumentDisplayDraft] = useState<DockDocumentDisplayState>(DEFAULT_DOCUMENT_DISPLAY);
+  const [documentControlsOpen, setDocumentControlsOpen] = useState(false);
+  const [savingDocumentControls, setSavingDocumentControls] = useState(false);
+  const [sendingDocumentPage, setSendingDocumentPage] = useState<string | null>(null);
   const [sceneSendEntry, setSceneSendEntry] = useState<DockMediaEntry | null>(null);
   const [sceneSendChoices, setSceneSendChoices] = useState<string[]>([]);
   const [sceneSendSelection, setSceneSendSelection] = useState("");
@@ -1305,6 +1351,79 @@ export default function DockMediaTab({
     () => mediaEntries.filter((entry) => entry.libraryItem?.source === "document-conversion"),
     [mediaEntries],
   );
+  const documentDecks = useMemo<DockDocumentDeck[]>(() => {
+    const groups = new Map<string, {
+      documentId: string;
+      name: string;
+      mimeLabel: string;
+      pages: DockMediaEntry[];
+      pageCount: number;
+      createdAt: string;
+    }>();
+
+    for (const entry of documentEntries) {
+      const item = entry.libraryItem;
+      const pageCount = Math.max(1, Number(item?.documentPageCount) || 1);
+      const sourceName = (item?.documentSourceName || entry.name)
+        .replace(/\s+·\s+Page\s+\d+(?:\/\d+)?$/i, "")
+        .trim();
+      // Older imports have no documentId. Keep those usable with a stable
+      // legacy key while new imports remain separate even with the same name.
+      const documentId = item?.documentId?.trim()
+        || `legacy:${sourceName.toLowerCase()}:${pageCount}`;
+      const existing = groups.get(documentId);
+      if (existing) {
+        existing.pages.push(entry);
+        existing.pageCount = Math.max(existing.pageCount, pageCount);
+        const entryCreatedAt = getDocumentImportDate(entry.createdAt);
+        if (entryCreatedAt && (!existing.createdAt || entryCreatedAt < existing.createdAt)) {
+          existing.createdAt = entryCreatedAt;
+        }
+        continue;
+      }
+
+      groups.set(documentId, {
+        documentId,
+        name: sourceName || "Document",
+        mimeLabel: sourceName.split(".").pop()?.toUpperCase() || "DOC",
+        pages: [entry],
+        pageCount,
+        createdAt: getDocumentImportDate(entry.createdAt),
+      });
+    }
+
+    return Array.from(groups.values())
+      .map((group) => {
+        const pages = [...group.pages].sort((a, b) => (
+          (a.libraryItem?.documentPageNumber ?? 0) - (b.libraryItem?.documentPageNumber ?? 0)
+        ));
+        return {
+          key: `document:${group.documentId}`,
+          documentId: group.documentId,
+          name: group.name,
+          mimeLabel: group.mimeLabel,
+          pages,
+          pageCount: Math.max(group.pageCount, pages.length),
+          createdAt: group.createdAt,
+          coverPage: pages.find((page) => page.libraryItem?.documentPageNumber === 1) || pages[0],
+        };
+      })
+      .sort((a, b) => {
+        const getSortValue = (deck: DockDocumentDeck): string => {
+          if (viewMode !== "recent") return deck.createdAt || "";
+          return deck.pages.reduce((latest, page) => {
+            const usedAt = mediaPrefs[page.prefKey]?.lastUsedAt || "";
+            return usedAt > latest ? usedAt : latest;
+          }, deck.createdAt || "");
+        };
+        return getSortValue(b).localeCompare(getSortValue(a));
+      });
+  }, [documentEntries, mediaPrefs, viewMode]);
+
+  const nonDocumentMediaEntries = useMemo(
+    () => mediaEntries.filter((entry) => entry.libraryItem?.source !== "document-conversion"),
+    [mediaEntries],
+  );
   const videoEntries = useMemo(() => mediaEntries.filter((entry) => entry.kind === "video"), [mediaEntries]);
   const imageEntries = useMemo(
     () => mediaEntries.filter((entry) => entry.kind === "image" && entry.libraryItem?.source !== "document-conversion"),
@@ -1372,11 +1491,11 @@ export default function DockMediaTab({
 
   const filteredUploadEntries = useMemo(() => {
     const pool = activeKind === "all"
-      ? mediaEntries
+      ? nonDocumentMediaEntries
       : activeKind === "video"
         ? videoEntries
         : activeKind === "document"
-          ? documentEntries
+          ? []
           : imageEntries;
     const query = assetSearch.trim().toLowerCase();
     let result = !query ? pool : pool.filter((entry) => entry.name.toLowerCase().includes(query));
@@ -1385,7 +1504,13 @@ export default function DockMediaTab({
       result = result.filter((entry) => !lockedKeys.has(entry.key));
     }
     return result;
-  }, [activeKind, assetSearch, documentEntries, imageEntries, isFreePlan, lockedKeys, mediaEntries, videoEntries]);
+  }, [activeKind, assetSearch, imageEntries, isFreePlan, lockedKeys, nonDocumentMediaEntries, videoEntries]);
+
+  const filteredDocumentDecks = useMemo(() => {
+    const query = assetSearch.trim().toLowerCase();
+    if (!query) return documentDecks;
+    return documentDecks.filter((deck) => deck.name.toLowerCase().includes(query));
+  }, [assetSearch, documentDecks]);
 
   const filteredPatternEntries = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
@@ -1432,6 +1557,9 @@ export default function DockMediaTab({
     setSceneSendError(null);
   }, [presentationLinkMode]);
   const previewBaseEntry = activeTargets.active;
+  // The entry can take a moment to rehydrate after reload, but the persisted key
+  // still tells us that OBS has an active media target that can be cleared.
+  const hasActiveMediaTarget = Boolean(activeTargets.active || activeTargetKeys.active);
 
   // ── Selection helpers ──
   const toggleSelectionMode = useCallback(() => {
@@ -1675,7 +1803,7 @@ export default function DockMediaTab({
     // Validate file types — reject unsupported files with clear error
     const rejected = allFiles.filter((f) => !isSupportedMediaFile(f) && !isSupportedDocumentFile(f));
     for (const f of rejected) {
-      showUpgradeModal(`Unsupported file type: ${f.name}. Please upload an image, video, PDF, or DOCX file.`);
+      showUpgradeModal(`Unsupported file type: ${f.name}. Please upload an image, video, PDF, DOCX, or PPTX file.`);
     }
 
     let queueItems: UploadQueueItem[] = mediaFiles.map((file) => ({ file }));
@@ -1725,9 +1853,12 @@ export default function DockMediaTab({
     const imageLimit = getLimit("images");
     const videoLimit = getLimit("videos");
 
-    // Count current stored items per type
-    const currentImages = libraryMedia.filter((m) => m.type === "image").length;
-    const currentVideos = libraryMedia.filter((m) => m.type === "video").length;
+    // Count both the shared library and the local fallback library. The upload
+    // path writes to both, and counting only IndexedDB can make quota state
+    // stale while the newly uploaded item is being added.
+    const currentMediaItems = dedupeMediaItems([...libraryMedia, ...localLibrary]);
+    const currentImages = currentMediaItems.filter((m) => m.type === "image").length;
+    const currentVideos = currentMediaItems.filter((m) => m.type === "video").length;
 
     // Count incoming files per type
     const incomingImages = queue.filter((f) => f.type.startsWith("image/")).length;
@@ -1793,6 +1924,7 @@ export default function DockMediaTab({
         if (documentPage) {
           item.source = "document-conversion";
           item.documentSourceName = documentPage.sourceName;
+          item.documentId = documentPage.documentId;
           item.documentPageNumber = documentPage.pageNumber;
           item.documentPageCount = documentPage.pageCount;
           item.name = `${documentPage.sourceName} · Page ${documentPage.pageNumber}`;
@@ -1806,32 +1938,15 @@ export default function DockMediaTab({
         }
       }
       if (nextItems.length > 0) {
-        // Mark excess items with old createdAt so lockedKeys puts them at the bottom
-        // Recount after upload to handle items that push past the limit
-        const postImages = currentImages + nextItems.filter((i) => i.type === "image").length;
-        const postVideos = currentVideos + nextItems.filter((i) => i.type === "video").length;
-        let excessImages = imageLimit >= 0 ? Math.max(0, postImages - imageLimit) : 0;
-        let excessVideos = videoLimit >= 0 ? Math.max(0, postVideos - videoLimit) : 0;
-
-        const patchedItems = nextItems.map((item) => {
-          if (item.type === "image" && excessImages > 0) {
-            excessImages--;
-            return { ...item, createdAt: "0001-01-01T00:00:00.000Z" } as MediaItem;
-          }
-          if (item.type === "video" && excessVideos > 0) {
-            excessVideos--;
-            return { ...item, createdAt: "0001-01-01T00:00:00.000Z" } as MediaItem;
-          }
-          return item;
-        });
-
-        persistLocalLibrary((current) => [...patchedItems, ...current]);
-        setLibraryMedia((current) => dedupeMediaItems([...patchedItems, ...current]));
+        // Keep the timestamp returned by the upload service. Newly uploaded
+        // items must remain visible in the Uploaded/Newly Updated view.
+        persistLocalLibrary((current) => [...nextItems, ...current]);
+        setLibraryMedia((current) => dedupeMediaItems([...nextItems, ...current]));
         console.log("[UPLOAD] About to refreshMedia. Library size:", mergedLibraryItems.length, "Local:", localLibrary.length);
         await refreshMedia();
         console.log("[UPLOAD] refreshMedia complete. Library size:", libraryMedia.length);
         setShowAddMediaModal(false);
-        for (const item of patchedItems) {
+        for (const item of nextItems) {
           track("media_uploaded", { mediaType: item.type });
         }
         console.log("[UPLOAD] ─── Upload flow finished successfully ───");
@@ -1846,7 +1961,7 @@ export default function DockMediaTab({
       setUploadStatus("");
       if (uploadInputRef.current) uploadInputRef.current.value = "";
     }
-  }, [libraryMedia, persistLocalLibrary, refreshMedia, t, updateMediaPreference]);
+  }, [libraryMedia, localLibrary, persistLocalLibrary, refreshMedia, t, updateMediaPreference]);
 
   const deleteEntry = useCallback(
     async (entry: DockMediaEntry) => {
@@ -1865,25 +1980,147 @@ export default function DockMediaTab({
   );
 
   const handleSendEntry = useCallback(
-    async (entry: DockMediaEntry) => {
+    async (entry: DockMediaEntry, optionOverrides: DockMediaSendOptions = {}) => {
       // Presentation actions do NOT consume storage quota — no entitlement check needed.
       // The media already exists within the user's allowed quota.
       let success = false;
-      const options = getEntrySendOptions(entry);
+      const options = { ...getEntrySendOptions(entry), ...optionOverrides };
       if (entry.uploadFile) {
         success = await playMedia(entry.uploadFile, options);
       } else if (entry.libraryItem) {
         success = await playLibraryMedia(entry.libraryItem, options);
       }
 
-      if (!success) return;
+      if (!success) return false;
 
       setActiveTargetKeys({ active: entry.key });
       updateMediaPreference(entry.prefKey, { lastUsedAt: new Date().toISOString() });
       setPausedTargets({ active: false });
+      return true;
     },
     [getEntrySendOptions, playLibraryMedia, playMedia, updateMediaPreference]
   );
+
+  const openDocumentDeck = useCallback((deck: DockDocumentDeck) => {
+    setOpenOptionsKey(null);
+    setDocumentDeck(deck);
+    setDocumentPageIndex(0);
+    setDocumentDisplay(DEFAULT_DOCUMENT_DISPLAY);
+    setDocumentDisplayDraft(DEFAULT_DOCUMENT_DISPLAY);
+    setDocumentControlsOpen(false);
+  }, []);
+
+  const closeDocumentDeck = useCallback(() => {
+    if (sendingDocumentPage || savingDocumentControls) return;
+    setDocumentDeck(null);
+    setDocumentPageIndex(0);
+    setDocumentControlsOpen(false);
+  }, [savingDocumentControls, sendingDocumentPage]);
+
+  const deleteDocumentDeck = useCallback(async (deck: DockDocumentDeck) => {
+    if (sendingDocumentPage) return;
+    for (const page of deck.pages) {
+      await deleteEntry(page);
+    }
+    if (documentDeck?.documentId === deck.documentId) {
+      setDocumentDeck(null);
+      setDocumentPageIndex(0);
+      setDocumentControlsOpen(false);
+    }
+  }, [deleteEntry, documentDeck?.documentId, sendingDocumentPage]);
+
+  const updateDocumentPositionFromPointer = useCallback((element: HTMLDivElement, clientX: number, clientY: number) => {
+    const bounds = element.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    const offsetX = Math.round(Math.max(-100, Math.min(100, ((clientX - bounds.left) / bounds.width - 0.5) * 200)));
+    const offsetY = Math.round(Math.max(-100, Math.min(100, ((clientY - bounds.top) / bounds.height - 0.5) * 200)));
+    setDocumentDisplayDraft((current) => ({ ...current, offsetX, offsetY }));
+  }, []);
+
+  const handleDocumentPositionPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateDocumentPositionFromPointer(event.currentTarget, event.clientX, event.clientY);
+  }, [updateDocumentPositionFromPointer]);
+
+  const handleDocumentPositionPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      updateDocumentPositionFromPointer(event.currentTarget, event.clientX, event.clientY);
+    }
+  }, [updateDocumentPositionFromPointer]);
+
+  const handleDocumentPositionKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const step = event.shiftKey ? 10 : 5;
+    const direction = event.key === "ArrowUp" ? -1 : 1;
+    setDocumentDisplayDraft((current) => ({
+      ...current,
+      offsetY: Math.max(-100, Math.min(100, current.offsetY + direction * step)),
+    }));
+  }, []);
+
+  const resetDocumentPosition = useCallback(() => {
+    setDocumentDisplayDraft((current) => ({ ...current, offsetX: 0, offsetY: 0 }));
+  }, []);
+
+  const openDocumentControls = useCallback(() => {
+    setDocumentDisplayDraft(documentDisplay);
+    setDocumentControlsOpen(true);
+  }, [documentDisplay]);
+
+  const closeDocumentControls = useCallback(() => {
+    if (savingDocumentControls) return;
+    setDocumentControlsOpen(false);
+  }, [savingDocumentControls]);
+
+  const showDocumentPage = useCallback(async (pageIndex: number, display = documentDisplay): Promise<boolean> => {
+    const page = documentDeck?.pages[pageIndex];
+    if (!page || sendingDocumentPage) return false;
+    if (isFreePlan && lockedKeys.has(page.key)) {
+      void requireEntitlement("images", documentEntries.length);
+      return false;
+    }
+
+    setDocumentPageIndex(pageIndex);
+    setSendingDocumentPage(page.key);
+    try {
+      const documentOptions: DockDocumentMediaOptions = {
+        pageNumber: page.libraryItem?.documentPageNumber ?? pageIndex + 1,
+        pageCount: documentDeck.pageCount,
+        showBackground: display.showBackground,
+        showPageLabel: display.showPageLabel,
+        alignment: display.alignment,
+        zoom: display.zoom,
+        offsetX: display.offsetX,
+        offsetY: display.offsetY,
+        legacyCanvas: page.libraryItem?.width !== undefined && page.libraryItem?.height !== undefined
+          ? page.libraryItem.width === 1920 && page.libraryItem.height === 1080
+          : undefined,
+      };
+      const success = await handleSendEntry(page, {
+        transition: documentTransition,
+        fitMode: display.fitMode,
+        document: documentOptions,
+      });
+      return Boolean(success);
+    } finally {
+      setSendingDocumentPage(null);
+    }
+  }, [documentDeck, documentDisplay, documentEntries.length, documentTransition, handleSendEntry, isFreePlan, lockedKeys, sendingDocumentPage]);
+
+  const saveDocumentControls = useCallback(async () => {
+    if (!documentDeck || savingDocumentControls) return;
+    setSavingDocumentControls(true);
+    try {
+      const success = await showDocumentPage(documentPageIndex, documentDisplayDraft);
+      if (success) {
+        setDocumentDisplay(documentDisplayDraft);
+        setDocumentControlsOpen(false);
+      }
+    } finally {
+      setSavingDocumentControls(false);
+    }
+  }, [documentDeck, documentDisplayDraft, documentPageIndex, savingDocumentControls, showDocumentPage]);
 
   const handleSendPattern = useCallback(async (entry: DockMediaEntry) => {
     // Presentation actions do NOT consume storage quota — no entitlement check needed.
@@ -2266,6 +2503,83 @@ export default function DockMediaTab({
     ]
   );
 
+  const renderDocumentCard = useCallback(
+    (deck: DockDocumentDeck) => {
+      const isActiveTarget = deck.pages.some((page) => activeTargets.active?.key === page.key);
+      const isLocked = isFreePlan && deck.pages.every((page) => lockedKeys.has(page.key));
+      const importedDate = deck.createdAt ? new Date(deck.createdAt) : null;
+      const importedLabel = importedDate && !Number.isNaN(importedDate.getTime())
+        ? importedDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+        : "Date unavailable";
+      const coverUrl = deck.coverPage?.thumbnailUrl || deck.coverPage?.previewUrl || "";
+
+      const handleOpen = () => {
+        if (isLocked) {
+          void requireEntitlement("images", documentEntries.length);
+          return;
+        }
+        openDocumentDeck(deck);
+      };
+
+      return (
+        <article
+          key={deck.key}
+          className={`dock-document-card${isActiveTarget ? " dock-document-card--active" : ""}${isLocked ? " dock-document-card--locked" : ""}`}
+        >
+          <button
+            type="button"
+            className="dock-document-card__main"
+            onClick={handleOpen}
+            title={isLocked ? t('common.locked') : `Open ${deck.name}`}
+          >
+            <span className="dock-document-card__cover">
+              {coverUrl ? (
+                <img src={coverUrl} alt={`${deck.name} first page`} loading="lazy" />
+              ) : (
+                <span className="dock-document-card__cover-placeholder"><Icon name="description" size={28} /></span>
+              )}
+              <span className="dock-document-card__page-count">
+                <Icon name="description" size={11} />
+                {deck.pageCount} {deck.pageCount === 1 ? "page" : "pages"}
+              </span>
+              {isLocked && (
+                <span className="dock-document-card__lock">
+                  <Icon name="lock" size={14} />
+                  {t('media.upgradeToAccess')}
+                </span>
+              )}
+            </span>
+            <span className="dock-document-card__meta">
+              <span className="dock-document-card__name">{deck.name}</span>
+              <span className="dock-document-card__details">
+                {deck.mimeLabel} · Imported {importedLabel}
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className="dock-document-card__delete"
+            onClick={(event) => {
+              event.stopPropagation();
+              void deleteDocumentDeck(deck);
+            }}
+            aria-label={`Delete ${deck.name}`}
+            title={`Delete ${deck.name}`}
+          >
+            <Icon name="delete" size={13} />
+          </button>
+          {isActiveTarget && (
+            <span className="dock-document-card__status">
+              <Icon name="visibility" size={11} />
+              {t('media.showing')}
+            </span>
+          )}
+        </article>
+      );
+    },
+    [activeTargets.active, deleteDocumentDeck, documentEntries.length, isFreePlan, lockedKeys, openDocumentDeck, t],
+  );
+
   const searchPlaceholder = browserTab === "animations"
     ? t('media.searchAnimations')
     : browserTab === "patterns"
@@ -2416,6 +2730,9 @@ export default function DockMediaTab({
       </div>
     </div>
   );
+
+  const hasVisibleDocumentDecks = (activeKind === "all" || activeKind === "document") && filteredDocumentDecks.length > 0;
+  const hasVisibleMediaEntries = filteredUploadEntries.length > 0;
 
   // ── Render ──
 
@@ -2644,7 +2961,7 @@ export default function DockMediaTab({
                 </div>
                 <div className="dock-media-empty__title">{t('media.noUploads')}</div>
                 <div className="dock-media-empty__text">
-                  Add images, videos, PDFs, or Word documents.
+                  Add images, videos, PDFs, DOCX, or PPTX documents.
                 </div>
                 <button
                   type="button"
@@ -2657,107 +2974,425 @@ export default function DockMediaTab({
               </div>
             ) : (
               <>
-                {/* Kind toggle */}
-                <div className="dock-media-pills" role="tablist" aria-label={t('media.uploadType')}>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeKind === "all"}
-                    className={`dock-media-pill${activeKind === "all" ? " dock-media-pill--active" : ""}`}
-                    onClick={() => setActiveKind("all")}
-                    title={t('media.all')}>
-                    {t('media.all')}
-                    <span className="dock-media-pill__count">{mediaEntries.length}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeKind === "video"}
-                    className={`dock-media-pill${activeKind === "video" ? " dock-media-pill--active" : ""}`}
-                    onClick={() => setActiveKind("video")}
-                    title={t('media.tabVideos')}>
-                    {t('media.tabVideos')}
-                    <span className="dock-media-pill__count">{videoEntries.length}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeKind === "image"}
-                    className={`dock-media-pill${activeKind === "image" ? " dock-media-pill--active" : ""}`}
-                    onClick={() => setActiveKind("image")}
-                    title={t('media.tabImages')}>
-                    {t('media.tabImages')}
-                    <span className="dock-media-pill__count">{imageEntries.length}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeKind === "document"}
-                    className={`dock-media-pill${activeKind === "document" ? " dock-media-pill--active" : ""}`}
-                    onClick={() => setActiveKind("document")}
-                    title="Documents">
-                    Documents
-                    <span className="dock-media-pill__count">{documentEntries.length}</span>
-                  </button>
-                </div>
+                {documentDeck ? (() => {
+                  const importedDate = documentDeck.createdAt ? new Date(documentDeck.createdAt) : null;
+                  const importedLabel = importedDate && !Number.isNaN(importedDate.getTime())
+                    ? importedDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+                    : "Date unavailable";
+                  const documentPreviewPage = documentDeck.pages[documentPageIndex] ?? documentDeck.pages[0];
+                  const documentPreviewUrl = documentPreviewPage?.thumbnailUrl || documentPreviewPage?.previewUrl || "";
+                  const documentPreviewNumber = documentPreviewPage?.libraryItem?.documentPageNumber ?? documentPageIndex + 1;
 
-                {/* View mode toggle — hidden for free plan users */}
-                {!isFreePlan && (
-                  <div className="dock-media-pills dock-media-pills--secondary" role="tablist" aria-label={t('media.sortOrder')}>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={viewMode === "recent"}
-                      className={`dock-media-pill dock-media-pill--small${viewMode === "recent" ? " dock-media-pill--active" : ""}`}
-                      onClick={() => setViewMode("recent")}
-                      title={t('media.recentlyUsed')}>
-                      {t('media.recentlyUsed')}
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={viewMode === "uploaded"}
-                      className={`dock-media-pill dock-media-pill--small${viewMode === "uploaded" ? " dock-media-pill--active" : ""}`}
-                      onClick={() => setViewMode("uploaded")}
-                      title={t('media.newlyUploaded')}>
-                      {t('media.newlyUploaded')}
-                    </button>
-                  </div>
-                )}
+                  return (
+                    <section className="dock-media-document-workspace">
+                      <div className="dock-media-document-header">
+                        <button
+                          type="button"
+                          className="dock-worship-back-btn"
+                          onClick={closeDocumentDeck}
+                          disabled={sendingDocumentPage !== null}
+                          title={t('common.back')}
+                        >
+                          <Icon name="arrow_back" size={14} />
+                        </button>
+                        <div className="dock-media-document-header__copy">
+                          <h2 className="dock-media-document-header__title">{documentDeck.name}</h2>
+                          <span className="dock-media-document-header__meta">
+                            {documentDeck.mimeLabel} · {documentDeck.pageCount} {documentDeck.pageCount === 1 ? "page" : "pages"} · Imported {importedLabel}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="dock-media-document-header__controls"
+                          onClick={openDocumentControls}
+                          disabled={savingDocumentControls}
+                          title="Document controls"
+                          aria-label="Document controls"
+                        >
+                          <Icon name="tune" size={14} />
+                        </button>
+                      </div>
 
-                {/* Error banner */}
-                {sendError && (
-                  <div className="dock-media-send-error">
-                    <Icon name="error_outline" size={13} />
-                    <span>{sendError}</span>
-                    <button
-                      type="button"
-                      className="dock-media-send-error__dismiss"
-                      onClick={() => setSendError(null)}
-                      aria-label={t('media.dismiss')}
-                      title={t('common.close')}>
-                      <Icon name="close" size={13} />
-                    </button>
-                  </div>
-                )}
+                      <div className="dock-media-document-transition" role="group" aria-label="Page transition">
+                        <span className="dock-media-document-transition__label">
+                          <Icon name="swap_horiz" size={13} />
+                          Page transition
+                        </span>
+                        <button
+                          type="button"
+                          className={`dock-media-document-transition__option${documentTransition === "cut" ? " dock-media-document-transition__option--active" : ""}`}
+                          onClick={() => setDocumentTransition("cut")}
+                        >
+                          Cut
+                        </button>
+                        <button
+                          type="button"
+                          className={`dock-media-document-transition__option${documentTransition === "fade" ? " dock-media-document-transition__option--active" : ""}`}
+                          onClick={() => setDocumentTransition("fade")}
+                        >
+                          Fade in/out
+                        </button>
+                      </div>
 
-                {/* Asset list */}
-                {filteredUploadEntries.length === 0 ? (
-                  <div className="dock-empty dock-empty--inline">
-                    <div className="dock-empty__text">
-                      {activeKind === "all"
-                        ? t('media.noUploads')
-                        : activeKind === "video"
-                          ? t('media.noVideos')
-                          : activeKind === "document"
-                            ? "No document pages yet"
-                            : t('media.noImages')}
+                      {documentControlsOpen && (
+                        <div className="dock-media-document-modal-backdrop" role="presentation" onClick={closeDocumentControls}>
+                          <div
+                            className="dock-media-document-modal"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="dock-document-controls-title"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <div className="dock-media-document-modal__header">
+                              <div>
+                                <h3 id="dock-document-controls-title">Document controls</h3>
+                                <span>{documentDeck.name}</span>
+                              </div>
+                              <button
+                                type="button"
+                                className="dock-media-document-modal__close"
+                                onClick={closeDocumentControls}
+                                disabled={savingDocumentControls}
+                                title="Close"
+                                aria-label="Close document controls"
+                              >
+                                <Icon name="close" size={14} />
+                              </button>
+                            </div>
+
+                            <div
+                              className="dock-media-document-modal__preview"
+                              style={{ background: documentDisplayDraft.showBackground ? "#0f172a" : "transparent" }}
+                            >
+                              {documentPreviewUrl ? (
+                                <img
+                                  src={documentPreviewUrl}
+                                  alt={`${documentDeck.name} page ${documentPreviewNumber}`}
+                                  style={{
+                                    objectFit: documentDisplayDraft.fitMode === "contain" ? "contain" : "cover",
+                                    objectPosition: `${documentDisplayDraft.alignment} center`,
+                                    transformOrigin: `${documentDisplayDraft.alignment} center`,
+                                    transform: `translate(${documentDisplayDraft.offsetX}%, ${documentDisplayDraft.offsetY}%) scale(${documentDisplayDraft.zoom})`,
+                                  }}
+                                />
+                              ) : (
+                                <Icon name="description" size={28} />
+                              )}
+                              {documentDisplayDraft.showPageLabel && (
+                                <span className={`dock-media-document-modal__page-label dock-media-document-modal__page-label--${documentDisplayDraft.alignment}`}>
+                                  Page {documentPreviewNumber} of {documentDeck.pageCount}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="dock-media-document-controls">
+                              <div className="dock-media-document-controls__row">
+                                <span className="dock-media-document-controls__label">Frame</span>
+                                <div className="dock-media-document-controls__segmented" role="group" aria-label="Document frame">
+                                  <button
+                                    type="button"
+                                    className={`dock-media-document-controls__option${documentDisplayDraft.fitMode === "contain" ? " dock-media-document-controls__option--active" : ""}`}
+                                    onClick={() => setDocumentDisplayDraft((current) => ({ ...current, fitMode: "contain" }))}
+                                    aria-pressed={documentDisplayDraft.fitMode === "contain"}
+                                    title="Fit document"
+                                  >
+                                    <Icon name="fit_screen" size={12} />
+                                    Fit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`dock-media-document-controls__option${documentDisplayDraft.fitMode === "cover" ? " dock-media-document-controls__option--active" : ""}`}
+                                    onClick={() => setDocumentDisplayDraft((current) => ({ ...current, fitMode: "cover" }))}
+                                    aria-pressed={documentDisplayDraft.fitMode === "cover"}
+                                    title="Fill frame"
+                                  >
+                                    <Icon name="crop" size={12} />
+                                    Fill
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="dock-media-document-controls__row dock-media-document-controls__row--wrap">
+                                <span className="dock-media-document-controls__label">Show</span>
+                                <button
+                                  type="button"
+                                  className={`dock-media-document-controls__toggle${documentDisplayDraft.showBackground ? " dock-media-document-controls__toggle--active" : ""}`}
+                                  onClick={() => setDocumentDisplayDraft((current) => ({ ...current, showBackground: !current.showBackground }))}
+                                  aria-pressed={documentDisplayDraft.showBackground}
+                                  title={documentDisplayDraft.showBackground ? "Remove background" : "Show background"}
+                                >
+                                  <Icon name={documentDisplayDraft.showBackground ? "visibility" : "visibility_off"} size={12} />
+                                  Background
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`dock-media-document-controls__toggle${documentDisplayDraft.showPageLabel ? " dock-media-document-controls__toggle--active" : ""}`}
+                                  onClick={() => setDocumentDisplayDraft((current) => ({ ...current, showPageLabel: !current.showPageLabel }))}
+                                  aria-pressed={documentDisplayDraft.showPageLabel}
+                                  title={documentDisplayDraft.showPageLabel ? "Remove page label" : "Show page label"}
+                                >
+                                  <Icon name="tag" size={12} />
+                                  Page label
+                                </button>
+                              </div>
+
+                              <div className="dock-media-document-controls__row">
+                                <span className="dock-media-document-controls__label">Align</span>
+                                <div className="dock-media-document-controls__align" role="group" aria-label="Document alignment">
+                                  {([
+                                    ["left", "format_align_left", "Align left"],
+                                    ["center", "format_align_center", "Align center"],
+                                    ["right", "format_align_right", "Align right"],
+                                  ] as Array<[DockDocumentAlignment, string, string]>).map(([alignment, icon, label]) => (
+                                    <button
+                                      key={alignment}
+                                      type="button"
+                                      className={`dock-media-document-controls__icon-option${documentDisplayDraft.alignment === alignment ? " dock-media-document-controls__icon-option--active" : ""}`}
+                                      onClick={() => setDocumentDisplayDraft((current) => ({ ...current, alignment }))}
+                                      aria-label={label}
+                                      aria-pressed={documentDisplayDraft.alignment === alignment}
+                                      title={label}
+                                    >
+                                      <Icon name={icon} size={13} />
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <label className="dock-media-document-controls__zoom">
+                                <span className="dock-media-document-controls__label">Zoom <output>{documentDisplayDraft.zoom.toFixed(1)}×</output></span>
+                                <input
+                                  type="range"
+                                  min="1"
+                                  max="3"
+                                  step="0.1"
+                                  value={documentDisplayDraft.zoom}
+                                  onChange={(event) => setDocumentDisplayDraft((current) => ({ ...current, zoom: Number(event.target.value) }))}
+                                  aria-label="Document zoom"
+                                />
+                              </label>
+
+                              <div className="dock-media-document-controls__position">
+                                <div className="dock-media-document-controls__position-header">
+                                  <span className="dock-media-document-controls__label">
+                                    <Icon name="open_with" size={12} />
+                                    Position
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="dock-media-document-controls__reset"
+                                    onClick={resetDocumentPosition}
+                                    title="Reset position to center"
+                                    aria-label="Reset position to center"
+                                  >
+                                    <Icon name="refresh" size={12} />
+                                  </button>
+                                </div>
+                                <div
+                                  className="dock-media-document-controls__pad"
+                                  onPointerDown={handleDocumentPositionPointerDown}
+                                  onPointerMove={handleDocumentPositionPointerMove}
+                                  onKeyDown={handleDocumentPositionKeyDown}
+                                  onPointerUp={(event) => {
+                                    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                                      event.currentTarget.releasePointerCapture(event.pointerId);
+                                    }
+                                  }}
+                                  onPointerCancel={(event) => {
+                                    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                                      event.currentTarget.releasePointerCapture(event.pointerId);
+                                    }
+                                  }}
+                                  role="slider"
+                                  aria-label="Drag document position"
+                                  aria-valuemin={-100}
+                                  aria-valuemax={100}
+                                  aria-valuenow={documentDisplayDraft.offsetY}
+                                  aria-valuetext={`${documentDisplayDraft.offsetX}, ${documentDisplayDraft.offsetY}`}
+                                  tabIndex={0}
+                                >
+                                  <span className="dock-media-document-controls__pad-crosshair" />
+                                  <span
+                                    className="dock-media-document-controls__pad-thumb"
+                                    style={{
+                                      left: `${50 + documentDisplayDraft.offsetX / 2}%`,
+                                      top: `${50 + documentDisplayDraft.offsetY / 2}%`,
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="dock-media-document-modal__actions">
+                              <button
+                                type="button"
+                                className="dock-btn dock-btn--secondary dock-btn--compact"
+                                onClick={closeDocumentControls}
+                                disabled={savingDocumentControls}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                className="dock-btn dock-btn--primary dock-btn--compact"
+                                onClick={() => void saveDocumentControls()}
+                                disabled={savingDocumentControls || sendingDocumentPage !== null}
+                              >
+                                <Icon name="save" size={12} />
+                                {savingDocumentControls ? "Saving…" : "Save and show"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="dock-media-document-list">
+                        {documentDeck.pages.map((page, index) => {
+                          const isSelected = documentPageIndex === index;
+                          const isActive = activeTargets.active?.key === page.key;
+                          const isLocked = isFreePlan && lockedKeys.has(page.key);
+                          const pageUrl = page.thumbnailUrl || page.previewUrl || "";
+
+                          return (
+                            <button
+                              type="button"
+                              key={page.key}
+                              className={`dock-media-document-page${isSelected ? " dock-media-document-page--selected" : ""}${isActive ? " dock-media-document-page--active" : ""}${isLocked ? " dock-media-document-page--locked" : ""}`}
+                              onClick={() => void showDocumentPage(index)}
+                              disabled={sendingDocumentPage !== null}
+                              title={isLocked ? t('common.locked') : `Show page ${index + 1}`}
+                            >
+                              <span className="dock-media-document-page__thumb">
+                                {pageUrl ? (
+                                  <img src={pageUrl} alt={`${documentDeck.name} page ${index + 1}`} loading="lazy" />
+                                ) : (
+                                  <Icon name="description" size={22} />
+                                )}
+                              </span>
+                              <span className="dock-media-document-page__copy">
+                                <span className="dock-media-document-page__number">Page {index + 1}</span>
+                                <span className="dock-media-document-page__status">
+                                  {sendingDocumentPage === page.key
+                                    ? "Showing…"
+                                    : isActive
+                                      ? "Showing in OBS"
+                                      : isLocked
+                                        ? t('media.upgradeToAccess')
+                                        : "Ready to show"}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })() : (
+                  <>
+                    {/* Kind toggle */}
+                    <div className="dock-media-pills" role="tablist" aria-label={t('media.uploadType')}>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeKind === "all"}
+                        className={`dock-media-pill${activeKind === "all" ? " dock-media-pill--active" : ""}`}
+                        onClick={() => setActiveKind("all")}
+                        title={t('media.all')}>
+                        {t('media.all')}
+                        <span className="dock-media-pill__count">{nonDocumentMediaEntries.length + documentDecks.length}</span>
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeKind === "video"}
+                        className={`dock-media-pill${activeKind === "video" ? " dock-media-pill--active" : ""}`}
+                        onClick={() => setActiveKind("video")}
+                        title={t('media.tabVideos')}>
+                        {t('media.tabVideos')}
+                        <span className="dock-media-pill__count">{videoEntries.length}</span>
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeKind === "image"}
+                        className={`dock-media-pill${activeKind === "image" ? " dock-media-pill--active" : ""}`}
+                        onClick={() => setActiveKind("image")}
+                        title={t('media.tabImages')}>
+                        {t('media.tabImages')}
+                        <span className="dock-media-pill__count">{imageEntries.length}</span>
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeKind === "document"}
+                        className={`dock-media-pill${activeKind === "document" ? " dock-media-pill--active" : ""}`}
+                        onClick={() => setActiveKind("document")}
+                        title="Documents">
+                        Docs
+                        <span className="dock-media-pill__count">{documentDecks.length}</span>
+                      </button>
                     </div>
-                  </div>
-                ) : (
-                  <div key={`${browserTab}-${activeKind}`} className="dock-media-list">
-                    {filteredUploadEntries.map((entry) => renderMediaCard(entry))}
-                  </div>
+
+                    {/* View mode toggle — hidden for free plan users */}
+                    {!isFreePlan && (
+                      <div className="dock-media-pills dock-media-pills--secondary" role="tablist" aria-label={t('media.sortOrder')}>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={viewMode === "recent"}
+                          className={`dock-media-pill dock-media-pill--small${viewMode === "recent" ? " dock-media-pill--active" : ""}`}
+                          onClick={() => setViewMode("recent")}
+                          title={t('media.recentlyUsed')}>
+                          {t('media.recentlyUsed')}
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={viewMode === "uploaded"}
+                          className={`dock-media-pill dock-media-pill--small${viewMode === "uploaded" ? " dock-media-pill--active" : ""}`}
+                          onClick={() => setViewMode("uploaded")}
+                          title={t('media.newlyUploaded')}>
+                          {t('media.newlyUploaded')}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Error banner */}
+                    {sendError && (
+                      <div className="dock-media-send-error">
+                        <Icon name="error_outline" size={13} />
+                        <span>{sendError}</span>
+                        <button
+                          type="button"
+                          className="dock-media-send-error__dismiss"
+                          onClick={() => setSendError(null)}
+                          aria-label={t('media.dismiss')}
+                          title={t('common.close')}>
+                          <Icon name="close" size={13} />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Asset list */}
+                    {!hasVisibleMediaEntries && !hasVisibleDocumentDecks ? (
+                      <div className="dock-empty dock-empty--inline">
+                        <div className="dock-empty__text">
+                          {activeKind === "all"
+                            ? t('media.noUploads')
+                            : activeKind === "video"
+                              ? t('media.noVideos')
+                              : activeKind === "document"
+                                ? "No documents yet"
+                                : t('media.noImages')}
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={`${browserTab}-${activeKind}`} className="dock-media-list">
+                        {hasVisibleDocumentDecks && filteredDocumentDecks.map((deck) => renderDocumentCard(deck))}
+                        {filteredUploadEntries.map((entry) => renderMediaCard(entry))}
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -3430,7 +4065,7 @@ export default function DockMediaTab({
                     </div>
                     <div className="dock-media-add-modal__hero-copy">
                       <div className="dock-media-add-modal__hero-title">{t('media.addRegularMedia')}</div>
-                      <div className="dock-media-add-modal__hero-text">Upload images, videos, PDFs, or Word documents. PDFs and DOCX files become easy page cards.</div>
+                      <div className="dock-media-add-modal__hero-text">Upload images, videos, PDFs, DOCX, or PPTX files. Documents become easy page cards.</div>
                     </div>
                   </div>
                   <button
@@ -3447,8 +4082,8 @@ export default function DockMediaTab({
                   </button>
                   <div className="dock-media-card__hint">
                     {presentationLinkMode
-                      ? "Accepted: images, videos, PDF, DOCX. Documents become page images for the presentation screen."
-                      : "Accepted: images, videos, PDF, DOCX. Documents are converted to page images for OBS."}
+                      ? "Accepted: images, videos, PDF, DOCX, PPTX. Documents become page images for the presentation screen."
+                      : "Accepted: images, videos, PDF, DOCX, PPTX. Documents are converted to page images for OBS."}
                   </div>
                 </div>
               ) : (
@@ -3608,12 +4243,12 @@ export default function DockMediaTab({
       {browserTab !== "text" && (
         <button
           type="button"
-          className="dock-btm-toolbar__clear"
+          className="dock-btn dock-btn--secondary dock-btn--compact dock-media-hide-btn"
           onClick={() => void clearMedia()}
-          disabled={clearingTarget !== null || (!activeTargets.active && !textOverlayTargets.active)}
+          disabled={clearingTarget !== null || (!hasActiveMediaTarget && !textOverlayTargets.active)}
           aria-label={t('media.clearMedia')}
           title={t('media.hideMedia')}>
-          <span>{activeTargets.active || textOverlayTargets.active ? t('media.hideMedia') : t('common.clear')}</span>
+          <span>{hasActiveMediaTarget || textOverlayTargets.active ? t('media.hideMedia') : t('common.clear')}</span>
         </button>
       )}
 

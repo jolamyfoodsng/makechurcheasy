@@ -9,12 +9,13 @@
 // Generated from the same keypair as SUBSCRIPTION_PRIVATE_KEY on the server
 const PUBLIC_KEY_BASE64 = import.meta.env.VITE_SUBSCRIPTION_PUBLIC_KEY || "";
 
-// Fail loudly in production if the public key is not configured.
+// Keep the configuration issue visible without presenting it as an auth
+// failure. Dock authentication is handled by the local device session; this
+// key only verifies the optional offline subscription cache.
 if (!PUBLIC_KEY_BASE64 && import.meta.env.PROD) {
-  console.error(
-    "[cryptoVerify] FATAL: VITE_SUBSCRIPTION_PUBLIC_KEY is not set. " +
-    "Subscription signature verification is disabled. " +
-    "Set this environment variable before building for production."
+  console.warn(
+    "[cryptoVerify] Subscription verification key is not configured for this build. " +
+    "Offline subscription cache verification is unavailable."
   );
 }
 

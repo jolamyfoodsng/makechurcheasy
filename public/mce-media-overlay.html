@@ -18,17 +18,65 @@
     #stage {
       position: fixed;
       inset: 0;
-      display: grid;
-      place-items: center;
+      overflow: hidden;
     }
 
-    img,
-    video {
+    .media-layer,
+    .media-layer img,
+    .media-layer video {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       display: block;
       background: transparent;
     }
+
+    .media-layer--fade-in {
+      animation: mce-media-fade-in 140ms ease-out both;
+    }
+
+    .media-layer--fade-out {
+      animation: mce-media-fade-out 100ms ease-in both;
+      pointer-events: none;
+    }
+
+    @keyframes mce-media-fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes mce-media-fade-out {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+
+    .media-layer__background {
+      position: absolute;
+      inset: 0;
+      background: #0f172a;
+    }
+
+    .media-layer__document {
+      filter: drop-shadow(0 18px 26px rgba(0, 0, 0, 0.42));
+      transform-origin: center center;
+    }
+
+    .media-layer__page-label {
+      position: absolute;
+      top: 24px;
+      z-index: 2;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.82);
+      color: #f8fafc;
+      font: 600 18px/1.1 Inter, Arial, sans-serif;
+      white-space: nowrap;
+    }
+
+    .media-layer__page-label--left { left: 24px; }
+    .media-layer__page-label--center { left: 50%; transform: translateX(-50%); }
+    .media-layer__page-label--right { right: 24px; }
   </style>
 </head>
 <body>
@@ -52,17 +100,211 @@
       return "cover";
     }
 
+    function normalizeDocumentAlignment(value) {
+      if (value === "left" || value === "right") return value;
+      return "center";
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, Number(value) || 0));
+    }
+
+    function applyLegacyDocumentClip(image, documentOptions) {
+      if (documentOptions?.legacyCanvas === false) return;
+      if (!image.naturalWidth || !image.naturalHeight) return;
+      if (documentOptions?.legacyCanvas !== true && (image.naturalWidth !== 1920 || image.naturalHeight !== 1080)) return;
+      if (image.naturalWidth !== 1920 || image.naturalHeight !== 1080) return;
+
+      const sampleWidth = Math.min(image.naturalWidth, 960);
+      const sampleHeight = Math.max(1, Math.round(image.naturalHeight * (sampleWidth / image.naturalWidth)));
+      const canvas = document.createElement("canvas");
+      canvas.width = sampleWidth;
+      canvas.height = sampleHeight;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return;
+      context.drawImage(image, 0, 0, sampleWidth, sampleHeight);
+
+      const pixels = context.getImageData(0, 0, sampleWidth, sampleHeight).data;
+      const rowWhite = new Uint32Array(sampleHeight);
+      const columnWhite = new Uint32Array(sampleWidth);
+      for (let y = 0; y < sampleHeight; y += 1) {
+        for (let x = 0; x < sampleWidth; x += 1) {
+          const index = (y * sampleWidth + x) * 4;
+          const white = pixels[index] > 238 && pixels[index + 1] > 238 && pixels[index + 2] > 238;
+          if (white) {
+            rowWhite[y] += 1;
+            columnWhite[x] += 1;
+          }
+        }
+      }
+
+      // Portrait pages may occupy less than half of the 16:9 legacy canvas.
+      // The white-page run is still much wider than the label/text pixels.
+      const rowThreshold = sampleWidth * 0.18;
+      const columnThreshold = sampleHeight * 0.48;
+      const top = rowWhite.findIndex((count) => count >= rowThreshold);
+      const bottom = rowWhite.length - 1 - Array.from(rowWhite).reverse().findIndex((count) => count >= rowThreshold);
+      const left = columnWhite.findIndex((count) => count >= columnThreshold);
+      const right = columnWhite.length - 1 - Array.from(columnWhite).reverse().findIndex((count) => count >= columnThreshold);
+      if (top < 0 || bottom < top || left < 0 || right < left) return;
+
+      const topPercent = (top / sampleHeight) * 100;
+      const rightPercent = ((sampleWidth - right - 1) / sampleWidth) * 100;
+      const bottomPercent = ((sampleHeight - bottom - 1) / sampleHeight) * 100;
+      const leftPercent = (left / sampleWidth) * 100;
+      image.style.clipPath = `inset(${topPercent}% ${rightPercent}% ${bottomPercent}% ${leftPercent}%)`;
+    }
+
+    function isImagePayload(payload) {
+      const mimeType = String(payload.mimeType || "").toLowerCase();
+      if (mimeType.startsWith("image/")) return true;
+
+      // Generated document pages can carry the original PDF name in `title`
+      // even though the served asset is a PNG. Trust the asset extension when
+      // the packet's legacy isImage flag is missing or incorrect.
+      const candidates = [payload.url, payload.title].filter(Boolean).map((value) => String(value).toLowerCase());
+      return Boolean(payload.isImage) || candidates.some((value) => /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)(?:[?#]|$)/i.test(value));
+    }
+
+    function waitForImage(image) {
+      if (image.complete && image.naturalWidth > 0) return Promise.resolve();
+      return new Promise(function (resolve) {
+        image.addEventListener("load", resolve, { once: true });
+        image.addEventListener("error", resolve, { once: true });
+      });
+    }
+
+    function createDocumentLayer(payload, documentOptions) {
+      const alignment = normalizeDocumentAlignment(documentOptions?.alignment);
+      const zoom = clamp(documentOptions?.zoom ?? 1, 1, 3);
+      const offsetX = clamp(documentOptions?.offsetX ?? 0, -100, 100);
+      const offsetY = clamp(documentOptions?.offsetY ?? 0, -100, 100);
+      const fitMode = normalizeFitMode(payload.fitMode);
+      const layer = document.createElement("div");
+      layer.className = "media-layer";
+
+      if (documentOptions.showBackground !== false) {
+        const background = document.createElement("div");
+        background.className = "media-layer__background";
+        layer.appendChild(background);
+      }
+
+      const node = document.createElement("img");
+      node.className = "media-layer__document";
+      node.alt = payload.title || "Document";
+      node.style.objectFit = fitMode === "stretch" ? "fill" : fitMode;
+      node.style.objectPosition = `${alignment} center`;
+      node.style.transformOrigin = `${alignment} center`;
+      node.style.transform = `translate(${offsetX}%, ${offsetY}%) scale(${zoom})`;
+      node.addEventListener("load", function () {
+        applyLegacyDocumentClip(node, documentOptions);
+      }, { once: true });
+      node.src = payload.url;
+      layer.appendChild(node);
+
+      if (documentOptions.showPageLabel !== false) {
+        const label = document.createElement("div");
+        label.className = `media-layer__page-label media-layer__page-label--${alignment}`;
+        label.textContent = `Page ${documentOptions.pageNumber} of ${documentOptions.pageCount}`;
+        layer.appendChild(label);
+      }
+
+      return { layer, node };
+    }
+
+    function renderDocument(stage, payload, renderVersion) {
+      const documentOptions = payload.document;
+      const isFade = payload.transition === "fade";
+      const created = createDocumentLayer(payload, documentOptions);
+
+      // Keep the current page visible until the replacement image has loaded.
+      // This prevents a blank flash when OBS changes pages quickly.
+      waitForImage(created.node).then(function () {
+        if (renderVersion !== window.__mceDocumentRenderVersion) return;
+        const previous = stage.querySelector(".media-layer");
+        if (previous && isFade) {
+          previous.classList.remove("media-layer--fade-in");
+          previous.classList.add("media-layer--fade-out");
+          previous.addEventListener("animationend", function () {
+            if (previous.isConnected) previous.remove();
+          }, { once: true });
+          window.setTimeout(function () {
+            if (previous.isConnected) previous.remove();
+          }, 220);
+          created.layer.classList.add("media-layer--fade-in");
+          stage.appendChild(created.layer);
+        } else {
+          stage.innerHTML = "";
+          stage.appendChild(created.layer);
+        }
+      });
+    }
+
+    window.__mceDocumentRenderVersion = 0;
+
     function render() {
       const stage = document.getElementById("stage");
+      const renderVersion = ++window.__mceDocumentRenderVersion;
       const payload = readPayload();
-      stage.innerHTML = "";
-      if (!payload || !payload.url) return;
+      if (!payload || !payload.url) {
+        stage.innerHTML = "";
+        return;
+      }
 
-      const isImage = Boolean(payload.isImage);
+      const isImage = isImagePayload(payload);
+      const documentOptions = payload.document && typeof payload.document === "object" ? payload.document : null;
+      if (documentOptions && isImage) {
+        renderDocument(stage, payload, renderVersion);
+        return;
+      }
+
+      const isFade = payload.transition === "fade";
+      const previous = stage.querySelector(".media-layer");
+      if (previous && isFade) {
+        previous.classList.remove("media-layer--fade-in");
+        previous.classList.add("media-layer--fade-out");
+        previous.addEventListener("animationend", function () {
+          if (previous.isConnected) previous.remove();
+        }, { once: true });
+        window.setTimeout(function () {
+          if (previous.isConnected) previous.remove();
+        }, 220);
+      } else {
+        stage.innerHTML = "";
+      }
+
       const node = document.createElement(isImage ? "img" : "video");
+      const layer = document.createElement("div");
+      layer.className = `media-layer${isFade ? " media-layer--fade-in" : ""}`;
       const fitMode = normalizeFitMode(payload.fitMode);
-      node.style.objectFit = fitMode === "stretch" ? "fill" : fitMode;
+      const alignment = normalizeDocumentAlignment(documentOptions?.alignment);
+      const zoom = clamp(documentOptions?.zoom ?? 1, 1, 3);
+      const offsetX = clamp(documentOptions?.offsetX ?? 0, -100, 100);
+      const offsetY = clamp(documentOptions?.offsetY ?? 0, -100, 100);
+
+      if (documentOptions) {
+        if (documentOptions.showBackground !== false) {
+          const background = document.createElement("div");
+          background.className = "media-layer__background";
+          layer.appendChild(background);
+        }
+        node.className = "media-layer__document";
+        node.style.objectFit = fitMode === "stretch" ? "fill" : fitMode;
+        node.style.objectPosition = `${alignment} center`;
+        node.style.transformOrigin = `${alignment} center`;
+        node.style.transform = `translate(${offsetX}%, ${offsetY}%) scale(${zoom})`;
+      } else {
+        node.style.objectFit = fitMode === "stretch" ? "fill" : fitMode;
+      }
       node.src = payload.url;
+
+      if (documentOptions && isImage) {
+        const clipLegacyPage = function () {
+          applyLegacyDocumentClip(node, documentOptions);
+        };
+        node.addEventListener("load", clipLegacyPage, { once: true });
+        if (node.complete) clipLegacyPage();
+      }
 
       if (isImage) {
         node.alt = payload.title || "Media";
@@ -77,7 +319,16 @@
         }, { once: true });
       }
 
-      stage.appendChild(node);
+      layer.appendChild(node);
+
+      if (documentOptions && documentOptions.showPageLabel !== false) {
+        const label = document.createElement("div");
+        label.className = `media-layer__page-label media-layer__page-label--${alignment}`;
+        label.textContent = `Page ${documentOptions.pageNumber} of ${documentOptions.pageCount}`;
+        layer.appendChild(label);
+      }
+
+      stage.appendChild(layer);
     }
 
     window.addEventListener("hashchange", render);

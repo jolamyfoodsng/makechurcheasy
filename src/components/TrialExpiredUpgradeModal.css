@@ -1,18 +1,16 @@
 .trial-expired-upgrade {
   position: fixed;
-  inset: 0;
+  right: 24px;
+  bottom: 24px;
   z-index: 2200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(4, 7, 13, 0.74);
-  backdrop-filter: blur(10px);
+  width: min(520px, calc(100vw - 48px));
+  pointer-events: none;
 }
 
 .trial-expired-upgrade__card {
   position: relative;
-  width: min(520px, 100%);
+  width: 100%;
+  pointer-events: auto;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 24px;
@@ -169,4 +167,16 @@
 .trial-expired-upgrade__dismiss:hover {
   border-color: rgba(148, 163, 184, 0.5);
   color: #f8fafc;
+}
+
+@media (max-width: 640px) {
+  .trial-expired-upgrade {
+    right: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+  }
+
+  .trial-expired-upgrade__title {
+    font-size: 22px;
+  }
 }

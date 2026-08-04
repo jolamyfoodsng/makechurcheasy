@@ -11,7 +11,7 @@ import { DEFAULT_THEME_SETTINGS } from "../types";
 
 const defaultDarkFullscreenSettings: BibleThemeSettings = {
   ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"CMG Sans", sans-serif',
+  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif',
   fontSize: 56,
   fontWeight: "bold",
   fontColor: "#F7F8FB",
@@ -70,7 +70,7 @@ const defaultDarkFullscreen: BibleTheme = {
 
 const defaultDarkLowerThirdSettings: BibleThemeSettings = {
   ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"CMG Sans", sans-serif',
+  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif',
   fontSize: 40,
   fontWeight: "bold",
   fontColor: "#F6F8FC",
@@ -129,7 +129,7 @@ const defaultDarkLowerThird: BibleTheme = {
 
 const classicDarkSettings: BibleThemeSettings = {
   ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"CMG Sans", sans-serif',
+  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif',
   fontSize: 52,
   fontWeight: "normal",
   fontColor: "#FFFFFF",
@@ -182,7 +182,7 @@ const classicDark: BibleTheme = {
 
 const modernLightSettings: BibleThemeSettings = {
   ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"CMG Sans", sans-serif',
+  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif',
   fontSize: 44,
   fontWeight: "bold",
   fontColor: "#FFFFFF",
@@ -235,7 +235,7 @@ const modernLight: BibleTheme = {
 
 const cinematicSettings: BibleThemeSettings = {
   ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"CMG Sans Bold", "CMG Sans", sans-serif',
+  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans Bold", "CMG Sans", sans-serif',
   fontSize: 56,
   fontWeight: "bold",
   fontColor: "#FFFFFF",
@@ -288,7 +288,7 @@ const cinematic: BibleTheme = {
 
 const cleanMinimalSettings: BibleThemeSettings = {
   ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"CMG Sans Light", "CMG Sans", sans-serif',
+  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans Light", "CMG Sans", sans-serif',
   fontSize: 40,
   fontWeight: "light",
   fontColor: "#333333",

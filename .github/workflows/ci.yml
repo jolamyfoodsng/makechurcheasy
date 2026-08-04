@@ -38,6 +38,7 @@ jobs:
           VITE_AUTH_API_URL: ${{ secrets.VITE_AUTH_API_URL || 'https://api.creatorstudioslabs.stream' }}
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://api.creatorstudioslabs.stream' }}
           VITE_WS_URL: ${{ secrets.VITE_WS_URL || 'wss://relay.makechurcheazy.com' }}
+          VITE_SUBSCRIPTION_PUBLIC_KEY: ${{ secrets.VITE_SUBSCRIPTION_PUBLIC_KEY }}
           VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
           VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
           VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
@@ -155,6 +156,7 @@ jobs:
           VITE_AUTH_API_URL: ${{ secrets.VITE_AUTH_API_URL || 'https://api.creatorstudioslabs.stream' }}
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://api.creatorstudioslabs.stream' }}
           VITE_WS_URL: ${{ secrets.VITE_WS_URL || 'wss://relay.makechurcheazy.com' }}
+          VITE_SUBSCRIPTION_PUBLIC_KEY: ${{ secrets.VITE_SUBSCRIPTION_PUBLIC_KEY }}
           VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
           VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
           VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}

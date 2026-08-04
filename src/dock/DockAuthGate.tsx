@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import { DEFAULT_PLAN_CONFIG } from "../services/planConfigTypes";
@@ -57,9 +57,14 @@ async function checkLocalAuth(expectedDeviceId: string): Promise<LocalAuthStatus
     const sessionDeviceId =
       data.deviceId != null ? String(data.deviceId).trim() : "";
     const hasMatchingDevice =
-      sessionDeviceId !== "" && sessionDeviceId === expectedDeviceId;
+      !expectedDeviceId || !sessionDeviceId || sessionDeviceId === expectedDeviceId;
+    const hasLocalSession = data.authenticated === true && Boolean(data.user);
 
-    if (data.authenticated === false || !hasMatchingDevice) {
+    // Older overlay/session writers did not include deviceId in the status
+    // payload. The local server is already bound to this desktop, so a valid
+    // authenticated session is sufficient when that field is absent. A URL
+    // deviceId is still enforced whenever both sides provide one.
+    if (data.authenticated === false || !hasLocalSession || !hasMatchingDevice) {
       clearDockAuthCache();
       return "unauthenticated";
     }
@@ -100,7 +105,8 @@ async function checkLocalAuth(expectedDeviceId: string): Promise<LocalAuthStatus
 async function checkDeviceOnline(deviceId: string): Promise<boolean> {
   try {
     const res = await fetch(
-      `${ONLINE_API}/api/device/bootstrap?deviceId=${encodeURIComponent(deviceId)}`
+      `${ONLINE_API}/api/device/bootstrap?deviceId=${encodeURIComponent(deviceId)}`,
+      { cache: "no-store" },
     );
     if (res.ok) {
       const data = await res.json();
@@ -154,62 +160,79 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
   const isTestEnv = ENV_CONFIG.isTest;
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
+  const authCheckInFlightRef = useRef<Promise<void> | null>(null);
 
-  const checkAuth = useCallback(async (attempt = 0) => {
-    // Try session first (no URL parameter needed), fall back to URL for
-    // backward compat with old OBS browser sources that embed ?deviceId=
-    const deviceId = (await getDeviceIdFromSession()) || getDeviceIdFromUrl();
-    if (!deviceId) {
-      // No deviceId anywhere — can't verify
-      setAuthed(false);
-      setReady(true);
-      return;
-    }
+  const checkAuth = useCallback(async () => {
+    if (authCheckInFlightRef.current) return authCheckInFlightRef.current;
 
-    // 1) Try local overlay server first (works offline)
-    const localStatus = await checkLocalAuth(deviceId);
-    if (localStatus === "authenticated") {
-      setAuthed(true);
-      setReady(true);
-      return;
-    }
+    const run = (async () => {
+      // Retry the local handoff before showing the blocked state. This is
+      // important on Windows, where OBS can load the dock before the Tauri
+      // webview has finished posting its restored session.
+      for (let attempt = 0; attempt <= 3; attempt += 1) {
+        // Try the local session first (no URL parameter needed), then support
+        // legacy OBS dock URLs that still embed ?deviceId=.
+        const deviceId = (await getDeviceIdFromSession()) || getDeviceIdFromUrl() || "";
 
-    if (localStatus === "unauthenticated") {
-      setAuthed(false);
-      setReady(true);
-      return;
-    }
+        // 1) Try the local overlay server first (works offline).
+        const localStatus = await checkLocalAuth(deviceId);
+        if (localStatus === "authenticated") {
+          setAuthed(true);
+          setReady(true);
+          return;
+        }
 
-    // 2) Fallback: verify against the online API (requires internet)
-    if (!isTestEnv) {
-      const onlineOk = await checkDeviceOnline(deviceId);
-      if (onlineOk) {
-        setAuthed(true);
-        setReady(true);
-        return;
+        // 2) If a device id is available, verify it against the backend too.
+        // This recovers from a stale/missed local session without requiring a
+        // new pairing or asking the user to reinstall the dock.
+        if (!isTestEnv && deviceId) {
+          const onlineOk = await checkDeviceOnline(deviceId);
+          if (onlineOk) {
+            setAuthed(true);
+            setReady(true);
+            return;
+          }
+        }
+
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+        }
       }
-    }
 
-    // Retry up to 3 times with backoff
-    if (attempt < 3) {
-      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-      return checkAuth(attempt + 1);
-    }
+      setAuthed(false);
+      setReady(true);
+    })();
 
-    setAuthed(false);
-    setReady(true);
+    authCheckInFlightRef.current = run;
+    try {
+      await run;
+    } finally {
+      if (authCheckInFlightRef.current === run) authCheckInFlightRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
 
-  // Auto-poll every 15s while blocked. Local overlay checks remain frequent;
-  // the online fallback is only a safety net when the overlay server is unavailable.
+  // Auto-poll while blocked so a session restored by the desktop app unlocks
+  // an already-open OBS dock without a manual reload.
   useEffect(() => {
     if (authed || !ready) return;
-    const id = setInterval(() => checkAuth(), 15_000);
-    return () => clearInterval(id);
+    const id = setInterval(() => void checkAuth(), 5_000);
+    const retryOnFocus = () => void checkAuth();
+    const retryWhenVisible = () => {
+      if (document.visibilityState === "visible") retryOnFocus();
+    };
+    window.addEventListener("focus", retryOnFocus);
+    window.addEventListener("online", retryOnFocus);
+    document.addEventListener("visibilitychange", retryWhenVisible);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", retryOnFocus);
+      window.removeEventListener("online", retryOnFocus);
+      document.removeEventListener("visibilitychange", retryWhenVisible);
+    };
   }, [authed, ready, checkAuth]);
 
   // Re-check auth every 30s while authenticated (detects logout from main app)
@@ -222,11 +245,11 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
         (await getDeviceIdFromSession()) || getDeviceIdFromUrl() || "",
       );
       if (stillAuthed !== "authenticated") {
-        setAuthed(false);
+        void checkAuth();
       }
     }, 30_000);
     return () => clearInterval(id);
-  }, [authed, ready]);
+  }, [authed, ready, checkAuth]);
 
   if (!ready) {
     return (

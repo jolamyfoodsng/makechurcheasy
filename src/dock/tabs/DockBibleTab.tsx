@@ -18,6 +18,7 @@ import {
   type BibleTheme,
   type BibleThemeSettings,
 } from "../../bible/types";
+import { withScriptureFontFallback } from "../../bible/scriptureFont";
 import { dockClient, type DockStateMessage } from "../../services/dockBridge";
 import type { DockProductionModuleSettings } from "../../services/productionSettings";
 import {
@@ -72,6 +73,10 @@ import { getUserScopedKey } from "../../services/userScopedStorage";
 import { invoke } from "@tauri-apps/api/core";
 import { dockObsClient } from "../dockObsClient";
 import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
+import {
+  buildBibleVerseClipboardText,
+  copyTextToClipboard,
+} from "../bibleClipboard";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -107,6 +112,11 @@ const MIN_DOCK_KEYWORD_SEARCH_LENGTH = 2;
 const DOCK_KEYWORD_SEARCH_LIMIT = 24;
 const BIBLE_RECENT_SEARCHES_KEY = "ocs-dock-bible-recent-searches-v1";
 const BIBLE_RECENT_SEARCH_LIMIT = 4;
+const DEFAULT_TRANSLATION_OPTION: BibleTranslationOption = {
+  value: "KJV",
+  label: "King James Version",
+  language: "English",
+};
 
 interface DockBiblePreferences {
   overlayMode?: OverlayMode;
@@ -150,6 +160,40 @@ function normalizeColumnTranslations(
     const next = source[index] ?? source[0] ?? fallback;
     return next.toUpperCase();
   });
+}
+
+function buildInitialTranslationOptions(prefs: DockBiblePreferences): BibleTranslationOption[] {
+  const savedCodes = [
+    "KJV",
+    ...(prefs.translations ?? []),
+    prefs.translation,
+    prefs.translationA,
+    prefs.translationB,
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim().toUpperCase());
+
+  const uniqueCodes = Array.from(new Set(savedCodes));
+  return uniqueCodes.map((value) =>
+    value === DEFAULT_TRANSLATION_OPTION.value
+      ? DEFAULT_TRANSLATION_OPTION
+      : { value, label: value },
+  );
+}
+
+function mergeTranslationOptions(
+  primary: BibleTranslationOption[],
+  fallback: BibleTranslationOption[],
+): BibleTranslationOption[] {
+  const seen = new Set<string>();
+  const merged: BibleTranslationOption[] = [];
+  for (const option of [...primary, ...fallback]) {
+    const value = option.value.trim().toUpperCase();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    merged.push({ ...option, value });
+  }
+  return merged;
 }
 
 function createEmptyPassages(): Array<BiblePassage | null> {
@@ -280,7 +324,8 @@ function extractFullscreenQuickThemeSettings(
   return {
     backgroundType,
     fontSize: clampNumber(settings.fontSize, 28, 200),
-    fontFamily: settings.fontFamily || DEFAULT_THEME_SETTINGS.fontFamily || "",
+    autoFontScale: settings.autoFontScale === true,
+    fontFamily: withScriptureFontFallback(settings.fontFamily || DEFAULT_THEME_SETTINGS.fontFamily),
     refFontSize: clampNumber(settings.refFontSize, 10, 150),
     refFontWeight: settings.refFontWeight || DEFAULT_THEME_SETTINGS.refFontWeight,
     fontColor: settings.fontColor || DEFAULT_THEME_SETTINGS.fontColor,
@@ -439,7 +484,10 @@ function sanitizeFullscreenQuickThemeSettings(
 
   return {
     fontSize: clampNumber(Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize), 28, 200),
-    fontFamily: typeof source.fontFamily === "string" ? source.fontFamily : (DEFAULT_THEME_SETTINGS.fontFamily || ""),
+    autoFontScale: source.autoFontScale === true,
+    fontFamily: withScriptureFontFallback(
+      typeof source.fontFamily === "string" ? source.fontFamily : DEFAULT_THEME_SETTINGS.fontFamily,
+    ),
     refFontSize: clampNumber(
       Number(source.refFontSize ?? DEFAULT_THEME_SETTINGS.refFontSize),
       14,
@@ -582,6 +630,7 @@ function applyFullscreenQuickThemeSettings(
     settings: {
       ...theme.settings,
       fontSize: quickSettings.fontSize,
+      autoFontScale: quickSettings.autoFontScale === true,
       refFontSize: quickSettings.refFontSize,
       fontColor: quickSettings.fontColor,
       refFontColor: quickSettings.refFontColor,
@@ -934,9 +983,10 @@ export default function DockBibleTab({
   );
   const [translationA, setTranslationA] = useState(initialPrefs.translationA ?? "KJV");
   const [translationB, setTranslationB] = useState(initialPrefs.translationB ?? "NIV");
-  const [availableTranslations, setAvailableTranslations] = useState<BibleTranslationOption[]>([
-    { value: "KJV", label: "King James Version", language: "English" },
-  ]);
+  const [availableTranslations, setAvailableTranslations] = useState<BibleTranslationOption[]>(() =>
+    buildInitialTranslationOptions(initialPrefs),
+  );
+  const [translationsLoaded, setTranslationsLoaded] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showRecentSearches, setShowRecentSearches] = useState(false);
   const [keywordActionResult, setKeywordActionResult] = useState<Extract<DockBibleSearchOption, { kind: "keyword" | "concept" }> | null>(null);
@@ -1019,6 +1069,8 @@ export default function DockBibleTab({
   const [themeSettingsInitialTab, setThemeSettingsInitialTab] = useState<ThemeSettingsTab>("text");
   const [showBibleHistory, setShowBibleHistory] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [copyFeedback, setCopyFeedback] = useState<"success" | "error" | null>(null);
+  const copyFeedbackTimerRef = useRef<number | null>(null);
 
   // ── Height-responsive compact mode ──
   const [isShortHeight, setIsShortHeight] = useState(() => {
@@ -1039,6 +1091,12 @@ export default function DockBibleTab({
 
     observer.observe(element);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => () => {
+    if (copyFeedbackTimerRef.current !== null) {
+      window.clearTimeout(copyFeedbackTimerRef.current);
+    }
   }, []);
 
   // Signal compact mode to parent shell via body class
@@ -1364,7 +1422,7 @@ export default function DockBibleTab({
   }, [isUtilityCollapsed]);
 
   const loadTranslations = useCallback(async () => {
-    const fallbackTranslation: BibleTranslationOption = { value: "KJV", label: "King James Version", language: "English" };
+    const savedTranslations = buildInitialTranslationOptions(initialPrefsRef.current ?? {});
     const toTranslationOption = (entry: { abbr: string; name?: string; language?: string }) => {
       const value = entry.abbr.trim().toUpperCase();
       return {
@@ -1378,12 +1436,17 @@ export default function DockBibleTab({
       try {
         const { getInstalledTranslations } = await import("../../bible/bibleDb");
         const installed = await getInstalledTranslations();
-        setAvailableTranslations([
-          fallbackTranslation,
-          ...installed
-            .filter((entry) => entry.abbr && entry.abbr.toUpperCase() !== "KJV")
-            .map(toTranslationOption),
-        ]);
+        setAvailableTranslations(
+          mergeTranslationOptions(
+            [
+              DEFAULT_TRANSLATION_OPTION,
+              ...installed
+                .filter((entry) => entry.abbr && entry.abbr.toUpperCase() !== "KJV")
+                .map(toTranslationOption),
+            ],
+            savedTranslations,
+          ),
+        );
         return true;
       } catch {
         return false;
@@ -1399,12 +1462,17 @@ export default function DockBibleTab({
       if (remote.ok) {
         const payload = await remote.json() as Array<{ abbr: string; name: string; language?: string }>;
         if (Array.isArray(payload) && payload.length > 0) {
-          setAvailableTranslations([
-            fallbackTranslation,
-            ...payload
-              .filter((entry) => entry.abbr && entry.abbr.toUpperCase() !== "KJV")
-              .map(toTranslationOption),
-          ]);
+          setAvailableTranslations(
+            mergeTranslationOptions(
+              [
+                DEFAULT_TRANSLATION_OPTION,
+                ...payload
+                  .filter((entry) => entry.abbr && entry.abbr.toUpperCase() !== "KJV")
+                  .map(toTranslationOption),
+              ],
+              savedTranslations,
+            ),
+          );
           return;
         }
       }
@@ -1413,15 +1481,36 @@ export default function DockBibleTab({
     }
 
     if (!(await loadLocalTranslations())) {
-      setAvailableTranslations([fallbackTranslation]);
+      setAvailableTranslations(mergeTranslationOptions([DEFAULT_TRANSLATION_OPTION], savedTranslations));
     }
   }, []);
 
   useEffect(() => {
-    void loadTranslations();
+    let cancelled = false;
+    setTranslationsLoaded(false);
+    void loadTranslations()
+      .catch(() => {
+        if (!cancelled) {
+          setAvailableTranslations(
+            mergeTranslationOptions(
+              [DEFAULT_TRANSLATION_OPTION],
+              buildInitialTranslationOptions(initialPrefsRef.current ?? {}),
+            ),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setTranslationsLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [loadTranslations]);
 
   useEffect(() => {
+    if (!translationsLoaded) return;
     const allowed = new Set(availableTranslations.map((entry) => entry.value.toUpperCase()));
     setColumnTranslations((current) => {
       const next = current.map((value) =>
@@ -1429,7 +1518,7 @@ export default function DockBibleTab({
       );
       return current.every((value, index) => value === next[index]) ? current : next;
     });
-  }, [availableTranslations]);
+  }, [availableTranslations, translationsLoaded]);
 
   // Resolve the base theme for each mode from the unified theme's variants
   const baseFullscreenTheme = useMemo(() => {
@@ -3227,10 +3316,37 @@ export default function DockBibleTab({
     [selectedBook, selectedChapter, goLiveVerse],
   );
 
-  const stopVerseActionEvent = useCallback((event: React.SyntheticEvent) => {
+  const showCopyFeedback = useCallback((status: "success" | "error") => {
+    if (copyFeedbackTimerRef.current !== null) {
+      window.clearTimeout(copyFeedbackTimerRef.current);
+    }
+    setCopyFeedback(status);
+    copyFeedbackTimerRef.current = window.setTimeout(() => {
+      setCopyFeedback(null);
+      copyFeedbackTimerRef.current = null;
+    }, 1600);
+  }, []);
+
+  const handleVerseDoubleClick = useCallback(async (
+    event: React.MouseEvent,
+    verseNumber: number,
+    primaryText: string,
+    secondaryText?: string,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
-  }, []);
+    if (!selectedBook || !selectedChapter) return;
+
+    const reference = `${selectedBook} ${selectedChapter}:${verseNumber}`;
+    const copyBlocks = compareEnabled && secondaryText
+      ? [
+        { reference, translation: translationA, text: primaryText },
+        { reference, translation: translationB, text: secondaryText },
+      ]
+      : [{ reference, translation: activeTranslation, text: primaryText }];
+    const copied = await copyTextToClipboard(buildBibleVerseClipboardText(copyBlocks));
+    showCopyFeedback(copied ? "success" : "error");
+  }, [activeTranslation, compareEnabled, selectedBook, selectedChapter, showCopyFeedback, translationA, translationB]);
 
   const handleVerseRowDelegated = useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
@@ -3742,6 +3858,25 @@ export default function DockBibleTab({
     </div>
   );
 
+  const referenceDisplayTrigger = (
+    <div className="dock-bible-reference-trigger dock-bible-reference-trigger--bottom" ref={referencePopoverRef}>
+      <button
+        type="button"
+        className={`dock-bible-reference-trigger__btn${showReferencePopover ? " dock-bible-reference-trigger__btn--active" : ""}`}
+        onClick={() => {
+          setShowComparePopover(false);
+          setShowReferencePopover((prev) => !prev);
+        }}
+        title={t("bible.referenceSettings", "Reference display settings")}
+        aria-label={t("bible.referenceSettings", "Reference display settings")}
+        aria-expanded={showReferencePopover}
+      >
+        <Icon name="tag" size={14} />
+      </button>
+      {showReferencePopover && referenceSettingsPopover}
+    </div>
+  );
+
   return (
     <BibleDockContainer
       ref={containerRef}
@@ -3794,22 +3929,6 @@ export default function DockBibleTab({
             >
               <Icon name="swap_horiz" size={14} />
             </button>
-            <span className="dock-bible-reference-trigger dock-bible-reference-trigger--compact" ref={referencePopoverRef}>
-              <button
-                type="button"
-                className={`dock-bible-compact-actions__reference${showReferencePopover ? " dock-bible-compact-actions__reference--active" : ""}`}
-                onClick={() => {
-                  setShowComparePopover(false);
-                  setShowReferencePopover((prev) => !prev);
-                }}
-                title={t("bible.referenceSettings", "Reference display settings")}
-                aria-label={t("bible.referenceSettings", "Reference display settings")}
-                aria-expanded={showReferencePopover}
-              >
-                <Icon name="tag" size={14} />
-              </button>
-              {showReferencePopover && referenceSettingsPopover}
-            </span>
             <button
               type="button"
               className="dock-bible-compact-actions__refresh"
@@ -4005,22 +4124,6 @@ export default function DockBibleTab({
                 </button>
               </div>
             )}
-          </div>
-          <div className="dock-bible-reference-trigger" ref={referencePopoverRef}>
-            <button
-              type="button"
-              className={`dock-bible-reference-trigger__btn${showReferencePopover ? " dock-bible-reference-trigger__btn--active" : ""}`}
-              onClick={() => {
-                setShowComparePopover(false);
-                setShowReferencePopover((prev) => !prev);
-              }}
-              title={t("bible.referenceSettings", "Reference display settings")}
-              aria-label={t("bible.referenceSettings", "Reference display settings")}
-              aria-expanded={showReferencePopover}
-            >
-              <Icon name="tag" size={14} />
-            </button>
-            {showReferencePopover && referenceSettingsPopover}
           </div>
         </div>
       }
@@ -4295,7 +4398,12 @@ export default function DockBibleTab({
                 key={verse.verse}
                 data-verse-row={verse.verse}
                 className={rowClassName}
-                onDoubleClick={stopVerseActionEvent}
+                onDoubleClick={(event) => void handleVerseDoubleClick(
+                  event,
+                  verse.verse,
+                  verseA.text,
+                  compareEnabled ? verseB.text : undefined,
+                )}
                 tabIndex={0}
                 role="button"
                 aria-current={isSelected ? "true" : undefined}
@@ -4376,7 +4484,7 @@ export default function DockBibleTab({
           collapsed={toolbarCollapsed}
           onCollapseChange={setToolbarCollapsed}
           inlineAction={
-            <>
+            <div className="dock-bible-bottom-actions">
               <button
                 type="button"
                 className="dock-btm-toolbar__icon-btn"
@@ -4423,7 +4531,8 @@ export default function DockBibleTab({
                   </div>
                 )}
               </div>
-            </>
+              {referenceDisplayTrigger}
+            </div>
           }
         />
 
@@ -4560,6 +4669,21 @@ export default function DockBibleTab({
         storageScope="bible"
         hideBackgroundOnCompare={displayMode === "compare"}
       />
+
+      {copyFeedback && (
+        <div
+          className={`dock-bible-copy-feedback dock-bible-copy-feedback--${copyFeedback}`}
+          role="status"
+          aria-live="polite"
+        >
+          <Icon name={copyFeedback === "success" ? "check_circle" : "warning"} size={14} />
+          <span>
+            {copyFeedback === "success"
+              ? t("common.copiedToClipboard")
+              : t("common.copyFailed", { defaultValue: "Could not copy to clipboard" })}
+          </span>
+        </div>
+      )}
 
       {showBibleHistory && (
         <BibleHistoryScreen

@@ -15,6 +15,7 @@ import { useBible } from "../bibleStore";
 import { saveCustomTheme } from "../bibleDb";
 import type { BibleTheme, BibleThemeSettings, BibleTemplateType } from "../types";
 import { DEFAULT_THEME_SETTINGS } from "../types";
+import { SCRIPTURE_FONT_FAMILY } from "../scriptureFont";
 import Icon from "../../components/Icon";
 import ThemePreviewSurface from "../../components/ThemePreviewSurface";
 
@@ -45,6 +46,7 @@ function autoTransparentForLowerThird(
 }
 
 const FONT_OPTIONS = [
+  { label: "Charis SIL (African languages)", value: SCRIPTURE_FONT_FAMILY },
   { label: "CMG Sans", value: '"CMG Sans", sans-serif' },
   { label: "CMG Sans Bold", value: '"CMG Sans Bold", "CMG Sans", sans-serif' },
   { label: "CMG Sans Condensed", value: '"CMG Sans Condensed", "CMG Sans", sans-serif' },

@@ -30,7 +30,7 @@ import {
   Sun,
   Video
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
@@ -58,6 +58,13 @@ import { getCachedSubscription } from "../services/subscriptionCache";
 import { confirmStopVoiceBibleForPresentation } from "../services/voiceBiblePresentationGuard";
 import { getAllSongs } from "../worship/worshipDb";
 import { OnboardingResumeBanner } from "./OnboardingPage";
+import MovePluginInstallModal from "../components/MovePluginInstallModal";
+import {
+  ensureMoveTransition,
+  getObsMovePluginStatus,
+  isMceBridgeLoaded,
+  isMovePluginLoaded,
+} from "../services/obsMovePlugin";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 import { getEnvConfig } from "../services/envConfig";
 
@@ -262,7 +269,8 @@ function DashboardSummaryCards() {
         const plan = getEffectivePlan(user);
         const actualPlan = getUserPlan(user);
         const limits = getUserPlanLimits(user);
-        const trial = isInTrial(user);
+        const storedPlan = String(user?.plan || "free").trim().toLowerCase();
+        const trial = storedPlan === "free" && isInTrial(user);
         const trialDays = getTrialDaysRemaining(user);
         const creditDetails = await fetchCreditDetails();
         const sub = getCachedSubscription();
@@ -377,7 +385,8 @@ function PlanUpgradeBanner() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { getFormattedPlanPrice, loading } = useCountryPricing();
-  const trialActive = isInTrial(user);
+  const storedPlan = String(user?.plan || "free").trim().toLowerCase();
+  const trialActive = storedPlan === "free" && isInTrial(user);
   const plan = getUserPlan(user);
   const isFree = plan === "free";
   const promoText = t("common.upgradePlansStartToday", {
@@ -912,6 +921,8 @@ export default function ProductionHomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { t } = useTranslation();
+  const [showMovePluginPrompt, setShowMovePluginPrompt] = useState(false);
+  const moveTransitionEnsureAttempt = useRef(false);
 
   // ── Settings ──
   const [pastorName, setPastorName] = useState("");
@@ -1080,6 +1091,45 @@ export default function ProductionHomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Older installations and users who skipped onboarding still get the
+  // bundled Move plugin offer from the dashboard.
+  useEffect(() => {
+    let active = true;
+    getObsMovePluginStatus()
+      .then(async (status) => {
+        if (active && status.bundled && status.bridgeBundled && (!status.installed || !status.bridgeInstalled)) {
+          setShowMovePluginPrompt(true);
+        }
+        if (active && status.installed && status.bridgeInstalled && obsService.isConnected) {
+          const [moveLoaded, bridgeLoaded] = await Promise.all([
+            isMovePluginLoaded(),
+            isMceBridgeLoaded(),
+          ]);
+          if (moveLoaded && bridgeLoaded) {
+            void ensureMoveTransition();
+          }
+        }
+      })
+      .catch(() => { });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Apply the bridge once after OBS becomes available. This keeps the setup
+  // automatic without repeatedly replacing a transition during normal use.
+  useEffect(() => {
+    if (obsStatus !== "connected" || moveTransitionEnsureAttempt.current) return;
+    moveTransitionEnsureAttempt.current = true;
+    getObsMovePluginStatus()
+      .then(async (status) => {
+        if (status.installed && status.bridgeInstalled) {
+          await ensureMoveTransition();
+        }
+      })
+      .catch(() => { });
+  }, [obsStatus]);
+
   // ── Subscribe to OBS status ──
   useEffect(() => {
     const unsub = obsService.onStatusChange((status) => {
@@ -1228,6 +1278,9 @@ export default function ProductionHomePage() {
         open={tutorialOpen}
         onClose={() => setTutorialOpen(false)}
       />
+      {showMovePluginPrompt && (
+        <MovePluginInstallModal onClose={() => setShowMovePluginPrompt(false)} />
+      )}
       <DashboardTutorial
         isActive={tourActive}
         onClose={() => setTourActive(false)}

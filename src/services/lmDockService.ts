@@ -67,6 +67,23 @@ export interface LmDockSnapshot {
   telemetry?: LmDockTelemetry;
 }
 
+/** Suggestions are provisional and must be materially stronger than noise. */
+const MIN_LIVE_QUOTE_CONFIDENCE = 0.55;
+
+/**
+ * A live quote search is provisional. An empty result can be caused by the
+ * next few spoken words not being enough to match yet, so it must not erase a
+ * suggestion that is still waiting for the operator to click it. Suggestions
+ * are replaced by the next positive result and explicitly cleared when the
+ * listening session stops.
+ */
+export function retainSuggestionsUntilReplacement(
+  current: VoiceBibleCandidate[],
+  next: VoiceBibleCandidate[],
+): VoiceBibleCandidate[] {
+  return next.length > 0 ? next.slice(0, 20) : current;
+}
+
 type SnapshotListener = (snapshot: LmDockSnapshot) => void;
 
 /**
@@ -633,7 +650,7 @@ class LmDockService {
     this.scriptureEngine.cancelQuoteSearchPublic();
 
     const searchId = ++this.latestSearchId;
-    const boundBook = this.scriptureEngine.getBoundBook();
+    const boundPassage = this.scriptureEngine.getBoundPassage();
     const searchStartedAt = Date.now();
     this.telemetry.lastSearchAt = searchStartedAt;
     this.telemetry.speechToSearchMs = this.lastSpeechReceivedAt > 0
@@ -645,7 +662,7 @@ class LmDockService {
     this.pushStatus();
 
     try {
-      const quoteMatches = await this.scriptureEngine.searchQuotesWithText(text, boundBook);
+      const quoteMatches = await this.scriptureEngine.searchQuotesWithText(text, boundPassage);
 
       // Freshness guard: discard if a newer search has started
       if (searchId !== this.latestSearchId) {
@@ -659,9 +676,17 @@ class LmDockService {
       this.latencySum += this.telemetry.searchToResultsMs;
       this.telemetry.avgLatencyMs = Math.round(this.latencySum / this.telemetry.searchCount);
 
-      if (quoteMatches.length > 0) {
-        // REPLACE suggestions — every new search represents the latest quote.
-        const suggestions = quoteMatches.map((m) => m.candidate).slice(0, 20);
+      const usableQuoteMatches = quoteMatches.filter(
+        (match) => match.confidence >= MIN_LIVE_QUOTE_CONFIDENCE,
+      );
+
+      if (usableQuoteMatches.length > 0) {
+        // Replace suggestions only when a newer search has a real match.
+        // Empty interim searches must not remove a clickable suggestion.
+        const suggestions = retainSuggestionsUntilReplacement(
+          this.snapshot.suggestions,
+          usableQuoteMatches.map((m) => m.candidate),
+        );
         const candidates = [...this.snapshot.queue, ...suggestions].slice(0, 20);
         this.snapshot = { ...this.snapshot, suggestions, candidates };
         this.telemetry.lastResultsAt = Date.now();
@@ -670,13 +695,9 @@ class LmDockService {
           : this.telemetry.searchToResultsMs;
         this.pushCandidates();
       } else {
-        // Clear stale suggestions — the new query found nothing, so the
-        // previous match is no longer relevant. Without this, a verse from
-        // a prior search persists on screen even after the topic changes.
-        if (this.snapshot.suggestions.length > 0) {
-          this.snapshot = { ...this.snapshot, suggestions: [], candidates: [...this.snapshot.queue] };
-          this.pushCandidates();
-        }
+        // Keep the previous suggestion visible. The dock owns its configured
+        // suggestion lifetime, and the next partial search may simply be too
+        // short to match while the pastor is still speaking.
       }
     } catch (err) {
       console.warn("[LmDockService] Sentence quote search failed:", err);

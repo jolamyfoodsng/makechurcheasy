@@ -7,6 +7,7 @@ import Icon from "../DockIcon";
 export type DockFullscreenQuickThemeSettings = Pick<
   BibleThemeSettings,
   | "fontSize"
+  | "autoFontScale"
   | "fontFamily"
   | "refFontSize"
   | "refFontWeight"

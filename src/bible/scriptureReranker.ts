@@ -552,15 +552,19 @@ export function matchVerseAlias(query: string): string | null {
   if (compressed) return compressed;
 
   // Substring containment
+  // Only allow a shorter query to be contained by an alias when it has at
+  // least three words. Without this floor, fragments such as "of Jesus"
+  // incorrectly match the alias "the blood of Jesus".
+  const allowShorterQuery = q.split(" ").filter(Boolean).length >= 3;
   for (const [normalizedPhrase, reference] of ALIAS_EXACT) {
-    if (q.includes(normalizedPhrase) || normalizedPhrase.includes(q)) {
+    if (q.includes(normalizedPhrase) || (allowShorterQuery && normalizedPhrase.includes(q))) {
       return reference;
     }
   }
 
   // Compressed substring containment
   for (const [compressedPhrase, reference] of ALIAS_COMPRESSED) {
-    if (qCompressed.includes(compressedPhrase) || compressedPhrase.includes(qCompressed)) {
+    if (qCompressed.includes(compressedPhrase) || (allowShorterQuery && compressedPhrase.includes(qCompressed))) {
       return reference;
     }
   }

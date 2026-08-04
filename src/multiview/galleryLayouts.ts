@@ -18,6 +18,7 @@ export type GalleryLayoutCategory =
   | "translation"
   | "speaker-focus"
   | "hybrid"
+  | "multimedia"
   | "custom"
   | "added";
 
@@ -43,6 +44,9 @@ export interface GalleryLayout {
   useCases: string[];
   /** Scene name prefix used when creating in OBS */
   scenePrefix: string;
+  /** Optional frame defaults applied when this layout is selected in the dock. */
+  defaultFrameId?: string | null;
+  defaultSlotFrames?: Record<string, string>;
 }
 
 export const GALLERY_CATEGORIES: { key: GalleryLayoutCategory | "all"; label: string; icon: string }[] = [
@@ -53,6 +57,7 @@ export const GALLERY_CATEGORIES: { key: GalleryLayoutCategory | "all"; label: st
   { key: "translation", label: "Translation", icon: "translate" },
   { key: "speaker-focus", label: "Speaker Focus", icon: "person" },
   { key: "hybrid", label: "Hybrid", icon: "dashboard" },
+  { key: "multimedia", label: "Multimedia", icon: "perm_media" },
   { key: "custom", label: "Custom", icon: "tune" },
 ];
 
@@ -63,6 +68,7 @@ const CATEGORY_MAP: Record<string, GalleryLayoutCategory> = {
   worship: "hybrid",
   "multi-camera": "cameras",
   announcement: "custom",
+  multimedia: "multimedia",
   ceremony: "hybrid",
   youth: "custom",
   kids: "custom",
@@ -92,6 +98,12 @@ function templateToGalleryLayout(tpl: TemplateDefinition): GalleryLayout {
     category: CATEGORY_MAP[tpl.category] || "custom",
     scenePrefix: `MultiView - ${tpl.name}`,
     useCases: tpl.tags.slice(0, 3),
+    defaultFrameId: tpl.dockFrameId,
+    defaultSlotFrames: tpl.dockSlotFrames
+      ? Object.fromEntries(
+          Object.entries(tpl.dockSlotFrames).map(([key, value]) => [key.replace(/^tpl_r_/, ""), value]),
+        )
+      : undefined,
     slots: tpl.regions.map((r) => ({
       id: r.id.replace("tpl_r_", ""),
       label: r.slotLabel || r.name,

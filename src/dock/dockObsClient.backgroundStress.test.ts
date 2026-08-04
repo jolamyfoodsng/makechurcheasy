@@ -448,6 +448,28 @@ describe("dockObsClient background reflection stress", () => {
     expect(callLog).toHaveLength(callsAfterFirstPass);
   });
 
+  it("keeps the copied Program scene underlay when MCE Presentation is already Program", async () => {
+    sceneItems.set("MCE Presentation", new Map([
+      ["Pastor Camera", { sourceName: "Pastor Camera", sceneItemId: 10, sceneItemIndex: 0, enabled: true }],
+      ["MCE Worship", { sourceName: "MCE Worship", sceneItemId: 11, sceneItemIndex: 1, enabled: true }],
+    ]));
+    sceneItems.set("Pastor Camera", new Map());
+    client.readSceneMode = vi.fn(() => "auto-duplicate");
+    client.isStudioModeEnabled = vi.fn(async () => true);
+    client.ensurePresentationSceneReady = vi.fn(async () => {});
+    client.getCurrentProgramSceneName = vi.fn(async () => "MCE Presentation");
+
+    await client.ensureProgramSceneAsSourceInPresentation(true);
+
+    expect(sceneItems.get("MCE Presentation")?.has("Pastor Camera")).toBe(true);
+    expect(sceneItems.get("MCE Presentation")?.has("MCE Worship")).toBe(true);
+    expect(callLog.some((entry) => (
+      entry.method === "RemoveSceneItem" &&
+      entry.payload.sceneName === "MCE Presentation" &&
+      entry.payload.sceneItemId === 10
+    ))).toBe(false);
+  });
+
   it("keeps routing live on repeated fast overlay sends while layout prep stays cached", async () => {
     const fitSource = vi.fn(async () => {});
     client.promotePresentationScene = vi.fn(async () => {});

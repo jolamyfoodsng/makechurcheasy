@@ -5,6 +5,7 @@ import type {
   PresentationTextAlign,
 } from "../presentation/types";
 import { toStoredOverlayAssetUrl } from "./overlayUrl";
+import { withScriptureFontFallback } from "../bible/scriptureFont";
 import {
   clearPresentationScreen,
   publishBibleToPresentation,
@@ -97,7 +98,7 @@ function buildPresentationStyle(data: Record<string, unknown>): PresentationStyl
 
   return {
     themeId: asString(data.theme) || undefined,
-    fontFamily: asString(merged.fontFamily) || "Inter, system-ui, sans-serif",
+    fontFamily: withScriptureFontFallback(asString(merged.fontFamily)),
     fontSize: asNumber(merged.fontSize, 64),
     fontWeight: asString(merged.fontWeight) || 700,
     lineHeight: asNumber(merged.lineHeight, 1.2),

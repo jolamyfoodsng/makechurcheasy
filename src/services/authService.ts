@@ -14,6 +14,8 @@ import { requestJsonWithRetry } from "./requestDedup";
 const PRODUCTION_API_BASE = "https://api.creatorstudioslabs.stream";
 const PRODUCTION_DASHBOARD_BASE = "https://makechurcheazy.com";
 const LOCAL_DASHBOARD_BASE = "http://localhost:4000";
+const DEFAULT_OVERLAY_PORT = 45678;
+const SESSION_SYNC_TIMEOUT_MS = 1200;
 
 function normalizeApiBase(value: string | undefined): string {
   return (value || PRODUCTION_API_BASE).replace(/\/+$/, "");
@@ -35,35 +37,44 @@ function isLocalApiBase(apiBase: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(apiBase);
 }
 
-function shouldRetryOnProduction(apiBase: string, response?: Response): boolean {
-  if (!isLocalApiBase(apiBase) || apiBase === PRODUCTION_API_BASE) return false;
+function shouldTryNextApiBase(response?: Response): boolean {
   if (!response) return true;
   return response.status === 404 || response.status >= 500;
 }
 
+function authApiCandidates(): string[] {
+  return Array.from(new Set(
+    [API_BASE, PRODUCTION_API_BASE].map(normalizeApiBase),
+  ));
+}
+
 async function fetchAuthApi(path: string, init?: RequestInit): Promise<{ response: Response; apiBase: string }> {
-  let primaryResponse: Response | null = null;
+  const candidates = authApiCandidates();
+  let lastResponse: Response | null = null;
+  let lastError: unknown = null;
 
-  try {
-    primaryResponse = await fetch(`${API_BASE}${path}`, init);
-    if (!shouldRetryOnProduction(API_BASE, primaryResponse)) {
-      _activePairingApiBase = API_BASE;
-      return { response: primaryResponse, apiBase: API_BASE };
-    }
-  } catch {
-    if (!shouldRetryOnProduction(API_BASE)) {
-      throw new Error("auth_api_unavailable");
+  for (let index = 0; index < candidates.length; index += 1) {
+    const apiBase = candidates[index];
+    try {
+      const response = await fetch(`${apiBase}${path}`, init);
+      lastResponse = response;
+      if (!shouldTryNextApiBase(response) || index === candidates.length - 1) {
+        _activePairingApiBase = apiBase;
+        return { response, apiBase };
+      }
+      console.warn("[authService] Auth API %s returned %s; trying fallback.", apiBase, response.status);
+    } catch (error) {
+      lastError = error;
+      if (index === candidates.length - 1) break;
+      console.warn("[authService] Auth API %s unavailable; trying fallback.", apiBase);
     }
   }
 
-  const response = await fetch(`${PRODUCTION_API_BASE}${path}`, init);
-  _activePairingApiBase = PRODUCTION_API_BASE;
-  if (primaryResponse) {
-    console.warn("[authService] Local auth API returned %s; using production auth API.", primaryResponse.status);
-  } else {
-    console.warn("[authService] Local auth API unavailable; using production auth API.");
+  if (lastResponse) {
+    _activePairingApiBase = candidates[candidates.length - 1];
+    return { response: lastResponse, apiBase: _activePairingApiBase };
   }
-  return { response, apiBase: PRODUCTION_API_BASE };
+  throw lastError instanceof Error ? lastError : new Error("auth_api_unavailable");
 }
 
 export function getDashboardBaseForAuth(): string {
@@ -259,11 +270,12 @@ export async function initAuthStore(): Promise<void> {
   if (_session) {
     if (_session.deviceId) {
       void refreshPlanFromServer().then(() => {
-        syncSessionToOverlay(_session);
+        if (_session) void syncSessionToOverlay(_session);
       });
-    } else {
-      syncSessionToOverlay(_session);
     }
+    // Do not let plan refresh timing decide whether the dock can authenticate.
+    // The cached session itself must reach the local overlay immediately.
+    await syncSessionToOverlay(_session);
   }
 }
 
@@ -281,9 +293,10 @@ export function getDeviceSecret(): string | null {
 
 export function resolveDeviceApiBaseCandidates(sessionApiBase?: string | null): string[] {
   const primary = normalizeApiBase(sessionApiBase || API_BASE);
-  return primary === PRODUCTION_API_BASE
-    ? [primary]
-    : [primary, PRODUCTION_API_BASE];
+  return Array.from(new Set([
+    primary,
+    PRODUCTION_API_BASE,
+  ].map(normalizeApiBase)));
 }
 
 export function getSessionApiBase(): string {
@@ -321,7 +334,10 @@ async function saveSession(session: AuthSession) {
   } else {
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   }
-  syncSessionToOverlay(session);
+  // The OBS dock runs in a separate CEF context. Await the local handoff so a
+  // newly paired Windows install cannot render the dock before its session is
+  // available on the overlay server.
+  await syncSessionToOverlay(session);
 }
 
 /**
@@ -364,37 +380,66 @@ export async function syncSessionToOverlay(session: AuthSession | null): Promise
 
   // On logout, clear BOTH the Tauri overlay server AND the Vite file-based
   // server so the dock is blocked regardless of which server it reads from.
-  const clearSession = async (url: string) => {
+  const syncTarget = async (url: string): Promise<boolean> => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), SESSION_SYNC_TIMEOUT_MS);
     try {
-      await fetch(url, {
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,
+        signal: controller.signal,
       });
-    } catch { /* server may not be running — not critical */ }
+      return response.ok;
+    } catch {
+      return false;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
   };
 
-  // Try Tauri first (production)
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const port = await invoke<number>("get_overlay_port");
-    if (port > 0) {
-      // Always sync to BOTH servers — the Tauri overlay server (for dock
-      // running on the Tauri port) AND the Vite file-based server (for dock
-      // running on localhost:1420). Without both, the dock may hit the
-      // server that doesn't have the session.
-      await Promise.allSettled([
-        clearSession(`http://127.0.0.1:${port}/api/auth/session`),
-        clearSession(`${window.location.origin}/api/auth/session`),
-      ]);
-      return;
-    }
-  } catch {
-    // Not running in Tauri
+  const targets = new Set<string>();
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const isHttpLocalOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+  if (isHttpLocalOrigin) {
+    // Dev dock pages are served by Vite. Never POST to a tauri:// origin: it
+    // is not an HTTP server and silently loses the handoff.
+    targets.add(`${origin}/api/auth/session`);
   }
 
-  // Fallback: same origin (Vite dev server plugin or production overlay)
-  await clearSession(`${window.location.origin}/api/auth/session`);
+  // Try Tauri first (production). The overlay server can still be starting
+  // while the webview restores the secure store, so retry the command briefly
+  // before falling back to its fixed port.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const port = await invoke<number>("get_overlay_port");
+      if (port > 0) {
+        targets.add(`http://127.0.0.1:${port}/api/auth/session`);
+        break;
+      }
+    } catch {
+      // The OBS browser dock is not a Tauri webview; use the local HTTP
+      // targets above instead.
+      break;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 150 * (attempt + 1)));
+  }
+
+  // Production currently uses a fixed port. This also covers the short
+  // startup window where get_overlay_port has not been populated yet.
+  targets.add(`http://127.0.0.1:${DEFAULT_OVERLAY_PORT}/api/auth/session`);
+
+  const targetList = [...targets];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const results = await Promise.all(targetList.map((target) => syncTarget(target)));
+    if (results.some(Boolean)) return;
+    if (attempt < 2) {
+      await new Promise((resolve) => window.setTimeout(resolve, 200 * (attempt + 1)));
+    }
+  }
+
+  console.warn("[authService] Could not sync the desktop session to the local overlay server");
 }
 
 export function getStoredUser(): AuthUser | null {
@@ -649,13 +694,18 @@ export async function createPairingCode(
         fingerprintHash,
       }),
     });
-    if (res.status === 403) {
+    if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      if (body.error === "VERSION_TOO_OLD") {
+      if (res.status === 403 && body.error === "VERSION_TOO_OLD") {
         return { error: body.message || "This version is no longer supported. Please update.", versionBlocked: true };
       }
+      return {
+        error:
+          body.message ||
+          body.error ||
+          `Failed to create pairing code. Please try again. (${res.status})`,
+      };
     }
-    if (!res.ok) return { error: "Failed to create pairing code" };
     const data = await res.json();
     _lastPairingCode = data.code;
     return data;
@@ -678,13 +728,29 @@ export async function redeemPairingCode(
 > {
   try {
     const os = detectOS();
+    let installationId: string | undefined;
+    let fingerprintHash: string | undefined;
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const fp = await invoke<{ installationId: string; fingerprintHash: string }>("get_device_fingerprint");
+      installationId = fp.installationId;
+      fingerprintHash = fp.fingerprintHash;
+    } catch {
+      // Browser/dev fallback: the server will refuse to start a new trial
+      // without the durable desktop identity, but pairing can still proceed.
+    }
     const { response: res } = await fetchAuthApi("/api/pairing/redeem", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-App-Version": APP_VERSION,
       },
-      body: JSON.stringify({ code: code.toUpperCase().replace(/[^A-Z0-9]/g, ""), deviceName: os }),
+      body: JSON.stringify({
+        code: code.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+        deviceName: os,
+        installationId,
+        fingerprintHash,
+      }),
     });
 
     const data = await res.json();
@@ -778,7 +844,7 @@ export function watchPairingStatus(
     console.log("[authService] SSE received 'connected' event:", e.data);
   });
 
-  es.addEventListener("authorized", (e: MessageEvent) => {
+  es.addEventListener("authorized", async (e: MessageEvent) => {
     console.log("[authService] SSE received authorized event");
     const data = JSON.parse(e.data);
     const authUser: AuthUser = {
@@ -807,13 +873,19 @@ export function watchPairingStatus(
       trial: data.user.trial || undefined,
     };
 
-    saveSession({
-      user: authUser,
-      deviceId: data.deviceId,
-      deviceSecret: data.deviceSecret || undefined,
-      apiBase: _activePairingApiBase,
-      expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
-    });
+    try {
+      // Do not open the dock until its separate local browser context can read
+      // the newly paired session from the overlay server.
+      await saveSession({
+        user: authUser,
+        deviceId: data.deviceId,
+        deviceSecret: data.deviceSecret || undefined,
+        apiBase: _activePairingApiBase,
+        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
+      });
+    } catch (error) {
+      console.error("[authService] Failed to sync authorized session to the dock:", error);
+    }
 
     // Code consumed — clear tracked reference
     _lastPairingCode = null;

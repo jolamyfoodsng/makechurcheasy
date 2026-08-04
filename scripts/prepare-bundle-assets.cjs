@@ -1,5 +1,7 @@
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
+const { execFileSync } = require("child_process");
 const { Readable } = require("stream");
 const { pipeline } = require("stream/promises");
 
@@ -13,6 +15,13 @@ const windowsRuntimeOutputDir = path.join(
 );
 const appIconsSrcDir = path.join(projectRoot, "public", "app_icons");
 const appIconsDestDir = path.join(projectRoot, "src-tauri", "resources", "app_icons");
+const movePluginVersion = process.env.MCE_MOVE_PLUGIN_VERSION || "3.2.1";
+const movePluginOutputDir = path.join(
+  projectRoot,
+  "src-tauri",
+  "resources",
+  "obs-move-transition"
+);
 const llmDir = path.join(projectRoot, "src-tauri", "resources", "models", "llm");
 const qwenFileName = "qwen2.5-1.5b-instruct-q4_k_m.gguf";
 const qwenModelPath = path.join(llmDir, qwenFileName);
@@ -32,6 +41,28 @@ const fallbackQwenModelUrls = [
   defaultQwenModelUrl,
   `https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/${qwenFileName}?download=true`,
 ];
+
+const movePluginUrls = {
+  darwin: `https://github.com/exeldro/obs-move-transition/releases/download/${movePluginVersion}/move-transition-${movePluginVersion}-macos-universal.pkg`,
+  win32: `https://github.com/exeldro/obs-move-transition/releases/download/${movePluginVersion}/move-transition-${movePluginVersion}-windows-programdata.zip`,
+};
+
+function getBundlePlatform() {
+  const target = [
+    process.env.MCE_TARGET_OS,
+    process.env.TAURI_ENV_TARGET_TRIPLE,
+    process.env.TAURI_ENV_PLATFORM,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (target.includes("windows") || target.includes("win32")) return "win32";
+  if (target.includes("darwin") || target.includes("macos") || target.includes("apple")) {
+    return "darwin";
+  }
+  return process.platform;
+}
 
 function getExistingFileSize(filePath) {
   try {
@@ -322,9 +353,127 @@ function copyAppIcons() {
   );
 }
 
+function copyDirectory(sourceDir, destinationDir) {
+  fs.mkdirSync(destinationDir, { recursive: true });
+  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+    const source = path.join(sourceDir, entry.name);
+    const destination = path.join(destinationDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirectory(source, destination);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(source, destination);
+    }
+  }
+}
+
+function readMovePluginMarker(markerPath) {
+  try {
+    return fs.readFileSync(markerPath, "utf8").trim() === movePluginVersion;
+  } catch {
+    return false;
+  }
+}
+
+function movePluginAlreadyStaged(platform) {
+  const platformDir = path.join(movePluginOutputDir, platform);
+  const expectedPath = platform === "darwin"
+    ? path.join(platformDir, "move-transition.plugin")
+    : path.join(platformDir, "move-transition", "bin", "64bit", "move-transition.dll");
+  return fs.existsSync(expectedPath) && readMovePluginMarker(path.join(platformDir, ".version"));
+}
+
+async function ensureMovePluginAssets() {
+  const platform = getBundlePlatform();
+  if (!Object.hasOwn(movePluginUrls, platform)) {
+    console.log(
+      `[prepare-bundle-assets] Move Transition is not bundled for ${platform}; desktop builds on macOS and Windows include it.`
+    );
+    return;
+  }
+
+  if (movePluginAlreadyStaged(platform)) {
+    console.log(
+      `[prepare-bundle-assets] Move Transition ${movePluginVersion} already staged for ${platform}.`
+    );
+    return;
+  }
+
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mce-move-transition-"));
+  const platformDir = path.join(movePluginOutputDir, platform);
+
+  try {
+    const archivePath = path.join(
+      temporaryRoot,
+      platform === "darwin" ? "move-transition.pkg" : "move-transition.zip"
+    );
+    await downloadFile(movePluginUrls[platform], archivePath);
+
+    fs.rmSync(platformDir, { recursive: true, force: true });
+    fs.mkdirSync(platformDir, { recursive: true });
+
+    if (platform === "darwin") {
+      const expandedPath = path.join(temporaryRoot, "expanded");
+      execFileSync("/usr/sbin/pkgutil", ["--expand-full", archivePath, expandedPath], {
+        stdio: "inherit",
+      });
+      const macPluginRelativePath = path.join(
+        "Library",
+        "Application Support",
+        "obs-studio",
+        "plugins",
+        "move-transition.plugin"
+      );
+      const pluginCandidates = [
+        path.join(expandedPath, macPluginRelativePath),
+        path.join(expandedPath, "move-transition.pkg", "Payload", macPluginRelativePath),
+      ];
+      const pluginPath = pluginCandidates.find((candidate) => fs.existsSync(candidate));
+      if (!pluginPath || !fs.existsSync(pluginPath)) {
+        throw new Error("The macOS Move Transition package did not contain the OBS plugin bundle.");
+      }
+      copyDirectory(pluginPath, path.join(platformDir, "move-transition.plugin"));
+    } else {
+      const extractedPath = path.join(temporaryRoot, "extracted");
+      fs.mkdirSync(extractedPath, { recursive: true });
+      const escapedArchive = archivePath.replace(/'/g, "''");
+      const escapedDestination = extractedPath.replace(/'/g, "''");
+      execFileSync(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          `Expand-Archive -LiteralPath '${escapedArchive}' -DestinationPath '${escapedDestination}' -Force`,
+        ],
+        { stdio: "inherit" }
+      );
+      const pluginPath = path.join(extractedPath, "move-transition");
+      if (!fs.existsSync(pluginPath)) {
+        throw new Error("The Windows Move Transition package did not contain the OBS plugin files.");
+      }
+      copyDirectory(pluginPath, path.join(platformDir, "move-transition"));
+    }
+
+    fs.writeFileSync(path.join(platformDir, ".version"), `${movePluginVersion}\n`);
+    console.log(
+      `[prepare-bundle-assets] Staged Move Transition ${movePluginVersion} for ${platform}.`
+    );
+  } finally {
+    fs.rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+function ensureMceObsBridgeAssets() {
+  execFileSync(process.execPath, [path.join(projectRoot, "scripts", "build-obs-bridge.cjs")], {
+    stdio: "inherit",
+  });
+}
+
 async function main() {
   stageWindowsRuntimeDlls();
   copyAppIcons();
+  await ensureMovePluginAssets();
+  ensureMceObsBridgeAssets();
 }
 
 main().catch((error) => {

@@ -19,17 +19,19 @@ async function openCheckout() {
 
 export default function TrialExpiredUpgradeModal() {
   const { user, authenticated, loading, isAdmin } = useAuth();
-  const [dismissed, setDismissed] = useState(() =>
-    typeof sessionStorage !== "undefined"
-      ? sessionStorage.getItem(DISMISS_SESSION_KEY) === "true"
-      : false
-  );
+  const [dismissed, setDismissed] = useState(false);
+  const dismissKey = user?.id ? `${DISMISS_SESSION_KEY}:${user.id}` : DISMISS_SESSION_KEY;
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem(dismissKey);
+    setDismissed(stored === "true");
+  }, [dismissKey]);
 
   useEffect(() => {
     if (dismissed) {
-      sessionStorage.setItem(DISMISS_SESSION_KEY, "true");
+      sessionStorage.setItem(dismissKey, "true");
     }
-  }, [dismissed]);
+  }, [dismissKey, dismissed]);
 
   const shouldShow = useMemo(() => {
     if (dismissed || loading || !authenticated || !user || isAdmin) return false;
@@ -43,8 +45,7 @@ export default function TrialExpiredUpgradeModal() {
   return (
     <div
       className="trial-expired-upgrade"
-      role="dialog"
-      aria-modal="false"
+      role="status"
       aria-labelledby="trial-expired-upgrade-title"
       onClick={handleDismiss}
     >
@@ -66,12 +67,11 @@ export default function TrialExpiredUpgradeModal() {
             id="trial-expired-upgrade-title"
             className="trial-expired-upgrade__title"
           >
-            Upgrade to continue using MakeChurchEasy
+            Your trial has ended. You are now on the Free plan.
           </h2>
           <p className="trial-expired-upgrade__copy">
-            Your account has already fallen back to Free. Upgrade to Growth to
-            keep presentation, broadcast, library, and team tools active for
-            your church.
+            Your account remains available with Free plan limits. Upgrade when
+            you need more presentation, broadcast, library, or team capacity.
           </p>
         </div>
 
@@ -83,8 +83,8 @@ export default function TrialExpiredUpgradeModal() {
             <div>
               <p className="trial-expired-upgrade__plan-title">Growth plan</p>
               <p className="trial-expired-upgrade__plan-copy">
-                The dashboard will open and start the secure Paystack checkout.
-                Your desktop access updates after payment is confirmed.
+                The dashboard opens the secure Paystack checkout. Desktop access
+                updates after payment is confirmed.
               </p>
             </div>
           </div>
@@ -94,7 +94,7 @@ export default function TrialExpiredUpgradeModal() {
             className="trial-expired-upgrade__button"
             onClick={() => void openCheckout()}
           >
-            Upgrade to continue
+            View upgrade plans
             <Icon name="arrow_forward" size={18} />
           </button>
           <button

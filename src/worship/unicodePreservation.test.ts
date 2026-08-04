@@ -6,7 +6,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { autoSplitLyricsText, generateSlides, parseWorshipLyricSections } from "./slideEngine";
+import {
+  autoSplitLyricsText,
+  extractStructuredTextTitle,
+  generateSlides,
+  parseWorshipLyricSections,
+} from "./slideEngine";
 import {
   unicodeSearchNormalize,
   unicodeStripDiacritics,
@@ -159,6 +164,19 @@ describe("generateSlides preserves Unicode", () => {
     const allContent = slides.map((s) => s.content).join("\n");
     expect(allContent).toContain("Kyerɛ");
     expect(allContent).toContain("Owura");
+  });
+
+  it("promotes bracketed hymn titles and numeric verse headings", () => {
+    const lyrics = "[Orin 969]\n2: Jesu Kristi wa pelu mi,\nJesu Kristi wa pelu mi,\nJesu Kristi wa pelu\n\n[Orin 969].";
+    const title = extractStructuredTextTitle(lyrics);
+    const slides = generateSlides(lyrics, 2, false);
+
+    expect(title.title).toBe("Orin 969");
+    expect(title.body).not.toContain("[Orin 969]");
+    expect(slides).toHaveLength(1);
+    expect(slides[0].label).toBe("Verse 2");
+    expect(slides[0].content).toContain("Jesu Kristi wa pelu mi");
+    expect(slides[0].content).not.toContain("2:");
   });
 });
 

@@ -5,6 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1920, initial-scale=1">
   <title>MCE Notes Overlay</title>
+  <link href="/fonts/google/google-fonts.css" rel="stylesheet">
+  <link href="/fonts/cmg-sans-fonts.css" rel="stylesheet">
   <style>
     /* ── Shared: Font-face ── */
     @font-face {
@@ -36,14 +38,14 @@
       width: 1920px;
       height: 1080px;
       overflow: hidden;
-      font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      font-family: 'Charis SIL', 'Noto Sans', 'CMG Sans', Arial, sans-serif;
       background: transparent !important;
       color: #ffffff;
     }
 
     :root {
       --font-size: 48px;
-      --font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      --font-family: 'Charis SIL', 'Noto Sans', 'CMG Sans', Arial, sans-serif;
       --font-color: #ffffff;
       --font-weight: 400;
       --font-style: normal;
@@ -496,6 +498,15 @@
       pointer-events: auto;
     }
 
+    @keyframes mce-preview-slide-fade {
+      0%, 100% { opacity: 1; }
+      45% { opacity: 0; }
+    }
+
+    .mode-layer.mce-preview-slide-fade {
+      animation: mce-preview-slide-fade 220ms ease-in-out;
+    }
+
     #lt-bar.hidden,
     #lt-bar.blank {
       opacity: 0 !important;
@@ -802,6 +813,7 @@
       let baseCompareLayoutPadding = { top: 60, right: 60, bottom: 60, left: 60 };
       let baseBarPadding = 28;
       let barMaxHeight = 600;
+      let autoFontScaleEnabled = false;
       function toCssFontWeight(w, fb) {
         const n = Number(w); if (!n || isNaN(n)) return fb || '400';
         if (n <= 100) return '100'; if (n <= 200) return '200'; if (n <= 300) return '300';
@@ -827,8 +839,21 @@
         return m[t.toLowerCase()] || 'none';
       }
 
+      function scriptureFontFamily(fontFamily) {
+        var value = typeof fontFamily === 'string' ? fontFamily.trim() : '';
+        if (!value) return '"Charis SIL","Noto Sans","CMG Sans",Arial,sans-serif';
+        var lower = value.toLowerCase();
+        if (lower.indexOf('cmg sans') !== -1 && lower.indexOf('charis sil') === -1) {
+          value = '"Charis SIL","Noto Sans",' + value;
+        } else {
+          if (lower.indexOf('charis sil') === -1) value += ',"Charis SIL"';
+          if (lower.indexOf('noto sans') === -1) value += ',"Noto Sans"';
+        }
+        return value;
+      }
+
       function ensureCmgSansFont() {
-        body.style.fontFamily = '"CMG Sans","Noto Sans","Charis SIL",Arial,sans-serif';
+        body.style.fontFamily = scriptureFontFamily();
       }
 
       function parseColorToRgb(c) {
@@ -1075,10 +1100,64 @@
         return Number(getComputedStyle(root).getPropertyValue('--safe-area').trim().replace('px', '')) || 40;
       }
 
+      function getFrameContentRect(frame) {
+        if (!frame) return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
+        const rect = frame.getBoundingClientRect();
+        const style = getComputedStyle(frame);
+        const paddingLeft = Number.parseFloat(style.paddingLeft) || 0;
+        const paddingRight = Number.parseFloat(style.paddingRight) || 0;
+        const paddingTop = Number.parseFloat(style.paddingTop) || 0;
+        const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
+        const borderLeft = Number.parseFloat(style.borderLeftWidth) || 0;
+        const borderRight = Number.parseFloat(style.borderRightWidth) || 0;
+        const borderTop = Number.parseFloat(style.borderTopWidth) || 0;
+        const borderBottom = Number.parseFloat(style.borderBottomWidth) || 0;
+        const left = rect.left + borderLeft + paddingLeft;
+        const top = rect.top + borderTop + paddingTop;
+        const right = Math.max(left, rect.right - borderRight - paddingRight);
+        const bottom = Math.max(top, rect.bottom - borderBottom - paddingBottom);
+        return { left, top, right, bottom, width: right - left, height: bottom - top };
+      }
+
+      function getRenderedBounds(node) {
+        if (!node || getComputedStyle(node).display === 'none') return null;
+        const rect = node.getBoundingClientRect();
+        return {
+          left: rect.left,
+          top: rect.top,
+          right: rect.left + Math.max(rect.width, node.scrollWidth || 0),
+          bottom: rect.top + Math.max(rect.height, node.scrollHeight || 0),
+        };
+      }
+
+      function isContentOutsideFrame(nodes, frame) {
+        const frameRect = getFrameContentRect(frame);
+        const bounds = nodes
+          .map(getRenderedBounds)
+          .filter(Boolean)
+          .reduce((combined, current) => ({
+            left: Math.min(combined.left, current.left),
+            top: Math.min(combined.top, current.top),
+            right: Math.max(combined.right, current.right),
+            bottom: Math.max(combined.bottom, current.bottom),
+          }), { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity });
+        if (!Number.isFinite(bounds.left)) return false;
+        return bounds.left < frameRect.left - 1 ||
+          bounds.top < frameRect.top - 1 ||
+          bounds.right > frameRect.right + 1 ||
+          bounds.bottom > frameRect.bottom + 1;
+      }
+
       function isOverflowing(node, w, h) {
         if (!node) return false;
         return Math.max(node.scrollWidth, node.getBoundingClientRect().width) > w + 1 ||
           Math.max(node.scrollHeight, node.getBoundingClientRect().height) > h + 1;
+      }
+
+      function resolveAutoFontFloor(baseSize, fallback) {
+        const base = Math.max(fallback, Math.round(Number(baseSize) || fallback));
+        const fixedFloor = fallback <= 12 ? 12 : Math.min(Math.max(fallback, 16), 24);
+        return Math.min(base, fixedFloor);
       }
 
       /* ── Seamless video loop ── */
@@ -1132,29 +1211,32 @@
 
       /* ═══ FULLSCREEN: Auto-scaling ═══ */
       function isSingleLayoutOverflowing(tw, th) {
-        return isOverflowing(verseContainer, tw, th) ||
-          isOverflowing(verseText, verseText.clientWidth || tw, th) ||
-          (reference.style.display !== 'none' && isOverflowing(reference, reference.clientWidth || tw, th));
+        const frameRect = getFrameContentRect(overlay);
+        return isContentOutsideFrame([verseText, reference], overlay) ||
+          isOverflowing(verseContainer, frameRect.width || tw, frameRect.height || th);
       }
 
       function autoScaleContent() {
         if (!verseContainer) return;
-        const isWin = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
-        if (!isWin) {
-          verseText.style.fontSize = Math.round(baseFontSize) + 'px';
-          reference.style.fontSize = Math.round(baseRefFontSize) + 'px';
-          verseText.style.lineHeight = String(Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.6);
+        if (overlay.classList.contains('hidden') || overlay.classList.contains('blank')) return;
+        if (!autoFontScaleEnabled) {
+          verseText.style.fontSize = '';
+          reference.style.fontSize = '';
+          verseText.style.lineHeight = '';
+          verseContainer.style.padding = '';
+          reference.style.marginTop = '';
+          reference.style.marginBottom = '';
           return;
         }
-        let vs = Math.max(FONT_SIZE_MIN, Math.round(baseFontSize));
+        const textFloor = resolveAutoFontFloor(baseFontSize, FONT_SIZE_MIN);
+        let vs = Math.max(textFloor, Math.round(baseFontSize));
         let rs = Math.max(REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
         let pd = Math.max(CONTENT_PADDING_MIN, Math.round(basePadding));
         let lh = Math.max(CONTENT_LINE_HEIGHT_MIN, Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.6);
         let sp = reference.classList.contains('top') ? 24 : 24;
         const ratio = baseFontSize > 0 ? Math.max(0.6, baseRefFontSize / baseFontSize) : 0.6;
-        const sa = resolveSafeArea();
-        const vw = document.body?.clientWidth || 1920, vh = document.body?.clientHeight || 1080;
-        const tw = Math.max(420, vw - sa * 2), th = Math.max(260, vh - sa * 2);
+        const frameRect = getFrameContentRect(overlay);
+        const tw = Math.max(420, frameRect.width), th = Math.max(260, frameRect.height);
         const apply = () => {
           verseText.style.fontSize = vs + 'px'; reference.style.fontSize = rs + 'px';
           verseText.style.lineHeight = String(lh); verseContainer.style.padding = pd + 'px';
@@ -1163,8 +1245,8 @@
         };
         apply();
         let g = 0;
-        while (isSingleLayoutOverflowing(tw, th) && (vs > FONT_SIZE_MIN || rs > REF_FONT_SIZE_MIN || pd > CONTENT_PADDING_MIN || lh > CONTENT_LINE_HEIGHT_MIN || sp > 8) && g < 220) {
-          if (vs > FONT_SIZE_MIN) vs -= 1;
+        while (isSingleLayoutOverflowing(tw, th) && (vs > textFloor || rs > REF_FONT_SIZE_MIN || pd > CONTENT_PADDING_MIN || lh > CONTENT_LINE_HEIGHT_MIN || sp > 8) && g < 220) {
+          if (vs > textFloor) vs -= 1;
           rs = Math.max(REF_FONT_SIZE_MIN, Math.round(vs * ratio));
           if (isSingleLayoutOverflowing(tw, th) && pd > CONTENT_PADDING_MIN) pd = Math.max(CONTENT_PADDING_MIN, pd - 2);
           if (isSingleLayoutOverflowing(tw, th) && lh > CONTENT_LINE_HEIGHT_MIN) lh = Math.max(CONTENT_LINE_HEIGHT_MIN, +(lh - 0.02).toFixed(2));
@@ -1175,12 +1257,20 @@
 
       function autoScaleCompareContent() {
         if (!compareLayout || !compareTextLeft || !compareTextRight) return;
-        const isWin = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
-        if (!isWin) return;
+        if (!compareLayout.classList.contains('is-visible')) return;
+        if (overlay.classList.contains('hidden') || overlay.classList.contains('blank')) return;
+        if (!autoFontScaleEnabled) {
+          [compareTextLeft, compareTextRight].forEach((node) => { node.style.fontSize = ''; node.style.lineHeight = ''; });
+          [compareReferenceLeft, compareReferenceRight, compareTranslationLeft, compareTranslationRight].forEach((node) => { if (node) node.style.fontSize = ''; });
+          compareLayout.style.padding = '';
+          compareLayout.querySelectorAll('.compare-column').forEach((column) => { column.style.padding = ''; });
+          return;
+        }
         const tn = [compareTextLeft, compareTextRight], rn = [compareReferenceLeft, compareReferenceRight], trn = [compareTranslationLeft, compareTranslationRight];
         const wr = Array.from(compareLayout.querySelectorAll('.compare-column__text-wrap'));
         const bT = Math.max(22, Math.round(baseCompareFontSize)), bR = Math.max(14, Math.round(baseCompareRefFontSize));
         const bM = Math.max(12, Math.round(bR * 0.62));
+        const textFloor = resolveAutoFontFloor(baseCompareFontSize, COMPARE_TEXT_MIN);
         let ts = bT, rs2 = bR, ms = bM;
         let cp = Math.max(COMPARE_PADDING_MIN, Math.round(baseComparePanelInnerPadding));
         let lpTop = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.top));
@@ -1205,14 +1295,78 @@
           rn.forEach(n => n.style.fontSize = rs2 + 'px');
           trn.forEach(n => n.style.fontSize = ms + 'px');
         };
-        const ov = () => { if (isOverflowing(compareLayout, tw, th)) return true; return cols.some((c, i) => { const w = wr[i]; return isOverflowing(c, c.clientWidth || tw, c.clientHeight || th) || (w && isOverflowing(w, w.clientWidth || tw, w.clientHeight || th)) || isOverflowing(tn[i], tn[i].clientWidth || tw, th); }); };
+        const ov = () => {
+          const layoutOverflow = compareLayout.scrollWidth > compareLayout.clientWidth + 1 || compareLayout.scrollHeight > compareLayout.clientHeight + 1;
+          if (layoutOverflow) return true;
+          return cols.some((c, i) => {
+            const w = wr[i];
+            return isOverflowing(c, c.clientWidth || tw, c.clientHeight || th) ||
+              (w && isOverflowing(w, w.clientWidth || tw, w.clientHeight || th)) ||
+              isOverflowing(tn[i], tn[i].clientWidth || tw, th);
+          });
+        };
         apply(); let g = 0;
-        while (ov() && (ts > COMPARE_TEXT_MIN || rs2 > COMPARE_REF_MIN || ms > COMPARE_META_MIN || cp > COMPARE_PADDING_MIN || hasLayoutPaddingRoom() || lh > 1.08) && g < 240) {
-          if (ts > COMPARE_TEXT_MIN) ts--; if (rs2 > COMPARE_REF_MIN) rs2 = Math.max(COMPARE_REF_MIN, rs2 - 1); if (ms > COMPARE_META_MIN) ms = Math.max(COMPARE_META_MIN, ms - 1);
+        while (ov() && (ts > textFloor || rs2 > COMPARE_REF_MIN || ms > COMPARE_META_MIN || cp > COMPARE_PADDING_MIN || hasLayoutPaddingRoom() || lh > 1.08) && g < 240) {
+          if (ts > textFloor) ts--; if (rs2 > COMPARE_REF_MIN) rs2 = Math.max(COMPARE_REF_MIN, rs2 - 1); if (ms > COMPARE_META_MIN) ms = Math.max(COMPARE_META_MIN, ms - 1);
           if (ov() && cp > COMPARE_PADDING_MIN) cp = Math.max(COMPARE_PADDING_MIN, cp - 1);
           if (ov() && hasLayoutPaddingRoom()) shrinkLayoutPadding();
           if (ov() && lh > 1.08) lh = Math.max(1.08, +((lh - 0.02).toFixed(2)));
           apply(); g++;
+        }
+      }
+
+      function autoScaleLowerThirdContent() {
+        if (!ltBar || !ltVerseText || !ltRefText) return;
+        if (ltBar.classList.contains('hidden') || ltBar.classList.contains('blank')) return;
+        if (!autoFontScaleEnabled) {
+          ltVerseText.style.fontSize = '';
+          ltVerseText.style.lineHeight = '';
+          ltRefText.style.fontSize = '';
+          ltBar.style.padding = '';
+          return;
+        }
+
+        const textFloor = resolveAutoFontFloor(baseFontSize, FONT_SIZE_MIN);
+        const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
+        let textSize = Math.max(textFloor, Math.round(baseFontSize));
+        let referenceSize = Math.max(REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
+        const frameRect = getFrameContentRect(ltBar);
+        const targetWidth = Math.max(280, frameRect.width || document.body?.clientWidth || window.innerWidth || 1920);
+        const targetHeight = Math.max(100, frameRect.height || Math.min(barMaxHeight, document.body?.clientHeight || window.innerHeight || 1080));
+        const apply = () => {
+          ltVerseText.style.fontSize = `${textSize}px`;
+          ltVerseText.style.lineHeight = getComputedStyle(root).getPropertyValue('--line-height').trim() || '1.3';
+          ltRefText.style.fontSize = `${referenceSize}px`;
+        };
+        const overflowing = () => isContentOutsideFrame(
+          [ltVerseText, ltRefText],
+          ltBar,
+        ) || isOverflowing(ltBar, targetWidth, targetHeight);
+
+        apply();
+        let guard = 0;
+        while (overflowing() && textSize > textFloor && guard < 180) {
+          textSize -= 1;
+          referenceSize = Math.max(REF_FONT_SIZE_MIN, Math.round(textSize * ratio));
+          apply();
+          guard += 1;
+        }
+      }
+
+      function requestAutoScaleActiveContent() {
+        requestAnimationFrame(() => {
+          if (activeMode === 'lower-third') autoScaleLowerThirdContent();
+          else if (compareLayout.classList.contains('is-visible')) autoScaleCompareContent();
+          else autoScaleContent();
+        });
+      }
+
+      function requestAutoScaleAfterRender() {
+        requestAutoScaleActiveContent();
+        if (document.fonts?.ready) {
+          document.fonts.ready
+            .then(() => requestAutoScaleActiveContent())
+            .catch(() => { });
         }
       }
 
@@ -1268,8 +1422,9 @@
       function applyThemeBase(s) {
         ensureCmgSansFont();
         const bs = Number(s.fontSize || 48); baseFontSize = bs; baseRefFontSize = Number(s.refFontSize) || Math.max(14, Math.round(bs * 0.5));
+        autoFontScaleEnabled = s.autoFontScale === true;
         root.style.setProperty('--font-size', baseFontSize + 'px');
-        root.style.setProperty('--font-family', s.fontFamily || '"CMG Sans", "Noto Sans", "Charis SIL", Arial, sans-serif');
+        root.style.setProperty('--font-family', scriptureFontFamily(s.fontFamily));
         root.style.setProperty('--font-color', s.fontColor || '#ffffff');
         root.style.setProperty('--font-weight', mapFontWeight(s.fontWeight));
         root.style.setProperty('--font-style', s.fontStyle === 'italic' ? 'italic' : 'normal');
@@ -1280,7 +1435,7 @@
         root.style.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
         root.style.setProperty('--outline-color', s.textOutline ? (s.textOutlineColor || '#000') : 'transparent');
         root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
-        root.style.setProperty('--ref-font-family', s.fontFamily || '"CMG Sans", "Noto Sans", "Charis SIL", Arial, sans-serif');
+        root.style.setProperty('--ref-font-family', scriptureFontFamily(s.fontFamily));
         root.style.setProperty('--ref-font-weight', mapFontWeight(s.refFontWeight));
         root.style.setProperty('--ref-font-style', 'normal');
         root.style.setProperty('--ref-font-color', s.refFontColor || '#fff');
@@ -1470,6 +1625,28 @@
         ].join('|');
       }
 
+      function getOverlaySlideKey(data) {
+        if (!hasRenderableSlide(data)) return '';
+        try {
+          return JSON.stringify({ mode: data.mode || '', slide: data.slide });
+        } catch {
+          return [
+            data.mode || '',
+            data.slide && data.slide.id || '',
+            data.verseText || '',
+            data.referenceText || data.referenceLabel || '',
+          ].join('|');
+        }
+      }
+
+      function restartPreviewFade(mode) {
+        const layer = mode === 'lower-third' ? lowerThirdLayer : fullscreenLayer;
+        if (!layer) return;
+        layer.classList.remove('mce-preview-slide-fade');
+        void layer.offsetWidth;
+        layer.classList.add('mce-preview-slide-fade');
+      }
+
       function renderBothBibleLayers(state) {
         if (!state) return;
         processSlideFullscreen(state);
@@ -1503,6 +1680,10 @@
           0
         );
         if (revision && revision < currentBibleRevision) return;
+        const previousSlideKey = getOverlaySlideKey(currentOverlayData);
+        const shouldFadePreview = hasShownOnce &&
+          hasRenderableSlide(packet) &&
+          previousSlideKey !== getOverlaySlideKey(packet);
         currentBibleRevision = revision;
         currentBibleState = packet;
         currentOverlayData = packet;
@@ -1513,6 +1694,7 @@
         }
 
         renderBothBibleLayers(currentBibleState);
+        if (shouldFadePreview) restartPreviewFade(packet.mode || activeMode);
         writeRenderAck(packet);
       }
 
@@ -1552,6 +1734,7 @@
         try { applyThemeIfChanged(data.theme || {}, !hasShownOnce, 'fullscreen'); } catch (error) { console.error('mce-note-overlay fullscreen theme error', error); }
         if (isCL) autoScaleCompareContent();
         else { autoScaleContent(); }
+        requestAutoScaleAfterRender();
         if (!hasShownOnce) hasShownOnce = true;
       }
 
@@ -1582,6 +1765,8 @@
         }
 
         try { applyThemeIfChanged(data.theme || {}, !hasShownOnce, 'lower-third'); } catch (error) { console.error('mce-note-overlay lower-third theme error', error); }
+        autoScaleLowerThirdContent();
+        requestAutoScaleAfterRender();
         if (!hasShownOnce) hasShownOnce = true;
       }
 
@@ -1741,7 +1926,16 @@
         _cssObserver.observe(_cssObserverTarget, { childList: true, subtree: true, characterData: true });
       }
 
-      if (window.ResizeObserver) { const ro = new ResizeObserver(() => { if (activeMode === 'fullscreen') requestAnimationFrame(autoScaleContent); }); ro.observe(document.body); ro.observe(verseContainer); ro.observe(compareLayout); }
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(() => requestAutoScaleActiveContent());
+        ro.observe(document.body);
+        ro.observe(verseContainer);
+        ro.observe(compareLayout);
+        ro.observe(ltBar);
+        [verseText, reference, compareTextLeft, compareTextRight, compareReferenceLeft, compareReferenceRight, ltVerseText, ltRefText]
+          .filter(Boolean)
+          .forEach((node) => ro.observe(node));
+      }
 
       /* ═══ INITIAL ═══
          Both layers start hidden (opacity 0). Reveal the correct one.

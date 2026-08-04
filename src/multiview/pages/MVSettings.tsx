@@ -205,7 +205,8 @@ export function MVSettings() {
   const [planConfig, setPlanConfig] = useState<PlanConfig | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<CreditTransaction[]>([]);
   const userPlan = proUnlocked ? "growth" as const : getUserPlan(authUser);
-  const trialActive = !proUnlocked && isInTrial(authUser);
+  const storedPlan = String(authUser?.plan || "free").trim().toLowerCase();
+  const trialActive = !proUnlocked && storedPlan === "free" && isInTrial(authUser);
   // During trial, user gets Growth-level credits — use the trial config tier for lookup
   const effectivePlanForCredits = trialActive ? "trial" as const : userPlan;
   const planCredits = proUnlocked ? -1 : (planConfig ? getPlanCredits(planConfig, effectivePlanForCredits) : 1000);
@@ -222,6 +223,26 @@ export function MVSettings() {
   useEffect(() => {
     getPlanConfig().then(setPlanConfig);
   }, []);
+
+  // Settings is often the first place an upgraded user checks their account.
+  // Refresh the device bootstrap here so the displayed plan is not limited to
+  // the background heartbeat or the Usage tab.
+  useEffect(() => {
+    if (!authUser?.id) return;
+    let cancelled = false;
+
+    void refreshAccountBootstrapFromServer()
+      .then((result) => {
+        if (!cancelled && result.status === "ok") refreshUser();
+      })
+      .catch(() => {
+        // Keep the settings screen usable when the account service is offline.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id, refreshUser]);
 
   // Fetch transactions after auth is ready
   useEffect(() => {
@@ -261,15 +282,6 @@ export function MVSettings() {
     let cancelled = false;
 
     const loadUsageState = async () => {
-      try {
-        await refreshAccountBootstrapFromServer();
-        if (!cancelled) {
-          refreshUser();
-        }
-      } catch {
-        // Keep the settings screen usable even if bootstrap refresh fails.
-      }
-
       try {
         const details = await fetchCreditDetails();
         if (!cancelled && details) {

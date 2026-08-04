@@ -301,6 +301,7 @@ export default function BackgroundPickerCard({
   const lowerThirdCardRadius = clampNumberValue(Number(quickSettings.lowerThirdCardRadius ?? 18), 0, 64);
   const lowerThirdTextDirection = quickSettings.lowerThirdTextDirection === "inverted" ? "inverted" : "normal";
   const supportsLowerThirdShapeControls = storageScope === "bible" || storageScope === "worship" || storageScope === "notes";
+  const autoFontScaleEnabled = quickSettings.autoFontScale === true;
 
   useEffect(() => {
     const previous = prevStorageKeysRef.current;
@@ -768,6 +769,30 @@ export default function BackgroundPickerCard({
                       onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, fontSize: Number(e.target.value) }))}
                       aria-label={t('bgPicker.fontSize')}
                     />
+                  </div>
+
+                  <div className="dtb-toggle-field">
+                    <div className="dtb-toggle-field__copy">
+                      <span className="dtb-toggle-field__label">
+                        {t('bgPicker.autoFontScale', 'Auto font scale')}
+                      </span>
+                      <p className="dtb-compare-section__description">
+                        {t('bgPicker.autoFontScaleDescription', 'Reduce text only when it would overflow the frame.')}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className={`dtb-toggle${autoFontScaleEnabled ? " dtb-toggle--on" : ""}`}
+                      onClick={() => onQuickSettingsChange((prev) => ({
+                        ...prev,
+                        autoFontScale: !prev.autoFontScale,
+                      }))}
+                      role="switch"
+                      aria-checked={autoFontScaleEnabled}
+                      aria-label={t('bgPicker.autoFontScale', 'Auto font scale')}
+                    >
+                      <span className="dtb-toggle__knob" />
+                    </button>
                   </div>
 
                   <div className="dtb-control-section dtb-control-section--nested">
@@ -2415,6 +2440,7 @@ function PresetSection({
 
 const FONT_FAMILY_OPTIONS = [
   { value: "", label: "Use Theme Font" },
+  { value: '"Charis SIL", "Noto Sans", "CMG Sans", Arial, sans-serif', label: "Charis SIL (African languages)" },
   { value: '"CMG Sans", sans-serif', label: "CMG Sans" },
   { value: '"Inter", system-ui, sans-serif', label: "Inter" },
   { value: '"Charis SIL", serif', label: "Charis SIL" },

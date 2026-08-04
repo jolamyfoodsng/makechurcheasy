@@ -45,8 +45,10 @@ export interface MediaItem {
   downloadedAt?: string;
   /** Optional origin marker for remote-backed/generated assets saved locally */
   source?: "local" | "template-cloudflare" | "document-conversion";
-  /** Original document name when this item is a rendered PDF/DOCX page. */
+  /** Original document name when this item is a rendered PDF/DOCX/PPTX page. */
   documentSourceName?: string;
+  /** Stable id shared by all rendered pages from one document import. */
+  documentId?: string;
   /** 1-based page/slide number when rendered from a document. */
   documentPageNumber?: number;
   /** Total rendered pages/slides in the source document. */

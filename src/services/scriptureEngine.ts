@@ -68,6 +68,59 @@ export interface DetectionResult {
   context: ScriptureContext;
 }
 
+/**
+ * The passage currently being preached. Quote search uses this as a hard
+ * boundary until an explicit new Bible reference is spoken.
+ */
+export interface ScriptureSearchScope {
+  book: string;
+  chapter: number;
+  verse?: number | null;
+}
+
+type QuoteSearchScope = ScriptureSearchScope | string | null | undefined;
+
+function normalizeBookForScope(book: string): string {
+  const normalized = book.toLowerCase().replace(/\s+/g, " ").trim();
+  return normalized === "psalm" ? "psalms" : normalized;
+}
+
+function normalizeQuoteSearchScope(scope: QuoteSearchScope): { book: string; chapter?: number } | undefined {
+  if (typeof scope === "string") {
+    const book = scope.trim();
+    return book ? { book } : undefined;
+  }
+
+  if (!scope?.book) return undefined;
+  return {
+    book: scope.book,
+    chapter: Number.isFinite(scope.chapter) ? scope.chapter : undefined,
+  };
+}
+
+function matchesQuoteSearchScope(
+  book: string,
+  chapter: number,
+  scope: { book: string; chapter?: number } | undefined,
+): boolean {
+  if (!scope) return true;
+  if (normalizeBookForScope(book) !== normalizeBookForScope(scope.book)) return false;
+  return scope.chapter === undefined || chapter === scope.chapter;
+}
+
+function isSupportingPassageResult(
+  best: { book: string; chapter: number; verse: number },
+  runnerUp: { book: string; chapter: number; verse: number; endVerse?: number },
+): boolean {
+  return (
+    normalizeBookForScope(best.book) === normalizeBookForScope(runnerUp.book) &&
+    best.chapter === runnerUp.chapter &&
+    runnerUp.endVerse !== undefined &&
+    runnerUp.verse <= best.verse &&
+    runnerUp.endVerse >= best.verse
+  );
+}
+
 interface ChunkRecord {
   text: string;
   timestamp: number;
@@ -109,6 +162,12 @@ const CONTEXT_DECAY_MS = 120_000; // 2 minutes — context entries older than th
 /** Minimum finalScore for a result to be shown to the user */
 const MIN_DISPLAY_SCORE = 0.30;
 
+// Fuzzy search is a recovery path for ASR errors, not a license to turn
+// ordinary sermon language into a Bible reference. Keep it conservative and
+// require a clear winner before returning a candidate.
+const MIN_FUZZY_QUOTE_SCORE = 0.72;
+const MIN_FUZZY_QUOTE_GAP = 0.06;
+
 /** Score decay factor per update cycle for unreinforced candidates */
 const CANDIDATE_DECAY_FACTOR = 0.98;
 const BARE_VERSE_RE = /^(?:verse\s+)?([a-z0-9 -]+)$/i;
@@ -125,7 +184,9 @@ const GENERIC_QUOTE_ANCHORS = new Set([
   "god", "lord", "jesus", "christ", "spirit", "love", "faith", "grace",
   "mercy", "peace", "strength", "good", "evil", "heart", "world", "life",
   "light", "truth", "way", "word", "son", "father", "king", "kingdom",
-  "people", "holy", "blood", "cross", "name", "man", "men",
+  "people", "holy", "blood", "cross", "name", "man", "men", "going",
+  "through", "suddenly", "begin", "began", "fade", "away", "thank", "thanks",
+  "today", "morning", "coming", "things",
 ]);
 
 interface QuoteQueryProfile {
@@ -142,6 +203,16 @@ interface QuoteSearchThresholds {
   embeddingMinGap: number;
   allowSemanticSearch: boolean;
   allowFuzzySearch: boolean;
+}
+
+interface RankedBibleSearchResult {
+  book: string;
+  chapter: number;
+  verse: number;
+  endVerse?: number;
+  text: string;
+  snippet?: string;
+  score: number;
 }
 
 function analyzeQuoteQuery(input: string): QuoteQueryProfile {
@@ -366,6 +437,8 @@ export class ScriptureDetectionEngine {
   private activeCandidate: { ref: string; score: number; timestamp: number } | null = null;
   /** Fast speech-state resolver for continuations and corrections */
   private speechState: ScriptureSpeechState = createScriptureSpeechState();
+  /** Bare numbers are valid only after an explicit spoken Bible reference. */
+  private allowBareVerseContinuation = false;
 
   /** Preload Bible data and embeddings to avoid first-call latency */
   async preload(): Promise<void> {
@@ -397,6 +470,7 @@ export class ScriptureDetectionEngine {
     this.currentVerseIndex = -1;
     this.activeCandidate = null;
     this.speechState = createScriptureSpeechState();
+    this.allowBareVerseContinuation = false;
   }
 
   /**
@@ -453,6 +527,7 @@ export class ScriptureDetectionEngine {
     if (intent && isFinal) {
       const intentResults = await this.resolveIntent(intent);
       if (intentResults.length > 0) {
+        this.allowBareVerseContinuation = intentResults.some((candidate) => candidate.verse !== null);
         const navOnly = intent.type === "open" && intent.navigationOnly === true;
         return {
           matches: intentResults.map((candidate) => ({
@@ -471,13 +546,14 @@ export class ScriptureDetectionEngine {
     // Keep this engine-local so standalone numbers are ignored unless the
     // session already has a concrete book/chapter context.
     if (isFinal) {
-      const bareVerse = parseBareVerseNumber(trimmed);
+      const bareVerse = this.allowBareVerseContinuation ? parseBareVerseNumber(trimmed) : null;
       const current = bareVerse !== null ? this.getCurrentVerseRef() : null;
       if (bareVerse !== null && current) {
         const maxVerse = await getVerseCount(current.book, current.chapter, this.translation);
         if (maxVerse > 0 && bareVerse <= maxVerse) {
           const candidate = await this.buildCandidate(current.book, current.chapter, bareVerse);
           if (candidate) {
+            this.allowBareVerseContinuation = true;
             this.pushVerseHistory({
               book: current.book,
               chapter: current.chapter,
@@ -508,6 +584,7 @@ export class ScriptureDetectionEngine {
       // Book-only and chapter-only entries update conversational state but do
       // not fabricate a verse 1 projection.
       if (!speechResolution.shouldProject || verse === null) {
+        this.allowBareVerseContinuation = false;
         if (book && chapter !== null) {
           this.context = pushScriptureContext(this.context, book, chapter, null, false);
         }
@@ -531,6 +608,7 @@ export class ScriptureDetectionEngine {
               }
             }
             if (passageResults.length > 0) {
+              this.allowBareVerseContinuation = true;
               this.context = pushScriptureContext(this.context, book, chapter, verse, false);
               return { matches: passageResults, context: this.context };
             }
@@ -538,6 +616,7 @@ export class ScriptureDetectionEngine {
         } else {
           const candidate = await this.buildCandidate(book, chapter, verse);
           if (candidate) {
+            this.allowBareVerseContinuation = true;
             this.context = pushScriptureContext(this.context, book, chapter, verse, false);
             return {
               matches: [{
@@ -650,6 +729,7 @@ export class ScriptureDetectionEngine {
       }
 
       if (matches.length > 0) {
+        this.allowBareVerseContinuation = matches.some((match) => match.candidate.verse !== null);
         // Update context with the first (most likely) match
         const bestParsed = allParsed[0];
         const bestResolved = resolveWithContext(bestParsed, this.context);
@@ -732,17 +812,29 @@ export class ScriptureDetectionEngine {
    * Get the currently bound book from context.
    * Returns the most recent book in the context stack, or null.
    */
+  getBoundPassage(): ScriptureSearchScope | null {
+    const now = Date.now();
+    const fullRef = this.context.stack.find(
+      (entry) => entry.chapter !== null && now - entry.timestamp <= CONTEXT_DECAY_MS,
+    );
+    if (!fullRef || fullRef.chapter === null) return null;
+    return {
+      book: fullRef.book,
+      chapter: fullRef.chapter,
+      verse: fullRef.verse,
+    };
+  }
+
   getBoundBook(): string | null {
-    const fullRef = this.context.stack.find((e) => e.chapter !== null);
-    return fullRef?.book ?? null;
+    return this.getBoundPassage()?.book ?? null;
   }
 
   /**
    * Run quote search on the time-based speech window.
-   * If boundBook is set, filters candidates to that book only.
+   * If a passage is active, filters candidates to that chapter.
    * Uses backpressure: only one search at a time.
    */
-  async searchQuotes(boundBook?: string | null): Promise<ScriptureMatch[]> {
+  async searchQuotes(scope?: QuoteSearchScope): Promise<ScriptureMatch[]> {
     this.cancelQuoteSearch();
     this.quoteAbortController = new AbortController();
     const signal = this.quoteAbortController.signal;
@@ -756,7 +848,10 @@ export class ScriptureDetectionEngine {
     const interimText = this.interimChunk?.text ?? "";
     const searchInput = interimText ? `${windowText} ${interimText}`.trim() : windowText;
 
-    return this.runQuoteSearchPipeline(searchInput, boundBook, signal);
+    const searchScope = normalizeQuoteSearchScope(scope) ?? this.getBoundPassage() ?? undefined;
+    const matches = await this.runQuoteSearchPipeline(searchInput, searchScope, signal);
+    this.bindSearchMatch(matches, analyzeQuoteQuery(searchInput));
+    return matches;
   }
 
   /**
@@ -765,13 +860,16 @@ export class ScriptureDetectionEngine {
    * what text is searched. This is the primary search path for the
    * sentence-detection architecture.
    */
-  async searchQuotesWithText(text: string, boundBook?: string | null): Promise<ScriptureMatch[]> {
+  async searchQuotesWithText(text: string, scope?: QuoteSearchScope): Promise<ScriptureMatch[]> {
     this.cancelQuoteSearch();
     this.quoteAbortController = new AbortController();
     const signal = this.quoteAbortController.signal;
 
     const searchInput = text.trim();
-    return this.runQuoteSearchPipeline(searchInput, boundBook, signal);
+    const searchScope = normalizeQuoteSearchScope(scope) ?? this.getBoundPassage() ?? undefined;
+    const matches = await this.runQuoteSearchPipeline(searchInput, searchScope, signal);
+    this.bindSearchMatch(matches, analyzeQuoteQuery(searchInput));
+    return matches;
   }
 
   /**
@@ -780,7 +878,7 @@ export class ScriptureDetectionEngine {
    */
   private async runQuoteSearchPipeline(
     searchInput: string,
-    _boundBook: string | null | undefined,
+    searchScope: { book: string; chapter?: number } | undefined,
     signal: AbortSignal,
   ): Promise<ScriptureMatch[]> {
 
@@ -791,14 +889,15 @@ export class ScriptureDetectionEngine {
     this.decayActiveCandidate();
     const quoteProfile = analyzeQuoteQuery(searchInput);
     const quoteThresholds = getQuoteSearchThresholds(quoteProfile);
+    let rankedSearchResults: RankedBibleSearchResult[] = [];
 
     // ────────────────────────────────────────────────────────────────────────
     // STAGE 1: Fast keyword match (<1ms, no LLM)
-    // O(1) lookup for hardcoded common scriptures. No context filtering —
-    // quote searches always scan the entire Bible.
+    // O(1) lookup for hardcoded common scriptures. A match outside the active
+    // passage is ignored so a generic phrase cannot jump to another book.
     // ────────────────────────────────────────────────────────────────────────
     const fastMatch = fastKeywordMatch(searchInput);
-    if (fastMatch) {
+    if (fastMatch && matchesQuoteSearchScope(fastMatch.book, fastMatch.chapter, searchScope)) {
       const verseData = await getVerse(fastMatch.book, fastMatch.chapter, fastMatch.verse, this.translation as "KJV").catch(() => null);
       if (!verseData?.text) return [];
       const snippet = verseData.text;
@@ -822,7 +921,7 @@ export class ScriptureDetectionEngine {
     // ────────────────────────────────────────────────────────────────────────
     // STAGE 2: Verse alias fast path (<1ms, no embedding)
     // Direct phrase→reference lookup for universally known quotations.
-    // Searches the entire Bible — no context filtering.
+    // When a passage is active, an alias from another book is ignored.
     // ────────────────────────────────────────────────────────────────────────
     try {
       const { matchVerseAlias } = await loadScriptureRerankerModule();
@@ -830,7 +929,7 @@ export class ScriptureDetectionEngine {
       if (aliasRef) {
         const { getVerse: getV } = await loadBibleDataModule();
         const parsed = aliasRef.match(/^(.+?)\s+(\d+):(\d+)$/);
-        if (parsed) {
+        if (parsed && matchesQuoteSearchScope(parsed[1], +parsed[2], searchScope)) {
           const [, book, ch, vs] = parsed;
           const verseData = await getV(book, +ch, +vs, this.translation as "KJV").catch(() => null);
           if (!verseData?.text) return [];
@@ -854,6 +953,13 @@ export class ScriptureDetectionEngine {
       console.warn("[ScriptureEngine] Verse alias lookup failed:", err);
     }
 
+    // Do not spend a full-corpus search on generic worship language. Famous
+    // phrases have already passed through the alias path above; everything
+    // else needs at least one distinctive word to be worth searching.
+    if (quoteProfile.contentTokens.length < 3 || quoteProfile.strongAnchors === 0) {
+      return [];
+    }
+
     // ────────────────────────────────────────────────────────────────────────
     // STAGE 3: Lexical Bible search
     // This catches partial/quoted phrases that are not exact alias hits but
@@ -865,14 +971,22 @@ export class ScriptureDetectionEngine {
       const { searchBibleRanked } = await loadBibleDataModule();
       if (signal.aborted) return [];
 
-      const rankedResults = await searchBibleRanked(searchInput, this.translation as "KJV", 5);
+      const rankedResults = await searchBibleRanked(
+        searchInput,
+        this.translation as "KJV",
+        5,
+        searchScope,
+      );
+      rankedSearchResults = rankedResults;
       if (signal.aborted) return [];
 
       if (rankedResults.length > 0) {
         const best = rankedResults[0];
         const runnerUp = rankedResults.length > 1 ? rankedResults[1] : null;
         const hasStrongScore = best.score >= quoteThresholds.lexicalMinScore;
-        const hasClearGap = runnerUp ? (best.score - runnerUp.score) >= quoteThresholds.lexicalMinGap : true;
+        const hasClearGap = runnerUp
+          ? (best.score >= 0.95 && isSupportingPassageResult(best, runnerUp)) || (best.score - runnerUp.score) >= quoteThresholds.lexicalMinGap
+          : true;
 
         if (hasStrongScore && hasClearGap) {
           return rankedResults.slice(0, 10).map((result) => ({
@@ -898,10 +1012,8 @@ export class ScriptureDetectionEngine {
     // ────────────────────────────────────────────────────────────────────────
     // STAGE 4: Semantic embedding search (PRIMARY discovery engine)
     // This is the core quote-retrieval mechanism for paraphrases that do not
-    // have a strong lexical match. Searches the entire Bible corpus using
-    // vector similarity. No context filtering — a pastor quoting
-    // "Greater is he that is in me" must find 1 John 4:4 even when Genesis
-    // is the active book.
+    // have a strong lexical match. With an active passage, only embedding
+    // results from that passage are eligible. A new book must be named.
     //
     // Parameters:
     //   topK = 100  — large candidate pool so the reranker has room to work
@@ -927,10 +1039,14 @@ export class ScriptureDetectionEngine {
         const embeddingResults = await searchByEmbedding(searchInput, 75, 0.25);
         if (signal.aborted) return [];
 
-        if (embeddingResults.length > 0) {
-          // No context bias for quote searches — pass null so the reranker
-          // evaluates purely on semantic/keyword/phrase/concept merit.
-          const reranked = rerankCandidates(searchInput, embeddingResults, null);
+        const scopedEmbeddingResults = searchScope
+          ? embeddingResults.filter((result) =>
+            matchesQuoteSearchScope(result.book, result.chapter, searchScope),
+          )
+          : embeddingResults;
+
+        if (scopedEmbeddingResults.length > 0) {
+          const reranked = rerankCandidates(searchInput, scopedEmbeddingResults, null);
 
           if (reranked.length > 0) {
             const best = reranked[0];
@@ -942,7 +1058,7 @@ export class ScriptureDetectionEngine {
             // pass — the system can't tell them apart and shows garbage.
             const hasMinWinnerScore = best.finalScore >= quoteThresholds.embeddingMinScore;
             const hasClearGap = runnerUp
-              ? (best.finalScore - runnerUp.finalScore) >= quoteThresholds.embeddingMinGap
+              ? (best.finalScore >= 0.95 && isSupportingPassageResult(best, runnerUp)) || (best.finalScore - runnerUp.finalScore) >= quoteThresholds.embeddingMinGap
               : true;
 
             if (!hasMinWinnerScore || !hasClearGap) {
@@ -980,35 +1096,35 @@ export class ScriptureDetectionEngine {
     }
 
     try {
-      const { searchBible } = await loadBibleDataModule();
       if (signal.aborted) return [];
 
-      const fuzzyResults = await searchBible(searchInput, this.translation as "KJV", 10);
-      if (signal.aborted) return [];
+      // Stage 3 already performed the same ranked corpus lookup. Reuse it
+      // instead of scanning the Bible a second time for the fuzzy fallback.
+      const fuzzyResults = rankedSearchResults;
+      if (signal.aborted || fuzzyResults.length === 0) return [];
 
-      if (fuzzyResults.length > 0) {
-        return fuzzyResults.map((result, index) => {
-          // Fuzzy matches get honest low confidence — they are string
-          // approximations, not semantic matches. Using the old
-          // Math.max(0.5, 0.85 - index * 0.05) produced fake 80-85%
-          // scores that made garbage look authoritative.
-          const confidence = Math.max(0.10, 0.18 - (index * 0.02));
-          return {
-            candidate: {
-              book: result.book,
-              chapter: result.chapter,
-              verse: result.verse,
-              translation: this.translation,
-              label: `${result.book} ${result.chapter}:${result.verse}`,
-              snippet: result.snippet || result.text,
-              confidence,
-              source: "fuzzy",
-            },
-            source: "quote" as const,
-            confidence,
-          };
-        });
-      }
+      const best = fuzzyResults[0];
+      const runnerUp = fuzzyResults[1];
+      const hasMinimumScore = best.score >= MIN_FUZZY_QUOTE_SCORE;
+      const hasClearGap = !runnerUp ||
+        (best.score >= 0.95 && isSupportingPassageResult(best, runnerUp)) ||
+        (best.score - runnerUp.score) >= MIN_FUZZY_QUOTE_GAP;
+      if (!hasMinimumScore || !hasClearGap) return [];
+
+      return [{
+        candidate: {
+          book: best.book,
+          chapter: best.chapter,
+          verse: best.verse,
+          translation: this.translation,
+          label: `${best.book} ${best.chapter}:${best.verse}`,
+          snippet: best.snippet || best.text,
+          confidence: best.score,
+          source: "fuzzy",
+        },
+        source: "quote" as const,
+        confidence: best.score,
+      }];
     } catch (err) {
       console.warn("[ScriptureEngine] Fuzzy Bible search failed:", err);
     }
@@ -1049,6 +1165,63 @@ export class ScriptureDetectionEngine {
       this.verseHistory = this.verseHistory.slice(-50);
       this.currentVerseIndex = this.verseHistory.length - 1;
     }
+  }
+
+  /**
+   * Promote a confident quote result to the active sermon passage. This lets
+   * the next spoken verse stay in the same chapter even when the first verse
+   * was found from its words rather than from an explicit reference.
+   */
+  private bindSearchMatch(matches: ScriptureMatch[], profile: QuoteQueryProfile): void {
+    const candidate = matches[0]?.candidate;
+    if (!candidate) return;
+
+    // Quote matches are provisional. Only a highly confident result, or an
+    // explicit alias, may change the chapter used by later spoken numbers.
+    // This prevents ordinary sermon language from becoming false context.
+    if (
+      candidate.source === "fuzzy" ||
+      candidate.confidence < 0.90 ||
+      (candidate.source !== "alias" && profile.strongAnchors === 0)
+    ) {
+      return;
+    }
+
+    const bound = this.getBoundPassage();
+    if (
+      bound &&
+      (normalizeBookForScope(bound.book) !== normalizeBookForScope(candidate.book) ||
+        bound.chapter !== candidate.chapter)
+    ) {
+      // Defensive guard: a scoped pipeline must never switch passages through
+      // a quote result. The caller must speak an explicit new reference.
+      return;
+    }
+
+    const current = this.getCurrentVerseRef();
+    if (
+      !current ||
+      normalizeBookForScope(current.book) !== normalizeBookForScope(candidate.book) ||
+      current.chapter !== candidate.chapter ||
+      current.verse !== candidate.verse
+    ) {
+      this.pushVerseHistory({
+        book: candidate.book,
+        chapter: candidate.chapter,
+        verse: candidate.verse,
+        label: candidate.label,
+        snippet: candidate.snippet,
+        timestamp: Date.now(),
+      });
+    }
+
+    this.context = pushScriptureContext(
+      this.context,
+      candidate.book,
+      candidate.chapter,
+      candidate.verse,
+      true,
+    );
   }
 
   /**
@@ -1109,6 +1282,7 @@ export class ScriptureDetectionEngine {
         }
 
         if (intent.navigationOnly === true && intent.verse === undefined && intent.endVerse === undefined) {
+          this.allowBareVerseContinuation = false;
           this.context = pushScriptureContext(this.context, intent.book, intent.chapter, null, false);
           return [];
         }

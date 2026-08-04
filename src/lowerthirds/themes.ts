@@ -1424,7 +1424,7 @@ const WORSHIP_BIBLE_TRANSPARENT_THEMES: ThemeLike[] = [
     css: `
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
-body { font-family: "CMG Sans", sans-serif; }
+body { font-family: "Charis SIL", "Noto Sans", "CMG Sans", sans-serif; }
 
 .lt-transparent-text {
   position: fixed;
@@ -1594,7 +1594,7 @@ body { font-family: "CMG Sans", sans-serif; }
     css: `
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
-body { font-family: "CMG Sans", sans-serif; }
+body { font-family: "Charis SIL", "Noto Sans", "CMG Sans", sans-serif; }
 
 .lt-transparent-text {
   position: fixed;
@@ -1820,7 +1820,7 @@ export function getLTThemeById(id: string): LowerThirdTheme | undefined {
 export const LT_SHARED_CSS = `
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
-body { font-family: "CMG Sans", sans-serif; }
+body { font-family: "Charis SIL", "Noto Sans", "CMG Sans", sans-serif; }
 
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(20px); }

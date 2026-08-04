@@ -12,6 +12,7 @@ import type {
   PresentationRemoteItem,
   PresentationStyleSnapshot,
 } from "../presentation/types";
+import { SCRIPTURE_FONT_FAMILY } from "../bible/scriptureFont";
 
 const PRESENTATION_SCREEN_ZOOM_KEY = "mce-presentation-screen-zoom";
 const MIN_PRESENTATION_SCREEN_ZOOM = 0.8;
@@ -211,7 +212,7 @@ export async function publishTextOverlayToPresentation(payload: {
     title: "Media Text",
     body: [headline, subline].filter(Boolean).join("\n"),
     style: {
-      fontFamily: "Inter, system-ui, sans-serif",
+      fontFamily: SCRIPTURE_FONT_FAMILY,
       fontSize: Math.max(48, Number(payload.headlineSize || 72)),
       fontWeight: 800,
       lineHeight: 1.12,

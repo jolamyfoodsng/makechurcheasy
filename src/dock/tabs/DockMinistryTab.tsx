@@ -25,7 +25,7 @@ import { FAVORITE_THEMES_UPDATED_EVENT } from "../../services/favoriteThemes";
 import { dockClient } from "../../services/dockBridge";
 import type { LowerThirdTheme } from "../../lowerthirds/types";
 import type { LTSize } from "../../lowerthirds/types";
-import { LT_SIZE_LABELS, LT_SIZE_SCALE } from "../../lowerthirds/types";
+import { LT_SIZE_FONT_SCALE, LT_SIZE_LABELS } from "../../lowerthirds/types";
 import type { BibleTheme } from "../../bible/types";
 import type { BibleThemeSettings } from "../../bible/types";
 import type { TickerThemeColors } from "../../components/modules/tickerThemes";
@@ -80,6 +80,17 @@ type MixedLTThemeEntry = LTThemeEntry | BibleThemeEntry;
 
 const MINISTRY_LT_SIZE_OPTIONS: LTSize[] = ["xs", "sm", "md", "lg"];
 const DEFAULT_MINISTRY_LT_SIZE: LTSize = "sm";
+const MINISTRY_BIBLE_LT_SIZE_PRESETS: Record<LTSize, string> = {
+  xs: "smallest",
+  sm: "small",
+  md: "medium",
+  lg: "bigger",
+  xl: "big",
+  "2xl": "bigger",
+  "3xl": "biggest",
+  x2: "biggest",
+  x3: "biggest",
+};
 
 function resolveMinistryLtSize(value: unknown): LTSize {
   return MINISTRY_LT_SIZE_OPTIONS.includes(value as LTSize) ? (value as LTSize) : DEFAULT_MINISTRY_LT_SIZE;
@@ -617,9 +628,16 @@ export default function DockMinistryTab({
       ? {
         ...(selectedBibleLtSettings as unknown as Record<string, unknown>),
         ...selectedBibleLtOverrides,
+        lowerThirdSize: MINISTRY_BIBLE_LT_SIZE_PRESETS[ltSize],
+        ...(Number(selectedBibleLtSettings.fontSize) > 0
+          ? { fontSize: Math.max(1, Math.round(Number(selectedBibleLtSettings.fontSize) * (LT_SIZE_FONT_SCALE[ltSize] ?? 1))) }
+          : {}),
+        ...(Number(selectedBibleLtSettings.refFontSize) > 0
+          ? { refFontSize: Math.max(1, Math.round(Number(selectedBibleLtSettings.refFontSize) * (LT_SIZE_FONT_SCALE[ltSize] ?? 1))) }
+          : {}),
       }
       : null,
-    [selectedBibleLtSettings, selectedBibleLtOverrides],
+    [selectedBibleLtSettings, selectedBibleLtOverrides, ltSize],
   );
   const selectedBibleLtAnimationDuration = selectedBibleLtEffectiveSettings
     ? Number(selectedBibleLtEffectiveSettings.animationDuration) || 800
@@ -1489,10 +1507,12 @@ export default function DockMinistryTab({
                       setLtFeedback(null);
                       try {
                         await ensureObsConnected();
-                        const scale = LT_SIZE_SCALE[ltSize] ?? 1;
+                        // Keep the OBS browser viewport stable. The selected
+                        // size is rendered by lower-third-overlay.html so it
+                        // also works when the live source is reused.
                         const sourceSize = {
-                          sourceWidth: Math.round(1920 / scale),
-                          sourceHeight: Math.round(1080 / scale),
+                          sourceWidth: 1920,
+                          sourceHeight: 1080,
                         };
                         if (ltLive) {
                           const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;

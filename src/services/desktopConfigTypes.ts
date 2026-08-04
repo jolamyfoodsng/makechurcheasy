@@ -174,7 +174,7 @@ export const DEFAULT_DESKTOP_CONFIG: DesktopConfig = {
   storage: {
     enableCloudSync: true,
     maxUploadSizeMB: 50,
-    allowedFileTypes: "jpg,png,gif,mp4,pdf,docx",
+  allowedFileTypes: "jpg,png,gif,mp4,pdf,docx,pptx",
     allowedImageExtensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"],
     allowedVideoExtensions: ["mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv", "flv"],
     maximumBackgroundVideoSizeMB: 500,

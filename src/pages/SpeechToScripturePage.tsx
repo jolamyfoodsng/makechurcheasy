@@ -499,24 +499,28 @@ export default function SpeechToScripturePage() {
         const fallbackTime = prevWords * 0.4;
         return `${formatTimestamp(e, fallbackTime)}\t${e.text}`;
       }).join("\n");
-      const detectedScriptures = [
-        ...snapshot.queue.map((c) => ({
-          id: `sc-${c.book}-${c.chapter}-${c.verse}`,
-          transcriptId: "",
-          reference: c.label,
-          verseText: c.snippet,
-          confidence: c.confidence,
-        })),
-        ...snapshot.suggestions
-          .filter(s => !snapshot.queue.some(q => q.book === s.book && q.chapter === s.chapter && q.verse === s.verse))
-          .map((c) => ({
-            id: `sc-${c.book}-${c.chapter}-${c.verse}`,
-            transcriptId: "",
-            reference: c.label,
-            verseText: c.snippet,
-            confidence: c.confidence,
-          })),
-      ];
+      const persistableCandidates = [
+        ...snapshot.queue,
+        ...snapshot.suggestions.filter(
+          (candidate) => (
+            (candidate.source === "alias" || candidate.source === "keyword") &&
+            candidate.confidence >= 0.90
+          ),
+        ),
+      ].filter((candidate, index, all) => (
+        all.findIndex((other) => (
+          other.book === candidate.book &&
+          other.chapter === candidate.chapter &&
+          other.verse === candidate.verse
+        )) === index
+      ));
+      const detectedScriptures = persistableCandidates.map((c) => ({
+        id: `sc-${c.book}-${c.chapter}-${c.verse}`,
+        transcriptId: "",
+        reference: c.label,
+        verseText: c.snippet,
+        confidence: c.confidence,
+      }));
       const title = new Date().toLocaleDateString("en-US", {
         month: "short", day: "numeric", year: "numeric",
       }) + " — " + (durationSec >= 60

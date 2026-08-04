@@ -303,6 +303,26 @@ function buildPreview(text: string): string {
     .slice(0, 180);
 }
 
+function stripLrcTimestamps(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((rawLine) => {
+      let line = rawLine.trim();
+      while (line.startsWith("[")) {
+        const close = line.indexOf("]");
+        if (close < 0) break;
+        const tag = line.slice(1, close);
+        const isTimestamp = /^\d{1,3}:\d{2}(?:\.\d{1,3})?$/.test(tag);
+        const isMetadata = /^(?:ar|ti|al|by|offset):/i.test(tag);
+        if (!isTimestamp && !isMetadata) break;
+        line = line.slice(close + 1).trimStart();
+      }
+      return line;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 function tokenize(value: string): string[] {
   return unicodeSearchNormalize(value)
     .split(" ")
@@ -425,7 +445,9 @@ async function searchWordPressLyricsSource(
 
 function buildLrcLibResult(track: LrcLibTrack, query: string): OnlineLyricsSearchResult | null {
   const id = typeof track.id === "number" ? String(track.id) : "";
-  const lyrics = pruneLyricsText(track.plainLyrics ?? "");
+  const plainLyrics = pruneLyricsText(track.plainLyrics ?? "");
+  const syncedLyrics = pruneLyricsText(stripLrcTimestamps(track.syncedLyrics ?? ""));
+  const lyrics = plainLyrics || syncedLyrics;
   const title = cleanInlineText(track.trackName ?? track.name ?? "");
   const artist = cleanInlineText(track.artistName ?? "");
   const preview = buildPreview(lyrics);
@@ -453,7 +475,10 @@ async function searchLrcLibLyricsSource(query: string): Promise<OnlineLyricsSear
   url.searchParams.set("q", query);
 
   const response = await fetch(url.toString(), {
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      "Lrclib-Client": "MakeChurchEasy/1.0",
+    },
   });
 
   if (!response.ok) {
@@ -471,17 +496,31 @@ async function searchLrcLibLyricsSource(query: string): Promise<OnlineLyricsSear
 }
 
 async function searchOnlineSongLyricsFallback(query: string): Promise<OnlineLyricsSearchResult[]> {
+  let lrclibError: unknown = null;
+  try {
+    const lrclibResults = await searchLrcLibLyricsSource(query);
+    if (lrclibResults.length > 0) {
+      return lrclibResults.slice(0, ONLINE_LYRICS_RESULT_LIMIT);
+    }
+  } catch (error) {
+    lrclibError = error;
+    console.warn("[onlineLyricsService] LRCLIB search failed; trying fallback sources:", error);
+  }
+
   const settledResults = await Promise.allSettled(
-    [
-      ...WORDPRESS_LYRICS_SOURCES.map((source) => searchWordPressLyricsSource(source, query)),
-      searchLrcLibLyricsSource(query),
-    ],
+    WORDPRESS_LYRICS_SOURCES.map((source) => searchWordPressLyricsSource(source, query)),
   );
   const results = settledResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
 
   if (results.length === 0 && settledResults.every((result) => result.status === "rejected")) {
     const firstError = settledResults.find((result) => result.status === "rejected");
-    throw new Error(firstError?.reason ? errorMessage(firstError.reason) : "No online lyrics sources responded");
+    throw new Error(
+      firstError?.reason
+        ? errorMessage(firstError.reason)
+        : lrclibError
+          ? errorMessage(lrclibError)
+          : "No online lyrics sources responded",
+    );
   }
 
   const seenUrls = new Set<string>();

@@ -205,6 +205,7 @@ jobs:
           VITE_AUTH_API_URL: ${{ secrets.PROD_AUTH_API_URL || secrets.VITE_AUTH_API_URL }}
           VITE_API_BASE_URL: ${{ secrets.PROD_API_BASE_URL || secrets.VITE_API_BASE_URL }}
           VITE_WS_URL: ${{ secrets.PROD_WS_URL || secrets.VITE_WS_URL }}
+          VITE_SUBSCRIPTION_PUBLIC_KEY: ${{ secrets.VITE_SUBSCRIPTION_PUBLIC_KEY }}
           VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
           VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
           VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
@@ -402,6 +403,7 @@ jobs:
           VITE_AUTH_API_URL: ${{ secrets.PROD_AUTH_API_URL || secrets.VITE_AUTH_API_URL }}
           VITE_API_BASE_URL: ${{ secrets.PROD_API_BASE_URL || secrets.VITE_API_BASE_URL }}
           VITE_WS_URL: ${{ secrets.PROD_WS_URL || secrets.VITE_WS_URL }}
+          VITE_SUBSCRIPTION_PUBLIC_KEY: ${{ secrets.VITE_SUBSCRIPTION_PUBLIC_KEY }}
           VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
           VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
           VITE_ANALYTICS_TOKEN: ${{ secrets.VITE_ANALYTICS_TOKEN }}
@@ -434,3 +436,64 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
+
+  # ── 3) Normalize updater manifest after all release assets exist ───────────
+  normalize-latest-json:
+    name: Normalize latest.json
+    needs:
+      - publish-windows
+      - publish-other
+    if: ${{ always() && needs.publish-windows.result == 'success' && (needs.publish-other.result == 'success' || needs.publish-other.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
+
+      - name: Resolve release tag
+        id: release-tag
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            TAG="${{ github.event.inputs.version }}"
+          else
+            echo "No release tag found"
+            exit 1
+          fi
+          case "$TAG" in
+            v*) ;;
+            *) TAG="v$TAG" ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download generated latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/mce-release
+          gh release download "${{ steps.release-tag.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern latest.json \
+            --dir /tmp/mce-release \
+            --clobber
+
+      - name: Normalize latest.json shape
+        run: |
+          node scripts/normalize-update-json.cjs /tmp/mce-release/latest.json \
+            --out /tmp/mce-release/latest.json \
+            --source-repo "${{ github.repository }}" \
+            --target-repo "jolamyfoodsng/makechurcheasy-releases" \
+            --tag "${{ steps.release-tag.outputs.tag }}"
+
+      - name: Upload normalized latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ steps.release-tag.outputs.tag }}" \
+            /tmp/mce-release/latest.json \
+            --repo "${{ github.repository }}" \
+            --clobber

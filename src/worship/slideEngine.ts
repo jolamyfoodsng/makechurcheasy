@@ -84,6 +84,15 @@ function parseSectionLabelLine(line: string): { section: SectionLabel; rest: str
     if (section) return { section, rest: bracketMatch[2]?.trim() ?? "" };
   }
 
+  const numberedVerseMatch = trimmed.match(/^(\d+)\s*:\s*(.*)$/);
+  if (numberedVerseMatch) {
+    const number = numberedVerseMatch[1];
+    return {
+      section: { label: `Verse ${number}`, shortLabel: `V${number}`, type: "verse" },
+      rest: numberedVerseMatch[2]?.trim() ?? "",
+    };
+  }
+
   const colonMatch = trimmed.match(/^([A-Za-z][A-Za-z\s-]*\d*)\s*:\s*(.*)$/);
   if (colonMatch) {
     const section = classifySectionLabel(colonMatch[1]);
@@ -92,6 +101,60 @@ function parseSectionLabelLine(line: string): { section: SectionLabel; rest: str
 
   const section = classifySectionLabel(trimmed);
   return section ? { section, rest: "" } : null;
+}
+
+export interface ParsedWorshipSectionLabel {
+  label: string;
+  shortLabel: string;
+  type: Slide["type"];
+  rest: string;
+}
+
+/** Parse a visible worship heading such as "Verse 2:" or "2:". */
+export function parseWorshipSectionLabelLine(line: string): ParsedWorshipSectionLabel | null {
+  const parsed = parseSectionLabelLine(line);
+  if (!parsed) return null;
+  return {
+    label: parsed.section.label,
+    shortLabel: parsed.section.shortLabel,
+    type: parsed.section.type,
+    rest: parsed.rest,
+  };
+}
+
+export interface StructuredTextDocument {
+  /** A standalone bracketed heading such as [Orin 969], when present. */
+  title: string | null;
+  /** Lyric/note content with the heading markers removed. */
+  body: string;
+}
+
+/**
+ * Extract the title convention used by imported hymns and notes.
+ *
+ * A marker is only treated as a title when it is the first non-empty line,
+ * so normal bracketed lyric text remains untouched.
+ */
+export function extractStructuredTextTitle(rawText: string): StructuredTextDocument {
+  const normalized = rawText.replace(/\r\n?/g, "\n");
+  const lines = normalized.split("\n");
+  const firstContentIndex = lines.findIndex((line) => line.trim().length > 0);
+  if (firstContentIndex < 0) return { title: null, body: "" };
+
+  const titleMatch = lines[firstContentIndex].trim().match(/^\[([^\]\r\n]+)\]\s*\.?$/);
+  if (!titleMatch) return { title: null, body: normalized };
+
+  const title = titleMatch[1].trim();
+  const bodyLines = lines.filter((line, index) => {
+    if (index === firstContentIndex) return false;
+    const repeatedMarker = line.trim().match(/^\[([^\]\r\n]+)\]\s*\.?$/);
+    return repeatedMarker?.[1].trim().toLocaleLowerCase() !== title.toLocaleLowerCase();
+  });
+
+  return {
+    title,
+    body: bodyLines.join("\n").replace(/^\n+|\n+$/g, "").trim(),
+  };
 }
 
 function wrapLyricLine(line: string, maxLineLength: number): string[] {
@@ -166,7 +229,8 @@ export function autoSplitLyricsText(
   linesPerSlide: number = 2,
   options: { maxLineLength?: number } = {},
 ): string {
-  const normalized = rawLyrics.replace(/\r\n?/g, "\n").trim();
+  const structured = extractStructuredTextTitle(rawLyrics);
+  const normalized = structured.body.trim();
   if (!normalized) return rawLyrics;
 
   const safeLinesPerSlide = Math.max(1, Math.min(12, Math.floor(linesPerSlide) || 2));
@@ -187,7 +251,8 @@ export function autoSplitLyricsText(
     }
   }
 
-  return blocks.join("\n\n") || rawLyrics;
+  const result = blocks.join("\n\n") || structured.body;
+  return structured.title ? `[${structured.title}]\n\n${result}` : result;
 }
 
 export function getSectionTypeTone(type: Slide["type"]): string {
@@ -214,7 +279,7 @@ export function getSectionTypeTone(type: Slide["type"]): string {
  * the same slide.
  */
 export function parseWorshipLyricSections(rawLyrics: string, linesPerSlide: number): LyricSection[] {
-  const normalizedLyrics = rawLyrics.replace(/\r\n?/g, "\n").trim();
+  const normalizedLyrics = extractStructuredTextTitle(rawLyrics).body.trim();
   if (!normalizedLyrics) return [];
 
   // Split on one or more blank lines (spaces/tabs allowed between newlines).
@@ -336,7 +401,7 @@ export function generateSlides(
   linesPerSlide: number,
   identifyChorus: boolean
 ): Slide[] {
-  const normalized = rawLyrics.replace(/\r\n?/g, "\n").trim();
+  const normalized = extractStructuredTextTitle(rawLyrics).body.trim();
   if (!normalized) return [];
 
   // 1. Split into stanzas using blank lines as boundaries

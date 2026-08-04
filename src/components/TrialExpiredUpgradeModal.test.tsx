@@ -34,10 +34,10 @@ describe("TrialExpiredUpgradeModal", () => {
   it("renders as a non-blocking, dismissible notice for expired trials", () => {
     const html = renderToStaticMarkup(<TrialExpiredUpgradeModal />);
 
-    expect(html).toContain('aria-modal="false"');
+    expect(html).toContain('role="status"');
     expect(html).toContain("Close trial ended notice");
-    expect(html).toContain("Your account has already fallen back to Free.");
-    expect(html).toContain("Upgrade to continue");
+    expect(html).toContain("You are now on the Free plan.");
+    expect(html).toContain("View upgrade plans");
   });
 
   it("does not render for admins or users without an expired free trial", () => {

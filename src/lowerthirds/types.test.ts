@@ -20,12 +20,17 @@ describe("lower-third size presets", () => {
   it("sends the half-size output scale to the overlay renderer", () => {
     expect(lowerThirdObsServiceSource).toContain("visualScale: LT_VISUAL_OUTPUT_SCALE");
     expect(lowerThirdOverlayHtml).toContain("--lt-visual-scale");
-    expect(lowerThirdOverlayHtml).toContain("var finalScale = visualScale * fitScale");
+    expect(lowerThirdOverlayHtml).toContain("--lt-size-scale");
+    expect(lowerThirdOverlayHtml).toContain("var requestedScale = visualScale * sizeScale");
+    expect(lowerThirdOverlayHtml).toContain("var finalScale = requestedScale * fitScale");
+    expect(lowerThirdOverlayHtml).toContain("data.visualScale, data.scale");
   });
 
   it("limits the Ministry lower-third picker to XS, SM, MD, and LG", () => {
     expect(ministrySource).toContain('const MINISTRY_LT_SIZE_OPTIONS: LTSize[] = ["xs", "sm", "md", "lg"];');
     expect(ministrySource).toContain("return resolveMinistryLtSize(saved);");
+    expect(ministrySource).toContain("sourceWidth: 1920");
+    expect(ministrySource).toContain("sourceHeight: 1080");
     expect(ministrySource).not.toContain('(["xl", "x2"] as LTSize[])');
   });
 });

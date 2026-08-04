@@ -24,6 +24,11 @@ function isLocalOverlayHost(hostname: string): boolean {
   return normalized === "127.0.0.1" || normalized === "localhost";
 }
 
+function isTauriRuntime(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.protocol === "tauri:" || "__TAURI_INTERNALS__" in window;
+}
+
 export function toStoredOverlayAssetUrl(value: string | undefined): string {
   const trimmed = String(value || "").trim();
   if (!trimmed) return "";
@@ -101,6 +106,13 @@ export async function getOverlayBaseUrl(): Promise<string> {
     const isHttpLocalOrigin =
       (protocol === "http:" || protocol === "https:")
       && (hostname === "localhost" || hostname === "127.0.0.1");
+    if (isHttpLocalOrigin && !isTauriRuntime()) {
+      // OBS loads the dock in a normal Chromium/CEF page from the local
+      // overlay server. There is no Tauri IPC bridge in that context, and the
+      // page origin is already the correct asset server.
+      _cachedBaseUrl = window.location.origin;
+      return _cachedBaseUrl;
+    }
     if (isHttpLocalOrigin && port === DEV_VITE_PORT) {
       const viteFallback = (): string => {
         _cachedBaseUrl = window.location.origin;
@@ -116,6 +128,7 @@ export async function getOverlayBaseUrl(): Promise<string> {
         return viteFallback();
       }
     }
+
   }
 
   // Cooldown: don't hammer invoke on repeated failures
@@ -126,6 +139,7 @@ export async function getOverlayBaseUrl(): Promise<string> {
   _lastInvokeAttempt = now;
 
   try {
+    if (!isTauriRuntime()) return getOverlayBaseUrlSync();
     const port = await invoke<number>("get_overlay_port");
     if (port > 0) {
       _cachedBaseUrl = `http://127.0.0.1:${port}`;

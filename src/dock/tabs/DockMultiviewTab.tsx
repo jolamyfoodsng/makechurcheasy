@@ -296,6 +296,15 @@ function resolveFrame(frameId: string | null | undefined): MultiviewFrame | unde
   return FRAME_LIBRARY.find(f => f.id === frameId);
 }
 
+function resolveEffectiveFrameId(
+  slotFrameId: string | null | undefined,
+  layoutFrameId: string | null | undefined,
+): string | null {
+  if (slotFrameId === "none") return null;
+  if (!slotFrameId || slotFrameId === "inherit") return layoutFrameId || null;
+  return slotFrameId;
+}
+
 // ── Shared frame renderer — used by both preview and OBS compositor ──
 
 function drawRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -359,10 +368,12 @@ async function generateCompositeFramePng(
 ): Promise<Uint8Array | null> {
   // Resolve effective frame per slot
   const slotDefs = layout.slots.map(slot => {
-    const sf = slotFrames[slot.id];
-    const eff = sf === "none" ? null : sf ? sf : frameId;
-    return eff ? { rect: { x: slot.x, y: slot.y, w: slot.width, h: slot.height }, frame: resolveFrame(eff) } : null;
-  }).filter(Boolean) as Array<{ rect: { x: number; y: number; w: number; h: number }; frame: MultiviewFrame }>;
+    const effectiveFrameId = resolveEffectiveFrameId(slotFrames?.[slot.id], frameId);
+    const frame = resolveFrame(effectiveFrameId);
+    return frame
+      ? { rect: { x: slot.x, y: slot.y, w: slot.width, h: slot.height }, frame }
+      : null;
+  }).filter((entry): entry is { rect: { x: number; y: number; w: number; h: number }; frame: MultiviewFrame } => Boolean(entry));
 
   if (slotDefs.length === 0) return null;
 
@@ -454,13 +465,56 @@ function normalizeLoadedMultiView(item: SavedMultiView): SavedMultiView {
 // Storage helpers
 // ---------------------------------------------------------------------------
 
-function loadSaved(): SavedMultiView[] {
+interface SavedStorageSnapshot {
+  items: SavedMultiView[];
+  /** A valid persisted value was found, including an intentional empty list. */
+  hasStoredValue: boolean;
+  /** The value came from the pre-user-scoping key and should be migrated. */
+  shouldMigrate: boolean;
+  /** Storage was readable and may safely be written to. */
+  canPersist: boolean;
+}
+
+function parseSavedItems(raw: string): SavedMultiView[] | null {
   try {
-    const raw = localStorage.getItem(getUserScopedKey(STORAGE_KEY));
-    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as SavedMultiView[]).map(normalizeLoadedMultiView) : [];
-  } catch { return []; }
+    return Array.isArray(parsed)
+      ? (parsed as SavedMultiView[]).map(normalizeLoadedMultiView)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadSavedSnapshot(): SavedStorageSnapshot {
+  try {
+    const scopedKey = getUserScopedKey(STORAGE_KEY);
+    const keys = scopedKey === STORAGE_KEY
+      ? [{ key: STORAGE_KEY, shouldMigrate: false }]
+      : [
+        { key: scopedKey, shouldMigrate: false },
+        { key: STORAGE_KEY, shouldMigrate: true },
+      ];
+
+    for (const { key, shouldMigrate } of keys) {
+      const raw = localStorage.getItem(key);
+      if (raw === null) continue;
+      const items = parseSavedItems(raw);
+      if (items) {
+        return { items, hasStoredValue: true, shouldMigrate, canPersist: true };
+      }
+    }
+
+    // A malformed value must not be replaced with fresh default cards during a
+    // remount. Leave it untouched and let an explicit user edit repair it.
+    const hasUnreadableValue = keys.some(({ key }) => localStorage.getItem(key) !== null);
+    return { items: [], hasStoredValue: hasUnreadableValue, shouldMigrate: false, canPersist: !hasUnreadableValue };
+  } catch {
+    // Storage can be temporarily unavailable while the dock/auth document is
+    // being restored. Treat that as an unreadable session, never as an empty
+    // Multiview that should be written back over the user's cards.
+    return { items: [], hasStoredValue: false, shouldMigrate: false, canPersist: false };
+  }
 }
 
 function saveSaved(items: SavedMultiView[]) {
@@ -698,8 +752,7 @@ function LayoutMiniPreview({ layout, thumbnails, slotFraming, frameId, slotFrame
 
   // Resolve frames per slot for SVG overlay
   const slotFramesResolved = layout.slots.map(slot => {
-    const sf = slotFrames?.[slot.id];
-    const effId = sf === "none" ? null : sf ? (sf === "inherit" ? frameId : sf) : frameId;
+    const effId = resolveEffectiveFrameId(slotFrames?.[slot.id], frameId);
     return { slot, frame: resolveFrame(effId) };
   }).filter((s): s is { slot: GallerySlot; frame: MultiviewFrame } => !!s.frame);
 
@@ -1336,7 +1389,7 @@ function SlotControl({
       <div className="dock-mv-slot-row">
         <div className="dock-mv-slot-row__main">
           <SlotTypeIcon contentType={slot.contentType} />
-          <span className="dock-mv-slot-row__name">{t('multiview.contentN', { n: slotIndex + 1 })}</span>
+          <span className="dock-mv-slot-row__name">{slot.label || t('multiview.contentN', { n: slotIndex + 1 })}</span>
           <div className="dock-mv-slot-row__spacer" />
           {!hasValue && (
             <button type="button" className="dock-mv-slot-row__add-btn" onClick={onSelect} title={t('multiview.addContent')}>
@@ -1401,7 +1454,7 @@ function SlotControl({
       <div className="dock-mv-slot-row">
         <div className="dock-mv-slot-row__main">
           <SlotTypeIcon contentType={slot.contentType} />
-          <span className="dock-mv-slot-row__name">{t('multiview.contentN', { n: slotIndex + 1 })}</span>
+          <span className="dock-mv-slot-row__name">{slot.label || t('multiview.contentN', { n: slotIndex + 1 })}</span>
           <div className="dock-mv-slot-row__spacer" />
           <input
             className="dock-mv-slot-row__input"
@@ -1419,7 +1472,7 @@ function SlotControl({
     <div className="dock-mv-slot-row">
       <div className="dock-mv-slot-row__main">
         <SlotTypeIcon contentType={slot.contentType} />
-        <span className="dock-mv-slot-row__name">{t('multiview.contentN', { n: slotIndex + 1 })}</span>
+        <span className="dock-mv-slot-row__name">{slot.label || t('multiview.contentN', { n: slotIndex + 1 })}</span>
         <div className="dock-mv-slot-row__spacer" />
         <input
           className="dock-mv-slot-row__input"
@@ -2311,28 +2364,56 @@ export default function DockMultiviewTab() {
     return GALLERY_LAYOUTS.filter(l => visibleIds.has(l.id));
   }, [addedLayoutIds, savedList]);
 
-  // ── Load saved list (auto-seed two cards if empty) ──
+  // ── Load saved list without overwriting it during a remount ──
   useEffect(() => {
-    let list = loadSaved();
+    const snapshot = loadSavedSnapshot();
+    let list = snapshot.items;
+    let changed = false;
+    const usedSceneNames = new Set(list.map((m) => m.obsSceneName).filter(Boolean));
+
     // Migrate old data: cards without obsSceneName get one assigned
     list = list.map((m, i) => {
       if (!m.obsSceneName) {
-        return { ...m, obsSceneName: `MV: Multiview ${i + 1}` };
+        let number = i + 1;
+        let obsSceneName = `MV: Multiview ${number}`;
+        while (usedSceneNames.has(obsSceneName)) {
+          number += 1;
+          obsSceneName = `MV: Multiview ${number}`;
+        }
+        usedSceneNames.add(obsSceneName);
+        changed = true;
+        return { ...m, obsSceneName };
       }
       // Migrate: ensure slotThumbnails, layoutFrameId, slotFrames, frameThickness exist
-      if (!m.slotThumbnails || !("layoutFrameId" in m) || !m.slotFrames || typeof m.frameThickness !== "number") {
-        return { ...m, slotThumbnails: m.slotThumbnails ?? {}, layoutFrameId: m.layoutFrameId ?? null, slotFrames: m.slotFrames ?? {}, frameThickness: m.frameThickness ?? 2, frameCornerRadius: (m as any).frameCornerRadius ?? 0, frameOpacity: (m as any).frameOpacity ?? 100, frameColor: (m as any).frameColor ?? "" };
+      if (!m.slotThumbnails || !("layoutFrameId" in m) || !m.slotFrames || typeof m.frameThickness !== "number" || !m.background) {
+        changed = true;
+        return {
+          ...m,
+          slotThumbnails: m.slotThumbnails ?? {},
+          layoutFrameId: m.layoutFrameId ?? null,
+          slotFrames: m.slotFrames ?? {},
+          frameThickness: m.frameThickness ?? 2,
+          frameCornerRadius: (m as any).frameCornerRadius ?? 0,
+          frameOpacity: (m as any).frameOpacity ?? 100,
+          frameColor: (m as any).frameColor ?? "",
+          background: m.background ?? { ...DEFAULT_MV_BG },
+        };
       }
       return m;
     });
+
     const now = new Date().toISOString();
-    const cards: SavedMultiView[] = [1, 2, 3].map((n) => {
-      const existing = list[n - 1];
-      if (existing) return existing;
-      return {
+    const cards: SavedMultiView[] = [...list];
+    // Seed only a brand-new store. If the user deliberately has an empty
+    // stored list, keep it empty. Never truncate saved cards to the first 3.
+    const shouldSeedDefaults = !snapshot.hasStoredValue || cards.length > 0;
+    while (shouldSeedDefaults && cards.length < 3) {
+      const n = cards.length + 1;
+      const obsSceneName = nextObsSceneName(cards);
+      cards.push({
         id: genId(),
         name: `${t('multiview.title')} ${n}`,
-        obsSceneName: `MV: Multiview ${n}`,
+        obsSceneName,
         layoutId: GALLERY_LAYOUTS[0]?.id ?? "",
         assignments: {},
         slotModes: {},
@@ -2347,11 +2428,16 @@ export default function DockMultiviewTab() {
         background: { ...DEFAULT_MV_BG },
         createdAt: now,
         updatedAt: now,
-      };
-    });
-    list = cards;
-    saveSaved(list);
-    setSavedList(list);
+      });
+      changed = true;
+    }
+
+    // A failed/temporary storage read must not be written back as defaults.
+    // Persist only migrations, legacy-key recovery, or intentional seeding.
+    if (snapshot.canPersist && (changed || snapshot.shouldMigrate)) {
+      saveSaved(cards);
+    }
+    setSavedList(cards);
   }, []);
 
   const obsReady = useDockObsReady();
@@ -2505,6 +2591,7 @@ export default function DockMultiviewTab() {
   }, [savedList]);
 
   const handleUpdateLayout = useCallback((id: string, layoutId: string) => {
+    const selectedLayout = resolveLayout(layoutId);
     const next = savedList.map(m => m.id === id ? {
       ...m,
       layoutId,
@@ -2512,6 +2599,8 @@ export default function DockMultiviewTab() {
       slotModes: {},
       slotFraming: {},
       slotThumbnails: {},
+      layoutFrameId: selectedLayout?.defaultFrameId ?? null,
+      slotFrames: { ...(selectedLayout?.defaultSlotFrames ?? {}) },
       updatedAt: new Date().toISOString(),
     } : m);
     setSavedList(next);

@@ -350,7 +350,7 @@ body { font-family: "Inter", sans-serif; }
     css: `
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
-body { font-family: "CMG Sans", sans-serif; }
+body { font-family: "Charis SIL", "Noto Sans", "CMG Sans", sans-serif; }
 
 .lt-transparent-text {
   position: fixed;
@@ -429,7 +429,7 @@ body { font-family: "CMG Sans", sans-serif; }
     css: `
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
-body { font-family: "CMG Sans", sans-serif; }
+body { font-family: "Charis SIL", "Noto Sans", "CMG Sans", sans-serif; }
 
 .lt-transparent-text {
   position: fixed;

@@ -1010,6 +1010,11 @@ describe("live quote replacement", () => {
     expect(suggestions).toHaveLength(1);
     expect(suggestions[0].book).toBe("Romans");
 
+    // Explicitly switch passages before the second quote. Quote matching
+    // stays inside the active chapter until the preacher names a new one.
+    const newReference = await engine.processChunk("Psalms 23:1", true);
+    expect(newReference.matches[0].candidate.label).toContain("Psalms 23:1");
+
     // Second quote — also resolves via fastKeywordMatch
     const result2 = await engine.searchQuotesWithText(
       "the lord is my shepherd i shall not want"
@@ -1045,6 +1050,36 @@ describe("live quote replacement", () => {
     expect(result).toHaveLength(0);
   });
 
+  it("does not bind sermon filler or bare numbers as scripture context", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    expect(await engine.searchQuotesWithText("If you are going through lack.")).toHaveLength(0);
+    expect(await engine.searchQuotesWithText("Thank you, Lord Jesus.")).toHaveLength(0);
+
+    const bareNumber = await engine.processChunk("3.", true);
+    expect(bareNumber.matches).toHaveLength(0);
+  });
+
+  it("does not treat a short alias fragment as a complete verse quote", async () => {
+    expect(matchVerseAlias("of Jesus")).toBeNull();
+  });
+
+  it("keeps distinctive sermon quotations fast and deterministic", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const quoteCases = [
+      ["we wrestle not against flesh and blood.", "Ephesians 6:12"],
+      ["mercy prevails over judgment.", "James 2:13"],
+      ["for everything there is a time.", "Ecclesiastes 3:1"],
+    ] as const;
+
+    for (const [text, reference] of quoteCases) {
+      expect(matchVerseAlias(text)).toBe(reference);
+      const result = await new ScriptureDetectionEngine().searchQuotesWithText(text);
+      expect(result[0]?.candidate.label).toContain(reference);
+    }
+  });
+
   it("finds Genesis 3:7 from spontaneous lexical quote search", async () => {
     const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
     const { matchVerseAlias } = await import("./scriptureReranker");
@@ -1059,6 +1094,52 @@ describe("live quote replacement", () => {
 });
 
 describe("reference continuations", () => {
+  it("anchors the next quote to the chapter found from the first quote", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const first = await engine.searchQuotesWithText(
+      "He that dwelleth in the secret place of the most High shall abide under the shadow of the Almighty.",
+    );
+    expect(first[0].candidate.label).toContain("Psalms 91:1");
+
+    const next = await engine.searchQuotesWithText(
+      "I will say of the LORD, my refuge and my fortress: my God; in him will I trust.",
+    );
+    expect(next[0].candidate.label).toContain("Psalms 91:2");
+  });
+
+  it("keeps spoken verse text inside the active chapter", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const initial = await engine.processChunk("Psalms 91:1", true);
+    expect(initial.matches).toHaveLength(1);
+    expect(initial.matches[0].candidate.label).toContain("Psalms 91:1");
+
+    const continuation = await engine.searchQuotesWithText(
+      "I will say of the LORD, my refuge and my fortress: my God; in him will I trust.",
+    );
+    expect(continuation.length).toBeGreaterThan(0);
+    expect(continuation[0].candidate.label).toContain("Psalms 91:2");
+    expect(continuation.every((match) => (
+      match.candidate.book === "Psalms" && match.candidate.chapter === 91
+    ))).toBe(true);
+  });
+
+  it("does not jump to another book without an explicit new reference", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    await engine.processChunk("Psalms 91:1", true);
+
+    const unrelatedQuote = await engine.searchQuotesWithText("for God so loved the world");
+    expect(unrelatedQuote).toHaveLength(0);
+
+    const explicitReference = await engine.processChunk("John 3:16", true);
+    expect(explicitReference.matches[0].candidate.label).toContain("John 3:16");
+  });
+
   it("moves forward one verse from the current queue reference", async () => {
     const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
     const engine = new ScriptureDetectionEngine();

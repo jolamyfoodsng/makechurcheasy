@@ -24,6 +24,7 @@ mod local_llm;
 #[cfg(not(target_os = "macos"))]
 mod local_llm_stub;
 mod mobile_companion;
+mod obs_move_plugin;
 mod overlay_relay;
 mod presentation_remote;
 #[cfg(not(target_os = "macos"))]
@@ -1545,6 +1546,8 @@ struct LrcLibTrack {
     instrumental: bool,
     #[serde(default)]
     plain_lyrics: Option<String>,
+    #[serde(default)]
+    synced_lyrics: Option<String>,
 }
 
 fn build_online_lyrics_client() -> Result<reqwest::blocking::Client, String> {
@@ -1920,6 +1923,42 @@ fn build_preview(text: &str) -> String {
     }
 
     output
+}
+
+fn strip_lrc_timestamps(text: &str) -> String {
+    text.lines()
+        .filter_map(|raw_line| {
+            let mut line = raw_line.trim();
+
+            while line.starts_with('[') {
+                let Some(close) = line.find(']') else {
+                    break;
+                };
+                let tag = &line[1..close];
+                let mut tag_parts = tag.split(':');
+                let first = tag_parts.next().unwrap_or_default();
+                let second = tag_parts.next().unwrap_or_default();
+                let is_timestamp = tag_parts.next().is_none()
+                    && !first.is_empty()
+                    && first.chars().all(|ch| ch.is_ascii_digit())
+                    && second.len() >= 2
+                    && second.chars().all(|ch| ch.is_ascii_digit() || ch == '.');
+                let is_metadata = matches!(
+                    first.to_ascii_lowercase().as_str(),
+                    "ar" | "ti" | "al" | "by" | "offset"
+                );
+
+                if !is_timestamp && !is_metadata {
+                    break;
+                }
+                line = line[close + 1..].trim_start();
+            }
+
+            let cleaned = clean_inline_text(line);
+            (!cleaned.is_empty()).then_some(cleaned)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn tokenize_query(query: &str) -> Vec<String> {
@@ -2375,7 +2414,15 @@ fn search_lrclib(
                 return None;
             }
 
-            let lyrics = prune_lyrics_text(&track.plain_lyrics.unwrap_or_default());
+            let plain_lyrics = prune_lyrics_text(&track.plain_lyrics.unwrap_or_default());
+            let synced_lyrics = prune_lyrics_text(&strip_lrc_timestamps(
+                &track.synced_lyrics.unwrap_or_default(),
+            ));
+            let lyrics = if plain_lyrics.is_empty() {
+                synced_lyrics
+            } else {
+                plain_lyrics
+            };
             let title = clean_inline_text(
                 track
                     .track_name
@@ -2449,6 +2496,21 @@ fn search_online_song_lyrics_blocking(
     let mut results = Vec::new();
     let search_queries = build_online_lyrics_search_queries(&trimmed_query);
 
+    // Prefer LRCLIB because it returns structured track metadata and either
+    // plain or synchronized lyrics. The other providers remain a fallback
+    // for songs that are not present in LRCLIB.
+    for search_query in &search_queries {
+        match search_lrclib(&client, search_query) {
+            Ok(lrclib_results) => {
+                let finished = finish_online_lyrics_results(lrclib_results);
+                if !finished.is_empty() {
+                    return Ok(finished);
+                }
+            }
+            Err(err) => eprintln!("[OnlineLyrics] {}", err),
+        }
+    }
+
     for search_query in &search_queries {
         std::thread::scope(|scope| {
             let gospel_client = client.clone();
@@ -2475,10 +2537,6 @@ fn search_online_song_lyrics_blocking(
                 )
             });
 
-            let lrclib_client = client.clone();
-            let lrclib_query = search_query.clone();
-            let lrclib = scope.spawn(move || search_lrclib(&lrclib_client, &lrclib_query));
-
             let ng_client = client.clone();
             let ng_query = search_query.clone();
             let nglyrics = scope.spawn(move || {
@@ -2503,9 +2561,6 @@ fn search_online_song_lyrics_blocking(
                 ceenaija
                     .join()
                     .unwrap_or_else(|_| Err("CeeNaija search worker panicked".to_string())),
-                lrclib
-                    .join()
-                    .unwrap_or_else(|_| Err("LRCLIB search worker panicked".to_string())),
                 nglyrics
                     .join()
                     .unwrap_or_else(|_| Err("NgLyrics search worker panicked".to_string())),
@@ -2569,6 +2624,15 @@ mod tests {
 
         assert!(preview.ends_with("..."));
         assert!(preview.is_char_boundary(preview.len()));
+    }
+
+    #[test]
+    fn strip_lrc_timestamps_keeps_lyrics_and_drops_metadata() {
+        let lyrics = strip_lrc_timestamps(
+            "[ar:Artist]\n[ti:Song]\n[00:01.20][00:02.30]Amazing grace\n[00:04.00]How sweet the sound",
+        );
+
+        assert_eq!(lyrics, "Amazing grace\nHow sweet the sound");
     }
 
     #[test]
@@ -5933,6 +5997,8 @@ pub fn run() {
             local_llm::get_local_llm_runtime_status,
             local_llm::install_local_llm_model,
             local_llm::generate_local_llm_text,
+            obs_move_plugin::get_obs_move_plugin_status,
+            obs_move_plugin::install_obs_move_plugin,
             get_mobile_pairing_info,
             complete_mobile_command,
             save_obs_connection_for_mobile,

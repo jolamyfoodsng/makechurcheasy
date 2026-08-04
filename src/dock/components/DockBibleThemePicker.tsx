@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { BibleTheme, BibleThemeSettings } from "../../bible/types";
+import { SCRIPTURE_FONT_FAMILY, withScriptureFontFallback } from "../../bible/scriptureFont";
 import DockThemeBrowserModal from "./DockThemeBrowserModal";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
 import ThemePreviewSurface from "../../components/ThemePreviewSurface";
@@ -52,7 +53,7 @@ function themePreviewStyle(settings: BibleThemeSettings) {
     backgroundSize: imageLayer ? "cover, cover" : undefined,
     color: settings.fontColor || "#fff",
     textAlign: settings.textAlign || "center",
-    fontFamily: settings.fontFamily || '"CMG Sans", sans-serif',
+    fontFamily: withScriptureFontFallback(settings.fontFamily || SCRIPTURE_FONT_FAMILY),
   } as const;
 }
 

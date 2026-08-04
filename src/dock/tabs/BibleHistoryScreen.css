@@ -315,7 +315,7 @@
   width: 100%;
   padding: 8px;
   margin-bottom: 4px;
-  border: 1px solid var(--dock-border-soft, #334155);
+  border: 0.4px solid var(--dock-border-soft, #334155);
   border-radius: 3px;
   background: var(--dock-surface, #111827);
   cursor: pointer;

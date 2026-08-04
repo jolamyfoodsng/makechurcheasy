@@ -564,6 +564,70 @@
   line-height: 1.35;
 }
 
+/* ── OBS plugin setup ── */
+.ob-plugin-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ob-plugin-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ob-plugin-card__version {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ob-plugin-state {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--surface);
+}
+
+.ob-plugin-state--ready {
+  border-color: rgba(var(--success-rgb), 0.35);
+  color: var(--success);
+  background: rgba(var(--success-rgb), 0.08);
+}
+
+.ob-plugin-state--pending {
+  border-color: rgba(var(--warning-rgb, 245, 158, 11), 0.35);
+  color: var(--warning);
+  background: rgba(var(--warning-rgb, 245, 158, 11), 0.08);
+}
+
+.ob-plugin-card__detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.ob-plugin-card__detail svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--success);
+}
+
 /* ── Mock OBS UI ── */
 .ob-mock {
   background: var(--surface-raised);

@@ -5,6 +5,7 @@
  */
 
 import { getDefaultBibleTheme } from "../services/desktopConfig";
+import { SCRIPTURE_FONT_FAMILY, withScriptureFontFallback } from "./scriptureFont";
 
 // ---------------------------------------------------------------------------
 // Bible Data Types
@@ -246,6 +247,8 @@ export interface BibleThemeSettings {
   // Typography
   fontFamily: string;
   fontSize: number;          // px
+  /** Reduce text only when it would overflow the selected overlay frame. */
+  autoFontScale?: boolean;
   fontWeight: "normal" | "bold" | "light";
   fontStyle?: "normal" | "italic";
   fontColor: string;         // hex
@@ -338,8 +341,9 @@ export interface BibleThemeSettings {
 }
 
 export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
-  fontFamily: '"CMG Sans", sans-serif',
+  fontFamily: SCRIPTURE_FONT_FAMILY,
   fontSize: 48,
+  autoFontScale: false,
   fontWeight: "normal",
   fontStyle: "normal",
   fontColor: "#FFFFFF",
@@ -413,7 +417,7 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
  */
 export function applyThemeConfigOverrides(): void {
   const bible = getDefaultBibleTheme();
-  DEFAULT_THEME_SETTINGS.fontFamily = `"${bible.font}", sans-serif`;
+  DEFAULT_THEME_SETTINGS.fontFamily = withScriptureFontFallback(bible.font);
   DEFAULT_THEME_SETTINGS.fontSize = bible.textSize;
   DEFAULT_THEME_SETTINGS.fontColor = bible.textColor;
   DEFAULT_THEME_SETTINGS.backgroundColor = bible.backgroundColor;

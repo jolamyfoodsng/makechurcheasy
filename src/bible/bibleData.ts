@@ -303,6 +303,20 @@ export interface RankedSearchResult extends SearchResult {
   score: number;
 }
 
+/**
+ * Optional passage boundary for live sermon matching.
+ * When present, quote search must stay inside this book/chapter.
+ */
+export interface BibleSearchScope {
+  book?: string;
+  chapter?: number;
+}
+
+function normalizeSearchScopeBook(book: string): string {
+  const normalized = book.toLowerCase().replace(/\s+/g, " ").trim();
+  return normalized === "psalm" ? "psalms" : normalized;
+}
+
 const SEARCH_STOP_WORDS = new Set([
   "a",
   "an",
@@ -776,6 +790,7 @@ async function searchBibleInTranslation(
   query: string,
   translation: BibleTranslation,
   limit: number,
+  scope?: BibleSearchScope,
 ): Promise<RankedSearchResult[]> {
   const data = await loadTranslation(translation);
   const corpus = await getBibleCorpus(translation, 3);
@@ -796,7 +811,16 @@ async function searchBibleInTranslation(
     ),
   }));
 
+  const scopedBook = scope?.book ? normalizeSearchScopeBook(scope.book) : undefined;
+
   for (const entry of corpus) {
+    if (
+      (scopedBook && normalizeSearchScopeBook(entry.book) !== scopedBook) ||
+      (scope?.chapter !== undefined && entry.chapter !== scope.chapter)
+    ) {
+      continue;
+    }
+
     let bestScore = 0;
     let bestTokens: string[] = [];
 
@@ -835,24 +859,25 @@ async function searchBibleInTranslation(
 }
 
 /**
- * Keyword search across the entire Bible.
+ * Keyword search across the Bible, or inside an optional book/chapter scope.
  * Returns up to `limit` results.
  */
 export async function searchBibleRanked(
   query: string,
   translation: BibleTranslation = "KJV",
-  limit = 50
+  limit = 50,
+  scope?: BibleSearchScope,
 ): Promise<RankedSearchResult[]> {
   if (!query.trim()) return [];
 
   const selectedTranslation = translation.toUpperCase() as BibleTranslation;
-  const primaryResults = await searchBibleInTranslation(query, selectedTranslation, limit);
+  const primaryResults = await searchBibleInTranslation(query, selectedTranslation, limit, scope);
   const shouldSearchKjv =
     selectedTranslation !== "KJV" &&
     (primaryResults.length === 0 || primaryResults[0].score < 0.78);
 
   const fallbackResults = shouldSearchKjv
-    ? await searchBibleInTranslation(query, "KJV", limit)
+    ? await searchBibleInTranslation(query, "KJV", limit, scope)
     : [];
 
   const merged = [...primaryResults, ...fallbackResults]
@@ -879,9 +904,10 @@ export async function searchBibleRanked(
 export async function searchBible(
   query: string,
   translation: BibleTranslation = "KJV",
-  limit = 50
+  limit = 50,
+  scope?: BibleSearchScope,
 ): Promise<SearchResult[]> {
-  const merged = await searchBibleRanked(query, translation, limit);
+  const merged = await searchBibleRanked(query, translation, limit, scope);
   return merged.map(({ score: _score, ...result }) => result);
 }
 

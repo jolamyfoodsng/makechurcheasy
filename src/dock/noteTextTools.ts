@@ -1,3 +1,5 @@
+import { extractStructuredTextTitle } from "../worship/slideEngine";
+
 export type NoteTextToolAction = "autosplit" | "clean" | "remove-verse-numbers" | "uppercase" | "lowercase" | "capitalize";
 
 export const NOTE_TEXT_TOOL_BUTTONS: Array<{ action: NoteTextToolAction; title: string; icon?: string; label?: string }> = [
@@ -86,7 +88,10 @@ export function formatNoteText(text: string, action: NoteTextToolAction, linesPe
 }
 
 export function getNoteContentSections(content: string, fallbackTitle = ""): string[] {
-  const sections = content.split(/\n\n+/).map((section) => section.trim()).filter(Boolean);
+  const sections = extractStructuredTextTitle(content).body
+    .split(/\n\n+/)
+    .map((section) => section.trim())
+    .filter(Boolean);
   if (sections.length > 0) return sections;
   return fallbackTitle ? [fallbackTitle] : [];
 }

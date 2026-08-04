@@ -48,7 +48,7 @@ function fuzzyMatch(query: string, target: string): boolean {
   return qi === q.length;
 }
 
-export const MEDIA_FILE_ACCEPT = ".png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.mp4,.mov,.m4v,.avi,.mkv,.webm,.wmv,.flv,.pdf,.docx";
+export const MEDIA_FILE_ACCEPT = ".png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.mp4,.mov,.m4v,.avi,.mkv,.webm,.wmv,.flv,.pdf,.docx,.pptx";
 
 /* ---------- helpers ---------- */
 
@@ -260,6 +260,7 @@ export async function saveLibraryMediaItem(
       createdAt: new Date().toISOString(),
       source: documentPage ? "document-conversion" : undefined,
       documentSourceName: documentPage ? (overrideName || documentPage.sourceName) : undefined,
+      documentId: documentPage?.documentId,
       documentPageNumber: documentPage?.pageNumber,
       documentPageCount: documentPage?.pageCount,
     };
@@ -903,7 +904,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
           <div className="lib-media-drop-overlay__card">
             <Icon name="cloud_upload" size={22} />
             <div className="lib-media-drop-overlay__title">Drag to add</div>
-            <div className="lib-media-drop-overlay__text">Drop images, videos, PDFs, or DOCX files to save them into the library.</div>
+            <div className="lib-media-drop-overlay__text">Drop images, videos, PDFs, DOCX, or PPTX files to save them into the library.</div>
           </div>
         </div>
       )}
@@ -1138,7 +1139,7 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
                     {" "}
                     <span className="lib-dropzone-browse">{t("library.mediaTab.addModal.browse").toLowerCase()}</span>
                   </p>
-                  <p className="lib-dropzone-hint">PNG, JPG, MP4, MOV, PDF, DOCX</p>
+                  <p className="lib-dropzone-hint">PNG, JPG, MP4, MOV, PDF, DOCX, PPTX</p>
                 </>
               )}
             </div>

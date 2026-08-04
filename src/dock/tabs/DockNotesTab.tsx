@@ -3,10 +3,17 @@ import type { DockStagedItem } from "../dockTypes";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import type { BibleTheme } from "../../bible/types";
+import {
+  extractStructuredTextTitle,
+  parseWorshipSectionLabelLine,
+} from "../../worship/slideEngine";
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
 import Icon from "../DockIcon";
 import DockBottomToolbar from "../components/DockBottomToolbar";
 import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
+import DockTranslationControls, {
+  type DockTranslationValue,
+} from "../components/DockTranslationControls";
 import {
   DOCK_NOTES_KEY,
   DOCK_NOTES_BROADCAST_CHANNEL,
@@ -32,9 +39,7 @@ import { getRecommendedPollingInterval } from "../../services/performanceManager
 import { dockClient } from "../../services/dockBridge";
 import {
   NOTE_TEXT_TOOL_BUTTONS,
-  autoSplitNoteText,
   formatNoteText,
-  getNoteContentSections,
   type NoteTextToolAction,
 } from "../noteTextTools";
 
@@ -46,17 +51,38 @@ interface Props {
 
 type OverlayMode = DockNotesOverlayMode;
 
+function getNoteDisplayTitle(note: DockNote): string {
+  return extractStructuredTextTitle(note.content).title || note.title;
+}
+
+function getTranslatedNoteText(
+  text: string,
+  sectionId: string,
+  translation: DockTranslationValue | null,
+): string {
+  const translated = translation?.translatedSections[sectionId]?.trim();
+  if (!translation || !translated) return text;
+  return translation.showBoth ? `${text}\n\n${translated}` : translated;
+}
+
 function generateNoteSlides(note: DockNote): { id: string; label: string; text: string }[] {
   const slides: { id: string; label: string; text: string }[] = [];
-  const sections = note.content.split(/\n\n+/).filter(Boolean);
-  if (sections.length === 0 && note.title) {
-    slides.push({ id: crypto.randomUUID?.() ?? `s-${Date.now()}`, label: "", text: note.title });
+  const structuredText = extractStructuredTextTitle(note.content);
+  const displayTitle = structuredText.title || note.title;
+  const sections = structuredText.body.split(/\n\n+/).map((section) => section.trim()).filter(Boolean);
+  if (sections.length === 0 && displayTitle) {
+    slides.push({ id: crypto.randomUUID?.() ?? `s-${Date.now()}`, label: "", text: displayTitle });
   } else {
     sections.forEach((text, i) => {
+      const lines = text.split("\n");
+      const heading = parseWorshipSectionLabelLine(lines[0] ?? "");
+      const slideText = heading
+        ? [heading.rest, ...lines.slice(1)].filter(Boolean).join("\n")
+        : text;
       slides.push({
         id: crypto.randomUUID?.() ?? `s-${Date.now()}-${i}`,
-        label: i === 0 ? note.title : "",
-        text,
+        label: heading?.label || (i === 0 ? displayTitle : ""),
+        text: slideText,
       });
     });
   }
@@ -160,6 +186,7 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
   const [notes, setNotes] = useState<DockNote[]>(() => loadDockNotes());
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNote, setSelectedNote] = useState<DockNote | null>(null);
+  const [notesTranslation, setNotesTranslation] = useState<DockTranslationValue | null>(null);
   const [selectedSlideIdx, setSelectedSlideIdx] = useState<number | null>(null);
   const [visibleSlideIdx, setVisibleSlideIdx] = useState<number | null>(null);
   const [overlayVisible, setOverlayVisible] = useState(true);
@@ -195,6 +222,11 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
     () => (selectedNote ? generateNoteSlides(selectedNote) : []),
     [selectedNote],
   );
+  const selectedNoteDisplayTitle = selectedNote ? getNoteDisplayTitle(selectedNote) : "";
+
+  useEffect(() => {
+    setNotesTranslation(null);
+  }, [selectedNote?.id]);
 
   const activeSlideIndex = useMemo(() => {
     if (selectedSlideIdx !== null && selectedSlideIdx < selectedNoteSlides.length) return selectedSlideIdx;
@@ -382,54 +414,6 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
     showToast("Note deleted", "info");
   }, [notes, selectedNote, showToast]);
 
-  const updateNoteContent = useCallback((noteId: string, nextContent: string) => {
-    const now = Date.now();
-    let updatedNote: DockNote | null = null;
-    const next = notes.map((note) => {
-      if (note.id !== noteId) return note;
-      updatedNote = { ...note, content: nextContent, updatedAt: now };
-      return updatedNote;
-    });
-    if (!updatedNote) return;
-
-    setNotes(next);
-    saveDockNotes(next);
-    setSelectedNote((current) => current?.id === noteId ? updatedNote : current);
-  }, [notes]);
-
-  const applySlideTextTool = useCallback((note: DockNote, slideIndex: number, action: NoteTextToolAction, linesPerSlide?: number) => {
-    const sections = getNoteContentSections(note.content, note.title);
-    const currentText = sections[slideIndex];
-    if (currentText === undefined) return;
-
-    if (action === "autosplit") {
-      const splitSections = autoSplitNoteText(currentText, linesPerSlide)
-        .split(/\n\n+/)
-        .map((section) => section.trim())
-        .filter(Boolean);
-      sections.splice(slideIndex, 1, ...(splitSections.length > 0 ? splitSections : [currentText]));
-    } else {
-      sections[slideIndex] = formatNoteText(currentText, action, linesPerSlide);
-    }
-
-    updateNoteContent(note.id, sections.join("\n\n"));
-    setSelectedSlideIdx((current) => {
-      if (current === null) return slideIndex;
-      return Math.min(current, sections.length - 1);
-    });
-    setVisibleSlideIdx((current) => {
-      if (current === null) return current;
-      return Math.min(current, sections.length - 1);
-    });
-    showToast("Slide updated", "success");
-  }, [showToast, updateNoteContent]);
-
-  const applySelectedSlideTextTool = useCallback((action: NoteTextToolAction, linesPerSlide?: number) => {
-    if (!selectedNote || selectedNoteSlides.length === 0) return;
-    const targetIndex = activeSlideIndex ?? 0;
-    applySlideTextTool(selectedNote, targetIndex, action, linesPerSlide);
-  }, [activeSlideIndex, applySlideTextTool, selectedNote, selectedNoteSlides.length]);
-
   const buildNoteObsPayload = useCallback(
     (idx: number) => {
       if (!selectedNote) return null;
@@ -439,17 +423,18 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
       const theme = getDockNotesThemeForMode(selectedTheme, overlayMode);
       const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
       const themeSettings = quickSettings ?? theme.settings;
+      const sectionText = getTranslatedNoteText(slide.text, slide.id, notesTranslation);
       return {
         stageItem: {
           type: "notes" as const,
-          label: slide.label || selectedNote.title,
-          subtitle: selectedNote.title,
-          data: { sectionText: slide.text, sectionLabel: slide.label, note: selectedNote, slideIdx: idx, overlayMode, theme: theme.id },
+          label: slide.label || selectedNoteDisplayTitle,
+          subtitle: selectedNoteDisplayTitle,
+          data: { sectionText, sectionLabel: slide.label, note: selectedNote, slideIdx: idx, overlayMode, theme: theme.id },
         },
         obsData: {
-          sectionText: slide.text,
-          sectionLabel: slide.label || selectedNote.title,
-          songTitle: selectedNote.title,
+          sectionText,
+          sectionLabel: slide.label || selectedNoteDisplayTitle,
+          songTitle: selectedNoteDisplayTitle,
           overlayMode,
           bibleThemeSettings: themeSettings as unknown as Record<string, unknown>,
           liveOverrides: null,
@@ -457,7 +442,7 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
         },
       };
     },
-    [selectedNote, selectedNoteSlides, overlayMode, selectedFSTheme, selectedLTTheme, fullscreenQuickSettings, lowerThirdQuickSettings],
+    [selectedNote, selectedNoteDisplayTitle, selectedNoteSlides, notesTranslation, overlayMode, selectedFSTheme, selectedLTTheme, fullscreenQuickSettings, lowerThirdQuickSettings],
   );
 
   const pushNoteSlide = useCallback(
@@ -590,7 +575,7 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
                 <div className="dock-console-header__eyebrow"></div>
                 <div className="dock-console-header__eyebrow"></div>
                 <div className="dock-console-header__eyebrow"></div>
-                <div className="dock-console-header__eyebrow">Search Notes</div>
+                {/* <div className="dock-console-header__eyebrow">Search Notes</div> */}
                 <div className="dock-console-header__eyebrow"></div>
               </div>
               <div className="dock-console-actions dock-console-actions--song-browser">
@@ -642,9 +627,9 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
                       }}
                       title={note.title}
                     >
-                      <span className="dock-card__title">{note.title}</span>
+                      <span className="dock-card__title">{getNoteDisplayTitle(note)}</span>
                       <span className="dock-card__subtitle">
-                        {note.content.split("\n")[0]?.substring(0, 80) || "No content"}
+                        {extractStructuredTextTitle(note.content).body.split("\n")[0]?.substring(0, 80) || "No content"}
                       </span>
                     </button>
                     <button type="button" className="dock-song-card__edit" onClick={() => openEditNote(note)} aria-label="Edit" title="Edit">
@@ -674,7 +659,7 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
                   <Icon name="arrow_back" size={14} />
                 </button>
                 <div className="dock-worship-summary__copy">
-                  <div className="dock-worship-summary__title">{selectedNote.title}</div>
+                  <div className="dock-worship-summary__title">{selectedNoteDisplayTitle}</div>
                   <div className="dock-worship-summary__artist">Note</div>
                 </div>
               </div>
@@ -687,13 +672,12 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
                 </button>
               </div>
             </div>
-            {selectedNoteSlides.length > 0 && (
-              <DockNotesTextTools
-                className="dock-notes-text-tools dock-notes-text-tools--selected"
-                buttonClassName="dock-notes-text-tools__btn"
-                onAction={applySelectedSlideTextTool}
-              />
-            )}
+
+            <DockTranslationControls
+              sections={selectedNoteSlides.map((slide) => ({ id: slide.id, text: slide.text }))}
+              value={notesTranslation}
+              onChange={setNotesTranslation}
+            />
           </section>
 
           <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace">
@@ -721,7 +705,18 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
                           </div>
                           <div className="dock-worship-slide-card__badges" />
                         </div>
-                        <div className="dock-worship-slide-card__text">{slide.text}</div>
+                        {notesTranslation?.translatedSections[slide.id] && notesTranslation.showBoth ? (
+                          <>
+                            <div className="dock-worship-slide-card__text">{slide.text}</div>
+                            <div className="dock-worship-slide-card__translation">
+                              {notesTranslation.translatedSections[slide.id]}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="dock-worship-slide-card__text">
+                            {getTranslatedNoteText(slide.text, slide.id, notesTranslation)}
+                          </div>
+                        )}
                       </button>
                     </div>
                   );

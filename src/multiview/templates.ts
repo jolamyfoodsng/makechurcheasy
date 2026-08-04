@@ -1878,6 +1878,131 @@ const RAW_TEMPLATE_LIBRARY: TemplateDefinition[] = [
     accentColor: "#636e72",
   },
 
+  // ── 39. Multimedia — Scene Portrait ──
+  {
+    id: tId("multimedia-scene-portrait"),
+    name: "Multimedia: Scene Portrait",
+    description:
+      "A full-canvas scene with a framed portrait or short-form scene anchored on the left.",
+    category: "multimedia",
+    icon: "perm_media",
+    canvas: HD,
+    background: { ...DEFAULT_BACKGROUND, color: "#0a0a14" },
+    safeFrame: NO_SF,
+    regions: [
+      slot({
+        id: rId("multimedia-background"),
+        type: "obs-scene",
+        name: "Background Scene",
+        slotLabel: "Background Scene",
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+        zIndex: 1,
+        constraints: {
+          lockPosition: true,
+          lockSize: true,
+          lockDelete: true,
+          allowedContentTypes: ["obs-scene"],
+          editableStyles: [],
+        },
+      }),
+      slot({
+        id: rId("multimedia-portrait"),
+        type: "obs-scene",
+        name: "Portrait Scene",
+        slotLabel: "Portrait / Short-form Scene",
+        x: 72,
+        y: 72,
+        width: 520,
+        height: 936,
+        zIndex: 2,
+        borderRadius: 24,
+        constraints: {
+          lockPosition: true,
+          lockSize: false,
+          lockDelete: true,
+          minWidth: 240,
+          minHeight: 426,
+          maxWidth: 760,
+          maxHeight: 1000,
+          allowedContentTypes: ["obs-scene"],
+          editableStyles: ["opacity", "borderRadius"],
+        },
+      }),
+    ],
+    tags: ["multimedia", "portrait", "short-form", "scene", "vertical"],
+    accentColor: "#7c3aed",
+    // The dock applies this frame only to the portrait slot. The background
+    // remains a clean full-canvas scene behind it.
+    dockFrameId: "clean-white-round",
+    dockSlotFrames: {
+      [rId("multimedia-background")]: "none",
+      [rId("multimedia-portrait")]: "inherit",
+    },
+  },
+
+  // ── 40. Multimedia — Left Feature ──
+  {
+    id: tId("multimedia-scene-half-left"),
+    name: "Multimedia: Left Feature",
+    description:
+      "A full-canvas background scene with a featured scene filling the left half of the screen.",
+    category: "multimedia",
+    icon: "perm_media",
+    canvas: HD,
+    background: { ...DEFAULT_BACKGROUND, color: "#0a0a14" },
+    safeFrame: NO_SF,
+    regions: [
+      slot({
+        id: rId("multimedia-half-background"),
+        type: "obs-scene",
+        name: "Background Scene",
+        slotLabel: "Background Scene",
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+        zIndex: 1,
+        constraints: {
+          lockPosition: true,
+          lockSize: true,
+          lockDelete: true,
+          allowedContentTypes: ["obs-scene"],
+          editableStyles: [],
+        },
+      }),
+      slot({
+        id: rId("multimedia-half-left"),
+        type: "obs-scene",
+        name: "Left Half Scene",
+        slotLabel: "Left Half Landscape Scene",
+        x: 0,
+        y: 0,
+        width: 960,
+        height: 1080,
+        zIndex: 2,
+        borderRadius: 0,
+        constraints: {
+          lockPosition: true,
+          lockSize: true,
+          lockDelete: true,
+          allowedContentTypes: ["obs-scene"],
+          editableStyles: ["opacity", "borderRadius"],
+        },
+      }),
+    ],
+    tags: ["multimedia", "landscape", "half-screen", "scene", "split-screen"],
+    accentColor: "#ea580c",
+    // Keep the background unframed and frame the left-half scene only.
+    dockFrameId: "broadcast-gold",
+    dockSlotFrames: {
+      [rId("multimedia-half-background")]: "none",
+      [rId("multimedia-half-left")]: "inherit",
+    },
+  },
+
   // ════════════════════════════════════════════════════════════
   // Future Premium Church Templates
   // ════════════════════════════════════════════════════════════

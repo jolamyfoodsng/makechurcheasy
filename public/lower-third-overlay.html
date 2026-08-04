@@ -625,7 +625,7 @@
      *     live: boolean,
      *     blanked: boolean,
      *     size: string,       // "sm" | "md" | "lg" | "xl" | "2xl" | "3xl"
-     *     scale: number,      // Scale factor (from size)
+     *     scale: number,      // Visual scale factor (from size)
      *     timestamp: number
      *   }
      *
@@ -676,7 +676,7 @@
      * Font scaling sets the <html> root font-size so Tailwind rem-based
      * classes (text-2xl, text-sm, etc.) all scale proportionally.
      */
-    function applySize(root, widthPct, fontScale, fontSizeScale, heightPx, visualScale) {
+    function applySize(root, widthPct, fontScale, fontSizeScale, heightPx, visualScale, sizeScale) {
 
       if (widthPct) {
         let new_one = Math.max(0, widthPct);
@@ -703,6 +703,13 @@
       var safeVisualScale = Number(visualScale);
       if (!isFinite(safeVisualScale) || safeVisualScale <= 0) safeVisualScale = 1;
       root.style.setProperty("--lt-visual-scale", String(safeVisualScale));
+
+      // The size preset must be applied inside the stable OBS canvas. The
+      // browser source stays 1920x1080, so changing LG/MD/etc. updates the
+      // rendered theme even when the live source is reused without a reload.
+      var safeSizeScale = Number(sizeScale);
+      if (!isFinite(safeSizeScale) || safeSizeScale <= 0) safeSizeScale = 1;
+      root.style.setProperty("--lt-size-scale", String(safeSizeScale));
     }
 
     /**
@@ -1112,6 +1119,9 @@
       frame.style.transform = "scale(1)";
       var visualScale = Number(root.style.getPropertyValue("--lt-visual-scale")) || 1;
       if (!isFinite(visualScale) || visualScale <= 0) visualScale = 1;
+      var sizeScale = Number(root.style.getPropertyValue("--lt-size-scale")) || 1;
+      if (!isFinite(sizeScale) || sizeScale <= 0) sizeScale = 1;
+      var requestedScale = visualScale * sizeScale;
       var rootWidth = root.clientWidth || window.innerWidth || 1920;
       var rootHeight = root.clientHeight || window.innerHeight || 1080;
       var frameRect = frame.getBoundingClientRect();
@@ -1119,10 +1129,10 @@
       if (frameRect.width && frameRect.height) {
         var availableWidth = Math.max(220, rootWidth - 8);
         var availableHeight = Math.max(120, rootHeight - 8);
-        fitScale = Math.min(1, availableWidth / (frameRect.width * visualScale), availableHeight / (frameRect.height * visualScale));
+        fitScale = Math.min(1, availableWidth / (frameRect.width * requestedScale), availableHeight / (frameRect.height * requestedScale));
         if (!isFinite(fitScale) || fitScale <= 0) fitScale = 1;
       }
-      var finalScale = visualScale * fitScale;
+      var finalScale = requestedScale * fitScale;
       frame.style.transform = Math.abs(finalScale - 1) > 0.0005 ? "scale(" + finalScale.toFixed(4) + ")" : "scale(1)";
     }
 
@@ -1458,7 +1468,7 @@
       root.classList.remove("exit-fading");
       isExiting = false;
       pendingThemePayload = null;
-      applySize(root, widthPct, data.fontScale, data.fontSizeScale, data.heightPx, data.visualScale);
+      applySize(root, widthPct, data.fontScale, data.fontSizeScale, data.heightPx, data.visualScale, data.scale);
       applyCustomStyles(root, data);
       applyPosition(root, data);
       scheduleFitOverlay(root);
@@ -1489,7 +1499,7 @@
         var widthPct = Math.max(0, payload.widthPct || 80);
         root.innerHTML = wrapThemeHtml(payload.html || "", payload.values || {}, "out");
         root.className = "";
-        applySize(root, widthPct, payload.fontScale, payload.fontSizeScale, payload.heightPx, payload.visualScale);
+        applySize(root, widthPct, payload.fontScale, payload.fontSizeScale, payload.heightPx, payload.visualScale, payload.scale);
         applyCustomStyles(root, payload);
         applyPosition(root, payload);
         scheduleFitOverlay(root);
@@ -1651,7 +1661,7 @@
           // Fresh load (OBS reloaded the page) — render exit animation from scratch
           root.innerHTML = wrapThemeHtml(data.html || "", data.values || {}, "out");
           root.className = "";
-          applySize(root, data.widthPct, data.fontScale, data.fontSizeScale, data.heightPx, data.visualScale);
+          applySize(root, data.widthPct, data.fontScale, data.fontSizeScale, data.heightPx, data.visualScale, data.scale);
           applyCustomStyles(root, data);
           applyPosition(root, data);
           scheduleFitOverlay(root);
@@ -1743,7 +1753,7 @@
         }
         root.innerHTML = wrapThemeHtml(html || "", values || {}, "in");
         root.className = "";
-        applySize(root, data.widthPct, data.fontScale, data.fontSizeScale, data.heightPx, data.visualScale);
+        applySize(root, data.widthPct, data.fontScale, data.fontSizeScale, data.heightPx, data.visualScale, data.scale);
         applyCustomStyles(root, data);
         applyPosition(root, data);
         scheduleFitOverlay(root);
