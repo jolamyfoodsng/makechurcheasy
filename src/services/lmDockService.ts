@@ -69,6 +69,13 @@ export interface LmDockSnapshot {
 
 /** Suggestions are provisional and must be materially stronger than noise. */
 const MIN_LIVE_QUOTE_CONFIDENCE = 0.55;
+const MIN_SILENCE_QUOTE_CONFIDENCE = 0.08;
+
+type QuoteSearchMode = "strict" | "closest";
+
+interface QueueQuoteSearchOptions {
+  mode?: QuoteSearchMode;
+}
 
 /**
  * A live quote search is provisional. An empty result can be caused by the
@@ -144,6 +151,8 @@ class LmDockService {
   private latestSearchId = 0;
   private static readonly PAUSE_THRESHOLD_MS = 450;
   private static readonly LIVE_QUOTE_SEARCH_WINDOW_WORDS = 18;
+  private lastQueuedQuoteSearchKey = "";
+  private lastQueuedQuoteSearchAt = 0;
 
   // ── Interim provisional search ────────────────────────────────────────────
   /** Debounce timer for provisional quote search on interim text */
@@ -229,10 +238,27 @@ class LmDockService {
         ? this.telemetry.lastSearchAt - this.lastSpeechReceivedAt
         : 0;
 
-      this.matchingQueue = this.matchingQueue.then(() =>
-        this.runQuoteSearchWithText(pending, Date.now()),
-      );
+      this.queueQuoteSearch(pending);
     }, delay);
+  }
+
+  private queueQuoteSearch(text: string, options: QueueQuoteSearchOptions = {}): void {
+    const trimmed = text.trim();
+    if (trimmed.length < 10) return;
+
+    const mode = options.mode ?? "strict";
+    const now = Date.now();
+    const normalized = trimmed.toLowerCase().replace(/\s+/g, " ");
+    const key = `${mode}:${normalized}`;
+    if (key === this.lastQueuedQuoteSearchKey && now - this.lastQueuedQuoteSearchAt < 1_000) {
+      return;
+    }
+
+    this.lastQueuedQuoteSearchKey = key;
+    this.lastQueuedQuoteSearchAt = now;
+    this.matchingQueue = this.matchingQueue.then(() =>
+      this.runQuoteSearchWithText(trimmed, now, { mode }),
+    );
   }
 
   init(): () => void {
@@ -592,23 +618,21 @@ class LmDockService {
       // Keep any trailing incomplete text in buffer
       this.sentenceBuffer = trailing;
 
-      // Queue each complete sentence for independent, sequential search.
-      // Using matchingQueue ensures earlier searches aren't cancelled by
-      // later ones — each sentence gets its own results.
       for (const sentence of complete) {
-        const s = sentence.trim();
-        if (s.length < 10) continue;
-        this.matchingQueue = this.matchingQueue.then(() =>
-          this.runQuoteSearchWithText(s, Date.now()),
-        );
+        this.queueQuoteSearch(sentence, { mode: "closest" });
+      }
+
+      if (trailing.trim().length >= 10) {
+        this.queueQuoteSearch(trailing, { mode: "closest" });
+        this.sentenceBuffer = "";
       }
     } else {
-      // No punctuation yet — search the accumulated buffer anyway
+      // AssemblyAI marks end_of_turn after silence, so even an incomplete
+      // phrase should search once the speaker pauses.
       const trimmed = this.sentenceBuffer.trim();
       if (trimmed.length >= 10) {
-        this.matchingQueue = this.matchingQueue.then(() =>
-          this.runQuoteSearchWithText(trimmed, now),
-        );
+        this.queueQuoteSearch(trimmed, { mode: "closest" });
+        this.sentenceBuffer = "";
       }
     }
   }
@@ -622,10 +646,7 @@ class LmDockService {
     const trimmed = sentence.trim();
     if (!trimmed || trimmed.length < 10) return;
 
-    const now = Date.now();
-    this.matchingQueue = this.matchingQueue.then(() =>
-      this.runQuoteSearchWithText(trimmed, now),
-    );
+    this.queueQuoteSearch(trimmed, { mode: "closest" });
   }
 
   /**
@@ -643,7 +664,11 @@ class LmDockService {
    * Cancels any in-flight search. Results are discarded if a newer search
    * has started by the time they arrive.
    */
-  private async runQuoteSearchWithText(text: string, _transcriptTimestamp: number): Promise<void> {
+  private async runQuoteSearchWithText(
+    text: string,
+    _transcriptTimestamp: number,
+    options: QueueQuoteSearchOptions = {},
+  ): Promise<void> {
     if (this.snapshot.status === "idle") return;
 
     // Cancel any in-flight search — we only care about the latest
@@ -662,7 +687,11 @@ class LmDockService {
     this.pushStatus();
 
     try {
-      const quoteMatches = await this.scriptureEngine.searchQuotesWithText(text, boundPassage);
+      const quoteMatches = await this.scriptureEngine.searchQuotesWithText(
+        text,
+        boundPassage,
+        { mode: options.mode ?? "strict" },
+      );
 
       // Freshness guard: discard if a newer search has started
       if (searchId !== this.latestSearchId) {
@@ -676,9 +705,10 @@ class LmDockService {
       this.latencySum += this.telemetry.searchToResultsMs;
       this.telemetry.avgLatencyMs = Math.round(this.latencySum / this.telemetry.searchCount);
 
-      const usableQuoteMatches = quoteMatches.filter(
-        (match) => match.confidence >= MIN_LIVE_QUOTE_CONFIDENCE,
-      );
+      const minConfidence = options.mode === "closest"
+        ? MIN_SILENCE_QUOTE_CONFIDENCE
+        : MIN_LIVE_QUOTE_CONFIDENCE;
+      const usableQuoteMatches = quoteMatches.filter((match) => match.confidence >= minConfidence);
 
       if (usableQuoteMatches.length > 0) {
         // Replace suggestions only when a newer search has a real match.
@@ -754,6 +784,8 @@ class LmDockService {
     };
     this.scriptureEngine.reset();
     this.scriptureSpeechState = createScriptureSpeechState();
+    this.lastQueuedQuoteSearchKey = "";
+    this.lastQueuedQuoteSearchAt = 0;
     this.pushStatus();
 
     try {
@@ -814,6 +846,7 @@ class LmDockService {
         if (end_of_turn) {
           this.finalizeCurrent(text, audio_start, audio_end);
           this.pushTranscript();
+          this.lastSpeechTime = Date.now();
 
           // Process final text through scripture engine (reference parsing)
           // Only process the final text — the speechBuffer may overlap with
@@ -988,6 +1021,8 @@ class LmDockService {
     this.lastSpeechReceivedAt = 0;
     this.sentenceBuffer = "";
     this.lastInterimSearched = "";
+    this.lastQueuedQuoteSearchKey = "";
+    this.lastQueuedQuoteSearchAt = 0;
     this.latestSearchId++;
     this.liveQuoteSearchPendingText = "";
     this.lastLevelNotifyAt = 0;

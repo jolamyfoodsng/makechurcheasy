@@ -36,6 +36,7 @@ export const DOCK_NOTES_KEY = "ocs-dock-notes-v1";
 export const DOCK_NOTES_PREFS_KEY = "ocs-dock-notes-preferences";
 export const DOCK_NOTES_UPDATED_EVENT = "mce-dock-notes-updated";
 export const DOCK_NOTES_BROADCAST_CHANNEL = "mce-dock-notes-storage";
+export const DOCK_NOTES_DOCK_DATA_NAME = "dock-notes";
 
 function safeJsonParse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
@@ -44,6 +45,37 @@ function safeJsonParse<T>(raw: string | null, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function normalizeDockNotes(value: unknown): DockNote[] {
+  return Array.isArray(value)
+    ? value.filter((note): note is DockNote =>
+      Boolean(
+        note
+        && typeof note === "object"
+        && typeof (note as DockNote).id === "string"
+        && typeof (note as DockNote).title === "string"
+        && typeof (note as DockNote).content === "string",
+      ),
+    )
+    : [];
+}
+
+function readScopedStorage(baseKey: string): string | null {
+  if (typeof localStorage === "undefined") return null;
+  const scopedKey = getUserScopedKey(baseKey);
+  const scopedRaw = localStorage.getItem(scopedKey);
+  if (scopedRaw !== null || scopedKey === baseKey) return scopedRaw;
+
+  const legacyRaw = localStorage.getItem(baseKey);
+  if (legacyRaw !== null) {
+    try {
+      localStorage.setItem(scopedKey, legacyRaw);
+    } catch {
+      // Ignore migration failures in embedded browser contexts.
+    }
+  }
+  return legacyRaw;
 }
 
 function createId(prefix: string): string {
@@ -210,9 +242,8 @@ function applyQuickSettingsToNotesTheme(
 
 export function loadDockNotes(): DockNote[] {
   if (typeof localStorage === "undefined") return [];
-  const raw = localStorage.getItem(getUserScopedKey(DOCK_NOTES_KEY));
-  const parsed = safeJsonParse<unknown>(raw, []);
-  return Array.isArray(parsed) ? parsed as DockNote[] : [];
+  const parsed = safeJsonParse<unknown>(readScopedStorage(DOCK_NOTES_KEY), []);
+  return normalizeDockNotes(parsed);
 }
 
 export function saveDockNotes(items: DockNote[], notify = true): void {
@@ -222,6 +253,30 @@ export function saveDockNotes(items: DockNote[], notify = true): void {
     if (notify) notifyDockNotesUpdated(items);
   } catch {
     // Ignore storage failures inside OBS/browser dock contexts.
+  }
+}
+
+export async function loadDockNotesFromDockData(): Promise<DockNote[]> {
+  try {
+    const response = await fetch(`/uploads/${DOCK_NOTES_DOCK_DATA_NAME}.json?_=${Date.now()}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) return [];
+    return normalizeDockNotes(safeJsonParse<unknown>(await response.text(), []));
+  } catch {
+    return [];
+  }
+}
+
+export async function syncDockNotesToDock(notes: DockNote[] = loadDockNotes()): Promise<void> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("save_dock_data", {
+      name: DOCK_NOTES_DOCK_DATA_NAME,
+      data: JSON.stringify(notes),
+    });
+  } catch {
+    // The standalone OBS dock cannot call Tauri; the main app sync path handles this.
   }
 }
 
@@ -271,7 +326,7 @@ export function appendTextToDockNotes(
 
 export function loadDockNotesPreferences(): DockNotesPreferences {
   if (typeof localStorage === "undefined") return {};
-  const raw = localStorage.getItem(getUserScopedKey(DOCK_NOTES_PREFS_KEY));
+  const raw = readScopedStorage(DOCK_NOTES_PREFS_KEY);
   const parsed = safeJsonParse<unknown>(raw, {});
   return parsed && typeof parsed === "object" ? parsed as DockNotesPreferences : {};
 }

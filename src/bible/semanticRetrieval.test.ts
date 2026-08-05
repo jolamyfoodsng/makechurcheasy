@@ -1091,6 +1091,32 @@ describe("live quote replacement", () => {
     expect(result.length).toBeGreaterThan(0);
     expect(result[0].candidate.label).toContain("Genesis 3:7");
   });
+
+  it("returns a closest Bible result for every finalized pause within one second", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+    const pauses = [
+      "That's not sin, cousin.",
+      "That is not sin.",
+      "In Bible studies, in the book of Daniel.",
+    ];
+
+    await engine.preload();
+
+    for (let index = 0; index < pauses.length; index += 1) {
+      if (index > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+      }
+
+      const startedAt = performance.now();
+      const result = await engine.searchQuotesWithText(pauses[index], undefined, { mode: "closest" });
+      const elapsedMs = performance.now() - startedAt;
+
+      expect(elapsedMs).toBeLessThan(1_000);
+      expect(result.length).toBeGreaterThan(0);
+      expect(result[0]?.candidate.label).toMatch(/\d+:\d+/);
+    }
+  }, 10_000);
 });
 
 describe("reference continuations", () => {

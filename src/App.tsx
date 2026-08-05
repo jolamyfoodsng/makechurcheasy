@@ -96,7 +96,7 @@ import {
   saveWorshipDockSongSaveResult,
   type WorshipDockSongSavePayload,
 } from "./services/worshipDockInterop";
-import { appendTextToDockNotes } from "./dock/dockNotesStorage";
+import { appendTextToDockNotes, loadDockNotes, syncDockNotesToDock } from "./dock/dockNotesStorage";
 import type { DockNotesAppendCommand } from "./services/dockNotesInterop";
 import { getLiveToolsSnapshot, syncLiveToolsToDock } from "./live-tools/liveToolStore";
 import { getCountdownSnapshot } from "./countdowns/countdownStore";
@@ -288,6 +288,15 @@ function App() {
     } catch { /* ignore */ }
   }, []);
 
+  const sendNotesToDock = useCallback((notes = loadDockNotes()) => {
+    dockBridge.sendState({
+      type: "state:notes-updated",
+      payload: { notes, snapshot: true },
+      timestamp: Date.now(),
+    });
+    void syncDockNotesToDock(notes);
+  }, []);
+
   // Write song limit to localStorage immediately when user changes,
   // so the dock always has the correct limit even before any
   // BroadcastChannel message is received.
@@ -304,8 +313,23 @@ function App() {
         payload: { plan: effectivePlan },
         timestamp: Date.now(),
       });
+      void getAllSongs()
+        .then((allSongs) => {
+          const { limit } = checkEntitlementSync("songs", effectivePlan);
+          const songs = (limit > 0 && limit < 9999) ? allSongs.slice(0, limit) : allSongs;
+          dockBridge.sendState({
+            type: "state:songs-data",
+            payload: songs,
+            timestamp: Date.now(),
+          });
+        })
+        .catch((err) => {
+          console.warn("[App] Failed to send songs after auth update:", err);
+        });
+      sendNotesToDock();
+      void syncSongsToDock().catch(() => { });
     }
-  }, [user]);
+  }, [sendNotesToDock, user]);
 
   useEffect(() => {
     const s = getSettings();
@@ -389,6 +413,8 @@ function App() {
         } catch (err) {
           console.warn("[App] Failed to send countdowns on ping:", err);
         }
+
+        sendNotesToDock();
       }
 
       if (cmd.type === "request-service-plans") {
@@ -447,6 +473,7 @@ function App() {
             payload: media,
             timestamp: Date.now(),
           });
+          sendNotesToDock();
         } catch (err) {
           console.warn("[App] Failed to send library data to dock:", err);
         }
@@ -537,6 +564,7 @@ function App() {
             sourceId: payload.commandId,
           });
           if (result) {
+            void syncDockNotesToDock(result.notes);
             dockBridge.sendState({
               type: "state:notes-updated",
               payload: { notes: result.notes, commandId: payload.commandId },
@@ -850,6 +878,7 @@ function App() {
 
     // Sync dock-first production data to dock JSON files on startup.
     syncSongsToDock().catch(() => { });
+    syncDockNotesToDock().catch(() => { });
     syncCustomThemesToDock().catch(() => { });
     syncInstalledTranslationsToDock().catch(() => { });
     syncProductionSettingsToDock().catch(() => { });

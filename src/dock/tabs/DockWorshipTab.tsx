@@ -217,6 +217,25 @@ function writeDockSongDefaults(next: DockSongDefaults): void {
   }
 }
 
+function readScopedWorshipStorage(baseKey: string): string | null {
+  try {
+    const scopedKey = getUserScopedKey(baseKey);
+    const scopedRaw = localStorage.getItem(scopedKey);
+    if (scopedRaw !== null || scopedKey === baseKey) return scopedRaw;
+    const legacyRaw = localStorage.getItem(baseKey);
+    if (legacyRaw !== null) {
+      try {
+        localStorage.setItem(scopedKey, legacyRaw);
+      } catch {
+        // Ignore migration failures in OBS browser contexts.
+      }
+    }
+    return legacyRaw;
+  } catch {
+    return null;
+  }
+}
+
 function cacheSongsLocally(songs: DockSong[]): void {
   try {
     localStorage.setItem(getUserScopedKey(DOCK_WORSHIP_CACHED_SONGS_KEY), JSON.stringify(songs));
@@ -227,7 +246,7 @@ function cacheSongsLocally(songs: DockSong[]): void {
 
 function loadCachedSongs(): DockSong[] {
   try {
-    const raw = localStorage.getItem(getUserScopedKey(DOCK_WORSHIP_CACHED_SONGS_KEY));
+    const raw = readScopedWorshipStorage(DOCK_WORSHIP_CACHED_SONGS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];

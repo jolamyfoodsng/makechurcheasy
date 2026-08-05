@@ -7,7 +7,7 @@
 
 import { openDB, type IDBPDatabase } from "idb";
 import type { Song } from "./types";
-import { clearStore, getAll, getByKey, getCurrentUserId, putRecord, STORES } from "../services/db";
+import { clearStore, getByKey, getCentralDb, getCurrentUserId, putRecord, STORES } from "../services/db";
 
 const DB_NAME = "obs-church-studio-worship";
 const DB_VERSION = 4;
@@ -61,18 +61,26 @@ function mergeSongs(...groups: Song[][]): Song[] {
   return Array.from(merged.values());
 }
 
+type StoredSong = Song & { userId?: string | null };
+
+function songBelongsToCurrentUser(song: StoredSong, uid: string | null): boolean {
+  if (!uid) return true;
+  return !song.userId || song.userId === uid;
+}
+
 async function readSongsFromLegacyDb(): Promise<Song[]> {
   const db = await getDb();
   const uid = getCurrentUserId();
-  if (uid) {
-    return await db.getAllFromIndex("songs", "userId", uid) as Song[];
-  }
-  return await db.getAll("songs") as Song[];
+  const songs = await db.getAll("songs") as StoredSong[];
+  return songs.filter((song) => songBelongsToCurrentUser(song, uid));
 }
 
 async function readSongsFromCentralDb(): Promise<Song[]> {
   try {
-    return await getAll<Song>(STORES.WORSHIP_SONGS);
+    const db = await getCentralDb();
+    const uid = getCurrentUserId();
+    const songs = await db.getAll(STORES.WORSHIP_SONGS) as StoredSong[];
+    return songs.filter((song) => songBelongsToCurrentUser(song, uid));
   } catch {
     return [];
   }
@@ -83,14 +91,16 @@ async function backfillSongsToStores(songs: Song[], legacySongs: Song[], central
   try {
     const db = await getDb();
     const uid = getCurrentUserId();
-    const legacyIds = new Set(legacySongs.map((song) => song.id));
-    const centralIds = new Set(centralSongs.map((song) => song.id));
+    const legacyById = new Map(legacySongs.map((song) => [song.id, song as StoredSong]));
+    const centralById = new Map(centralSongs.map((song) => [song.id, song as StoredSong]));
     await Promise.all(songs.map(async (song) => {
       const tagged = uid ? { ...song, userId: uid } : song;
-      if (!legacyIds.has(song.id)) {
+      const legacySong = legacyById.get(song.id);
+      const centralSong = centralById.get(song.id);
+      if (!legacySong || (uid && !legacySong.userId)) {
         await db.put("songs", tagged);
       }
-      if (!centralIds.has(song.id)) {
+      if (!centralSong || (uid && !centralSong.userId)) {
         await putRecord(STORES.WORSHIP_SONGS, tagged);
       }
     }));

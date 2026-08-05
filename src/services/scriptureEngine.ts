@@ -79,6 +79,11 @@ export interface ScriptureSearchScope {
 }
 
 type QuoteSearchScope = ScriptureSearchScope | string | null | undefined;
+type QuoteSearchMode = "strict" | "closest";
+
+interface QuoteSearchOptions {
+  mode?: QuoteSearchMode;
+}
 
 function normalizeBookForScope(book: string): string {
   const normalized = book.toLowerCase().replace(/\s+/g, " ").trim();
@@ -167,6 +172,9 @@ const MIN_DISPLAY_SCORE = 0.30;
 // require a clear winner before returning a candidate.
 const MIN_FUZZY_QUOTE_SCORE = 0.72;
 const MIN_FUZZY_QUOTE_GAP = 0.06;
+const CLOSEST_QUOTE_SEARCH_MIN_SCORE = 0.08;
+const MIN_CLOSEST_QUOTE_SCORE = 0.08;
+const MIN_UNSCOPED_CLOSEST_QUOTE_SCORE = 0.08;
 
 /** Score decay factor per update cycle for unreinforced candidates */
 const CANDIDATE_DECAY_FACTOR = 0.98;
@@ -444,12 +452,13 @@ export class ScriptureDetectionEngine {
   async preload(): Promise<void> {
     if (this.bibleDataLoaded) return;
     try {
-      const [{ preloadTranslation }, { loadBibleEmbeddings }] = await Promise.all([
+      const [{ getBibleCorpus, preloadTranslation }, { loadBibleEmbeddings }] = await Promise.all([
         import("../bible/bibleData"),
         import("../bible/bibleEmbeddings"),
       ]);
       await Promise.all([
         preloadTranslation(this.translation as "KJV"),
+        getBibleCorpus(this.translation as "KJV", 3),
         loadBibleEmbeddings(),
       ]);
       this.bibleDataLoaded = true;
@@ -834,7 +843,7 @@ export class ScriptureDetectionEngine {
    * If a passage is active, filters candidates to that chapter.
    * Uses backpressure: only one search at a time.
    */
-  async searchQuotes(scope?: QuoteSearchScope): Promise<ScriptureMatch[]> {
+  async searchQuotes(scope?: QuoteSearchScope, options: QuoteSearchOptions = {}): Promise<ScriptureMatch[]> {
     this.cancelQuoteSearch();
     this.quoteAbortController = new AbortController();
     const signal = this.quoteAbortController.signal;
@@ -849,7 +858,7 @@ export class ScriptureDetectionEngine {
     const searchInput = interimText ? `${windowText} ${interimText}`.trim() : windowText;
 
     const searchScope = normalizeQuoteSearchScope(scope) ?? this.getBoundPassage() ?? undefined;
-    const matches = await this.runQuoteSearchPipeline(searchInput, searchScope, signal);
+    const matches = await this.runQuoteSearchPipeline(searchInput, searchScope, signal, options);
     this.bindSearchMatch(matches, analyzeQuoteQuery(searchInput));
     return matches;
   }
@@ -860,14 +869,18 @@ export class ScriptureDetectionEngine {
    * what text is searched. This is the primary search path for the
    * sentence-detection architecture.
    */
-  async searchQuotesWithText(text: string, scope?: QuoteSearchScope): Promise<ScriptureMatch[]> {
+  async searchQuotesWithText(
+    text: string,
+    scope?: QuoteSearchScope,
+    options: QuoteSearchOptions = {},
+  ): Promise<ScriptureMatch[]> {
     this.cancelQuoteSearch();
     this.quoteAbortController = new AbortController();
     const signal = this.quoteAbortController.signal;
 
     const searchInput = text.trim();
     const searchScope = normalizeQuoteSearchScope(scope) ?? this.getBoundPassage() ?? undefined;
-    const matches = await this.runQuoteSearchPipeline(searchInput, searchScope, signal);
+    const matches = await this.runQuoteSearchPipeline(searchInput, searchScope, signal, options);
     this.bindSearchMatch(matches, analyzeQuoteQuery(searchInput));
     return matches;
   }
@@ -880,10 +893,13 @@ export class ScriptureDetectionEngine {
     searchInput: string,
     searchScope: { book: string; chapter?: number } | undefined,
     signal: AbortSignal,
+    options: QuoteSearchOptions = {},
   ): Promise<ScriptureMatch[]> {
 
     if (searchInput.length < MIN_QUOTE_LENGTH) return [];
     if (signal.aborted) return [];
+
+    const useClosestFallback = options.mode === "closest";
 
     // Decay any active candidate from a previous search cycle
     this.decayActiveCandidate();
@@ -956,7 +972,13 @@ export class ScriptureDetectionEngine {
     // Do not spend a full-corpus search on generic worship language. Famous
     // phrases have already passed through the alias path above; everything
     // else needs at least one distinctive word to be worth searching.
-    if (quoteProfile.contentTokens.length < 3 || quoteProfile.strongAnchors === 0) {
+    const hasEnoughDistinctiveText = quoteProfile.contentTokens.length >= 3 && quoteProfile.strongAnchors > 0;
+    const canUseClosestFallback =
+      useClosestFallback &&
+      quoteProfile.tokens.length >= 3 &&
+      quoteProfile.contentTokens.length > 0;
+
+    if (!hasEnoughDistinctiveText && !canUseClosestFallback) {
       return [];
     }
 
@@ -976,6 +998,7 @@ export class ScriptureDetectionEngine {
         this.translation as "KJV",
         5,
         searchScope,
+        useClosestFallback ? CLOSEST_QUOTE_SEARCH_MIN_SCORE : undefined,
       );
       rankedSearchResults = rankedResults;
       if (signal.aborted) return [];
@@ -1021,7 +1044,9 @@ export class ScriptureDetectionEngine {
     // ────────────────────────────────────────────────────────────────────────
 
     if (!quoteThresholds.allowSemanticSearch) {
-      return [];
+      return useClosestFallback
+        ? this.buildClosestQuoteMatches(rankedSearchResults, quoteProfile, searchScope)
+        : [];
     }
 
     try {
@@ -1089,10 +1114,12 @@ export class ScriptureDetectionEngine {
     // ────────────────────────────────────────────────────────────────────────
     // STAGE 5: Fuzzy Bible search (fallback for STT errors)
     // Handles speech-recognition misrecognitions when embeddings are
-    // unavailable or returned no results. No context filtering.
+    // unavailable or returned no results.
     // ────────────────────────────────────────────────────────────────────────
     if (!quoteThresholds.allowFuzzySearch) {
-      return [];
+      return useClosestFallback
+        ? this.buildClosestQuoteMatches(rankedSearchResults, quoteProfile, searchScope)
+        : [];
     }
 
     try {
@@ -1101,7 +1128,11 @@ export class ScriptureDetectionEngine {
       // Stage 3 already performed the same ranked corpus lookup. Reuse it
       // instead of scanning the Bible a second time for the fuzzy fallback.
       const fuzzyResults = rankedSearchResults;
-      if (signal.aborted || fuzzyResults.length === 0) return [];
+      if (signal.aborted || fuzzyResults.length === 0) {
+        return useClosestFallback
+          ? this.buildClosestQuoteMatches(rankedSearchResults, quoteProfile, searchScope)
+          : [];
+      }
 
       const best = fuzzyResults[0];
       const runnerUp = fuzzyResults[1];
@@ -1109,7 +1140,11 @@ export class ScriptureDetectionEngine {
       const hasClearGap = !runnerUp ||
         (best.score >= 0.95 && isSupportingPassageResult(best, runnerUp)) ||
         (best.score - runnerUp.score) >= MIN_FUZZY_QUOTE_GAP;
-      if (!hasMinimumScore || !hasClearGap) return [];
+      if (!hasMinimumScore || !hasClearGap) {
+        return useClosestFallback
+          ? this.buildClosestQuoteMatches(rankedSearchResults, quoteProfile, searchScope)
+          : [];
+      }
 
       return [{
         candidate: {
@@ -1129,7 +1164,40 @@ export class ScriptureDetectionEngine {
       console.warn("[ScriptureEngine] Fuzzy Bible search failed:", err);
     }
 
-    return [];
+    return useClosestFallback
+      ? this.buildClosestQuoteMatches(rankedSearchResults, quoteProfile, searchScope)
+      : [];
+  }
+
+  private buildClosestQuoteMatches(
+    rankedResults: RankedBibleSearchResult[],
+    profile: QuoteQueryProfile,
+    searchScope: { book: string; chapter?: number } | undefined,
+  ): ScriptureMatch[] {
+    if (rankedResults.length === 0) return [];
+
+    const best = rankedResults[0];
+    const minScore = searchScope ? MIN_CLOSEST_QUOTE_SCORE : MIN_UNSCOPED_CLOSEST_QUOTE_SCORE;
+    const hasUsableContext =
+      searchScope !== undefined ||
+      profile.contentTokens.length > 0 ||
+      best.score >= 0.58;
+    if (!hasUsableContext || best.score < minScore) return [];
+
+    return rankedResults.slice(0, 5).map((result) => ({
+      candidate: {
+        book: result.book,
+        chapter: result.chapter,
+        verse: result.verse,
+        translation: this.translation,
+        label: `${result.book} ${result.chapter}:${result.verse}`,
+        snippet: result.snippet || result.text,
+        confidence: result.score,
+        source: "fuzzy",
+      },
+      source: "quote" as const,
+      confidence: result.score,
+    }));
   }
 
   cancelQuoteSearchPublic(): void {

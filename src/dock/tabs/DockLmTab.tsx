@@ -345,6 +345,12 @@ export default function DockLmTab({
     incoming: VoiceBibleCandidate[],
     clearEmpty = false,
   ) => {
+    if (incoming.length > 0) {
+      const nowMs = Date.now();
+      for (const candidate of incoming) {
+        detectedAtRef.current.set(getLmCandidateKey(candidate), nowMs);
+      }
+    }
     // A relay poll can briefly return the previous empty state while a new
     // search result is being posted. Do not erase a clickable suggestion
     // during an active listening session; explicit session resets may clear.

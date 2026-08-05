@@ -22,6 +22,7 @@ import {
   getDockNotesThemeForMode,
   getFallbackDockNotesTheme,
   loadDockNotes,
+  loadDockNotesFromDockData,
   loadDockNotesPreferences,
   resolveDockNotesTheme,
   saveDockNotes,
@@ -243,7 +244,10 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
   }, []);
 
   const refreshNotes = useCallback((incomingNotes?: DockNote[]) => {
-    const next = Array.isArray(incomingNotes) ? incomingNotes : loadDockNotes();
+    const localNotes = loadDockNotes();
+    const next = Array.isArray(incomingNotes)
+      ? (incomingNotes.length > 0 || localNotes.length === 0 ? incomingNotes : localNotes)
+      : localNotes;
     setNotes(next);
     setSelectedNote((current) => {
       if (!current) return current;
@@ -315,6 +319,23 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
 
   useEffect(() => {
     if (isActive) refreshNotes();
+  }, [isActive, refreshNotes]);
+
+  useEffect(() => {
+    if (!isActive) return;
+    let disposed = false;
+    dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
+
+    const fallbackTimer = window.setTimeout(() => {
+      void loadDockNotesFromDockData().then((remoteNotes) => {
+        if (!disposed && remoteNotes.length > 0) refreshNotes(remoteNotes);
+      });
+    }, 300);
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(fallbackTimer);
+    };
   }, [isActive, refreshNotes]);
 
   useEffect(() => {

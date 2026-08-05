@@ -791,6 +791,7 @@ async function searchBibleInTranslation(
   translation: BibleTranslation,
   limit: number,
   scope?: BibleSearchScope,
+  minScore = 0.42,
 ): Promise<RankedSearchResult[]> {
   const data = await loadTranslation(translation);
   const corpus = await getBibleCorpus(translation, 3);
@@ -841,7 +842,7 @@ async function searchBibleInTranslation(
 
     const windowSize = Math.max(1, entry.endVerse - entry.verse + 1);
     const score = Math.max(0, bestScore - (windowSize - 1) * 0.02);
-    if (score < 0.42) continue;
+    if (score < minScore) continue;
 
     results.push({
       book: entry.book,
@@ -867,17 +868,18 @@ export async function searchBibleRanked(
   translation: BibleTranslation = "KJV",
   limit = 50,
   scope?: BibleSearchScope,
+  minScore = 0.42,
 ): Promise<RankedSearchResult[]> {
   if (!query.trim()) return [];
 
   const selectedTranslation = translation.toUpperCase() as BibleTranslation;
-  const primaryResults = await searchBibleInTranslation(query, selectedTranslation, limit, scope);
+  const primaryResults = await searchBibleInTranslation(query, selectedTranslation, limit, scope, minScore);
   const shouldSearchKjv =
     selectedTranslation !== "KJV" &&
     (primaryResults.length === 0 || primaryResults[0].score < 0.78);
 
   const fallbackResults = shouldSearchKjv
-    ? await searchBibleInTranslation(query, "KJV", limit, scope)
+    ? await searchBibleInTranslation(query, "KJV", limit, scope, minScore)
     : [];
 
   const merged = [...primaryResults, ...fallbackResults]

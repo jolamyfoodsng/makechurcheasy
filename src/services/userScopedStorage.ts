@@ -172,7 +172,7 @@ export function clearAllUserScopedStorage(): void {
 
     // Check if this key matches any known user-scoped prefix
     for (const prefix of USER_SCOPED_KEY_PREFIXES) {
-      if (key === prefix || key.startsWith(`${prefix}:`)) {
+      if (key.startsWith(`${prefix}:`)) {
         keysToRemove.push(key);
         break;
       }
