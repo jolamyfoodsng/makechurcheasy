@@ -4,7 +4,7 @@
  * Dense operator console for song browsing, lyric cueing, and live transport.
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, startTransition } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { DockStagedItem, DockWorshipSection } from "../dockTypes";
@@ -134,7 +134,6 @@ interface DockSongDefault extends DockSongDraft {
 
 type DockSongDefaults = Record<string, DockSongDefault>;
 type DockToastTone = "info" | "success" | "error";
-type LyricsEditorTarget = "song" | "new-song";
 type LyricsFormatAction =
   | "autosplit"
   | "clean"
@@ -491,6 +490,245 @@ function applyLyricsFormat(text: string, action: LyricsFormatAction, autosplitLi
   }
 
   return result;
+}
+
+interface DockLyricsEditorDialogProps {
+  dialogId: string;
+  eyebrow: string;
+  title: string;
+  initialDraft: DockSongDraft;
+  saveLabel: string;
+  cancelLabel: string;
+  resetLabel?: string;
+  saving: boolean;
+  onCancel: () => void;
+  onSave: (draft: DockSongDraft) => Promise<void>;
+  onReset?: () => DockSongDraft | null;
+  onDraftChange?: (draft: DockSongDraft) => void;
+}
+
+function DockLyricsEditorDialog({
+  dialogId,
+  eyebrow,
+  title,
+  initialDraft,
+  saveLabel,
+  cancelLabel,
+  resetLabel,
+  saving,
+  onCancel,
+  onSave,
+  onReset,
+  onDraftChange,
+}: DockLyricsEditorDialogProps) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState<DockSongDraft>(initialDraft);
+  const [autoSplitOpen, setAutoSplitOpen] = useState(false);
+  const autoSplitPopoverRef = useRef<HTMLDivElement>(null);
+  const autoSplitSourceRef = useRef<string | null>(null);
+
+  // Keep the live preview useful without sending the whole DockWorshipTab
+  // through a render for every character typed in the editor.
+  useEffect(() => {
+    if (!onDraftChange) return;
+    const timer = window.setTimeout(() => {
+      startTransition(() => onDraftChange(draft));
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [draft, onDraftChange]);
+
+  useEffect(() => {
+    if (!autoSplitOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (autoSplitPopoverRef.current && !autoSplitPopoverRef.current.contains(event.target as Node)) {
+        setAutoSplitOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [autoSplitOpen]);
+
+  const formatDraft = useCallback((action: LyricsFormatAction, autosplitLines?: number) => {
+    setDraft((current) => {
+      if (action === "autosplit") {
+        const sourceLyrics = autoSplitSourceRef.current ?? current.lyrics;
+        autoSplitSourceRef.current = sourceLyrics;
+        return {
+          ...current,
+          lyrics: applyLyricsFormat(sourceLyrics, action, autosplitLines),
+          autoSplit: true,
+          linesPerSlide: Math.max(1, Math.min(6, autosplitLines ?? DEFAULT_LINES_PER_SLIDE)),
+        };
+      }
+      autoSplitSourceRef.current = null;
+      return { ...current, lyrics: applyLyricsFormat(current.lyrics, action, autosplitLines) };
+    });
+  }, []);
+
+  const handleReset = useCallback(() => {
+    const nextDraft = onReset?.();
+    if (!nextDraft) return;
+    autoSplitSourceRef.current = null;
+    setDraft(nextDraft);
+  }, [onReset]);
+
+  const handleSave = useCallback(() => {
+    if (saving || !draft.title.trim() || !draft.lyrics.trim()) return;
+    void onSave(draft);
+  }, [draft, onSave, saving]);
+
+  return (
+    <div className="dock-dialog-backdrop" role="presentation">
+      <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby={dialogId}>
+        <div className="dock-dialog__header">
+          <div>
+            <div className="dock-dialog__eyebrow">{eyebrow}</div>
+            <h2 id={dialogId} className="dock-dialog__title">{title}</h2>
+          </div>
+          <button
+            type="button"
+            className="dock-dialog__close"
+            onClick={onCancel}
+            aria-label={t('common.close')}
+            title={t('common.close')}>
+            <Icon name="close" size={14} />
+          </button>
+        </div>
+        <div className="dock-dialog__body">
+          <div className="dock-dialog__row dock-dialog__row--two">
+            <label className="dock-dialog-field">
+              <span className="dock-dialog-field__label">
+                <span>{t('worship.songTitle')}</span>
+                <span className="dock-dialog-field__tag dock-dialog-field__tag--required">{t('worship.required')}</span>
+              </span>
+              <input
+                className="dock-input"
+                value={draft.title}
+                onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+              />
+            </label>
+            <label className="dock-dialog-field">
+              <span className="dock-dialog-field__label">
+                <span>{t('worship.artist')}</span>
+                <span className="dock-dialog-field__tag">{t('worship.optional')}</span>
+              </span>
+              <input
+                className="dock-input"
+                value={draft.artist}
+                onChange={(event) => setDraft((current) => ({ ...current, artist: event.target.value }))}
+              />
+            </label>
+          </div>
+          <label className="dock-dialog-field dock-dialog-field--lyrics">
+            <span>{t('worship.songLyrics')}</span>
+            <div className="dock-lyrics-toolbar" role="toolbar" aria-label="Lyrics formatting tools">
+              <div className="dock-lyrics-toolbar__actions">
+                <div className="dock-lyrics-autosplit" ref={autoSplitPopoverRef}>
+                  <button
+                    type="button"
+                    className={`dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon dock-lyrics-toolbar__btn--accent${autoSplitOpen ? " dock-lyrics-toolbar__btn--active" : ""}`}
+                    onClick={() => setAutoSplitOpen((current) => !current)}
+                    title="Auto Split"
+                    aria-label="Auto Split"
+                    aria-haspopup="menu"
+                    aria-expanded={autoSplitOpen}
+                  >
+                    <Icon name="format_align_left" size={12} />
+                    <span className="dock-lyrics-toolbar__caret">▾</span>
+                  </button>
+                  {autoSplitOpen && (
+                    <div className="dock-lyrics-autosplit__menu" role="menu" aria-label="Auto split options">
+                      {[2, 3, 4].map((count) => (
+                        <button
+                          key={count}
+                          type="button"
+                          className="dock-lyrics-autosplit__option"
+                          onClick={() => {
+                            formatDraft("autosplit", count);
+                            setAutoSplitOpen(false);
+                          }}
+                        >
+                          {count} lines
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon"
+                  onClick={() => formatDraft("clean")}
+                  title="Clean Text"
+                  aria-label="Clean Text">
+                  <Icon name="auto_fix_high" size={12} />
+                </button>
+                <button
+                  type="button"
+                  className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon dock-lyrics-toolbar__btn--toggle"
+                  onClick={() => formatDraft("remove-verse-numbers")}
+                  title="Verse Numbers"
+                  aria-label="Verse Numbers">
+                  <Icon name="tag" size={12} />
+                </button>
+              </div>
+              <div className="dock-lyrics-toolbar__group" role="group" aria-label="Text case controls">
+                <button
+                  type="button"
+                  className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
+                  onClick={() => formatDraft("uppercase")}
+                  title={t("bible.uppercase")}
+                  aria-label={t("bible.uppercase")}>
+                  <span>AA</span>
+                </button>
+                <button
+                  type="button"
+                  className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
+                  onClick={() => formatDraft("lowercase")}
+                  title="Lowercase"
+                  aria-label="Lowercase">
+                  <span>aa</span>
+                </button>
+                <button
+                  type="button"
+                  className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
+                  onClick={() => formatDraft("capitalize")}
+                  title={t("common.capitalize")}
+                  aria-label={t("common.capitalize")}>
+                  <span>Aa</span>
+                </button>
+              </div>
+            </div>
+            <textarea
+              className="dock-input dock-dialog-textarea"
+              value={draft.lyrics}
+              onChange={(event) => {
+                autoSplitSourceRef.current = null;
+                setDraft((current) => ({ ...current, lyrics: event.target.value }));
+              }}
+            />
+          </label>
+        </div>
+        <div className="dock-dialog__footer">
+          {resetLabel && onReset && (
+            <button type="button" className="dock-btn dock-btn--ghost" onClick={handleReset} title={resetLabel}>
+              {resetLabel}
+            </button>
+          )}
+          <button type="button" className="dock-btn dock-btn--ghost" onClick={onCancel} title={cancelLabel}>
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            className="dock-btn dock-btn--primary"
+            onClick={handleSave}
+            disabled={saving || !draft.title.trim() || !draft.lyrics.trim()}
+            title={saveLabel}>
+            {saveLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -935,13 +1173,8 @@ export default function DockWorshipTab({
   const [slideEditorAutoSplitPopoverOpen, setSlideEditorAutoSplitPopoverOpen] = useState(false);
   const slideEditorAutoSplitPopoverRef = useRef<HTMLDivElement>(null);
   const slideEditorAutoSplitSourceRef = useRef<string | null>(null);
-  const lyricsAutoSplitSourceRef = useRef<Record<LyricsEditorTarget, string | null>>({
-    song: null,
-    "new-song": null,
-  });
 
   const closeSongEditor = useCallback(() => {
-    lyricsAutoSplitSourceRef.current.song = null;
     setSongEditor(null);
   }, []);
 
@@ -952,7 +1185,6 @@ export default function DockWorshipTab({
   }, []);
 
   const closeNewSongModal = useCallback(() => {
-    lyricsAutoSplitSourceRef.current["new-song"] = null;
     setIsNewSongModalOpen(false);
     setNewSongSource(null);
   }, []);
@@ -1316,9 +1548,6 @@ export default function DockWorshipTab({
         deletedSectionsTriggerRef.current && !deletedSectionsTriggerRef.current.contains(event.target as Node)
       ) {
         setShowDeletedSectionsPopover(false);
-      }
-      if (autoSplitPopoverRef.current && !autoSplitPopoverRef.current.contains(event.target as Node)) {
-        setAutoSplitPopoverTarget(null);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -1774,7 +2003,6 @@ export default function DockWorshipTab({
 
   const openSongEditor = useCallback((song: DockSong) => {
     rememberDockSongDefault(song);
-    lyricsAutoSplitSourceRef.current.song = null;
     setSongEditor(song);
     setSongDraft({
       title: song.title,
@@ -1786,12 +2014,12 @@ export default function DockWorshipTab({
     setActionError("");
   }, []);
 
-  const handleSaveSongEditor = useCallback(async () => {
+  const handleSaveSongEditor = useCallback(async (draft: DockSongDraft) => {
     if (!songEditor) return;
     setSavingSong(true);
     setActionError("");
     try {
-      await persistSong(songEditor.id, songDraft, songEditor);
+      await persistSong(songEditor.id, draft, songEditor);
       showToast(t('worship.songSaved'), "success");
       closeSongEditor();
       track("song_created", { autoSplit: false });
@@ -1805,150 +2033,26 @@ export default function DockWorshipTab({
     } finally {
       setSavingSong(false);
     }
-  }, [closeSongEditor, persistSong, showToast, songDraft, songEditor]);
+  }, [closeSongEditor, persistSong, showToast, songEditor]);
 
-  const handleResetSongEditor = useCallback(() => {
-    if (!songEditor) return;
+  const handleResetSongEditor = useCallback((): DockSongDraft | null => {
+    if (!songEditor) return null;
     const defaults = readDockSongDefaults();
     const fallback = defaults[songEditor.id] ?? songEditor;
-    lyricsAutoSplitSourceRef.current.song = null;
-    setSongDraft({
+    const nextDraft = {
       title: fallback.title,
       artist: fallback.artist,
       lyrics: fallback.lyrics,
       autoSplit: fallback.autoSplit,
       linesPerSlide: fallback.linesPerSlide,
-    });
+    };
+    setSongDraft(nextDraft);
     showToast(t('worship.defaultRestored'));
+    return nextDraft;
   }, [showToast, songEditor]);
-
-  const formatLyricsUndoRef = useRef<Record<LyricsEditorTarget, string>>({
-    song: "",
-    "new-song": "",
-  });
-  const [autoSplitPopoverTarget, setAutoSplitPopoverTarget] = useState<LyricsEditorTarget | null>(null);
-  const autoSplitPopoverRef = useRef<HTMLDivElement>(null);
-
-  const formatLyrics = useCallback((target: LyricsEditorTarget, action: LyricsFormatAction, autosplitLines?: number) => {
-    const updateDraft = target === "song" ? setSongDraft : setNewSongDraft;
-    updateDraft((draft) => {
-      formatLyricsUndoRef.current[target] = draft.lyrics;
-      if (action === "autosplit") {
-        const sourceLyrics = lyricsAutoSplitSourceRef.current[target] ?? draft.lyrics;
-        lyricsAutoSplitSourceRef.current[target] = sourceLyrics;
-        const nextLyrics = applyLyricsFormat(sourceLyrics, action, autosplitLines);
-        return {
-          ...draft,
-          lyrics: nextLyrics,
-          autoSplit: true,
-          linesPerSlide: Math.max(1, Math.min(6, autosplitLines ?? DEFAULT_LINES_PER_SLIDE)),
-        };
-      }
-      lyricsAutoSplitSourceRef.current[target] = null;
-      const nextLyrics = applyLyricsFormat(draft.lyrics, action, autosplitLines);
-      return { ...draft, lyrics: nextLyrics };
-    });
-  }, []);
-
-  const handleUndoFormatting = useCallback((target: LyricsEditorTarget) => {
-    const previous = formatLyricsUndoRef.current[target];
-    if (!previous) return;
-    const updateDraft = target === "song" ? setSongDraft : setNewSongDraft;
-    updateDraft((draft) => ({
-      ...draft,
-      lyrics: previous,
-    }));
-    formatLyricsUndoRef.current[target] = "";
-    lyricsAutoSplitSourceRef.current[target] = null;
-  }, []);
-
-  useEffect(() => {
-    if (!songEditor && !isNewSongModalOpen) {
-      setAutoSplitPopoverTarget(null);
-    }
-  }, [isNewSongModalOpen, songEditor]);
-
-  const renderLyricsToolbar = useCallback((target: LyricsEditorTarget) => {
-    const isAutoSplitOpen = autoSplitPopoverTarget === target;
-    return (
-      <div className="dock-lyrics-toolbar" role="toolbar" aria-label="Lyrics formatting tools">
-        <div className="dock-lyrics-toolbar__actions">
-          <div className="dock-lyrics-autosplit" ref={autoSplitPopoverRef}>
-            <button
-              type="button"
-              className={`dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon dock-lyrics-toolbar__btn--accent${isAutoSplitOpen ? " dock-lyrics-toolbar__btn--active" : ""}`}
-              onClick={() => setAutoSplitPopoverTarget((current) => current === target ? null : target)}
-              title="Auto Split"
-              aria-label="Auto Split"
-              aria-haspopup="menu"
-              aria-expanded={isAutoSplitOpen}
-            >
-              <Icon name="format_align_left" size={12} />
-              <span className="dock-lyrics-toolbar__caret">▾</span>
-            </button>
-            {isAutoSplitOpen && (
-              <div className="dock-lyrics-autosplit__menu" role="menu" aria-label="Auto split options">
-                {[2, 3, 4].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    className="dock-lyrics-autosplit__option"
-                    onClick={() => {
-                      formatLyrics(target, "autosplit", n);
-                      setAutoSplitPopoverTarget(null);
-                    }}
-                  >
-                    {n} lines
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon" onClick={() => formatLyrics(target, "clean")} title="Clean Text" aria-label="Clean Text">
-            <Icon name="auto_fix_high" size={12} />
-          </button>
-
-          <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon dock-lyrics-toolbar__btn--toggle" onClick={() => formatLyrics(target, "remove-verse-numbers")} title="Verse Numbers" aria-label="Verse Numbers">
-            <Icon name="tag" size={12} />
-          </button>
-        </div>
-        <div className="dock-lyrics-toolbar__group" role="group" aria-label="Text case controls">
-          <button
-            type="button"
-            className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
-            onClick={() => formatLyrics(target, "uppercase")}
-            title={t("bible.uppercase")}
-            aria-label={t("bible.uppercase")}
-          >
-            <span>AA</span>
-          </button>
-          <button
-            type="button"
-            className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
-            onClick={() => formatLyrics(target, "lowercase")}
-            title="Lowercase"
-            aria-label="Lowercase"
-          >
-            <span>aa</span>
-          </button>
-          <button
-            type="button"
-            className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
-            onClick={() => formatLyrics(target, "capitalize")}
-            title={t("common.capitalize")}
-            aria-label={t("common.capitalize")}
-          >
-            <span>Aa</span>
-          </button>
-        </div>
-
-      </div>
-    );
-  }, [autoSplitPopoverTarget, formatLyrics, handleUndoFormatting, t]);
 
   const openNewSongModal = useCallback(async (draft?: Partial<DockSongDraft>) => {
     if (!(await requireEntitlement("songs", rawSongsRef.current.length))) return;
-    lyricsAutoSplitSourceRef.current["new-song"] = null;
     setNewSongDraft({
       title: draft?.title ?? nextAutoSongTitle(),
       artist: draft?.artist ?? "",
@@ -1961,7 +2065,7 @@ export default function DockWorshipTab({
     setActionError("");
   }, [showToast]);
 
-  const handleSaveNewSong = useCallback(async () => {
+  const handleSaveNewSong = useCallback(async (draft: DockSongDraft) => {
     if (!(await requireEntitlement("songs", rawSongsRef.current.length))) {
       closeNewSongModal();
       return;
@@ -1969,7 +2073,7 @@ export default function DockWorshipTab({
     setSavingSong(true);
     setActionError("");
     try {
-      const newSong = await persistSong(createDockSongId(), newSongDraft, newSongSource ?? { importSourceType: "manual" });
+      const newSong = await persistSong(createDockSongId(), draft, newSongSource ?? { importSourceType: "manual" });
       if (newSong) {
         rememberDockSongDefault(newSong);
         closeNewSongModal();
@@ -1991,7 +2095,7 @@ export default function DockWorshipTab({
     } finally {
       setSavingSong(false);
     }
-  }, [closeNewSongModal, newSongDraft, newSongSource, persistSong, showToast]);
+  }, [closeNewSongModal, newSongSource, persistSong, showToast]);
 
   useEffect(() => {
     if (!selectedSong) return;
@@ -2333,7 +2437,6 @@ export default function DockWorshipTab({
       setOnlineResults([]);
       setOnlineSearchQuery("");
       setOnlineSearchSubmittedQuery("");
-      lyricsAutoSplitSourceRef.current["new-song"] = null;
       setNewSongDraft({
         title: result.title,
         artist: result.artist,
@@ -3024,75 +3127,21 @@ export default function DockWorshipTab({
           )}
 
           {songEditor && (
-            <div className="dock-dialog-backdrop" role="presentation">
-              <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-song-editor-title">
-                <div className="dock-dialog__header">
-                  <div>
-                    <div className="dock-dialog__eyebrow">{t('worship.editSong')}</div>
-                    <h2 id="dock-song-editor-title" className="dock-dialog__title">{t('worship.songDetails')}</h2>
-                  </div>
-                  <button
-                    type="button"
-                    className="dock-dialog__close"
-                    onClick={closeSongEditor}
-                    aria-label={t('common.close')}
-                    title={t('common.close')}>
-                    <Icon name="close" size={14} />
-                  </button>
-                </div>
-                <div className="dock-dialog__body">
-                  <div className="dock-dialog__row dock-dialog__row--two">
-                    <label className="dock-dialog-field">
-                      <span className="dock-dialog-field__label">
-                        <span>{t('worship.songTitle')}</span>
-                        <span className="dock-dialog-field__tag dock-dialog-field__tag--required">{t('worship.required')}</span>
-                      </span>
-                      <input
-                        className="dock-input"
-                        value={songDraft.title}
-                        onChange={(event) => setSongDraft((draft) => ({ ...draft, title: event.target.value }))}
-                      />
-                    </label>
-                    <label className="dock-dialog-field">
-                      <span className="dock-dialog-field__label">
-                        <span>{t('worship.artist')}</span>
-                        <span className="dock-dialog-field__tag">{t('worship.optional')}</span>
-                      </span>
-                      <input
-                        className="dock-input"
-                        value={songDraft.artist}
-                        onChange={(event) => setSongDraft((draft) => ({ ...draft, artist: event.target.value }))}
-                      />
-                    </label>
-                  </div>
-                  <label className="dock-dialog-field dock-dialog-field--lyrics">
-                    <span>{t('worship.songLyrics')}</span>
-                    {renderLyricsToolbar("song")}
-                    <textarea
-                      className="dock-input dock-dialog-textarea"
-                      value={songDraft.lyrics}
-                      onChange={(event) => {
-                        lyricsAutoSplitSourceRef.current.song = null;
-                        setSongDraft((draft) => ({ ...draft, lyrics: event.target.value }));
-                      }}
-                    />
-                  </label>
-                </div>
-                <div className="dock-dialog__footer">
-                  <button type="button" className="dock-btn dock-btn--ghost" onClick={handleResetSongEditor} title={t('worship.resetDefault')}>
-                    {t('worship.resetDefault')}
-                  </button>
-                  <button
-                    type="button"
-                    className="dock-btn dock-btn--primary"
-                    onClick={() => void handleSaveSongEditor()}
-                    disabled={savingSong || !songDraft.title.trim() || !songDraft.lyrics.trim()}
-                    title={t('worship.saving')}>
-                    {savingSong ? t('worship.saving') : t('common.save')}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <DockLyricsEditorDialog
+              key={songEditor.id}
+              dialogId="dock-song-editor-title"
+              eyebrow={t('worship.editSong')}
+              title={t('worship.songDetails')}
+              initialDraft={songDraft}
+              saveLabel={savingSong ? t('worship.saving') : t('common.save')}
+              cancelLabel={t('common.cancel')}
+              resetLabel={t('worship.resetDefault')}
+              saving={savingSong}
+              onCancel={closeSongEditor}
+              onSave={handleSaveSongEditor}
+              onReset={handleResetSongEditor}
+              onDraftChange={setSongDraft}
+            />
           )}
 
           {slideEditor && (
@@ -3198,81 +3247,18 @@ export default function DockWorshipTab({
           )}
 
           {isNewSongModalOpen && (
-            <div className="dock-dialog-backdrop" role="presentation">
-              <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-new-song-title">
-                <div className="dock-dialog__header">
-                  <div>
-                    <div className="dock-dialog__eyebrow">{newSongSource?.importSourceType === "online" ? t('worship.reviewImport') : t('worship.addSong')}</div>
-                    <h2 id="dock-new-song-title" className="dock-dialog__title">
-                      {newSongSource?.importSourceType === "online" ? t('worship.reviewLyricsBeforeSaving') : t('worship.newWorshipSong')}
-                    </h2>
-                  </div>
-                  <button
-                    type="button"
-                    className="dock-dialog__close"
-                    onClick={closeNewSongModal}
-                    aria-label={t('common.close')}
-                    title={t('common.close')}>
-                    <Icon name="close" size={14} />
-                  </button>
-                </div>
-                <div className="dock-dialog__body">
-                  <div className="dock-dialog__row dock-dialog__row--two">
-                    <label className="dock-dialog-field">
-                      <span className="dock-dialog-field__label">
-                        <span>{t('worship.songTitle')}</span>
-                        <span className="dock-dialog-field__tag dock-dialog-field__tag--required">{t('worship.required')}</span>
-                      </span>
-                      <input
-                        className="dock-input"
-                        value={newSongDraft.title}
-                        onChange={(event) => setNewSongDraft((draft) => ({ ...draft, title: event.target.value }))}
-                      />
-                    </label>
-                    <label className="dock-dialog-field">
-                      <span className="dock-dialog-field__label">
-                        <span>{t('worship.artist')}</span>
-                        <span className="dock-dialog-field__tag">{t('worship.optional')}</span>
-                      </span>
-                      <input
-                        className="dock-input"
-                        value={newSongDraft.artist}
-                        onChange={(event) => setNewSongDraft((draft) => ({ ...draft, artist: event.target.value }))}
-                      />
-                    </label>
-                  </div>
-                  <label className="dock-dialog-field dock-dialog-field--lyrics">
-                    <span>{t('worship.songLyrics')}</span>
-                    {renderLyricsToolbar("new-song")}
-                    <textarea
-                      className="dock-input dock-dialog-textarea"
-                      value={newSongDraft.lyrics}
-                      onChange={(event) => {
-                        lyricsAutoSplitSourceRef.current["new-song"] = null;
-                        setNewSongDraft((draft) => ({ ...draft, lyrics: event.target.value }));
-                      }}
-                    />
-                  </label>
-                </div>
-                <div className="dock-dialog__footer">
-                  <button
-                    type="button"
-                    className="dock-btn dock-btn--ghost"
-                    onClick={closeNewSongModal}
-                    title={t('common.cancel')}>
-                    {t('common.cancel')}
-                  </button>
-                  <button
-                    type="button"
-                    className="dock-btn dock-btn--primary"
-                    onClick={() => void handleSaveNewSong()}
-                    disabled={savingSong || !newSongDraft.title.trim() || !newSongDraft.lyrics.trim()}
-                    title={t('worship.saving')}>
-                    {savingSong ? t('worship.saving') : t('worship.saveSong')}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <DockLyricsEditorDialog
+              dialogId="dock-new-song-title"
+              eyebrow={newSongSource?.importSourceType === "online" ? t('worship.reviewImport') : t('worship.addSong')}
+              title={newSongSource?.importSourceType === "online" ? t('worship.reviewLyricsBeforeSaving') : t('worship.newWorshipSong')}
+              initialDraft={newSongDraft}
+              saveLabel={savingSong ? t('worship.saving') : t('worship.saveSong')}
+              cancelLabel={t('common.cancel')}
+              saving={savingSong}
+              onCancel={closeNewSongModal}
+              onSave={handleSaveNewSong}
+              onDraftChange={setNewSongDraft}
+            />
           )}
 
           {onlineSearchOpen && (
