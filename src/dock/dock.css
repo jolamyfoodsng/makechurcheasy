@@ -30394,26 +30394,6 @@ button.dock-btm-toolbar__clear--inline,
   min-width: 0;
 }
 
-.dock-module--bible--compact .dock-bible-search-row__menu-btn {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--dock-text-secondary);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 3px;
-}
-
-.dock-module--bible--compact .dock-bible-search-row__menu-btn:hover {
-  background: var(--dock-hover, rgba(255, 255, 255, 0.08));
-  color: var(--dock-text);
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════
    ImagePicker — compact image selector for lower-third variables
    ═══════════════════════════════════════════════════════════════════════════ */

@@ -3873,7 +3873,6 @@ export default function DockBibleTab({
     <BibleDockContainer
       ref={containerRef}
       isCompact={isShortHeight}
-      onMenuClick={() => window.dispatchEvent(new CustomEvent("dock-open-menu"))}
       isTopbarExpanded={isTopbarExpanded}
       setIsTopbarExpanded={setIsTopbarExpanded}
       selectedBook={selectedBook}

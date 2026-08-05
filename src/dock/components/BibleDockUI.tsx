@@ -273,7 +273,6 @@ interface BibleDockContainerProps {
   searchSection: React.ReactNode;
   headerActions?: React.ReactNode;
   compactActions?: React.ReactNode;
-  onMenuClick?: () => void;
   children: React.ReactNode;
   isCompact?: boolean;
 }
@@ -307,7 +306,6 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
   compactActions,
   children,
   isCompact = false,
-  onMenuClick,
 }: BibleDockContainerProps, ref) {
   const [_isNarrowScreen, _setIsNarrowScreen] = useState(false);
 
@@ -356,17 +354,6 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
       {/* Search bar + Translation select row */}
       <div className="dock-bible-search-row">
         <div className="dock-bible-search-row__input">
-          {isCompact && onMenuClick && (
-            <button
-              type="button"
-              className="dock-shell-icon-btn dock-bible-search-row__menu-btn"
-              onClick={onMenuClick}
-              aria-label="Menu"
-              title="Menu"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></svg>
-            </button>
-          )}
           {searchSection}
         </div>
         <div className="dock-bible-search-row__translation">
