@@ -4,7 +4,7 @@
  * Dense operator console for song browsing, lyric cueing, and live transport.
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { DockStagedItem, DockWorshipSection } from "../dockTypes";
@@ -981,19 +981,23 @@ export default function DockWorshipTab({
   const songsPollBusyRef = useRef(false);
   const liveSectionRequestIdRef = useRef(0);
 
+  // Keep the editor controlled by the immediate draft so the caret never waits
+  // for slide parsing. The preview can safely follow at a lower priority.
+  const deferredSongDraft = useDeferredValue(songDraft);
+
   // Preview sections from the draft lyrics when the song editor is open,
   // so the user sees the effect of their edits (auto-split, spacing, etc.)
   // in real time without having to save first.
-  const effectiveLyrics = songEditor && songDraft.lyrics !== selectedSong?.lyrics
-    ? songDraft.lyrics
+  const effectiveLyrics = songEditor && deferredSongDraft.lyrics !== selectedSong?.lyrics
+    ? deferredSongDraft.lyrics
     : (selectedSong?.lyrics ?? "");
   const effectiveLinesPerSlide = clampLinesPerSlide(
-    songEditor && typeof songDraft.linesPerSlide === "number"
-      ? songDraft.linesPerSlide
+    songEditor && typeof deferredSongDraft.linesPerSlide === "number"
+      ? deferredSongDraft.linesPerSlide
       : selectedSong?.linesPerSlide ?? linesPerSlide,
   );
-  const effectiveAutoSplit = songEditor && typeof songDraft.autoSplit === "boolean"
-    ? songDraft.autoSplit
+  const effectiveAutoSplit = songEditor && typeof deferredSongDraft.autoSplit === "boolean"
+    ? deferredSongDraft.autoSplit
     : selectedSong?.autoSplit ?? false;
   const structuredSongText = useMemo(
     () => extractStructuredTextTitle(effectiveLyrics),
