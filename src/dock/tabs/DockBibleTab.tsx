@@ -2300,16 +2300,8 @@ export default function DockBibleTab({
       const pushLive = () => liveOverlayMode === "lower-third"
         ? dockObsClient.pushBibleOverlayFast(lowerThirdPayload)
         : dockObsClient.pushBible(stageData as Parameters<typeof dockObsClient.pushBible>[0]);
-      const bringBibleOverlayForward = dockObsClient
-        .bringBibleOverlayForward(liveOverlayMode)
-        .catch(() => { });
 
-      // Make the Bible source the active/top overlay before changing the packet.
-      void bringBibleOverlayForward
-        .then(() => dockObsClient.primeBibleOverlay(stageData as Parameters<typeof dockObsClient.primeBibleOverlay>[0]))
-        .catch(() => { });
-      bringBibleOverlayForward
-        .then(pushLive)
+      pushLive()
         .then(() => {
           if (requestId !== liveVerseRequestIdRef.current) return;
           setBibleOverlayVisible(true);

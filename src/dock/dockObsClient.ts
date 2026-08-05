@@ -425,6 +425,8 @@ class DockObsClient {
   private _lastBrowserSourceUrlBySource: Record<string, string> = {};
   /** Avoid repeating expensive source order/fit checks on every fast overlay packet. */
   private _lastFastOverlayPrepAtBySource: Record<string, number> = {};
+  /** The program scene has already been wired behind the Bible overlay. */
+  private _lastBibleProgramScenePrepared = "";
   /** Serialize Bible overlay mutations so rapid verse clicks do not overlap OBS scene rebuilds. */
   private _bibleMutationTail: Promise<void> = Promise.resolve();
   private _lastBiblePushSignature = "";
@@ -533,6 +535,7 @@ class DockObsClient {
     this._lastCssOverlayBaseUrlBySource = {};
     this._lastCssOverlayThemeCssBySource = {};
     this._lastFastOverlayPrepAtBySource = {};
+    this._lastBibleProgramScenePrepared = "";
     this._lastBiblePushSignature = "";
     this._lastWorshipPushSignature = "";
     this._lastAnnouncementPushSignature = "";
@@ -749,6 +752,18 @@ class DockObsClient {
           if (!sceneName) return;
           this._programSceneCache = { name: sceneName, expiresAt: Date.now() + 30_000 };
           this._lastBibleFullscreenSetupSignature = "";
+          if (sceneName !== DOCK_PRESENTATION_SCENE) {
+            this._lastBibleProgramScenePrepared = "";
+            this._lastFastOverlayPrepAtBySource = {};
+            this._presentationProgramUnderlayCache = null;
+          }
+        });
+        this.obs.on("CurrentPreviewSceneChanged" as never, (data: { sceneName?: string } | unknown) => {
+          if (this._obsGeneration !== gen) return;
+          const sceneName = String((data as { sceneName?: string } | undefined)?.sceneName || "").trim();
+          if (sceneName && sceneName !== DOCK_PRESENTATION_SCENE) {
+            this._lastFastOverlayPrepAtBySource = {};
+          }
         });
         this.obs.on("SceneCreated" as never, (data: { sceneName?: string } | unknown) => {
           if (this._obsGeneration !== gen) return;
@@ -1587,13 +1602,16 @@ class DockObsClient {
     sourceName: string,
     fitSource: (sceneName: string) => Promise<void>,
   ): Promise<void> {
-    await this.promotePresentationScene(tabId).catch(() => { });
-
     const key = `${tabId}:${sourceName}`;
     const now = Date.now();
-    if (this._lastFastOverlayPrepAtBySource[key] && now - this._lastFastOverlayPrepAtBySource[key] < 10_000) {
+    if (this._lastFastOverlayPrepAtBySource[key]) {
       return;
     }
+
+    // The browser document is already live. Re-promoting or refitting the OBS
+    // scene for every verse can briefly redraw the scene and expose the
+    // underlying frame. Prepare the route once, then update only the packet.
+    await this.promotePresentationScene(tabId).catch(() => { });
     this._lastFastOverlayPrepAtBySource[key] = now;
 
     const target = await this.getPresentationTargetScene(tabId, { activate: false }).catch(() => null);
@@ -4104,17 +4122,15 @@ class DockObsClient {
     packet: Record<string, unknown>,
     baseUrl: string,
     overlayCss: string,
-    timeoutMs = 180,
   ): Promise<void> {
     const emitted = await this.emitBrowserOverlayPacket(tabType, packet, overlayCss);
-    if (emitted) {
-      const timestamp = Number(packet.timestamp) || Date.now();
-      const mode = typeof packet.mode === "string" ? packet.mode : "";
-      if (mode) {
-        const acked = await this.waitForOverlayRenderAck(tabType, timestamp, mode, timeoutMs).catch(() => false);
-        if (acked) return;
-      }
-    }
+    // The OBS browser source has its own localStorage context, so its render
+    // acknowledgement is not readable from the dock webview. Falling back to
+    // SetInputSettings after a timeout therefore refreshes the browser source
+    // on every verse click even when the live event was already delivered.
+    // Trust the vendor event when OBS accepts it; only use CSS as a fallback
+    // when the event request itself is unavailable.
+    if (emitted) return;
 
     await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
   }
@@ -5482,10 +5498,13 @@ class DockObsClient {
 
       if (!sceneName) throw new Error("Could not determine the current OBS scene.");
 
-      // Keep OBS routing in sync on every explicit verse click. The routing
-      // helper has a short cache, so rapid repeated clicks do not rebuild
-      // scene items, but a changed Program scene is picked up immediately.
-      await this.ensureProgramSceneAsSourceInPresentation();
+      // Wire the current Program scene behind the overlay only when the
+      // route actually changes. Repeating this scene mutation for every verse
+      // can make OBS redraw the whole presentation frame.
+      if (!data.targetScene && currentProgramSceneBeforeTarget !== this._lastBibleProgramScenePrepared) {
+        await this.ensureProgramSceneAsSourceInPresentation();
+        this._lastBibleProgramScenePrepared = currentProgramSceneBeforeTarget;
+      }
 
       const pushSignature = this.buildBiblePushSignature(sceneName, currentProgramSceneBeforeTarget, data);
       if (pushSignature === this._lastBiblePushSignature) {
@@ -5759,8 +5778,6 @@ class DockObsClient {
         if (!modeChanged && this._lastBibleFullscreenSetupSignature === fullscreenSetupSignature) {
           const packetWithMode: Record<string, unknown> = { ...packet, mode };
           try {
-            await this.bringBibleOverlayForward(mode).catch(() => { });
-
             this.publishFullscreenOverlayPacket({
               slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
               theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
@@ -5777,7 +5794,6 @@ class DockObsClient {
               cssOverlayBaseUrl,
               themeCss,
             ).catch(() => { });
-            await this.fitSceneSourceToCanvas(PRESENTATION_SCENE_NAME, def.browserSourceName).catch(() => { });
 
             this._bibleLtInitialized = true;
             this._lastBiblePushSignature = pushSignature;
@@ -5917,8 +5933,6 @@ class DockObsClient {
           mode,
         };
 
-        await this.bringBibleOverlayForward(mode).catch(() => { });
-
         this.publishFullscreenOverlayPacket({
           slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
           theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
@@ -5937,12 +5951,6 @@ class DockObsClient {
           nextBaseUrl,
           themeCss,
         );
-        if (mode === "fullscreen") {
-          await this.fitSceneSourceToOverlayMode(PRESENTATION_SCENE_NAME, this._fullscreenSceneDefs["bible"].browserSourceName, mode).catch(() => { });
-          if (modeChanged) {
-            await this.setSceneSourceEnabledByName(PRESENTATION_SCENE_NAME, this._fullscreenSceneDefs["bible"].browserSourceName, true).catch(() => { });
-          }
-        }
       }
 
       if (mode === "lower-third" && useCssOverlayTransport && cssOverlayPacket) {
@@ -5954,9 +5962,7 @@ class DockObsClient {
       }
 
       if (mode === "lower-third") {
-        await this.promotePresentationScene("bible").catch(() => { });
         const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
-        await this.fitSceneSourceToOverlayMode(PRESENTATION_SCENE_NAME, browserSourceName, mode).catch(() => { });
         if (modeChanged) {
           await this.setSceneSourceEnabledByName(PRESENTATION_SCENE_NAME, browserSourceName, true).catch(() => { });
           if (sceneName !== PRESENTATION_SCENE_NAME) {
@@ -6098,8 +6104,6 @@ class DockObsClient {
 
     const packetWithMode: Record<string, unknown> = { ...cssOverlayPacket, mode };
 
-    await this.bringBibleOverlayForward(mode).catch(() => { });
-
     this.publishFullscreenOverlayPacket({
       slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
       theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
@@ -6115,11 +6119,6 @@ class DockObsClient {
       packetWithMode,
       cssOverlayBaseUrl,
       themeCss,
-    );
-    await this.prepareFastOverlayScene(
-      "bible",
-      browserSourceName,
-      (sceneName) => this.fitSceneSourceToCanvas(sceneName, browserSourceName),
     );
   }
 

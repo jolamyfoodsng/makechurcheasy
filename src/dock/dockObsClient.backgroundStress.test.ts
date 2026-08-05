@@ -479,7 +479,7 @@ describe("dockObsClient background reflection stress", () => {
     await client.prepareFastOverlayScene("bible", "MCE Browser - Bible", fitSource);
     await client.prepareFastOverlayScene("bible", "MCE Browser - Bible", fitSource);
 
-    expect(client.promotePresentationScene).toHaveBeenCalledTimes(2);
+    expect(client.promotePresentationScene).toHaveBeenCalledTimes(1);
     expect(fitSource).toHaveBeenCalledTimes(2);
   });
 
@@ -603,7 +603,7 @@ describe("dockObsClient background reflection stress", () => {
     expect(client._lastCssOverlayThemeCssBySource[sourceName]).toContain("--bg-pattern-data");
   });
 
-  it("falls back to a durable CSS packet when a live Bible click event is not acknowledged", async () => {
+  it("does not rewrite the browser source when a live Bible click event is accepted", async () => {
     const sourceName = "MCE Browser - Bible";
     const baseUrl = "http://overlay.test/mce-bible-overlay.html?v=2026-07-29-1-lt-bg-image&tab=bible";
     const theme = makeBackgroundTheme({ backgroundColor: "#000000" });
@@ -645,8 +645,7 @@ describe("dockObsClient background reflection stress", () => {
     );
 
     expect(callLog.some((entry) => entry.method === "CallVendorRequest")).toBe(true);
-    expect(cssWrites).toHaveLength(1);
-    expect(String((cssWrites[0].payload.inputSettings as Record<string, unknown>).css)).toContain("A%20new%20visible%20verse");
+    expect(cssWrites).toHaveLength(0);
   });
 
   it("keeps Bible fullscreen setup stable when only background settings change", () => {

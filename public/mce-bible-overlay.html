@@ -715,13 +715,14 @@
       pointer-events: auto;
     }
 
-    @keyframes mce-preview-slide-fade {
+    /* Verse changes must never fade the background layer with the text. */
+    @keyframes mce-preview-text-fade {
       0%, 100% { opacity: 1; }
       45% { opacity: 0; }
     }
 
-    .mode-layer.mce-preview-slide-fade {
-      animation: mce-preview-slide-fade 220ms ease-in-out;
+    .mce-preview-text-fade {
+      animation: mce-preview-text-fade 220ms ease-in-out;
     }
 
     #lt-bar.hidden,
@@ -1066,7 +1067,13 @@
       let hasShownOnce = false;
       let bgClearToken = 0;
       let lastCssOverlayData = '';
-      let lastAppliedThemeKey = '';
+      // Both presentation modes are rendered ahead of time. Keep their
+      // theme caches separate so updating the verse does not re-apply the
+      // fullscreen background after the lower-third layer is rendered.
+      const lastAppliedThemeKeyByMode = {
+        fullscreen: '',
+        'lower-third': '',
+      };
       let fitRafId = 0;
       let fullscreenFitKey = '';
       let compareFitKey = '';
@@ -2291,9 +2298,9 @@
         } catch {
           themeKey = targetMode + '|unserializable';
         }
-        if (!force && themeKey === lastAppliedThemeKey) return;
+        if (!force && themeKey === lastAppliedThemeKeyByMode[targetMode]) return;
         applyTheme(safeTheme, targetMode);
-        lastAppliedThemeKey = themeKey;
+        lastAppliedThemeKeyByMode[targetMode] = themeKey;
       }
 
       /* ═══ SINGLE RENDERER ═══ */
@@ -2328,11 +2335,16 @@
       }
 
       function restartPreviewFade(mode) {
-        const layer = mode === 'lower-third' ? lowerThirdLayer : fullscreenLayer;
-        if (!layer) return;
-        layer.classList.remove('mce-preview-slide-fade');
-        void layer.offsetWidth;
-        layer.classList.add('mce-preview-slide-fade');
+        const targets = mode === 'lower-third'
+          ? [ltVerseText, ltRefText]
+          : compareLayout && compareLayout.classList.contains('is-visible')
+            ? [compareLayout]
+            : [overlay];
+        const validTargets = targets.filter(Boolean);
+        if (!validTargets.length) return;
+        validTargets.forEach((target) => target.classList.remove('mce-preview-text-fade'));
+        void validTargets[0].offsetWidth;
+        validTargets.forEach((target) => target.classList.add('mce-preview-text-fade'));
       }
 
       function renderBothBibleLayers(state) {
@@ -2511,8 +2523,46 @@
           styleEl = document.createElement('style');
           styleEl.id = 'obs-cssoverride';
           document.head.appendChild(styleEl);
+          styleEl.textContent = ':root {}';
         }
-        styleEl.textContent = cssText;
+
+        // OBS sends the full CSS packet with every verse. Replacing the
+        // stylesheet removes image/pattern variables for a frame, which is
+        // visible as a background flash. Update only the custom properties so
+        // the existing background layer stays mounted and decoded.
+        const propertyNames = [
+          '--overlay-data',
+          '--display-mode',
+          '--bg-image',
+          '--bg-pattern-data',
+          '--logo-data-uri',
+          '--box-bg-image',
+        ];
+        let rootRule = null;
+        try {
+          const rules = styleEl.sheet && styleEl.sheet.cssRules;
+          if (rules) {
+            for (let i = 0; i < rules.length; i += 1) {
+              const rule = rules[i];
+              if (rule && rule.style && typeof rule.selectorText === 'string' && rule.selectorText.indexOf(':root') !== -1) {
+                rootRule = rule;
+                break;
+              }
+            }
+          }
+        } catch { }
+        if (!rootRule) {
+          styleEl.textContent = ':root {}';
+          try {
+            rootRule = styleEl.sheet && styleEl.sheet.cssRules && styleEl.sheet.cssRules[0];
+          } catch { }
+        }
+        if (!rootRule || !rootRule.style) return;
+        propertyNames.forEach((name) => {
+          const value = extractCssCustomPropertyValue(cssText, name);
+          if (value) rootRule.style.setProperty(name, value);
+          else rootRule.style.removeProperty(name);
+        });
         lastCssOverlayData = '';
       }
       function readFromObsBrowserEvent(event) {

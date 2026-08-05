@@ -687,15 +687,8 @@ export default function DockLmTab({
     const pushLive = () => overlayMode === "lower-third"
       ? dockObsClient.pushBibleOverlayFast(lowerThirdPayload)
       : dockObsClient.pushBible(stageData);
-    const bringBibleOverlayForward = dockObsClient
-      .bringBibleOverlayForward(overlayMode)
-      .catch(() => { });
 
-    void bringBibleOverlayForward
-      .then(() => dockObsClient.primeBibleOverlay(stageData))
-      .catch(() => { });
-
-    await bringBibleOverlayForward.then(pushLive);
+    await pushLive();
   }, [presentationLinkMode, settings.pushScene, settings.translation]);
 
   useEffect(() => {

@@ -441,7 +441,7 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(overlayHtml).toContain("root.style.setProperty('--compare-inline-align', mapFlexAlign(compareReferenceAlign))");
     expect(overlayHtml).toContain("align-self: var(--compare-inline-align, center)");
     expect(overlayHtml).toContain("#compare-layout.is-line-by-line .compare-column__reference");
-    expect(overlayHtml).toContain("compareLayout.classList.toggle('is-line-by-line', clMode === 'line-by-line')");
+    expect(overlayHtml).toContain("compareLayout.classList.toggle('is-line-by-line', mode === 'line-by-line')");
     expect(backgroundPickerSource).not.toContain("Reference alignment");
     expect(backgroundPickerSource).not.toContain("compareReferenceAlignmentLeft");
     expect(backgroundPickerSource).not.toContain("compareReferenceAlignmentRight");
@@ -675,6 +675,25 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(gradientIndex).toBeLessThan(imageIndex);
   });
 
+  it("fades Bible content without fading the background layer", () => {
+    expect(overlayHtml).toContain("@keyframes mce-preview-text-fade");
+    expect(overlayHtml).toContain(".mce-preview-text-fade");
+    expect(overlayHtml).toContain("const targets = mode === 'lower-third'");
+    expect(overlayHtml).not.toContain("mode-layer.mce-preview-slide-fade");
+  });
+
+  it("does not re-apply the background when both Bible modes render a new verse", () => {
+    expect(overlayHtml).toContain("const lastAppliedThemeKeyByMode = {");
+    expect(overlayHtml).toContain("themeKey === lastAppliedThemeKeyByMode[targetMode]");
+    expect(overlayHtml).toContain("lastAppliedThemeKeyByMode[targetMode] = themeKey");
+  });
+
+  it("updates OBS CSS variables without replacing the live stylesheet", () => {
+    expect(overlayHtml).toContain("const propertyNames = [");
+    expect(overlayHtml).toContain("rootRule.style.setProperty(name, value)");
+    expect(overlayHtml).not.toContain("styleEl.textContent = cssText");
+  });
+
   it("keeps notes lower-third pattern background behavior aligned with worship", () => {
     expect(noteOverlayHtml).toContain("function applyThemeLowerThird");
     expect(noteOverlayHtml).toContain("const bgPattern = String(s.backgroundPattern || '').trim()");
@@ -713,7 +732,7 @@ describe("Active OBS Bible overlay wiring", () => {
     const saveBlock = dockThemeSettingsModalSource.slice(handleSaveStart, dockThemeSettingsModalSource.indexOf("const handleReset", handleSaveStart));
     expect(saveBlock).toContain("onSelect(nextTheme)");
     expect(saveBlock).toContain("onBackgroundPresetChange?.(nextPreset)");
-    expect(saveBlock).toContain("onQuickSettingsSave(nextSettings)");
+    expect(saveBlock).toContain("onQuickSettingsSave(nextSettings, {");
   });
 
   it("hydrates saved Bible dock background preferences before first render and persists saves immediately", () => {
