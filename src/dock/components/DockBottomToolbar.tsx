@@ -2,7 +2,7 @@
  * DockBottomToolbar.tsx — Shared bottom toolbar for Bible & Worship tabs
  *
  * Always compact one-row layout at every width.
- * [ Full | LT ] ... [ visibility ] [ inline action ] [ ⋯ ]
+ * [ Full | LT ] [ centered action ] ... [ visibility ] [ inline action ] [ ⋯ ]
  */
 
 import { useCallback, useRef, useEffect, useState } from "react";
@@ -42,6 +42,8 @@ interface Props {
   sourceVisible?: boolean;
   /** Action that stays visible outside the overflow menu */
   inlineAction?: React.ReactNode;
+  /** Optional action centered between the overlay mode and toolbar actions */
+  centerAction?: React.ReactNode;
   /** Whether the toolbar is collapsed (controlled) */
   collapsed?: boolean;
   /** Called when collapse/expand is toggled */
@@ -61,6 +63,7 @@ export default function DockBottomToolbar({
   clearDisabled = false,
   sourceVisible = true,
   inlineAction,
+  centerAction,
   collapsed = false,
   onCollapseChange,
 }: Props) {
@@ -137,7 +140,7 @@ export default function DockBottomToolbar({
 
   return (
     <div className="dock-btm-toolbar dock-btm-toolbar--compact" ref={toolbarRef}>
-      <div className="dock-btm-toolbar__row">
+      <div className={`dock-btm-toolbar__row${centerAction ? " dock-btm-toolbar__row--centered" : ""}`}>
         {!hideOverlayModeToggle && (
           <div
             className={`dock-btm-segmented${morphing ? " dock-btm-segmented--morphing" : ""}`}
@@ -185,6 +188,12 @@ export default function DockBottomToolbar({
             >
               {t("dock.bottomToolbar.ltLabel")}
             </button>
+          </div>
+        )}
+
+        {centerAction && (
+          <div className="dock-btm-toolbar__center" aria-label={t("dock.bottomToolbar.centerActions", "Navigation")}>
+            {centerAction}
           </div>
         )}
 

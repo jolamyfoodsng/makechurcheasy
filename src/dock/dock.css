@@ -6747,16 +6747,20 @@
 .dock-bible-reader__chapter-nav {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
+}
+
+.dock-bible-reader__chapter-nav--toolbar {
+  justify-content: center;
 }
 
 .dock-bible-reader__chapter-nav-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 26px;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--dock-border) 88%, transparent);
   border-radius: 4px;

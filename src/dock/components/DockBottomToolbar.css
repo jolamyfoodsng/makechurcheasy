@@ -2,7 +2,7 @@
  * DockBottomToolbar.css
  *
  * Compact one-row layout at every width.
- * [ Full | LT ] ... [ visibility ] [ inline action ] [ ⋯ ]
+ * [ Full | LT ] [ centered action ] ... [ visibility ] [ inline action ] [ ⋯ ]
  */
 
 /* ── Container ── */
@@ -251,6 +251,36 @@
   min-width: 0;
 }
 
+.dock-btm-toolbar__row--centered {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.dock-btm-toolbar__row--centered .dock-btm-segmented {
+  grid-column: 1;
+  justify-self: start;
+}
+
+.dock-btm-toolbar__center {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  grid-column: 2;
+  justify-self: center;
+}
+
+.dock-btm-toolbar__row--centered .dock_bottom_bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  grid-column: 3;
+  justify-self: end;
+}
+
 .dock-btm-toolbar--compact .dock-btm-segmented {
   flex: 0 0 auto;
   height: fit-content;
@@ -375,6 +405,26 @@
 
 .dock-btm-overflow__menu .dock-line-popover {
   position: static;
+}
+
+.dock-btm-overflow__menu .dock-bible-reference-trigger {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 36px;
+  height: 32px;
+}
+
+.dock-btm-overflow__menu .dock-bible-reference-trigger__btn {
+  width: 100%;
+  height: 32px;
+}
+
+.dock-btm-overflow__menu .dock-bible-reference-trigger--bottom .dock-bible-reference-popover {
+  position: static;
+  width: 250px;
+  max-width: min(250px, calc(100vw - 24px));
+  margin: 4px 0 0;
 }
 
 .dock-btm-overflow__menu .dock-line-popover__menu {

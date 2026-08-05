@@ -678,6 +678,8 @@ describe("Active OBS Bible overlay wiring", () => {
   it("fades Bible content without fading the background layer", () => {
     expect(overlayHtml).toContain("@keyframes mce-preview-text-fade");
     expect(overlayHtml).toContain(".mce-preview-text-fade");
+    expect(overlayHtml).toContain("animation: mce-preview-text-fade 520ms cubic-bezier(0.42, 0, 0.58, 1) both");
+    expect(overlayHtml).toContain("50% { opacity: 0.28; }");
     expect(overlayHtml).toContain("const targets = mode === 'lower-third'");
     expect(overlayHtml).not.toContain("mode-layer.mce-preview-slide-fade");
   });

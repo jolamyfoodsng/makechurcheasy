@@ -4259,39 +4259,6 @@ export default function DockBibleTab({
             <div className="dock-bible-reader__ref-header">
               <div className="dock-bible-reader__ref-header-start">
                 <span className="dock-bible-reader__ref-header-label">{t("bible.reading")}</span>
-                <div
-                  className="dock-bible-reader__chapter-nav"
-                  aria-label={t("bible.chapterNavigation", "Chapter navigation")}
-                >
-                  <button
-                    type="button"
-                    className="dock-bible-reader__chapter-nav-btn"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      handleChapterJump(-1);
-                    }}
-                    disabled={!canGoPreviousChapter}
-                    title={t("bible.previousChapter", "Previous chapter")}
-                    aria-label={t("bible.previousChapter", "Previous chapter")}
-                  >
-                    <Icon name="chevron_left" size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="dock-bible-reader__chapter-nav-btn"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      handleChapterJump(1);
-                    }}
-                    disabled={!canGoNextChapter}
-                    title={t("bible.nextChapter", "Next chapter")}
-                    aria-label={t("bible.nextChapter", "Next chapter")}
-                  >
-                    <Icon name="chevron_right" size={12} />
-                  </button>
-                </div>
               </div>
               <span className="dock-bible-reader__ref-header-reference">{currentReferenceLabel}</span>
               {compareEnabled ? (
@@ -4465,6 +4432,41 @@ export default function DockBibleTab({
           onModeChange={handleOverlayModeChange}
           displayMode={displayMode}
           onDisplayModeChange={handleDisplayModeChange}
+          centerAction={
+            <div
+              className="dock-bible-reader__chapter-nav dock-bible-reader__chapter-nav--toolbar"
+              aria-label={t("bible.chapterNavigation", "Chapter navigation")}
+            >
+              <button
+                type="button"
+                className="dock-bible-reader__chapter-nav-btn"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleChapterJump(-1);
+                }}
+                disabled={!canGoPreviousChapter}
+                title={t("bible.previousChapter", "Previous chapter")}
+                aria-label={t("bible.previousChapter", "Previous chapter")}
+              >
+                <Icon name="chevron_left" size={14} />
+              </button>
+              <button
+                type="button"
+                className="dock-bible-reader__chapter-nav-btn"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleChapterJump(1);
+                }}
+                disabled={!canGoNextChapter}
+                title={t("bible.nextChapter", "Next chapter")}
+                aria-label={t("bible.nextChapter", "Next chapter")}
+              >
+                <Icon name="chevron_right" size={14} />
+              </button>
+            </div>
+          }
           morphing={modeMorphing}
           hideOverlayModeToggle={fullscreenOnlyMode}
           clearLabel={bibleOverlayVisible
@@ -4486,6 +4488,10 @@ export default function DockBibleTab({
               >
                 <Icon name="edit" size={14} />
               </button>
+            </div>
+          }
+          children={
+            <>
 
               <div
                 className={`dock-line-popover dock-line-popover--toolbar${showVerseLinePopover ? " is-open" : ""}`}
@@ -4524,7 +4530,7 @@ export default function DockBibleTab({
                 )}
               </div>
               {referenceDisplayTrigger}
-            </div>
+            </>
           }
         />
 
