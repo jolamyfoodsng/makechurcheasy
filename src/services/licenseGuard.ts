@@ -21,7 +21,8 @@
  *   - Payload is normalized (expired paid → free) before caching
  *   - On startup: verify internet → verify with backend → normalize → cache → continue
  *   - Every 6 hours: re-verify while running
- *   - If offline > 14 days: immediately lock
+ *   - Connectivity failures preserve local auth during the configured grace window
+ *   - After the grace window, the user is asked to reconnect and verify
  *
  * Feature gating:
  *   Use hasRequiredPlan("growth") or canUseFeature("multiview") — never isUnlocked()
@@ -38,6 +39,7 @@ import {
 } from "./authService";
 import { checkEntitlementSync, type FeatureKey } from "./entitlementClient";
 import { normalizePlanId } from "../lib/subscriptionSourceOfTruth";
+import { refreshSubscriptionState } from "./subscriptionCache";
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
@@ -119,6 +121,7 @@ const DOWNGRADE_NOTIFIED_KEY = "ocs-downgrade-notified";
 const VISIBILITY_REVERIFY_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_BACKGROUND_REVERIFY_INTERVAL_MS = 60 * 1000;
+const SUBSCRIPTION_CACHE_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
 const FEATURE_ALIAS_MAP: Record<string, FeatureKey> = {
   multiview: "multiview",
@@ -148,6 +151,7 @@ let _initialized = false;
 let _revalidationTimer: ReturnType<typeof setInterval> | null = null;
 let _listeners: Array<(state: LicenseGuardState) => void> = [];
 let _lastVisibilityVerificationAt = 0;
+let _lastSubscriptionCacheRefreshAt = 0;
 
 // ── Cache Read/Write ─────────────────────────────────────────────────────────
 
@@ -403,7 +407,27 @@ function evaluateOfflineValidity(cached: LicenseCache): LockReason {
   if (!lastVerifiedMs) return "internet_required";
 
   const offlineWindowMs = getOfflineWindowDays(cached) * DAY_MS;
-  return Date.now() - lastVerifiedMs > offlineWindowMs ? "internet_required" : null;
+  if (Date.now() - lastVerifiedMs > offlineWindowMs) return "internet_required";
+  return null;
+}
+
+function refreshSubscriptionCacheInBackground(): void {
+  const session = getSession();
+  const deviceId = getDeviceId();
+  if (!session?.user?.id || !deviceId) return;
+
+  const now = Date.now();
+  if (now - _lastSubscriptionCacheRefreshAt < SUBSCRIPTION_CACHE_REFRESH_INTERVAL_MS) return;
+  _lastSubscriptionCacheRefreshAt = now;
+
+  void refreshSubscriptionState({
+    apiBases: getDeviceApiBaseCandidates(),
+    deviceId,
+    deviceSecret: getDeviceSecret(),
+    appVersion: APP_VERSION,
+  }).catch((error) => {
+    console.debug("[licenseGuard] Subscription cache refresh skipped:", error);
+  });
 }
 
 // ── Core State Management ────────────────────────────────────────────────────
@@ -572,6 +596,16 @@ export function subscribe(listener: (state: LicenseGuardState) => void): Unsubsc
  * Returns true if verification succeeded, false otherwise.
  */
 export async function verify(): Promise<boolean> {
+  // The license guard starts during app boot, before a user has paired this
+  // installation.  A missing session is not a removed device; treating it as
+  // one leaves a stale lock state that can immediately log a newly paired
+  // Windows session back out of the app.
+  if (!getSession()?.user?.id || !getDeviceId()) {
+    _lockReason = null;
+    emit();
+    return true;
+  }
+
   if (_verifying) return false;
   _verifying = true;
   emit();
@@ -583,7 +617,10 @@ export async function verify(): Promise<boolean> {
       if (_cache) {
         _lockReason = evaluateOfflineValidity(_cache);
       } else {
-        _lockReason = "internet_required";
+        // A first launch can be offline before a license cache exists. The
+        // desktop must still open and allow local/free workflows; verification
+        // will happen when connectivity returns.
+        _lockReason = null;
       }
       emit();
       return _lockReason === null;
@@ -605,9 +642,11 @@ export async function verify(): Promise<boolean> {
         emit();
         return _lockReason === null;
       }
-      _lockReason = "internet_required";
+      // No cached license means this is an unverified first run or a
+      // transient API outage, not proof that the account is invalid.
+      _lockReason = null;
       emit();
-      return false;
+      return true;
     }
 
     // Normalize before caching — convert billing expiry to free plan
@@ -617,6 +656,7 @@ export async function verify(): Promise<boolean> {
       cachedAt: Date.now(),
     };
     writeCache(_cache);
+    refreshSubscriptionCacheInBackground();
 
     _lockReason = evaluateLicense(normalizedPayload);
     emit();
@@ -624,7 +664,7 @@ export async function verify(): Promise<boolean> {
   } catch (err) {
     console.error("[licenseGuard] Verification error:", err);
     if (!_cache) {
-      _lockReason = "internet_required";
+      _lockReason = null;
       emit();
     }
     return _lockReason === null;
@@ -682,7 +722,7 @@ export async function initLicenseGuard(): Promise<void> {
     // Online — verify with backend
     await verify();
   } else {
-    _lockReason = _cache ? evaluateOfflineValidity(_cache) : "internet_required";
+    _lockReason = _cache ? evaluateOfflineValidity(_cache) : null;
     emit();
   }
 
@@ -761,6 +801,7 @@ export function resetLicenseGuard(): void {
   _verifying = false;
   _initialized = false;
   _lastVisibilityVerificationAt = 0;
+  _lastSubscriptionCacheRefreshAt = 0;
   clearCache();
   emit();
 }

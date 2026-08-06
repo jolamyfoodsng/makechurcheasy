@@ -10,7 +10,7 @@ import {
 } from "@/services/authService";
 import { resetFavoriteThemeCaches } from "@/services/favoriteThemes";
 import { clearAllUserScopedStorage } from "@/services/userScopedStorage";
-import { resetLicenseGuard, subscribe as subscribeLicenseGuard } from "@/services/licenseGuard";
+import { resetLicenseGuard } from "@/services/licenseGuard";
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -73,16 +73,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthenticated(false);
   }
 
-  useEffect(() => {
-    if (!authenticated) return;
-
-    return subscribeLicenseGuard((state) => {
-      if (state.lockReason !== "device_removed") return;
-      console.warn("[AuthContext] license guard reported device_removed — clearing stale local session");
-      logout();
-    });
-  }, [authenticated]);
-
   // Verify device still exists on server + keep lastSeen fresh
   useEffect(() => {
     if (!authenticated) return;
@@ -131,14 +121,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           `[AuthContext] refreshAccountState: ${result.status} — preserving local session, failure ${consecutiveFailuresRef.current}/${DEVICE_STATE_WARNING_THRESHOLD}`,
         );
         return true;
-      }
-
-      if (result.status === "device_removed") {
-        console.warn(
-          "[AuthContext] refreshAccountState: device_removed confirmed — clearing stale local session",
-        );
-        logout();
-        return false;
       }
 
       console.warn(

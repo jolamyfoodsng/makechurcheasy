@@ -8,10 +8,9 @@ describe("auth service device API base selection", () => {
     ]);
   });
 
-  it("tries production after a local API base", () => {
+  it("keeps an explicit local API isolated from production", () => {
     expect(resolveDeviceApiBaseCandidates("http://localhost:3004")).toEqual([
       "http://localhost:3004",
-      "https://api.creatorstudioslabs.stream",
     ]);
   });
 

@@ -43,9 +43,10 @@ function shouldTryNextApiBase(response?: Response): boolean {
 }
 
 function authApiCandidates(): string[] {
-  return Array.from(new Set(
-    [API_BASE, PRODUCTION_API_BASE].map(normalizeApiBase),
-  ));
+  // An explicit local API is an isolated development environment. Do not
+  // silently authenticate against production when that local server is down.
+  if (isLocalApiBase(API_BASE)) return [API_BASE];
+  return Array.from(new Set([API_BASE, PRODUCTION_API_BASE].map(normalizeApiBase)));
 }
 
 async function fetchAuthApi(path: string, init?: RequestInit): Promise<{ response: Response; apiBase: string }> {
@@ -293,6 +294,7 @@ export function getDeviceSecret(): string | null {
 
 export function resolveDeviceApiBaseCandidates(sessionApiBase?: string | null): string[] {
   const primary = normalizeApiBase(sessionApiBase || API_BASE);
+  if (isLocalApiBase(API_BASE) && isLocalApiBase(primary)) return [primary];
   return Array.from(new Set([
     primary,
     PRODUCTION_API_BASE,

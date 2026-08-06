@@ -8267,7 +8267,7 @@
   width: 100%;
   margin-top: 6px;
   padding: 8px 10px;
-  border: 0.4px solid var(--dock-border-soft, #334155);
+  border: 1px solid var(--dock-border-soft, #334155);
   border-radius: 10px;
   background: var(--dock-surface-alt, #1F2937);
 }
