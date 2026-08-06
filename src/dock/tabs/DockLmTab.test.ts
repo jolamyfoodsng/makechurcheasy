@@ -70,6 +70,15 @@ describe("DockLmTab settings helpers", () => {
     expect(dockLmTabSource).toContain("pushBibleCandidateToOutput(live, settings.overlayMode)");
   });
 
+  it("uses the saved Bible stream style when pushing LM verses", () => {
+    expect(dockLmTabSource).toContain("resolveDockBibleThemeForOverlayMode(overlayMode)");
+    expect(dockLmTabSource).toContain("resolveDockBibleReferenceLabels(");
+    expect(dockLmTabSource).toContain("bibleThemeSettings: bibleTheme.themeSettings");
+    expect(dockLmTabSource).toContain("liveOverrides: bibleTheme.liveOverrides");
+    expect(dockLmTabSource).toContain("displayReferenceLabel: referenceLabels.displayReferenceLabel");
+    expect(dockLmTabSource).not.toContain("loadBiblePrefs()");
+  });
+
   it("renders and wires the auto-push controls", () => {
     expect(dockLmTabSource).toContain("AUTO-PUSH");
     expect(dockLmTabSource).toContain('t("lm.autoPushQueue")');

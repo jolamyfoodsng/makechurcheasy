@@ -13,7 +13,12 @@
 
 import { dockBridge } from "./dockBridge";
 import { ScriptureDetectionEngine } from "./scriptureEngine";
-import { createScriptureSpeechState, resolveScriptureSpeech, type ScriptureSpeechState } from "./scriptureParser";
+import {
+  createScriptureSpeechState,
+  isLikelyScriptureReferenceAttempt,
+  resolveScriptureSpeech,
+  type ScriptureSpeechState,
+} from "./scriptureParser";
 import { getOverlayBaseUrl } from "./overlayUrl";
 import { getSettings as getMvSettings } from "../multiview/mvStore";
 import type { VoiceBibleCandidate, TranscriptEntry, DetectionSpeed, LmDockTelemetry } from "./voiceBibleTypes";
@@ -592,7 +597,7 @@ class LmDockService {
     // always return 0 results and clear suggestions, making the reference appear
     // to show "nothing" even though processChunk already detected it.
     const ref = resolveScriptureSpeech(text, this.scriptureSpeechState, now);
-    if (ref) {
+    if (ref || isLikelyScriptureReferenceAttempt(text)) {
       return;
     }
 

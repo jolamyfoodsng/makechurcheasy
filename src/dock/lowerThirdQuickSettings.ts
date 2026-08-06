@@ -42,6 +42,21 @@ const LINKED_LOWER_THIRD_INHERITED_KEYS: Array<keyof DockFullscreenQuickThemeSet
   "bgGradientAngle",
 ];
 
+const SHARED_BACKGROUND_KEYS: Array<keyof DockFullscreenQuickThemeSettings> = [
+  "backgroundType",
+  "backgroundImage",
+  "backgroundImageFilePath",
+  "backgroundPattern",
+  "backgroundVideo",
+  "backgroundVideoFilePath",
+  "backgroundOpacity",
+  "backgroundColor",
+  "backgroundColorEnd",
+  "bgGradientAngle",
+  "fullscreenShadeColor",
+  "fullscreenShadeOpacity",
+];
+
 export function areQuickThemeSettingsEquivalent(
   left: DockFullscreenQuickThemeSettings | null | undefined,
   right: DockFullscreenQuickThemeSettings | null | undefined,
@@ -60,6 +75,28 @@ export function areQuickThemeSettingsEquivalent(
   }
 
   return true;
+}
+
+export function mergeQuickThemeBackground(
+  base: DockFullscreenQuickThemeSettings,
+  source: DockFullscreenQuickThemeSettings | null | undefined,
+): DockFullscreenQuickThemeSettings {
+  if (!source) return base;
+
+  const next: DockFullscreenQuickThemeSettings = { ...base };
+  const assignableNext = next as Record<
+    keyof DockFullscreenQuickThemeSettings,
+    DockFullscreenQuickThemeSettings[keyof DockFullscreenQuickThemeSettings] | undefined
+  >;
+
+  for (const key of SHARED_BACKGROUND_KEYS) {
+    const value = source[key];
+    if (value !== undefined) {
+      assignableNext[key] = value;
+    }
+  }
+
+  return next;
 }
 
 export function buildLinkedLowerThirdQuickThemeSettings(

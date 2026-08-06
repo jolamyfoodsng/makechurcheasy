@@ -286,7 +286,6 @@ export default function BackgroundPickerCard({
   const [selectedLocalStyleId, setSelectedLocalStyleId] = useState("");
   const [localStyleStatus, setLocalStyleStatus] = useState("");
   const [textAdvancedOpen, setTextAdvancedOpen] = useState(false);
-  const [spacingShapeOpen, setSpacingShapeOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const styleMenuRef = useRef<HTMLDivElement>(null);
   const prevStorageKeysRef = useRef(storageKeys);
@@ -724,6 +723,13 @@ export default function BackgroundPickerCard({
               )}
             </div>
 
+            {storageScope === "bible" && (
+              <BibleAnimationSection
+                quickSettings={quickSettings}
+                onQuickSettingsChange={onQuickSettingsChange}
+              />
+            )}
+
 
 
           </>
@@ -934,18 +940,8 @@ export default function BackgroundPickerCard({
               </div>
 
               {overlayMode === "lower-third" && (
-                <div className="dtb-control-section dtb-control-section--collapsible">
-                  <button
-                    type="button"
-                    className="dtb-colors__collapsible-header"
-                    onClick={() => setSpacingShapeOpen((open) => !open)}
-                    aria-expanded={spacingShapeOpen}
-                  >
-                    <span className="dtb-section-title">{t('bgPicker.spacingAndShape', 'Spacing and shape')}</span>
-                    <Icon name={spacingShapeOpen ? "expand_less" : "expand_more"} size={14} />
-                  </button>
-                  {spacingShapeOpen && (
-                    <div className="dtb-control-section__body">
+                <div className="dtb-control-section">
+                  <div className="dtb-control-section__body">
                       <div className="dtb-toggle-field dtb-toggle-field--inline">
                         <div className="dtb-toggle-field__copy">
                           <span className="dtb-toggle-field__label">{t('bgPicker.linkTextPadding', 'Control both padding values')}</span>
@@ -1072,8 +1068,7 @@ export default function BackgroundPickerCard({
                           />
                         </div>
                       )}
-                    </div>
-                  )}
+                  </div>
                 </div>
               )}
             </div>
@@ -1594,6 +1589,76 @@ function PatternTab({
         })}
       </div>
     </div>
+  );
+}
+
+const BIBLE_ANIMATION_OPTIONS: Array<{ value: NonNullable<DockFullscreenQuickThemeSettings["animation"]>; label: string }> = [
+  { value: "none", label: "Off" },
+  { value: "fade", label: "Fade" },
+  { value: "slide-up", label: "Slide up" },
+  { value: "slide-left", label: "Slide left" },
+  { value: "scale-in", label: "Scale in" },
+  { value: "reveal-bg-then-text", label: "Reveal background + text" },
+];
+
+function BibleAnimationSection({
+  quickSettings,
+  onQuickSettingsChange,
+}: {
+  quickSettings: DockFullscreenQuickThemeSettings;
+  onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
+}) {
+  const { t } = useTranslation();
+  const animation = quickSettings.animation ?? "none";
+  const animationEnabled = animation !== "none";
+
+  return (
+    <section className="dtb-bg-picker__motion-section" aria-labelledby="dtb-bible-motion-title">
+      <div className="dtb-bg-picker__motion-header">
+        <div>
+          <div id="dtb-bible-motion-title" className="dtb-bg-picker__motion-title">
+            {t("bgPicker.motion", "Motion")}
+          </div>
+          <div className="dtb-bg-picker__motion-help">
+            {t("bgPicker.motionHelp", "Animations are off by default. Enable one when you want verse transitions.")}
+          </div>
+        </div>
+        <select
+          className="dtb-bg-picker__motion-select"
+          value={animation}
+          onChange={(event) => onQuickSettingsChange((prev) => ({
+            ...prev,
+            animation: event.target.value as NonNullable<DockFullscreenQuickThemeSettings["animation"]>,
+          }))}
+          aria-label={t("bgPicker.motion", "Motion")}
+        >
+          {BIBLE_ANIMATION_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </div>
+      {animationEnabled && (
+        <div className="dtb-bg-picker__motion-duration">
+          <div className="dtb-slider-field__head">
+            <span>{t("bgPicker.duration", "Duration")}</span>
+            <span className="dtb-slider-field__value">{quickSettings.animationDuration}ms</span>
+          </div>
+          <input
+            type="range"
+            className="dtb-slider"
+            min="100"
+            max="1500"
+            step="50"
+            value={quickSettings.animationDuration}
+            onChange={(event) => onQuickSettingsChange((prev) => ({
+              ...prev,
+              animationDuration: Number(event.target.value),
+            }))}
+            aria-label={t("bgPicker.duration", "Duration")}
+          />
+        </div>
+      )}
+    </section>
   );
 }
 

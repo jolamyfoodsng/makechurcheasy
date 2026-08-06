@@ -2099,7 +2099,10 @@
         } else { root.style.setProperty('--ref-width', '100%'); root.style.setProperty('--ref-bg-color', 'transparent'); root.style.setProperty('--ref-bg-padding', '0'); root.style.setProperty('--ref-bg-radius', '0'); root.style.setProperty('--ref-bg-border', 'none'); }
 
         root.style.setProperty('--text-transform', mapTextTransform(s.textTransform));
-        const ead = Math.max(95, Math.min(170, Math.round((s.animationDuration || 400) * 0.38)));
+        const animationsEnabled = ['fade', 'slide-up', 'slide-left', 'scale-in', 'reveal-bg-then-text'].includes(String(s.animation || ''));
+        const ead = animationsEnabled
+          ? Math.max(95, Math.min(170, Math.round((s.animationDuration || 400) * 0.38)))
+          : 0;
         root.style.setProperty('--anim-duration', ead + 'ms');
         root.style.setProperty('--bg-enter-duration', Math.max(70, Math.round(ead * 0.42)) + 'ms');
         root.style.setProperty('--text-enter-duration', Math.max(82, Math.round(ead * 0.54)) + 'ms');
@@ -2338,6 +2341,13 @@
         }
       }
 
+      function isOverlayAnimationEnabled(data) {
+        const animation = data && data.theme && data.theme.animation
+          || currentOverlayData && currentOverlayData.theme && currentOverlayData.theme.animation
+          || currentBibleState && currentBibleState.theme && currentBibleState.theme.animation;
+        return ['fade', 'slide-up', 'slide-left', 'scale-in', 'reveal-bg-then-text'].includes(String(animation || ''));
+      }
+
       function restartPreviewFade(mode) {
         const targets = mode === 'lower-third'
           ? [ltVerseText, ltRefText]
@@ -2389,7 +2399,8 @@
         const previousSlideKey = getOverlaySlideKey(currentOverlayData);
         const shouldFadePreview = hasShownOnce &&
           hasRenderableSlide(packet) &&
-          previousSlideKey !== getOverlaySlideKey(packet);
+          previousSlideKey !== getOverlaySlideKey(packet) &&
+          isOverlayAnimationEnabled(packet);
         currentBibleRevision = revision;
         currentBibleState = packet;
         currentOverlayData = packet;

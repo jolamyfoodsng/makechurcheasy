@@ -355,6 +355,14 @@
   cursor: not-allowed;
 }
 
+/* Inline actions can move into the overflow menu at very narrow widths. */
+.dock-btm-toolbar__inline-action {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
 /* ── Overflow menu container ── */
 .dock-btm-overflow {
   position: relative;
@@ -393,6 +401,12 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.dock-btm-overflow__narrow-actions {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
 }
 
 /* ── Make children inside overflow menu full-width icon buttons ── */

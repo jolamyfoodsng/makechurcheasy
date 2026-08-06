@@ -155,7 +155,15 @@ describe("dockObsClient background reflection stress", () => {
       deliverCssOverlayPacket: client.deliverCssOverlayPacket,
       getPresentationTargetScene: client.getPresentationTargetScene,
       fitSceneSourceToLowerThirdWindow: client.fitSceneSourceToLowerThirdWindow,
+      fitSceneSourceToCanvas: client.fitSceneSourceToCanvas,
       ensureTickerAboveSource: client.ensureTickerAboveSource,
+      ensureOverlaySource: client.ensureOverlaySource,
+      ensureActiveMceOverlaySource: client.ensureActiveMceOverlaySource,
+      _ensureFullscreenScene: client._ensureFullscreenScene,
+      hideSceneSource: client.hideSceneSource,
+      hideFullscreenBg: client.hideFullscreenBg,
+      _hideLowerThirdBgSource: client._hideLowerThirdBgSource,
+      waitForOverlayRenderAck: client.waitForOverlayRenderAck,
       promotePresentationScene: client.promotePresentationScene,
       ensurePresentationPreviewActive: client.ensurePresentationPreviewActive,
       ensurePresentationSceneReady: client.ensurePresentationSceneReady,
@@ -483,7 +491,7 @@ describe("dockObsClient background reflection stress", () => {
     expect(fitSource).toHaveBeenCalledTimes(2);
   });
 
-  it("does not copy managed multiview Program scenes into MCE Presentation", async () => {
+  it("preserves the last presentation underlay while a managed multiview scene is Program", async () => {
     sceneItems.set("MCE Presentation", new Map([
       ["Pastor Camera", { sourceName: "Pastor Camera", sceneItemId: 10, sceneItemIndex: 0, enabled: true }],
       ["MCE Worship", { sourceName: "MCE Worship", sceneItemId: 11, sceneItemIndex: 1, enabled: true }],
@@ -498,13 +506,66 @@ describe("dockObsClient background reflection stress", () => {
     await client.ensureProgramSceneAsSourceInPresentation(true);
 
     const presentationItems = sceneItems.get("MCE Presentation");
-    expect(presentationItems?.has("Pastor Camera")).toBe(false);
+    expect(presentationItems?.has("Pastor Camera")).toBe(true);
     expect(presentationItems?.has("MV: Multiview 1")).toBe(false);
     expect(presentationItems?.has("MCE Worship")).toBe(true);
+    expect(callLog.some((entry) => entry.method === "RemoveSceneItem")).toBe(false);
     expect(callLog.some((entry) => (
       entry.method === "CreateSceneItem" &&
       entry.payload.sceneName === "MCE Presentation" &&
       entry.payload.sourceName === "MV: Multiview 1"
+    ))).toBe(false);
+  });
+
+  it("preserves the last presentation underlay in no-clone mode for Multiview", async () => {
+    sceneItems.set("MCE Presentation", new Map([
+      ["Camera 2", { sourceName: "Camera 2", sceneItemId: 10, sceneItemIndex: 0, enabled: true }],
+      ["MCE Worship", { sourceName: "MCE Worship", sceneItemId: 11, sceneItemIndex: 1, enabled: true }],
+    ]));
+    sceneItems.set("MV: Multiview 1", new Map());
+    client.readSceneMode = vi.fn(() => "no-clone");
+    client.getCurrentProgramSceneName = vi.fn(async () => "MV: Multiview 1");
+
+    await client.ensureNoProgramSceneUnderlayInPresentation(true);
+
+    expect(sceneItems.get("MCE Presentation")?.has("Camera 2")).toBe(true);
+    expect(sceneItems.get("MCE Presentation")?.has("MCE Worship")).toBe(true);
+    expect(callLog.some((entry) => entry.method === "RemoveSceneItem")).toBe(false);
+  });
+
+  it("does not remove MCE Presentation from Multiview while Bible lower-third initializes", async () => {
+    sceneItems.set("MV: Multiview 1", new Map([
+      ["MCE Presentation", { sourceName: "MCE Presentation", sceneItemId: 20, sceneItemIndex: 1, enabled: true }],
+    ]));
+    sceneItems.set("MCE Presentation", new Map());
+    currentProgramSceneName = "MV: Multiview 1";
+    client.getPresentationTargetScene = vi.fn(async () => ({ sceneName: "MCE Presentation", studioMode: false }));
+    client._ensureFullscreenScene = vi.fn(async () => ({ sceneName: "MCE Presentation", browserItemId: 1 }));
+    client.ensureOverlaySource = vi.fn(async () => {});
+    client.ensureActiveMceOverlaySource = vi.fn(async () => {});
+    client.ensureTickerAboveSource = vi.fn(async () => {});
+    client.hideSceneSource = vi.fn(async () => {});
+    client.hideFullscreenBg = vi.fn(async () => {});
+    client._hideLowerThirdBgSource = vi.fn(async () => {});
+    client.fitSceneSourceToCanvas = vi.fn(async () => {});
+    client.waitForOverlayRenderAck = vi.fn(async () => {});
+    client.publishFullscreenOverlayPacket = vi.fn();
+    client.deliverCssOverlayPacket = vi.fn(async () => {});
+
+    await client.pushBible({
+      book: "John",
+      chapter: 1,
+      verse: 1,
+      translation: "KJV",
+      verseText: "In the beginning was the Word.",
+      overlayMode: "lower-third",
+      bibleThemeSettings: makeBackgroundTheme({ backgroundColor: "#112233" }),
+    });
+
+    expect(sceneItems.get("MV: Multiview 1")?.has("MCE Presentation")).toBe(true);
+    expect(callLog.some((entry) => (
+      entry.method === "RemoveSceneItem" &&
+      entry.payload.sceneName === "MV: Multiview 1"
     ))).toBe(false);
   });
 

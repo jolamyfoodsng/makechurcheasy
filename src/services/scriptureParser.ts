@@ -249,6 +249,14 @@ interface ChapterVerseResult {
 function parseChapterVerseFromTokens(tokens: string[]): ChapterVerseResult | null {
   if (tokens.length === 0) return null;
 
+  const chapterIdx = tokens.findIndex((token) => /^(chapter|chap)$/i.test(token));
+  if (
+    chapterIdx > 0 &&
+    tokens.slice(0, chapterIdx).some((token) => parseNumberWord(token) !== null || /^verse$/i.test(token))
+  ) {
+    return null;
+  }
+
   // Handle colon notation first (e.g., "2:1", "3:16-17")
   // This is common when the input comes as a single token after a numbered book
   // like "2 kings 2:1" where "2:1" is one token.
@@ -623,6 +631,10 @@ export function parseScriptureIntent(text: string): ScriptureIntent {
     }
   }
 
+  if (isLikelyScriptureReferenceAttempt(lower)) {
+    return null;
+  }
+
   // ── Return to last passage ──
   if (/\breturn\s+(?:to\s+)?(?:the\s+)?last\s+passage\b/.test(lower) ||
     /\bgo\s+back\s+(?:to\s+)?(?:the\s+)?last\s+passage\b/.test(lower)) {
@@ -895,6 +907,12 @@ export function parseScriptureReference(text: string): ParsedReference | null {
 
   // Check for "chapter N" or "verse N" patterns
   const chapterIdx = afterBook.indexOf("chapter");
+  if (
+    chapterIdx > 0 &&
+    afterBook.slice(0, chapterIdx).some((token) => parseNumberWord(token) !== null || token === "verse")
+  ) {
+    return null;
+  }
   if (chapterIdx >= 0 && chapterIdx + 1 < afterBook.length) {
     const n = parseNumberWord(afterBook[chapterIdx + 1]);
     if (n !== null) {
@@ -973,6 +991,31 @@ export function parseScriptureReference(text: string): ParsedReference | null {
     endVerse,
     isRelative: !book,
   };
+}
+
+export function isLikelyScriptureReferenceAttempt(text: string): boolean {
+  const cleaned = cleanTranscript(text);
+  if (!cleaned) return false;
+
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return false;
+
+  const hasReferenceStructure =
+    tokens.some((token) => token === "chapter" || token === "verse") ||
+    tokens.some((token) => parseNumberWord(token) !== null || /^\d+:\d+/.test(token));
+
+  if (!hasReferenceStructure) return false;
+  if (resolveNumberedBookWithTokens(text) || resolveNumberedBookWithTokens(cleaned)) return true;
+
+  for (let len = Math.min(tokens.length, 5); len >= 1; len -= 1) {
+    for (let index = 0; index <= tokens.length - len; index += 1) {
+      const candidate = tokens.slice(index, index + len).join(" ");
+      if (BOOK_ALIAS_MAP.has(candidate)) return true;
+      if (BOOK_ALIAS_MAP.has(candidate.replace(/\s+/g, ""))) return true;
+    }
+  }
+
+  return tokens.some((token) => fuzzyMatchBook(token) !== null);
 }
 
 /**

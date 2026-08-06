@@ -126,6 +126,47 @@ function isSupportingPassageResult(
   );
 }
 
+function canStrongQuoteLeaveScope(confidence: number, profile: QuoteQueryProfile): boolean {
+  return confidence >= 0.82 && (profile.strongAnchors > 0 || profile.contentTokens.length >= 4);
+}
+
+function hasStrongRankedSearchWinner(
+  rankedResults: RankedBibleSearchResult[],
+  quoteThresholds: QuoteSearchThresholds,
+): boolean {
+  if (rankedResults.length === 0) return false;
+
+  const best = rankedResults[0];
+  const runnerUp = rankedResults.length > 1 ? rankedResults[1] : null;
+  const hasStrongScore = best.score >= quoteThresholds.lexicalMinScore;
+  const hasClearGap = runnerUp
+    ? (best.score >= 0.95 && isSupportingPassageResult(best, runnerUp)) ||
+      (best.score - runnerUp.score) >= quoteThresholds.lexicalMinGap
+    : true;
+
+  return hasStrongScore && hasClearGap;
+}
+
+function buildLexicalQuoteMatches(
+  rankedResults: RankedBibleSearchResult[],
+  translation: string,
+): ScriptureMatch[] {
+  return rankedResults.slice(0, 1).map((result) => ({
+    candidate: {
+      book: result.book,
+      chapter: result.chapter,
+      verse: result.verse,
+      translation,
+      label: `${result.book} ${result.chapter}:${result.verse}`,
+      snippet: result.text,
+      confidence: result.score,
+      source: "keyword",
+    },
+    source: "quote" as const,
+    confidence: result.score,
+  }));
+}
+
 interface ChunkRecord {
   text: string;
   timestamp: number;
@@ -906,14 +947,77 @@ export class ScriptureDetectionEngine {
     const quoteProfile = analyzeQuoteQuery(searchInput);
     const quoteThresholds = getQuoteSearchThresholds(quoteProfile);
     let rankedSearchResults: RankedBibleSearchResult[] = [];
+    const hasEnoughDistinctiveText = quoteProfile.contentTokens.length >= 3 && quoteProfile.strongAnchors > 0;
+    const canUseClosestFallback =
+      useClosestFallback &&
+      quoteProfile.tokens.length >= 3 &&
+      quoteProfile.contentTokens.length > 0;
 
     // ────────────────────────────────────────────────────────────────────────
-    // STAGE 1: Fast keyword match (<1ms, no LLM)
-    // O(1) lookup for hardcoded common scriptures. A match outside the active
-    // passage is ignored so a generic phrase cannot jump to another book.
+    // STAGE 1: Lexical Bible corpus search
+    // Search the actual Bible text before curated shortcuts. Strong corpus
+    // matches may override stale passage context; weak closest matches remain
+    // scoped so ordinary sermon language does not jump books.
+    // ────────────────────────────────────────────────────────────────────────
+
+    if (hasEnoughDistinctiveText || canUseClosestFallback) {
+      try {
+        const { searchBibleRanked } = await loadBibleDataModule();
+        if (signal.aborted) return [];
+
+        const globalRankedResults = await searchBibleRanked(
+          searchInput,
+          this.translation as "KJV",
+          5,
+          undefined,
+          useClosestFallback ? CLOSEST_QUOTE_SEARCH_MIN_SCORE : undefined,
+        );
+        rankedSearchResults = globalRankedResults;
+        if (signal.aborted) return [];
+
+        if (hasStrongRankedSearchWinner(globalRankedResults, quoteThresholds)) {
+          const best = globalRankedResults[0];
+          if (
+            matchesQuoteSearchScope(best.book, best.chapter, searchScope) ||
+            canStrongQuoteLeaveScope(best.score, quoteProfile)
+          ) {
+            return buildLexicalQuoteMatches(globalRankedResults, this.translation);
+          }
+        }
+
+        if (searchScope) {
+          const scopedRankedResults = await searchBibleRanked(
+            searchInput,
+            this.translation as "KJV",
+            5,
+            searchScope,
+            useClosestFallback ? CLOSEST_QUOTE_SEARCH_MIN_SCORE : undefined,
+          );
+          rankedSearchResults = scopedRankedResults.length > 0 ? scopedRankedResults : globalRankedResults;
+          if (signal.aborted) return [];
+
+          if (hasStrongRankedSearchWinner(scopedRankedResults, quoteThresholds)) {
+            return buildLexicalQuoteMatches(scopedRankedResults, this.translation);
+          }
+        }
+      } catch (err) {
+        console.warn("[ScriptureEngine] Lexical search failed:", err);
+      }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // STAGE 2: Fast keyword match (<1ms, no LLM)
+    // O(1) lookup for hardcoded common scriptures. Strong deterministic
+    // matches may override stale passage context; weak fallbacks stay scoped.
     // ────────────────────────────────────────────────────────────────────────
     const fastMatch = fastKeywordMatch(searchInput);
-    if (fastMatch && matchesQuoteSearchScope(fastMatch.book, fastMatch.chapter, searchScope)) {
+    if (
+      fastMatch &&
+      (
+        matchesQuoteSearchScope(fastMatch.book, fastMatch.chapter, searchScope) ||
+        canStrongQuoteLeaveScope(fastMatch.confidence, quoteProfile)
+      )
+    ) {
       const verseData = await getVerse(fastMatch.book, fastMatch.chapter, fastMatch.verse, this.translation as "KJV").catch(() => null);
       if (!verseData?.text) return [];
       const snippet = verseData.text;
@@ -935,9 +1039,10 @@ export class ScriptureDetectionEngine {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // STAGE 2: Verse alias fast path (<1ms, no embedding)
+    // STAGE 3: Verse alias fast path (<1ms, no embedding)
     // Direct phrase→reference lookup for universally known quotations.
-    // When a passage is active, an alias from another book is ignored.
+    // Strong aliases may override stale passage context; weaker stages below
+    // stay scoped to avoid turning sermon filler into a random reference.
     // ────────────────────────────────────────────────────────────────────────
     try {
       const { matchVerseAlias } = await loadScriptureRerankerModule();
@@ -945,7 +1050,13 @@ export class ScriptureDetectionEngine {
       if (aliasRef) {
         const { getVerse: getV } = await loadBibleDataModule();
         const parsed = aliasRef.match(/^(.+?)\s+(\d+):(\d+)$/);
-        if (parsed && matchesQuoteSearchScope(parsed[1], +parsed[2], searchScope)) {
+        if (
+          parsed &&
+          (
+            matchesQuoteSearchScope(parsed[1], +parsed[2], searchScope) ||
+            canStrongQuoteLeaveScope(0.95, quoteProfile)
+          )
+        ) {
           const [, book, ch, vs] = parsed;
           const verseData = await getV(book, +ch, +vs, this.translation as "KJV").catch(() => null);
           if (!verseData?.text) return [];
@@ -969,67 +1080,8 @@ export class ScriptureDetectionEngine {
       console.warn("[ScriptureEngine] Verse alias lookup failed:", err);
     }
 
-    // Do not spend a full-corpus search on generic worship language. Famous
-    // phrases have already passed through the alias path above; everything
-    // else needs at least one distinctive word to be worth searching.
-    const hasEnoughDistinctiveText = quoteProfile.contentTokens.length >= 3 && quoteProfile.strongAnchors > 0;
-    const canUseClosestFallback =
-      useClosestFallback &&
-      quoteProfile.tokens.length >= 3 &&
-      quoteProfile.contentTokens.length > 0;
-
     if (!hasEnoughDistinctiveText && !canUseClosestFallback) {
       return [];
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // STAGE 3: Lexical Bible search
-    // This catches partial/quoted phrases that are not exact alias hits but
-    // still line up strongly with the verse text. It is more precise than
-    // embeddings for spoken scripture and should win before semantic fallback.
-    // ────────────────────────────────────────────────────────────────────────
-
-    try {
-      const { searchBibleRanked } = await loadBibleDataModule();
-      if (signal.aborted) return [];
-
-      const rankedResults = await searchBibleRanked(
-        searchInput,
-        this.translation as "KJV",
-        5,
-        searchScope,
-        useClosestFallback ? CLOSEST_QUOTE_SEARCH_MIN_SCORE : undefined,
-      );
-      rankedSearchResults = rankedResults;
-      if (signal.aborted) return [];
-
-      if (rankedResults.length > 0) {
-        const best = rankedResults[0];
-        const runnerUp = rankedResults.length > 1 ? rankedResults[1] : null;
-        const hasStrongScore = best.score >= quoteThresholds.lexicalMinScore;
-        const hasClearGap = runnerUp
-          ? (best.score >= 0.95 && isSupportingPassageResult(best, runnerUp)) || (best.score - runnerUp.score) >= quoteThresholds.lexicalMinGap
-          : true;
-
-        if (hasStrongScore && hasClearGap) {
-          return rankedResults.slice(0, 10).map((result) => ({
-            candidate: {
-              book: result.book,
-              chapter: result.chapter,
-              verse: result.verse,
-              translation: this.translation,
-              label: `${result.book} ${result.chapter}:${result.verse}`,
-              snippet: result.text,
-              confidence: result.score,
-              source: "keyword",
-            },
-            source: "quote" as const,
-            confidence: result.score,
-          }));
-        }
-      }
-    } catch (err) {
-      console.warn("[ScriptureEngine] Lexical search failed:", err);
     }
 
     // ────────────────────────────────────────────────────────────────────────

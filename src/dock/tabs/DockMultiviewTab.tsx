@@ -18,6 +18,7 @@ import Icon from "../DockIcon";
 import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { GALLERY_LAYOUTS, type GalleryLayout, type GallerySlot } from "../../multiview/galleryLayouts";
+import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
 import {
   areAddedLayoutIdsEqual,
   getAddedLayoutLocalStorageKeys,
@@ -71,16 +72,17 @@ function areStringListsEqual(a: string[], b: string[]): boolean {
 // Data Model
 // ---------------------------------------------------------------------------
 
-type MVBgType = "color" | "image" | "video" | "scene";
+type MVBgType = "color" | "image" | "video" | "pattern" | "scene";
 
 interface MVBackground {
   type: MVBgType;
   color: string;
   filePath: string;
+  patternSrc: string;
   sceneName: string;
 }
 
-const DEFAULT_MV_BG: MVBackground = { type: "color", color: "transparent", filePath: "", sceneName: "" };
+const DEFAULT_MV_BG: MVBackground = { type: "color", color: "transparent", filePath: "", patternSrc: "", sceneName: "" };
 
 interface SavedMultiView {
   id: string;
@@ -419,6 +421,44 @@ async function saveFramePngToDisk(bytes: Uint8Array): Promise<string | null> {
       });
       if (!res.ok) return null;
       const data = await res.json();
+      return data.path || null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+async function saveBackgroundDataUrlToDisk(dataUrl: string, safeName: string): Promise<string | null> {
+  if (!dataUrl.startsWith("data:")) return dataUrl;
+  const commaIndex = dataUrl.indexOf(",");
+  if (commaIndex < 0) return null;
+
+  const header = dataUrl.slice(0, commaIndex);
+  const payload = dataUrl.slice(commaIndex + 1);
+  const bytes = /;base64/i.test(header)
+    ? Uint8Array.from(atob(payload), (char) => char.charCodeAt(0))
+    : new TextEncoder().encode(decodeURIComponent(payload));
+
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<string>("save_upload_file", {
+      fileName: safeName,
+      fileData: Array.from(bytes),
+    });
+  } catch {
+    try {
+      const response = await fetch("/api/save-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: safeName,
+          dataUrl: dataUrl.startsWith("data:image/svg+xml")
+            ? `data:image/svg+xml;base64,${btoa(String.fromCharCode(...bytes))}`
+            : dataUrl,
+        }),
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
       return data.path || null;
     } catch {
       return null;
@@ -1548,8 +1588,13 @@ const BG_TYPE_OPTIONS: Array<{ type: MVBgType | "none"; labelKey: string; icon: 
   { type: "color", labelKey: "multiview.bgColor", icon: "palette" },
   { type: "image", labelKey: "multiview.bgImage", icon: "image" },
   { type: "video", labelKey: "multiview.bgVideo", icon: "movie" },
+  { type: "pattern", labelKey: "common.pattern", icon: "grid_view" },
   { type: "scene", labelKey: "multiview.bgScene", icon: "grid_view" },
 ];
+
+function getPatternLabel(src: string): string {
+  return BACKGROUND_PATTERNS.find((pattern) => pattern.src === src)?.label || "Pattern";
+}
 
 function BackgroundSection({
   background,
@@ -1573,9 +1618,16 @@ function BackgroundSection({
   const [draggingType, setDraggingType] = useState<string | null>(null);
   const [mediaQuery, setMediaQuery] = useState("");
 
-  const hasBg = background.type !== "color" || (background.color !== "#0F172A" && background.color !== "transparent") || background.filePath || background.sceneName;
+  const hasBg = background.type === "color"
+    ? background.color !== "#0F172A" && background.color !== "transparent"
+    : background.type === "scene"
+      ? Boolean(background.sceneName)
+      : background.type === "pattern"
+        ? Boolean(background.patternSrc)
+        : Boolean(background.filePath);
 
   const isMediaType = background.type === "image" || background.type === "video";
+  const isPatternType = background.type === "pattern";
   const mediaType = background.type === "video" ? "video" : "image";
 
   const refreshMediaLibrary = useCallback(async () => {
@@ -1660,13 +1712,14 @@ function BackgroundSection({
   const bgLabel = background.type === "color" ? t('multiview.bgColor')
     : background.type === "image" ? t('multiview.bgImage')
       : background.type === "video" ? t('multiview.bgVideo')
+        : background.type === "pattern" ? t('common.pattern')
         : background.type === "scene" ? t('multiview.bgScene')
           : "";
 
   const bgValue = background.type === "color" ? background.color
+    : background.type === "pattern" ? getPatternLabel(background.patternSrc)
     : background.type === "scene" ? background.sceneName
-      : background.filePath ? getBackgroundMediaLabel(background.filePath)
-        : "";
+      : "";
 
   const selectedMediaName = background.filePath ? getBackgroundMediaLabel(background.filePath) : "";
   const hasSelectedMedia = selectedMediaName.length > 0;
@@ -1679,14 +1732,34 @@ function BackgroundSection({
   const visibleMediaLibraryItems = normalizedMediaQuery
     ? mediaLibraryItems.filter((item) => item.name.toLowerCase().includes(normalizedMediaQuery))
     : mediaLibraryItems;
+  const selectedMediaItem = mediaLibraryItems.find((item) => isMediaItemSelectedForBackground(item, background.filePath));
+  const selectedMediaPreviewSrc = selectedMediaItem ? getMediaItemPreviewSrc(selectedMediaItem) : "";
   const selectableObsScenes = obsScenes.filter((sceneName) => !isMultiviewManagedSceneName(sceneName));
+  const selectedType = background.type === "color" && (background.color === "transparent" || background.color === "#0F172A")
+    ? "none"
+    : background.type;
+
+  const handleTypeChange = (type: MVBgType | "none") => {
+    if (type === "none") {
+      onChange({ ...DEFAULT_MV_BG });
+      return;
+    }
+    onChange({
+      ...background,
+      type,
+      color: type === "color" ? (background.color === "transparent" ? "#0F172A" : background.color) : background.color,
+      filePath: type === "image" || type === "video" ? background.filePath : "",
+      patternSrc: type === "pattern" ? (background.patternSrc || BACKGROUND_PATTERNS[0]?.src || "") : "",
+      sceneName: type === "scene" ? background.sceneName : "",
+    });
+  };
 
   return (
     <div className="dock-mv-property">
       <span className="dock-mv-property__label">{t('multiview.background')}</span>
       <div className="dock-mv-property__row">
         {hasBg ? (
-          <span className="dock-mv-property__value">{bgLabel}: {bgValue}</span>
+          <span className="dock-mv-property__value">{bgLabel}{bgValue ? `: ${bgValue}` : ""}</span>
         ) : (
           <span className="dock-mv-property__value dock-mv-property__value--empty">{t('multiview.noBackground')}</span>
         )}
@@ -1706,24 +1779,21 @@ function BackgroundSection({
               </button>
             </div>
 
-            <div className="dock-mv-bg-editor__types">
-              {BG_TYPE_OPTIONS.map(opt => (
-                <button
-                  key={opt.type}
-                  type="button"
-                  className={`dock-mv-bg-editor__type-btn${background.type === opt.type ? " dock-mv-bg-editor__type-btn--active" : ""}`}
-                  onClick={() => {
-                    if (opt.type === "none") {
-                      onChange({ type: "color", color: "transparent", filePath: "", sceneName: "" });
-                    } else {
-                      onChange({ ...background, type: opt.type });
-                    }
-                  }}
+            <div className="dock-mv-bg-editor__type-select-wrap">
+              <label htmlFor="dock-mv-background-type" className="dock-mv-bg-editor__type-label">Background type</label>
+              <div className="dock-mv-bg-editor__type-select-control">
+                <Icon name={BG_TYPE_OPTIONS.find((option) => option.type === selectedType)?.icon || "layers"} size={14} />
+                <select
+                  id="dock-mv-background-type"
+                  className="dock-mv-bg-editor__type-select"
+                  value={selectedType}
+                  onChange={(event) => handleTypeChange(event.target.value as MVBgType | "none")}
                 >
-                  <Icon name={opt.icon} size={14} />
-                  <span>{t(opt.labelKey)}</span>
-                </button>
-              ))}
+                  {BG_TYPE_OPTIONS.map((option) => (
+                    <option key={option.type} value={option.type}>{t(option.labelKey)}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {background.type === "color" && (
@@ -1826,12 +1896,22 @@ function BackgroundSection({
                   onDrop={(event) => void handleMediaDrop(event, mediaType)}
                   aria-busy={uploading}
                 >
-                  <div className="dock-mv-bg-editor__media-icon">
-                    <Icon name={uploading ? "hourglass_top" : mediaType === "image" ? "image" : "movie"} size={18} />
-                  </div>
+                  {hasSelectedMedia && selectedMediaPreviewSrc ? (
+                    <span className="dock-mv-bg-editor__media-selected-thumb">
+                      {mediaType === "image" ? (
+                        <img src={selectedMediaPreviewSrc} alt="" />
+                      ) : (
+                        <video src={selectedMediaPreviewSrc} muted playsInline preload="metadata" />
+                      )}
+                    </span>
+                  ) : (
+                    <div className="dock-mv-bg-editor__media-icon">
+                      <Icon name={uploading ? "hourglass_top" : mediaType === "image" ? "image" : "movie"} size={18} />
+                    </div>
+                  )}
                   <div className="dock-mv-bg-editor__media-copy">
                     <div className="dock-mv-bg-editor__media-title">
-                      {uploading ? (uploadStatus || "Saving original media...") : hasSelectedMedia ? `${t('multiview.bgMediaSelected', 'Selected')}: ${selectedMediaName}` : mediaTitle}
+                      {uploading ? (uploadStatus || "Saving original media...") : hasSelectedMedia ? selectedMediaName : mediaTitle}
                     </div>
                     <div className="dock-mv-bg-editor__media-hint">{hasSelectedMedia ? "" : mediaHint}</div>
                   </div>
@@ -1861,16 +1941,64 @@ function BackgroundSection({
               </div>
             )}
 
+            {isPatternType && (
+              <div className="dock-mv-bg-editor__visual-section">
+                <div className="dock-mv-bg-editor__visual-section-head">
+                  <span>Patterns</span>
+                  <span>{BACKGROUND_PATTERNS.length}</span>
+                </div>
+                <div className="dock-mv-bg-editor__visual-grid dock-mv-bg-editor__visual-grid--patterns">
+                  {BACKGROUND_PATTERNS.map((pattern) => {
+                    const selected = background.patternSrc === pattern.src;
+                    return (
+                      <button
+                        key={pattern.label}
+                        type="button"
+                        className={`dock-mv-bg-editor__visual-card${selected ? " dock-mv-bg-editor__visual-card--selected" : ""}`}
+                        onClick={() => onChange({ ...background, type: "pattern", patternSrc: pattern.src, filePath: "", sceneName: "" })}
+                        title={pattern.label}
+                      >
+                        <img src={pattern.src} alt="" loading="lazy" />
+                        <span>{pattern.label}</span>
+                        {selected && <Icon name="check" size={13} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {background.type === "scene" && (
-              <div className="dock-mv-bg-editor__row">
-                <select
-                  className="dock-mv-bg__select"
-                  value={background.sceneName}
-                  onChange={(e) => onChange({ ...background, sceneName: e.target.value })}
-                >
-                  <option value="">— {t('multiview.selectScene')} —</option>
-                  {selectableObsScenes.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+              <div className="dock-mv-bg-editor__visual-section">
+                <div className="dock-mv-bg-editor__visual-section-head">
+                  <span>Scenes</span>
+                  <span>{selectableObsScenes.length}</span>
+                </div>
+                {selectableObsScenes.length > 0 ? (
+                  <div className="dock-mv-bg-editor__visual-grid dock-mv-bg-editor__visual-grid--scenes">
+                    {selectableObsScenes.map((sceneName) => {
+                      const selected = background.sceneName === sceneName;
+                      return (
+                        <button
+                          key={sceneName}
+                          type="button"
+                          className={`dock-mv-bg-editor__visual-card dock-mv-bg-editor__visual-card--scene${selected ? " dock-mv-bg-editor__visual-card--selected" : ""}`}
+                          onClick={() => onChange({ ...background, type: "scene", sceneName, filePath: "", patternSrc: "" })}
+                          title={sceneName}
+                        >
+                          <Icon name="grid_view" size={18} />
+                          <span>{sceneName}</span>
+                          {selected && <Icon name="check" size={13} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="dock-mv-bg-editor__library-status">
+                    <Icon name="grid_view" size={14} />
+                    <span>{t('multiview.selectScene')}</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2382,10 +2510,10 @@ export default function DockMultiviewTab() {
         }
         usedSceneNames.add(obsSceneName);
         changed = true;
-        return { ...m, obsSceneName };
+        return { ...m, obsSceneName, background: { ...DEFAULT_MV_BG, ...(m.background ?? {}) } };
       }
       // Migrate: ensure slotThumbnails, layoutFrameId, slotFrames, frameThickness exist
-      if (!m.slotThumbnails || !("layoutFrameId" in m) || !m.slotFrames || typeof m.frameThickness !== "number" || !m.background) {
+      if (!m.slotThumbnails || !("layoutFrameId" in m) || !m.slotFrames || typeof m.frameThickness !== "number" || !m.background || typeof (m.background as Partial<MVBackground>).patternSrc !== "string") {
         changed = true;
         return {
           ...m,
@@ -2396,7 +2524,7 @@ export default function DockMultiviewTab() {
           frameCornerRadius: (m as any).frameCornerRadius ?? 0,
           frameOpacity: (m as any).frameOpacity ?? 100,
           frameColor: (m as any).frameColor ?? "",
-          background: m.background ?? { ...DEFAULT_MV_BG },
+          background: { ...DEFAULT_MV_BG, ...(m.background ?? {}) },
         };
       }
       return m;
@@ -2806,7 +2934,10 @@ export default function DockMultiviewTab() {
       // Background (always zIndex 0) — skip when transparent/effectively none
       const bg = getMvBg(mv);
       const bgSourceName = `${prefix}BACKGROUND`;
-      const isBgEmpty = bg.type === "color" && (bg.color === "transparent" || bg.color === "#0F172A") && !bg.filePath && !bg.sceneName;
+      const isBgEmpty = (bg.type === "color" && (bg.color === "transparent" || bg.color === "#0F172A"))
+        || (bg.type === "scene" && !bg.sceneName)
+        || (bg.type === "pattern" && !bg.patternSrc)
+        || ((bg.type === "image" || bg.type === "video") && !bg.filePath);
       try {
         let bgItemId = -1;
         if (isBgEmpty) {
@@ -2826,6 +2957,20 @@ export default function DockMultiviewTab() {
           } else if (bg.type === "video" && bg.filePath) {
             inputKind = "ffmpeg_source";
             inputSettings = { local_file: bg.filePath, is_local_file: true, looping: true, restart_on_activate: true, close_when_inactive: false };
+          } else if (bg.type === "pattern" && bg.patternSrc) {
+            const patternPath = await saveBackgroundDataUrlToDisk(bg.patternSrc, `mv-pattern-${Date.now()}.svg`);
+            if (patternPath) {
+              inputKind = "image_source";
+              inputSettings = { file: patternPath, width: CANVAS_W, height: CANVAS_H };
+            } else {
+              inputKind = "browser_source";
+              inputSettings = {
+                url: `data:text/html;charset=utf-8,${encodeURIComponent(`<html><body style="margin:0;background:#000;overflow:hidden"><img src="${bg.patternSrc}" style="width:100vw;height:100vh;object-fit:cover" /></body></html>`)}`,
+                width: CANVAS_W,
+                height: CANVAS_H,
+                shutdown: true,
+              };
+            }
           }
           bgItemId = await createManagedItem(bgSourceName, inputKind, inputSettings);
         }

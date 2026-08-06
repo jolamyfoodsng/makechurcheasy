@@ -25,6 +25,17 @@ describe("Bible keyword search", () => {
     expect(results[0].score).toBeGreaterThanOrEqual(0.9);
   });
 
+  it("finds KJV phrases from the corpus without a verse-specific alias", async () => {
+    const results = await searchBibleRanked("Let him ask God if he lack wisdom.", "KJV", 5);
+
+    expect(results[0]).toMatchObject({
+      book: "James",
+      chapter: 1,
+      verse: 5,
+    });
+    expect(results[0].score).toBeGreaterThanOrEqual(0.9);
+  });
+
   it("finds scripture from content words when filler words are missing", async () => {
     const results = await searchBibleRanked("eyes both opened", "KJV", 5);
 

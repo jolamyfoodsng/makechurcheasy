@@ -3,6 +3,7 @@ import type { DockFullscreenQuickThemeSettings } from "./components/DockFullscre
 import {
   areQuickThemeSettingsEquivalent,
   buildLinkedLowerThirdQuickThemeSettings,
+  mergeQuickThemeBackground,
 } from "./lowerThirdQuickSettings";
 
 function makeSettings(
@@ -105,5 +106,33 @@ describe("lowerThirdQuickSettings", () => {
     expect(linked.referenceBackgroundColor).toBe(fullscreenSettings.referenceBackgroundColor);
     expect(linked.referenceBackgroundStyle).toBe(fullscreenSettings.referenceBackgroundStyle);
     expect(linked.referenceBackgroundRadius).toBe(fullscreenSettings.referenceBackgroundRadius);
+  });
+
+  it("carries a custom background across Full/LT without changing LT layout", () => {
+    const lowerThirdDefaults = makeSettings({
+      backgroundType: "theme",
+      backgroundColor: "#112233",
+      lowerThirdPosition: "right",
+      lowerThirdCardPadding: "12px 20px",
+    });
+    const fullscreenSettings = makeSettings({
+      backgroundType: "pattern",
+      backgroundPattern: "/patterns/soft-grid.png",
+      backgroundColor: "",
+      backgroundColorEnd: "",
+      backgroundOpacity: 0.82,
+      fullscreenShadeColor: "#050505",
+      fullscreenShadeOpacity: 0.28,
+    });
+
+    const switched = mergeQuickThemeBackground(lowerThirdDefaults, fullscreenSettings);
+
+    expect(switched.backgroundType).toBe("pattern");
+    expect(switched.backgroundPattern).toBe(fullscreenSettings.backgroundPattern);
+    expect(switched.backgroundOpacity).toBe(fullscreenSettings.backgroundOpacity);
+    expect(switched.fullscreenShadeColor).toBe(fullscreenSettings.fullscreenShadeColor);
+    expect(switched.fullscreenShadeOpacity).toBe(fullscreenSettings.fullscreenShadeOpacity);
+    expect(switched.lowerThirdPosition).toBe(lowerThirdDefaults.lowerThirdPosition);
+    expect(switched.lowerThirdCardPadding).toBe(lowerThirdDefaults.lowerThirdCardPadding);
   });
 });

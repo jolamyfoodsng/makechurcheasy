@@ -54,6 +54,7 @@ import { requireEntitlement } from "../dockEntitlement";
 import {
   areQuickThemeSettingsEquivalent,
   buildLinkedLowerThirdQuickThemeSettings,
+  mergeQuickThemeBackground,
 } from "../lowerThirdQuickSettings";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
@@ -1210,6 +1211,7 @@ export default function DockWorshipTab({
   const deletedSectionsTriggerRef = useRef<HTMLButtonElement>(null);
   const [deletedSectionsPopoverPos, setDeletedSectionsPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const prefsReadyRef = useRef(false);
+  const prefsLoadIdRef = useRef(0);
   const songsPollBusyRef = useRef(false);
   const liveSectionRequestIdRef = useRef(0);
 
@@ -1314,9 +1316,13 @@ export default function DockWorshipTab({
   const _ltThemeDepId = productionDefaults.lowerThirdTheme?.id;
 
   useEffect(() => {
+    const loadId = ++prefsLoadIdRef.current;
     prefsReadyRef.current = false;
     let cancelled = false;
-    const applyPreferences = async (prefs: DockWorshipPreferences) => {
+    const applyPreferences = (
+      prefs: DockWorshipPreferences,
+      allFavorites: BibleTheme[],
+    ) => {
       setSelectedFSTheme(productionDefaults.fullscreenTheme ?? BUILTIN_THEMES[0]);
       setSelectedLTTheme(productionDefaults.lowerThirdTheme ?? BUILTIN_THEMES[0]);
       setOverlayMode(readDockWorshipOverlayMode() ?? prefs.overlayMode ?? productionDefaults.defaultMode);
@@ -1342,10 +1348,6 @@ export default function DockWorshipTab({
       setLowerThirdQuickThemeSettingsLinkedToFullscreen(storedLowerThirdLinked);
       setShowPresentationMeta(prefs.showPresentationMeta === true);
 
-      const allFavorites = await loadDockFavoriteBibleThemes();
-
-      if (cancelled) return;
-
       const storedFullscreen = allFavorites.find(
         (theme) => theme.id === prefs.fullscreenThemeId
           && themeSupportsBibleOverlayMode(theme, "fullscreen"),
@@ -1357,27 +1359,37 @@ export default function DockWorshipTab({
 
       if (storedFullscreen) setSelectedFSTheme(storedFullscreen);
       if (storedLowerThird) setSelectedLTTheme(storedLowerThird);
+    };
+
+    const hydratePreferences = async () => {
+      const [allFavorites, appPrefs] = await Promise.all([
+        loadDockFavoriteBibleThemes().catch(() => [] as BibleTheme[]),
+        loadDockWorshipPreferencesFromApp().catch(() => null),
+      ]);
+
+      if (cancelled || loadId !== prefsLoadIdRef.current) return;
+
+      // Local storage and the app bridge can both contain the same preference
+      // record. Resolve them before applying anything so an older async result
+      // cannot overwrite a newly selected background.
+      const latestLocalPrefs = loadDockWorshipPreferences();
+      const localUpdatedAt = Date.parse(latestLocalPrefs.updatedAt ?? "");
+      const appUpdatedAt = Date.parse(appPrefs?.updatedAt ?? "");
+      const prefs = appPrefs
+        && Number.isFinite(appUpdatedAt)
+        && (!Number.isFinite(localUpdatedAt) || appUpdatedAt > localUpdatedAt)
+        ? appPrefs
+        : latestLocalPrefs;
+
+      applyPreferences(prefs, allFavorites);
       prefsReadyRef.current = true;
     };
 
-    const localPrefs = loadDockWorshipPreferences();
-
-    void applyPreferences(localPrefs).catch(() => {
-      prefsReadyRef.current = true;
-    });
-
-    void loadDockWorshipPreferencesFromApp().then((appPrefs) => {
-      if (cancelled || !appPrefs) return;
-      const localUpdatedAt = Date.parse(localPrefs.updatedAt ?? "");
-      const appUpdatedAt = Date.parse(appPrefs.updatedAt ?? "");
-      if (Number.isFinite(localUpdatedAt) && Number.isFinite(appUpdatedAt) && appUpdatedAt <= localUpdatedAt) {
-        return;
-      }
-      prefsReadyRef.current = false;
-      void applyPreferences(appPrefs).catch(() => {
+    void hydratePreferences().catch(() => {
+      if (!cancelled && loadId === prefsLoadIdRef.current) {
         prefsReadyRef.current = true;
-      });
-    }).catch(() => { });
+      }
+    });
 
     return () => {
       cancelled = true;
@@ -1727,9 +1739,41 @@ export default function DockWorshipTab({
   const handleOverlayModeChange = useCallback((nextMode: OverlayMode) => {
     if (nextMode === overlayMode) return;
 
+    const currentSettings = overlayMode === "fullscreen"
+      ? (fullscreenQuickThemeSettings ?? activeFullscreenQuickThemeSettings)
+      : (lowerThirdQuickThemeSettings ?? activeLowerThirdQuickThemeSettings);
+    const targetSettings = nextMode === "fullscreen"
+      ? fullscreenQuickThemeSettings
+      : lowerThirdQuickThemeSettings;
+    const targetUsesThemeBackground =
+      !targetSettings || targetSettings.backgroundType == null || targetSettings.backgroundType === "theme";
+    const sourceUsesCustomBackground = currentSettings.backgroundType !== undefined
+      && currentSettings.backgroundType !== "theme";
+
+    if (targetUsesThemeBackground && sourceUsesCustomBackground) {
+      if (nextMode === "fullscreen") {
+        const nextSettings = mergeQuickThemeBackground(defaultFullscreenQuickThemeSettings, currentSettings);
+        setFullscreenQuickThemeSettings(nextSettings);
+        setSavedFullscreenQuickThemeSettings(nextSettings);
+      } else if (!lowerThirdQuickThemeSettingsLinkedToFullscreen) {
+        const nextSettings = mergeQuickThemeBackground(defaultLowerThirdQuickThemeSettings, currentSettings);
+        setLowerThirdQuickThemeSettings(nextSettings);
+        setSavedLowerThirdQuickThemeSettings(nextSettings);
+      }
+    }
+
     setOverlayMode(nextMode);
     saveDockWorshipOverlayMode(nextMode);
-  }, [overlayMode]);
+  }, [
+    activeFullscreenQuickThemeSettings,
+    activeLowerThirdQuickThemeSettings,
+    defaultFullscreenQuickThemeSettings,
+    defaultLowerThirdQuickThemeSettings,
+    fullscreenQuickThemeSettings,
+    lowerThirdQuickThemeSettings,
+    lowerThirdQuickThemeSettingsLinkedToFullscreen,
+    overlayMode,
+  ]);
   const activeThemePickerProps = fullscreenOnlyMode || overlayMode === "fullscreen"
     ? { selectedThemeId: selectedFSTheme.id, onSelect: handleSelectFSTheme }
     : { selectedThemeId: selectedLTTheme.id, onSelect: handleSelectLTTheme };

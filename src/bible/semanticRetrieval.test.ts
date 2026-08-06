@@ -1080,6 +1080,24 @@ describe("live quote replacement", () => {
     }
   });
 
+  it("lets a strong scripture quote override stale chapter context", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    await engine.processChunk("John 3:2", true);
+    expect(matchVerseAlias("Let him ask God if he lack wisdom.")).toBeNull();
+
+    const result = await engine.searchQuotesWithText(
+      "Let him ask God if he lack wisdom.",
+      engine.getBoundPassage(),
+      { mode: "closest" },
+    );
+
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0].candidate.label).toContain("James 1:5");
+    expect(result[0].candidate.snippet.toLowerCase()).toContain("lack wisdom");
+  });
+
   it("finds Genesis 3:7 from spontaneous lexical quote search", async () => {
     const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
     const { matchVerseAlias } = await import("./scriptureReranker");
@@ -1282,5 +1300,30 @@ describe("reference continuations", () => {
     const verse19 = await engine.processChunk("19.", true);
     expect(verse19.matches).toHaveLength(1);
     expect(verse19.matches[0].candidate.label).toContain("Genesis 4:19");
+  });
+
+  it("keeps a valid chapter context when malformed book-number-chapter speech arrives", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const chapter = await engine.processChunk("Ecclesiastes chapter 5.", true);
+    expect(chapter.matches).toHaveLength(0);
+    expect(engine.getBoundPassage()).toMatchObject({
+      book: "Ecclesiastes",
+      chapter: 5,
+      verse: null,
+    });
+
+    const verse2 = await engine.processChunk("Verse 2.", true);
+    expect(verse2.matches).toHaveLength(1);
+    expect(verse2.matches[0].candidate.label).toContain("Ecclesiastes 5:2");
+
+    const malformed = await engine.processChunk("James 7, chapter 5.", true);
+    expect(malformed.matches).toHaveLength(0);
+    expect(engine.getBoundPassage()).toMatchObject({
+      book: "Ecclesiastes",
+      chapter: 5,
+      verse: 2,
+    });
   });
 });

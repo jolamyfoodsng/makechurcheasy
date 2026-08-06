@@ -708,6 +708,19 @@ function contentPhraseCoverage(queryContent: string[], textContent: string[]): n
   return bestRun / queryContent.length;
 }
 
+function denseContentCoverageBonus(queryContent: string[], textContent: string[]): number {
+  if (queryContent.length < 4 || textContent.length === 0) return 0;
+  if (!queryContent.some((token) => token.length >= 6)) return 0;
+
+  const textTokenSet = new Set(textContent);
+  const matchedCount = queryContent.filter((token) => textTokenSet.has(token)).length;
+  const coverage = matchedCount / queryContent.length;
+
+  if (coverage >= 0.9) return 0.16;
+  if (coverage >= 0.8) return 0.10;
+  return 0;
+}
+
 function firstStrongTokenBonus(queryContent: string[], textContent: string[]): number {
   const firstStrongToken = queryContent.find((token) => token.length >= 5);
   if (!firstStrongToken) return 0;
@@ -771,6 +784,7 @@ function scoreVerseMatch(
   const pairCoverage = nearbyPairCoverage(normalizedQueryTokens, textTokens);
   const textContent = entry.searchContentTokens ?? contentTokens(textTokens);
   const contentCoverage = contentPhraseCoverage(queryContent, textContent);
+  const denseCoverageBonus = denseContentCoverageBonus(queryContent, textContent);
   const prefixBonus =
     queryTokens.length > 0 && normalizedText.startsWith(queryTokens[0]) ? 0.06 : 0;
   const strongStartBonus = firstStrongTokenBonus(queryContent, textContent);
@@ -781,6 +795,7 @@ function scoreVerseMatch(
     orderedCoverage * 0.22 +
     pairCoverage * 0.12 +
     contentCoverage * 0.20 +
+    denseCoverageBonus +
     prefixBonus +
     strongStartBonus,
   );

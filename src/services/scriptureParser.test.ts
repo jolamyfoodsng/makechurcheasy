@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { createScriptureSpeechState, parseScriptureIntent, parseScriptureReference, resolveScriptureSpeech } from "./scriptureParser";
+import {
+  createScriptureSpeechState,
+  isLikelyScriptureReferenceAttempt,
+  parseScriptureIntent,
+  parseScriptureReference,
+  resolveScriptureSpeech,
+} from "./scriptureParser";
 
 /**
  * Helper: convert ParsedReference to a display string for easy assertion.
@@ -482,6 +488,32 @@ describe("Speech state matrix", () => {
     resolveScriptureSpeech("Genesis 1:2", state, 1000);
 
     expect(resolveScriptureSpeech("3", state, 10_500)).toBeNull();
+  });
+
+  it("rejects malformed book-number-chapter speech without updating context", () => {
+    const state = createScriptureSpeechState();
+    const chapter = resolveScriptureSpeech("Ecclesiastes chapter 5", state, 1000);
+    expect(chapter).toMatchObject({
+      kind: "chapter_reference",
+      book: "Ecclesiastes",
+      chapter: 5,
+      verse: null,
+      shouldProject: false,
+    });
+
+    expect(parseScriptureReference("James 7, chapter 5")).toBeNull();
+    expect(parseScriptureIntent("James 7, chapter 5")).toBeNull();
+    expect(resolveScriptureSpeech("James 7, chapter 5", state, 1500)).toBeNull();
+    expect(isLikelyScriptureReferenceAttempt("James 7, chapter 5")).toBe(true);
+
+    const continuation = resolveScriptureSpeech("Verse 2", state, 2000);
+    expect(continuation).toMatchObject({
+      kind: "verse_reference",
+      book: "Ecclesiastes",
+      chapter: 5,
+      verse: 2,
+      shouldProject: true,
+    });
   });
 });
 

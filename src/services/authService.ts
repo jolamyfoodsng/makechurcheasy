@@ -334,10 +334,12 @@ async function saveSession(session: AuthSession) {
   } else {
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   }
-  // The OBS dock runs in a separate CEF context. Await the local handoff so a
-  // newly paired Windows install cannot render the dock before its session is
-  // available on the overlay server.
-  await syncSessionToOverlay(session);
+  // The desktop session is ready as soon as it is persisted. The OBS dock
+  // runs in a separate context, so hand off its session in the background; a
+  // missing local overlay endpoint must never hold the desktop on LoginPage.
+  void syncSessionToOverlay(session).catch((error) => {
+    console.warn("[authService] Background overlay session sync failed:", error);
+  });
 }
 
 /**
@@ -874,8 +876,8 @@ export function watchPairingStatus(
     };
 
     try {
-      // Do not open the dock until its separate local browser context can read
-      // the newly paired session from the overlay server.
+      // Persist the desktop session before notifying the UI. The overlay handoff
+      // continues in the background and is independent of desktop navigation.
       await saveSession({
         user: authUser,
         deviceId: data.deviceId,

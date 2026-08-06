@@ -155,8 +155,10 @@ type PrimeBibleOverlayData = {
   verse: number;
   verseEnd?: number;
   verseRange?: string;
+  rawReferenceLabel?: string;
   referenceLabel?: string;
   displayReferenceLabel?: string;
+  referenceBaseLabel?: string;
   translation: string;
   verseText?: string;
   overlayMode?: DockOverlayMode;
@@ -2046,7 +2048,7 @@ class DockObsClient {
       }
     }
 
-    const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
+    const currentProgramScene = await this.getCurrentProgramSceneName(true).catch(() => "");
     if (currentProgramScene === remembered) {
       this.clearRememberedSceneBeforePush(tabId);
       return false; // already on the right scene
@@ -2187,8 +2189,9 @@ class DockObsClient {
         }
 
         if (DockObsClient.isManagedMultiviewSceneName(programScene)) {
-          await this.removeProgramSceneUnderlaysFromPresentation();
-          this._presentationProgramUnderlayCache = null;
+          // Multiview scenes are themselves composed outputs. Do not replace
+          // the presentation's last background scene with a Multiview scene,
+          // and do not empty the presentation while a Multiview scene is live.
           return;
         }
 
@@ -2298,6 +2301,13 @@ class DockObsClient {
   }
 
   private async ensureNoProgramSceneUnderlayInPresentation(force = false): Promise<void> {
+    const currentProgramScene = await this.getCurrentProgramSceneName(true).catch(() => "");
+    if (DockObsClient.isManagedMultiviewSceneName(currentProgramScene)) {
+      // A Multiview scene can be the live OBS output while MCE Presentation
+      // remains the presentation layer. Preserve its last added underlay.
+      return;
+    }
+
     const cached = this._presentationProgramUnderlayCache;
     if (
       !force &&
@@ -2364,6 +2374,7 @@ class DockObsClient {
   private async removeMCEPresentationFromScene(sceneName: string): Promise<void> {
     try {
       if (!sceneName || sceneName === DOCK_PRESENTATION_SCENE) return;
+      if (DockObsClient.isManagedMultiviewSceneName(sceneName)) return;
 
       const resp = await this.call("GetSceneItemList", { sceneName }) as {
         sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
@@ -5418,8 +5429,10 @@ class DockObsClient {
     verse: number;
     verseEnd?: number;
     verseRange?: string;
+    rawReferenceLabel?: string;
     referenceLabel?: string;
     displayReferenceLabel?: string;
+    referenceBaseLabel?: string;
     translation: string;
     theme?: string;
     verseText?: string;
@@ -5451,9 +5464,11 @@ class DockObsClient {
   }): Promise<void> {
     return this.runSerializedBibleMutation(async () => {
       const resources = getDockResources();
-      const currentProgramSceneBeforeTarget = await this.getCurrentProgramSceneName().catch(() => "");
+      // Read the live Program scene before touching any overlay sources. The
+      // cached value can be stale after OBS switches to a Multiview scene, and
+      // using it here can make the selected presentation background disappear.
+      const currentProgramSceneBeforeTarget = await this.getCurrentProgramSceneName(true).catch(() => "");
       let sceneName: string;
-      let studioMode = false;
 
       // Detect mode switch early. Keep the active sources in place and only
       // reset cached signatures so fullscreen/lower-third can morph without
@@ -5475,8 +5490,7 @@ class DockObsClient {
             .then(() => { this._knownScenes.add(sceneName); })
             .catch(() => { });
         }
-        studioMode = await this.isStudioModeEnabled().catch(() => false);
-        if (studioMode) {
+        if (await this.isStudioModeEnabled().catch(() => false)) {
           // Save original preview scene before switching to custom target
           const originalPreview = await this.getCurrentPreviewSceneName().catch(() => "");
           await this.setCurrentPreviewScene(sceneName);
@@ -5488,11 +5502,9 @@ class DockObsClient {
         if (data.overlayMode === "fullscreen") {
           // Fullscreen mode: always use MCE Presentation scene
           sceneName = PRESENTATION_SCENE_NAME;
-          studioMode = await this.isStudioModeEnabled().catch(() => false);
         } else {
           const target = await this.getPresentationTargetScene("bible", { activate: false });
           sceneName = target.sceneName;
-          studioMode = target.studioMode;
         }
       }
 
@@ -5543,7 +5555,6 @@ class DockObsClient {
           await this.fitSceneSourceToOverlayMode(sourceScene, browserSrc, mode).catch(() => { });
           await this.ensureTickerAboveSource(sceneName, browserSrc).catch(() => { });
         }
-        await this.promotePresentationScene("bible").catch(() => { });
         return;
       }
 
@@ -5620,7 +5631,10 @@ class DockObsClient {
           if (!this._bibleLtInitialized) {
             // Clean up any leftover fullscreen scene sources from previous mode
             const fsDef = this._fullscreenSceneDefs["bible"];
-            if (fsDef) {
+            // MCE Presentation may be the intentional last-added layer inside
+            // a managed Multiview scene. It is not a temporary Bible source
+            // and must remain in that scene while lower-third initializes.
+            if (fsDef && !DockObsClient.isManagedMultiviewSceneName(userScene)) {
               try {
                 const resp = await this.call("GetSceneItemList", { sceneName: userScene }) as {
                   sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
@@ -5909,8 +5923,6 @@ class DockObsClient {
           } catch { /* best effort */ }
         }
 
-        await this.promotePresentationScene("bible").catch(() => { });
-
         const animation = effectiveThemeSettings?.animation as string | undefined;
         if (!modeChanged && animation && animation !== "none" && sceneItemId && !alreadyImported) {
           const canvas = await this.getCanvasSize();
@@ -5979,9 +5991,8 @@ class DockObsClient {
    * Fast path for lower-third overlay updates (theme changes, verse text changes).
    *
    * Keeps the browser source document stable and sends only overlay packets
-   * for verse text changes. It still re-routes OBS to the presentation scene
-   * so search-result "Show" clicks become visible even after the user changed
-   * Program scenes.
+   * for verse text changes. It does not change OBS Preview or Program scene
+   * routing; the existing presentation layer remains where the user left it.
    *
    * Falls back to the full `pushBible` if the source hasn't been bootstrapped yet.
    */
@@ -6352,7 +6363,7 @@ class DockObsClient {
 
       // Also hide the unified Bible source from the user's current scene
       // (lower-third mode adds it there)
-      const currentScene = await this.getCurrentProgramSceneName().catch(() => "");
+      const currentScene = await this.getCurrentProgramSceneName(true).catch(() => "");
       if (currentScene && currentScene !== scene) {
         await Promise.all([
           this.hideOverlaySource(currentScene, browserSourceName).catch(() => { }),
@@ -6362,9 +6373,10 @@ class DockObsClient {
         ]);
         this.invalidateActiveMceOverlayState(currentScene);
 
-        // Remove fullscreen scene source from user's scene if present
+        // A Multiview scene may intentionally contain MCE Presentation as its
+        // last-added source. Clearing Bible must never remove that scene item.
         const fsDef = this._fullscreenSceneDefs["bible"];
-        if (fsDef) {
+        if (fsDef && !DockObsClient.isManagedMultiviewSceneName(currentScene)) {
           try {
             const resp = await this.call("GetSceneItemList", { sceneName: currentScene }) as {
               sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
@@ -7535,7 +7547,7 @@ class DockObsClient {
         ltBg.b,
       ];
 
-      const currentScene = await this.getCurrentProgramSceneName().catch(() => "");
+      const currentScene = await this.getCurrentProgramSceneName(true).catch(() => "");
       let currentNames: string[] = [];
       if (currentScene && currentScene !== scene) {
         const curLtBg = this._ltBgNames(currentScene);
@@ -7572,10 +7584,11 @@ class DockObsClient {
 
       // ── Phase 3: remaining cleanup (non-hide operations) ──
 
-      // Remove fullscreen scene source from user's scene if present
+      // Keep MCE Presentation inside managed Multiview scenes. It is the
+      // user's last-added presentation layer, not a temporary overlay item.
       if (currentScene && currentScene !== scene) {
         const fsDef = this._fullscreenSceneDefs["worship"];
-        if (fsDef) {
+        if (fsDef && !DockObsClient.isManagedMultiviewSceneName(currentScene)) {
           try {
             const items = await this.getSceneItemListCached(currentScene);
             const fsItems = items.filter((i) => i.sourceName.startsWith(fsDef.sceneName));
@@ -7620,7 +7633,7 @@ class DockObsClient {
         ltBg.b,
       ];
 
-      const currentScene = await this.getCurrentProgramSceneName().catch(() => "");
+      const currentScene = await this.getCurrentProgramSceneName(true).catch(() => "");
       let currentNames: string[] = [];
       if (currentScene && currentScene !== scene) {
         const curLtBg = this._ltBgNames(currentScene);
@@ -7654,7 +7667,7 @@ class DockObsClient {
 
       if (currentScene && currentScene !== scene) {
         const fsDef = this._fullscreenSceneDefs["notes"];
-        if (fsDef) {
+        if (fsDef && !DockObsClient.isManagedMultiviewSceneName(currentScene)) {
           try {
             const items = await this.getSceneItemListCached(currentScene);
             const fsItems = items.filter((i) => i.sourceName.startsWith(fsDef.sceneName));

@@ -55,7 +55,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function setUser(u: AuthUser) {
     console.log("[AuthContext] setUser called, authenticated:", isAuthenticated(), "user:", u.name);
     setUserState(u);
-    setAuthenticated(isAuthenticated());
+    // Login has already persisted the session before calling this setter. Set
+    // the React auth state directly so a slow overlay handoff cannot leave the
+    // user stranded on LoginPage after successful pairing.
+    setAuthenticated(true);
     setIsAdmin(u.role === "admin");
   }
 

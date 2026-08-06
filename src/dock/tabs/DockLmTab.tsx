@@ -25,17 +25,22 @@ import {
   resolveDockNotesPresentationSettings,
 } from "../dockNotesStorage";
 import {
+  resolveDockBibleReferenceLabels,
+  resolveDockBibleThemeForOverlayMode,
+} from "../dockBibleThemeResolution";
+import {
   createDockNotesAppendCommand,
   postDockNotesAppendCommand,
 } from "../../services/dockNotesInterop";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
+import DockNotesTextTools from "../components/DockNotesTextTools";
+import { formatNoteText, type NoteTextToolAction } from "../noteTextTools";
 
 type LmStatus = "idle" | "requesting-mic" | "connecting" | "listening" | "error";
 type LmOverlayMode = "fullscreen" | "lower-third";
 
 const LM_DOCK_SETTINGS_KEY = "ocs-lm-dock-settings";
 const PREFERRED_MIC_STORAGE_KEY = "ocs-speech-to-scripture-mic-id";
-const DOCK_BIBLE_PREFS_KEY = "ocs-dock-bible-preferences";
 const HISTORY_STORAGE_KEY = "ocs-lm-dock-history";
 const MAX_HISTORY = 50;
 const MAX_TRANSCRIPT_LINES = 40;
@@ -186,15 +191,6 @@ function savePreferredMicId(micId: string): void {
   try {
     localStorage.setItem(getUserScopedKey(PREFERRED_MIC_STORAGE_KEY), micId);
   } catch { }
-}
-
-function loadBiblePrefs(): Record<string, unknown> {
-  try {
-    const raw = localStorage.getItem(DOCK_BIBLE_PREFS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
 }
 
 function loadHistory(): string[] {
@@ -636,33 +632,36 @@ export default function DockLmTab({
     candidate: VoiceBibleCandidate,
     overlayMode: LmOverlayMode,
   ) => {
-    const biblePrefs = loadBiblePrefs();
-    const themeId = overlayMode === "fullscreen"
-      ? (biblePrefs.fullscreenThemeId as string || undefined)
-      : (biblePrefs.lowerThirdThemeId as string || undefined);
-
-    const quickSettings = overlayMode === "fullscreen"
-      ? (biblePrefs.fullscreenQuickThemeSettings as Record<string, unknown> | null | undefined)
-      : (biblePrefs.lowerThirdQuickThemeSettings as Record<string, unknown> | null | undefined);
+    const bibleTheme = await resolveDockBibleThemeForOverlayMode(overlayMode);
+    const verseRange = String(candidate.verse);
+    const referenceLabels = resolveDockBibleReferenceLabels(
+      candidate.book,
+      candidate.chapter,
+      verseRange,
+      settings.translation,
+    );
 
     if (presentationLinkMode) {
       await publishDockStagedItemToPresentation({
         type: "bible",
-        label: candidate.label,
+        label: referenceLabels.displayReferenceLabel,
         subtitle: candidate.snippet,
         data: {
           book: candidate.book,
           chapter: candidate.chapter,
           verse: candidate.verse,
           verseEnd: candidate.verse,
-          verseRange: String(candidate.verse),
-          referenceLabel: candidate.label,
+          verseRange,
+          rawReferenceLabel: referenceLabels.rawReferenceLabel,
+          referenceLabel: referenceLabels.displayReferenceLabel,
+          displayReferenceLabel: referenceLabels.displayReferenceLabel,
+          referenceBaseLabel: referenceLabels.referenceBaseLabel,
           translation: settings.translation,
           verseText: candidate.snippet,
           overlayMode,
-          theme: themeId,
-          bibleThemeSettings: quickSettings ?? null,
-          liveOverrides: null,
+          theme: bibleTheme.themeId,
+          bibleThemeSettings: bibleTheme.themeSettings,
+          liveOverrides: bibleTheme.liveOverrides,
           _dockLive: true,
         },
       });
@@ -674,21 +673,27 @@ export default function DockLmTab({
       book: candidate.book,
       chapter: candidate.chapter,
       verse: candidate.verse,
+      verseEnd: candidate.verse,
+      verseRange,
       translation: settings.translation,
-      referenceLabel: candidate.label,
+      rawReferenceLabel: referenceLabels.rawReferenceLabel,
+      referenceLabel: referenceLabels.displayReferenceLabel,
+      displayReferenceLabel: referenceLabels.displayReferenceLabel,
+      referenceBaseLabel: referenceLabels.referenceBaseLabel,
       verseText: candidate.snippet,
       overlayMode,
-      theme: themeId,
-      liveOverrides: quickSettings || null,
+      theme: bibleTheme.themeId,
+      bibleThemeSettings: bibleTheme.themeSettings,
+      liveOverrides: bibleTheme.liveOverrides,
       targetScene,
     };
     const lowerThirdPayload = {
       verseText: candidate.snippet,
-      referenceText: `${candidate.label} (${settings.translation})`,
-      verseRange: String(candidate.verse),
-      bibleThemeSettings: quickSettings || null,
+      referenceText: referenceLabels.displayReferenceLabel,
+      verseRange,
+      bibleThemeSettings: bibleTheme.themeSettings,
       liveOverrides: null,
-      themeId,
+      themeId: bibleTheme.themeId,
     };
     const pushLive = () => overlayMode === "lower-third"
       ? dockObsClient.pushBibleOverlayFast(lowerThirdPayload)
@@ -1098,6 +1103,13 @@ export default function DockLmTab({
     setEditModal({ visible: true, text });
     handleCancelSelection();
   }, [selectedIndices, recentEntries, handleCancelSelection]);
+
+  const applyEditTextTool = useCallback((action: NoteTextToolAction, linesPerSlide?: number) => {
+    setEditModal((current) => ({
+      ...current,
+      text: formatNoteText(current.text, action, linesPerSlide),
+    }));
+  }, []);
 
   const handlePushToNotes = useCallback(async (text: string) => {
     const cleanText = text.trim();
@@ -1805,6 +1817,11 @@ export default function DockLmTab({
               </button>
             </div>
             <div style={S.editModalBody}>
+              <DockNotesTextTools
+                className="dock-notes-text-tools dock-notes-text-tools--editor"
+                buttonClassName="dock-notes-text-tools__btn"
+                onAction={applyEditTextTool}
+              />
               <label style={S.editModalLabel}>Content to edit</label>
               <textarea
                 style={S.editModalTextarea}

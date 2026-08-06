@@ -406,7 +406,7 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   compareTranslationWidth: 40,
   compareTranslationGap: 40,
 
-  animation: "fade",
+  animation: "none",
   animationDuration: 400,
 };
 
