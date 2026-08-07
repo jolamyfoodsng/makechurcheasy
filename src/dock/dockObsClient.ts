@@ -4085,9 +4085,8 @@ class DockObsClient {
       if (mode === "lower-third") {
         // ── Lower-third: unified browser source, shown in user's scene ──
         // Uses the same "MCE Browser - Bible" source as fullscreen.
-        // When entering lower-third: hide from MCE Presentation, add to user's scene.
+        // When entering lower-third: add to user's scene (source stays in MCE Presentation — CSS handles mode).
         const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
-        const presScene = PRESENTATION_SCENE_NAME;
         const userScene = currentProgramSceneBeforeTarget || sceneName;
 
         // Ensure the source exists (creates if first time)
@@ -4111,21 +4110,13 @@ class DockObsClient {
                   await this.call("RemoveSceneItem", { sceneName: userScene, sceneItemId: item.sceneItemId });
                 }
               } catch { /* ignore */ }
-              // Hide fullscreen Bible sources from MCE Presentation
-              await Promise.all([
-                this.hideSceneSource(presScene, resources.bibleScene).catch(() => { }),
-                this.hideFullscreenBg(presScene, resources).catch(() => { }),
-              ]);
             }
-
-            // Hide the unified source in MCE Presentation
-            await this.hideOverlaySource(presScene, browserSourceName);
 
             // Hide any leftover dedicated scene
             await this.hideSceneSource(sceneName, resources.bibleScene);
             await this.hideFullscreenBg(sceneName, resources);
 
-            // Add the unified source to user's scene
+            // Add the unified source to user's scene (source stays in MCE Presentation too — CSS handles mode)
             await this.ensureOverlaySource(sceneName, browserSourceName, undefined, undefined, true);
             await this.ensureTickerAboveSource(sceneName, browserSourceName);
 
@@ -4162,8 +4153,7 @@ class DockObsClient {
           url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(cssOverlayPacket))}`;
         } else {
           // ── Lower-third without theme settings: direct browser source ──
-          // Hide from MCE Presentation, show in user's scene
-          await this.hideOverlaySource(presScene, browserSourceName);
+          // Add to user's scene (source stays in MCE Presentation too — CSS handles mode)
           await this.ensureOverlaySource(sceneName, browserSourceName, undefined, undefined, true);
           await this.ensureTickerAboveSource(sceneName, browserSourceName);
 
