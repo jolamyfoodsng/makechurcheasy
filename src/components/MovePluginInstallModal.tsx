@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle, Download, Loader2, Puzzle, RefreshCw, X } from "lucide-react";
+import { CheckCircle, Download, ExternalLink, Loader2, Puzzle, RefreshCw, X } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   getObsMovePluginStatus,
   isMceBridgeLoaded,
   ensureMoveTransition,
   installObsMovePlugin,
   isMovePluginLoaded,
+  MOVE_TRANSITION_RELEASE_URL,
   type ObsMovePluginStatus,
 } from "../services/obsMovePlugin";
 import "./MovePluginInstallModal.css";
@@ -21,11 +23,9 @@ export default function MovePluginInstallModal({ onClose }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [bridgeLoaded, setBridgeLoaded] = useState(false);
   const [state, setState] = useState<ModalState>("checking");
-  const [error, setError] = useState("");
 
   const check = useCallback(async () => {
     setState("checking");
-    setError("");
     try {
       const status = await getObsMovePluginStatus();
       const [runtimeLoaded, runtimeBridgeLoaded] = await Promise.all([
@@ -41,9 +41,8 @@ export default function MovePluginInstallModal({ onClose }: Props) {
       const installed = status.installed && status.bridgeInstalled;
       const available = status.bundled && status.bridgeBundled;
       setState(installed ? (runtimeLoaded && runtimeBridgeLoaded ? "ready" : "installed") : available ? "not-installed" : "error");
-    } catch (err: unknown) {
+    } catch {
       setState("error");
-      setError(err instanceof Error ? err.message : "Could not check Move Transition");
     }
   }, []);
 
@@ -53,7 +52,6 @@ export default function MovePluginInstallModal({ onClose }: Props) {
 
   const install = async () => {
     setState("installing");
-    setError("");
     if (!window.confirm("Install Move Transition and the MakeChurchEasy OBS Bridge for this user?")) {
       setState(plugin?.installed && plugin.bridgeInstalled ? "installed" : "not-installed");
       return;
@@ -64,10 +62,14 @@ export default function MovePluginInstallModal({ onClose }: Props) {
       setLoaded(false);
       setBridgeLoaded(false);
       setState("installed");
-    } catch (err: unknown) {
+    } catch {
       setState("error");
-      setError(err instanceof Error ? err.message : "Could not install Move Transition");
     }
+  };
+
+  const canInstallInApp = Boolean(plugin?.bundled && plugin.bridgeBundled);
+  const openMoveTransitionRelease = () => {
+    void openUrl(MOVE_TRANSITION_RELEASE_URL);
   };
 
   return (
@@ -87,9 +89,10 @@ export default function MovePluginInstallModal({ onClose }: Props) {
         </div>
         <h2 id="move-plugin-modal-title">Install OBS motion support</h2>
         <p>
-          Add smooth scene movement to OBS. MakeChurchEasy downloads Move
-          Transition and its small bridge, then places both in your user OBS
-          folder.
+          Add optional smooth scene movement to OBS. MakeChurchEasy downloads
+          Move Transition and its small bridge, then places both in your user
+          OBS folder. You can leave this disabled and use the built-in layout
+          fallback.
         </p>
 
         <div className="move-plugin-modal__status">
@@ -116,10 +119,6 @@ export default function MovePluginInstallModal({ onClose }: Props) {
             <span>Restart OBS, then return here and choose Check again.</span>
           </div>
         )}
-        {(state === "error" || (plugin && (!plugin.bundled || !plugin.bridgeBundled) && (!plugin.installed || !plugin.bridgeInstalled))) && (
-          <div className="move-plugin-modal__error">{error || plugin?.message}</div>
-        )}
-
         <div className="move-plugin-modal__actions">
           <button className="move-plugin-modal__secondary" onClick={onClose} title="Not now">
             Not now
@@ -136,15 +135,20 @@ export default function MovePluginInstallModal({ onClose }: Props) {
           ) : (
             <button
               className="move-plugin-modal__primary"
-              onClick={() => void install()}
-              disabled={state === "checking" || state === "installing" || !plugin?.bundled || !plugin.bridgeBundled}
-              title="Install OBS motion support">
+              onClick={() => {
+                if (canInstallInApp) void install();
+                else openMoveTransitionRelease();
+              }}
+              disabled={state === "checking" || state === "installing"}
+              title={canInstallInApp ? "Install OBS motion support" : "Open Move Transition download"}>
               {state === "installing" ? (
                 <Loader2 size={15} className="move-plugin-modal__spin" />
-              ) : (
+              ) : canInstallInApp ? (
                 <Download size={15} />
+              ) : (
+                <ExternalLink size={15} />
               )}
-              Install motion support
+              {canInstallInApp ? "Install motion support" : "Open Move Transition"}
             </button>
           )}
         </div>

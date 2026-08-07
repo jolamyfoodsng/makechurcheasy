@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getLmCandidateKey,
+  getSelectedTranscriptEntries,
   isLmAutoPushSuppressed,
   mergeRetainedLmQueue,
   normalizeLmOverlayMode,
@@ -65,9 +66,35 @@ describe("DockLmTab settings helpers", () => {
     expect(retainSuggestionsUntilReplacement([first], [replacement])).toEqual([replacement]);
   });
 
+  it("keeps transcript selection attached to entry IDs when new lines arrive", () => {
+    const firstEntries = ["one", "two", "three"].map((text) => ({
+      id: text,
+      text,
+      finalized: true,
+    }));
+    const selectedIds = new Set(["one", "two", "three"]);
+    const updatedEntries = [
+      ...firstEntries,
+      { id: "four", text: "four", finalized: true },
+    ];
+
+    expect(getSelectedTranscriptEntries(updatedEntries, selectedIds).map((entry) => entry.id))
+      .toEqual(["one", "two", "three"]);
+  });
+
   it("tracks actual pushed verses as the live card source", () => {
     expect(dockLmTabSource).toContain("setLiveVerse(candidate)");
     expect(dockLmTabSource).toContain("pushBibleCandidateToOutput(live, settings.overlayMode)");
+  });
+
+  it("renders the queue without a separate live card", () => {
+    expect(dockLmTabSource).not.toContain('data-onboarding="live-card"');
+    expect(dockLmTabSource).toContain('data-onboarding="queue-section"');
+  });
+
+  it("keeps queue previews compact while preserving the verse reference", () => {
+    expect(dockLmTabSource).toContain("WebkitLineClamp: 2");
+    expect(dockLmTabSource).toContain("fontSize: 12");
   });
 
   it("uses the saved Bible stream style when pushing LM verses", () => {

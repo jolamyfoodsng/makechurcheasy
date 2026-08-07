@@ -119,6 +119,13 @@ export function isLmAutoPushSuppressed(
   return windowMs > 0 && nowMs - lastPushedAt < windowMs;
 }
 
+export function getSelectedTranscriptEntries(
+  entries: TranscriptEntry[],
+  selectedEntryIds: ReadonlySet<string>,
+): TranscriptEntry[] {
+  return entries.filter((entry) => selectedEntryIds.has(entry.id));
+}
+
 export function getLmCandidateKey(candidate: Pick<VoiceBibleCandidate, "book" | "chapter" | "verse">): string {
   return `${candidate.book}:${candidate.chapter}:${candidate.verse}`;
 }
@@ -454,10 +461,10 @@ export default function DockLmTab({
 
   // ── Transcript interaction state ──
   const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+  const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; index: number | null }>({
-    visible: false, x: 0, y: 0, index: null,
+  const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; entryId: string | null }>({
+    visible: false, x: 0, y: 0, entryId: null,
   });
   const [editModal, setEditModal] = useState<{ visible: boolean; text: string }>({
     visible: false, text: "",
@@ -613,7 +620,7 @@ export default function DockLmTab({
     }
   }, [retainedQueue, suggestions]);
 
-  const hasFreshnessItems = retainedQueue.length > 0 || suggestions.length > 0 || liveVerse !== null;
+  const hasFreshnessItems = retainedQueue.length > 0 || suggestions.length > 0;
 
   useEffect(() => {
     if (!hasFreshnessItems) return;
@@ -916,7 +923,6 @@ export default function DockLmTab({
     return result.slice(0, MAX_QUEUE_SIZE);
   }, [retainedQueue]);
 
-  const currentVerse = liveVerse;
   const queueVerses = processedQueue;
   const suggestionExpiryMs = Math.max(5, Number(settings.suggestionLifetime) || 20) * 1000;
   const queuedVerseKeys = useMemo(() => new Set(processedQueue.map((c) => getLmCandidateKey(c))), [processedQueue]);
@@ -1027,6 +1033,26 @@ export default function DockLmTab({
   }, [now]);
 
   const recentEntries = useMemo(() => entries.slice(-MAX_TRANSCRIPT_LINES), [entries]);
+  const selectedEntries = useMemo(
+    () => getSelectedTranscriptEntries(recentEntries, selectedEntryIds),
+    [recentEntries, selectedEntryIds],
+  );
+  const contextEntry = useMemo(
+    () => contextMenu.entryId
+      ? recentEntries.find((entry) => entry.id === contextMenu.entryId) ?? null
+      : null,
+    [contextMenu.entryId, recentEntries],
+  );
+
+  // Keep selection limited to entries that are still in the visible transcript
+  // window, while preserving selected entries when new lines are appended.
+  useEffect(() => {
+    const visibleIds = new Set(recentEntries.map((entry) => entry.id));
+    setSelectedEntryIds((current) => {
+      const next = new Set(Array.from(current).filter((id) => visibleIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [recentEntries]);
 
   // ── Live word indicator ──
   const liveEntryIndex = useMemo(() => {
@@ -1049,17 +1075,17 @@ export default function DockLmTab({
   }, []);
 
   // ── Transcript interaction handlers ──
-  const handleContextMenu = useCallback((e: React.MouseEvent, index: number) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, entryId: string) => {
     e.preventDefault();
-    setContextMenu({ visible: true, x: e.clientX, y: e.clientY, index });
+    setContextMenu({ visible: true, x: e.clientX, y: e.clientY, entryId });
   }, []);
 
-  const handleLineClick = useCallback((index: number) => {
+  const handleLineClick = useCallback((entryId: string) => {
     if (isSelectionMode) {
-      setSelectedIndices((prev) => {
+      setSelectedEntryIds((prev) => {
         const next = new Set(prev);
-        if (next.has(index)) next.delete(index);
-        else next.add(index);
+        if (next.has(entryId)) next.delete(entryId);
+        else next.add(entryId);
         return next;
       });
     } else {
@@ -1067,11 +1093,11 @@ export default function DockLmTab({
         clearTimeout(clickTimeout.current);
         clickTimeout.current = null;
         setIsSelectionMode(true);
-        setSelectedIndices(new Set([index]));
+        setSelectedEntryIds(new Set([entryId]));
         window.getSelection()?.removeAllRanges();
       } else {
         clickTimeout.current = setTimeout(() => {
-          const text = recentEntries[index]?.text;
+          const text = recentEntries.find((entry) => entry.id === entryId)?.text;
           if (text) {
             navigator.clipboard.writeText(text).catch(() => { });
             showToast("Copied to clipboard!");
@@ -1084,25 +1110,23 @@ export default function DockLmTab({
 
   const handleCancelSelection = useCallback(() => {
     setIsSelectionMode(false);
-    setSelectedIndices(new Set());
+    setSelectedEntryIds(new Set());
   }, []);
 
   const handleCopyAll = useCallback(() => {
-    const sorted = Array.from(selectedIndices).sort((a, b) => a - b);
-    const text = sorted.map(idx => recentEntries[idx]?.text ?? "").filter(Boolean).join("\n");
+    const text = selectedEntries.map((entry) => entry.text).filter(Boolean).join("\n");
     if (text) {
       navigator.clipboard.writeText(text).catch(() => { });
-      showToast(`Copied ${selectedIndices.size} lines`);
+      showToast(`Copied ${selectedEntries.length} lines`);
     }
     handleCancelSelection();
-  }, [selectedIndices, recentEntries, showToast, handleCancelSelection]);
+  }, [selectedEntries, showToast, handleCancelSelection]);
 
   const handleEditAll = useCallback(() => {
-    const sorted = Array.from(selectedIndices).sort((a, b) => a - b);
-    const text = sorted.map(idx => recentEntries[idx]?.text ?? "").filter(Boolean).join("\n");
+    const text = selectedEntries.map((entry) => entry.text).filter(Boolean).join("\n");
     setEditModal({ visible: true, text });
     handleCancelSelection();
-  }, [selectedIndices, recentEntries, handleCancelSelection]);
+  }, [selectedEntries, handleCancelSelection]);
 
   const applyEditTextTool = useCallback((action: NoteTextToolAction, linesPerSlide?: number) => {
     setEditModal((current) => ({
@@ -1141,7 +1165,9 @@ export default function DockLmTab({
     setEditModal({ visible: false, text: "" });
   }, [editModal.text, pushTranscriptToOBS]);
 
-  const maxSelectedIndex = selectedIndices.size > 0 ? Math.max(...Array.from(selectedIndices)) : -1;
+  const lastSelectedEntryId = selectedEntries.length > 0
+    ? selectedEntries[selectedEntries.length - 1].id
+    : null;
   const renderOverlayModeSwitch = useCallback((variant: "bar" | "settings" = "bar") => {
     const options: Array<{ mode: LmOverlayMode; label: string; ariaLabel: string; title: string }> = [
       {
@@ -1307,77 +1333,6 @@ export default function DockLmTab({
 
       {activeTab === "up-next" && (
         <div style={S.tabContent}>
-          {/* ── CURRENT / LIVE VERSE ── */}
-          {currentVerse && (
-            <div style={S.currentSection} data-onboarding="live-card">
-              <div style={S.currentCard}>
-                <div style={S.currentCardHeader}>
-                  <span style={S.currentDot} />
-                  <span style={S.currentBadge}>LIVE</span>
-                </div>
-                <div style={S.currentRef}>{currentVerse.label}</div>
-                {currentVerse.snippet && (
-                  <div style={S.currentText}>{currentVerse.snippet}</div>
-                )}
-                <div style={S.currentBottom}>
-                  <span style={S.currentTime}>
-                    {(() => {
-                      const k = getLmCandidateKey(currentVerse);
-                      const d = detectedAtRef.current.get(k) ?? Date.now();
-                      return getFreshness(d, now).label;
-                    })()}
-                  </span>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    <button
-                      style={S.pinBtn}
-                      onClick={() => handlePinVerse(currentVerse)}
-                      title="Pin verse"
-                      data-onboarding="pin-btn"
-                    >
-                      <Icon name="push_pin" size={11} />
-                    </button>
-                    <button
-                      style={S.pushBtn}
-                      onClick={() => void handlePushVerse(currentVerse, "queue")}
-                      disabled={pushing || (!presentationLinkMode && obsStatus !== "connected")}
-                      title={pushActionTitle}
-                      data-onboarding="push-btn"
-                    >
-                      <Icon name="play" size={11} />
-                      {pushActionLabel}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── Pinned badges inline below live card ── */}
-              {pinnedVerses.length > 0 && (
-                <div style={S.pinnedRow}>
-                  {pinnedVerses.map((c, i) => {
-                    const key = getLmCandidateKey(c);
-                    return (
-                      <div
-                        key={`pin-${key}-${i}`}
-                        style={S.pinnedChip}
-                        onClick={() => void handlePushVerse(c, "queue")}
-                        title={presentationLinkMode ? "Click to show on the presentation screen" : "Click to push to OBS"}
-                      >
-                        📌 {c.label}
-                        <button
-                          style={S.pinnedChipClose}
-                          onClick={(e) => { e.stopPropagation(); handleUnpinVerse(key); }}
-                          title="Unpin"
-                        >
-                          <Icon name="close" size={9} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* ── QUEUE ── */}
           <div style={S.queueSectionFull} data-onboarding="queue-section">
             <div style={S.sectionHeader}>
@@ -1386,6 +1341,30 @@ export default function DockLmTab({
                 <span style={S.sectionCount}>{queueVerses.length}</span>
               )}
             </div>
+            {pinnedVerses.length > 0 && (
+              <div style={S.pinnedRow}>
+                {pinnedVerses.map((c, i) => {
+                  const key = getLmCandidateKey(c);
+                  return (
+                    <div
+                      key={`pin-${key}-${i}`}
+                      style={S.pinnedChip}
+                      onClick={() => void handlePushVerse(c, "queue")}
+                      title={presentationLinkMode ? "Click to show on the presentation screen" : "Click to push to OBS"}
+                    >
+                      📌 {c.label}
+                      <button
+                        style={S.pinnedChipClose}
+                        onClick={(e) => { e.stopPropagation(); handleUnpinVerse(key); }}
+                        title="Unpin"
+                      >
+                        <Icon name="close" size={9} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <div style={S.queueScroll}>
               {queueVerses.length === 0 && pinnedVerses.length === 0 && (
                 <div style={S.sectionEmpty}>
@@ -1497,8 +1476,8 @@ export default function DockLmTab({
                 </div>
               )}
               {recentEntries.map((entry, index) => {
-                const isSelected = selectedIndices.has(index);
-                const showActionBar = isSelectionMode && index === maxSelectedIndex;
+                const isSelected = selectedEntryIds.has(entry.id);
+                const showActionBar = isSelectionMode && entry.id === lastSelectedEntryId;
                 const isLive = index === liveEntryIndex;
 
                 return (
@@ -1515,9 +1494,9 @@ export default function DockLmTab({
                     onClick={(e) => {
                       if ((e.target as HTMLElement).closest('[data-action-bar]')) return;
                       if ((e.target as HTMLElement).tagName.toLowerCase() === "input") return;
-                      handleLineClick(index);
+                      handleLineClick(entry.id);
                     }}
-                    onContextMenu={(e) => handleContextMenu(e, index)}
+                    onContextMenu={(e) => handleContextMenu(e, entry.id)}
                   >
                     <div style={S.transcriptLine}>
                       <div style={{
@@ -1529,10 +1508,10 @@ export default function DockLmTab({
                           style={S.checkbox}
                           checked={isSelected}
                           onChange={(e) => {
-                            setSelectedIndices((prev) => {
+                            setSelectedEntryIds((prev) => {
                               const next = new Set(prev);
-                              if (e.target.checked) next.add(index);
-                              else next.delete(index);
+                              if (e.target.checked) next.add(entry.id);
+                              else next.delete(entry.id);
                               return next;
                             });
                           }}
@@ -1553,7 +1532,7 @@ export default function DockLmTab({
                     {showActionBar && (
                       <div data-action-bar style={S.actionBar}>
                         <div style={S.actionBarLeft}>
-                          <span style={S.selectionCount}>{selectedIndices.size} selected</span>
+                          <span style={S.selectionCount}>{selectedEntries.length} selected</span>
                           <button
                             style={S.btnCancel}
                             onClick={(e) => { e.stopPropagation(); handleCancelSelection(); }}
@@ -1582,8 +1561,7 @@ export default function DockLmTab({
                             style={S.btnAction}
                             onClick={(e) => {
                               e.stopPropagation();
-                              const sorted = Array.from(selectedIndices).sort((a, b) => a - b);
-                              const text = sorted.map(idx => recentEntries[idx]?.text ?? "").filter(Boolean).join("\n");
+                              const text = selectedEntries.map((selected) => selected.text).filter(Boolean).join("\n");
                               handlePushToNotes(text);
                               handleCancelSelection();
                             }}
@@ -1596,8 +1574,7 @@ export default function DockLmTab({
                             style={S.btnPrimary}
                             onClick={(e) => {
                               e.stopPropagation();
-                              const sorted = Array.from(selectedIndices).sort((a, b) => a - b);
-                              const text = sorted.map(idx => recentEntries[idx]?.text ?? "").filter(Boolean).join("\n");
+                              const text = selectedEntries.map((selected) => selected.text).filter(Boolean).join("\n");
                               pushTranscriptToOBS(text);
                               handleCancelSelection();
                             }}
@@ -1712,7 +1689,7 @@ export default function DockLmTab({
         </div>
       )}
 
-      {!isListening && entries.length === 0 && candidates.length === 0 && retainedQueue.length === 0 && suggestions.length === 0 && !liveVerse && (
+      {!isListening && entries.length === 0 && candidates.length === 0 && retainedQueue.length === 0 && suggestions.length === 0 && (
         <div style={S.emptyState}>
           <Icon name="mic" size={32} style={{ opacity: 0.15 }} />
           <span style={S.emptyText}>
@@ -1741,9 +1718,9 @@ export default function DockLmTab({
           <button
             style={S.contextMenuItem}
             onClick={() => {
-              if (contextMenu.index !== null) {
+              if (contextMenu.entryId !== null) {
                 setIsSelectionMode(true);
-                setSelectedIndices(new Set([contextMenu.index]));
+                setSelectedEntryIds(new Set([contextMenu.entryId]));
               }
               setContextMenu(prev => ({ ...prev, visible: false }));
             }}
@@ -1753,8 +1730,8 @@ export default function DockLmTab({
           <button
             style={S.contextMenuItem}
             onClick={() => {
-              if (contextMenu.index !== null) {
-                const text = recentEntries[contextMenu.index]?.text;
+              if (contextEntry?.text) {
+                const text = contextEntry.text;
                 if (text) {
                   navigator.clipboard.writeText(text).catch(() => { });
                   showToast("Copied to clipboard!");
@@ -1768,9 +1745,8 @@ export default function DockLmTab({
           <button
             style={S.contextMenuItem}
             onClick={() => {
-              if (contextMenu.index !== null) {
-                const text = recentEntries[contextMenu.index]?.text ?? "";
-                setEditModal({ visible: true, text });
+              if (contextEntry) {
+                setEditModal({ visible: true, text: contextEntry.text });
               }
               setContextMenu(prev => ({ ...prev, visible: false }));
             }}
@@ -1780,8 +1756,8 @@ export default function DockLmTab({
           <button
             style={S.contextMenuItem}
             onClick={() => {
-              if (contextMenu.index !== null) {
-                const text = recentEntries[contextMenu.index]?.text;
+              if (contextEntry?.text) {
+                const text = contextEntry.text;
                 if (text) pushTranscriptToOBS(text);
               }
               setContextMenu(prev => ({ ...prev, visible: false }));
@@ -1793,9 +1769,8 @@ export default function DockLmTab({
           <button
             style={S.contextMenuItem}
             onClick={() => {
-              if (contextMenu.index !== null) {
-                const text = recentEntries[contextMenu.index]?.text ?? "";
-                void handlePushToNotes(text);
+              if (contextEntry) {
+                void handlePushToNotes(contextEntry.text);
               }
               setContextMenu(prev => ({ ...prev, visible: false }));
             }}
@@ -2459,7 +2434,7 @@ const S: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
   },
   queueRef: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 700,
     color: "var(--dock-text, #E2E8F0)",
   },
@@ -2481,6 +2456,10 @@ const S: Record<string, React.CSSProperties> = {
     lineHeight: "1.4",
     color: "var(--dock-text-dim, #94A3B8)",
     fontStyle: "italic",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: 2,
+    overflow: "hidden",
   },
 
   pushBtn: {

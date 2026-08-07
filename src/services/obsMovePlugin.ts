@@ -3,6 +3,7 @@ import { obsService } from "./obsService";
 
 export const MOVE_PLUGIN_VERSION = "3.2.1";
 export const MCE_OBS_BRIDGE_VERSION = "1.0.0";
+export const MOVE_TRANSITION_RELEASE_URL = `https://github.com/exeldro/obs-move-transition/releases/tag/${MOVE_PLUGIN_VERSION}`;
 
 export interface ObsMovePluginStatus {
   installed: boolean;
