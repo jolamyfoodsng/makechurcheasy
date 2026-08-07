@@ -22,7 +22,7 @@ use cpal::{Device, SampleFormat, StreamConfig};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc;
@@ -104,24 +104,24 @@ fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
 /// Managed state for the AssemblyAI realtime STT capture pipeline.
 pub struct AssemblyAiStreamState {
     /// cpal mic stream — dropped to stop capture.
-    stream: Mutex<StreamBox>,
+    stream: Arc<Mutex<StreamBox>>,
     /// Sends `()` to signal the WS forwarding task to shut down.
     shutdown_tx: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
     /// Sends runtime timing-profile changes to the WS forwarding task.
     profile_tx: Mutex<Option<mpsc::Sender<RealtimeProfile>>>,
     /// Handle for the async WS task so we can await / abort it.
     task_handle: Mutex<Option<JoinHandle<()>>>,
-    is_streaming: Mutex<bool>,
+    is_streaming: Arc<Mutex<bool>>,
 }
 
 impl Default for AssemblyAiStreamState {
     fn default() -> Self {
         Self {
-            stream: Mutex::new(StreamBox(None)),
+            stream: Arc::new(Mutex::new(StreamBox(None))),
             shutdown_tx: Mutex::new(None),
             profile_tx: Mutex::new(None),
             task_handle: Mutex::new(None),
-            is_streaming: Mutex::new(false),
+            is_streaming: Arc::new(Mutex::new(false)),
         }
     }
 }
@@ -335,8 +335,10 @@ pub async fn start_assemblyai_stream(
 
     // ── 2. Spawn the AssemblyAI realtime STT task ─────────────────────────
     let realtime_app = app.clone();
+    let task_stream = Arc::clone(&state.stream);
+    let task_is_streaming = Arc::clone(&state.is_streaming);
     let task = tokio::spawn(async move {
-        if let Err(error) = run_realtime_transcriber(
+        let result = run_realtime_transcriber(
             realtime_app.clone(),
             api_key,
             audio_rx,
@@ -344,8 +346,18 @@ pub async fn start_assemblyai_stream(
             profile_rx,
             profile,
         )
-        .await
-        {
+        .await;
+
+        // A network close can end the WebSocket without an explicit stop command.
+        // Release the microphone and start guard so the UI can reconnect immediately.
+        if let Ok(mut stream) = task_stream.lock() {
+            stream.0 = None;
+        }
+        if let Ok(mut is_streaming) = task_is_streaming.lock() {
+            *is_streaming = false;
+        }
+
+        if let Err(error) = result {
             eprintln!("[AssemblyAI Realtime] Stream failed: {error}");
             let _ = realtime_app.emit(
                 "assemblyai-status",

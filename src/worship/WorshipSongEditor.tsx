@@ -46,7 +46,7 @@ const LAYOUT_PRESETS = [
   { key: "2", label: "2 Lines", linesPerSlide: 2, autoSplit: true },
   { key: "3", label: "3 Lines", linesPerSlide: 3, autoSplit: true },
   { key: "4", label: "4 Lines", linesPerSlide: 4, autoSplit: true },
-  { key: "manual", label: "Manual", linesPerSlide: 2, autoSplit: false },
+  { key: "original", label: "Original", linesPerSlide: 2, autoSplit: false },
 ] as const;
 
 /* ── Fullscreen themes only ─────────────────────────────────────────────── */
@@ -166,11 +166,11 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
 
   /* ── Layout preset selection ── */
   const activeLayoutKey = useMemo(() => {
-    if (!autoSplit) return "manual";
+    if (!autoSplit) return "original";
     const match = LAYOUT_PRESETS.find(
       (p) => p.autoSplit && p.linesPerSlide === linesPerSlide,
     );
-    return match?.key ?? "manual";
+    return match?.key ?? "original";
   }, [autoSplit, linesPerSlide]);
 
   const handleLayoutChange = useCallback(

@@ -148,6 +148,16 @@ class LmDockService {
   private lastLiveQuoteSearchAt = 0;
   /** Resolved overlay base URL (http://127.0.0.1:<port>) — set once at init */
   private overlayBaseUrl: string | null = null;
+  /** The relay only needs the newest snapshot; serialize writes to prevent stale posts winning. */
+  private relayPostInFlight = false;
+  private relayPendingPayload: Record<string, unknown> | null = null;
+
+  /** User intent survives an unexpected native stream close, but never a manual stop. */
+  private shouldKeepListening = false;
+  private activeMicId: string | undefined;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
+  private nativeStopPromise: Promise<void> | null = null;
 
   // ── Sentence detection state ──────────────────────────────────────────────
   /** Accumulated text for the current sentence (across ASR finals) */
@@ -156,6 +166,10 @@ class LmDockService {
   private latestSearchId = 0;
   private static readonly PAUSE_THRESHOLD_MS = 450;
   private static readonly LIVE_QUOTE_SEARCH_WINDOW_WORDS = 18;
+  /** The dock only renders recent lines; never serialize an entire service into each live relay packet. */
+  private static readonly MAX_RELAY_TRANSCRIPT_ENTRIES = 60;
+  private static readonly MAX_RECONNECT_ATTEMPTS = 5;
+  private static readonly RECONNECT_DELAYS_MS = [750, 1_500, 3_000, 5_000, 8_000];
   private lastQueuedQuoteSearchKey = "";
   private lastQueuedQuoteSearchAt = 0;
 
@@ -386,7 +400,7 @@ class LmDockService {
     dockBridge.sendState({
       type: "state:lm-transcript",
       payload: {
-        entries: this.snapshot.entries,
+        entries: this.snapshot.entries.slice(-LmDockService.MAX_RELAY_TRANSCRIPT_ENTRIES),
       },
       timestamp: Date.now(),
     });
@@ -395,50 +409,45 @@ class LmDockService {
 
   /** POST snapshot to overlay server relay for cross-process LM Dock communication */
   private postToRelay(): void {
-    try {
-      const payload = {
-        status: this.snapshot.status,
-        entries: this.snapshot.entries,
-        candidates: this.snapshot.candidates,
-        queue: this.snapshot.queue,
-        suggestions: this.snapshot.suggestions,
-        matching: this.snapshot.matching,
-        error: this.snapshot.error,
-      };
-
-      // Use the eagerly-resolved overlay URL (http://127.0.0.1:<port>).
-      // Falls back to async getOverlayBaseUrl() if cache hasn't resolved yet.
-      // Must NOT use window.location.origin (Vite dev server or tauri://) —
-      // that would hit the Vite proxy which forwards to the wrong port.
-      const base = this.overlayBaseUrl;
-      if (!base) {
-        // URL not yet resolved — wait for it (first few posts after init)
-        void getOverlayBaseUrl().then((resolved) => {
-          this.overlayBaseUrl = resolved;
-          this._postToRelayDirect(resolved, payload);
-        }).catch((err) => {
-          console.warn("[lmDockService] postToRelay: overlay URL resolve failed:", err);
-        });
-        return;
-      }
-
-      this._postToRelayDirect(base, payload);
-    } catch (err) {
-      console.warn("[lmDockService] postToRelay error:", err);
-    }
+    this.relayPendingPayload = {
+      status: this.snapshot.status,
+      entries: this.snapshot.entries.slice(-LmDockService.MAX_RELAY_TRANSCRIPT_ENTRIES),
+      candidates: this.snapshot.candidates,
+      queue: this.snapshot.queue,
+      suggestions: this.snapshot.suggestions,
+      matching: this.snapshot.matching,
+      error: this.snapshot.error,
+    };
+    void this.flushRelaySnapshot();
   }
 
-  private _postToRelayDirect(baseUrl: string, payload: Record<string, unknown>): void {
-    const url = `${baseUrl}/api/lm-state`;
-    fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }).then((r) => {
-      if (!r.ok) console.warn("[lmDockService] postToRelay HTTP", r.status, r.statusText);
-    }).catch((err) => {
-      console.warn("[lmDockService] postToRelay fetch FAILED:", url, err);
-    });
+  private async flushRelaySnapshot(): Promise<void> {
+    if (this.relayPostInFlight) return;
+    this.relayPostInFlight = true;
+
+    try {
+      while (this.relayPendingPayload) {
+        const payload = this.relayPendingPayload;
+        this.relayPendingPayload = null;
+        const baseUrl = this.overlayBaseUrl || await getOverlayBaseUrl();
+        this.overlayBaseUrl = baseUrl;
+
+        const response = await fetch(`${baseUrl}/api/lm-state`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          console.warn("[lmDockService] postToRelay HTTP", response.status, response.statusText);
+        }
+      }
+    } catch (err) {
+      console.warn("[lmDockService] postToRelay failed:", err);
+    } finally {
+      this.relayPostInFlight = false;
+      // A snapshot may arrive between the final loop check and clearing the lock.
+      if (this.relayPendingPayload) void this.flushRelaySnapshot();
+    }
   }
 
   /** Get all finalized text joined for Bible matching */
@@ -747,7 +756,59 @@ class LmDockService {
 
   // ── Start / Stop ────────────────────────────────────────────────────────
 
-  async startListening(micId?: string): Promise<void> {
+  private recoverFromUnexpectedStreamEnd(reason: string): void {
+    if (!this.shouldKeepListening || this.reconnectTimer) return;
+
+    const isConfigurationFailure = /api key|unauthori[sz]ed|forbidden|invalid.*key/i.test(reason);
+    if (isConfigurationFailure) {
+      this.shouldKeepListening = false;
+      void this.cleanup();
+      return;
+    }
+
+    const nextAttempt = this.reconnectAttempts + 1;
+    if (nextAttempt > LmDockService.MAX_RECONNECT_ATTEMPTS) {
+      this.shouldKeepListening = false;
+      this.snapshot = {
+        ...this.snapshot,
+        status: "error",
+        error: "Speech connection stopped. Start listening again to retry.",
+      };
+      this.pushStatus();
+      void this.cleanup();
+      return;
+    }
+
+    this.reconnectAttempts = nextAttempt;
+    void this.cleanup().finally(() => {
+      if (!this.shouldKeepListening || this.reconnectTimer) return;
+
+      const delay = LmDockService.RECONNECT_DELAYS_MS[nextAttempt - 1] ?? 8_000;
+      this.snapshot = {
+        ...this.snapshot,
+        status: "connecting",
+        error: `Reconnecting speech service (${nextAttempt}/${LmDockService.MAX_RECONNECT_ATTEMPTS})…`,
+      };
+      this.pushStatus();
+
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null;
+        if (!this.shouldKeepListening) return;
+        void this.startListening(this.activeMicId, { reconnect: true });
+      }, delay);
+    });
+  }
+
+  async startListening(micId?: string, options: { reconnect?: boolean } = {}): Promise<void> {
+    if (!options.reconnect) {
+      this.shouldKeepListening = true;
+      this.reconnectAttempts = 0;
+    }
+    this.activeMicId = micId;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     console.log("[lmDockService] 🎤 startListening() called, micId:", micId, "currentStatus:", this.snapshot.status);
     if (
       this.startInFlight ||
@@ -907,15 +968,17 @@ class LmDockService {
           if (token !== this.sessionToken) return;
           const { status } = event.payload;
           if (status === "connected") {
+            this.reconnectAttempts = 0;
             this.snapshot = { ...this.snapshot, status: "listening" };
             this.pushStatus();
           } else if (status.startsWith("error")) {
             this.snapshot = { ...this.snapshot, status: "error", error: status };
             this.pushStatus();
-            this.cleanup();
+            this.recoverFromUnexpectedStreamEnd(status);
           } else if (status === "stopped") {
             this.snapshot = { ...this.snapshot, status: "idle" };
             this.pushStatus();
+            this.recoverFromUnexpectedStreamEnd("The speech connection closed unexpectedly.");
           }
         },
       );
@@ -998,7 +1061,7 @@ class LmDockService {
       const msg = err instanceof Error ? err.message : String(err);
       this.snapshot = { ...this.snapshot, status: "error", error: msg };
       this.pushStatus();
-      this.cleanup();
+      this.recoverFromUnexpectedStreamEnd(msg);
     } finally {
       if (token === this.sessionToken) {
         this.startInFlight = false;
@@ -1007,6 +1070,13 @@ class LmDockService {
   }
 
   stopListening(): void {
+    this.shouldKeepListening = false;
+    this.activeMicId = undefined;
+    this.reconnectAttempts = 0;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.sessionToken++;
     this.startInFlight = false;
     if (this.pauseCheckTimer) {
@@ -1033,7 +1103,7 @@ class LmDockService {
     this.lastLevelNotifyAt = 0;
     this.lastLevelValue = 0;
 
-    this.cleanup();
+    void this.cleanup();
 
     this.snapshot = {
       ...this.snapshot,
@@ -1059,7 +1129,7 @@ class LmDockService {
     await safeTauriInvoke("set_microphone_gain", { gain }).catch(() => { });
   }
 
-  private cleanup(): void {
+  private cleanup(): Promise<void> {
     // Unlisten Tauri event listeners
     this.transcriptUnlisten?.();
     this.transcriptUnlisten = null;
@@ -1094,10 +1164,19 @@ class LmDockService {
       this.focusHandler = null;
     }
 
-    // Stop Rust-side AssemblyAI realtime STT (mic capture + transcription task)
-    safeTauriInvoke("stop_assemblyai_stream").catch((err) => {
-      console.warn("[LmDockService] Failed to stop voice stream:", err);
-    });
+    // Stop Rust-side AssemblyAI realtime STT (mic capture + transcription task).
+    // Keep one shared promise so a reconnect never races a previous shutdown.
+    if (!this.nativeStopPromise) {
+      this.nativeStopPromise = safeTauriInvoke("stop_assemblyai_stream")
+        .then(() => undefined)
+        .catch((err) => {
+          console.warn("[LmDockService] Failed to stop voice stream:", err);
+        })
+        .finally(() => {
+          this.nativeStopPromise = null;
+        });
+    }
+    return this.nativeStopPromise;
   }
 
   subscribe(listener: SnapshotListener): () => void {

@@ -48,8 +48,10 @@ const MAX_QUEUE_SIZE = 3;
 const LM_QUEUE_RETENTION_MS = 90_000;
 const LM_LIVE_VERSE_STORAGE_KEY = "ocs-lm-dock-live-verse";
 const SUGGESTION_COOLDOWN_MS = 60_000;
-const LM_RELAY_POLL_MS = 2_000;
-const LM_RELAY_HIDDEN_POLL_MS = 10_000;
+// The relay is local-only. Poll often enough for a detected reference to feel live;
+// performanceManager still applies a device-specific minimum interval.
+const LM_RELAY_POLL_MS = 500;
+const LM_RELAY_HIDDEN_POLL_MS = 2_000;
 
 async function loadLmDockService() {
   const module = await import("../../services/lmDockService");

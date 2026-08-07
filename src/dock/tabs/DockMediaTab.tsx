@@ -238,6 +238,11 @@ function extractUploadTimestamp(filename: string): string {
   return Number.isFinite(d.getTime()) ? d.toISOString() : "";
 }
 
+/** Show the user-facing filename instead of the generated disk-storage prefix. */
+function getUploadDisplayName(filename: string): string {
+  return filename.replace(/^media_\d{10,13}_/, "");
+}
+
 function loadMediaPreferences(): DockMediaPreferences {
   try {
     const stored = localStorage.getItem(getUserScopedKey(MEDIA_PREFS_STORAGE_KEY));
@@ -1281,7 +1286,7 @@ export default function DockMediaTab({
       entries.push({
         key: prefKey,
         prefKey,
-        name: file,
+        name: getUploadDisplayName(file),
         kind,
         createdAt: extractUploadTimestamp(file),
         originLabel: t('media.uploads'),
