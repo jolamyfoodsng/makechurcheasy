@@ -19,7 +19,7 @@ import {
 } from "../../i18n/localeCatalog";
 import { ltDurationStore } from "../../lowerthirds/ltDurationStore";
 import { applyBrandingSettingsToDom } from "../../services/branding";
-import { fetchCreditDetails, fetchCreditTransactions, onCreditChange, type CreditTransaction } from "../../services/credits";
+import { fetchCreditDetails, fetchCreditTransactions, onCreditChange, type CreditDetails, type CreditTransaction } from "../../services/credits";
 import {
   applyInterfaceLanguagePreference,
   getInterfaceLanguageLabel,
@@ -200,7 +200,8 @@ export function MVSettings() {
   const effectivePlan = getEffectivePlan(authUser);
   const hasMobileAccess = canUseMobileControl(authUser);
   const [showMobileUpgrade, setShowMobileUpgrade] = useState(false);
-  const [, setCreditBalance] = useState<number>(0);
+  const [creditBalance, setCreditBalance] = useState<number>(0);
+  const [creditDetails, setCreditDetails] = useState<CreditDetails | null>(null);
   const [creditsUsedThisMonth, setCreditsUsedThisMonth] = useState<number>(0);
   const [planConfig, setPlanConfig] = useState<PlanConfig | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<CreditTransaction[]>([]);
@@ -209,14 +210,23 @@ export function MVSettings() {
   const trialActive = !proUnlocked && storedPlan === "free" && isInTrial(authUser);
   // During trial, user gets Growth-level credits — use the trial config tier for lookup
   const effectivePlanForCredits = trialActive ? "trial" as const : userPlan;
-  const planCredits = proUnlocked ? -1 : (planConfig ? getPlanCredits(planConfig, effectivePlanForCredits) : 1000);
+  const serverPlan = creditDetails?.effectivePlan;
+  const serverTrialActive = serverPlan === "trial";
+  const displayPlan = serverPlan && serverPlan !== "trial"
+    ? serverPlan
+    : effectivePlanForCredits;
+  const planCredits = proUnlocked
+    ? -1
+    : (creditDetails?.planAllocation ?? (planConfig ? getPlanCredits(planConfig, displayPlan) : 0));
+  const creditsRemaining = proUnlocked ? -1 : (creditDetails?.credits ?? creditBalance);
+  const displayTrialActive = serverPlan ? serverTrialActive : trialActive;
   const trialDaysLeft = trialActive ? getTrialDaysRemaining(authUser) : 0;
   const trialEndDate = trialActive && authUser?.trial?.endsAt
     ? new Date(authUser.trial.endsAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : null;
-  const planLabel = trialActive
+  const planLabel = displayTrialActive
     ? "Growth Trial"
-    : (proUnlocked ? "Full Access" : (planConfig ? getPlanLabel(planConfig, userPlan) : "Free"));
+    : (proUnlocked ? "Full Access" : (planConfig ? getPlanLabel(planConfig, displayPlan) : "Free"));
   const isUnlimited = planCredits === -1;
   const usagePct = planCredits > 0 ? Math.min(100, Math.round((creditsUsedThisMonth / planCredits) * 100)) : 0;
 
@@ -255,10 +265,12 @@ export function MVSettings() {
     fetchCreditDetails().then((details) => {
       if (details) {
         setCreditBalance(details.credits);
+        setCreditDetails(details);
         setCreditsUsedThisMonth(details.totalConsumed);
       }
     }).catch(() => {
       setCreditBalance(0);
+      setCreditDetails(null);
       setCreditsUsedThisMonth(0);
     });
   }, [authUser?.id, planConfig]);
@@ -269,7 +281,10 @@ export function MVSettings() {
       setCreditBalance(newBalance);
       // Re-fetch full details to get accurate totalConsumed
       fetchCreditDetails().then((details) => {
-        if (details) setCreditsUsedThisMonth(details.totalConsumed);
+        if (details) {
+          setCreditDetails(details);
+          setCreditsUsedThisMonth(details.totalConsumed);
+        }
       });
       fetchCreditTransactions(10).then(setRecentTransactions);
     });
@@ -286,6 +301,7 @@ export function MVSettings() {
         const details = await fetchCreditDetails();
         if (!cancelled && details) {
           setCreditBalance(details.credits);
+          setCreditDetails(details);
           setCreditsUsedThisMonth(details.totalConsumed);
         }
       } catch {
@@ -1694,7 +1710,7 @@ export function MVSettings() {
                   </div>
 
                   {/* ── Trial Banner ── */}
-                  {trialActive && (
+                  {displayTrialActive && (
                     <div style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
                       padding: "14px 18px", borderRadius: "3px", marginBottom: "24px",
@@ -1728,14 +1744,14 @@ export function MVSettings() {
                           <span className="feature-tag-pill" style={{
                             textTransform: "uppercase",
                             fontSize: "12px",
-                            background: trialActive ? "rgba(29,78,216,0.15)" : "rgba(16,185,129,0.15)",
-                            color: trialActive ? "#1D4ED8" : "var(--success-color)",
-                          }}>{trialActive ? t("mvSettings.credits.activeTrial") : t("mvSettings.credits.active")}</span>
+                            background: displayTrialActive ? "rgba(29,78,216,0.15)" : "rgba(16,185,129,0.15)",
+                            color: displayTrialActive ? "#1D4ED8" : "var(--success-color)",
+                          }}>{displayTrialActive ? t("mvSettings.credits.activeTrial") : t("mvSettings.credits.active")}</span>
                         </div>
                       </div>
                       <div className="credits-stat">
                         <span className="credits-stat-label">{t("mvSettings.credits.creditsRemaining")}</span>
-                        <span className="credits-stat-value credits-accent">{isUnlimited ? t("mvSettings.credits.unlimited") : formatCredits(planCredits)}</span>
+                        <span className="credits-stat-value credits-accent">{isUnlimited ? t("mvSettings.credits.unlimited") : formatCredits(creditsRemaining)}</span>
                       </div>
                       <div className="credits-stat">
                         <span className="credits-stat-label">{t("mvSettings.credits.thisMonth")}</span>
