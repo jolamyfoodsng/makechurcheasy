@@ -19,11 +19,12 @@
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod audio_capture;
 mod assemblyai_stream;
+#[cfg(target_os = "macos")]
 mod local_llm;
 mod mobile_companion;
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[cfg(not(target_os = "macos"))]
 mod local_llm_stub;
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[cfg(not(target_os = "macos"))]
 use local_llm_stub as local_llm;
 
 use chrono::Utc;

@@ -152,6 +152,8 @@ let backoffActive = false;
 let backoffMultiplier = 1;
 const latencies: LatencyEntry[] = [];
 const inFlightDedupes = new Map<string, Promise<unknown>>();
+const recentFailures: Array<{ label: string; error: string; time: string }> = [];
+const MAX_RECENT_FAILURES = 20;
 
 const semaphore = new Semaphore(perf.getMaxConcurrentRequests());
 const rateLimiter = new RateLimiter(perf.getOBSRequestBudget());
@@ -171,6 +173,9 @@ function startStatsLogging(): void {
       `| Deduped: ${stats.dedupCount} | Queue: ${stats.queueDepth} ` +
       `| Backoff: ${stats.backoffActive ? `${(stats.backoffMultiplier * 100).toFixed(0)}%` : "off"}`
     );
+    if (recentFailures.length > 0) {
+      console.warn(`${LOG_PREFIX} Recent failures:`, recentFailures);
+    }
   }, STATS_LOG_INTERVAL_MS);
 }
 
@@ -336,6 +341,7 @@ export function resetStats(): void {
   backoffActive = false;
   backoffMultiplier = 1;
   latencies.length = 0;
+  recentFailures.length = 0;
 }
 
 // ---------------------------------------------------------------------------

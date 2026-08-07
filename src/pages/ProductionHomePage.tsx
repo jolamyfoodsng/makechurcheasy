@@ -1258,7 +1258,7 @@ export default function ProductionHomePage() {
 
   const handleOpenTutorials = useCallback(() => {
     track("tutorial_modal_opened");
-    openUrl("https://www.youtube.com/watch?v=08UjSYtjmLU");
+    openUrl("https://www.youtube.com/playlist?list=PLRua6gJfgC0o");
   }, []);
 
   return (

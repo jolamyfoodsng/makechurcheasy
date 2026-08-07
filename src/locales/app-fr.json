@@ -4614,6 +4614,7 @@
   "dt.final.finish": "Commencer à utiliser MakeChurchEasy",
   "dt.common.skip": "Ignorer la visite",
   "dt.common.next": "Suivant",
+  "dt.common.finish": "Continuer",
   "dt.common.done": "Étape terminée",
   "dt.button": "Tutoriel",
   "dt.button.tooltip": "Démarrer la visite interactive du tableau de bord",

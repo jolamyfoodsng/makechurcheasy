@@ -97,7 +97,7 @@ export default function BackgroundPickerCard({
   displayMode = "single",
 }: Props) {
   const { t } = useTranslation();
-  const [collapsed, setCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState<"background" | "text">("background");
   const [bgType, setBgType] = useState<BackgroundType>(() => {
     try {
       const stored = localStorage.getItem(getUserScopedKey(BG_TYPE_KEY));
@@ -217,42 +217,33 @@ export default function BackgroundPickerCard({
 
   const selectedOption = BG_OPTIONS.find((o) => o.id === bgType) ?? BG_OPTIONS[0];
 
-  const modeLabel = useMemo(() => {
-    switch (bgType) {
-      case "off": return t('bgPicker.bgDisabled');
-      case "theme": return t('bgPicker.usingThemeBg');
-      case "color": {
-        const c = quickSettings.backgroundColor || "#0F172A";
-        const end = quickSettings.backgroundColorEnd;
-        return end ? `${t('bgPicker.gradient')} · ${c} → ${end}` : `${t('bgPicker.solid')} · ${c}`;
-      }
-      case "image": return quickSettings.backgroundImage ? t('bgPicker.imageBgActive') : t('bgPicker.noImageSelected');
-      case "video": return quickSettings.backgroundVideo ? t('bgPicker.videoBgActive') : t('bgPicker.noVideoSelected');
-      case "pattern": return quickSettings.backgroundPattern ? t('bgPicker.patternBgActive') : t('bgPicker.noPatternSelected');
-      default: return "";
-    }
-  }, [bgType, quickSettings.backgroundColor, quickSettings.backgroundColorEnd, quickSettings.backgroundImage, quickSettings.backgroundVideo]);
-
   return (
     <div className="dtb-studio-card">
-      <button
-        type="button"
-        className="dtb-studio-card__header"
-        onClick={() => setCollapsed((v) => !v)}
-        title="expand_less"
-      >
-        <div className="dtb-studio-card__header-left">
-          <Icon name="wallpaper" size={14} className="dtb-studio-card__icon" />
-          <span className="dtb-studio-card__title">{t('bgPicker.background')}</span>
+      
+      <div className="dtb-studio-card__body dtb-bg-picker">
+        {/* Tab Navigation */}
+        <div className="dtb-bg-picker__tabs">
+          <button
+            type="button"
+            className={`dtb-bg-picker__tab${activeTab === "background" ? " dtb-bg-picker__tab--active" : ""}`}
+            onClick={() => setActiveTab("background")}
+          >
+            <Icon name="wallpaper" size={13} />
+            <span>{t('bgPicker.background')}</span>
+          </button>
+          <button
+            type="button"
+            className={`dtb-bg-picker__tab${activeTab === "text" ? " dtb-bg-picker__tab--active" : ""}`}
+            onClick={() => setActiveTab("text")}
+          >
+            <Icon name="text_fields" size={13} />
+            <span>{t('bgPicker.text')}</span>
+          </button>
         </div>
-        <Icon
-          name={collapsed ? "expand_more" : "expand_less"}
-          size={14}
-          className="dtb-studio-card__chevron"
-        />
-      </button>
-      {!collapsed && (
-        <div className="dtb-studio-card__body dtb-bg-picker">
+
+        {/* Background Tab */}
+        {activeTab === "background" && (
+          <>
           <p className="dtb-bg-picker__subtitle">{t('bgPicker.chooseBackground')}</p>
 
           {/* Dropdown Selector */}
@@ -291,13 +282,7 @@ export default function BackgroundPickerCard({
             )}
           </div>
 
-          {/* Active mode indicator */}
-          <div className="dtb-bg-picker__mode-badge">
-            <span
-              className={`dtb-bg-picker__mode-dot${bgType === "off" ? " dtb-bg-picker__mode-dot--off" : ""}`}
-            />
-            <span className="dtb-bg-picker__mode-text">{modeLabel}</span>
-          </div>
+         
 
           {/* Content based on type */}
           <div className="dtb-bg-picker__content">
@@ -386,7 +371,12 @@ export default function BackgroundPickerCard({
               </div>
             </div>
           )}
+          </>
+          )}
 
+          {/* Text Tab */}
+          {activeTab === "text" && (
+            <>
           {/* ── Text Section ── */}
           <div className="dtb-bg-picker__settings">
             <div className="dtb-section-title">{t('bgPicker.text')}</div>
@@ -504,8 +494,9 @@ export default function BackgroundPickerCard({
               onQuickSettingsChange={onQuickSettingsChange}
             />
           )}
+            </>
+          )}
         </div>
-      )}
     </div>
   );
 }

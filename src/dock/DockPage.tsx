@@ -203,9 +203,6 @@ export default function DockPage() {
     getDefaultDockProductionSettings(),
   );
   const [servicePlanner, setServicePlanner] = useState<ServicePlannerSnapshot | null>(null);
-  const [movePluginInstalled, setMovePluginInstalled] = useState<boolean | null>(null);
-  const [moveNoticeDismissed, setMoveNoticeDismissed] = useState(false);
-  const [moveUrlCopied, setMoveUrlCopied] = useState(false);
   const [projectionSettings, setProjectionSettings] = useState<ProjectionSettings>(() => loadProjectionSettings());
   const [upgradeModalMsg, setUpgradeModalMsg] = useState("");
 
@@ -291,12 +288,6 @@ export default function DockPage() {
     void loadDockProductionSettings().then(setProductionSettings).catch(() => { });
   }, []);
 
-  // Check Move plugin status when OBS connects
-  useEffect(() => {
-    if (!obsConnected) return;
-    void dockObsClient.isMovePluginInstalled().then(setMovePluginInstalled).catch(() => setMovePluginInstalled(false));
-  }, [obsConnected]);
-
   // ── Force update: fetch latest release info and check pub_date ──
   useEffect(() => {
     const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-releases/releases/latest";
@@ -342,24 +333,6 @@ export default function DockPage() {
           }
         } catch { /* non-critical */ }
       });
-  }, []);
-
-  const handleOpenMovePlugin = useCallback(() => {
-    const url = dockObsClient.getMovePluginDownloadInfo().url;
-    // The dock runs in OBS's embedded CEF browser — window.open() stays
-    // inside CEF. Route through the overlay server which runs in the
-    // native Tauri process and can open the system default browser.
-    fetch(`http://127.0.0.1:45678/api/open-url`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
-    }).catch(() => {
-      // Fallback: copy URL to clipboard
-      navigator.clipboard.writeText(url).then(() => {
-        setMoveUrlCopied(true);
-        setTimeout(() => setMoveUrlCopied(false), 3000);
-      }).catch(() => { });
-    });
   }, []);
 
   const waitForDockObsConnected = useCallback(async (timeoutMs = 4000) => {
@@ -1158,39 +1131,6 @@ export default function DockPage() {
                   {t('page.makeSureEnabled')}
                 </div>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Move Plugin Notice */}
-        {obsConnected && movePluginInstalled === false && !moveNoticeDismissed && (
-          <div className="dock-settings-panel" style={{ background: "var(--dock-yellow-soft, rgba(255, 193, 7, 0.1))", borderBottom: "1px solid var(--dock-yellow, #ffc107)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
-              <Icon name="info" size={14} style={{ color: "var(--dock-yellow, #ffc107)" }} />
-              <span style={{ color: "var(--dock-text)" }}>
-                <strong>{t('dock.moveTransition')}</strong> {t('dock.movePluginNotDetected')}
-              </span>
-              <a
-                href="#"
-                onClick={(e) => { e.preventDefault(); handleOpenMovePlugin(); }}
-                className="dock-btn dock-btn--preview"
-                style={{ marginLeft: "auto", padding: "2px 6px", fontSize: 10, whiteSpace: "nowrap" }}
-              >
-                <Icon name="download" size={12} />
-                {moveUrlCopied ? t('common.done') : t('page.movePlugin')}
-              </a>
-              <button
-                type="button"
-                className="dock-toolbar__btn"
-                onClick={() => setMoveNoticeDismissed(true)}
-                title={t('common.close')}
-                style={{ width: 20, height: 20, padding: 0, border: "none", flexShrink: 0 }}
-              >
-                <Icon name="close" size={12} />
-              </button>
-            </div>
-            <div className="dock-settings-panel__hint" style={{ color: "var(--dock-text-dim)" }}>
-              {dockObsClient.getMovePluginDownloadInfo().instructions}
             </div>
           </div>
         )}

@@ -21008,7 +21008,47 @@
 .dtb-bg-picker {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 1px;
+}
+
+/* Tab Navigation */
+.dtb-bg-picker__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--dock-border);
+}
+
+.dtb-bg-picker__tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dock-text-tertiary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex: 1;
+  justify-content: center;
+}
+
+.dtb-bg-picker__tab:hover {
+  color: var(--dock-text-secondary);
+  background: var(--dock-surface-hover);
+}
+
+.dtb-bg-picker__tab--active {
+  color: var(--dock-accent);
+  border-bottom-color: var(--dock-accent);
+}
+
+.dtb-bg-picker__tab svg {
+  flex-shrink: 0;
 }
 
 /* Header */
@@ -21424,7 +21464,7 @@
   border: none;
   background: transparent;
   color: var(--dock-text-secondary, #94A3B8);
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 500;
   border-radius: 4px;
   cursor: pointer;
@@ -22090,7 +22130,6 @@
   align-items: center;
   gap: 8px;
   padding: 4px 0;
-  margin-bottom: 4px;
 }
 
 .dtb-bg-picker__mode-dot {

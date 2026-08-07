@@ -349,6 +349,8 @@ class DockObsClient {
   private _sceneItemListCache: { sceneName: string; items: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex?: number }>; expiresAt: number } | null = null;
   /** Cache the program scene name for ~2s to avoid redundant GetCurrentProgramScene calls */
   private _programSceneCache: { name: string; expiresAt: number } | null = null;
+  /** Short-lived cache for canvas size to avoid redundant GetVideoSettings calls within a single push */
+  private _canvasCache: { size: { width: number; height: number }; expiresAt: number } | null = null;
   /** Skip ensureProgramSceneAsSourceInPresentation when the program scene hasn't changed */
   private _presentationProgramScene = "";
   /** Active image-slideshow rotation timers keyed by source name */
@@ -356,6 +358,16 @@ class DockObsClient {
   /** Performance telemetry: recent call latencies (ms) */
   private _callLatencies: number[] = [];
   private _callLatencyWindowStart = 0;
+  /** Cache active LT background theme signature per scene to skip redundant OBS calls */
+  private _activeLtBgSignature: Record<string, string> = {};
+  /** Cache active LT background input kind per scene to skip GetInputList when type unchanged */
+  private _activeLtBgInputKind: Record<string, string> = {};
+  /** Cache studio mode result for the session (rarely changes) */
+  private _studioModeCache: { value: boolean; expiresAt: number } | null = null;
+  /** Track confirmed-clone scene names so ensureClone skips getObsSceneNames */
+  private _cloneExistsCache: Set<string> = new Set();
+  /** Track last-applied BG item state per scene to skip redundant SetSceneItemTransform/Index/Enabled */
+  private _lastBgItemState: Record<string, { sourceName: string; itemId: number; width: number; height: number }> = {};
 
   get status() { return this._status; }
   get isConnected() { return this._status === "connected"; }
@@ -671,16 +683,22 @@ class DockObsClient {
   }
 
   private async getCanvasSize(): Promise<{ width: number; height: number }> {
+    const now = Date.now();
+    if (this._canvasCache && now < this._canvasCache.expiresAt) {
+      return this._canvasCache.size;
+    }
     try {
       const video = await this.call("GetVideoSettings") as {
         baseWidth?: number;
         baseHeight?: number;
       };
       const fallback = getDefaultCanvasSize();
-      return {
+      const size = {
         width: Number(video.baseWidth) || fallback.width,
         height: Number(video.baseHeight) || fallback.height,
       };
+      this._canvasCache = { size, expiresAt: now + 5000 };
+      return size;
     } catch {
       return getDefaultCanvasSize();
     }
@@ -1443,9 +1461,15 @@ class DockObsClient {
   }
 
   private async isStudioModeEnabled(): Promise<boolean> {
+    // Cache for 30s — studio mode rarely changes mid-session
+    if (this._studioModeCache && Date.now() < this._studioModeCache.expiresAt) {
+      return this._studioModeCache.value;
+    }
     try {
       const resp = await this.call("GetStudioModeEnabled") as { studioModeEnabled?: boolean };
-      return Boolean(resp.studioModeEnabled);
+      const value = Boolean(resp.studioModeEnabled);
+      this._studioModeCache = { value, expiresAt: Date.now() + 30_000 };
+      return value;
     } catch {
       return false;
     }
@@ -1865,8 +1889,14 @@ class DockObsClient {
       ? (this.getStoredPreviewSceneStateForTab(tabId)?.previewSceneName ?? "")
       : (this.getStoredPreviewSceneState()?.previewSceneName ?? "");
 
-    const scenes = await this.getObsSceneNames().catch(() => [] as string[]);
-    const cloneExists = scenes.includes(cloneName);
+    // Fast path: if we already confirmed this clone exists, skip getObsSceneNames
+    const cloneExists = this._cloneExistsCache.has(cloneName)
+      || (await this.getObsSceneNames().catch(() => [] as string[])).includes(cloneName);
+
+    if (cloneExists) {
+      this._cloneExistsCache.add(cloneName);
+    }
+
     if (!cloneExists) {
       await this.call("CreateScene", { sceneName: cloneName });
       await this.sleep(120);
@@ -2594,6 +2624,10 @@ class DockObsClient {
   private async removeSceneIfExists(sceneName: string): Promise<void> {
     try {
       await this.call("RemoveScene", { sceneName });
+      this._cloneExistsCache.delete(sceneName);
+      delete this._lastBgItemState[sceneName];
+      delete this._activeLtBgSignature[sceneName];
+      delete this._activeLtBgInputKind[sceneName];
     } catch { /* ignore */ }
   }
 
@@ -4249,8 +4283,6 @@ class DockObsClient {
         await this.hideOverlaySource(sceneName, resources.bibleLtSource);
         await this.hideSceneSource(sceneName, resources.bibleScene);
         await this.hideFullscreenBg(sceneName, resources);
-        // Also hide lower-third BG sources from the target scene
-        await this._hideLowerThirdBgSource(sceneName).catch(() => { });
 
         // The browser source is already inside MCE Presentation (created by _ensureFullscreenScene).
         // Just find and enable it — don't try to add MCE Presentation as a scene source to itself.
@@ -6585,15 +6617,16 @@ class DockObsClient {
     const activeName = activeSlot === "A" ? names.a : names.b;
     const inactiveName = activeSlot === "A" ? names.b : names.a;
 
-    // Inspect what the active slot currently is
-    let activeKind = "";
+    // Fetch input list once to check both active and inactive slots (saves a round-trip)
+    let inputList: Array<{ inputName: string; inputKind: string }> = [];
     try {
       const inputs = await this.call("GetInputList") as {
         inputs: Array<{ inputName: string; inputKind: string }>;
       };
-      const existing = inputs.inputs.find((i) => i.inputName === activeName);
-      if (existing) activeKind = existing.inputKind;
+      inputList = inputs.inputs;
     } catch { /* ignore */ }
+
+    const activeKind = inputList.find((i) => i.inputName === activeName)?.inputKind ?? "";
 
     // If the active slot already matches the needed type, just update its settings
     if (activeKind === neededKind) {
@@ -6606,14 +6639,7 @@ class DockObsClient {
     // This ensures the old source stays visible until the new one is ready.
 
     // Create or update the inactive slot with the new type
-    let inactiveKind = "";
-    try {
-      const inputs = await this.call("GetInputList") as {
-        inputs: Array<{ inputName: string; inputKind: string }>;
-      };
-      const existing = inputs.inputs.find((i) => i.inputName === inactiveName);
-      if (existing) inactiveKind = existing.inputKind;
-    } catch { /* ignore */ }
+    let inactiveKind = inputList.find((i) => i.inputName === inactiveName)?.inputKind ?? "";
 
     // If inactive slot has a different kind, destroy it first
     if (inactiveKind && inactiveKind !== neededKind) {
@@ -6626,6 +6652,7 @@ class DockObsClient {
         inputName: inactiveName,
         inputKind: neededKind,
         inputSettings: neededSettings,
+        sceneName: def.sceneName,
       }).catch(() => { });
     } else {
       await this.call("SetInputSettings", { inputName: inactiveName, inputSettings: neededSettings }).catch(() => { });
@@ -6734,6 +6761,12 @@ class DockObsClient {
   ): Promise<void> {
     if (!themeSettings) return;
 
+    // Fast path: if the background theme hasn't changed since last push, skip all OBS calls
+    const bgSig = JSON.stringify(themeSettings);
+    if (this._activeLtBgSignature[sceneName] === bgSig) {
+      return;
+    }
+
     const canvas = await this.getCanvasSize();
     let neededKind: "image_source" | "color_source_v3" | "ffmpeg_source" | "browser_source" | null = null;
     let neededSettings: Record<string, unknown> = {};
@@ -6760,26 +6793,25 @@ class DockObsClient {
     const activeName = activeSlot === "A" ? names.a : names.b;
     const inactiveName = activeSlot === "A" ? names.b : names.a;
 
-    let activeKind = "";
+    // Fetch input list once to check both slots (saves a round-trip)
+    let inputList: Array<{ inputName: string; inputKind: string }> = [];
     try {
       const inputs = await this.call("GetInputList") as { inputs: Array<{ inputName: string; inputKind: string }> };
-      const existing = inputs.inputs.find((i) => i.inputName === activeName);
-      if (existing) activeKind = existing.inputKind;
+      inputList = inputs.inputs;
     } catch { /* ignore */ }
+
+    const activeKind = inputList.find((i) => i.inputName === activeName)?.inputKind ?? "";
 
     if (activeKind === neededKind) {
       await this.call("SetInputSettings", { inputName: activeName, inputSettings: neededSettings }).catch(() => { });
       await this._ensureSceneBgItem(sceneName, activeName, canvas);
+      this._activeLtBgSignature[sceneName] = bgSig;
+      this._activeLtBgInputKind[sceneName] = neededKind;
       return;
     }
 
     // Type changed — create in inactive slot, then swap
-    let inactiveKind = "";
-    try {
-      const inputs = await this.call("GetInputList") as { inputs: Array<{ inputName: string; inputKind: string }> };
-      const existing = inputs.inputs.find((i) => i.inputName === inactiveName);
-      if (existing) inactiveKind = existing.inputKind;
-    } catch { /* ignore */ }
+    let inactiveKind = inputList.find((i) => i.inputName === inactiveName)?.inputKind ?? "";
 
     if (inactiveKind && inactiveKind !== neededKind) {
       await this._destroyBgInputByName(sceneName, inactiveName);
@@ -6787,7 +6819,7 @@ class DockObsClient {
     }
 
     if (!inactiveKind) {
-      await this.call("CreateInput", { inputName: inactiveName, inputKind: neededKind, inputSettings: neededSettings }).catch(() => { });
+      await this.call("CreateInput", { inputName: inactiveName, inputKind: neededKind, inputSettings: neededSettings, sceneName }).catch(() => { });
     } else {
       await this.call("SetInputSettings", { inputName: inactiveName, inputSettings: neededSettings }).catch(() => { });
     }
@@ -6795,10 +6827,14 @@ class DockObsClient {
     await this._ensureSceneBgItem(sceneName, inactiveName, canvas);
     await this._hideSceneBgItem(sceneName, activeName);
     this._ltBgActiveSlot[sceneName] = activeSlot === "A" ? "B" : "A";
+    this._activeLtBgSignature[sceneName] = bgSig;
+    this._activeLtBgInputKind[sceneName] = neededKind;
   }
 
   /** Hide all lower-third BG sources (both double-buffer slots). */
   private async _hideLowerThirdBgSource(sceneName: string): Promise<void> {
+    this._activeLtBgSignature[sceneName] = "";
+    this._activeLtBgInputKind[sceneName] = "";
     const names = this._ltBgNames(sceneName);
     await this._hideSceneBgItem(sceneName, names.a);
     await this._hideSceneBgItem(sceneName, names.b);
@@ -6829,6 +6865,8 @@ class DockObsClient {
       });
       await this.call("SetSceneItemIndex", { sceneName, sceneItemId: bgItemId, sceneItemIndex: 0 });
       await this.call("SetSceneItemEnabled", { sceneName, sceneItemId: bgItemId, sceneItemEnabled: true });
+
+      this._lastBgItemState[sceneName] = { sourceName, itemId: bgItemId, width: canvas.width, height: canvas.height };
     } catch { /* best effort */ }
   }
 

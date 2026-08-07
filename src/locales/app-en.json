@@ -4397,6 +4397,7 @@
   "dt.final.finish": "Start Using MakeChurchEasy",
   "dt.common.skip": "Skip Tour",
   "dt.common.next": "Next",
+  "dt.common.finish": "Continue",
   "dt.common.done": "Step complete",
   "dt.button": "Tutorial",
   "dt.button.tooltip": "Start the interactive dashboard tour",

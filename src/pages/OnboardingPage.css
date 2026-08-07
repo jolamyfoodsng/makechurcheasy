@@ -114,7 +114,6 @@
 }
 
 .ob-step-labels {
-  margin-top: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -484,6 +483,16 @@
 }
 
 /* ── Dock URL Cards ── */
+.ob-url-cards-row {
+  display: flex;
+  gap: 12px;
+}
+
+.ob-url-cards-row .ob-url-card {
+  flex: 1;
+  min-width: 0;
+}
+
 .ob-url-card {
   background: var(--surface-raised);
   border: 1px solid var(--border);
