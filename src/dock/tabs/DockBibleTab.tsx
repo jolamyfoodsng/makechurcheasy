@@ -1814,7 +1814,6 @@ export default function DockBibleTab({
     }, 100);
   }, [
     effectiveSelectedLowerThirdTheme.settings,
-    overlayMode,
     selectedLowerThirdTheme.id,
   ]);
 
@@ -2513,6 +2512,13 @@ export default function DockBibleTab({
       return next;
     });
   }, [staged]);
+
+  const handleOverlayModeChange = useCallback((nextMode: OverlayMode) => {
+    // Just update state — the overlayMode useEffect (line ~1623) detects the
+    // change and re-pushes via goLiveVerse. Pushing here AND in the useEffect
+    // causes triple-flicker (two redundant OBS pushes).
+    setOverlayMode(nextMode);
+  }, []);
 
   const handleToggleFavoritePassage = useCallback(async () => {
     if (!selectedPassageForFavorite) {
@@ -3221,7 +3227,7 @@ export default function DockBibleTab({
         {/* ── Toolbar ── */}
         <DockBottomToolbar
           overlayMode={overlayMode}
-          onModeChange={setOverlayMode}
+          onModeChange={handleOverlayModeChange}
           displayMode={displayMode}
           onDisplayModeChange={setDisplayMode}
           morphing={modeMorphing}
@@ -3332,7 +3338,7 @@ export default function DockBibleTab({
                     <button
                       type="button"
                       className={`dock-console-segmented__item${overlayMode === "fullscreen" ? " dock-console-segmented__item--active" : ""}`}
-                      onClick={() => setOverlayMode("fullscreen")}
+                      onClick={() => handleOverlayModeChange("fullscreen")}
                       aria-pressed={overlayMode === "fullscreen"}
                       title={t("bible.full")}>
                       <span>{t("bible.full")}</span>
@@ -3340,7 +3346,7 @@ export default function DockBibleTab({
                     <button
                       type="button"
                       className={`dock-console-segmented__item${overlayMode === "lower-third" ? " dock-console-segmented__item--active" : ""}`}
-                      onClick={() => setOverlayMode("lower-third")}
+                      onClick={() => handleOverlayModeChange("lower-third")}
                       aria-pressed={overlayMode === "lower-third"}
                       title={t("bible.lt")}>
                       <span>{t("bible.lt")}</span>
