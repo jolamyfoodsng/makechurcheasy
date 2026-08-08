@@ -3843,53 +3843,6 @@ class DockObsClient {
     };
   }
 
-  /**
-   * Build a Bible verse as a lower-third using the generic LT overlay.
-   *
-   * NOTE: Always sends `live: true` to the overlay so it renders.
-   */
-  private buildBibleLowerThirdUrl(
-    verseText: string,
-    reference: string,
-    _live: boolean,
-    blanked: boolean,
-    theme?: DockLTThemeRef,
-  ): string {
-    const t = theme ?? getDefaultLTTheme();
-    const payload = {
-      themeId: t.id,
-      html: t.html,
-      css: stripCompatModeCSS(t.css),
-      values: {
-        name: verseText,
-        role: reference,
-        text: verseText,
-        verseText,
-        reference,
-        quote: verseText,
-        title: reference,
-        subtitle: verseText,
-        headline: reference,
-        details: verseText,
-        line1: verseText,
-        line2: reference,
-        label: reference,
-      },
-      live: true,
-      blanked,
-      size: "xl",
-      scale: 1,
-      widthPct: 65,
-      fontScale: 1,
-      fontSizeScale: 1,
-      position: "bottom-left",
-      animationIn: "slide-left",
-      timestamp: Date.now(),
-    };
-    const encoded = encodeURIComponent(JSON.stringify(payload));
-    return `${this.getOverlayBaseUrl()}/lower-third-overlay.html#data=${encoded}`;
-  }
-
   // ── Clear all overlays ──
 
   /**
@@ -4145,6 +4098,7 @@ class DockObsClient {
             live: true,
             blanked: false,
             timestamp: Date.now(),
+            mode,
           };
           // Always use the fullscreen HTML — it handles both modes via .lt-mode CSS class.
           // Mode switching is done purely via CSS --overlay-data, never via URL change.
@@ -4152,19 +4106,24 @@ class DockObsClient {
           useCssOverlayTransport = true;
           url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(cssOverlayPacket))}`;
         } else {
-          // ── Lower-third without theme settings: direct browser source ──
+          // ── Lower-third without theme settings: use unified fullscreen HTML ──
           // Add to user's scene (source stays in MCE Presentation too — CSS handles mode)
           await this.ensureOverlaySource(sceneName, browserSourceName, undefined, undefined, true);
           await this.ensureTickerAboveSource(sceneName, browserSourceName);
 
-          const resolvedLTTheme = this.resolveLTTheme(data.ltTheme, "bible");
-          url = this.buildBibleLowerThirdUrl(
-            primaryText,
-            referenceText,
-            false,
-            false,
-            resolvedLTTheme,
-          );
+          const slide = this.buildBibleSlide(primaryText, referenceText, displayVerseRange);
+          cssOverlayPacket = {
+            slide,
+            theme: null,
+            live: true,
+            blanked: false,
+            timestamp: Date.now(),
+            mode,
+          };
+          cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/bible-overlay-fullscreen.html?tab=bible`;
+          useCssOverlayTransport = true;
+          url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(cssOverlayPacket))}`;
+
           await this.hideFullscreenBg(sceneName, resources);
           await this.hideSceneSource(sceneName, resources.bibleScene);
           const fsDef = this._fullscreenSceneDefs["bible"];
@@ -4214,6 +4173,7 @@ class DockObsClient {
           live: true,
           blanked: false,
           timestamp: Date.now(),
+          mode,
         };
         cssOverlayPacket = packet;
         cssOverlayBaseUrl = `${this.getOverlayBaseUrl()}/bible-overlay-fullscreen.html?tab=bible`;
