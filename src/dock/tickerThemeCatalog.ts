@@ -10,6 +10,7 @@ import {
   remoteThemeToTickerConfig,
   type RemoteProductionTheme,
 } from "../services/remoteProductionThemes";
+import { normalizeDockFontFamily } from "./dockFontFamily";
 
 export type DockTickerThemeOption =
   | {
@@ -58,6 +59,7 @@ interface RenderDockTickerThemeOptions {
   loop: boolean;
   paused?: boolean;
   colors?: TickerThemeColors;
+  fontFamily?: string;
   brandLogoUrl?: string;
   brandName?: string;
 }
@@ -155,11 +157,13 @@ export function renderDockTickerThemeHtml({
   loop,
   paused = false,
   colors,
+  fontFamily,
   brandLogoUrl = "",
   brandName = "",
 }: RenderDockTickerThemeOptions): string {
   const safeMessages = messages.map((message) => message.trim()).filter(Boolean);
   const resolvedHeading = heading.trim() || option.defaultHeading;
+  const resolvedFontFamily = normalizeDockFontFamily(fontFamily);
 
   if (option.source === "dock" || option.source === "remote") {
     return generateTickerHTML(
@@ -173,6 +177,7 @@ export function renderDockTickerThemeHtml({
       paused,
       brandLogoUrl,
       brandName,
+      resolvedFontFamily || undefined,
     );
   }
 
@@ -184,6 +189,7 @@ export function renderDockTickerThemeHtml({
     loop,
     paused,
     colors,
+    fontFamily: resolvedFontFamily,
   });
 }
 
@@ -222,6 +228,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: transparen
 body { min-width: 200px; transform-origin: top left; text-align: left; }
 ${theme.css}
 ${buildPermanentTickerColorOverrides(options.colors)}
+${buildPermanentTickerFontOverride(options.fontFamily)}
 ${buildPermanentTickerOverrides(options.position, options.loop, Boolean(options.paused))}
 </style>
 </head>
@@ -229,6 +236,17 @@ ${buildPermanentTickerOverrides(options.position, options.loop, Boolean(options.
 ${html}
 </body>
 </html>`;
+}
+
+function buildPermanentTickerFontOverride(fontFamily: string | undefined): string {
+  const safeFontFamily = normalizeDockFontFamily(fontFamily);
+  if (!safeFontFamily) return "";
+
+  return [
+    "body, body *:not(.material-icons):not(.material-icons-outlined):not(.material-icons-round):not(.material-icons-sharp):not(.material-symbols-outlined):not(.fa):not([class^=\"fa-\"]):not([class*=\" fa-\"]) {",
+    `  font-family: ${safeFontFamily} !important;`,
+    "}",
+  ].join("\n");
 }
 
 function resolvePermanentTickerValues(

@@ -229,6 +229,26 @@
       overflow-wrap: break-word;
     }
 
+    #translation-text {
+      display: none;
+      width: 100%;
+      margin-top: clamp(16px, 2vh, 34px);
+      font-size: var(--ref-font-size);
+      font-family: var(--font-family);
+      color: var(--font-color, #ffffff);
+      font-weight: var(--font-weight, 400);
+      font-style: var(--font-style, normal);
+      line-height: 1.35;
+      letter-spacing: var(--letter-spacing, 0px);
+      text-align: var(--text-align);
+      text-shadow: var(--text-shadow);
+      text-transform: var(--text-transform);
+      white-space: pre-line;
+      opacity: 0.82;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
     #reference {
       font-size: var(--ref-font-size);
       font-family: var(--ref-font-family);
@@ -253,6 +273,10 @@
     }
 
     #reference:empty {
+      display: none;
+    }
+
+    #translation-text:empty {
       display: none;
     }
 
@@ -586,6 +610,24 @@
       transform-origin: center;
     }
 
+    #lt-translation-text {
+      display: none;
+      width: 100%;
+      margin-top: clamp(8px, 1vh, 18px);
+      font-size: var(--ref-font-size);
+      font-family: var(--font-family);
+      color: var(--font-color, #ffffff);
+      font-weight: var(--font-weight, 400);
+      font-style: var(--font-style, normal);
+      line-height: 1.3;
+      letter-spacing: var(--letter-spacing, 0px);
+      text-align: var(--text-align);
+      text-shadow: var(--text-shadow);
+      text-transform: var(--text-transform);
+      white-space: pre-line;
+      opacity: 0.82;
+    }
+
     #lt-bar.lt-edge-left #lt-verse-text,
     #lt-bar.lt-edge-right #lt-verse-text {
       width: max-content;
@@ -606,7 +648,9 @@
     #lt-bar.lt-text-inverted.lt-edge-bottom #lt-verse-text,
     #lt-bar.lt-text-inverted.lt-edge-top #lt-verse-text,
     #lt-bar.lt-text-inverted.lt-edge-bottom #ref-text,
-    #lt-bar.lt-text-inverted.lt-edge-top #ref-text {
+    #lt-bar.lt-text-inverted.lt-edge-top #ref-text,
+    #lt-bar.lt-text-inverted.lt-edge-bottom #lt-translation-text,
+    #lt-bar.lt-text-inverted.lt-edge-top #lt-translation-text {
       transform: rotate(180deg);
       transform-origin: center;
     }
@@ -620,8 +664,10 @@
     }
 
     #lt-bar.lt-edge-left #ref-text,
-    #lt-bar.lt-edge-right #ref-text {
-      display: none;
+    #lt-bar.lt-edge-right #ref-text,
+    #lt-bar.lt-edge-left #lt-translation-text,
+    #lt-bar.lt-edge-right #lt-translation-text {
+      display: none !important;
     }
 
     #lt-bar #ref-text {
@@ -638,6 +684,10 @@
     #lt-bar #ref-text.top {
       margin-top: 0;
       margin-bottom: 12px;
+    }
+
+    #lt-translation-text:empty {
+      display: none;
     }
 
     #bar-background-video {
@@ -681,6 +731,7 @@
         <div id="verse-container">
           <div id="verse-text"></div>
           <div id="reference"></div>
+          <div id="translation-text"></div>
         </div>
       </div>
       <div id="compare-layout">
@@ -709,6 +760,7 @@
         <div id="lt-bar-bg"></div>
         <div id="lt-verse-text"></div>
         <div id="ref-text"></div>
+        <div id="lt-translation-text"></div>
       </div>
     </div>
 
@@ -779,6 +831,7 @@
       const verseContainer = document.getElementById('verse-container');
       const verseText = document.getElementById('verse-text');
       const reference = document.getElementById('reference');
+      const translationText = document.getElementById('translation-text');
       const compareLayout = document.getElementById('compare-layout');
       const compareTextLeft = document.getElementById('compare-text-left');
       const compareTextRight = document.getElementById('compare-text-right');
@@ -791,15 +844,18 @@
       const barBackgroundVideoEl = document.getElementById('bar-background-video');
       const ltRefText = document.getElementById('ref-text');
       const ltVerseText = document.getElementById('lt-verse-text');
+      const ltTranslationText = document.getElementById('lt-translation-text');
       const logo = document.getElementById('logo');
       const overlayStage = document.getElementById('overlay-stage');
       const fullscreenLayer = document.getElementById('fullscreen-layer');
       const lowerThirdLayer = document.getElementById('lower-third-layer');
 
       const _tabParam = 'worship';
-      const _storageKey = 'worship-overlay-data';
-      const _ackStorageKey = 'worship-overlay-render-ack';
-      const _channelName = 'obs-church-studio-worship-overlay';
+      const _routeSource = new URLSearchParams(window.location.search).get('mceSource') || '';
+      const _routeSuffix = _routeSource ? `:${_routeSource}` : '';
+      const _storageKey = 'worship-overlay-data' + _routeSuffix;
+      const _ackStorageKey = 'worship-overlay-render-ack' + _routeSuffix;
+      const _channelName = 'obs-church-studio-worship-overlay' + _routeSuffix;
 
       function readInitialMode() {
         try {
@@ -888,6 +944,27 @@
           case 'capitalize': return capitalizeDisplayText(value);
           default: return value;
         }
+      }
+
+      function getSlideTranslationText(slide) {
+        return typeof slide?.translationText === 'string' ? slide.translationText.trim() : '';
+      }
+
+      function renderTranslationBlock(node, value, transform) {
+        if (!node) return;
+        const translated = typeof value === 'string' ? value.trim() : '';
+        if (!translated) {
+          node.innerHTML = '';
+          node.style.display = 'none';
+          return;
+        }
+        node.innerHTML = safeSupText(applyDisplayTextTransform(translated, transform));
+        node.style.display = 'block';
+      }
+
+      function clearTranslationBlocks() {
+        renderTranslationBlock(translationText, '', null);
+        renderTranslationBlock(ltTranslationText, '', null);
       }
 
       function scriptureFontFamily(fontFamily) {
@@ -1268,7 +1345,9 @@
         if (!autoFontScaleEnabled) {
           verseText.style.fontSize = '';
           reference.style.fontSize = '';
+          translationText.style.fontSize = '';
           verseText.style.lineHeight = '';
+          translationText.style.lineHeight = '';
           verseContainer.style.padding = '';
           reference.style.marginTop = '';
           reference.style.marginBottom = '';
@@ -1277,8 +1356,10 @@
 
         const textFloor = resolveAutoFontFloor(baseFontSize, 12);
         const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
+        const translationRatio = baseFontSize > 0 ? Math.max(0.42, Math.min(0.78, (baseRefFontSize * 1.15) / baseFontSize)) : 0.62;
         let textSize = Math.max(textFloor, Math.round(baseFontSize));
         let referenceSize = Math.max(10, Math.round(baseRefFontSize));
+        let translationSize = Math.max(10, Math.round(textSize * translationRatio));
         const frameRect = getFrameContentRect(overlay);
         const targetWidth = Math.max(320, frameRect.width);
         const targetHeight = Math.max(220, frameRect.height);
@@ -1286,9 +1367,11 @@
           verseText.style.fontSize = `${textSize}px`;
           verseText.style.lineHeight = getComputedStyle(root).getPropertyValue('--line-height').trim() || '1.6';
           reference.style.fontSize = `${referenceSize}px`;
+          translationText.style.fontSize = `${translationSize}px`;
+          translationText.style.lineHeight = '1.35';
         };
         const overflowing = () => isContentOutsideFrame(
-          [verseText, reference],
+          [verseText, reference, translationText],
           overlay,
         ) || isOverflowing(verseContainer, targetWidth, targetHeight);
 
@@ -1297,6 +1380,7 @@
         while (overflowing() && textSize > textFloor && guard < 240) {
           textSize -= 1;
           referenceSize = Math.max(10, Math.round(textSize * ratio));
+          translationSize = Math.max(10, Math.round(textSize * translationRatio));
           apply();
           guard += 1;
         }
@@ -1355,14 +1439,18 @@
           ltVerseText.style.fontSize = '';
           ltVerseText.style.lineHeight = '';
           ltRefText.style.fontSize = '';
+          ltTranslationText.style.fontSize = '';
+          ltTranslationText.style.lineHeight = '';
           ltBar.style.padding = '';
           return;
         }
 
         const textFloor = resolveAutoFontFloor(baseFontSize, 12);
         const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
+        const translationRatio = baseFontSize > 0 ? Math.max(0.46, Math.min(0.82, (baseRefFontSize * 1.25) / baseFontSize)) : 0.72;
         let textSize = Math.max(textFloor, Math.round(baseFontSize));
         let referenceSize = Math.max(10, Math.round(baseRefFontSize));
+        let translationSize = Math.max(10, Math.round(textSize * translationRatio));
         const frameRect = getFrameContentRect(ltBar);
         const targetWidth = Math.max(280, frameRect.width || document.body?.clientWidth || window.innerWidth || 1920);
         const targetHeight = Math.max(100, frameRect.height || Math.min(barMaxHeight, document.body?.clientHeight || window.innerHeight || 1080));
@@ -1370,9 +1458,11 @@
           ltVerseText.style.fontSize = `${textSize}px`;
           ltVerseText.style.lineHeight = getComputedStyle(root).getPropertyValue('--line-height').trim() || '1.3';
           ltRefText.style.fontSize = `${referenceSize}px`;
+          ltTranslationText.style.fontSize = `${translationSize}px`;
+          ltTranslationText.style.lineHeight = '1.3';
         };
         const overflowing = () => isContentOutsideFrame(
-          [ltVerseText, ltRefText],
+          [ltVerseText, ltRefText, ltTranslationText],
           ltBar,
         ) || isOverflowing(ltBar, targetWidth, targetHeight);
 
@@ -1381,6 +1471,7 @@
         while (overflowing() && textSize > textFloor && guard < 180) {
           textSize -= 1;
           referenceSize = Math.max(10, Math.round(textSize * ratio));
+          translationSize = Math.max(10, Math.round(textSize * translationRatio));
           apply();
           guard += 1;
         }
@@ -1407,6 +1498,8 @@
         verseText.style.fontSize = '';
         verseText.style.lineHeight = '';
         reference.style.fontSize = '';
+        translationText.style.fontSize = '';
+        translationText.style.lineHeight = '';
         reference.style.marginTop = '';
         reference.style.marginBottom = '';
         verseContainer.style.padding = '';
@@ -1649,10 +1742,13 @@
       }
 
       function getOverlayPacketKey(data) {
+        const slide = data && data.slide && typeof data.slide === 'object' ? data.slide : {};
         return [
           data.type || '',
           data.revision ?? data.timestamp ?? 0,
           data.mode ?? '',
+          typeof slide.text === 'string' ? slide.text.substring(0, 80) : '',
+          typeof slide.translationText === 'string' ? slide.translationText.substring(0, 80) : '',
           typeof data.verseText === 'string' ? data.verseText.substring(0, 40) : '',
           typeof data.referenceText === 'string' ? data.referenceText : (typeof data.referenceLabel === 'string' ? data.referenceLabel : ''),
         ].join('|');
@@ -1666,6 +1762,8 @@
           return [
             data.mode || '',
             data.slide && data.slide.id || '',
+            data.slide && data.slide.text || '',
+            data.slide && data.slide.translationText || '',
             data.verseText || '',
             data.referenceText || data.referenceLabel || '',
           ].join('|');
@@ -1732,15 +1830,16 @@
       }
 
       function processSlideFullscreen(data) {
-        if (!data.slide) { bgClearToken++; overlay.classList.add('blank'); ltBar.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
+        if (!data.slide) { clearTranslationBlocks(); bgClearToken++; overlay.classList.add('blank'); ltBar.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
         bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId, isSame = sl.id === currentSlideId && !isNew; currentSlideId = sl.id;
-        if (data.blanked) { overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
+        if (data.blanked) { clearTranslationBlocks(); overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
         const cc = Array.isArray(sl.columns) ? sl.columns.slice(0, 2) : [], isCL = sl.layout === 'compare' && cc.length === 2;
         overlay.classList.remove('hidden'); ltBar.classList.remove('hidden');
         if (isCL) {
           compareLayout.style.display = '';
           compareLayout.classList.add('is-visible');
           verseContainer.classList.add('is-hidden');
+          renderTranslationBlock(translationText, '', null);
           const [l, r] = cc;
           compareReferenceLeft.textContent = formatCompareReference(l.reference, l.translation);
           compareReferenceRight.textContent = formatCompareReference(r.reference, r.translation);
@@ -1759,10 +1858,12 @@
           compareLayout.classList.remove('is-visible');
           compareLayout.style.display = 'none';
           verseContainer.classList.remove('is-hidden');
-          verseText.innerHTML = safeSupText(applyDisplayTextTransform(sl.text, data.theme && data.theme.textTransform));
+          const textTransform = data.theme && data.theme.textTransform;
+          verseText.innerHTML = safeSupText(applyDisplayTextTransform(sl.text, textTransform));
           const rt = typeof sl.reference === 'string' ? sl.reference.trim() : '';
           reference.textContent = rt;
           reference.style.display = rt ? 'block' : 'none';
+          renderTranslationBlock(translationText, getSlideTranslationText(sl), textTransform);
         }
         try { applyThemeIfChanged(data.theme || {}, !hasShownOnce, 'fullscreen'); } catch (error) { console.error('mce-worship-overlay fullscreen theme error', error); }
         if (isCL) autoScaleCompareContent();
@@ -1772,10 +1873,10 @@
       }
 
       function processSlideLowerThird(data) {
-        if (data.action === 'animate-out') { overlay.classList.remove('hidden'); ltBar.classList.remove('hidden'); overlay.classList.add('blank'); ltBar.classList.add('blank'); _animateOutTimer = setTimeout(() => { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); signalAnimateOutComplete(); }, 400); return new Promise((r) => { _animateOutResolve = r; }); }
-        if (!data.slide) { bgClearToken++; overlay.classList.add('blank'); ltBar.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
+        if (data.action === 'animate-out') { clearTranslationBlocks(); overlay.classList.remove('hidden'); ltBar.classList.remove('hidden'); overlay.classList.add('blank'); ltBar.classList.add('blank'); _animateOutTimer = setTimeout(() => { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); signalAnimateOutComplete(); }, 400); return new Promise((r) => { _animateOutResolve = r; }); }
+        if (!data.slide) { clearTranslationBlocks(); bgClearToken++; overlay.classList.add('blank'); ltBar.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
         bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId; currentSlideId = sl.id;
-        if (data.blanked) { overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
+        if (data.blanked) { clearTranslationBlocks(); overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
         overlay.classList.remove('hidden'); ltBar.classList.remove('hidden');
 
         const cc = Array.isArray(sl.columns) ? sl.columns.slice(0, 2) : [];
@@ -1794,8 +1895,11 @@
             ltVerseText.innerHTML = `<div class="lt-compare-stack">${lRef}${lText ? `<span class="lt-compare-col">${lText}</span>` : ''}<span class="lt-compare-divider"></span>${rRef}${rText ? `<span class="lt-compare-col">${rText}</span>` : ''}</div>`;
           }
           ltRefText.textContent = '';
+          renderTranslationBlock(ltTranslationText, '', null);
         } else {
-          ltVerseText.innerHTML = safeSupText(applyDisplayTextTransform(sl.text, data.theme && data.theme.textTransform)); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
+          const textTransform = data.theme && data.theme.textTransform;
+          ltVerseText.innerHTML = safeSupText(applyDisplayTextTransform(sl.text, textTransform)); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
+          renderTranslationBlock(ltTranslationText, getSlideTranslationText(sl), textTransform);
         }
 
         try { applyThemeIfChanged(data.theme || {}, !hasShownOnce, 'lower-third'); } catch (error) { console.error('mce-worship-overlay lower-third theme error', error); }
@@ -1839,6 +1943,8 @@
           const data = detail && typeof detail.event_data === 'object' ? detail.event_data : detail;
           if (!data || typeof data !== 'object') return false;
           if (data.tab && data.tab !== _tabParam) return false;
+          const targetSource = typeof data.targetSource === 'string' ? data.targetSource : '';
+          if (_routeSource ? targetSource !== _routeSource : Boolean(targetSource)) return false;
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
           applyObsBrowserEventCss(data.css || data.overlayCss || '');
@@ -1850,6 +1956,8 @@
       function readFromOverlayRelayPacket(packet) {
         try {
           if (!packet || typeof packet !== 'object') return false;
+          const targetSource = typeof packet.targetSource === 'string' ? packet.targetSource : '';
+          if (_routeSource ? targetSource !== _routeSource : Boolean(targetSource)) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
           if (packet.type === 'mode-change' && packet.mode) {
             if (packet.theme) {
@@ -1966,7 +2074,7 @@
         ro.observe(verseContainer);
         ro.observe(compareLayout);
         ro.observe(ltBar);
-        [verseText, reference, compareTextLeft, compareTextRight, compareReferenceLeft, compareReferenceRight, ltVerseText, ltRefText]
+        [verseText, reference, translationText, compareTextLeft, compareTextRight, compareReferenceLeft, compareReferenceRight, ltVerseText, ltRefText, ltTranslationText]
           .filter(Boolean)
           .forEach((node) => ro.observe(node));
       }

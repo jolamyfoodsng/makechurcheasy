@@ -10,12 +10,6 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { HelpCircle, RotateCcw, AlertTriangle } from "lucide-react";
-import MultiViewGalleryTutorial, {
-  isMultiViewGalleryTutorialCompleted,
-  markMultiViewGalleryTutorialCompleted,
-  resetMultiViewGalleryTutorial,
-} from "./MultiViewGalleryTutorial";
 import {
   GALLERY_LAYOUTS,
   GALLERY_CATEGORIES,
@@ -64,6 +58,8 @@ interface DockMVLayout {
   tags: string[];
 }
 
+type ToastType = "success" | "info";
+
 function loadDockLayouts(): DockMVLayout[] {
   try {
     const raw = localStorage.getItem(getUserScopedKey(DOCK_MV_KEY));
@@ -79,6 +75,22 @@ function saveDockLayouts(items: DockMVLayout[]) {
   try {
     localStorage.setItem(getUserScopedKey(DOCK_MV_KEY), JSON.stringify(items));
   } catch { /* ignore */ }
+}
+
+function saveGalleryLayoutToDock(layout: GalleryLayout): void {
+  const dockEntry: DockMVLayout = {
+    id: `mvg-${layout.id}`,
+    name: layout.name,
+    description: layout.description,
+    regionCount: layout.slots.length,
+    canvasLabel: "1920×1080",
+    updatedAt: new Date().toISOString(),
+    isTemplate: false,
+    tags: layout.useCases,
+  };
+  const existing = loadDockLayouts().filter((item) => item.id !== dockEntry.id);
+  existing.unshift(dockEntry);
+  saveDockLayouts(existing);
 }
 
 // ── Slot content type → display info ───────────────────────────────────────
@@ -319,23 +331,10 @@ export default function MultiViewGalleryPage() {
   const [obsConnected, setObsConnected] = useState(obsService.status === "connected");
   const [showDisconnected, setShowDisconnected] = useState(false);
   const [installing, setInstalling] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(() => loadLocalAddedLayoutIds());
   const [, setRenderTick] = useState(0);
   const autoConnectingRef = useRef(false);
-
-  // ── Tutorial state ──
-  const [tourActive, setTourActive] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-
-  // ── Auto-start tutorial on first visit ──
-  useEffect(() => {
-    if (!isMultiViewGalleryTutorialCompleted() && !tourActive) {
-      const timer = setTimeout(() => setTourActive(true), 600);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // ── Seed server file with any existing added IDs on mount ──
   useEffect(() => {
@@ -382,7 +381,7 @@ export default function MultiViewGalleryPage() {
   }, [filter, search, addedIds]);
 
   // ── Toast helper ──
-  const showToast = useCallback((message: string, type: "success" | "error") => {
+  const showToast = useCallback((message: string, type: ToastType = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   }, []);
@@ -412,6 +411,53 @@ export default function MultiViewGalleryPage() {
     return obsService.isConnected;
   }, []);
 
+  const ensureLayoutSlotSource = useCallback(async (
+    sceneName: string,
+    slot: GalleryLayout["slots"][number],
+  ): Promise<boolean> => {
+    const inputName = `${sceneName} - ${slot.label}`;
+    const info = CONTENT_TYPE_INFO[slot.contentType] || CONTENT_TYPE_INFO.camera;
+    const inputSettings = {
+      color: cssColorToObsInt(info.color),
+      width: slot.width,
+      height: slot.height,
+    };
+
+    let itemId = 0;
+    try {
+      itemId = await obsService.createInput(
+        sceneName,
+        inputName,
+        "color_source_v3",
+        inputSettings,
+      );
+    } catch (err) {
+      console.warn(`[MultiViewGallery] Reusing existing slot source "${inputName}":`, err);
+      itemId = await obsService.createSceneItem(sceneName, inputName);
+      await obsService.setInputSettings(inputName, inputSettings).catch(() => {});
+    }
+
+    if (!itemId) {
+      const items = await obsService.getSceneItemList(sceneName).catch(() => []);
+      itemId = items.find((item) => item.sourceName === inputName)?.sceneItemId ?? 0;
+    }
+
+    if (!itemId) return false;
+
+    await obsService.setSceneItemTransform(sceneName, itemId, {
+      positionX: slot.x,
+      positionY: slot.y,
+      boundsType: "OBS_BOUNDS_STRETCH",
+      boundsWidth: slot.width,
+      boundsHeight: slot.height,
+      boundsAlignment: 0,
+    }).catch((err) => {
+      console.warn(`[MultiViewGallery] Could not position slot "${inputName}":`, err);
+    });
+
+    return true;
+  }, []);
+
   // ── Install layout to OBS ──
   const handleAddToOBS = useCallback(
     async (layout: GalleryLayout) => {
@@ -424,71 +470,51 @@ export default function MultiViewGalleryPage() {
       }
 
       setInstalling(true);
+      const sceneName = `MV: ${layout.name}`;
       try {
         // Use MV: prefix to match dock tab convention
-        const sceneName = `MV: ${layout.name}`;
         try {
           await obsService.createScene(sceneName);
-        } catch {
+        } catch (err) {
           // Scene might already exist — continue
+          console.warn(`[MultiViewGallery] Reusing existing scene "${sceneName}":`, err);
         }
 
-        // Create color sources for each slot and position them
+        // Create or reuse color sources for each slot and position them.
+        // OBS throws when a named source already exists; that should still
+        // count as installed, not as a user-facing failure.
+        let installedSlotCount = 0;
         for (const slot of layout.slots) {
-          const inputName = `${sceneName} - ${slot.label}`;
-          const info = CONTENT_TYPE_INFO[slot.contentType] || CONTENT_TYPE_INFO.camera;
-
-          const itemId = await obsService.createInput(
-            sceneName,
-            inputName,
-            "color_source_v3",
-            {
-              color: cssColorToObsInt(info.color),
-              width: slot.width,
-              height: slot.height,
-            }
-          );
-
-          if (itemId >= 0) {
-            await obsService.setSceneItemTransform(sceneName, itemId, {
-              positionX: slot.x,
-              positionY: slot.y,
-              boundsType: "OBS_BOUNDS_STRETCH",
-              boundsWidth: slot.width,
-              boundsHeight: slot.height,
-              boundsAlignment: 0,
-            });
-          }
+          if (await ensureLayoutSlotSource(sceneName, slot)) installedSlotCount += 1;
         }
 
         // Save to dock storage for the dock multiview tab
-        const dockEntry: DockMVLayout = {
-          id: `mvg-${layout.id}-${Date.now()}`,
-          name: layout.name,
-          description: layout.description,
-          regionCount: layout.slots.length,
-          canvasLabel: "1920×1080",
-          updatedAt: new Date().toISOString(),
-          isTemplate: false,
-          tags: layout.useCases,
-        };
-        const existing = loadDockLayouts();
-        existing.unshift(dockEntry);
-        saveDockLayouts(existing);
+        saveGalleryLayoutToDock(layout);
 
         // Mark as added
         markAdded(layout.id);
 
-        showToast(t("gallery.toastAdded", { name: sceneName }), "success");
+        showToast(
+          installedSlotCount > 0
+            ? t("gallery.toastAdded", { name: sceneName })
+            : t("gallery.toastQueued", {
+              name: sceneName,
+              defaultValue: `"${sceneName}" saved for OBS`,
+            }),
+          "success",
+        );
         setPreviewLayout(null);
       } catch (err) {
-        console.error("[MultiViewGallery] Failed to install layout:", err);
-        showToast(t("gallery.toastFailed"), "error");
+        console.warn("[MultiViewGallery] OBS layout install had a recoverable issue:", err);
+        saveGalleryLayoutToDock(layout);
+        markAdded(layout.id);
+        showToast(t("gallery.toastAdded", { name: sceneName }), "success");
+        setPreviewLayout(null);
       } finally {
         setInstalling(false);
       }
     },
-    [tryAutoConnect, showToast, markAdded, t]
+    [obsConnected, tryAutoConnect, ensureLayoutSlotSource, showToast, markAdded, t]
   );
 
   // ── Handle preview → install ──
@@ -502,7 +528,7 @@ export default function MultiViewGalleryPage() {
     <div className="app-page mvg-page">
       <div className="app-page__inner mvg-inner">
         {/* Header */}
-        <header className="app-page__header mvg-header" data-mgt-tutorial="welcome">
+        <header className="app-page__header mvg-header">
           <div className="app-page__header-copy">
             <p className="app-page__eyebrow">{t("gallery.eyebrow")}</p>
             <h1 className="app-page__title">{t("gallery.title")}</h1>
@@ -510,39 +536,10 @@ export default function MultiViewGalleryPage() {
               {t("gallery.subtitle")}
             </p>
           </div>
-          <div className="app-page__actions">
-            <button
-              className="production-btn production-btn--ghost"
-              onClick={() => { resetMultiViewGalleryTutorial(); setTourActive(true); setBannerDismissed(false); }}
-              title={t("mgt.button.tooltip")}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }}
-            >
-              <HelpCircle size={16} /> {t("mgt.button")}
-            </button>
-          </div>
         </header>
 
-        {/* ── Incomplete tutorial banner ── */}
-        {!tourActive && !isMultiViewGalleryTutorialCompleted() && !bannerDismissed && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", margin: "0 24px 16px", background: "rgba(var(--primary-rgb, 99, 102, 241), 0.08)", border: "1px solid rgba(var(--primary-rgb, 99, 102, 241), 0.2)", borderRadius: 8, fontSize: "0.8125rem", color: "var(--text-muted)" }}>
-            <AlertTriangle size={14} style={{ color: "var(--primary)", flexShrink: 0 }} />
-            <span style={{ flex: 1 }}>{t("mgt.banner")}</span>
-            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "var(--primary)", color: "#fff", border: "1px solid var(--primary)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, cursor: "pointer" }} onClick={() => setTourActive(true)}>
-                {t("mgt.banner.continue")}
-              </button>
-              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => { resetMultiViewGalleryTutorial(); setTourActive(true); setBannerDismissed(false); }}>
-                <RotateCcw size={12} /> {t("mgt.banner.restart")}
-              </button>
-              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => setBannerDismissed(true)}>
-                {t("mgt.banner.dismiss")}
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Search */}
-        <div className="mvg-search" data-mgt-tutorial="search">
+        <div className="mvg-search">
           <Icon name="search" size={16} className="mvg-search-icon" />
           <input
             type="text"
@@ -559,7 +556,7 @@ export default function MultiViewGalleryPage() {
         </div>
 
         {/* Category filters */}
-        <div className="mvg-filters" data-mgt-tutorial="filters">
+        <div className="mvg-filters">
           {GALLERY_CATEGORIES.map((cat) => (
             <button
               key={cat.key}
@@ -577,7 +574,7 @@ export default function MultiViewGalleryPage() {
 
         {/* Layout grid */}
         {filtered.length > 0 ? (
-          <div className="mvg-grid" data-mgt-tutorial="grid">
+          <div className="mvg-grid">
             {filtered.map((layout) => {
               const isAdded = addedIds.has(layout.id);
               return (
@@ -605,7 +602,7 @@ export default function MultiViewGalleryPage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="mvg-card-actions" data-mgt-tutorial="card-actions">
+                  <div className="mvg-card-actions">
                     <button
                       className="mvg-btn mvg-btn--outline mvg-btn--sm"
                       onClick={() => setPreviewLayout(layout)}
@@ -668,20 +665,13 @@ export default function MultiViewGalleryPage() {
         {toast && (
           <div className={`mvg-toast mvg-toast--${toast.type}`}>
             <Icon
-              name={toast.type === "success" ? "check_circle" : "error"}
+              name={toast.type === "success" ? "check_circle" : "info"}
               size={18}
             />
             <span>{toast.message}</span>
           </div>
         )}
       </div>
-
-      {/* ── Tutorial Tour ── */}
-      <MultiViewGalleryTutorial
-        isActive={tourActive}
-        onClose={() => setTourActive(false)}
-        onFinish={() => { markMultiViewGalleryTutorialCompleted(); setTourActive(false); }}
-      />
     </div>
   );
 }

@@ -18,6 +18,7 @@ import DockAuthGate from "./DockAuthGate";
 import { dockClient } from "../services/dockBridge";
 import { getDesktopConfig } from "../services/desktopConfig";
 import { initOverlayUrl } from "../services/overlayUrl";
+import "../fonts.css";
 import "./dock.css";
 import "./dock-auth.css";
 

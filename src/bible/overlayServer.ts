@@ -18,6 +18,7 @@
 
 import type { BibleSlide, BibleThemeSettings } from "./types";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { buildVersionedOverlayUrl } from "../services/overlayVersion";
 
 // ---------------------------------------------------------------------------
 // Overlay data packet (what gets sent to overlay HTML)
@@ -146,7 +147,10 @@ class OverlayBroadcaster {
   getOverlayUrl(templateType: "fullscreen" | "lower-third" = "fullscreen"): string {
     // In dev, served by Vite; in production, by Tauri's embedded localhost server
     const base = getOverlayBaseUrlSync();
-    return `${base}/bible-overlay-${templateType}.html`;
+    return buildVersionedOverlayUrl(base, "mce-bible-overlay.html", {
+      tab: "bible",
+      mode: templateType,
+    });
   }
 
   destroy() {

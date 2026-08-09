@@ -63,10 +63,25 @@ describe("dock projection settings", () => {
     expect(loadProjectionSettings().sceneMode).toBe("no-clone");
   });
 
-  it("shows only the two Program background routing choices in the dock sidebar", () => {
-    expect(dockPageSource).toContain("page.programBackgroundOn");
-    expect(dockPageSource).toContain("page.programBackgroundOff");
-    expect(dockPageSource).toContain("updateProjectionSceneMode(mode)");
+  it("persists the return-to-previous-scene choice", () => {
+    saveProjectionSettings({
+      ...loadProjectionSettings(),
+      restoreOriginalScene: true,
+    });
+
+    expect(loadProjectionSettings().restoreOriginalScene).toBe(true);
+  });
+
+  it("shows Program background routing as one compact dropdown in the dock sidebar", () => {
+    expect(dockPageSource).toContain("page.programBackground");
+    expect(dockPageSource).toContain('className="dock-sidebar__select dock-sidebar__select--routing"');
+    expect(dockPageSource).toContain('<option value="no-clone">');
+    expect(dockPageSource).toContain('<option value="auto-duplicate">');
+    expect(dockPageSource).toContain('updateProjectionSceneMode(event.target.value as ProjectionSettings["sceneMode"])');
+    expect(dockPageSource).toContain("updateProjectionSettings({ restoreOriginalScene: e.target.checked })");
+    expect(dockPageSource).not.toContain("setProjectionSettings((s) => ({ ...s, restoreOriginalScene: e.target.checked }))");
+    expect(dockPageSource).not.toContain("dock-sidebar__radio");
+    expect(dockPageSource).not.toContain("aria-pressed");
     expect(dockPageSource).not.toContain("Mirror Program");
     expect(dockPageSource).not.toContain("page.mirrorProgram");
     expect(dockPageSource).not.toContain("Direct Program");

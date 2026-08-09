@@ -17,26 +17,18 @@ import {
   FileCode,
   FileText,
   Globe,
-  HelpCircle,
   Info,
   Languages,
-  RotateCcw,
   Search,
   ShieldCheck,
   Timer,
   X,
   Zap,
-  AlertTriangle,
   AlertCircle
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import TranscriptDetailTutorial, {
-  isDetailTutorialCompleted,
-  markDetailTutorialCompleted,
-  resetDetailTutorial,
-} from './TranscriptDetailTutorial';
 import LanguagePicker from '../components/LanguagePicker';
 import languageData from '../../full_langugae_list.json';
 import { checkPremiumAccess, getPremiumAccessDeniedMessage } from '../services/premiumActionGuard';
@@ -1016,10 +1008,6 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   // Derived plan flags
   const canTranslate = ['basic', 'growth'].includes(userPlan);
 
-  // ── Tutorial state ────────────────────────────────────────────────────
-  const [tourActive, setTourActive] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-
   // Runtime license change: cancel in-progress work if license revoked
   const isTranslatingRef = useRef(isTranslating);
   isTranslatingRef.current = isTranslating;
@@ -1053,15 +1041,6 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
       }
     })();
   }, []);
-
-  // ── Auto-start tutorial on first visit ────────────────────────────────
-  useEffect(() => {
-    if (!loading && !isDetailTutorialCompleted() && !tourActive) {
-      const timer = setTimeout(() => setTourActive(true), 600);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
 
   const parsedLines = useMemo(
     () => transcript ? parseTranscriptLines(transcript.transcriptText) : [],
@@ -1264,31 +1243,12 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   }
 
   return (
-    <div className="detail-view" data-detail-tutorial="welcome">
+    <div className="detail-view">
       {/* Header Section */}
       <div className="detail-header-section">
-        <button className="back-link" onClick={onBack} data-detail-tutorial="back" title="Go back">
+        <button className="back-link" onClick={onBack} title="Go back">
           <ArrowLeft size={16} /> Back to Transcripts
         </button>
-
-        {/* ── Incomplete tutorial banner ── */}
-        {!tourActive && !isDetailTutorialCompleted() && !bannerDismissed && (
-          <div className="tdt-tutorial-banner">
-            <AlertTriangle size={14} />
-            <span>{t("detailTutorial.banner")}</span>
-            <div className="tdt-tutorial-banner-actions">
-              <button className="tdt-banner-btn tdt-banner-btn--primary" onClick={() => setTourActive(true)}>
-                {t("detailTutorial.banner.continue")}
-              </button>
-              <button className="tdt-banner-btn" onClick={() => { resetDetailTutorial(); setTourActive(true); setBannerDismissed(false); }}>
-                <RotateCcw size={12} /> {t("detailTutorial.banner.restart")}
-              </button>
-              <button className="tdt-banner-btn" onClick={() => setBannerDismissed(true)}>
-                {t("detailTutorial.banner.dismiss")}
-              </button>
-            </div>
-          </div>
-        )}
 
         <div className="detail-title-row">
           <div className="title-left">
@@ -1296,7 +1256,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
               <h1 className="main-title">{transcript.title}</h1>
               <button className="edit-btn" title="Edit title"><Edit2 size={12} /></button>
             </div>
-            <div className="meta-row" data-detail-tutorial="metadata">
+            <div className="meta-row">
               {transcript.church && <div className="meta-item"><Church size={14} /> {transcript.church}</div>}
               <div className="meta-item"><Calendar size={14} /> {dateLabel}</div>
               <div className="meta-item"><Clock size={14} /> {timeLabel}</div>
@@ -1309,14 +1269,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
           </div>
 
           <div className="title-actions">
-            <button
-              className="tdt-tutorial-btn"
-              onClick={() => { resetDetailTutorial(); setTourActive(true); setBannerDismissed(false); }}
-              title={t("detailTutorial.button.tooltip")}
-            >
-              <HelpCircle size={16} /> {t("detailTutorial.button")}
-            </button>
-            <div className="btn-export" style={{ position: 'relative' }} data-detail-tutorial="export">
+            <div className="btn-export" style={{ position: 'relative' }}>
               <button
                 className="btn-export-main"
                 style={{
@@ -1374,7 +1327,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                 return;
               }
               setIsTranslateOpen(true);
-            }} style={{ padding: '8px 16px', color: '#adc7ff', borderColor: 'rgba(173,199,255,0.3)' }} data-detail-tutorial="translate" title="Translate">
+            }} style={{ padding: '8px 16px', color: '#adc7ff', borderColor: 'rgba(173,199,255,0.3)' }} title="Translate">
               <Languages size={16} /> Translate
             </button>
           </div>
@@ -1393,7 +1346,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         {/* Left/Center Transcript Panel */}
         <div className="transcript-panel">
           <div className="transcript-toolbar">
-            <div className="search-input-wrapper" data-detail-tutorial="search">
+            <div className="search-input-wrapper">
               <input type="text" className="search-input" placeholder="Search in transcript…" />
             </div>
             <div className="toolbar-actions">
@@ -1404,14 +1357,13 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                   color: copyState === 'done' ? '#34d399' : undefined
                 }}
                 onClick={handleCopy}
-                data-detail-tutorial="copy"
                 title="Copy">
                 {copyState === 'done' ? <CheckCircle2 size={16} color="#34d399" /> : <Copy size={16} className="text-muted" />}
               </button>
             </div>
           </div>
 
-          <div className="transcript-scroll" data-detail-tutorial="transcript-content">
+          <div className="transcript-scroll">
             {displayLines.map((line, i) => (
               <div key={i} className={`t-line-wrapper ${line.highlight ? 'has-highlight' : ''}`}
                 style={line.highlight ? { borderLeftColor: `var(--hl-${line.highlight.type})` } : {}}>
@@ -1428,7 +1380,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         </div>
 
         {/* Right Sidebar - Scriptures & Translations */}
-        <div className="right-sidebar" data-detail-tutorial="sidebar">
+        <div className="right-sidebar">
           {/* Sidebar Tabs */}
           <div className="sidebar-tabs">
             <button
@@ -1444,7 +1396,6 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
             <button
               className={`sidebar-tab ${sidebarTab === 'translations' ? 'active' : ''}`}
               onClick={() => setSidebarTab('translations')}
-              data-detail-tutorial="translations-tab"
               title="Translations"
             >
               <Languages size={14} />
@@ -1728,15 +1679,6 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         isOpen={accessDeniedDialog.open}
         reason={accessDeniedDialog.reason}
         onClose={() => setAccessDeniedDialog({ open: false, reason: '' })}
-      />
-
-      {/* ── Tutorial Tour ── */}
-      <TranscriptDetailTutorial
-        isActive={tourActive}
-        onClose={() => setTourActive(false)}
-        onFinish={() => { markDetailTutorialCompleted(); setTourActive(false); }}
-        hasScriptures={transcript.scriptures.length > 0}
-        hasTranslations={transcript.translations.length > 0}
       />
 
     </div>

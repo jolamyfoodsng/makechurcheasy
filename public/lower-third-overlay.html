@@ -638,6 +638,7 @@
     let isVisible = false;
     let isExiting = false;
     let fitRafId = 0;
+    let fitRetryTimerId = 0;
 
     // ── XSS prevention ────────────────────────────────────────────────────────
     function escapeHtml(str) {
@@ -1125,12 +1126,37 @@
       var rootWidth = root.clientWidth || window.innerWidth || 1920;
       var rootHeight = root.clientHeight || window.innerHeight || 1080;
       var frameRect = frame.getBoundingClientRect();
+      var contentNode = frame.firstElementChild || frame;
+      var contentRect = contentNode.getBoundingClientRect();
       var fitScale = 1;
-      if (frameRect.width && frameRect.height) {
-        var availableWidth = Math.max(220, rootWidth - 8);
-        var availableHeight = Math.max(120, rootHeight - 8);
-        fitScale = Math.min(1, availableWidth / (frameRect.width * requestedScale), availableHeight / (frameRect.height * requestedScale));
+      if (contentRect.width && contentRect.height) {
+        // Some themes position their top-level element with position:fixed,
+        // leaving the wrapper with zero height. Measure the actual theme
+        // element and fit its bounds around the selected transform origin.
+        var originTokens = String(root.style.getPropertyValue("--lt-fit-origin") || "left bottom").split(/\s+/);
+        var originX = frameRect.x;
+        var originY = frameRect.y;
+        if (originTokens[0] === "center") originX += frameRect.width / 2;
+        else if (originTokens[0] === "right") originX += frameRect.width;
+        if (originTokens[1] === "center") originY += frameRect.height / 2;
+        else if (originTokens[1] === "bottom") originY += frameRect.height;
+
+        var minX = 8;
+        var maxX = Math.max(minX + 1, rootWidth - 8);
+        var minY = 8;
+        var maxY = Math.max(minY + 1, rootHeight - 8);
+        var leftOffset = contentRect.left - originX;
+        var rightOffset = contentRect.right - originX;
+        var topOffset = contentRect.top - originY;
+        var bottomOffset = contentRect.bottom - originY;
+
+        if (leftOffset < 0) fitScale = Math.min(fitScale, (minX - originX) / (leftOffset * requestedScale));
+        if (rightOffset > 0) fitScale = Math.min(fitScale, (maxX - originX) / (rightOffset * requestedScale));
+        if (topOffset < 0) fitScale = Math.min(fitScale, (minY - originY) / (topOffset * requestedScale));
+        if (bottomOffset > 0) fitScale = Math.min(fitScale, (maxY - originY) / (bottomOffset * requestedScale));
+
         if (!isFinite(fitScale) || fitScale <= 0) fitScale = 1;
+        fitScale = Math.min(1, fitScale);
       }
       var finalScale = requestedScale * fitScale;
       frame.style.transform = Math.abs(finalScale - 1) > 0.0005 ? "scale(" + finalScale.toFixed(4) + ")" : "scale(1)";
@@ -1141,14 +1167,29 @@
       if (fitRafId) {
         cancelAnimationFrame(fitRafId);
       }
+      if (fitRetryTimerId) {
+        clearTimeout(fitRetryTimerId);
+      }
+      var fitNow = function () {
+        if (root === document.getElementById("overlay-root")) {
+          fitOverlayContent(root);
+        }
+      };
       fitRafId = requestAnimationFrame(function () {
         fitRafId = 0;
-        fitOverlayContent(root);
+        fitNow();
+        requestAnimationFrame(fitNow);
       });
+      // Entry animations can move the theme after the first measurement. Refit
+      // after the animation settles so a large preset cannot remain clipped.
+      fitRetryTimerId = setTimeout(function () {
+        fitRetryTimerId = 0;
+        fitNow();
+      }, 700);
       if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(function () {
           requestAnimationFrame(function () {
-            fitOverlayContent(root);
+            fitNow();
           });
         }).catch(function () { });
       }
@@ -1824,13 +1865,21 @@
       }
     });
 
-    if (window.ResizeObserver) {
+    function setupOverlayResizeObserver() {
+      if (!window.ResizeObserver) return;
       const resizeObserver = new ResizeObserver(() => {
         const root = document.getElementById("overlay-root");
-        scheduleFitOverlay(root);
+        if (root) scheduleFitOverlay(root);
       });
-      resizeObserver.observe(document.body);
-      resizeObserver.observe(document.getElementById("overlay-root"));
+      if (document.body) resizeObserver.observe(document.body);
+      const root = document.getElementById("overlay-root");
+      if (root) resizeObserver.observe(root);
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", setupOverlayResizeObserver, { once: true });
+    } else {
+      setupOverlayResizeObserver();
     }
 
     // ════════════════════════════════════════════
@@ -1995,9 +2044,12 @@
       }, speedSec * 1000);
     }
 
+    const routeSource = new URLSearchParams(window.location.search).get("mceSource") || "";
+    const lowerThirdChannel = `ocs-lower-third${routeSource ? `:${routeSource}` : ""}`;
+
     // Also listen for BroadcastChannel messages (for local preview)
     try {
-      const bc = new BroadcastChannel("ocs-lower-third");
+      const bc = new BroadcastChannel(lowerThirdChannel);
       bc.onmessage = (e) => {
         if (e.data && e.data.type === "animate-out") {
           animateCurrentOverlayOut();
@@ -2017,6 +2069,8 @@
         const data = detail && typeof detail.event_data === "object" ? detail.event_data : detail;
         if (!data || typeof data !== "object") return false;
         if (data.tab && data.tab !== "lower-third") return false;
+        const targetSource = typeof data.targetSource === "string" ? data.targetSource : "";
+        if (routeSource ? targetSource !== routeSource : Boolean(targetSource)) return false;
         const packet = data.packet || data.overlayData || data.data;
         if (!packet || typeof packet !== "object") return false;
         if (packet.action === "animate-out") {
@@ -2048,7 +2102,7 @@
       // Check if the animated element has data-state="out" (exit animation)
       if (target.getAttribute && target.getAttribute("data-state") === "out") {
         try {
-          var bc = new BroadcastChannel("ocs-lower-third");
+          var bc = new BroadcastChannel(lowerThirdChannel);
           bc.postMessage({ type: "lower-third-animation-complete", state: "out" });
           bc.close();
         } catch (err) {

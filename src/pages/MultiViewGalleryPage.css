@@ -613,12 +613,14 @@
   color: var(--success);
 }
 
+.mvg-toast--info,
 .mvg-toast--error {
-  border-color: var(--error);
+  border-color: var(--border);
 }
 
+.mvg-toast--info svg,
 .mvg-toast--error svg {
-  color: var(--error);
+  color: var(--text-muted);
 }
 
 /* ── Loading spinner ── */

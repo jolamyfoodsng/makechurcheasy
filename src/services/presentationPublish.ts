@@ -293,6 +293,7 @@ export async function publishTickerToPresentation(payload: {
   textColor?: string;
   backgroundColor?: string;
   fontSize?: number;
+  fontFamily?: string;
   paused?: boolean;
 }): Promise<void> {
   await publishItem({
@@ -308,6 +309,7 @@ export async function publishTickerToPresentation(payload: {
       textColor: payload.textColor || "#ffffff",
       backgroundColor: payload.backgroundColor || "#0f172a",
       fontSize: payload.fontSize || 32,
+      fontFamily: payload.fontFamily || '"Charis SIL", "Noto Sans", "CMG Sans", "Inter", "Segoe UI", sans-serif',
       paused: Boolean(payload.paused),
       hidden: false,
       version: Date.now(),

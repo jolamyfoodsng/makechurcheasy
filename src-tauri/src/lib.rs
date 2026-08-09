@@ -44,7 +44,7 @@ use std::path::{Component, Path};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{mpsc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{image::Image, Manager};
+use tauri::{image::Image, Emitter, Manager};
 
 /// The port the overlay server is running on (set at startup).
 static OVERLAY_PORT: AtomicU16 = AtomicU16::new(0);
@@ -5955,6 +5955,61 @@ pub fn run() {
                 }
             });
             println!("[Tauri] Overlay relay starting on port 17891");
+
+            // macOS menu-bar control for the background VoiceAI session.
+            // The stop action emits an event to the existing frontend service
+            // so it cancels reconnects, clears timers, and stops native audio
+            // capture through the normal lmDockService cleanup path.
+            let show_item = tauri::menu::MenuItem::with_id(
+                app,
+                "show-main-window",
+                "Show MakeChurchEasy",
+                true,
+                None::<&str>,
+            )?;
+            let stop_voiceai_item = tauri::menu::MenuItem::with_id(
+                app,
+                "stop-voiceai",
+                "Stop VoiceAI",
+                true,
+                None::<&str>,
+            )?;
+            let separator = tauri::menu::PredefinedMenuItem::separator(app)?;
+            let quit_item = tauri::menu::MenuItem::with_id(
+                app,
+                "quit-makechurcheasy",
+                "Quit MakeChurchEasy",
+                true,
+                None::<&str>,
+            )?;
+            let tray_menu = tauri::menu::Menu::with_items(
+                app,
+                &[&show_item, &stop_voiceai_item, &separator, &quit_item],
+            )?;
+
+            let tray_icon = Image::from_bytes(include_bytes!("../icons/icon.png"))
+                .expect("bundled MakeChurchEasy tray icon must be valid PNG");
+            let _tray = tauri::tray::TrayIconBuilder::with_id("makechurcheasy-tray")
+                .icon(tray_icon)
+                .icon_as_template(true)
+                .tooltip("MakeChurchEasy — VoiceAI")
+                .menu(&tray_menu)
+                .show_menu_on_left_click(true)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show-main-window" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.unminimize();
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "stop-voiceai" => {
+                        let _ = app.emit("voiceai-tray-stop", ());
+                    }
+                    "quit-makechurcheasy" => app.exit(0),
+                    _ => {}
+                })
+                .build(app)?;
 
             Ok(())
         })

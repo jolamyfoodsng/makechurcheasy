@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { DockStagedItem } from "../dockTypes";
-import { dockObsClient } from "../dockObsClient";
+import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
+import { isPresentationLinkTarget } from "../dockPresentationTarget";
+import { dockObsClient, type DockTabContentPushData } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import type { BibleTheme } from "../../bible/types";
 import {
@@ -10,6 +12,7 @@ import {
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
 import Icon from "../DockIcon";
 import DockBottomToolbar from "../components/DockBottomToolbar";
+import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
 import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
 import DockTranslationControls, {
   type DockTranslationValue,
@@ -43,11 +46,13 @@ import {
   formatNoteText,
   type NoteTextToolAction,
 } from "../noteTextTools";
+import { useDockSceneRoute } from "../dockSceneRouting";
 
 interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
   isActive?: boolean;
+  presentationOutputTarget?: DockPresentationOutputTarget;
 }
 
 type OverlayMode = DockNotesOverlayMode;
@@ -92,7 +97,32 @@ function generateNoteSlides(note: DockNote): { id: string; label: string; text: 
 
 type ToastTone = "info" | "success" | "error";
 
-export default function DockNotesTab({ onStage, isActive }: Props) {
+export default function DockNotesTab({
+  onStage,
+  isActive,
+  presentationOutputTarget = "obs",
+}: Props) {
+  const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
+  const [sceneRoute, updateSceneRoute] = useDockSceneRoute("notes");
+  const hasSceneRoute = sceneRoute.enabled && Boolean(sceneRoute.sceneName);
+
+  const pushNotesToConfiguredOutput = useCallback(async (data: DockTabContentPushData) => {
+    if (!hasSceneRoute) {
+      await dockObsClient.pushNotesLyrics(data);
+      return;
+    }
+    await dockObsClient.pushNotesToScene(data, sceneRoute.sceneName);
+    if (sceneRoute.syncPresentation) await dockObsClient.pushNotesLyrics(data);
+  }, [hasSceneRoute, sceneRoute.sceneName, sceneRoute.syncPresentation]);
+
+  const clearNotesFromConfiguredOutput = useCallback(async () => {
+    if (!hasSceneRoute) {
+      await dockObsClient.clearNotesLyrics();
+      return;
+    }
+    await dockObsClient.clearSceneRouteSource("notes", sceneRoute.sceneName);
+    if (sceneRoute.syncPresentation) await dockObsClient.clearNotesLyrics();
+  }, [hasSceneRoute, sceneRoute.sceneName, sceneRoute.syncPresentation]);
   const initialPrefsRef = useRef<DockNotesPreferences | null>(null);
   if (initialPrefsRef.current === null) {
     initialPrefsRef.current = loadDockNotesPreferences();
@@ -391,17 +421,28 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
       setVisibleSlideIdx(idx);
       onStage(payload.stageItem);
 
-      const pushLive = () => payload.obsData.overlayMode === "lower-third"
-        ? dockObsClient.pushNotesOverlayFast(payload.obsData)
-        : dockObsClient.pushNotesLyrics(payload.obsData);
+      if (presentationLinkMode) {
+        setOverlayVisible(true);
+        return;
+      }
 
-      const bringNotesForward = dockObsClient
-        .bringNotesOverlayForward(payload.obsData.overlayMode ?? "fullscreen")
-        .catch(() => { });
+      const pushLive = () => hasSceneRoute
+        ? pushNotesToConfiguredOutput(payload.obsData)
+        : payload.obsData.overlayMode === "lower-third"
+          ? dockObsClient.pushNotesOverlayFast(payload.obsData)
+          : pushNotesToConfiguredOutput(payload.obsData);
 
-      void bringNotesForward
-        .then(() => dockObsClient.primeNotesOverlay(payload.obsData))
-        .catch(() => { });
+      const bringNotesForward = hasSceneRoute
+        ? Promise.resolve()
+        : dockObsClient
+          .bringNotesOverlayForward(payload.obsData.overlayMode ?? "fullscreen")
+          .catch(() => { });
+
+      if (!hasSceneRoute) {
+        void bringNotesForward
+          .then(() => dockObsClient.primeNotesOverlay(payload.obsData))
+          .catch(() => { });
+      }
 
       bringNotesForward
         .then(pushLive)
@@ -413,15 +454,19 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
           setActionError(err instanceof Error ? err.message : String(err));
         });
     },
-    [buildNoteObsPayload, onStage],
+    [buildNoteObsPayload, hasSceneRoute, onStage, presentationLinkMode, pushNotesToConfiguredOutput],
   );
 
   const handleClear = useCallback(async () => {
     setActionError("");
     try {
+      if (presentationLinkMode) {
+        setOverlayVisible((visible) => !visible);
+        return;
+      }
       await ensureObsConnected();
       if (overlayVisible) {
-        await dockObsClient.clearNotesLyrics();
+        await clearNotesFromConfiguredOutput();
         setOverlayVisible(false);
       } else if (activeSlideIndex !== null) {
         await pushNoteSlide(activeSlideIndex);
@@ -430,7 +475,7 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
       console.warn("[DockNotesTab] Toggle failed:", err);
       setActionError(err instanceof Error ? err.message : String(err));
     }
-  }, [overlayVisible, activeSlideIndex, pushNoteSlide]);
+  }, [overlayVisible, activeSlideIndex, clearNotesFromConfiguredOutput, presentationLinkMode, pushNoteSlide]);
 
   const handleOverlayModeChange = useCallback((nextMode: OverlayMode) => {
     if (nextMode === overlayMode) return;
@@ -479,7 +524,9 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
           setSelectedSlideIdx(null);
           setVisibleSlideIdx(null);
           onStage(null);
-          ensureObsConnected().then(() => dockObsClient.clearNotesLyrics()).catch(() => { });
+          if (!presentationLinkMode) {
+            ensureObsConnected().then(() => clearNotesFromConfiguredOutput()).catch(() => { });
+          }
           return;
         }
       }
@@ -500,7 +547,7 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isActive, showNoteEditor, selectedNote, selectedNoteSlides, activeSlideIndex, onStage, pushNoteSlide]);
+  }, [isActive, showNoteEditor, selectedNote, selectedNoteSlides, activeSlideIndex, clearNotesFromConfiguredOutput, onStage, presentationLinkMode, pushNoteSlide]);
 
   return (
     <div className="dock-module dock-module--worship">
@@ -516,6 +563,13 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
                 <div className="dock-console-header__eyebrow"></div>
               </div>
               <div className="dock-console-actions dock-console-actions--song-browser">
+                <DockSceneRoutingControl
+                  module="notes"
+                  route={sceneRoute}
+                  onRouteChange={updateSceneRoute}
+                  disabled={presentationLinkMode}
+                  title="Note output"
+                />
                 <button type="button" className="dock-console-toggle" onClick={openNewNote} title="Add Note" aria-label="Add Note">
                   <Icon name="add" size={13} />
                   <span className="dock-console-toggle__label">Add Note</span>
@@ -673,9 +727,19 @@ export default function DockNotesTab({ onStage, isActive }: Props) {
                 collapsed={toolbarCollapsed}
                 onCollapseChange={setToolbarCollapsed}
                 inlineAction={
-                  <button type="button" className="dock-btm-toolbar__icon-btn" onClick={() => setShowThemeSettings(true)} title="Theme Settings" aria-label="Theme Settings">
-                    <Icon name="edit" size={14} />
-                  </button>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <DockSceneRoutingControl
+                      module="notes"
+                      route={sceneRoute}
+                      onRouteChange={updateSceneRoute}
+                      disabled={presentationLinkMode}
+                      title="Note output"
+                      placement="above"
+                    />
+                    <button type="button" className="dock-btm-toolbar__icon-btn" onClick={() => setShowThemeSettings(true)} title="Theme Settings" aria-label="Theme Settings">
+                      <Icon name="edit" size={14} />
+                    </button>
+                  </div>
                 }
               />
             </div>

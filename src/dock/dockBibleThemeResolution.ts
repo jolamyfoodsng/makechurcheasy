@@ -16,7 +16,7 @@ import {
 } from "./dockConsoleTheme";
 import { loadDockCustomBibleThemes, loadDockFavoriteBibleThemes } from "./dockThemeData";
 import { buildLinkedLowerThirdQuickThemeSettings } from "./lowerThirdQuickSettings";
-import { getUserScopedKey } from "../services/userScopedStorage";
+import { readUserScopedStorage } from "../services/userScopedStorage";
 
 export type DockBibleOverlayMode = "fullscreen" | "lower-third";
 export type DockBibleReferenceFormat = "full" | "short" | "hidden";
@@ -59,20 +59,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function readScopedStorage(baseKey: string): string | null {
-  if (typeof localStorage === "undefined") return null;
-  const scopedKey = getUserScopedKey(baseKey);
-  const scopedRaw = localStorage.getItem(scopedKey);
-  if (scopedRaw !== null || scopedKey === baseKey) return scopedRaw;
-
-  const legacyRaw = localStorage.getItem(baseKey);
-  if (legacyRaw !== null) {
-    try {
-      localStorage.setItem(scopedKey, legacyRaw);
-    } catch {
-      // Ignore migration failures in embedded browser contexts.
-    }
-  }
-  return legacyRaw;
+  return readUserScopedStorage(baseKey);
 }
 
 function clampNumber(value: number, min: number, max: number): number {

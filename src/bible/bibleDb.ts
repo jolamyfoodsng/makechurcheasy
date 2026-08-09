@@ -156,8 +156,21 @@ function getTranslationKey(abbr: string): string {
   return abbr.trim().toUpperCase();
 }
 
-function installedBibleTime(bible: InstalledBible): number {
+type InstalledBibleMetadata = Omit<InstalledBible, "data">;
+
+function installedBibleTime(bible: Pick<InstalledBible, "downloadedAt">): number {
   return new Date(bible.downloadedAt || 0).getTime();
+}
+
+function toInstalledBibleMetadata(bible: InstalledBible): InstalledBibleMetadata {
+  return {
+    id: bible.id,
+    abbr: getTranslationKey(bible.abbr),
+    name: bible.name,
+    language: bible.language,
+    downloadedAt: bible.downloadedAt,
+    filesize: bible.filesize,
+  };
 }
 
 function mergeInstalledBibles(...groups: InstalledBible[][]): InstalledBible[] {
@@ -169,6 +182,21 @@ function mergeInstalledBibles(...groups: InstalledBible[][]): InstalledBible[] {
       const current = merged.get(key);
       if (!current || installedBibleTime(bible) >= installedBibleTime(current)) {
         merged.set(key, { ...bible, abbr: key });
+      }
+    }
+  }
+  return Array.from(merged.values()).sort((left, right) => left.abbr.localeCompare(right.abbr));
+}
+
+function mergeInstalledBibleMetadata(...groups: InstalledBibleMetadata[][]): InstalledBibleMetadata[] {
+  const merged = new Map<string, InstalledBibleMetadata>();
+  for (const group of groups) {
+    for (const bible of group) {
+      if (!bible?.abbr) continue;
+      const normalized = { ...bible, abbr: getTranslationKey(bible.abbr) };
+      const current = merged.get(normalized.abbr);
+      if (!current || installedBibleTime(normalized) >= installedBibleTime(current)) {
+        merged.set(normalized.abbr, normalized);
       }
     }
   }
@@ -224,27 +252,33 @@ async function readCustomThemesFromDockData(): Promise<BibleTheme[]> {
     .map((theme) => normalizeTheme(theme)));
 }
 
-async function readInstalledTranslationsFromDockData(): Promise<InstalledBible[]> {
-  const metadata = await loadDockDataJson<Array<Omit<InstalledBible, "data">>>("dock-bible-translations");
-  if (!Array.isArray(metadata) || metadata.length === 0) return [];
+async function readInstalledTranslationMetadataFromDockData(): Promise<InstalledBibleMetadata[]> {
+  const metadata = await loadDockDataJson<InstalledBibleMetadata[]>("dock-bible-translations");
+  if (!Array.isArray(metadata)) return [];
+  return metadata
+    .filter((entry): entry is InstalledBibleMetadata =>
+      Boolean(entry && typeof entry.abbr === "string" && entry.abbr.trim())
+    )
+    .map((entry) => ({ ...entry, abbr: getTranslationKey(entry.abbr) }));
+}
 
-  const recovered: InstalledBible[] = [];
-  for (const entry of metadata) {
-    if (!entry?.abbr) continue;
-    const abbr = getTranslationKey(entry.abbr);
-    const data = await loadDockDataJson<RawBibleData>(`dock-bible-translation-${abbr.toLowerCase()}`);
-    if (!data || !isCompleteBibleData(data)) continue;
-    recovered.push({
-      id: entry.id,
-      abbr,
-      name: entry.name,
-      language: entry.language,
-      downloadedAt: entry.downloadedAt,
-      filesize: entry.filesize,
-      data,
-    });
-  }
-  return recovered;
+async function readInstalledTranslationFromDockData(
+  abbrOrEntry: string | InstalledBibleMetadata,
+  metadata?: InstalledBibleMetadata[],
+): Promise<InstalledBible | undefined> {
+  const entries = metadata ?? await readInstalledTranslationMetadataFromDockData();
+  const key = getTranslationKey(typeof abbrOrEntry === "string" ? abbrOrEntry : abbrOrEntry.abbr);
+  const entry = entries.find((candidate) => getTranslationKey(candidate.abbr) === key);
+  if (!entry) return undefined;
+
+  const data = await loadDockDataJson<RawBibleData>(`dock-bible-translation-${key.toLowerCase()}`);
+  if (!data || !isCompleteBibleData(data)) return undefined;
+
+  return {
+    ...entry,
+    abbr: key,
+    data,
+  };
 }
 
 async function readInstalledTranslationsFromCentralDb(): Promise<InstalledBible[]> {
@@ -713,35 +747,40 @@ export async function syncCustomThemesToDock(themes?: BibleTheme[]): Promise<voi
   }
 }
 
+let installedTranslationsSyncPromise: Promise<void> | null = null;
+
 export async function syncInstalledTranslationsToDock(): Promise<void> {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const installed = await getInstalledTranslations();
+  if (installedTranslationsSyncPromise) return installedTranslationsSyncPromise;
 
-    await invoke("save_dock_data", {
-      name: "dock-bible-translations",
-      data: JSON.stringify(installed.map((entry) => ({
-        id: entry.id,
-        abbr: entry.abbr,
-        name: entry.name,
-        language: entry.language,
-        downloadedAt: entry.downloadedAt,
-        filesize: entry.filesize,
-      }))),
-    });
+  const syncPromise = (async () => {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const installed = await getInstalledTranslationsWithData();
 
-    for (const entry of installed) {
-      const full = await getInstalledTranslation(entry.abbr);
-      if (!full?.data) continue;
       await invoke("save_dock_data", {
-        name: `dock-bible-translation-${entry.abbr.toLowerCase()}`,
-        data: JSON.stringify(full.data),
+        name: "dock-bible-translations",
+        data: JSON.stringify(installed.map(toInstalledBibleMetadata)),
       });
+
+      for (const entry of installed) {
+        await invoke("save_dock_data", {
+          name: `dock-bible-translation-${entry.abbr.toLowerCase()}`,
+          data: JSON.stringify(entry.data),
+        });
+      }
+    } catch (err) {
+      console.warn("[bibleDb] Failed to sync installed translations to dock:", err);
     }
-  } catch (err) {
-    console.warn("[bibleDb] Failed to sync installed translations to dock:", err);
-  }
+  })();
+
+  const wrappedPromise = syncPromise.finally(() => {
+    if (installedTranslationsSyncPromise === wrappedPromise) {
+      installedTranslationsSyncPromise = null;
+    }
+  });
+  installedTranslationsSyncPromise = wrappedPromise;
+  return wrappedPromise;
 }
 
 // ---------------------------------------------------------------------------
@@ -815,36 +854,79 @@ export async function saveBibleSettings(
 /**
  * Get all installed / downloaded translations (metadata only — no data field).
  */
-export async function getInstalledTranslations(): Promise<Omit<InstalledBible, "data">[]> {
-  let legacyTranslations: InstalledBible[] = [];
-  try {
-    const db = await getDb();
-    legacyTranslations = await db.getAll("translations") as InstalledBible[];
-  } catch (err) {
-    console.warn("[bibleDb] Failed to read Bible translations from legacy IndexedDB:", err);
-  }
-  const [centralTranslations, dockTranslations] = await Promise.all([
-    readInstalledTranslationsFromCentralDb(),
-    readInstalledTranslationsFromDockData(),
-  ]);
-  const all = mergeInstalledBibles(legacyTranslations, centralTranslations, dockTranslations);
+let installedTranslationsReadPromise: Promise<InstalledBible[]> | null = null;
 
-  const valid: InstalledBible[] = [];
-  for (const bible of all) {
-    if (isCompleteBibleData(bible.data)) {
-      valid.push(bible);
-      continue;
+async function getInstalledTranslationsWithData(): Promise<InstalledBible[]> {
+  if (installedTranslationsReadPromise) return installedTranslationsReadPromise;
+
+  const readPromise = (async () => {
+    let legacyTranslations: InstalledBible[] = [];
+    try {
+      const db = await getDb();
+      legacyTranslations = await db.getAll("translations") as InstalledBible[];
+    } catch (err) {
+      console.warn("[bibleDb] Failed to read Bible translations from legacy IndexedDB:", err);
     }
 
-    const stats = getBibleDataStats(bible.data);
-    console.warn(
-      `[bibleDb] Ignoring incomplete Bible translation ${bible.abbr} (${formatBibleDataStats(stats)}).`
-    );
-  }
-  backfillInstalledTranslations(legacyTranslations, centralTranslations, valid).catch(() => { });
+    const [centralTranslations, dockMetadata] = await Promise.all([
+      readInstalledTranslationsFromCentralDb(),
+      readInstalledTranslationMetadataFromDockData(),
+    ]);
 
-  // Strip the heavy data field for listing
-  return valid.map(({ data: _data, ...meta }) => meta);
+    // The dock metadata is tiny. Only load a translation's multi-megabyte JSON
+    // when it is the newest copy or when the local databases do not have it.
+    // This keeps opening the Bible library from materializing every translation
+    // repeatedly, which can otherwise make WebKit retain gigabytes of RAM.
+    const localTranslations = mergeInstalledBibles(legacyTranslations, centralTranslations);
+    const localByAbbr = new Map(localTranslations.map((bible) => [bible.abbr, bible]));
+    const dockByAbbr = new Map(dockMetadata.map((bible) => [bible.abbr, bible]));
+    const allMetadata = mergeInstalledBibleMetadata(
+      legacyTranslations.map(toInstalledBibleMetadata),
+      centralTranslations.map(toInstalledBibleMetadata),
+      dockMetadata,
+    );
+
+    const valid: InstalledBible[] = [];
+    for (const metadata of allMetadata) {
+      const local = localByAbbr.get(metadata.abbr);
+      const dock = dockByAbbr.get(metadata.abbr);
+      const localIsNewest = Boolean(
+        local && (!dock || installedBibleTime(local) > installedBibleTime(dock)),
+      );
+      const bible = localIsNewest
+        ? local
+        : dock
+          ? await readInstalledTranslationFromDockData(dock, dockMetadata)
+          : local;
+
+      if (!bible) continue;
+      if (isCompleteBibleData(bible.data)) {
+        valid.push({ ...bible, abbr: metadata.abbr });
+        continue;
+      }
+
+      const stats = getBibleDataStats(bible.data);
+      console.warn(
+        `[bibleDb] Ignoring incomplete Bible translation ${bible.abbr} (${formatBibleDataStats(stats)}).`
+      );
+    }
+    backfillInstalledTranslations(legacyTranslations, centralTranslations, valid).catch(() => { });
+    return valid;
+  })();
+
+  installedTranslationsReadPromise = readPromise;
+  try {
+    return await readPromise;
+  } finally {
+    if (installedTranslationsReadPromise === readPromise) {
+      installedTranslationsReadPromise = null;
+    }
+  }
+}
+
+export async function getInstalledTranslations(): Promise<InstalledBibleMetadata[]> {
+  const installed = await getInstalledTranslationsWithData();
+  return installed.map(toInstalledBibleMetadata);
 }
 
 /**
@@ -873,9 +955,8 @@ export async function getInstalledTranslation(
     return { ...central, abbr: key };
   }
 
-  const dockTranslations = await readInstalledTranslationsFromDockData();
-  const dock = dockTranslations.find((entry) => getTranslationKey(entry.abbr) === key);
-  if (dock && isCompleteBibleData(dock.data)) {
+  const dock = await readInstalledTranslationFromDockData(key);
+  if (dock) {
     db?.put("translations", { ...dock, abbr: key }).catch(() => { });
     writeInstalledTranslationToCentralDb(dock).catch(() => { });
     return { ...dock, abbr: key };

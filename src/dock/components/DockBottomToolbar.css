@@ -9,6 +9,7 @@
 .dock-btm-toolbar {
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
   gap: 0;
   border-top: 1px solid var(--dock-border, #334155);
   background: var(--dock-surface, #111827);

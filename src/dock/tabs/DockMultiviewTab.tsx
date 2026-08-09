@@ -16,7 +16,8 @@ import { ensureObsConnected } from "../obsConnectionGuard";
 import { useDockObsReady } from "../useDockObsReady";
 import Icon from "../DockIcon";
 import { requireEntitlement } from "../dockEntitlement";
-import { getUserScopedKey } from "../../services/userScopedStorage";
+import { readUserScopedStorage } from "../../services/userScopedStorage";
+import { loadDockPreferenceList, saveDockPreferenceList } from "../../services/dockPreferenceStorage";
 import { GALLERY_LAYOUTS, type GalleryLayout, type GallerySlot } from "../../multiview/galleryLayouts";
 import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
 import {
@@ -48,6 +49,7 @@ const CANVAS_H = 1080;
 const DEFAULT_SLOT_FRAMING = { displayMode: "fit" as const, zoom: 1, focalX: 0.5, focalY: 0.5 };
 const BACKGROUND_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]);
 const BACKGROUND_VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv", "flv"]);
+const MV_IMAGE_LIBRARY_UPDATED_EVENT = "dock-mv-image-library-updated";
 
 const CONTENT_TYPE_INFO: Record<string, { labelKey: string; icon: string; color: string }> = {
   camera: { labelKey: "multiview.camera", icon: "videocam", color: "#0078d4" },
@@ -509,17 +511,23 @@ interface SavedStorageSnapshot {
   items: SavedMultiView[];
   /** A valid persisted value was found, including an intentional empty list. */
   hasStoredValue: boolean;
-  /** The value came from the pre-user-scoping key and should be migrated. */
+  /** The value came from a recovery/migration path and should be written back. */
   shouldMigrate: boolean;
   /** Storage was readable and may safely be written to. */
   canPersist: boolean;
 }
 
-function parseSavedItems(raw: string): SavedMultiView[] | null {
+function parseSavedItems(raw: string | null): SavedMultiView[] | null {
+  if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? (parsed as SavedMultiView[]).map(normalizeLoadedMultiView)
+    const items = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === "object" && Array.isArray((parsed as { items?: unknown }).items)
+        ? (parsed as { items: unknown[] }).items
+        : null;
+    return items
+      ? (items as SavedMultiView[]).map(normalizeLoadedMultiView)
       : null;
   } catch {
     return null;
@@ -528,27 +536,13 @@ function parseSavedItems(raw: string): SavedMultiView[] | null {
 
 function loadSavedSnapshot(): SavedStorageSnapshot {
   try {
-    const scopedKey = getUserScopedKey(STORAGE_KEY);
-    const keys = scopedKey === STORAGE_KEY
-      ? [{ key: STORAGE_KEY, shouldMigrate: false }]
-      : [
-        { key: scopedKey, shouldMigrate: false },
-        { key: STORAGE_KEY, shouldMigrate: true },
-      ];
-
-    for (const { key, shouldMigrate } of keys) {
-      const raw = localStorage.getItem(key);
-      if (raw === null) continue;
-      const items = parseSavedItems(raw);
-      if (items) {
-        return { items, hasStoredValue: true, shouldMigrate, canPersist: true };
-      }
-    }
+    const raw = readUserScopedStorage(STORAGE_KEY);
+    const items = parseSavedItems(raw);
+    if (items) return { items, hasStoredValue: true, shouldMigrate: false, canPersist: true };
 
     // A malformed value must not be replaced with fresh default cards during a
     // remount. Leave it untouched and let an explicit user edit repair it.
-    const hasUnreadableValue = keys.some(({ key }) => localStorage.getItem(key) !== null);
-    return { items: [], hasStoredValue: hasUnreadableValue, shouldMigrate: false, canPersist: !hasUnreadableValue };
+    return { items: [], hasStoredValue: raw !== null, shouldMigrate: false, canPersist: raw === null };
   } catch {
     // Storage can be temporarily unavailable while the dock/auth document is
     // being restored. Treat that as an unreadable session, never as an empty
@@ -558,9 +552,9 @@ function loadSavedSnapshot(): SavedStorageSnapshot {
 }
 
 function saveSaved(items: SavedMultiView[]) {
-  try {
-    localStorage.setItem(getUserScopedKey(STORAGE_KEY), JSON.stringify(items));
-  } catch { /* ignore */ }
+  // localStorage is written synchronously for instant recovery; the same
+  // snapshot is also mirrored to the dock's durable user-scoped store.
+  void saveDockPreferenceList(STORAGE_KEY, items);
 }
 
 // ---------------------------------------------------------------------------
@@ -576,6 +570,12 @@ function getMediaItemPreviewSrc(item: MediaItem): string {
   if (item.thumbnailUrl) return item.thumbnailUrl;
   if (item.diskFileName) return `/uploads/${encodeURIComponent(item.diskFileName)}`;
   return item.url;
+}
+
+function getInlineImagePreviewSrc(filePath: string): string {
+  const value = filePath.trim();
+  if (/^(https?:\/\/|data:image\/|\/uploads\/)/i.test(value)) return value;
+  return "";
 }
 
 function formatMediaItemMeta(item: MediaItem): string {
@@ -1379,6 +1379,269 @@ function gcd(a: number, b: number): number {
 // SlotControl — redesigned card-style slot assignment
 // ---------------------------------------------------------------------------
 
+function ImageSlotControl({
+  slot,
+  slotIndex,
+  value,
+  onChange,
+  onRemove,
+}: {
+  slot: GallerySlot;
+  slotIndex: number;
+  value: string;
+  onChange: (val: string, m: "scene" | "source") => void;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [imageItems, setImageItems] = useState<MediaItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
+  const [error, setError] = useState("");
+  const [resolvingMediaId, setResolvingMediaId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+
+  const refreshImages = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const items = await loadBackgroundMediaLibrary();
+      setImageItems(items.filter((item) => isSelectableBackgroundMediaItem(item, "image")));
+    } catch (err) {
+      console.warn("[DockMultiview] Failed to load image slot media library", err);
+      setImageItems([]);
+      setError(t("multiview.imageLibraryLoadError", "Could not load saved images."));
+    } finally {
+      setLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    if (!open && !value) return;
+    void refreshImages();
+  }, [open, refreshImages, value]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  useEffect(() => {
+    const handler = () => {
+      if (open) void refreshImages();
+    };
+    window.addEventListener(MV_IMAGE_LIBRARY_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(MV_IMAGE_LIBRARY_UPDATED_EVENT, handler);
+  }, [open, refreshImages]);
+
+  const selectedItem = imageItems.find((item) => isMediaItemSelectedForBackground(item, value));
+  const selectedName = value ? getBackgroundMediaLabel(value) : "";
+  const previewSrc = selectedItem ? getMediaItemPreviewSrc(selectedItem) : getInlineImagePreviewSrc(value);
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleImageItems = normalizedQuery
+    ? imageItems.filter((item) => item.name.toLowerCase().includes(normalizedQuery))
+    : imageItems;
+
+  const handleUpload = useCallback(async (file: File) => {
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    if (!file.type.startsWith("image/") && !BACKGROUND_IMAGE_EXTENSIONS.has(ext)) {
+      setError(t("multiview.chooseImageFile", "Choose an image file."));
+      return;
+    }
+
+    setUploading(true);
+    setUploadStatus("");
+    setError("");
+    try {
+      const { item, error: uploadError } = await uploadFileToDock(file, setUploadStatus);
+      if (uploadError) throw new Error(uploadError);
+      await registerDockMediaItem(item);
+      const nextItems = dedupeBackgroundMediaItems(dedupeMediaItems([item, ...imageItems]))
+        .filter((mediaItem) => isSelectableBackgroundMediaItem(mediaItem, "image"));
+      setImageItems(nextItems);
+      const diskPath = await resolveBackgroundMediaFilePath(item);
+      onChange(diskPath, "scene");
+      setOpen(false);
+      window.dispatchEvent(new CustomEvent(MV_IMAGE_LIBRARY_UPDATED_EVENT));
+    } catch (err) {
+      console.warn("[DockMultiview] Image slot upload failed", err);
+      setError(err instanceof Error ? err.message : t("multiview.imageUploadFailed", "Could not upload this image."));
+    } finally {
+      setUploading(false);
+      setUploadStatus("");
+    }
+  }, [imageItems, onChange, t]);
+
+  const handlePickerChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) void handleUpload(file);
+    event.target.value = "";
+  }, [handleUpload]);
+
+  const handleSelectImage = useCallback(async (item: MediaItem) => {
+    if (uploading || resolvingMediaId !== null) return;
+    setResolvingMediaId(item.id);
+    setError("");
+    try {
+      const diskPath = await resolveBackgroundMediaFilePath(item);
+      onChange(diskPath, "scene");
+      setOpen(false);
+    } catch (err) {
+      console.warn("[DockMultiview] Failed to use library image for slot", err);
+      setError(err instanceof Error ? err.message : t("multiview.imageSelectFailed", "Could not use this image."));
+    } finally {
+      setResolvingMediaId(null);
+    }
+  }, [onChange, resolvingMediaId, t, uploading]);
+
+  const slotLabel = slot.label || t("multiview.contentN", { n: slotIndex + 1 });
+  const hasImage = Boolean(value);
+
+  return (
+    <div className="dock-mv-slot-row dock-mv-slot-row--image">
+      <div className="dock-mv-slot-row__main">
+        <SlotTypeIcon contentType={slot.contentType} />
+        <span className="dock-mv-slot-row__name">{slotLabel}</span>
+        <div className="dock-mv-slot-row__spacer" />
+        <div className="dock-mv-slot-image" ref={pickerRef}>
+          <button
+            type="button"
+            className={`dock-mv-slot-image__trigger${hasImage ? " dock-mv-slot-image__trigger--selected" : ""}`}
+            onClick={() => setOpen((current) => !current)}
+            aria-expanded={open}
+            title={hasImage ? selectedName : t("multiview.chooseImage", "Choose image")}
+          >
+            <span className="dock-mv-slot-image__thumb" aria-hidden="true">
+              {previewSrc ? (
+                <img src={previewSrc} alt="" loading="lazy" />
+              ) : (
+                <Icon name="image" size={15} />
+              )}
+            </span>
+            <span className="dock-mv-slot-image__copy">
+              <span className="dock-mv-slot-image__label">{t("multiview.image", "Image")}</span>
+              <span className={`dock-mv-slot-image__value${hasImage ? "" : " dock-mv-slot-image__value--empty"}`}>
+                {hasImage ? selectedName : t("multiview.uploadImage", "Upload image")}
+              </span>
+            </span>
+            <Icon name={open ? "expand_less" : "expand_more"} size={14} />
+          </button>
+
+          {open && (
+            <div className="dock-mv-slot-image__popover">
+              <div className="dock-mv-slot-image__head">
+                <span>{t("multiview.savedImages", "Saved images")} · {imageItems.length}</span>
+                <button type="button" onClick={() => void refreshImages()} disabled={loading || uploading}>
+                  <Icon name="refresh" size={12} />
+                  <span>{loading ? t("common.loading", "Loading") : t("common.refresh", "Refresh")}</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className="dock-mv-slot-image__upload"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                <Icon name={uploading ? "hourglass_top" : "upload"} size={14} />
+                <span>{uploading ? (uploadStatus || t("multiview.savingImage", "Saving image...")) : t("multiview.uploadImage", "Upload image")}</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="dock-mv-bg__file-hidden"
+                onChange={handlePickerChange}
+              />
+
+              {imageItems.length > 6 && (
+                <div className="dock-mv-slot-image__search">
+                  <Icon name="search" size={13} />
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={t("multiview.searchSavedImages", "Search saved images...")}
+                  />
+                </div>
+              )}
+
+              {loading ? (
+                <div className="dock-mv-slot-image__status" role="status">
+                  <Icon name="hourglass_top" size={14} />
+                  <span>{t("multiview.loadingSavedImages", "Loading saved images...")}</span>
+                </div>
+              ) : visibleImageItems.length > 0 ? (
+                <div className="dock-mv-slot-image__list">
+                  {visibleImageItems.map((item) => {
+                    const selected = isMediaItemSelectedForBackground(item, value);
+                    const resolving = resolvingMediaId === item.id;
+                    const itemPreviewSrc = getMediaItemPreviewSrc(item);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`dock-mv-slot-image__item${selected ? " dock-mv-slot-image__item--selected" : ""}`}
+                        onClick={() => void handleSelectImage(item)}
+                        disabled={uploading || resolvingMediaId !== null}
+                        title={item.name}
+                      >
+                        <span className="dock-mv-slot-image__item-thumb">
+                          <img src={itemPreviewSrc} alt="" loading="lazy" />
+                        </span>
+                        <span className="dock-mv-slot-image__item-copy">
+                          <span className="dock-mv-slot-image__item-name">{item.name}</span>
+                          <span className="dock-mv-slot-image__item-meta">
+                            {resolving ? t("common.selecting", "Selecting...") : formatMediaItemMeta(item)}
+                          </span>
+                        </span>
+                        <Icon name={selected ? "check" : "arrow_forward"} size={13} />
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="dock-mv-slot-image__status">
+                  <Icon name="image" size={14} />
+                  <span>
+                    {imageItems.length > 0
+                      ? t("multiview.noSavedImageMatches", "No saved image matches that search.")
+                      : t("multiview.noSavedImages", "No saved images yet.")}
+                  </span>
+                </div>
+              )}
+
+              {hasImage && (
+                <button
+                  type="button"
+                  className="dock-mv-slot-image__clear"
+                  onClick={() => {
+                    onRemove();
+                    setOpen(false);
+                  }}
+                >
+                  {t("multiview.clearImage", "Clear image")}
+                </button>
+              )}
+
+              {error && <div className="dock-mv-slot-image__error">{error}</div>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SlotControl({
   slot,
   slotIndex,
@@ -1487,9 +1750,20 @@ function SlotControl({
     );
   }
 
-  // Browser / image / fallback slots keep inline input
-  if (slot.contentType === "browser" || slot.contentType === "image") {
-    const isUrl = slot.contentType === "browser";
+  if (slot.contentType === "image") {
+    return (
+      <ImageSlotControl
+        slot={slot}
+        slotIndex={slotIndex}
+        value={value}
+        onChange={onChange}
+        onRemove={onRemove}
+      />
+    );
+  }
+
+  // Browser slots keep URL input because they map to OBS browser sources.
+  if (slot.contentType === "browser") {
     return (
       <div className="dock-mv-slot-row">
         <div className="dock-mv-slot-row__main">
@@ -1498,10 +1772,10 @@ function SlotControl({
           <div className="dock-mv-slot-row__spacer" />
           <input
             className="dock-mv-slot-row__input"
-            type={isUrl ? "url" : "text"}
+            type="url"
             value={value}
             onChange={(e) => onChange(e.target.value, "scene")}
-            placeholder={isUrl ? t('multiview.urlPlaceholder') : t('multiview.imagePathPlaceholder')}
+            placeholder={t('multiview.urlPlaceholder')}
           />
         </div>
       </div>
@@ -2494,78 +2768,105 @@ export default function DockMultiviewTab() {
 
   // ── Load saved list without overwriting it during a remount ──
   useEffect(() => {
-    const snapshot = loadSavedSnapshot();
-    let list = snapshot.items;
-    let changed = false;
-    const usedSceneNames = new Set(list.map((m) => m.obsSceneName).filter(Boolean));
+    let cancelled = false;
 
-    // Migrate old data: cards without obsSceneName get one assigned
-    list = list.map((m, i) => {
-      if (!m.obsSceneName) {
-        let number = i + 1;
-        let obsSceneName = `MV: Multiview ${number}`;
-        while (usedSceneNames.has(obsSceneName)) {
-          number += 1;
-          obsSceneName = `MV: Multiview ${number}`;
+    const hydrate = async () => {
+      let snapshot = loadSavedSnapshot();
+
+      // If the fast local copy is missing, give the durable user-scoped copy a
+      // chance to restore the cards before creating the first three defaults.
+      if (!snapshot.hasStoredValue) {
+        const durableItems = await loadDockPreferenceList<SavedMultiView>(STORAGE_KEY);
+        if (cancelled) return;
+        if (durableItems) {
+          snapshot = {
+            items: durableItems.map(normalizeLoadedMultiView),
+            hasStoredValue: true,
+            shouldMigrate: true,
+            canPersist: true,
+          };
         }
-        usedSceneNames.add(obsSceneName);
-        changed = true;
-        return { ...m, obsSceneName, background: { ...DEFAULT_MV_BG, ...(m.background ?? {}) } };
       }
-      // Migrate: ensure slotThumbnails, layoutFrameId, slotFrames, frameThickness exist
-      if (!m.slotThumbnails || !("layoutFrameId" in m) || !m.slotFrames || typeof m.frameThickness !== "number" || !m.background || typeof (m.background as Partial<MVBackground>).patternSrc !== "string") {
-        changed = true;
-        return {
-          ...m,
-          slotThumbnails: m.slotThumbnails ?? {},
-          layoutFrameId: m.layoutFrameId ?? null,
-          slotFrames: m.slotFrames ?? {},
-          frameThickness: m.frameThickness ?? 2,
-          frameCornerRadius: (m as any).frameCornerRadius ?? 0,
-          frameOpacity: (m as any).frameOpacity ?? 100,
-          frameColor: (m as any).frameColor ?? "",
-          background: { ...DEFAULT_MV_BG, ...(m.background ?? {}) },
-        };
-      }
-      return m;
-    });
 
-    const now = new Date().toISOString();
-    const cards: SavedMultiView[] = [...list];
-    // Seed only a brand-new store. If the user deliberately has an empty
-    // stored list, keep it empty. Never truncate saved cards to the first 3.
-    const shouldSeedDefaults = !snapshot.hasStoredValue || cards.length > 0;
-    while (shouldSeedDefaults && cards.length < 3) {
-      const n = cards.length + 1;
-      const obsSceneName = nextObsSceneName(cards);
-      cards.push({
-        id: genId(),
-        name: `${t('multiview.title')} ${n}`,
-        obsSceneName,
-        layoutId: GALLERY_LAYOUTS[0]?.id ?? "",
-        assignments: {},
-        slotModes: {},
-        slotFraming: {},
-        slotThumbnails: {},
-        layoutFrameId: null,
-        slotFrames: {},
-        frameThickness: 2,
-        frameCornerRadius: 0,
-        frameOpacity: 100,
-        frameColor: "",
-        background: { ...DEFAULT_MV_BG },
-        createdAt: now,
-        updatedAt: now,
+      let list = snapshot.items;
+      let changed = false;
+      const usedSceneNames = new Set(list.map((m) => m.obsSceneName).filter(Boolean));
+
+      // Migrate old data: cards without obsSceneName get one assigned
+      list = list.map((m, i) => {
+        if (!m.obsSceneName) {
+          let number = i + 1;
+          let obsSceneName = `MV: Multiview ${number}`;
+          while (usedSceneNames.has(obsSceneName)) {
+            number += 1;
+            obsSceneName = `MV: Multiview ${number}`;
+          }
+          usedSceneNames.add(obsSceneName);
+          changed = true;
+          return { ...m, obsSceneName, background: { ...DEFAULT_MV_BG, ...(m.background ?? {}) } };
+        }
+        // Migrate: ensure slotThumbnails, layoutFrameId, slotFrames, frameThickness exist
+        if (!m.slotThumbnails || !("layoutFrameId" in m) || !m.slotFrames || typeof m.frameThickness !== "number" || !m.background || typeof (m.background as Partial<MVBackground>).patternSrc !== "string") {
+          changed = true;
+          return {
+            ...m,
+            slotThumbnails: m.slotThumbnails ?? {},
+            layoutFrameId: m.layoutFrameId ?? null,
+            slotFrames: m.slotFrames ?? {},
+            frameThickness: m.frameThickness ?? 2,
+            frameCornerRadius: (m as any).frameCornerRadius ?? 0,
+            frameOpacity: (m as any).frameOpacity ?? 100,
+            frameColor: (m as any).frameColor ?? "",
+            background: { ...DEFAULT_MV_BG, ...(m.background ?? {}) },
+          };
+        }
+        return m;
       });
-      changed = true;
-    }
 
-    // A failed/temporary storage read must not be written back as defaults.
-    // Persist only migrations, legacy-key recovery, or intentional seeding.
-    if (snapshot.canPersist && (changed || snapshot.shouldMigrate)) {
-      saveSaved(cards);
-    }
-    setSavedList(cards);
+      const now = new Date().toISOString();
+      const cards: SavedMultiView[] = [...list];
+      // Seed only a brand-new store. If the user deliberately has an empty
+      // stored list, keep it empty. Never truncate saved cards to the first 3.
+      const shouldSeedDefaults = !snapshot.hasStoredValue || cards.length > 0;
+      while (shouldSeedDefaults && cards.length < 3) {
+        const n = cards.length + 1;
+        const obsSceneName = nextObsSceneName(cards);
+        cards.push({
+          id: genId(),
+          name: `${t('multiview.title')} ${n}`,
+          obsSceneName,
+          layoutId: GALLERY_LAYOUTS[0]?.id ?? "",
+          assignments: {},
+          slotModes: {},
+          slotFraming: {},
+          slotThumbnails: {},
+          layoutFrameId: null,
+          slotFrames: {},
+          frameThickness: 2,
+          frameCornerRadius: 0,
+          frameOpacity: 100,
+          frameColor: "",
+          background: { ...DEFAULT_MV_BG },
+          createdAt: now,
+          updatedAt: now,
+        });
+        changed = true;
+      }
+
+      if (cancelled) return;
+
+      // A failed/temporary storage read must not be written back as defaults.
+      // Persist only migrations, durable recovery, or intentional seeding.
+      if (snapshot.canPersist && (changed || snapshot.shouldMigrate)) {
+        saveSaved(cards);
+      }
+      setSavedList(cards);
+    };
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const obsReady = useDockObsReady();

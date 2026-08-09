@@ -24,6 +24,7 @@
 
 import { obsService } from "./obsService";
 import { getOverlayBaseUrlSync } from "./overlayUrl";
+import { buildVersionedOverlayUrl } from "./overlayVersion";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -107,6 +108,36 @@ async function getCanvasSize(): Promise<{ width: number; height: number }> {
     };
   } catch {
     return { width: 1920, height: 1080 };
+  }
+}
+
+function normalizeBrowserSourceDocumentUrl(url: string | undefined): string {
+  const trimmed = String(url || "").trim();
+  if (!trimmed || trimmed === "about:blank") return "";
+  const hashIndex = trimmed.indexOf("#");
+  return hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
+}
+
+function getOverlayUrlForModule(module: string): string {
+  const base = getOverlayBaseUrlSync();
+  switch (module) {
+    case "bible":
+    case "fullscreen-bible":
+      return buildVersionedOverlayUrl(base, "mce-bible-overlay.html", { tab: "bible" });
+    case "worship":
+    case "fullscreen-worship":
+      return buildVersionedOverlayUrl(base, "mce-worship-overlay.html");
+    case "notes":
+    case "fullscreen-notes":
+      return buildVersionedOverlayUrl(base, "mce-note.html");
+    case "media":
+      return buildVersionedOverlayUrl(base, "mce-media-overlay.html");
+    case "lower-third":
+      return buildVersionedOverlayUrl(base, "lower-third-overlay.html");
+    case "fullscreen-countdown":
+      return buildVersionedOverlayUrl(base, "pre-service-countdown.html");
+    default:
+      return buildVersionedOverlayUrl(base, "mce-bible-overlay.html", { tab: "bible" });
   }
 }
 
@@ -226,8 +257,10 @@ class PresentationSceneManager {
     sourceName: string,
     inputKind: string,
     canvas: { width: number; height: number },
-    _moduleKey: string
+    moduleKey: string
   ): Promise<void> {
+    const overlayUrl = getOverlayUrlForModule(moduleKey);
+
     // Check if source already exists in scene
     try {
       const resp = await obsService.call("GetSceneItemList", { sceneName });
@@ -238,13 +271,13 @@ class PresentationSceneManager {
           sceneItemId: existing.sceneItemId,
           sceneUuid: _state.sceneUuid ?? "",
         });
+        await this.ensureBrowserSourceUrl(sourceName, overlayUrl, canvas);
         return;
       }
     } catch { /* scene might be empty */ }
 
     // Create the source
     try {
-      const overlayUrl = `${getOverlayBaseUrlSync()}/mce-bible-overlay.html`;
       const sceneItemId = await obsService.createInput(
         sceneName,
         sourceName,
@@ -288,6 +321,7 @@ class PresentationSceneManager {
             sceneItemId,
             sceneUuid: _state.sceneUuid ?? "",
           });
+          await this.ensureBrowserSourceUrl(sourceName, overlayUrl, canvas);
           await this.setSourceEnabled(sceneName, sceneItemId, false);
         } catch { /* ok */ }
       } else {
@@ -374,6 +408,31 @@ class PresentationSceneManager {
       } else {
         console.warn(`[PresentationScene] Failed to create BG source: ${bgSourceName}`, err);
       }
+    }
+  }
+
+  private async ensureBrowserSourceUrl(
+    inputName: string,
+    expectedUrl: string,
+    canvas: { width: number; height: number },
+  ): Promise<void> {
+    try {
+      const resp = await obsService.call("GetInputSettings", { inputName }) as {
+        inputSettings?: { url?: unknown };
+      };
+      const currentUrl = typeof resp.inputSettings?.url === "string" ? resp.inputSettings.url : "";
+      if (normalizeBrowserSourceDocumentUrl(currentUrl) === expectedUrl) return;
+
+      await obsService.call("SetInputSettings", {
+        inputName,
+        inputSettings: {
+          url: expectedUrl,
+          width: canvas.width,
+          height: canvas.height,
+        },
+      });
+    } catch {
+      // Best effort. Some existing source types may not expose URL settings.
     }
   }
 

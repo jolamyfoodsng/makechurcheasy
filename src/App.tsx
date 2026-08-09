@@ -548,7 +548,14 @@ function App() {
           if (!payload || typeof payload !== "object") {
             throw new Error("Invalid worship preference payload.");
           }
-          await putRecord(STORES.APP_SETTINGS, payload, DOCK_WORSHIP_PREFS_APP_KEY);
+          // Keep the app bridge on the same user-scoped IndexedDB key as the
+          // standalone dock. The old unscoped key is still read as a legacy
+          // migration by dockPreferenceStorage.
+          await putRecord(
+            STORES.APP_SETTINGS,
+            payload,
+            getUserScopedKey(DOCK_WORSHIP_PREFS_APP_KEY),
+          );
         } catch (err) {
           console.warn("[App] Failed to save dock Worship preferences:", err);
         }

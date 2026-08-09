@@ -14,27 +14,19 @@ import {
   Download,
   FileText,
   Globe,
-  HelpCircle,
   LayoutGrid,
   List,
   Lock,
   Mic,
   MoreVertical,
-  RotateCcw,
   Tag,
   Timer,
   Trash2,
   Wand2,
   X,
-  AlertTriangle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import TranscriptTutorial, {
-  isTutorialCompleted,
-  markTutorialCompleted,
-  resetTutorial,
-} from "./TranscriptTutorial";
 import "./TranscriptLibraryPage.css";
 
 import {
@@ -104,10 +96,6 @@ export default function TranscriptLibraryPage({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const perPage = 8;
 
-  // ── Tutorial state ────────────────────────────────────────────────────
-  const [tourActive, setTourActive] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-
   // ── Plan enforcement ──────────────────────────────────────────────────
   const entitlementResult = useMemo(
     () => checkEntitlementSync("speechToScripture", effectivePlan),
@@ -151,15 +139,6 @@ export default function TranscriptLibraryPage({
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
-
-  // ── Auto-start tutorial on first visit ────────────────────────────────
-  useEffect(() => {
-    if (!loading && !isTutorialCompleted() && !tourActive) {
-      const timer = setTimeout(() => setTourActive(true), 600);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
 
   // ── Filtering & sorting ──────────────────────────────────────────────────
 
@@ -262,14 +241,14 @@ export default function TranscriptLibraryPage({
       <div className="tl-container">
 
         {/* ── Header ── */}
-        <header className="tl-header" data-transcript-tutorial="welcome">
+        <header className="tl-header">
           <div>
             <h1 className="tl-title">{t("transcript.title")}</h1>
             <p className="tl-subtitle">{t("transcript.subtitle")}</p>
           </div>
           <div className="tl-header-actions">
             {!hasUnlimitedPlan && <CreditsDisplay userId={user?.id} refreshKey={creditRefreshKey} />}
-            <div className="tl-search-wrapper" data-transcript-tutorial="search">
+            <div className="tl-search-wrapper">
               <input
                 type="text"
                 className="tl-search-input"
@@ -284,16 +263,8 @@ export default function TranscriptLibraryPage({
               )}
             </div>
             <button
-              className="tl-btn tl-btn-ghost"
-              onClick={() => { resetTutorial(); setTourActive(true); setBannerDismissed(false); }}
-              title={t("transcript.tour.button.tooltip")}
-            >
-              <HelpCircle size={16} /> {t("transcript.tour.button")}
-            </button>
-            <button
               className={`tl-btn tl-btn-primary${!canStartSession ? " tl-btn--locked" : ""}`}
               onClick={handleNewSessionClick}
-              data-transcript-tutorial="new-session"
               title={canStartSession ? t("transcript.tooltip.newSession") : t("transcript.tooltip.upgradeRequired")}
             >
               {!canStartSession && <Lock size={14} />}
@@ -302,27 +273,8 @@ export default function TranscriptLibraryPage({
           </div>
         </header>
 
-        {/* ── Incomplete tutorial banner ── */}
-        {!tourActive && !isTutorialCompleted() && !bannerDismissed && (
-          <div className="tl-tutorial-banner">
-            <AlertTriangle size={14} />
-            <span>{t("transcript.tour.banner")}</span>
-            <div className="tl-tutorial-banner-actions">
-              <button className="tl-btn tl-btn-sm tl-btn-primary" onClick={() => setTourActive(true)}>
-                {t("transcript.tour.banner.continue")}
-              </button>
-              <button className="tl-btn tl-btn-sm tl-btn-ghost" onClick={() => { resetTutorial(); setTourActive(true); setBannerDismissed(false); }}>
-                <RotateCcw size={12} /> {t("transcript.tour.banner.restart")}
-              </button>
-              <button className="tl-btn tl-btn-sm tl-btn-ghost" onClick={() => setBannerDismissed(true)}>
-                {t("transcript.tour.banner.dismiss")}
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* ── Stats Grid ── */}
-        <section className="tl-stats-grid" data-transcript-tutorial="stats">
+        <section className="tl-stats-grid">
           {statDefs.map((def) => (
             <div key={def.key} className={`tl-stat-card tl-stat--${def.color}`}>
               <div className="tl-accent-bar" />
@@ -341,7 +293,7 @@ export default function TranscriptLibraryPage({
         <section className="tl-table-section">
 
           {/* Filters */}
-          <div className="tl-table-filters" data-transcript-tutorial="filters">
+          <div className="tl-table-filters">
             <button className="tl-filter-btn" title={t("transcript.tooltip.filterLanguage")}>
               <Globe size={14} /> {t("transcript.filter.allLanguages")} <ChevronDown size={12} />
             </button>
@@ -351,7 +303,7 @@ export default function TranscriptLibraryPage({
             <button className="tl-filter-btn" title={t("transcript.tooltip.filterService")}>
               <Tag size={14} /> {t("transcript.filter.allServices")} <ChevronDown size={12} />
             </button>
-            <div className="tl-view-toggles" data-transcript-tutorial="view-toggle">
+            <div className="tl-view-toggles">
               <button
                 className={`tl-view-btn${view === "list" ? " active" : ""}`}
                 onClick={() => setView("list")}
@@ -382,7 +334,7 @@ export default function TranscriptLibraryPage({
           </div>
 
           {/* Table Body */}
-          <div className="tl-table-body" data-transcript-tutorial="table">
+          <div className="tl-table-body">
             {loading ? (
               <div className="tl-empty-state">
                 <Timer size={32} className="tl-empty-icon" />
@@ -445,7 +397,6 @@ export default function TranscriptLibraryPage({
                     <button
                       className="tl-action-icon"
                       title={t("transcript.tooltip.download")}
-                      data-transcript-tutorial="download"
                       onClick={(e) => handleDownload(e, tr)}
                       style={{ color: doneId === tr.id ? "var(--success)" : undefined }}
                       disabled={downloadingId !== null || doneId === tr.id}
@@ -459,7 +410,7 @@ export default function TranscriptLibraryPage({
                       )}
                     </button>
 
-                    <div className="tl-menu-wrapper" data-transcript-tutorial="more-actions">
+                    <div className="tl-menu-wrapper">
                       <button
                         className="tl-action-icon"
                         title={t("transcript.tooltip.moreActions")}
@@ -585,15 +536,6 @@ export default function TranscriptLibraryPage({
         )}
 
       </div>
-
-      {/* ── Tutorial Tour ── */}
-      <TranscriptTutorial
-        isActive={tourActive}
-        onClose={() => setTourActive(false)}
-        onFinish={() => { markTutorialCompleted(); setTourActive(false); }}
-        hasTranscripts={transcripts.length > 0}
-        onStartRecording={handleNewSessionClick}
-      />
     </div>
   );
 }

@@ -5,10 +5,12 @@ export const MIN_COMPLETE_BIBLE_VERSES = 20000;
 
 const KNOWN_INCOMPLETE_CATALOG_IDS = new Set([
   "ebf729fc-7bb8-a069-06cd-d37f77f7430a", // Igbo1988Bible.xml, shows as 1B and only contains a partial corpus.
+  "0a5f01d6-4856-f192-44bd-3a665f8e3d39", // EnglishPassionBible.xml (PB), 19,798 verses.
 ]);
 
 const KNOWN_INCOMPLETE_FILENAMES = new Set([
   "igbo1988bible.xml",
+  "englishpassionbible.xml",
 ]);
 
 export interface BibleDataStats {

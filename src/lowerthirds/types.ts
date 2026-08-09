@@ -52,15 +52,16 @@ export type LTCategory = "bible" | "worship" | "general" | "speaker";
 
 export type LTSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "x2" | "x3";
 
-// Keep OBS viewport sizing stable while rendering lower thirds at half their previous visual footprint.
-export const LT_VISUAL_OUTPUT_SCALE = 0.5;
+// Keep OBS viewport sizing stable while letting each size preset control the
+// rendered footprint directly inside the 1920x1080 browser canvas.
+export const LT_VISUAL_OUTPUT_SCALE = 1;
 
 /** Scale factor for each size option (used for transform fallback) */
 export const LT_SIZE_SCALE: Record<LTSize, number> = {
   xs: 0.6,
   sm: 0.75,
   md: 0.9,
-  lg: 1.1,
+  lg: 1.0,
   xl: 1.35,
   "2xl": 1.6,
   "3xl": 1.85,

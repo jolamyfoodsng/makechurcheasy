@@ -40,6 +40,8 @@ interface Props {
   clearDisabled?: boolean;
   /** Whether the associated OBS source is currently visible */
   sourceVisible?: boolean;
+  /** Move the clear/visibility action into the overflow menu */
+  clearInOverflow?: boolean;
   /** Action that stays visible outside the overflow menu */
   inlineAction?: React.ReactNode;
   /** Actions moved into the overflow menu at very narrow dock widths */
@@ -64,6 +66,7 @@ export default function DockBottomToolbar({
   onClear,
   clearDisabled = false,
   sourceVisible = true,
+  clearInOverflow = false,
   inlineAction,
   narrowOverflowActions,
   centerAction,
@@ -130,7 +133,7 @@ export default function DockBottomToolbar({
   if (collapsed) {
     return (
       <div className="dock-btm-toolbar dock-btm-toolbar--collapsed" ref={toolbarRef}>
-        {onClear && (
+        {onClear && !clearInOverflow && (
           <button
             type="button"
             className="dock-btm-toolbar__clear dock-btm-toolbar__clear--bible"
@@ -216,7 +219,7 @@ export default function DockBottomToolbar({
 
         <div className="dock_bottom_bar">
           {/* Visibility toggle — always accessible */}
-          {onClear && (
+          {onClear && !clearInOverflow && (
             renderVisibilityButton("dock-btm-toolbar__clear--inline")
           )}
 
@@ -227,7 +230,7 @@ export default function DockBottomToolbar({
           )}
 
           {/* ⋯ Overflow menu for hidden actions */}
-          {(children || narrowOverflowActions) && (
+          {(children || narrowOverflowActions || (onClear && clearInOverflow)) && (
             <div className="dock-btm-overflow" ref={overflowRef}>
               <button
                 type="button"
@@ -240,6 +243,7 @@ export default function DockBottomToolbar({
               </button>
               {showOverflow && (
                 <div className="dock-btm-overflow__menu" role="menu">
+                  {onClear && clearInOverflow && renderVisibilityButton("dock-btm-toolbar__icon-btn")}
                   {narrowOverflowActions && (
                     <div className="dock-btm-overflow__narrow-actions">
                       {narrowOverflowActions}

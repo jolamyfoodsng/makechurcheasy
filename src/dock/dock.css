@@ -24,8 +24,9 @@
 
 /* ── Root container ── */
 .dock-root {
-  --dock-font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --dock-font-heading: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --dock-font-african-latin: "Questrial", "Charis SIL", "Noto Sans";
+  --dock-font-body: var(--dock-font-african-latin), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --dock-font-heading: var(--dock-font-african-latin), "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
   --dock-font-mono: "SF Mono", "Cascadia Code", "Fira Code", monospace;
   --dock-bg: #0F172A;
   --dock-bg-secondary: #111827;
@@ -78,6 +79,10 @@
   overflow: hidden;
   user-select: none;
   -webkit-font-smoothing: antialiased;
+}
+
+.dock-root :where(input, textarea, select, button, [contenteditable="true"]) {
+  font-family: var(--dock-font-body);
 }
 
 .dock-root :where(h1, h2, h3, h4, h5, h6),
@@ -5267,6 +5272,36 @@
   margin-top: 10px;
 }
 
+.dock-sidebar__select-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 2px 0;
+}
+
+.dock-sidebar__select-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--dock-text, #F8FAFC);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.dock-sidebar__select-label svg {
+  color: var(--dock-text-muted, #94A3B8);
+  flex: 0 0 auto;
+}
+
+.dock-sidebar__hint {
+  padding: 0 2px;
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 10.5px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
 .dock-sidebar__radio-group {
   display: flex;
   flex-direction: column;
@@ -5396,6 +5431,13 @@
   color: var(--dock-text, #F8FAFC);
   font-size: 12px;
   font-family: inherit;
+}
+
+.dock-sidebar__select--routing {
+  min-height: 34px;
+  padding: 0 9px;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
 .dock-shell-history {
@@ -5557,6 +5599,20 @@
   gap: 8px;
   padding: 4px;
   background: transparent;
+}
+
+/* Visited dock pages stay mounted while inactive so in-progress edits survive
+   navigation. The hidden attribute keeps inactive pages out of the layout. */
+.dock-tab-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dock-tab-panel[hidden] {
+  display: none;
 }
 
 .dock-presentation-bible-lm-split {
@@ -5945,13 +6001,13 @@
 
 @media (max-width: 290px) {
   .dock-bible-reader {
-    flex: 0 0 87% !important;
+    flex: 1 1 auto !important;
   }
 }
 
 @media (max-width: 200px) {
   .dock-bible-reader {
-    flex: 0 0 81% !important;
+    flex: 1 1 auto !important;
   }
 }
 
@@ -6155,6 +6211,38 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.dock-song-card__lyrics-preview {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 1px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--dock-border) 58%, transparent);
+  color: var(--dock-text-dim);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.dock-song-card__lyrics-line {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  color: var(--dock-text-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-song-card__lyrics-more {
+  color: var(--dock-text-dim);
+  line-height: 0.8;
+}
+
+.dock-song-card__lyrics-empty {
+  color: var(--dock-text-dim);
+  font-style: italic;
 }
 
 .dock-song-card__edit {
@@ -6694,7 +6782,7 @@
 }
 
 .dock-bible-reader {
-  flex: 0 0 94%;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--dock-border) 60%, transparent);
@@ -6702,9 +6790,9 @@
   transition: flex 0.2s ease;
 }
 
-/* Toolbar collapsed → reader expands to 92% */
+/* The reader fills the available workspace when the toolbar is collapsed. */
 [data-toolbar-collapsed] .dock-bible-reader {
-  flex: 0 0 90% !important;
+  flex: 1 1 auto !important;
 }
 
 .dock-bible-reader__ref-header {
@@ -6971,14 +7059,14 @@
   text-transform: uppercase;
 }
 
-.dock-bible-reader__font-size-row > span {
+.dock-bible-reader__font-size-row>span {
   min-width: 0;
   color: var(--dock-text-secondary);
   font-size: 11px;
   font-weight: 600;
 }
 
-.dock-bible-reader__font-size-row--toggle > div {
+.dock-bible-reader__font-size-row--toggle>div {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -9067,7 +9155,8 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  padding: 12px 0px;
+  padding: 12px 16px 12px 10px;
+  box-sizing: border-box;
   min-width: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--dock-border) 50%, transparent);
   background: transparent;
@@ -9120,6 +9209,7 @@
   align-items: flex-start;
   min-width: 0;
   flex: 1 1 auto;
+  max-width: 100%;
 }
 
 .dock-bible-verse-row__text {
@@ -9127,7 +9217,9 @@
   color: var(--dock-text);
   font-size: 12px;
   line-height: 1.55;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-wrap: pretty;
   letter-spacing: 0.01em;
 }
 
@@ -9156,7 +9248,8 @@
   color: var(--dock-text);
   font-size: 12px;
   line-height: 1.55;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
   letter-spacing: 0.01em;
 }
 
@@ -9171,7 +9264,9 @@
   color: var(--dock-text, #F8FAFC);
   font-size: 12px;
   line-height: 1.55;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-wrap: pretty;
 }
 
 .dock-bible-compare-block {
@@ -9184,7 +9279,9 @@
   color: var(--dock-text, #F8FAFC);
   font-size: 12px;
   line-height: 1.55;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-wrap: pretty;
 }
 
 .dock-bible-compare-stack {
@@ -13776,7 +13873,7 @@
 /* Micro (<250px): Translation select wraps to next line */
 @media (max-width: 250px) {
   .dock-bible-reader {
-    flex: 0 0 87%;
+    flex: 1 1 auto;
 
   }
 
@@ -15935,19 +16032,23 @@
 
 /* Song Summary Header */
 .dock-worship-summary {
-  gap: 0;
+  gap: 8px;
   padding: 8px;
 }
 
 .dock-worship-summary__header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  column-gap: 10px;
   min-width: 0;
 }
 
 .dock-worship-summary__copy {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  max-width: 100%;
 }
 
 .dock-worship-summary__title {
@@ -15962,7 +16063,7 @@
 
 .dock-worship-summary__artist {
   font-size: 13px;
-  color: #FFFFFF;
+  color: var(--dock-text-secondary);
   margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
@@ -15972,10 +16073,17 @@
 .dock-worship-summary__meta {
   display: flex;
   align-items: center;
-  gap: 4px;
+  flex-wrap: wrap;
+  column-gap: 6px;
+  row-gap: 2px;
   margin-top: 2px;
-  font-size: 13px;
-  color: #FFFFFF;
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--dock-text-dim);
+}
+
+.dock-worship-summary__meta>span:not(.dock-worship-summary__meta-dot) {
+  white-space: nowrap;
 }
 
 .dock-worship-summary__meta-dot {
@@ -15985,9 +16093,14 @@
 .dock-worship-summary__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-left: auto;
+  justify-content: flex-end;
+  gap: 6px;
   flex-shrink: 0;
+}
+
+.dock-worship-summary__actions .dock-shell-icon-btn {
+  width: 40px;
+  height: 40px;
 }
 
 .dock-worship-summary__left {
@@ -16009,9 +16122,10 @@
 .dock-worship-back-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 44px;
-  padding: 0 10px;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
   border: 1px solid var(--dock-border);
   border-radius: 4px;
   background: var(--dock-surface-alt);
@@ -16022,6 +16136,17 @@
   cursor: pointer;
   flex-shrink: 0;
   transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease;
+}
+
+.dock-worship-summary .dock-translation:not(.dock-translation--compact) {
+  margin-top: 0;
+  margin-left: 50px;
+  max-width: calc(100% - 50px);
+}
+
+.dock-worship-summary .dock-translation--compact {
+  margin: 0;
+  max-width: none;
 }
 
 .dock-worship-back-btn:hover {
@@ -25641,6 +25766,43 @@
   padding: 8px;
 }
 
+.dock-mv-tab__list--ticker {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-content: start;
+}
+
+.dock-mv-tab__list--ticker > .dock-mv-tab__section {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.dock-mv-tab__section--ticker-theme {
+  grid-column: span 1;
+}
+
+.dock-mv-tab__section--ticker-settings {
+  grid-column: span 2;
+}
+
+.dock-mv-tab__section--ticker-messages,
+.dock-mv-tab__section--ticker-live {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 620px) {
+  .dock-mv-tab__list--ticker {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .dock-mv-tab__list--ticker > .dock-mv-tab__section {
+    margin-bottom: 12px;
+  }
+}
+
 .dock-mv-tab__empty {
   display: flex;
   flex-direction: column;
@@ -27247,7 +27409,7 @@
   background: #020617;
 }
 
-.dock-mv-bg-editor__visual-card > span {
+.dock-mv-bg-editor__visual-card>span {
   min-width: 0;
   overflow: hidden;
   color: var(--dock-text, #F8FAFC);
@@ -27258,7 +27420,7 @@
   white-space: nowrap;
 }
 
-.dock-mv-bg-editor__visual-card > svg:last-child {
+.dock-mv-bg-editor__visual-card>svg:last-child {
   position: absolute;
   top: 9px;
   right: 9px;
@@ -27278,12 +27440,12 @@
   padding: 9px;
 }
 
-.dock-mv-bg-editor__visual-card--scene > svg:first-child {
+.dock-mv-bg-editor__visual-card--scene>svg:first-child {
   flex: 0 0 auto;
   color: var(--dock-text-dim, #94A3B8);
 }
 
-.dock-mv-bg-editor__visual-card--scene > span {
+.dock-mv-bg-editor__visual-card--scene>span {
   padding-right: 18px;
 }
 
@@ -27816,6 +27978,317 @@
   font-size: 11px;
   font-family: inherit;
   outline: none;
+}
+
+.dock-mv-slot-image {
+  position: relative;
+  flex: 0 1 178px;
+  min-width: 142px;
+}
+
+.dock-mv-slot-image__trigger {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 34px;
+  padding: 4px 7px 4px 5px;
+  border: 1px solid var(--dock-input-border);
+  border-radius: 6px;
+  background: var(--dock-input-bg);
+  color: var(--dock-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.dock-mv-slot-image__trigger:hover,
+.dock-mv-slot-image__trigger[aria-expanded="true"] {
+  border-color: var(--dock-border-active);
+  background: color-mix(in srgb, var(--dock-surface) 84%, transparent);
+}
+
+.dock-mv-slot-image__trigger--selected {
+  border-color: color-mix(in srgb, var(--dock-border-active) 58%, var(--dock-input-border));
+}
+
+.dock-mv-slot-image__thumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  overflow: hidden;
+  border: 1px solid var(--dock-border);
+  border-radius: 5px;
+  background: #020617;
+  color: var(--dock-text-dim);
+}
+
+.dock-mv-slot-image__thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dock-mv-slot-image__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dock-mv-slot-image__label {
+  color: var(--dock-text-dim);
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dock-mv-slot-image__value {
+  overflow: hidden;
+  color: var(--dock-text);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-mv-slot-image__value--empty {
+  color: var(--dock-text-dim);
+  font-weight: 600;
+}
+
+.dock-mv-slot-image__popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 5px);
+  z-index: 140;
+  display: flex;
+  width: min(292px, calc(100vw - 26px));
+  max-height: min(460px, 72vh);
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  padding: 10px;
+  border: 1px solid var(--dock-border);
+  border-radius: 8px;
+  background: var(--dock-bg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.46);
+}
+
+.dock-mv-slot-image__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--dock-text-secondary, #CBD5E1);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.dock-mv-slot-image__head button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--dock-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dock-text-dim);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.dock-mv-slot-image__head button:hover:not(:disabled) {
+  border-color: var(--dock-border-active);
+  color: var(--dock-text);
+}
+
+.dock-mv-slot-image__head button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.dock-mv-slot-image__upload {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--dock-border-active);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dock-border-active) 18%, var(--dock-surface));
+  color: var(--dock-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.dock-mv-slot-image__upload:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dock-border-active) 28%, var(--dock-surface));
+}
+
+.dock-mv-slot-image__upload:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.dock-mv-slot-image__search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--dock-input-border);
+  border-radius: 6px;
+  background: var(--dock-input-bg);
+  color: var(--dock-text-dim);
+}
+
+.dock-mv-slot-image__search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--dock-text);
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.dock-mv-slot-image__list {
+  display: flex;
+  min-height: 0;
+  max-height: 260px;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding-right: 1px;
+}
+
+.dock-mv-slot-image__item {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 5px 7px 5px 5px;
+  border: 1px solid var(--dock-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dock-surface) 82%, transparent);
+  color: var(--dock-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dock-mv-slot-image__item:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--dock-border-active) 60%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-surface-hover, #374151) 68%, transparent);
+}
+
+.dock-mv-slot-image__item--selected {
+  border-color: var(--dock-border-active);
+  background: color-mix(in srgb, var(--dock-border-active) 14%, var(--dock-surface));
+}
+
+.dock-mv-slot-image__item:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.dock-mv-slot-image__item-thumb {
+  display: block;
+  width: 54px;
+  height: 34px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 78%, transparent);
+  border-radius: 5px;
+  background: #020617;
+}
+
+.dock-mv-slot-image__item-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dock-mv-slot-image__item-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dock-mv-slot-image__item-name {
+  overflow: hidden;
+  color: var(--dock-text);
+  font-size: 11.5px;
+  font-weight: 750;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-mv-slot-image__item-meta {
+  overflow: hidden;
+  color: var(--dock-text-dim);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-mv-slot-image__status,
+.dock-mv-slot-image__error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 8px 9px;
+  border: 1px dashed var(--dock-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dock-surface) 68%, transparent);
+  color: var(--dock-text-dim);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.dock-mv-slot-image__error {
+  border-style: solid;
+  border-color: color-mix(in srgb, #EF4444 45%, var(--dock-border));
+  color: #FCA5A5;
+}
+
+.dock-mv-slot-image__clear {
+  min-height: 30px;
+  border: 1px solid color-mix(in srgb, #EF4444 42%, var(--dock-border));
+  border-radius: 6px;
+  background: transparent;
+  color: #FCA5A5;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dock-mv-slot-image__clear:hover {
+  background: rgba(220, 38, 38, 0.12);
 }
 
 /* ── Content Picker Modal ── */
@@ -30555,7 +31028,7 @@ button.dock-btm-toolbar__clear--inline,
   }
 
   .dock-bible-reader {
-    flex: 0 0 82% !important;
+    flex: 1 1 auto !important;
   }
 
   .dock-btm-toolbar__icon-btn {
@@ -30705,7 +31178,7 @@ button.dock-btm-toolbar__clear--inline,
 
 /* ── Scripture content: verse rows ── */
 .dock-module--bible--compact .dock-bible-verse-row {
-  padding: 8px 0;
+  padding: 8px 14px 8px 8px;
   gap: 6px;
 }
 
@@ -32599,4 +33072,225 @@ button.dock-btm-toolbar__clear--inline,
   .dock-module--bible .dock-btm-overflow__narrow-actions {
     display: flex;
   }
+}
+
+/* Bible actions that move into the overflow menu at a 300px dock width. */
+.dock-bible-actions__compare-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.dock-bible-actions__overflow {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dock-surface-alt) 74%, var(--dock-surface));
+  color: var(--dock-text-secondary, #CBD5E1);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  flex-shrink: 0;
+}
+
+.dock-bible-actions__overflow:hover,
+.dock-bible-actions__overflow[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--dock-accent) 42%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent-soft) 48%, var(--dock-surface));
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-bible-actions__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 250;
+  display: flex;
+  min-width: 174px;
+  padding: 4px;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dock-surface) 98%, transparent);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+}
+
+.dock-bible-actions__menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  gap: 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dock-text, #F8FAFC);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dock-bible-actions__menu-item:hover,
+.dock-bible-actions__menu-item:focus-visible {
+  background: color-mix(in srgb, var(--dock-accent-soft) 48%, var(--dock-surface));
+  color: var(--dock-text, #F8FAFC);
+  outline: none;
+}
+
+.dock-module--bible:not(.dock-module--bible--narrow) .dock-bible-actions__menu {
+  display: none;
+}
+
+.dock-module--bible--narrow .dock-bible-search-row {
+  gap: 2px;
+  padding: 4px 6px;
+  flex-wrap: nowrap;
+}
+
+.dock-module--bible--narrow .dock-bible-search-row__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dock-module--bible--narrow .dock-bible-search-row__translation {
+  gap: 1px;
+  margin-right: 0;
+}
+
+
+.dock-module--bible--narrow .bible-version-library__trigger {
+  width: 58px;
+  min-width: 48px;
+  max-width: 48px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 3px;
+  gap: 1px;
+  font-size: 8px;
+  line-height: 1;
+}
+
+.dock-module--bible--narrow .bible-version-library__trigger-abbr {
+  max-width: 40px;
+  overflow: hidden;
+  font-size: 8px;
+  letter-spacing: 0.15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-module--bible--narrow .bible-version-library__trigger svg {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+}
+
+.dock-module--bible--narrow .dock-bible-compact-actions {
+  gap: 1px;
+}
+
+.dock-module--bible--compact .dock-bible-compact-actions .dock-bible-actions__overflow {
+  display: none;
+}
+
+.dock-module--bible--narrow.dock-module--bible--compact .dock-bible-compact-actions button.dock-bible-compact-actions__compare,
+.dock-module--bible--narrow.dock-module--bible--compact .dock-bible-compact-actions button.dock-bible-compact-actions__browse,
+.dock-module--bible--narrow .dock-bible-topbar__toggle-btn,
+.dock-module--bible--narrow .dock-bible-compare-trigger__btn {
+  display: none;
+}
+
+.dock-module--bible--narrow .dock-bible-actions__overflow {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  flex: 0 0 26px;
+}
+
+.dock-module--bible--narrow .dock-bible-compact-actions .dock-bible-actions__overflow {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  flex: 0 0 26px;
+}
+
+.dock-module--bible--narrow .dock-bible-header-actions {
+  gap: 2px;
+}
+
+.dock-module--bible--narrow .dock-bible-topbar__toggle-btn {
+  gap: 3px;
+  padding: 4px 5px;
+}
+
+.dock-module--bible--narrow .dock-bible-topbar__toggle-label {
+  display: none;
+}
+
+.dock-module--bible--compact .dock-bible-compact-actions .dock-bible-actions__menu-item {
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 30px;
+  padding: 0 8px;
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--dock-text, #F8FAFC);
+  font-size: 11px;
+  justify-content: flex-start;
+}
+
+/* Keep the narrow Bible controls at the right edge of the search row. The
+   search field owns the flexible space; translation and more actions never
+   overlay it or drift to the left. */
+.dock-bible-search-row {
+  direction: ltr;
+}
+
+.dock-bible-search-row__input {
+  order: 1;
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+}
+
+.dock-bible-search-row__input .dock-bible-search-bar,
+.dock-bible-search-row__input .dock-search {
+  width: 100%;
+  min-width: 95px;
+}
+
+.dock-bible-search-row__input .dock_search__input {
+  width: 100% !important;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+.dock-bible-search-row__translation {
+  order: 2;
+  margin-left: auto;
+  margin-right: 0;
+  justify-content: flex-end;
+}
+
+.dock-module--bible--narrow .dock-bible-compact-actions__popover {
+  left: auto;
+  right: 0;
 }

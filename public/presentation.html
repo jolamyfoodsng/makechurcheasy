@@ -896,6 +896,7 @@
               background:${escapeHtml(ticker.backgroundColor || "#000000")};
               color:${escapeHtml(ticker.textColor || "#ffffff")};
               font-size:${Math.max(16, Number(ticker.fontSize || 32))}px;
+              font-family:${escapeHtml(ticker.fontFamily || '"Charis SIL", "Noto Sans", "CMG Sans", "Inter", "Segoe UI", sans-serif')};
               font-weight:700;
             ">
               <div class="ticker-track ${directionClass} ${pausedClass}" style="animation-duration:${durationSeconds}s;">

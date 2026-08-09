@@ -31,6 +31,7 @@ import {
   deriveBibleAbbr,
   formatBibleFileSize,
   installBibleFromCatalog,
+  isCatalogBibleInstalled,
 } from "../bibleInstallService";
 import { evictTranslationCache } from "../bibleData";
 import { assertCompleteBibleData } from "../bibleValidation";
@@ -273,7 +274,7 @@ export default function BibleLibrary({
       lang: string,
       filesize: number
     ) => {
-      const isInstalled = installed.some((i) => i.id === catalogId);
+      const isInstalled = isCatalogBibleInstalled(installed, catalogId, abbr);
       if (isInstalled) return;
 
       const existing = downloads.get(catalogId);
@@ -330,13 +331,25 @@ export default function BibleLibrary({
           });
         }, 3000);
       } catch (err: any) {
+        const message = err?.message || "Download failed";
+        if (/already installed/i.test(message)) {
+          setDownloads((prev) => {
+            const next = new Map(prev);
+            next.delete(catalogId);
+            return next;
+          });
+          await refreshInstalled();
+          onTranslationsChanged?.();
+          return;
+        }
+
         setDownloads((prev) => {
           const next = new Map(prev);
           next.set(catalogId, {
             ...state,
             progress: 0,
             status: "error",
-            error: err.message || "Download failed",
+            error: message,
           });
           return next;
         });
@@ -344,6 +357,21 @@ export default function BibleLibrary({
     },
     [installed, downloads, refreshInstalled, onTranslationsChanged]
   );
+
+  useEffect(() => {
+    if (downloads.size === 0 || installed.length === 0) return;
+    setDownloads((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const [catalogId, state] of next) {
+        if (isCatalogBibleInstalled(installed, catalogId, state.abbr)) {
+          next.delete(catalogId);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [downloads.size, installed]);
 
   // ── Import Bible from XML file ──
   const handleImportFile = useCallback(
@@ -451,12 +479,6 @@ export default function BibleLibrary({
       if (fileInputRef.current) fileInputRef.current.value = "";
     },
     [handleImportFile]
-  );
-
-  // ── Installed IDs set for quick lookup (by catalog UUID, not abbreviation) ──
-  const installedIds = useMemo(
-    () => new Set(installed.map((i) => i.id)),
-    [installed]
   );
 
   // ── Confirm-delete flow ──
@@ -685,7 +707,7 @@ export default function BibleLibrary({
               <div className="bible-library-list">
                 {catalogResult.items.map((bible) => {
                   const abbr = deriveBibleAbbr(bible);
-                  const isInst = installedIds.has(bible.id);
+                  const isInst = isCatalogBibleInstalled(installed, bible.id, abbr);
                   const dl = downloads.get(bible.id);
 
                   return (

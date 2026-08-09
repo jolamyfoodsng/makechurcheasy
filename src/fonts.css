@@ -1,9 +1,18 @@
 /*
  * fonts.css — @font-face declarations for bundled Unicode fonts
  *
- * Charis SIL: Broad African language coverage (Twi, Yoruba, Igbo, etc.)
- * Loaded locally from public/fonts/ for reliable Tauri WebView rendering.
+ * Questrial: Pan-African Latin support from Google Fonts.
+ * Charis SIL: Broad African language fallback (Twi, Yoruba, Igbo, etc.)
+ * Loaded locally from public/fonts/ for reliable Tauri WebView/dock rendering.
  */
+
+@font-face {
+  font-family: 'Questrial';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/questrial/Questrial-Regular.ttf') format('truetype');
+}
 
 @font-face {
   font-family: 'Charis SIL';

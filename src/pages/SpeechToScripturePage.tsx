@@ -18,11 +18,9 @@ import {
   ChevronDown,
   Copy,
   Download,
-  HelpCircle,
   Lock,
   Mic,
   Radio,
-  RotateCcw,
   ShieldAlert,
   StopCircle,
   Wifi,
@@ -32,11 +30,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { usePerformanceMonitor } from "../dock/usePerformanceMonitor";
-import SpeechToScriptureTutorial, {
-  isSpeechToScriptureTutorialCompleted,
-  markSpeechToScriptureTutorialCompleted,
-  resetSpeechToScriptureTutorial,
-} from "./SpeechToScriptureTutorial";
 import { bibleObsService } from "../bible/bibleObsService";
 import type { BibleSlide } from "../bible/types";
 import CreditsDisplay from "../components/CreditsDisplay";
@@ -141,9 +134,6 @@ export default function SpeechToScripturePage() {
   const { user, logout, isAdmin } = useAuth();
   const effectivePlan = getEffectivePlan(user);
 
-  // ── Tutorial state ──
-  const [tourActive, setTourActive] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // ── Backend access check (declared early for use in useEffects below) ──
@@ -152,15 +142,6 @@ export default function SpeechToScripturePage() {
     reason: string;
     requiredPlan?: string;
   } | null>(null);
-
-  // ── Auto-start tutorial on first visit ──
-  useEffect(() => {
-    if (!isSpeechToScriptureTutorialCompleted() && !tourActive) {
-      const timer = setTimeout(() => setTourActive(true), 600);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // ── Upfront plan gate — block immediately if plan doesn't include Verse AI ──
   useEffect(() => {
@@ -868,7 +849,7 @@ export default function SpeechToScripturePage() {
   return (
     <div className="sts3-root">
       {/* ── Header ── */}
-      <header className="sts3-header" data-stt-tutorial="welcome">
+      <header className="sts3-header">
         <div className="sts3-header-left">
           <div className="sts3-logo-box">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
@@ -880,15 +861,7 @@ export default function SpeechToScripturePage() {
         </div>
         <CreditsDisplay userId={user?.id} />
         <div className="sts3-header-right">
-          <button
-            className="production-btn production-btn--ghost"
-            onClick={() => { resetSpeechToScriptureTutorial(); setTourActive(true); setBannerDismissed(false); }}
-            title={t("stt.button.tooltip")}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }}
-          >
-            <HelpCircle size={16} /> {t("stt.button")}
-          </button>
-          <div className="sts3-header-mic-group" data-stt-tutorial="start-btn">
+          <div className="sts3-header-mic-group">
             <button
               className={`sts3-btn ${isListening ? "sts3-btn--red" : ""}`}
               onClick={isListening ? handleStop : handleStart}
@@ -910,25 +883,6 @@ export default function SpeechToScripturePage() {
 
         </div>
       </header>
-
-      {/* ── Incomplete tutorial banner ── */}
-      {!tourActive && !isSpeechToScriptureTutorialCompleted() && !bannerDismissed && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", margin: "0 24px 16px", background: "rgba(var(--primary-rgb, 99, 102, 241), 0.08)", border: "1px solid rgba(var(--primary-rgb, 99, 102, 241), 0.2)", borderRadius: 8, fontSize: "0.8125rem", color: "var(--text-muted)" }}>
-          <AlertTriangle size={14} style={{ color: "var(--primary)", flexShrink: 0 }} />
-          <span style={{ flex: 1 }}>{t("stt.banner")}</span>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "var(--primary)", color: "#fff", border: "1px solid var(--primary)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, cursor: "pointer" }} onClick={() => setTourActive(true)}>
-              {t("stt.banner.continue")}
-            </button>
-            <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => { resetSpeechToScriptureTutorial(); setTourActive(true); setBannerDismissed(false); }}>
-              <RotateCcw size={12} /> {t("stt.banner.restart")}
-            </button>
-            <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => setBannerDismissed(true)}>
-              {t("stt.banner.dismiss")}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ── Transcript generated banner ── */}
       {generatedTranscriptId && (
@@ -1081,7 +1035,7 @@ export default function SpeechToScripturePage() {
           {/* ── Left: Live Transcript ── */}
           <aside className="sts3-sidebar">
             <div className="sts3-sidebar-header">
-              <div className="sts3-select-mic-wrapper" ref={micDropdownRef} data-stt-tutorial="mic-select">
+              <div className="sts3-select-mic-wrapper" ref={micDropdownRef}>
                 <div
                   className="sts3-select-mic"
                   onClick={() => {
@@ -1178,7 +1132,7 @@ export default function SpeechToScripturePage() {
               <ChevronDown size={14} />
             </div>
 
-            <div className={`sts3-transcript-list${transcriptCollapsed ? " sts3-transcript-collapsed" : ""}`} ref={transcriptRef} data-stt-tutorial="transcript">
+            <div className={`sts3-transcript-list${transcriptCollapsed ? " sts3-transcript-collapsed" : ""}`} ref={transcriptRef}>
               {/* Empty state */}
               {filteredEntries.length === 0 && !isListening && (
                 <div className="sts3-transcript-empty">
@@ -1240,7 +1194,7 @@ export default function SpeechToScripturePage() {
           </aside>
 
           {/* ── Center: Current Verse (Top Match) ── */}
-          <div className="sts3-main-card" data-stt-tutorial="top-match">
+          <div className="sts3-main-card">
             <div className="sts3-card-title">
               <span>{t("verseAi.topMatch")}</span>
               {topMatch && (
@@ -1316,7 +1270,7 @@ export default function SpeechToScripturePage() {
         {/* ── Row 2: Full-width section ── */}
         <div className="sts3-main-row2">
           {/* Candidate Matches */}
-          <div className="sts3-candidate-card" data-stt-tutorial="candidates">
+          <div className="sts3-candidate-card">
             <div className="sts3-candidate-header">
               <span className="sts3-candidate-title">{t("verseAi.candidateMatches")}</span>
               {candidateMatches.length > 0 && (
@@ -1664,12 +1618,6 @@ export default function SpeechToScripturePage() {
         </div>
       )}
 
-      {/* ── Tutorial Tour ── */}
-      <SpeechToScriptureTutorial
-        isActive={tourActive}
-        onClose={() => setTourActive(false)}
-        onFinish={() => { markSpeechToScriptureTutorialCompleted(); setTourActive(false); }}
-      />
     </div>
   );
 }

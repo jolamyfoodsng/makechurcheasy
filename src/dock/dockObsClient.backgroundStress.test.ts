@@ -146,6 +146,7 @@ describe("dockObsClient background reflection stress", () => {
   beforeEach(() => {
     originalMethods = {
       call: client.call,
+      obs: client.obs,
       getCanvasSize: client.getCanvasSize,
       getSceneItemListCached: client.getSceneItemListCached,
       invalidateSceneItemListCache: client.invalidateSceneItemListCache,
@@ -174,6 +175,7 @@ describe("dockObsClient background reflection stress", () => {
       pushWorshipLyrics: client.pushWorshipLyrics,
       pushNotesLyrics: client.pushNotesLyrics,
       readSceneMode: client.readSceneMode,
+      readRestoreOriginalScene: client.readRestoreOriginalScene,
       isStudioModeEnabled: client.isStudioModeEnabled,
       sleep: client.sleep,
       _status: client._status,
@@ -188,6 +190,7 @@ describe("dockObsClient background reflection stress", () => {
     studioModeEnabled = false;
 
     client.resetPresentationSceneState();
+    client._programSceneBeforePush.clear();
     client._status = "connected";
 
     client.getCanvasSize = vi.fn(async () => ({ width: 1920, height: 1080 }));
@@ -313,6 +316,7 @@ describe("dockObsClient background reflection stress", () => {
 
   afterEach(() => {
     Object.assign(client, originalMethods);
+    client._programSceneBeforePush.clear();
     client.resetPresentationSceneState();
     vi.restoreAllMocks();
   });
@@ -335,6 +339,69 @@ describe("dockObsClient background reflection stress", () => {
       variant.assertInput(activeInput!);
       expect(client._activeFullscreenBgSignature["bible"]).not.toBe("__hidden__");
     }
+  });
+
+  it("recreates MCE Presentation before retrying a scene-source add after repeated manual deletion", async () => {
+    const realCall = originalMethods.call as (requestType: string, requestData?: Record<string, unknown>) => Promise<unknown>;
+    const sceneNames = new Set(["Main"]);
+
+    client.call = realCall;
+    client._knownScenes = new Set(["Main", "MCE Presentation"]);
+    client._presentationSceneDeletedAt = 0;
+    client.obs = {
+      call: vi.fn(async (method: string, payload: Record<string, unknown> = {}) => {
+        callLog.push({ method, payload });
+        switch (method) {
+          case "GetSceneList":
+            return { scenes: Array.from(sceneNames).map((sceneName) => ({ sceneName })) };
+          case "CreateScene": {
+            const sceneName = String(payload.sceneName);
+            sceneNames.add(sceneName);
+            sceneItems.set(sceneName, new Map());
+            return {};
+          }
+          case "CreateSceneItem": {
+            const sceneName = String(payload.sceneName);
+            const sourceName = String(payload.sourceName);
+            if (!sceneNames.has(sourceName)) {
+              throw new Error(`No source was found by the name of \`${sourceName}\` within the canvas \`${sceneName}\`.`);
+            }
+            const item: SceneItemState = {
+              sourceName,
+              sceneItemId: nextSceneItemId++,
+              sceneItemIndex: 0,
+              enabled: payload.sceneItemEnabled !== false,
+            };
+            if (!sceneItems.has(sceneName)) sceneItems.set(sceneName, new Map());
+            sceneItems.get(sceneName)!.set(sourceName, item);
+            return { sceneItemId: item.sceneItemId };
+          }
+          default:
+            throw new Error(`Unhandled OBS call: ${method}`);
+        }
+      }),
+    };
+
+    const addPresentationToMain = () => client.call("CreateSceneItem", {
+      sceneName: "Main",
+      sourceName: "MCE Presentation",
+      sceneItemEnabled: true,
+    });
+
+    await addPresentationToMain();
+
+    // Delete it again after the first automatic recovery. The second request
+    // must follow the same self-healing path rather than showing an OBS error.
+    sceneNames.delete("MCE Presentation");
+    sceneItems.get("Main")?.delete("MCE Presentation");
+    client._knownScenes.add("MCE Presentation");
+
+    await addPresentationToMain();
+
+    expect(sceneNames.has("MCE Presentation")).toBe(true);
+    expect(sceneItems.get("Main")?.has("MCE Presentation")).toBe(true);
+    expect(callLog.filter((entry) => entry.method === "CreateScene" && entry.payload.sceneName === "MCE Presentation")).toHaveLength(2);
+    expect(callLog.filter((entry) => entry.method === "CreateSceneItem" && entry.payload.sourceName === "MCE Presentation")).toHaveLength(4);
   });
 
   it("switches OBS Preview to MCE Presentation when Studio Mode is enabled", async () => {
@@ -381,6 +448,28 @@ describe("dockObsClient background reflection stress", () => {
       entry.payload.sceneName === "Pastor Camera" &&
       entry.payload.sourceName === "MCE Presentation"
     ))).toBe(false);
+  });
+
+  it("restores the original Program scene after fullscreen Bible is cleared", async () => {
+    client.readRestoreOriginalScene = vi.fn(() => true);
+    client.readSceneMode = vi.fn(() => "auto-duplicate");
+    client.isStudioModeEnabled = vi.fn(async () => false);
+
+    client.rememberUserScene("Pastor Camera", "bible");
+    // Repeated sends must not replace the original snapshot with the helper
+    // presentation scene after MCE has already become Program.
+    client.rememberUserScene("MCE Presentation", "bible");
+    currentProgramSceneName = "MCE Presentation";
+
+    const restored = await client.restoreProgramSceneBeforePush("bible");
+
+    expect(restored).toBe(true);
+    expect(currentProgramSceneName).toBe("Pastor Camera");
+    expect(callLog).toContainEqual({
+      method: "SetCurrentProgramScene",
+      payload: { sceneName: "Pastor Camera" },
+    });
+    expect(client._programSceneBeforePush.has("bible")).toBe(false);
   });
 
   it("removes Program scene nesting when Program background is turned off", async () => {

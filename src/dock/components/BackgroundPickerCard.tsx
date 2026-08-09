@@ -6,7 +6,15 @@ import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
 import type { BibleTheme } from "../../bible/types";
 import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
 import type { MediaItem } from "../../library/libraryTypes";
-import { getUserScopedKey } from "../../services/userScopedStorage";
+import {
+  readUserScopedStorage,
+  writeUserScopedStorage,
+} from "../../services/userScopedStorage";
+import {
+  loadDockPreferenceList,
+  readDockPreferenceList,
+  saveDockPreferenceList,
+} from "../../services/dockPreferenceStorage";
 import { FAVORITE_THEMES_UPDATED_EVENT } from "../../services/favoriteThemes";
 import Icon from "../DockIcon";
 import {
@@ -138,7 +146,7 @@ function resolveInitialTab(
 
   const stored = !tab ? (() => {
     try {
-      const v = localStorage.getItem(activeTabKey);
+      const v = readUserScopedStorage(activeTabKey);
       if (v === "text" || v === "layout" || v === "background" || v === "compare") return v;
     } catch { /* ignore */ }
     return null;
@@ -204,28 +212,22 @@ function formatLowerThirdPadding(vertical: number, horizontal: number): string {
   return `${Math.round(clampNumberValue(vertical, 0, LOWER_THIRD_TEXT_PADDING_MAX))}px ${Math.round(clampNumberValue(horizontal, 0, LOWER_THIRD_TEXT_PADDING_MAX))}px`;
 }
 
-function parseSavedLocalStyles(raw: string | null): SavedLocalStyle[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item): item is SavedLocalStyle => {
-        if (!item || typeof item !== "object") return false;
-        const candidate = item as Partial<SavedLocalStyle>;
-        return (
-          typeof candidate.id === "string" &&
-          typeof candidate.name === "string" &&
-          typeof candidate.createdAt === "number" &&
-          isBackgroundType(candidate.backgroundType ?? null) &&
-          !!candidate.settings &&
-          typeof candidate.settings === "object"
-        );
-      })
-      .slice(0, LOCAL_STYLE_LIMIT);
-  } catch {
-    return [];
-  }
+function validateSavedLocalStyles(parsed: unknown): SavedLocalStyle[] {
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((item): item is SavedLocalStyle => {
+      if (!item || typeof item !== "object") return false;
+      const candidate = item as Partial<SavedLocalStyle>;
+      return (
+        typeof candidate.id === "string" &&
+        typeof candidate.name === "string" &&
+        typeof candidate.createdAt === "number" &&
+        isBackgroundType(candidate.backgroundType ?? null) &&
+        !!candidate.settings &&
+        typeof candidate.settings === "object"
+      );
+    })
+    .slice(0, LOCAL_STYLE_LIMIT);
 }
 
 function getScopeLabel(scope: BackgroundPickerStorageScope): string {
@@ -262,9 +264,9 @@ export default function BackgroundPickerCard({
   const storageKeys = useMemo(() => {
     const scopeKey = `${storageScope}:${overlayMode}`;
     return {
-      activeTab: getUserScopedKey(`${ACTIVE_TAB_KEY}:${scopeKey}`),
-      bgType: getUserScopedKey(`${BG_TYPE_KEY}:${scopeKey}`),
-      localStyles: getUserScopedKey(`${LOCAL_STYLES_KEY}:${scopeKey}`),
+      activeTab: `${ACTIVE_TAB_KEY}:${scopeKey}`,
+      bgType: `${BG_TYPE_KEY}:${scopeKey}`,
+      localStyles: `${LOCAL_STYLES_KEY}:${scopeKey}`,
     };
   }, [overlayMode, storageScope]);
   const [activeTab, setActiveTab] = useState<BackgroundPickerTab>(() =>
@@ -272,7 +274,7 @@ export default function BackgroundPickerCard({
   );
   const [bgType, setBgType] = useState<BackgroundType>(() => {
     try {
-      const stored = localStorage.getItem(storageKeys.bgType);
+      const stored = readUserScopedStorage(storageKeys.bgType);
       if (isBackgroundType(stored)) return stored;
     } catch { /* ignore */ }
     return inferBgTypeFromSettings(quickSettings);
@@ -281,7 +283,7 @@ export default function BackgroundPickerCard({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
   const [savedStyles, setSavedStyles] = useState<SavedLocalStyle[]>(() => {
-    try { return parseSavedLocalStyles(localStorage.getItem(storageKeys.localStyles)); } catch { return []; }
+    try { return validateSavedLocalStyles(readDockPreferenceList<SavedLocalStyle>(storageKeys.localStyles)); } catch { return []; }
   });
   const [selectedLocalStyleId, setSelectedLocalStyleId] = useState("");
   const [localStyleStatus, setLocalStyleStatus] = useState("");
@@ -303,6 +305,17 @@ export default function BackgroundPickerCard({
   const autoFontScaleEnabled = quickSettings.autoFontScale === true;
 
   useEffect(() => {
+    let cancelled = false;
+    void loadDockPreferenceList<SavedLocalStyle>(storageKeys.localStyles).then((items) => {
+      if (cancelled || !items) return;
+      setSavedStyles(validateSavedLocalStyles(items));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKeys.localStyles]);
+
+  useEffect(() => {
     const previous = prevStorageKeysRef.current;
     if (previous.activeTab === storageKeys.activeTab && previous.bgType === storageKeys.bgType && previous.localStyles === storageKeys.localStyles) {
       return;
@@ -310,13 +323,13 @@ export default function BackgroundPickerCard({
     prevStorageKeysRef.current = storageKeys;
     setActiveTab(resolveInitialTab(initialTab, displayMode, storageKeys.activeTab, hideBackgroundOnCompare && displayMode === "compare"));
     try {
-      const stored = localStorage.getItem(storageKeys.bgType);
+      const stored = readUserScopedStorage(storageKeys.bgType);
       setBgType(isBackgroundType(stored) ? stored : inferBgTypeFromSettings(quickSettings));
     } catch {
       setBgType(inferBgTypeFromSettings(quickSettings));
     }
     try {
-      setSavedStyles(parseSavedLocalStyles(localStorage.getItem(storageKeys.localStyles)));
+      setSavedStyles(validateSavedLocalStyles(readDockPreferenceList<SavedLocalStyle>(storageKeys.localStyles)));
     } catch {
       setSavedStyles([]);
     }
@@ -337,7 +350,7 @@ export default function BackgroundPickerCard({
 
   // Persist active tab preference
   useEffect(() => {
-    try { localStorage.setItem(storageKeys.activeTab, activeTab); } catch { /* ignore */ }
+    writeUserScopedStorage(storageKeys.activeTab, activeTab);
   }, [activeTab, storageKeys.activeTab]);
 
   useEffect(() => {
@@ -357,7 +370,7 @@ export default function BackgroundPickerCard({
   const handleTypeChange = useCallback((type: BackgroundType) => {
     setBgType(type);
     setDropdownOpen(false);
-    try { localStorage.setItem(storageKeys.bgType, type); } catch { /* ignore */ }
+    writeUserScopedStorage(storageKeys.bgType, type);
 
     // Build the updater for the given type
     let updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings;
@@ -459,7 +472,7 @@ export default function BackgroundPickerCard({
   const persistSavedStyles = useCallback((next: SavedLocalStyle[]) => {
     const trimmed = next.slice(0, LOCAL_STYLE_LIMIT);
     setSavedStyles(trimmed);
-    try { localStorage.setItem(storageKeys.localStyles, JSON.stringify(trimmed)); } catch { /* ignore */ }
+    void saveDockPreferenceList(storageKeys.localStyles, trimmed);
   }, [storageKeys.localStyles]);
 
   const selectedLocalStyle = savedStyles.find((style) => style.id === selectedLocalStyleId) ?? null;
@@ -488,7 +501,7 @@ export default function BackgroundPickerCard({
       return;
     }
     setBgType(style.backgroundType);
-    try { localStorage.setItem(storageKeys.bgType, style.backgroundType); } catch { /* ignore */ }
+    writeUserScopedStorage(storageKeys.bgType, style.backgroundType);
     onQuickSettingsChange(() => cloneQuickSettings(style.settings));
     setLocalStyleStatus(`Applied ${style.name}`);
   }, [onQuickSettingsChange, savedStyles, storageKeys.bgType]);

@@ -87,9 +87,9 @@ describe("DockLmTab settings helpers", () => {
     expect(dockLmTabSource).toContain("pushBibleCandidateToOutput(live, settings.overlayMode)");
   });
 
-  it("renders the queue without a separate live card", () => {
-    expect(dockLmTabSource).not.toContain('data-onboarding="live-card"');
-    expect(dockLmTabSource).toContain('data-onboarding="queue-section"');
+  it("renders the queue without guided target attributes", () => {
+    const guidedTargetAttr = ["data", "onboarding"].join("-");
+    expect(dockLmTabSource).not.toContain(`${guidedTargetAttr}=`);
   });
 
   it("keeps queue previews compact while preserving the verse reference", () => {

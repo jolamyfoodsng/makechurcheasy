@@ -1,16 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "../components/Icon";
-import {
-  HelpCircle,
-  RotateCcw,
-  AlertTriangle,
-} from "lucide-react";
-import ThemeSettingsTour, {
-  isThemeTourCompleted,
-  markThemeTourCompleted,
-  resetThemeTour,
-} from "./ThemeSettingsTour";
 import type { BibleTheme } from "../bible/types";
 import { deleteCustomTheme } from "../bible/bibleDb";
 import ThemeCreatorModal from "./ThemeCreatorModal";
@@ -277,10 +267,6 @@ export default function ProductionThemeSettingsPage() {
   const [editingTheme, setEditingTheme] = useState<BibleTheme | null>(null);
   const [pendingDeleteTheme, setPendingDeleteTheme] = useState<BibleTheme | null>(null);
 
-  // ── Tutorial state ──
-  const [tourActive, setTourActive] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-
   // OBS Themes tab state
   const [obsFavorites, setObsFavorites] = useState<Set<string>>(new Set());
   const [tickerFavorites, setTickerFavorites] = useState<Set<string>>(new Set());
@@ -416,15 +402,6 @@ export default function ProductionThemeSettingsPage() {
     return () => window.clearTimeout(timer);
   }, [status]);
 
-  // ── Auto-start tutorial on first visit ──
-  useEffect(() => {
-    if (!loading && !isThemeTourCompleted() && !tourActive) {
-      const timer = setTimeout(() => setTourActive(true), 600);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
-
   const customThemes = useMemo(
     () => themes.filter((theme) => theme.source === "custom"),
     [themes],
@@ -548,11 +525,6 @@ export default function ProductionThemeSettingsPage() {
     setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const handleTourTabSwitch = useCallback(
-    (tab: "custom" | "obs" | "tickers") => setActiveTab(tab),
-    [],
-  );
-
   // ---------------------------------------------------------------------------
   // OBS favorite toggle
   // ---------------------------------------------------------------------------
@@ -607,7 +579,7 @@ export default function ProductionThemeSettingsPage() {
   return (
     <div className="app-page production-page">
       <div className="app-page__inner">
-        <header className="app-page__header" data-theme-tutorial="header">
+        <header className="app-page__header">
           <div className="app-page__header-copy">
             <p className="app-page__eyebrow">{t("themes.pageEyebrow")}</p>
             <h1 className="app-page__title">{t("themes.pageDescription")}</h1>
@@ -615,14 +587,6 @@ export default function ProductionThemeSettingsPage() {
           </div>
 
           <div className="app-page__actions">
-            <button
-              className="production-btn production-btn--ghost"
-              onClick={() => { resetThemeTour(); setTourActive(true); setBannerDismissed(false); }}
-              title={t("themeSettings.tour.button.tooltip")}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-            >
-              <HelpCircle size={16} /> {t("themeSettings.tour.button")}
-            </button>
             {activeTab === "custom" && (
               <button
                 className="production-btn production-btn--ghost"
@@ -632,7 +596,6 @@ export default function ProductionThemeSettingsPage() {
                   setEditingTheme(null);
                   setShowCreator(true);
                 }}
-                data-theme-tutorial="create-theme"
                 title={t("themes.createTheme")}>
                 <Icon name="add" size={16} />
                 {t("themes.createTheme")}
@@ -640,25 +603,6 @@ export default function ProductionThemeSettingsPage() {
             )}
           </div>
         </header>
-
-        {/* ── Incomplete tutorial banner ── */}
-        {!tourActive && !isThemeTourCompleted() && !bannerDismissed && (
-          <div className="tst-tutorial-banner">
-            <AlertTriangle size={14} />
-            <span>{t("themeSettings.tour.banner")}</span>
-            <div className="tst-tutorial-banner-actions">
-              <button className="tst-banner-btn tst-banner-btn--primary" onClick={() => setTourActive(true)}>
-                {t("themeSettings.tour.banner.continue")}
-              </button>
-              <button className="tst-banner-btn" onClick={() => { resetThemeTour(); setTourActive(true); setBannerDismissed(false); }}>
-                <RotateCcw size={12} /> {t("themeSettings.tour.banner.restart")}
-              </button>
-              <button className="tst-banner-btn" onClick={() => setBannerDismissed(true)}>
-                {t("themeSettings.tour.banner.dismiss")}
-              </button>
-            </div>
-          </div>
-        )}
 
         {status && (
           <div className={`production-status-banner production-status-banner--${status.tone}`}>
@@ -668,25 +612,22 @@ export default function ProductionThemeSettingsPage() {
         )}
 
         {/* ── Tab bar ── */}
-        <div className="production-tab-bar" data-theme-tutorial="tab-bar">
+        <div className="production-tab-bar">
           <button
             className={`production-tab ${activeTab === "custom" ? "production-tab--active" : ""}`}
             onClick={() => setActiveTab("custom")}
-            data-theme-tutorial="custom-tab"
             title={t("themes.tabCustom")}>
             {t("themes.tabCustom")}
           </button>
           <button
             className={`production-tab ${activeTab === "obs" ? "production-tab--active" : ""}`}
             onClick={() => setActiveTab("obs")}
-            data-theme-tutorial="obs-tab"
             title={t("themes.tabObs")}>
             {t("themes.tabObs")}
           </button>
           <button
             className={`production-tab ${activeTab === "tickers" ? "production-tab--active" : ""}`}
             onClick={() => setActiveTab("tickers")}
-            data-theme-tutorial="tickers-tab"
             title={t("themes.tabTickers")}>
             {t("themes.tabTickers")}
           </button>
@@ -714,7 +655,7 @@ export default function ProductionThemeSettingsPage() {
                 </div>
               </div>
             ) : (
-              <div className="production-theme-card-grid" data-theme-tutorial="custom-list">
+              <div className="production-theme-card-grid">
                 {sortThemesForDisplay(customThemes).map((theme) => (
                   <article key={theme.id} className="production-theme-card">
                     <ThemePreviewSurface
@@ -854,7 +795,7 @@ export default function ProductionThemeSettingsPage() {
                 </div>
               </div>
             ) : (
-              <div className="obs-theme-preview-grid" data-theme-tutorial="obs-theme-card">
+              <div className="obs-theme-preview-grid">
                 {obsFilteredThemes.map((theme) => {
                   const isFav = obsFavorites.has(theme.id);
                   const previewSrc = buildThemePreviewHtml(theme);
@@ -906,7 +847,6 @@ export default function ProductionThemeSettingsPage() {
                           <button
                             className={`production-btn production-btn--sm ${isFav ? "production-btn--ghost" : "production-btn--primary"}`}
                             onClick={() => handleToggleObsFavorite(theme.id)}
-                            data-theme-tutorial="obs-favorite"
                             title={isFav ? t("themes.removeFromOBS", "Remove from OBS") : t("themes.addToOBS")}>
                             <Icon name={isFav ? "remove_circle" : "add_circle"} size={14} />
                             <span>{isFav ? t("themes.removeFromOBS", "Remove from OBS") : t("themes.addToOBS")}</span>
@@ -936,7 +876,7 @@ export default function ProductionThemeSettingsPage() {
               </span>
             </div>
 
-            <div className="ticker-preview-grid" data-theme-tutorial="ticker-card">
+            <div className="ticker-preview-grid">
               {allTickers.map((ticker) => {
                 const isFav = tickerFavorites.has(ticker.id);
                 const previewSrc =
@@ -994,7 +934,6 @@ export default function ProductionThemeSettingsPage() {
                         <button
                           className={`production-btn production-btn--sm ${isFav ? "production-btn--ghost" : "production-btn--primary"}`}
                           onClick={() => handleToggleTickerFavorite(ticker.id)}
-                          data-theme-tutorial="ticker-favorite"
                           title={isFav ? t("themes.removeFromOBS", "Remove from OBS") : t("themes.addToOBS")}>
                           <Icon name={isFav ? "remove_circle" : "add_circle"} size={14} />
                           <span>{isFav ? t("themes.removeFromOBS", "Remove from OBS") : t("themes.addToOBS")}</span>
@@ -1195,13 +1134,6 @@ export default function ProductionThemeSettingsPage() {
           </div>
         )}
 
-        {/* ── Tutorial Tour ── */}
-        <ThemeSettingsTour
-          isActive={tourActive}
-          onClose={() => setTourActive(false)}
-          onFinish={() => { markThemeTourCompleted(); setTourActive(false); }}
-          onTabSwitch={handleTourTabSwitch}
-        />
       </div>
     </div>
   );

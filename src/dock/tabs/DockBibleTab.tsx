@@ -52,6 +52,7 @@ import {
 } from "../dockConsoleTheme";
 import Icon from "../DockIcon";
 import DockBottomToolbar from "../components/DockBottomToolbar";
+import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
 import {
   areQuickThemeSettingsEquivalent,
   buildLinkedLowerThirdQuickThemeSettings,
@@ -71,8 +72,14 @@ import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
 import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import {
+  loadDockPreference,
+  readDockPreference,
+  saveDockPreference,
+} from "../../services/dockPreferenceStorage";
 import { invoke } from "@tauri-apps/api/core";
-import { dockObsClient } from "../dockObsClient";
+import { dockObsClient, type DockBiblePushData } from "../dockObsClient";
+import { useDockSceneRoute } from "../dockSceneRouting";
 import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
 import {
   buildBibleVerseClipboardText,
@@ -120,6 +127,7 @@ const DEFAULT_TRANSLATION_OPTION: BibleTranslationOption = {
 };
 
 interface DockBiblePreferences {
+  [key: string]: unknown;
   overlayMode?: OverlayMode;
   displayMode?: DisplayMode;
   translation?: string;
@@ -139,6 +147,7 @@ interface DockBiblePreferences {
   referenceVersionVisible?: boolean;
   selectedBook?: string;
   selectedChapter?: number;
+  updatedAt?: string;
 }
 
 interface DockBibleUiPreferences {
@@ -488,6 +497,9 @@ function sanitizeFullscreenQuickThemeSettings(
   const compareSettings = normalizeCompareThemeSettings(source as Record<string, unknown>);
 
   return {
+    // Keep newly added style fields intact across an app update. Known fields
+    // below are still normalized and validated before they reach OBS.
+    ...source,
     fontSize: clampNumber(Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize), 28, 200),
     autoFontScale: source.autoFontScale === true,
     fontFamily: withScriptureFontFallback(
@@ -712,14 +724,7 @@ function buildFullscreenLiveOverridesForQuickSettings(
 }
 
 function loadDockBiblePreferences(): DockBiblePreferences {
-  try {
-    const raw = localStorage.getItem(getUserScopedKey(DOCK_BIBLE_PREFS_KEY));
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as DockBiblePreferences;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+  return readDockPreference<DockBiblePreferences>(DOCK_BIBLE_PREFS_KEY) ?? {};
 }
 
 function readDockBibleOverlayMode(): OverlayMode | null {
@@ -728,11 +733,7 @@ function readDockBibleOverlayMode(): OverlayMode | null {
 }
 
 function saveDockBiblePreferences(next: DockBiblePreferences): void {
-  try {
-    localStorage.setItem(getUserScopedKey(DOCK_BIBLE_PREFS_KEY), JSON.stringify(next));
-  } catch {
-    // ignore persistence failures in OBS CEF
-  }
+  void saveDockPreference(DOCK_BIBLE_PREFS_KEY, next);
 }
 
 function saveDockBibleOverlayMode(mode: OverlayMode): void {
@@ -928,6 +929,26 @@ export default function DockBibleTab({
   const { t } = useTranslation();
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   const fullscreenOnlyMode = presentationLinkMode || fullscreenOnly;
+  const [sceneRoute, updateSceneRoute] = useDockSceneRoute("bible");
+  const hasSceneRoute = sceneRoute.enabled && Boolean(sceneRoute.sceneName);
+
+  const pushBibleToConfiguredOutput = useCallback(async (data: DockBiblePushData) => {
+    if (!hasSceneRoute) {
+      await dockObsClient.pushBible(data);
+      return;
+    }
+    await dockObsClient.pushBibleToScene(data, sceneRoute.sceneName);
+    if (sceneRoute.syncPresentation) await dockObsClient.pushBible(data);
+  }, [hasSceneRoute, sceneRoute.sceneName, sceneRoute.syncPresentation]);
+
+  const clearBibleFromConfiguredOutput = useCallback(async () => {
+    if (!hasSceneRoute) {
+      await dockObsClient.clearBible();
+      return;
+    }
+    await dockObsClient.clearSceneRouteSource("bible", sceneRoute.sceneName);
+    if (sceneRoute.syncPresentation) await dockObsClient.clearBible();
+  }, [hasSceneRoute, sceneRoute.sceneName, sceneRoute.syncPresentation]);
   const initialPrefsRef = useRef<DockBiblePreferences | null>(null);
   if (initialPrefsRef.current === null) {
     initialPrefsRef.current = loadDockBiblePreferences();
@@ -1076,7 +1097,7 @@ export default function DockBibleTab({
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [themeSettingsInitialTab, setThemeSettingsInitialTab] = useState<ThemeSettingsTab>("text");
   const [showBibleHistory, setShowBibleHistory] = useState(false);
-  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [showBibleActionsMenu, setShowBibleActionsMenu] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<"success" | "error" | null>(null);
   const copyFeedbackTimerRef = useRef<number | null>(null);
 
@@ -1085,6 +1106,7 @@ export default function DockBibleTab({
     const el = containerRef.current;
     return el ? el.clientHeight <= 520 : false;
   });
+  const [isNarrowWidth, setIsNarrowWidth] = useState(false);
 
   const _fsThemeDepId = productionDefaults.fullscreenTheme?.id;
   const _ltThemeDepId = productionDefaults.lowerThirdTheme?.id;
@@ -1094,15 +1116,23 @@ export default function DockBibleTab({
     if (!element) return;
 
     setIsShortHeight(element.clientHeight <= 520);
+    setIsNarrowWidth(element.clientWidth <= 300);
 
     const observer = new ResizeObserver(([entry]) => {
-      const height = entry.contentRect.height;
+      const { height, width } = entry.contentRect;
       setIsShortHeight(height <= 520);
+      setIsNarrowWidth(width <= 300);
     });
 
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!isNarrowWidth) {
+      setShowBibleActionsMenu(false);
+    }
+  }, [isNarrowWidth]);
 
   useEffect(() => () => {
     if (copyFeedbackTimerRef.current !== null) {
@@ -1206,6 +1236,7 @@ export default function DockBibleTab({
       }
       if (comparePopoverRef.current && !comparePopoverRef.current.contains(event.target as Node)) {
         setShowComparePopover(false);
+        setShowBibleActionsMenu(false);
       }
       if (referencePopoverRef.current && !referencePopoverRef.current.contains(event.target as Node)) {
         setShowReferencePopover(false);
@@ -1281,61 +1312,69 @@ export default function DockBibleTab({
 
   useEffect(() => {
     prefsReadyRef.current = false;
-    const prefs = loadDockBiblePreferences();
-    const initialBook =
-      prefs.selectedBook && BOOK_CHAPTERS[prefs.selectedBook]
-        ? prefs.selectedBook
-        : (OT_BOOKS[0] ?? null);
-    const maxInitialChapter = initialBook ? (BOOK_CHAPTERS[initialBook] ?? 1) : 1;
-    const initialChapter = Math.min(
-      Math.max(prefs.selectedChapter ?? 1, 1),
-      maxInitialChapter,
-    );
-    setSelectedBibleTheme(productionDefaults.fullscreenTheme ?? BUILTIN_THEMES[0]);
-    setSelectedLowerThirdTheme(productionDefaults.lowerThirdTheme ?? BUILTIN_THEMES[0]);
-    setOverlayMode(readDockBibleOverlayMode() ?? prefs.overlayMode ?? productionDefaults.defaultMode);
-    const restoredCompareEnabled = typeof prefs.compareEnabled === "boolean"
-      ? prefs.compareEnabled
-      : prefs.displayMode === "compare";
-    setCompareEnabled(restoredCompareEnabled);
-    setDisplayMode(restoredCompareEnabled ? "compare" : "single");
-    setCompareLayout(prefs.compareLayout ?? "line-by-line");
-    setReferenceFormat(sanitizeBibleReferenceFormat(prefs.referenceFormat));
-    setReferenceVersionVisible(sanitizeReferenceVersionVisible(prefs.referenceVersionVisible));
-    setTranslationA(prefs.translationA ?? "KJV");
-    setTranslationB(prefs.translationB ?? "NIV");
-    setColumnTranslations(
-      normalizeColumnTranslations(
-        prefs.translations ?? (prefs.translation ? [prefs.translation] : undefined),
-      ),
-    );
-    setVerseLineCount(clampVerseLineCount(prefs.verseLineCount));
-    setBackgroundPreset(prefs.backgroundPreset ?? "theme");
-    const storedQuickSettings = sanitizeFullscreenQuickThemeSettings(
-      prefs.fullscreenQuickThemeSettings,
-    );
-    const rawStoredLowerThirdQuickSettings = sanitizeFullscreenQuickThemeSettings(
-      prefs.lowerThirdQuickThemeSettings,
-    );
-    const storedLowerThirdQuickSettings =
-      areQuickThemeSettingsEquivalent(storedQuickSettings, rawStoredLowerThirdQuickSettings)
-        ? null
-        : rawStoredLowerThirdQuickSettings;
-    const storedLowerThirdLinked = false;
-    setSavedFullscreenQuickThemeSettings(storedQuickSettings);
-    setFullscreenQuickThemeSettings(storedQuickSettings);
-    setSavedLowerThirdQuickThemeSettings(storedLowerThirdQuickSettings);
-    setLowerThirdQuickThemeSettings(
-      storedLowerThirdLinked ? (storedQuickSettings ?? storedLowerThirdQuickSettings) : storedLowerThirdQuickSettings,
-    );
-    setLowerThirdQuickThemeSettingsLinkedToFullscreen(storedLowerThirdLinked);
-    setSelectedBook(initialBook);
-    setSelectedChapter(initialBook ? initialChapter : null);
-    setSelectedVerse(null);
-    setSelectedColumn(0);
-
     let cancelled = false;
-    const applyStoredThemes = async () => {
+    const hydratePreferences = async () => {
+      // Read IndexedDB before marking the component ready. This prevents the
+      // first render's production defaults from being written over a saved
+      // style while the durable store is still opening.
+      const prefs = (await loadDockPreference<DockBiblePreferences>(DOCK_BIBLE_PREFS_KEY).catch(() => null))
+        ?? loadDockBiblePreferences();
+      if (cancelled) return;
+
+      const initialBook =
+        prefs.selectedBook && BOOK_CHAPTERS[prefs.selectedBook]
+          ? prefs.selectedBook
+          : (OT_BOOKS[0] ?? null);
+      const maxInitialChapter = initialBook ? (BOOK_CHAPTERS[initialBook] ?? 1) : 1;
+      const initialChapter = Math.min(
+        Math.max(prefs.selectedChapter ?? 1, 1),
+        maxInitialChapter,
+      );
+      setSelectedBibleTheme(productionDefaults.fullscreenTheme ?? BUILTIN_THEMES[0]);
+      setSelectedLowerThirdTheme(productionDefaults.lowerThirdTheme ?? BUILTIN_THEMES[0]);
+      setOverlayMode(prefs.overlayMode ?? productionDefaults.defaultMode);
+      const restoredCompareEnabled = typeof prefs.compareEnabled === "boolean"
+        ? prefs.compareEnabled
+        : prefs.displayMode === "compare";
+      setCompareEnabled(restoredCompareEnabled);
+      setDisplayMode(restoredCompareEnabled ? "compare" : "single");
+      setCompareLayout(prefs.compareLayout ?? "line-by-line");
+      setReferenceFormat(sanitizeBibleReferenceFormat(prefs.referenceFormat));
+      setReferenceVersionVisible(sanitizeReferenceVersionVisible(prefs.referenceVersionVisible));
+      setTranslationA(prefs.translationA ?? "KJV");
+      setTranslationB(prefs.translationB ?? "NIV");
+      setColumnTranslations(
+        normalizeColumnTranslations(
+          prefs.translations ?? (prefs.translation ? [prefs.translation] : undefined),
+        ),
+      );
+      setVerseLineCount(clampVerseLineCount(prefs.verseLineCount));
+      setBackgroundPreset(prefs.backgroundPreset ?? "theme");
+      const storedQuickSettings = sanitizeFullscreenQuickThemeSettings(
+        prefs.fullscreenQuickThemeSettings,
+      );
+      const rawStoredLowerThirdQuickSettings = sanitizeFullscreenQuickThemeSettings(
+        prefs.lowerThirdQuickThemeSettings,
+      );
+      const storedLowerThirdQuickSettings =
+        areQuickThemeSettingsEquivalent(storedQuickSettings, rawStoredLowerThirdQuickSettings)
+          ? null
+          : rawStoredLowerThirdQuickSettings;
+      const storedLowerThirdLinked = typeof prefs.lowerThirdQuickThemeSettingsLinkedToFullscreen === "boolean"
+        ? prefs.lowerThirdQuickThemeSettingsLinkedToFullscreen
+        : storedLowerThirdQuickSettings == null;
+      setSavedFullscreenQuickThemeSettings(storedQuickSettings);
+      setFullscreenQuickThemeSettings(storedQuickSettings);
+      setSavedLowerThirdQuickThemeSettings(storedLowerThirdLinked ? null : storedLowerThirdQuickSettings);
+      setLowerThirdQuickThemeSettings(
+        storedLowerThirdLinked ? (storedQuickSettings ?? storedLowerThirdQuickSettings) : storedLowerThirdQuickSettings,
+      );
+      setLowerThirdQuickThemeSettingsLinkedToFullscreen(storedLowerThirdLinked);
+      setSelectedBook(initialBook);
+      setSelectedChapter(initialBook ? initialChapter : null);
+      setSelectedVerse(null);
+      setSelectedColumn(0);
+
       const allFavorites = await loadDockFavoriteBibleThemes();
 
       if (cancelled) return;
@@ -1360,8 +1399,8 @@ export default function DockBibleTab({
       prefsReadyRef.current = true;
     };
 
-    void applyStoredThemes().catch(() => {
-      prefsReadyRef.current = true;
+    void hydratePreferences().catch(() => {
+      if (!cancelled) prefsReadyRef.current = true;
     });
     return () => {
       cancelled = true;
@@ -1789,7 +1828,7 @@ export default function DockBibleTab({
     return () => {
       cancelled = true;
     };
-  }, [columnTranslations, quickTranslations, selectedBook, selectedChapter, refreshNonce]);
+  }, [columnTranslations, quickTranslations, selectedBook, selectedChapter]);
 
   useEffect(() => {
     if (!compareEnabled || !selectedBook || !selectedChapter) {
@@ -2314,9 +2353,11 @@ export default function DockBibleTab({
         translationA: stageData.translationA as string | undefined,
         translationB: stageData.translationB as string | undefined,
       };
-      const pushLive = () => liveOverlayMode === "lower-third"
-        ? dockObsClient.pushBibleOverlayFast(lowerThirdPayload)
-        : dockObsClient.pushBible(stageData as Parameters<typeof dockObsClient.pushBible>[0]);
+      const pushLive = () => hasSceneRoute
+        ? pushBibleToConfiguredOutput(stageData as unknown as DockBiblePushData)
+        : liveOverlayMode === "lower-third"
+          ? dockObsClient.pushBibleOverlayFast(lowerThirdPayload)
+          : pushBibleToConfiguredOutput(stageData as unknown as DockBiblePushData);
 
       pushLive()
         .then(() => {
@@ -2375,6 +2416,8 @@ export default function DockBibleTab({
       presentationLinkMode,
       referenceFormat,
       referenceVersionVisible,
+      hasSceneRoute,
+      pushBibleToConfiguredOutput,
     ],
   );
 
@@ -3108,10 +3151,10 @@ export default function DockBibleTab({
     onStage(null);
     setBibleOverlayVisible(false);
     if (presentationLinkMode) return;
-    ensureObsConnected().then(() => dockObsClient.clearBible()).catch((err) =>
+    ensureObsConnected().then(() => clearBibleFromConfiguredOutput()).catch((err) =>
       console.warn("[DockBibleTab] clearBible failed:", err)
     );
-  }, [onStage, presentationLinkMode]);
+  }, [clearBibleFromConfiguredOutput, onStage, presentationLinkMode]);
 
   const handleToggleBibleVisibility = useCallback(() => {
     setActionError("");
@@ -3126,7 +3169,7 @@ export default function DockBibleTab({
       await ensureObsConnected();
 
       if (bibleOverlayVisible) {
-        await dockObsClient.clearBible();
+        await clearBibleFromConfiguredOutput();
         setBibleOverlayVisible(false);
         return;
       }
@@ -3141,9 +3184,11 @@ export default function DockBibleTab({
         ? data.overlayMode
         : overlayModeRef.current;
 
-      await dockObsClient.bringBibleOverlayForward(mode);
+      if (!hasSceneRoute) {
+        await dockObsClient.bringBibleOverlayForward(mode).catch(() => { });
+      }
       if (data) {
-        await dockObsClient.pushBible({ ...data, overlayMode: mode });
+        await pushBibleToConfiguredOutput({ ...data, overlayMode: mode });
       }
       setBibleOverlayVisible(true);
     };
@@ -3156,7 +3201,7 @@ export default function DockBibleTab({
         setActionError(message);
       }
     });
-  }, [bibleOverlayVisible, fullscreenOnlyMode, onStage, overlayMode, presentationLinkMode]);
+  }, [bibleOverlayVisible, clearBibleFromConfiguredOutput, fullscreenOnlyMode, hasSceneRoute, onStage, overlayMode, presentationLinkMode, pushBibleToConfiguredOutput]);
 
   const handleTranslationAChange = useCallback((newTranslation: string) => {
     if (newTranslation === translationB) {
@@ -3259,7 +3304,7 @@ export default function DockBibleTab({
         return;
       }
       ensureObsConnected()
-        .then(() => dockObsClient.pushBible(stageData as Parameters<typeof dockObsClient.pushBible>[0]))
+        .then(() => pushBibleToConfiguredOutput(stageData as unknown as DockBiblePushData))
         .then(() => trackBiblePresent(selA.text))
         .catch((err) => {
           const message = err instanceof Error ? err.message : String(err);
@@ -3296,6 +3341,7 @@ export default function DockBibleTab({
     fullscreenOnlyMode,
     presentationLinkMode,
     compareLayout,
+    pushBibleToConfiguredOutput,
   ]);
 
   const handleOverlayModeChange = useCallback((nextMode: OverlayMode) => {
@@ -3994,6 +4040,7 @@ export default function DockBibleTab({
     <BibleDockContainer
       ref={containerRef}
       isCompact={isShortHeight}
+      isNarrowWidth={isNarrowWidth}
       isTopbarExpanded={isTopbarExpanded}
       setIsTopbarExpanded={setIsTopbarExpanded}
       selectedBook={selectedBook}
@@ -4030,25 +4077,64 @@ export default function DockBibleTab({
             >
               <Icon name="menu_book" size={14} />
             </button>
-            <button
-              type="button"
-              className={`dock-bible-compact-actions__compare${showComparePopover ? " dock-bible-compact-actions__compare--active" : ""}`}
-              onClick={() => {
-                setShowReferencePopover(false);
-                setShowComparePopover((prev) => !prev);
-              }}
-              title={t("dock.compare.toggle", "Compare Translations")}
-            >
-              <Icon name="swap_horiz" size={14} />
-            </button>
-            <button
-              type="button"
-              className="dock-bible-compact-actions__refresh"
-              onClick={() => setRefreshNonce((n) => n + 1)}
-              title="Refresh"
-            >
-              <Icon name="refresh" size={14} />
-            </button>
+            <div className="dock-bible-actions__compare-group" ref={comparePopoverRef}>
+              <button
+                type="button"
+                className={`dock-bible-compact-actions__compare${showComparePopover ? " dock-bible-compact-actions__compare--active" : ""}`}
+                onClick={() => {
+                  setShowBibleActionsMenu(false);
+                  setShowReferencePopover(false);
+                  setShowComparePopover((prev) => !prev);
+                }}
+                aria-label={t("dock.compare.toggle", "Compare Translations")}
+                title={t("dock.compare.toggle", "Compare Translations")}
+              >
+                <Icon name="swap_horiz" size={14} />
+              </button>
+              <button
+                type="button"
+                className="dock-bible-actions__overflow"
+                onClick={() => setShowBibleActionsMenu((prev) => !prev)}
+                aria-label={t("common.moreActions", "More actions")}
+                aria-expanded={showBibleActionsMenu}
+                aria-haspopup="menu"
+                title={t("common.moreActions", "More actions")}
+              >
+                <Icon name="more_vert" size={15} />
+              </button>
+              {showBibleActionsMenu && (
+                <div className="dock-bible-actions__menu" role="menu">
+                  <button
+                    type="button"
+                    className="dock-bible-actions__menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowBibleActionsMenu(false);
+                      setShowComparePopover(false);
+                      setShowReferencePopover(false);
+                      setIsTopbarExpanded((prev) => !prev);
+                    }}
+                  >
+                    <Icon name="menu_book" size={14} />
+                    <span>
+                      {isTopbarExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="dock-bible-actions__menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowBibleActionsMenu(false);
+                      setShowReferencePopover(false);
+                      setShowComparePopover((prev) => !prev);
+                    }}
+                  >
+                    <Icon name="swap_horiz" size={14} />
+                    <span>{t("dock.compare.toggle", "Compare Translations")}</span>
+                  </button>
+                </div>
+              )}
             {showComparePopover && (
               <div className="dock-bible-compare-popover dock-bible-compact-actions__popover">
                 <div className="dock-bible-compare-popover__header">{t("dock.compare.title", "Compare Translations")}</div>
@@ -4134,6 +4220,7 @@ export default function DockBibleTab({
                 </button>
               </div>
             )}
+            </div>
           </>
         ) : undefined
       }
@@ -4144,13 +4231,59 @@ export default function DockBibleTab({
               type="button"
               className={`dock-bible-compare-trigger__btn${showComparePopover ? " dock-bible-compare-trigger__btn--active" : ""}`}
               onClick={() => {
+                setShowBibleActionsMenu(false);
                 setShowReferencePopover(false);
                 setShowComparePopover((prev) => !prev);
               }}
+              aria-label={t("dock.compare.toggle", "Compare Translations")}
               title={t("dock.compare.toggle", "Compare Translations")}
             >
               <Icon name="swap_horiz" size={14} />
             </button>
+            <button
+              type="button"
+              className="dock-bible-actions__overflow"
+              onClick={() => setShowBibleActionsMenu((prev) => !prev)}
+              aria-label={t("common.moreActions", "More actions")}
+              aria-expanded={showBibleActionsMenu}
+              aria-haspopup="menu"
+              title={t("common.moreActions", "More actions")}
+            >
+              <Icon name="more_vert" size={15} />
+            </button>
+            {showBibleActionsMenu && (
+              <div className="dock-bible-actions__menu" role="menu">
+                <button
+                  type="button"
+                  className="dock-bible-actions__menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowBibleActionsMenu(false);
+                    setShowComparePopover(false);
+                    setShowReferencePopover(false);
+                    setIsTopbarExpanded((prev) => !prev);
+                  }}
+                >
+                  <Icon name="menu_book" size={14} />
+                  <span>
+                    {isTopbarExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="dock-bible-actions__menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowBibleActionsMenu(false);
+                    setShowReferencePopover(false);
+                    setShowComparePopover((prev) => !prev);
+                  }}
+                >
+                  <Icon name="swap_horiz" size={14} />
+                  <span>{t("dock.compare.toggle", "Compare Translations")}</span>
+                </button>
+              </div>
+            )}
             {showComparePopover && (
               <div className="dock-bible-compare-popover">
                 <div className="dock-bible-compare-popover__header">{t("dock.compare.title", "Compare Translations")}</div>
@@ -4693,10 +4826,19 @@ export default function DockBibleTab({
           onClear={handleToggleBibleVisibility}
           clearDisabled={false}
           sourceVisible={bibleOverlayVisible}
+          clearInOverflow
           collapsed={toolbarCollapsed}
           onCollapseChange={setToolbarCollapsed}
           inlineAction={
             <div className="dock-bible-bottom-actions">
+              <DockSceneRoutingControl
+                module="bible"
+                route={sceneRoute}
+                onRouteChange={updateSceneRoute}
+                disabled={presentationLinkMode}
+                title={t("sceneRouting.bible", "Bible output")}
+                placement="above"
+              />
               <button
                 type="button"
                 className="dock-btm-toolbar__icon-btn"
@@ -4704,7 +4846,7 @@ export default function DockBibleTab({
                 title={t("bible.quickEdits")}
                 aria-label={t("bible.quickEdits")}
               >
-                <Icon name="edit" size={14} />
+                <Icon name="tune" size={14} />
               </button>
             </div>
           }
@@ -4713,26 +4855,20 @@ export default function DockBibleTab({
               <button
                 type="button"
                 className="dock-btm-toolbar__icon-btn"
-                onClick={handleToggleBibleVisibility}
-                aria-label={bibleOverlayVisible
-                  ? t("dock.bottomToolbar.hideBible")
-                  : t("dock.bottomToolbar.showBible", { defaultValue: "Show Bible" })}
-                aria-pressed={!bibleOverlayVisible}
-                title={bibleOverlayVisible
-                  ? t("dock.bottomToolbar.hideBible")
-                  : t("dock.bottomToolbar.showBible", { defaultValue: "Show Bible" })}
-              >
-                <Icon name={bibleOverlayVisible ? "visibility_off" : "visibility"} size={16} />
-              </button>
-              <button
-                type="button"
-                className="dock-btm-toolbar__icon-btn"
                 onClick={() => openThemeSettings("text")}
                 title={t("bible.quickEdits")}
                 aria-label={t("bible.quickEdits")}
               >
-                <Icon name="edit" size={14} />
+                <Icon name="tune" size={14} />
               </button>
+              <DockSceneRoutingControl
+                module="bible"
+                route={sceneRoute}
+                onRouteChange={updateSceneRoute}
+                disabled={presentationLinkMode}
+                title={t("sceneRouting.bible", "Bible output")}
+                placement="above"
+              />
             </>
           }
           children={

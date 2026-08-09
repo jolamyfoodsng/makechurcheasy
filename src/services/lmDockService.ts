@@ -131,6 +131,7 @@ class LmDockService {
   private transcriptUnlisten: TauriUnlisten | null = null;
   private statusUnlisten: TauriUnlisten | null = null;
   private levelUnlisten: TauriUnlisten | null = null;
+  private trayStopUnlisten: TauriUnlisten | null = null;
   private visibilityHandler: (() => void) | null = null;
   private focusHandler: (() => void) | null = null;
   private blurHandler: (() => void) | null = null;
@@ -313,6 +314,21 @@ class LmDockService {
       }
     });
 
+    // The macOS menu-bar VoiceAI action must use the same stop path as the
+    // in-app button so reconnection, timers, listeners, and native capture are
+    // all shut down together.
+    void safeTauriListen("voiceai-tray-stop", () => {
+      this.stopListening();
+    }).then((unlisten) => {
+      if (!this.initialized) {
+        unlisten();
+        return;
+      }
+      this.trayStopUnlisten = unlisten;
+    }).catch(() => {
+      // Browser/dock contexts do not expose Tauri events.
+    });
+
     // HTTP command polling — cross-process fallback for OBS CEF dock
     // BroadcastChannel only works within the same browser process.
     // In OBS, the dock runs in CEF (separate process), so we need HTTP relay.
@@ -356,6 +372,8 @@ class LmDockService {
         clearInterval(this.commandPollTimer);
         this.commandPollTimer = null;
       }
+      this.trayStopUnlisten?.();
+      this.trayStopUnlisten = null;
       this.stopListening();
       this.initialized = false;
     };

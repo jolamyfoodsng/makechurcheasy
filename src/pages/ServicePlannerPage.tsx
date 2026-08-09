@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { HelpCircle, RotateCcw, AlertTriangle } from "lucide-react";
-import ServicePlannerTutorial, {
-  isServicePlannerTutorialCompleted,
-  markServicePlannerTutorialCompleted,
-  resetServicePlannerTutorial,
-} from "./ServicePlannerTutorial";
 import Icon from "../components/Icon";
 import { getAllMedia } from "../library/libraryDb";
 import type { MediaItem } from "../library/libraryTypes";
@@ -179,7 +172,6 @@ function buildMediaCue(draft: CueDraft, media: MediaItem[]): ServicePlanItem | n
 }
 
 export default function ServicePlannerPage() {
-  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const requestedPlanId = searchParams.get("planId") ?? "";
   const requestedCueId = searchParams.get("cueId") ?? "";
@@ -191,19 +183,6 @@ export default function ServicePlannerPage() {
   const [editingItemId, setEditingItemId] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-
-  // ── Tutorial state ──
-  const [tourActive, setTourActive] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-
-  // ── Auto-start tutorial on first visit ──
-  useEffect(() => {
-    if (!isServicePlannerTutorialCompleted() && !tourActive) {
-      const timer = setTimeout(() => setTourActive(true), 600);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const activePlan = useMemo(
     () => plans.find((plan) => plan.id === activePlanId) ?? plans[0] ?? null,
@@ -321,7 +300,7 @@ export default function ServicePlannerPage() {
   return (
     <>
       <main className="service-planner-page app-page">
-        <section className="service-planner-hero" data-spt-tutorial="welcome">
+        <section className="service-planner-hero">
           <div>
             <p className="app-section-kicker">Service Planner</p>
             <h1>Build the service run-down before you go live.</h1>
@@ -330,43 +309,15 @@ export default function ServicePlannerPage() {
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button
-              type="button"
-              className="production-btn production-btn--ghost"
-              onClick={() => { resetServicePlannerTutorial(); setTourActive(true); setBannerDismissed(false); }}
-              title={t("spt.button.tooltip")}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }}
-            >
-              <HelpCircle size={16} /> {t("spt.button")}
-            </button>
-            <button type="button" className="app-button app-button--primary" onClick={handleCreatePlan} title="New plan" data-spt-tutorial="new-plan">
+            <button type="button" className="app-button app-button--primary" onClick={handleCreatePlan} title="New plan">
               <Icon name="add" size={18} />
               New plan
             </button>
           </div>
         </section>
 
-        {/* ── Incomplete tutorial banner ── */}
-        {!tourActive && !isServicePlannerTutorialCompleted() && !bannerDismissed && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", margin: "0 24px 16px", background: "rgba(var(--primary-rgb, 99, 102, 241), 0.08)", border: "1px solid rgba(var(--primary-rgb, 99, 102, 241), 0.2)", borderRadius: 8, fontSize: "0.8125rem", color: "var(--text-muted)" }}>
-            <AlertTriangle size={14} style={{ color: "var(--primary)", flexShrink: 0 }} />
-            <span style={{ flex: 1 }}>{t("spt.banner")}</span>
-            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "var(--primary)", color: "#fff", border: "1px solid var(--primary)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, cursor: "pointer" }} onClick={() => setTourActive(true)}>
-                {t("spt.banner.continue")}
-              </button>
-              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => { resetServicePlannerTutorial(); setTourActive(true); setBannerDismissed(false); }}>
-                <RotateCcw size={12} /> {t("spt.banner.restart")}
-              </button>
-              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => setBannerDismissed(true)}>
-                {t("spt.banner.dismiss")}
-              </button>
-            </div>
-          </div>
-        )}
-
         <div className="service-planner-layout">
-          <aside className="service-planner-list" aria-label="Service plans" data-spt-tutorial="plans-list">
+          <aside className="service-planner-list" aria-label="Service plans">
             <div className="service-planner-list__header">
               <span>Plans</span>
               <button type="button" className="app-button app-button--ghost" onClick={() => void load()} title="Refresh">
@@ -405,7 +356,7 @@ export default function ServicePlannerPage() {
               </div>
             ) : (
               <>
-                <div className="service-planner-editor" data-spt-tutorial="editor">
+                <div className="service-planner-editor">
                   <label>
                     <span>Title</span>
                     <input
@@ -460,7 +411,7 @@ export default function ServicePlannerPage() {
                 </div>
 
                 <div className="service-planner-workspace">
-                  <div className="service-planner-cues" data-spt-tutorial="cues">
+                  <div className="service-planner-cues">
                     <div className="service-planner-section-head">
                       <div>
                         <p className="app-section-kicker">Run-down</p>
@@ -530,7 +481,7 @@ export default function ServicePlannerPage() {
                     ))}
                   </div>
 
-                  <aside className="service-planner-add" data-spt-tutorial="add-cue">
+                  <aside className="service-planner-add">
                     <div className="service-planner-section-head">
                       <div>
                         <p className="app-section-kicker">Add cue</p>
@@ -689,13 +640,6 @@ export default function ServicePlannerPage() {
           </section>
         </div>
       </main>
-
-      {/* ── Tutorial Tour ── */}
-      <ServicePlannerTutorial
-        isActive={tourActive}
-        onClose={() => setTourActive(false)}
-        onFinish={() => { markServicePlannerTutorialCompleted(); setTourActive(false); }}
-      />
     </>
   );
 }

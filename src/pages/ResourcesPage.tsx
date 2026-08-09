@@ -8,16 +8,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import {
-  HelpCircle,
-  RotateCcw,
-  AlertTriangle,
-} from "lucide-react";
-import ResourcesTutorial, {
-  isResourcesTutorialCompleted,
-  markResourcesTutorialCompleted,
-  resetResourcesTutorial,
-} from "./ResourcesTutorial";
 import BibleLibrary from "../bible/components/BibleLibrary";
 import { MediaTab } from "../library/MediaTab";
 import { SongsTab } from "../library/SongsTab";
@@ -57,10 +47,6 @@ export default function ResourcesPage() {
     return requestedTab ?? saved ?? "worship";
   });
 
-  // ── Tutorial state ──
-  const [tourActive, setTourActive] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-
   useEffect(() => {
     if (requestedTab && requestedTab !== tab) {
       setTab(requestedTab);
@@ -70,15 +56,6 @@ export default function ResourcesPage() {
   useEffect(() => {
     localStorage.setItem(TAB_KEY, tab);
   }, [tab]);
-
-  // ── Auto-start tutorial on first visit ──
-  useEffect(() => {
-    if (!isResourcesTutorialCompleted() && !tourActive) {
-      const timer = setTimeout(() => setTourActive(true), 600);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleTab = useCallback((next: ResourceTab) => {
     setTab(next);
@@ -96,13 +73,13 @@ export default function ResourcesPage() {
   return (
     <div className="app-page resources-page">
       <div className="app-page__inner resources-page__inner">
-        <header className="app-page__header resources-page__header" data-res-tutorial="welcome">
+        <header className="app-page__header resources-page__header">
           <div className="app-page__header-copy resources-page__header-copy">
             <p className="app-page__eyebrow">{t("resources.pageEyebrow")}</p>
             <h1 className="app-page__title">{copy.title}</h1>
             <p className="app-page__subtitle">{copy.subtitle}</p>
 
-            <div className="resources-tab-switcher" role="tablist" aria-label={t("resources.ariaSections")} data-res-tutorial="tabs">
+            <div className="resources-tab-switcher" role="tablist" aria-label={t("resources.ariaSections")}>
               <button
                 type="button"
                 role="tab"
@@ -135,39 +112,9 @@ export default function ResourcesPage() {
               </button>
             </div>
           </div>
-
-          <div className="app-page__actions">
-            <button
-              className="production-btn production-btn--ghost"
-              onClick={() => { resetResourcesTutorial(); setTourActive(true); setBannerDismissed(false); }}
-              title={t("rt.button.tooltip")}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }}
-            >
-              <HelpCircle size={16} /> {t("rt.button")}
-            </button>
-          </div>
         </header>
 
-        {/* ── Incomplete tutorial banner ── */}
-        {!tourActive && !isResourcesTutorialCompleted() && !bannerDismissed && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", margin: "0 24px 16px", background: "rgba(var(--primary-rgb, 99, 102, 241), 0.08)", border: "1px solid rgba(var(--primary-rgb, 99, 102, 241), 0.2)", borderRadius: 8, fontSize: "0.8125rem", color: "var(--text-muted)" }}>
-            <AlertTriangle size={14} style={{ color: "var(--primary)", flexShrink: 0 }} />
-            <span style={{ flex: 1 }}>{t("rt.banner")}</span>
-            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "var(--primary)", color: "#fff", border: "1px solid var(--primary)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, cursor: "pointer" }} onClick={() => setTourActive(true)}>
-                {t("rt.banner.continue")}
-              </button>
-              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => { resetResourcesTutorial(); setTourActive(true); setBannerDismissed(false); }}>
-                <RotateCcw size={12} /> {t("rt.banner.restart")}
-              </button>
-              <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => setBannerDismissed(true)}>
-                {t("rt.banner.dismiss")}
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="resources-content" data-res-tutorial="content">
+        <div className="resources-content">
           <div className="lib-page">
             {tab === "bible" && (
               <div className="resources-embedded-panel" data-resource-tab="bible">
@@ -185,12 +132,6 @@ export default function ResourcesPage() {
         </div>
       </div>
 
-      {/* ── Tutorial Tour ── */}
-      <ResourcesTutorial
-        isActive={tourActive}
-        onClose={() => setTourActive(false)}
-        onFinish={() => { markResourcesTutorialCompleted(); setTourActive(false); }}
-      />
     </div>
   );
 }

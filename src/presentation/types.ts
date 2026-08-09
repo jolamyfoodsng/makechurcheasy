@@ -97,6 +97,7 @@ export interface PresentationTickerPayload {
   textColor: string;
   backgroundColor: string;
   fontSize: number;
+  fontFamily?: string;
   paused: boolean;
   hidden: boolean;
   version: number;

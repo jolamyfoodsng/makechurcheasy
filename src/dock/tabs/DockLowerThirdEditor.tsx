@@ -40,6 +40,7 @@ import Icon from "../DockIcon";
 // ---------------------------------------------------------------------------
 
 const SPEAKER_FIRST_TIME_KEY = "ocs-dock-lt-speaker-hint-seen";
+const LT_APPEARANCE_PANEL_ID = "dock-lt-appearance-panel";
 
 interface DockLTEditorProps {
   theme: LowerThirdTheme;
@@ -416,6 +417,7 @@ export default function DockLowerThirdEditor({
 
   // ── Cards accordion state ──
   const [cardsOpen, setCardsOpen] = useState(true);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
 
   const [slots, setSlots] = useState<(ContentSlot | null)[]>(() => loadSlots(theme.id, "default"));
   const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(0);
@@ -843,15 +845,38 @@ export default function DockLowerThirdEditor({
                 background: "var(--dock-surface)",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 7 }}>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: "var(--dock-text)", textTransform: "uppercase", letterSpacing: 0.3 }}>
-                    {t("lowerThird.appearance", "Appearance")}
+              <div style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: 8, marginBottom: appearanceOpen ? 7 : 0 }}>
+                <button
+                  type="button"
+                  aria-expanded={appearanceOpen}
+                  aria-controls={LT_APPEARANCE_PANEL_ID}
+                  onClick={() => setAppearanceOpen((open) => !open)}
+                  style={{
+                    display: "flex",
+                    flex: 1,
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    minWidth: 0,
+                    padding: 0,
+                    border: 0,
+                    background: "transparent",
+                    color: "inherit",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: "var(--dock-text)", textTransform: "uppercase", letterSpacing: 0.3 }}>
+                      {t("lowerThird.appearance", "Appearance")}
+                    </div>
+                    <div style={{ fontSize: 9, color: "var(--dock-text-dim)", marginTop: 2 }}>
+                      {t("lowerThird.appearanceDesc", "Adjust the live lower-third colors.")}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 9, color: "var(--dock-text-dim)", marginTop: 2 }}>
-                    {t("lowerThird.appearanceDesc", "Adjust the live lower-third colors.")}
-                  </div>
-                </div>
+                  <Icon name={appearanceOpen ? "expand_less" : "expand_more"} size={16} />
+                </button>
                 <button
                   type="button"
                   onClick={() => setCustomStyles((prev) => withoutLtAppearanceColors(prev))}
@@ -869,44 +894,51 @@ export default function DockLowerThirdEditor({
                   {t("common.reset", "Reset")}
                 </button>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7 }}>
-                {LT_APPEARANCE_COLOR_CONTROLS.map((control) => {
-                  const explicitColor = getLtAppearanceColor(customStyles, control.key);
-                  const baseColor = control.key === "accentColor" ? theme.accentColor : control.fallback;
-                  const effectiveColor = sanitizeLtColor(explicitColor) ?? sanitizeLtColor(baseColor) ?? control.fallback;
-                  return (
-                    <label
-                      key={control.key}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 26px",
-                        alignItems: "center",
-                        gap: 5,
-                        minWidth: 0,
-                      }}
-                    >
-                      <span style={{ fontSize: 9, color: "var(--dock-text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {t(`lowerThird.color.${control.key}`, control.label)}
-                      </span>
-                      <input
-                        type="color"
-                        value={ltColorInputValue(explicitColor || effectiveColor, control.fallback)}
-                        onChange={(event) => setCustomStyles((prev) => withLtAppearanceColor(prev, control.key, event.target.value))}
-                        title={control.label}
+              {appearanceOpen && (
+                <div
+                  id={LT_APPEARANCE_PANEL_ID}
+                  role="region"
+                  aria-label={t("lowerThird.appearance", "Appearance")}
+                  style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7 }}
+                >
+                  {LT_APPEARANCE_COLOR_CONTROLS.map((control) => {
+                    const explicitColor = getLtAppearanceColor(customStyles, control.key);
+                    const baseColor = control.key === "accentColor" ? theme.accentColor : control.fallback;
+                    const effectiveColor = sanitizeLtColor(explicitColor) ?? sanitizeLtColor(baseColor) ?? control.fallback;
+                    return (
+                      <label
+                        key={control.key}
                         style={{
-                          width: 26,
-                          height: 22,
-                          border: "1px solid var(--dock-border)",
-                          borderRadius: 3,
-                          background: "transparent",
-                          padding: 0,
-                          cursor: "pointer",
+                          display: "grid",
+                          gridTemplateColumns: "1fr 26px",
+                          alignItems: "center",
+                          gap: 5,
+                          minWidth: 0,
                         }}
-                      />
-                    </label>
-                  );
-                })}
-              </div>
+                      >
+                        <span style={{ fontSize: 9, color: "var(--dock-text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {t(`lowerThird.color.${control.key}`, control.label)}
+                        </span>
+                        <input
+                          type="color"
+                          value={ltColorInputValue(explicitColor || effectiveColor, control.fallback)}
+                          onChange={(event) => setCustomStyles((prev) => withLtAppearanceColor(prev, control.key, event.target.value))}
+                          title={control.label}
+                          style={{
+                            width: 26,
+                            height: 22,
+                            border: "1px solid var(--dock-border)",
+                            borderRadius: 3,
+                            background: "transparent",
+                            padding: 0,
+                            cursor: "pointer",
+                          }}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Panel Bottom: Memory + Time Controls */}

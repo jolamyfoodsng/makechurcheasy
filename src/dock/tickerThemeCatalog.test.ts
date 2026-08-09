@@ -5,6 +5,7 @@ import {
   renderDockTickerThemeHtml,
   resolveDockTickerThemeOption,
 } from "./tickerThemeCatalog";
+import { DOCK_FONT_FAMILY_OPTIONS, normalizeDockFontFamily } from "./dockFontFamily";
 
 describe("tickerThemeCatalog", () => {
   it("includes permanent ticker themes when they are favorited", () => {
@@ -59,5 +60,41 @@ describe("tickerThemeCatalog", () => {
 
     expect(html).toContain("#123456");
     expect(html).toContain("Welcome");
+  });
+
+  it("allows only bundled font families and applies the selection to source HTML", () => {
+    const font = DOCK_FONT_FAMILY_OPTIONS.find((option) => option.id === "sora");
+    expect(font).toBeDefined();
+    expect(normalizeDockFontFamily(font?.family)).toBe(font?.family);
+    expect(normalizeDockFontFamily("font-family: malicious")).toBe("");
+
+    const option = resolveDockTickerThemeOption("ticker-fresh");
+    const html = renderDockTickerThemeHtml({
+      option: option!,
+      heading: "Live",
+      messages: ["Welcome"],
+      speed: 50,
+      position: "bottom",
+      loop: true,
+      fontFamily: font?.family,
+    });
+
+    expect(html).toContain(`font-family:${font?.family}`);
+  });
+
+  it("applies the selected font to permanent ticker templates", () => {
+    const option = resolveDockTickerThemeOption("ticker-bottom");
+    const font = DOCK_FONT_FAMILY_OPTIONS.find((item) => item.id === "outfit");
+    const html = renderDockTickerThemeHtml({
+      option: option!,
+      heading: "Updates",
+      messages: ["Welcome"],
+      speed: 50,
+      position: "bottom",
+      loop: true,
+      fontFamily: font?.family,
+    });
+
+    expect(html).toContain(`font-family: ${font?.family} !important;`);
   });
 });

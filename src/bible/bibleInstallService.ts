@@ -13,15 +13,31 @@ export interface BibleDownloadProgress {
   status: "downloading" | "parsing" | "done";
 }
 
+export function normalizeBibleAbbr(abbr: string): string {
+  return abbr.trim().toUpperCase();
+}
+
 export function deriveBibleAbbr(bible: CatalogBible): string {
-  const version = (bible.version ?? "").trim().toUpperCase();
+  const version = normalizeBibleAbbr(bible.version ?? "");
   if (version && version.length <= 8 && /^[A-Z]/.test(version)) return version;
-  return (bible.name ?? "Unknown")
+  return normalizeBibleAbbr((bible.name ?? "Unknown")
     .split(/\s+/)
     .map((word) => word?.[0] ?? "")
     .join("")
-    .toUpperCase()
-    .slice(0, 6);
+    .slice(0, 6));
+}
+
+export function isCatalogBibleInstalled(
+  installed: Array<Pick<InstalledBible, "id" | "abbr">>,
+  catalogId: string,
+  abbr: string,
+): boolean {
+  const normalizedAbbr = normalizeBibleAbbr(abbr);
+  return installed.some(
+    (entry) =>
+      entry.id === catalogId ||
+      normalizeBibleAbbr(entry.abbr) === normalizedAbbr,
+  );
 }
 
 export function formatBibleFileSize(bytes: number): string {
@@ -35,13 +51,8 @@ export async function isBibleCatalogItemInstalled(
   catalogId: string,
   abbr: string,
 ): Promise<boolean> {
-  const normalizedAbbr = abbr.trim().toUpperCase();
   const installed = await getInstalledTranslations();
-  return installed.some(
-    (entry) =>
-      entry.id === catalogId ||
-      entry.abbr.trim().toUpperCase() === normalizedAbbr,
-  );
+  return isCatalogBibleInstalled(installed, catalogId, abbr);
 }
 
 export async function installBibleFromCatalog(
@@ -49,7 +60,7 @@ export async function installBibleFromCatalog(
   onProgress?: (state: BibleDownloadProgress) => void,
 ): Promise<InstalledBible> {
   const abbr = deriveBibleAbbr(bible);
-  const normalizedAbbr = abbr.trim().toUpperCase();
+  const normalizedAbbr = normalizeBibleAbbr(abbr);
 
   if (await isBibleCatalogItemInstalled(bible.id, normalizedAbbr)) {
     throw new Error(`${normalizedAbbr} is already installed.`);

@@ -33,6 +33,12 @@ import { DockUpgradeModal } from "./components/DockUpgradeModal";
 import { registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
 import { fetchPlanFromOverlayServer } from "../services/entitlementClient";
 import { publishDockStagedItemToPresentation } from "../services/presentationDockBridge";
+import {
+  DOCK_FONT_FAMILY_OPTIONS,
+  loadDockFontFamily,
+  normalizeDockFontFamily,
+  saveDockFontFamily,
+} from "./dockFontFamily";
 import "./dock.css";
 import "./dock-theme.css";
 import Icon from "./DockIcon";
@@ -175,7 +181,9 @@ export default function DockPage({
   const dockRootRef = useRef<HTMLDivElement>(null);
   const shellPreferences = loadDockShellPreferences();
   const { effective, setTheme } = useAppTheme();
-  const [activeTab, setActiveTab] = useState<DockTab>(() => resolveDockTab(shellPreferences.activeTab));
+  const initialActiveTab = resolveDockTab(shellPreferences.activeTab);
+  const [activeTab, setActiveTab] = useState<DockTab>(() => initialActiveTab);
+  const [visitedTabs, setVisitedTabs] = useState<Set<DockTab>>(() => new Set([initialActiveTab]));
   const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() => shellPreferences.disabledTabs ?? []);
   const [dockHeight, setDockHeight] = useState(0);
   const verticalTabs = dockHeight > 0 && dockHeight < 550;
@@ -190,6 +198,7 @@ export default function DockPage({
   );
   const [servicePlanner, setServicePlanner] = useState<ServicePlannerSnapshot | null>(null);
   const [projectionSettings, setProjectionSettings] = useState<ProjectionSettings>(() => loadProjectionSettings());
+  const [dockFontFamily, setDockFontFamily] = useState<string>(() => loadDockFontFamily());
   const [upgradeModalMsg, setUpgradeModalMsg] = useState("");
   const hiddenTabsKey = hiddenTabs.join("|");
   const hiddenTabIds = useMemo(() => new Set<DockTab>(hiddenTabs), [hiddenTabsKey]);
@@ -199,15 +208,27 @@ export default function DockPage({
     [disabledTabs, visibleDockTabs],
   );
 
-  const updateProjectionSceneMode = useCallback((sceneMode: ProjectionSettings["sceneMode"]) => {
+  const updateProjectionSettings = useCallback((patch: Partial<ProjectionSettings>) => {
     setProjectionSettings((current) => {
-      const next = { ...current, sceneMode };
+      const next = { ...current, ...patch };
+      // Persist immediately so a clear/send action in the same interaction
+      // sees the checkbox value even before React effects flush.
       saveProjectionSettings(next);
-      void dockObsClient.applyProjectionSettings({ allowSceneMutation: true }).catch((error) => {
-        console.warn("[Dock] Failed to apply OBS output routing:", error);
-      });
       return next;
     });
+  }, []);
+
+  const updateProjectionSceneMode = useCallback((sceneMode: ProjectionSettings["sceneMode"]) => {
+    updateProjectionSettings({ sceneMode });
+    void dockObsClient.applyProjectionSettings({ allowSceneMutation: true }).catch((error) => {
+      console.warn("[Dock] Failed to apply OBS output routing:", error);
+    });
+  }, [updateProjectionSettings]);
+
+  const updateDockFontFamily = useCallback((value: string) => {
+    const next = normalizeDockFontFamily(value);
+    setDockFontFamily(next);
+    saveDockFontFamily(next);
   }, []);
 
   // Register the upgrade modal trigger so any dock tab can show it.
@@ -250,6 +271,18 @@ export default function DockPage({
     onActiveTabChange?.(activeTab);
   }, [activeTab, onActiveTabChange]);
 
+  // Keep a visited tab mounted when the operator moves around the dock. This
+  // preserves in-progress work in every dock page instead of resetting the
+  // page each time React switches the active tab.
+  useEffect(() => {
+    setVisitedTabs((current) => {
+      if (current.has(activeTab)) return current;
+      const next = new Set(current);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
+
   useEffect(() => {
     if (visibleDockTabs.some((tab) => tab.id === activeTab)) return;
     setActiveTab(visibleDockTabs[0]?.id ?? "bible");
@@ -259,6 +292,12 @@ export default function DockPage({
   useEffect(() => {
     void fetchPlanFromOverlayServer();
   }, [activeTab]);
+
+  const mountedDockTabs = useMemo(() => {
+    const mounted = new Set(visitedTabs);
+    mounted.add(activeTab);
+    return mounted;
+  }, [activeTab, visitedTabs]);
 
   // Refresh plan from overlay server on any click in the dock (debounced)
   useEffect(() => {
@@ -421,6 +460,7 @@ export default function DockPage({
                 subtitle: recovered.worship.songTitle || "",
                 data: {
                   sectionText: recovered.worship.sectionText,
+                  translationText: recovered.worship.translationText ?? "",
                   sectionLabel: recovered.worship.sectionLabel,
                   song: { title: recovered.worship.songTitle, artist: recovered.worship.artist },
                   overlayMode: recovered.worship.overlayMode,
@@ -770,8 +810,30 @@ export default function DockPage({
                   </select>
                 </div>
 
-
-
+                <div className="dock-sidebar__subpanel">
+                  <label className="dock-sidebar__select-field">
+                    <span className="dock-sidebar__select-label">
+                      <Icon name="font_download" size={14} />
+                      <span>{t('page.fontFamily', 'Font family')}</span>
+                    </span>
+                    <select
+                      className="dock-sidebar__select"
+                      value={dockFontFamily}
+                      onChange={(event) => updateDockFontFamily(event.target.value)}
+                      aria-label={t('page.fontFamily', 'Font family')}
+                    >
+                      <option value="">{t('page.fontFamilySourceDefault', 'Use source default')}</option>
+                      {DOCK_FONT_FAMILY_OPTIONS.map((option) => (
+                        <option key={option.id} value={option.family} style={{ fontFamily: option.family }}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="dock-sidebar__hint">
+                    {t('page.fontFamilyDesc', 'Used by text sources the next time you send them to OBS.')}
+                  </div>
+                </div>
 
                 <div className="dock-sidebar__divider" />
 
@@ -843,36 +905,25 @@ export default function DockPage({
                       <div className="dock-sidebar__subpanel">
                         {/* Scene Routing */}
                         <div className="dock-sidebar__section-label">{t('page.sceneRouting', 'Scene Routing')}</div>
-                        <div className="dock-sidebar__radio-group">
-                          {([
-                            {
-                              mode: "auto-duplicate" as const,
-                              icon: "visibility",
-                              label: t('page.programBackgroundOn', 'Program background on'),
-                              desc: t('page.programBackgroundOnDesc', 'Put the current Program scene under MCE Presentation immediately.'),
-                            },
-                            {
-                              mode: "no-clone" as const,
-                              icon: "visibility_off",
-                              label: t('page.programBackgroundOff', 'Program background off'),
-                              desc: t('page.programBackgroundOffDesc', 'Do not place the Program scene inside MCE Presentation.'),
-                            },
-                          ]).map(({ mode, icon, label, desc }) => (
-                            <button
-                              key={mode}
-                              type="button"
-                              className={`dock-sidebar__radio${projectionSettings.sceneMode === mode ? " dock-sidebar__radio--active" : ""}`}
-                              aria-pressed={projectionSettings.sceneMode === mode}
-                              onClick={() => updateProjectionSceneMode(mode)}
-                              title={label}>
-                              <Icon name={icon} size={14} />
-                              <div className="dock-sidebar__radio-copy">
-                                <div className="dock-sidebar__radio-title">{label}</div>
-                                <div className="dock-sidebar__radio-desc">{desc}</div>
-                              </div>
-                              {projectionSettings.sceneMode === mode && <Icon name="check" size={12} />}
-                            </button>
-                          ))}
+                        <label className="dock-sidebar__select-field">
+                          <span className="dock-sidebar__select-label">
+                            <Icon name={projectionSettings.sceneMode === "auto-duplicate" ? "visibility" : "visibility_off"} size={14} />
+                            <span>{t('page.programBackground', 'Program background')}</span>
+                          </span>
+                          <select
+                            className="dock-sidebar__select dock-sidebar__select--routing"
+                            value={projectionSettings.sceneMode}
+                            onChange={(event) => updateProjectionSceneMode(event.target.value as ProjectionSettings["sceneMode"])}
+                            aria-label={t('page.programBackground', 'Program background')}
+                          >
+                            <option value="no-clone">{t('page.off', 'Off')}</option>
+                            <option value="auto-duplicate">{t('page.on', 'On')}</option>
+                          </select>
+                        </label>
+                        <div className="dock-sidebar__hint">
+                          {projectionSettings.sceneMode === "auto-duplicate"
+                            ? t('page.programBackgroundOnDesc', 'Put the current Program scene under MCE Presentation immediately.')
+                            : t('page.programBackgroundOffDesc', 'Do not place the Program scene inside MCE Presentation.')}
                         </div>
 
                         <div className="dock-sidebar__section-label dock-sidebar__section-label--spaced">{t('page.sendBehavior', 'Send Behavior')}</div>
@@ -880,20 +931,8 @@ export default function DockPage({
                         <label className="dock-sidebar__check dock-sidebar__check--stacked">
                           <input
                             type="checkbox"
-                            checked={projectionSettings.hideOtherMceSourcesOnSend}
-                            onChange={(e) => setProjectionSettings((s) => ({ ...s, hideOtherMceSourcesOnSend: e.target.checked }))}
-                          />
-                          <span className="dock-sidebar__check-copy">
-                            <span>{t('page.clearOtherMceOverlays', 'Hide other MCE overlays when sending')}</span>
-                            <small>{t('page.clearOtherMceOverlaysDesc', 'Keeps only the new item and ticker visible when you send content.')}</small>
-                          </span>
-                        </label>
-
-                        <label className="dock-sidebar__check dock-sidebar__check--stacked">
-                          <input
-                            type="checkbox"
                             checked={projectionSettings.restoreOriginalScene}
-                            onChange={(e) => setProjectionSettings((s) => ({ ...s, restoreOriginalScene: e.target.checked }))}
+                            onChange={(e) => updateProjectionSettings({ restoreOriginalScene: e.target.checked })}
                           />
                           <span className="dock-sidebar__check-copy">
                             <span>{t('page.returnToPreviousScene', 'Return to previous Program scene after clear')}</span>
@@ -1089,76 +1128,88 @@ export default function DockPage({
 
           <div className="dock-content-main">
             <Suspense fallback={<div className="dock-tab-loading">{t('common.loading')}</div>}>
-              {activeTab === "planner" && (
-                <DockPlannerTab
-                  staged={staged}
-                  onStage={handleStage}
-                  initialSnapshot={servicePlanner}
-                />
-              )}
-              {activeTab === "bible" && (
-                presentationBibleLmSplit ? (
-                  <div className="dock-presentation-bible-lm-split">
-                    <section className="dock-presentation-bible-lm-pane" aria-label="Bible dock">
-                      <div className="dock-presentation-bible-lm-pane__title">Bible</div>
-                      <DockBibleTab
-                        staged={staged}
-                        onStage={handleStage}
-                        productionDefaults={productionSettings.bible}
-                        appConnected={appConnected}
-                        presentationOutputTarget={presentationOutputTarget}
-                        showHistory={showHistory}
-                        onHistoryClose={() => setShowHistory(false)}
-                      />
-                    </section>
-                    <section className="dock-presentation-bible-lm-pane" aria-label="Scripture assistant dock">
-                      <div className="dock-presentation-bible-lm-pane__title">Scripture Assistant</div>
-                      <DockLmTab
-                        presentationOutputTarget={presentationOutputTarget}
-                        enablePresentationMicControls={enablePresentationAssistantMicControls}
-                      />
-                    </section>
-                  </div>
-                ) : (
-                  <DockBibleTab
+              {mountedDockTabs.has("planner") && (
+                <div className="dock-tab-panel" hidden={activeTab !== "planner"}>
+                  <DockPlannerTab
                     staged={staged}
                     onStage={handleStage}
-                    productionDefaults={productionSettings.bible}
-                    appConnected={appConnected}
+                    initialSnapshot={servicePlanner}
+                  />
+                </div>
+              )}
+              {mountedDockTabs.has("bible") && (
+                <div className="dock-tab-panel" hidden={activeTab !== "bible"}>
+                  {presentationBibleLmSplit ? (
+                    <div className="dock-presentation-bible-lm-split">
+                      <section className="dock-presentation-bible-lm-pane" aria-label="Bible dock">
+                        <div className="dock-presentation-bible-lm-pane__title">Bible</div>
+                        <DockBibleTab
+                          staged={staged}
+                          onStage={handleStage}
+                          productionDefaults={productionSettings.bible}
+                          appConnected={appConnected}
+                          presentationOutputTarget={presentationOutputTarget}
+                          showHistory={showHistory}
+                          onHistoryClose={() => setShowHistory(false)}
+                        />
+                      </section>
+                      <section className="dock-presentation-bible-lm-pane" aria-label="Scripture assistant dock">
+                        <div className="dock-presentation-bible-lm-pane__title">Scripture Assistant</div>
+                        <DockLmTab
+                          presentationOutputTarget={presentationOutputTarget}
+                          enablePresentationMicControls={enablePresentationAssistantMicControls}
+                        />
+                      </section>
+                    </div>
+                  ) : (
+                    <DockBibleTab
+                      staged={staged}
+                      onStage={handleStage}
+                      productionDefaults={productionSettings.bible}
+                      appConnected={appConnected}
+                      presentationOutputTarget={presentationOutputTarget}
+                      fullscreenOnly={hideLowerThirdControls}
+                      showHistory={showHistory}
+                      onHistoryClose={() => setShowHistory(false)}
+                    />
+                  )}
+                </div>
+              )}
+              {mountedDockTabs.has("worship") && (
+                <div className="dock-tab-panel" hidden={activeTab !== "worship"}>
+                  <DockWorshipTab
+                    staged={staged}
+                    onStage={handleStage}
+                    productionDefaults={productionSettings.worship}
                     presentationOutputTarget={presentationOutputTarget}
                     fullscreenOnly={hideLowerThirdControls}
-                    showHistory={showHistory}
-                    onHistoryClose={() => setShowHistory(false)}
                   />
-                )
+                </div>
               )}
-              {activeTab === "worship" && (
-                <DockWorshipTab
-                  staged={staged}
-                  onStage={handleStage}
-                  productionDefaults={productionSettings.worship}
-                  presentationOutputTarget={presentationOutputTarget}
-                  fullscreenOnly={hideLowerThirdControls}
-                />
+              {mountedDockTabs.has("media") && (
+                <div className="dock-tab-panel" hidden={activeTab !== "media"}>
+                  <DockMediaTab
+                    staged={staged}
+                    onStage={handleStage}
+                    presentationOutputTarget={presentationOutputTarget}
+                  />
+                </div>
               )}
-              {activeTab === "media" && (
-                <DockMediaTab
-                  staged={staged}
-                  onStage={handleStage}
-                  presentationOutputTarget={presentationOutputTarget}
-                />
+              {mountedDockTabs.has("multiview") && (
+                <div className="dock-tab-panel" hidden={activeTab !== "multiview"}>
+                  <DockMultiviewTab />
+                </div>
               )}
-              {activeTab === "multiview" && (
-                <DockMultiviewTab />
-              )}
-              {activeTab === "ministry" && (
-                <DockMinistryTab
-                  staged={staged}
-                  onStage={handleStage}
-                  presentationOutputTarget={presentationOutputTarget}
-                  hideTickerControls={hideTickerControls}
-                  hideLowerThirdControls={hideLowerThirdControls}
-                />
+              {mountedDockTabs.has("ministry") && (
+                <div className="dock-tab-panel" hidden={activeTab !== "ministry"}>
+                  <DockMinistryTab
+                    staged={staged}
+                    onStage={handleStage}
+                    presentationOutputTarget={presentationOutputTarget}
+                    hideTickerControls={hideTickerControls}
+                    hideLowerThirdControls={hideLowerThirdControls}
+                  />
+                </div>
               )}
             </Suspense>
           </div>

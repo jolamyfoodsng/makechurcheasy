@@ -203,7 +203,7 @@ export default function SongImportFullprocess({
     setImportedTitles([]);
   };
 
-  const handleDetectSongs = async () => {
+  const handleDetectSongs = async (fileOverride?: File) => {
     setError("");
     setWarnings([]);
 
@@ -211,8 +211,9 @@ export default function SongImportFullprocess({
       setStep("importing");
       setLoadingLabel("Extracting text...");
 
+      const fileToProcess = fileOverride ?? selectedFile;
       const resolvedSourceName = sourceMode === "file"
-        ? selectedFile?.name || "Imported Document"
+        ? fileToProcess?.name || "Imported Document"
         : "Pasted Lyrics";
 
       const nextWarnings: string[] = [];
@@ -221,7 +222,10 @@ export default function SongImportFullprocess({
 
       if (sourceMode === "file") {
         try {
-          const rawText = await extractTextFromFile(selectedFile as File);
+          if (!fileToProcess) {
+            throw new Error("Choose a document before starting the import.");
+          }
+          const rawText = await extractTextFromFile(fileToProcess);
           normalizedText = normalizeExtractedLyricsText(rawText);
           if (normalizedText.trim()) {
             textQuality = assessExtractedTextQuality(normalizedText);
@@ -291,6 +295,13 @@ export default function SongImportFullprocess({
       setImportProgress({ saved: 0, total: 0 });
       setStep("pick");
     }
+  };
+
+  const handleFileSelected = (file: File | null) => {
+    if (!file) return;
+    setSelectedFile(file);
+    setError("");
+    void handleDetectSongs(file);
   };
 
   const handleImport = async () => {
@@ -444,10 +455,7 @@ export default function SongImportFullprocess({
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={(event) => {
                     event.preventDefault();
-                    const file = event.dataTransfer.files?.[0];
-                    if (!file) return;
-                    setSelectedFile(file);
-                    setError("");
+                    handleFileSelected(event.dataTransfer.files?.[0] ?? null);
                   }}
                 >
                   <input
@@ -455,11 +463,7 @@ export default function SongImportFullprocess({
                     className="song-import-hidden-input"
                     type="file"
                     accept=".pdf,.docx,.txt,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null;
-                      setSelectedFile(file);
-                      setError("");
-                    }}
+                    onChange={(event) => handleFileSelected(event.target.files?.[0] ?? null)}
                   />
                   <Upload size={28} />
                   <h3>{selectedFile ? selectedFile.name : "Drop a PDF, DOCX, or TXT file here"}</h3>

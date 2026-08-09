@@ -27,9 +27,10 @@ interface Props {
   sections: DockTranslationSection[];
   value?: DockTranslationValue | null;
   onChange: (value: DockTranslationValue | null) => void;
+  compact?: boolean;
 }
 
-export default function DockTranslationControls({ sections, value, onChange }: Props) {
+export default function DockTranslationControls({ sections, value, onChange, compact = false }: Props) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
   const requestIdRef = useRef(0);
@@ -127,17 +128,18 @@ export default function DockTranslationControls({ sections, value, onChange }: P
   };
 
   return (
-    <div className="dock-translation" ref={panelRef}>
+    <div className={`dock-translation${compact ? " dock-translation--compact" : ""}`} ref={panelRef}>
       <div className="dock-translation__trigger-row">
         <button
           type="button"
           className={`dock-translation__trigger${open ? " dock-translation__trigger--active" : ""}`}
           onClick={() => setOpen((current) => !current)}
           aria-expanded={open}
+          aria-label={t("dock.translation.open", { defaultValue: "Translate this song" })}
           title={t("dock.translation.open", { defaultValue: "Translate this song" })}
         >
           <Icon name="translate" size={14} />
-          <span>{t("common.translate", { defaultValue: "Translate" })}</span>
+          <span className="dock-translation__trigger-label">{t("common.translate", { defaultValue: "Translate" })}</span>
           {value && <span className="dock-translation__status-dot" aria-label={value.targetLanguageLabel} />}
         </button>
         {value && (

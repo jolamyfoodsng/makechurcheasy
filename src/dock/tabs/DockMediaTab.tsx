@@ -4292,7 +4292,7 @@ export default function DockMediaTab({
                         <img className="dock-media-inspector__preview-media" src={thumbUrl} alt={cleanName} />
                       ) : (
                         <div className="dock-media-inspector__preview-placeholder">
-                          <Icon name="movie" size={32} />
+
                         </div>
                       )}
                       <button type="button" className="dock-media-inspector__play-btn" onClick={() => setPreviewPlaying(true)} title={t('common.play')}>

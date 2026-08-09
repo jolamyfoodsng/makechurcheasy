@@ -13,6 +13,7 @@ import { resolveInterfaceLocale } from "../i18n/localeCatalog";
 import DockLmTab from "./tabs/DockLmTab";
 import DockAuthGate from "./DockAuthGate";
 import { dockClient } from "../services/dockBridge";
+import "../fonts.css";
 import "./dock.css";
 import "./dock-auth.css";
 

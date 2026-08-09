@@ -8,6 +8,8 @@
  * background opacity, text color, separator style, animation speed.
  */
 
+import { normalizeDockFontFamily } from "../../dock/dockFontFamily";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -218,6 +220,7 @@ export function generateTickerHTML(
   paused: boolean = false,
   brandLogoUrl: string = "",
   brandName: string = "",
+  fontFamilyOverride?: string,
 ): string {
   // OBS Text Source v1 default is 32px. Use it as ticker base size for readability on program output.
 
@@ -225,6 +228,7 @@ export function generateTickerHTML(
   const TICKER_BAR_HEIGHT_PX = 80;
   const pxPerSecond = Math.max(60, Math.min(320, 40 + speed * 2.8));
   const positionCSS = position === "top" ? "top: 0;" : "bottom: 0;";
+  const fontFamily = normalizeDockFontFamily(fontFamilyOverride) || theme.fontFamily;
   const safeMessages = messages.map((m) => m.trim()).filter(Boolean);
   const cycleMessages = (safeMessages.length > 0 ? safeMessages : [" "])
     .map((m) => `<span class="tk-msg">${escapeHTML(m)}</span>`)
@@ -250,6 +254,7 @@ export function generateTickerHTML(
       pxPerSecond,
       brandLogoUrl,
       brandName,
+      fontFamily,
     });
   }
 
@@ -268,7 +273,7 @@ html,body{background:transparent;overflow:hidden;width:100%;height:100%}
   display:flex;align-items:center;
   height:${TICKER_BAR_HEIGHT_PX}px;
   ${barBgCSS}
-  font-family:${theme.fontFamily};
+  font-family:${fontFamily};
   z-index:9999;
   box-shadow:0 2px 12px rgba(0,0,0,0.3);
 }
@@ -446,6 +451,7 @@ function generateRotatingLogoTickerHTML({
   pxPerSecond,
   brandLogoUrl,
   brandName,
+  fontFamily,
 }: {
   theme: TickerThemeConfig;
   colors: TickerThemeColors;
@@ -457,6 +463,7 @@ function generateRotatingLogoTickerHTML({
   pxPerSecond: number;
   brandLogoUrl: string;
   brandName: string;
+  fontFamily: string;
 }): string {
   const TICKER_BAR_HEIGHT_PX = 80;
   const positionCSS = position === "top" ? "top: 0;" : "bottom: 0;";
@@ -483,7 +490,7 @@ html,body{background:transparent;overflow:hidden;width:100%;height:100%}
   position:fixed;left:0;right:0;${positionCSS}
   height:${TICKER_BAR_HEIGHT_PX}px;
   display:flex;align-items:center;
-  font-family:${theme.fontFamily};
+  font-family:${fontFamily};
   z-index:9999;
   pointer-events:none;
   filter:drop-shadow(0 10px 24px rgba(0,0,0,.34));

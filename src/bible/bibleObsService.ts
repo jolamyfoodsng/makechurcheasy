@@ -11,6 +11,7 @@
 import { obsService } from "../services/obsService";
 import { obsSyncService } from "../services/obsSyncService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { buildVersionedOverlayUrl } from "../services/overlayVersion";
 import {
   registerInput,
   registerSceneItem,
@@ -116,6 +117,13 @@ class BibleObsService {
     const modeVar = displayMode ? ` --display-mode: "${displayMode}";` : "";
     const overlayCss = `:root { --overlay-data: "${encodedPacket}";${modeVar} }`;
     return customCss ? `${overlayCss}\n${customCss}` : overlayCss;
+  }
+
+  private getBibleOverlayUrl(templateType?: BibleTemplateType): string {
+    return buildVersionedOverlayUrl(getOverlayBaseUrlSync(), "mce-bible-overlay.html", {
+      tab: "bible",
+      mode: templateType,
+    });
   }
 
   private buildThemePayload(theme: BibleThemeSettings | null): {
@@ -966,9 +974,7 @@ class BibleObsService {
           blanked,
           timestamp: Date.now(),
         };
-        const base = getOverlayBaseUrlSync();
-        const overlayFile = "mce-bible-overlay.html";
-        const baseUrl = `${base}/${overlayFile}`;
+        const baseUrl = this.getBibleOverlayUrl(this.currentTemplateType);
         const overlayCss = this.buildOverlayDataCss(
           packet as unknown as Record<string, unknown>,
           customCss || "",

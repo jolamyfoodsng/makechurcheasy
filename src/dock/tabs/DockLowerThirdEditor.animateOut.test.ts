@@ -31,6 +31,32 @@ describe("Dock lower-third animate out wiring", () => {
     expect(replaceIndex).toBeLessThan(firstPushIndex);
     expect(dockObsClientSource).toContain("async replaceLiveLowerThirdOverlayUrl");
     expect(dockObsClientSource).toContain('emitBrowserOverlayPacket("lower-third", nextPacket, overlayCss)');
+    expect(dockObsClientSource).toContain('inputSettings: { url, css: overlayCss }');
+  });
+
+  it("stages the Ministry size until the user presses Go Live", () => {
+    expect(editorSource).toContain("const url = buildOverlayUrl(");
+    expect(editorSource).toContain("size,");
+    expect(editorSource).not.toContain("pendingLiveSizeUpdateRef");
+    expect(editorSource).not.toContain("latestHandleSendRef.current()");
+    expect(ministrySource).not.toContain("live={ltLive}");
+    expect(ministrySource).toContain("writeUserScopedStorage(MINISTRY_LT_SIZE_STORAGE_KEY, s)");
+  });
+
+  it("keeps Appearance behind an accessible collapsible section", () => {
+    expect(editorSource).toContain("const [appearanceOpen, setAppearanceOpen] = useState(false);");
+    expect(editorSource).toContain("aria-expanded={appearanceOpen}");
+    expect(editorSource).toContain("aria-controls={LT_APPEARANCE_PANEL_ID}");
+    expect(editorSource).toContain("id={LT_APPEARANCE_PANEL_ID}");
+    expect(editorSource).toContain("{appearanceOpen && (");
+  });
+
+  it("uses compact visible Ministry labels while keeping full accessible labels", () => {
+    expect(ministrySource).toContain('t("ministry.tickerShort", "Ticker")');
+    expect(ministrySource).toContain('t("ministry.lowerThirdsShort", "Low")');
+    expect(ministrySource).toContain('t("ministry.countdownsShort", "Count")');
+    expect(ministrySource).toContain('aria-label={t("ministry.lowerThirds")}');
+    expect(ministrySource).toContain('aria-label={t("ministry.countdowns")}');
   });
 
   it("keeps theme-defined exit animations as the default", () => {

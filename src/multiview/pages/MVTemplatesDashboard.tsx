@@ -728,7 +728,7 @@ export function MVTemplatesDashboard() {
           <header className="tpldash-header">
             <div>
               <h2 className="tpldash-title">Giving Templates</h2>
-              <p className="tpldash-subtitle">Choose a visual style for your donation overlays.</p>
+
             </div>
 
             <div className="tpldash-header-actions">

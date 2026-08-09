@@ -1,11 +1,10 @@
 /**
  * Fonts used for scripture and worship text.
  *
- * Charis SIL is bundled with the app and covers the African Latin characters
- * used by Twi/Akan, Ewe, Yoruba, and Igbo. Noto Sans is kept as a second
- * fallback for any characters outside Charis SIL.
+ * Questrial is bundled with the app for Pan-African Latin support. Charis SIL
+ * and Noto Sans remain fallbacks for any characters outside Questrial.
  */
-export const SCRIPTURE_FONT_FAMILY = '"Charis SIL", "Noto Sans", "CMG Sans", Arial, sans-serif';
+export const SCRIPTURE_FONT_FAMILY = '"Questrial", "Charis SIL", "Noto Sans", "CMG Sans", Arial, sans-serif';
 
 /**
  * Keep a user's selected typeface while guaranteeing a Unicode-safe fallback
@@ -22,11 +21,12 @@ export function withScriptureFontFallback(fontFamily?: string | null): string {
   }
 
   const lower = value.toLowerCase();
-  if (lower.includes("cmg sans") && !lower.includes("charis sil")) {
-    return `"Charis SIL", "Noto Sans", ${value}`;
+  if (lower.includes("cmg sans") && !lower.includes("questrial")) {
+    return `"Questrial", "Charis SIL", "Noto Sans", ${value}`;
   }
 
   const additions: string[] = [];
+  if (!lower.includes("questrial")) additions.push('"Questrial"');
   if (!lower.includes("charis sil")) additions.push('"Charis SIL"');
   if (!lower.includes("noto sans")) additions.push('"Noto Sans"');
 

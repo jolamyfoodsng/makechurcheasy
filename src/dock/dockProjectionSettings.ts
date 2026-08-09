@@ -5,7 +5,6 @@ export interface ProjectionSettings {
   tickerLayerPriority: "ticker-above" | "content-above";
   restoreOriginalScene: boolean;
   presentationOnly: boolean;
-  hideOtherMceSourcesOnSend: boolean;
 }
 
 const PROJECTION_SETTINGS_KEY = "ocs-dock-projection-settings";
@@ -16,7 +15,6 @@ const DEFAULT_PROJECTION_SETTINGS: ProjectionSettings = {
   tickerLayerPriority: "content-above",
   restoreOriginalScene: false,
   presentationOnly: false,
-  hideOtherMceSourcesOnSend: false,
 };
 
 type StoredProjectionSettings = Partial<ProjectionSettings> & {
@@ -42,9 +40,12 @@ export function loadProjectionSettings(): ProjectionSettings {
     if (!raw) return { ...DEFAULT_PROJECTION_SETTINGS };
     const parsed = JSON.parse(raw) as StoredProjectionSettings;
     return {
-      ...DEFAULT_PROJECTION_SETTINGS,
-      ...parsed,
       sceneMode: normalizeSceneMode(parsed.sceneMode, parsed),
+      tickerLayerPriority: parsed.tickerLayerPriority === "ticker-above"
+        ? "ticker-above"
+        : DEFAULT_PROJECTION_SETTINGS.tickerLayerPriority,
+      restoreOriginalScene: parsed.restoreOriginalScene === true,
+      presentationOnly: parsed.presentationOnly === true,
     };
   } catch {
     return { ...DEFAULT_PROJECTION_SETTINGS };

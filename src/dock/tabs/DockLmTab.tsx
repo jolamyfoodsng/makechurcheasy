@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, Edit2, MonitorUp, Check, StickyNote, HelpCircle } from "lucide-react";
+import { Copy, Edit2, MonitorUp, Check, StickyNote } from "lucide-react";
 import { dockObsClient, type DockObsStatus } from "../dockObsClient";
 import { dockClient, type DockStateMessage, type DockCommandType } from "../../services/dockBridge";
 import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
@@ -15,10 +15,6 @@ import { getSettings } from "../../multiview/mvStore";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 import { getEnvConfig } from "../../services/envConfig";
 import type { LmDockSnapshot } from "../../services/lmDockService";
-import BibleAiOnboarding, {
-  isBibleAiOnboardingCompleted,
-  resetBibleAiOnboarding,
-} from "../../../others/BibleAiOnboarding";
 import { publishDockStagedItemToPresentation } from "../../services/presentationDockBridge";
 import {
   appendTextToDockNotes,
@@ -35,6 +31,7 @@ import {
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
 import DockNotesTextTools from "../components/DockNotesTextTools";
 import { formatNoteText, type NoteTextToolAction } from "../noteTextTools";
+import { loadDockSceneRoute } from "../dockSceneRouting";
 
 type LmStatus = "idle" | "requesting-mic" | "connecting" | "listening" | "error";
 type LmOverlayMode = "fullscreen" | "lower-third";
@@ -437,14 +434,6 @@ export default function DockLmTab({
     });
   }, [savePinned]);
 
-  const [showOnboarding, setShowOnboarding] = useState(false);
-
-  useEffect(() => {
-    if (!isBibleAiOnboardingCompleted()) {
-      setShowOnboarding(true);
-    }
-  }, []);
-
   const [creditBalance, setCreditBalance] = useState<number>(0);
   const [proUnlocked] = useState(() => isProUnlocked());
 
@@ -708,6 +697,13 @@ export default function DockLmTab({
       ? dockObsClient.pushBibleOverlayFast(lowerThirdPayload)
       : dockObsClient.pushBible(stageData);
 
+    const bibleSceneRoute = loadDockSceneRoute("bible");
+    if (bibleSceneRoute.enabled && bibleSceneRoute.sceneName) {
+      await dockObsClient.pushBibleToScene(stageData, bibleSceneRoute.sceneName);
+      if (bibleSceneRoute.syncPresentation) await pushLive();
+      return;
+    }
+
     await pushLive();
   }, [presentationLinkMode, settings.pushScene, settings.translation]);
 
@@ -803,6 +799,20 @@ export default function DockLmTab({
           },
         });
         showToast("Shown on presentation screen");
+        return;
+      }
+
+      const notesSceneRoute = loadDockSceneRoute("notes");
+      if (notesSceneRoute.enabled && notesSceneRoute.sceneName) {
+        await dockObsClient.pushNotesToScene(obsData, notesSceneRoute.sceneName);
+        if (notesSceneRoute.syncPresentation) {
+          if (notesSettings.overlayMode === "lower-third") {
+            await dockObsClient.pushNotesOverlayFast(obsData);
+          } else {
+            await dockObsClient.pushNotesLyrics(obsData);
+          }
+        }
+        showToast("Pushed to OBS");
         return;
       }
 
@@ -1290,21 +1300,9 @@ export default function DockLmTab({
             </span>
           )}
           <button
-            style={S.helpBtn}
-            onClick={() => {
-              resetBibleAiOnboarding();
-              setShowOnboarding(true);
-            }}
-            title="Bible AI Tour"
-            data-onboarding="help-btn"
-          >
-            <HelpCircle size={14} />
-          </button>
-          <button
             style={S.gearBtn}
             onClick={() => setShowSettings(!showSettings)}
             title={t("lm.settings")}
-            data-onboarding="settings-btn"
           >
             <Icon name="settings" size={14} />
           </button>
@@ -1336,7 +1334,7 @@ export default function DockLmTab({
       {activeTab === "up-next" && (
         <div style={S.tabContent}>
           {/* ── QUEUE ── */}
-          <div style={S.queueSectionFull} data-onboarding="queue-section">
+          <div style={S.queueSectionFull}>
             <div style={S.sectionHeader}>
               <span style={S.sectionLabel}>{t("lm.queue")}</span>
               {queueVerses.length > 0 && (
@@ -1416,7 +1414,7 @@ export default function DockLmTab({
           </div>
 
           {filteredSuggestions.length > 0 && (
-            <div style={S.suggestionsSection} data-onboarding="suggestions-section">
+            <div style={S.suggestionsSection}>
               <div style={S.sectionHeader}>
                 <span style={S.sectionLabel}>{t("lm.suggestions", "Suggestions")}</span>
                 <span style={S.sectionCount}>{filteredSuggestions.length}</span>
@@ -1824,12 +1822,6 @@ export default function DockLmTab({
         </div>
       )}
 
-      <BibleAiOnboarding
-        isOpen={showOnboarding}
-        onClose={() => setShowOnboarding(false)}
-        onOpenSettings={() => setShowSettings(true)}
-      />
-
       {showSettings && (
         <>
           <div style={S.settingsOverlay} onClick={() => setShowSettings(false)} />
@@ -1997,7 +1989,7 @@ export default function DockLmTab({
 
               <div style={S.settingsGroup}>
                 <div style={S.settingsGroupLabel}>TRANSLATION</div>
-                <div style={S.settingRow} data-onboarding="translation-setting">
+                <div style={S.settingRow}>
                   <span style={S.settingLabel}>{t("lm.translation")}</span>
                   <select
                     style={S.settingSelect}

@@ -11,6 +11,8 @@ import { ensureObsConnected } from "../obsConnectionGuard";
 import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
 import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import Icon from "../DockIcon";
+import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
+import { useDockSceneRoute } from "../dockSceneRouting";
 import type { CountdownConfig, BackgroundSettings, BackgroundType, ImageFit, MessageSettings, OBSSettings, OverlaySyncState, CountdownOverlayPayload } from "../../countdowns/types";
 // countdownDefaults removed — editBg initialized inline
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
@@ -515,6 +517,8 @@ export default function DockCountdownsTab({
 } = {}) {
   const { t } = useTranslation();
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
+  const [sceneRoute, updateSceneRoute] = useDockSceneRoute("countdown");
+  const hasSceneRoute = sceneRoute.enabled && Boolean(sceneRoute.sceneName);
   const [countdowns, setCountdowns] = useState<CountdownConfig[]>(HARDCODED_COUNTDOWNS);
   const [liveCountdownId, setLiveCountdownId] = useState<string | null>(() => readLivePersistState()?.id ?? null);
   const livePersistRef = useRef<LivePersistState | null>(readLivePersistState());
@@ -653,6 +657,32 @@ export default function DockCountdownsTab({
   const COUNTDOWN_SOURCE = DOCK_COUNTDOWN_SOURCE_NAME;
   const BG_SOURCE = DOCK_COUNTDOWN_BG_SOURCE_NAME;
 
+  const getObsTargets = useCallback((cd: CountdownConfig) => {
+    if (!hasSceneRoute) {
+      return [{
+        sceneName: resolveCountdownTargetScene(cd.obs.sceneName),
+        contentSourceName: COUNTDOWN_SOURCE,
+        backgroundSourceName: BG_SOURCE,
+      }];
+    }
+
+    const selectedTarget = {
+      sceneName: sceneRoute.sceneName,
+      contentSourceName: dockObsClient.getSceneRouteSourceName("countdown", sceneRoute.sceneName),
+      backgroundSourceName: dockObsClient.getSceneRouteSourceName("countdown", sceneRoute.sceneName, "Background"),
+    };
+    if (!sceneRoute.syncPresentation) return [selectedTarget];
+
+    return [
+      selectedTarget,
+      {
+        sceneName: resolveCountdownTargetScene(),
+        contentSourceName: COUNTDOWN_SOURCE,
+        backgroundSourceName: BG_SOURCE,
+      },
+    ];
+  }, [hasSceneRoute, sceneRoute.sceneName, sceneRoute.syncPresentation]);
+
   async function loadObsScenes(): Promise<string[]> {
     if (presentationLinkMode) return [];
     try {
@@ -735,13 +765,12 @@ export default function DockCountdownsTab({
     }
   }
 
-  async function hideObsSource(sourceName: string, sceneName?: string): Promise<void> {
-    const target = resolveCountdownTargetScene(sceneName);
-    const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName: target }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
+  async function hideObsSource(sourceName: string, sceneName: string): Promise<void> {
+    const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
     const item = sceneItems.sceneItems.find((i) => i.sourceName === sourceName);
     if (item) {
       await dockObsClient.call("SetSceneItemEnabled", {
-        sceneName: target,
+        sceneName,
         sceneItemId: item.sceneItemId,
         sceneItemEnabled: false,
       });
@@ -761,13 +790,13 @@ export default function DockCountdownsTab({
       const baseUrl = getOverlayBaseUrlSync();
       const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
       const url = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
-      const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
-
-      await ensureObsSource(COUNTDOWN_SOURCE, url, targetScene);
+      for (const target of getObsTargets(cd)) {
+        await ensureObsSource(target.contentSourceName, url, target.sceneName);
+      }
     } catch (err) {
       console.warn("[DockCountdowns] Failed to push to OBS:", err);
     }
-  }, [presentationLinkMode]);
+  }, [getObsTargets, presentationLinkMode]);
 
   // ── Actions ─────────────────────────────────────────────────────────────
 
@@ -791,11 +820,13 @@ export default function DockCountdownsTab({
     try {
       // 1. Push BG first, then countdown overlay ONCE with running state
       const baseUrl = getOverlayBaseUrlSync();
-      const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
+      const targets = getObsTargets(cd);
 
       const bgPayload = { config: cd, baseUrl, timestamp: Date.now() };
       const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
-      await ensureObsSource(BG_SOURCE, bgUrl, targetScene, { setTransform: true });
+      for (const target of targets) {
+        await ensureObsSource(target.backgroundSourceName, bgUrl, target.sceneName, { setTransform: true });
+      }
 
       setActiveId(cd.id);
       setPlaybackState("running");
@@ -810,13 +841,15 @@ export default function DockCountdownsTab({
       const sync: OverlaySyncState = { paused: false, remaining };
       const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
       const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
-      await ensureObsSource(COUNTDOWN_SOURCE, contentUrl, targetScene, { setTransform: true });
+      for (const target of targets) {
+        await ensureObsSource(target.contentSourceName, contentUrl, target.sceneName, { setTransform: true });
+      }
 
       timer.start();
     } catch (err) {
       console.warn("[DockCountdowns] Failed to show in OBS:", err);
     }
-  }, [presentationLinkMode, timer, pushToObs]);
+  }, [getObsTargets, presentationLinkMode, timer]);
 
   const handlePause = useCallback(async (cd: CountdownConfig) => {
     const currentRemaining = timer.pause();
@@ -849,7 +882,7 @@ export default function DockCountdownsTab({
     obsControlArmedRef.current = true;
     setActiveId(null);
     setPlaybackState("running");
-    const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
+    const targets = getObsTargets(cd);
     try {
       if (presentationLinkMode) {
         await clearPresentationScreen();
@@ -857,15 +890,17 @@ export default function DockCountdownsTab({
         await ensureObsConnected();
       }
       if (!presentationLinkMode && dockObsClient.isConnected) {
-        await hideObsSource(BG_SOURCE, targetScene);
-        await hideObsSource(COUNTDOWN_SOURCE, targetScene);
+        for (const target of targets) {
+          await hideObsSource(target.backgroundSourceName, target.sceneName);
+          await hideObsSource(target.contentSourceName, target.sceneName);
+        }
       }
     } catch (err) {
       console.warn("[DockCountdowns] Failed to hide OBS sources:", err);
     }
     writeLivePersistState(null);
     setLiveCountdownId(null);
-  }, [presentationLinkMode, timer]);
+  }, [getObsTargets, presentationLinkMode, timer]);
 
   const handleAdjustTime = useCallback(async (cd: CountdownConfig, deltaSeconds: number) => {
     const oldRemaining = timer.remaining;
@@ -910,6 +945,13 @@ export default function DockCountdownsTab({
           <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dock-text)" }}>{t("countdowns.myCountdowns")}</span>
           <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>({countdowns.length})</span>
         </div>
+        <DockSceneRoutingControl
+          module="countdown"
+          route={sceneRoute}
+          onRouteChange={updateSceneRoute}
+          disabled={presentationLinkMode}
+          title="Countdown output"
+        />
       </div>
 
       {/* Countdown list */}

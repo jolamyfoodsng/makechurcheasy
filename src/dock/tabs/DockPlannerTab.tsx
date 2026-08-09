@@ -238,9 +238,9 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
       }
       const payload = cue.payloadSnapshot ?? {};
       if (cue.type === "bible") {
-        await dockObsClient.pushBible(payload as Parameters<typeof dockObsClient.pushBible>[0]);
+        await dockObsClient.pushBible(payload as unknown as Parameters<typeof dockObsClient.pushBible>[0]);
       } else if (cue.type === "worship") {
-        await dockObsClient.pushWorshipLyrics(payload as Parameters<typeof dockObsClient.pushWorshipLyrics>[0]);
+        await dockObsClient.pushWorshipLyrics(payload as unknown as Parameters<typeof dockObsClient.pushWorshipLyrics>[0]);
       } else if (cue.type === "sermon") {
         await dockObsClient.pushSermonCue(payload as Parameters<typeof dockObsClient.pushSermonCue>[0]);
       } else {

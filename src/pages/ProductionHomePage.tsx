@@ -2,7 +2,6 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Activity,
   AlertCircle,
-  AlertTriangle,
   ArrowRight,
   BookOpen,
   Calendar,
@@ -12,8 +11,6 @@ import {
   Coins,
   Copy,
   Crown,
-  ExternalLink,
-  HelpCircle,
   History,
   Image as ImageIcon,
   Images,
@@ -25,8 +22,6 @@ import {
   MonitorSmartphone,
   Moon,
   Music,
-  Play,
-  RotateCcw,
   Sun,
   Video
 } from "lucide-react";
@@ -34,14 +29,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
-import DashboardTutorial, {
-  isDashboardTutorialCompleted,
-  markDashboardTutorialCompleted,
-  resetDashboardTutorial,
-} from "./DashboardTutorial";
-
 import { getBibleSettings, getInstalledTranslations } from "../bible/bibleDb";
-import { TutorialModal } from "../components/TutorialModal";
 import { useAuth } from "../contexts/AuthContext";
 import { useAppTheme } from "../hooks/useAppTheme";
 import { useCountryPricing } from "../hooks/useCountryPricing";
@@ -106,8 +94,6 @@ interface DashboardHeaderProps {
   obsStatus: ConnectionStatus;
   dockAvailable: boolean;
   onConnectObs: () => void;
-  onOpenTutorials: () => void;
-  onOpenTutorialsWithReset: () => void;
 }
 
 function DashboardHeader({
@@ -115,8 +101,6 @@ function DashboardHeader({
   obsStatus,
   dockAvailable,
   onConnectObs,
-  onOpenTutorials,
-  onOpenTutorialsWithReset,
 }: DashboardHeaderProps) {
   const { t } = useTranslation();
   const greetingKey = useMemo(() => getGreetingKey(), []);
@@ -135,7 +119,7 @@ function DashboardHeader({
 
   return (
     <>
-      <header className="header-container" data-dt-tutorial="header">
+      <header className="header-container">
         <div className="header-left">
 
           <div>
@@ -153,14 +137,6 @@ function DashboardHeader({
         </div>
         <div className="header-right">
           <button
-            className="btn-secondary"
-            onClick={() => onOpenTutorialsWithReset()}
-            title={t("dt.button.tooltip")}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-          >
-            <HelpCircle size={16} /> {t("dt.button")}
-          </button>
-          <button
             className="header-theme-toggle"
             onClick={() => setTheme(isLight ? "dark" : "light")}
             title={isLight ? t("dashboard.header.themeToggle.dark") : t("dashboard.header.themeToggle.light")}
@@ -171,7 +147,7 @@ function DashboardHeader({
         </div>
       </header>
 
-      <div className="status-panel" data-dt-tutorial="status-panel">
+      <div className="status-panel">
         <div className="status-item">
           <Monitor className="status-icon" />
           <div>
@@ -230,9 +206,6 @@ function DashboardHeader({
               <Monitor className="btn-icon" /> {t("dashboard.btn.connectToObs")}
             </>
           )}
-        </button>
-        <button className="btn-secondary" onClick={onOpenTutorials} title={t("dashboard.btn.openInNewTab")}>
-          <Play className="btn-icon" /> {t("dashboard.btn.watchTutorials")} <ExternalLink className="btn-icon" />
         </button>
       </div>
     </>
@@ -319,7 +292,7 @@ function DashboardSummaryCards() {
     : `${data.deviceLimit}`;
 
   return (
-    <div className="summary-cards" data-dt-tutorial="summary-cards">
+    <div className="summary-cards">
       <div className="summary-card summary-card--plan">
         <div className="summary-card-icon-wrap summary-card-icon--plan">
           <Crown size={18} />
@@ -488,9 +461,9 @@ function FeatureGrid({
   }, [voiceBibleStatus, voiceBibleConnected, t]);
 
   return (
-    <div className="grid-container" data-dt-tutorial="feature-grid">
+    <div className="grid-container">
       {/* Voice Bible */}
-      <div className="feature-card group card-purple" data-dt-tutorial="voice-bible">
+      <div className="feature-card group card-purple">
         <div className="card-bg-purple" />
         <div className="icon-wrapper icon-wrapper-purple">
           <Mic className="feature-icon icon-purple" />
@@ -962,10 +935,6 @@ export default function ProductionHomePage() {
   // ── Activity ──
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
 
-  // ── Tutorial state ──
-  const [tourActive, setTourActive] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-
   // ── Add activity entry ──
   const addActivity = useCallback(
     (
@@ -1082,15 +1051,6 @@ export default function ProductionHomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, t]);
 
-  // ── Auto-start tutorial on first visit ──
-  useEffect(() => {
-    if (!isDashboardTutorialCompleted() && !tourActive) {
-      const timer = setTimeout(() => setTourActive(true), 600);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Older installations and users who skipped onboarding still get the
   // bundled Move plugin offer from the dashboard.
   useEffect(() => {
@@ -1183,9 +1143,6 @@ export default function ProductionHomePage() {
     }
   }, [voiceBible.status]);
 
-  // ── Tutorial Modal ──
-  const [tutorialOpen, setTutorialOpen] = useState(false);
-
   const handleConnectObs = useCallback(async () => {
     try {
       // If obsService.connect does not exist, replace with appropriate connect/reconnect method.
@@ -1202,33 +1159,9 @@ export default function ProductionHomePage() {
     }
   }, [navigate]);
 
-  const handleOpenTutorials = useCallback(() => {
-    track("tutorial_modal_opened");
-    openUrl("https://www.youtube.com/playlist?list=PLRua6gJfgC0o");
-  }, []);
-
   return (
     <div className="app-page__inner">
       <OnboardingResumeBanner />
-
-      {/* ── Incomplete tutorial banner ── */}
-      {!tourActive && !isDashboardTutorialCompleted() && !bannerDismissed && (
-        <div className="tst-tutorial-banner" style={{ marginBottom: 12 }}>
-          <AlertTriangle size={14} />
-          <span>{t("dt.banner")}</span>
-          <div className="tst-tutorial-banner-actions">
-            <button className="tst-banner-btn tst-banner-btn--primary" onClick={() => setTourActive(true)}>
-              {t("dt.banner.continue")}
-            </button>
-            <button className="tst-banner-btn" onClick={() => { resetDashboardTutorial(); setTourActive(true); setBannerDismissed(false); }}>
-              <RotateCcw size={12} /> {t("dt.banner.restart")}
-            </button>
-            <button className="tst-banner-btn" onClick={() => setBannerDismissed(true)}>
-              {t("dt.banner.dismiss")}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* <AppIdCard /> */}
       <DashboardHeader
@@ -1236,12 +1169,6 @@ export default function ProductionHomePage() {
         obsStatus={obsStatus}
         dockAvailable={dockAvailable}
         onConnectObs={handleConnectObs}
-        onOpenTutorials={handleOpenTutorials}
-        onOpenTutorialsWithReset={() => {
-          resetDashboardTutorial();
-          setTourActive(true);
-          setBannerDismissed(false);
-        }}
       />
       <DashboardSummaryCards />
       <PlanUpgradeBanner />
@@ -1257,35 +1184,22 @@ export default function ProductionHomePage() {
         onStartVoiceBible={handleToggleVoiceBible}
         onNavigate={handleNavigate}
       />
-      <div data-dt-tutorial="connection-urls">
-        <ConnectionUrls obsStatus={obsStatus} />
-      </div>
+      <ConnectionUrls obsStatus={obsStatus} />
       {/* <RemotePresentationStatus /> */}
-      <div data-dt-tutorial="activity-log">
-        <ActivityAndStatus
-          activities={activities}
-          obsStatus={obsStatus}
-          dockAvailable={dockAvailable}
-          voiceBibleStatus={voiceBible.status}
-          translationCount={translationCount}
-          mediaCount={mediaCount}
-          songCount={songCount}
-          onNavigate={handleNavigate}
-        />
-      </div>
-      {/* <WhatsNewSection /> */}
-      <TutorialModal
-        open={tutorialOpen}
-        onClose={() => setTutorialOpen(false)}
+      <ActivityAndStatus
+        activities={activities}
+        obsStatus={obsStatus}
+        dockAvailable={dockAvailable}
+        voiceBibleStatus={voiceBible.status}
+        translationCount={translationCount}
+        mediaCount={mediaCount}
+        songCount={songCount}
+        onNavigate={handleNavigate}
       />
+      {/* <WhatsNewSection /> */}
       {showMovePluginPrompt && (
         <MovePluginInstallModal onClose={() => setShowMovePluginPrompt(false)} />
       )}
-      <DashboardTutorial
-        isActive={tourActive}
-        onClose={() => setTourActive(false)}
-        onFinish={() => { markDashboardTutorialCompleted(); setTourActive(false); }}
-      />
     </div>
   );
 }

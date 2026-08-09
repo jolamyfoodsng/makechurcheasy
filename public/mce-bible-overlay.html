@@ -1040,11 +1040,17 @@
       const lowerThirdLayer = document.getElementById('lower-third-layer');
 
       const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
-      const _storageKey = _tabParam === 'worship' ? 'worship-overlay-data' : 'bible-overlay-data';
-      const _ackStorageKey = _tabParam === 'worship' ? 'worship-overlay-render-ack' : 'bible-overlay-render-ack';
-      const _channelName = _tabParam === 'worship' ? 'obs-church-studio-worship-overlay' : 'obs-church-studio-bible-overlay';
+      const _routeSource = new URLSearchParams(window.location.search).get('mceSource') || '';
+      const _routeSuffix = _routeSource ? `:${_routeSource}` : '';
+      const _storageKey = (_tabParam === 'worship' ? 'worship-overlay-data' : 'bible-overlay-data') + _routeSuffix;
+      const _ackStorageKey = (_tabParam === 'worship' ? 'worship-overlay-render-ack' : 'bible-overlay-render-ack') + _routeSuffix;
+      const _channelName = (_tabParam === 'worship' ? 'obs-church-studio-worship-overlay' : 'obs-church-studio-bible-overlay') + _routeSuffix;
 
       function readInitialMode() {
+        try {
+          const modeParam = new URLSearchParams(window.location.search).get('mode');
+          if (modeParam === 'fullscreen' || modeParam === 'lower-third') return modeParam;
+        } catch { }
         try {
           const raw = localStorage.getItem(_storageKey);
           const parsed = raw ? JSON.parse(raw) : null;
@@ -2586,6 +2592,8 @@
           const data = detail && typeof detail.event_data === 'object' ? detail.event_data : detail;
           if (!data || typeof data !== 'object') return false;
           if (data.tab && data.tab !== _tabParam) return false;
+          const targetSource = typeof data.targetSource === 'string' ? data.targetSource : '';
+          if (_routeSource ? targetSource !== _routeSource : Boolean(targetSource)) return false;
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
           applyObsBrowserEventCss(data.css || data.overlayCss || '');
@@ -2597,6 +2605,8 @@
       function readFromOverlayRelayPacket(packet) {
         try {
           if (!packet || typeof packet !== 'object') return false;
+          const targetSource = typeof packet.targetSource === 'string' ? packet.targetSource : '';
+          if (_routeSource ? targetSource !== _routeSource : Boolean(targetSource)) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
           if (packet.type === 'mode-change' && packet.mode) {
             if (packet.theme) {

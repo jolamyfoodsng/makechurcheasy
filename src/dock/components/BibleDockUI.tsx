@@ -275,6 +275,7 @@ interface BibleDockContainerProps {
   compactActions?: React.ReactNode;
   children: React.ReactNode;
   isCompact?: boolean;
+  isNarrowWidth?: boolean;
 }
 
 export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerProps>(function BibleDockContainer({
@@ -306,6 +307,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
   compactActions,
   children,
   isCompact = false,
+  isNarrowWidth = false,
 }: BibleDockContainerProps, ref) {
   const [_isNarrowScreen, _setIsNarrowScreen] = useState(false);
 
@@ -326,6 +328,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
     "dock-module",
     "dock-module--bible",
     isCompact ? "dock-module--bible--compact" : "",
+    isNarrowWidth ? "dock-module--bible--narrow" : "",
   ].filter(Boolean).join(" ");
   const browseControls = (
     <BibleControls
