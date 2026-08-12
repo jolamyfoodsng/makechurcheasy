@@ -25,5 +25,7 @@ describe("African-language font stack", () => {
   it("loads shared fonts in standalone dock entries", () => {
     expect(dockMain).toContain('import "../fonts.css"');
     expect(lmDockMain).toContain('import "../fonts.css"');
+    expect(fontsCss).toContain('@import url("/fonts/google/google-fonts.css")');
+    expect(fontsCss).toContain('@import url("/fonts/cmg-sans-fonts.css")');
   });
 });

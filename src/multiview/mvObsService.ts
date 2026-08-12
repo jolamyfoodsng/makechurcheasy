@@ -55,6 +55,13 @@ export interface SceneSlot {
 // Helpers
 // ---------------------------------------------------------------------------
 
+function cssFontWeight(value: unknown): string {
+  if (value === "light") return "300";
+  if (value === "bold") return "700";
+  if (value === "extrabold") return "900";
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "normal";
+}
+
 /** Generate a unique OBS source name for a region within a layout */
 function obsSourceName(layoutName: string, region: Region): string {
   const clean = (layoutName || "Untitled").replace(/[^a-zA-Z0-9 _-]/g, "").trim() || "Layout";
@@ -397,7 +404,7 @@ export async function pushLayoutToOBS(
               const cssVars = [
                 `--font-family: ${fo?.fontFamily ?? ts.fontFamily};`,
                 `--font-size: ${fo?.fontSize ?? ts.fontSize}px;`,
-                `--font-weight: ${ts.fontWeight};`,
+                `--font-weight: ${cssFontWeight(ts.fontWeight)};`,
                 `--font-style: ${ts.fontStyle === "italic" ? "italic" : "normal"};`,
                 `--font-color: ${ts.fontColor};`,
                 `--line-height: ${ts.lineHeight};`,
@@ -407,7 +414,7 @@ export async function pushLayoutToOBS(
                 `--outline-width: ${ts.textOutline ? (ts.textOutlineWidth || 2) + "px" : "0px"};`,
                 `--outline-color: ${ts.textOutline ? ts.textOutlineColor : "transparent"};`,
                 `--ref-font-size: ${ts.refFontSize}px;`,
-                `--ref-font-weight: ${ts.refFontWeight};`,
+                `--ref-font-weight: ${cssFontWeight(ts.refFontWeight)};`,
                 `--ref-font-color: ${ts.refFontColor};`,
                 `--bg-color: ${ts.backgroundColor};`,
                 `--bg-opacity: ${ts.backgroundOpacity ?? 1};`,
@@ -1109,5 +1116,4 @@ export async function removeLayoutFromOBS(
     return { removed, errors };
   }
 }
-
 

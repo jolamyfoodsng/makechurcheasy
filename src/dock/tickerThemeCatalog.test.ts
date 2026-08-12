@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatDockTickerMessages,
   getDockTickerThemeOptionsForFavorites,
   renderDockTickerThemeHtml,
   resolveDockTickerThemeOption,
@@ -96,5 +97,45 @@ describe("tickerThemeCatalog", () => {
     });
 
     expect(html).toContain(`font-family: ${font?.family} !important;`);
+  });
+
+  it("adds extra space before the next native ticker message and supports divider styles", () => {
+    const option = resolveDockTickerThemeOption("ticker-fresh");
+    const html = renderDockTickerThemeHtml({
+      option: option!,
+      heading: "Live",
+      messages: ["Alpha", "Beta"],
+      speed: 50,
+      position: "bottom",
+      loop: true,
+      divider: "diamond",
+      messageSpacing: 50,
+    });
+
+    expect(html).toContain("margin-left:50px");
+    expect(html).toContain("◆");
+  });
+
+  it("applies spacing and a creative divider to the social footer ticker", () => {
+    const option = resolveDockTickerThemeOption("ticker-social-footer");
+    const html = renderDockTickerThemeHtml({
+      option: option!,
+      heading: "Follow Us",
+      messages: ["@church", "@mce"],
+      speed: 50,
+      position: "bottom",
+      loop: true,
+      divider: "spark",
+      messageSpacing: 50,
+    });
+
+    expect(html).toContain("gap: calc(22px + 50px)");
+    expect(html).toContain('content: "✦";');
+  });
+
+  it("formats presentation ticker text with the selected divider and spacing", () => {
+    expect(formatDockTickerMessages(["Alpha", "Beta"], "line", 16)).toContain("Alpha");
+    expect(formatDockTickerMessages(["Alpha", "Beta"], "line", 16)).toContain("—");
+    expect(formatDockTickerMessages(["Alpha", "Beta"], "none", 16)).not.toContain("•");
   });
 });

@@ -119,6 +119,7 @@ import "./lowerthirds/lowerthirds.css";
 import "./App.css";
 import "./NewDashboard.css";
 import "./compat-mode.css";
+import "./accessibility.css";
 import { getRecommendedPollingInterval } from "./services/performanceManager";
 
 const UPDATE_POLL_INTERVAL_MS = 30_000;

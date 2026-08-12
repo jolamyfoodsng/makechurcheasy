@@ -75,4 +75,26 @@ describe("dock scene routing", () => {
     expect(ministryTabSource).toContain("tickerSceneRoute.syncPresentation");
     expect(ministryTabSource).toContain("lowerThirdSceneRoute.syncPresentation");
   });
+
+  it("keeps the Bible overlay fit cache tied to the active theme mode", () => {
+    expect(bibleOverlaySource).toContain("lastAppliedThemeKeyByMode[activeMode] || ''");
+    expect(bibleOverlaySource).not.toContain("lastAppliedThemeKey,\n");
+  });
+
+  it("updates Notes slides in place without restarting a full-layer fade", () => {
+    expect(notesOverlaySource).not.toContain("mce-preview-slide-fade");
+    expect(notesOverlaySource).not.toContain("restartPreviewFade");
+  });
+
+  it("delivers every routed lower-third update as a complete targeted packet", () => {
+    const methodStart = obsClientSource.indexOf("async pushLowerThirdOverlayUrlToScene(");
+    const methodEnd = obsClientSource.indexOf("\n  /**\n   * Push a Bible verse", methodStart);
+    const methodSource = obsClientSource.slice(methodStart, methodEnd);
+
+    expect(methodSource).toContain("const parsed = this.parseOverlayPayloadUrl(url);");
+    expect(methodSource).toContain("url: parsed.baseUrl");
+    expect(methodSource).toContain("overlayPacket: parsed.payload");
+    expect(methodSource).toContain('overlayTab: "lower-third"');
+    expect(methodSource).toContain("this.rememberCssOverlayTransport(sourceName, parsed.payload, parsed.baseUrl, \"\")");
+  });
 });

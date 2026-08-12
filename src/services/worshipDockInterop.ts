@@ -30,6 +30,19 @@ export interface WorshipDockSongSaveResult {
 export const WORSHIP_DOCK_SONG_SAVE_COMMAND_NAME = "dock-worship-song-save";
 export const WORSHIP_DOCK_SONG_SAVE_RESULT_NAME = "dock-worship-song-save-result";
 
+// The dock can start before the Tauri overlay server has finished booting.
+// Keep the fallback handoff alive through that short startup window instead
+// of making the first proxy 500 look like a failed save.
+const SAVE_RETRY_DELAYS_MS = [250, 500, 750, 1_000, 1_500, 2_000, 2_500] as const;
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function shouldRetrySaveStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
 function parseJson<T>(raw: string): T | null {
   try {
     return JSON.parse(raw) as T;
@@ -52,18 +65,42 @@ export async function postWorshipDockSongSaveCommand(
   command: WorshipDockSongSaveCommand,
   baseUrl = window.location.origin,
 ): Promise<void> {
-  const response = await fetch(`${baseUrl}/api/save-dock-data`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: WORSHIP_DOCK_SONG_SAVE_COMMAND_NAME,
-      data: JSON.stringify(command),
-    }),
-  });
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    throw new Error(`Worship song save command failed with ${response.status}`);
+  for (let attempt = 0; attempt <= SAVE_RETRY_DELAYS_MS.length; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}/api/save-dock-data`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: WORSHIP_DOCK_SONG_SAVE_COMMAND_NAME,
+          data: JSON.stringify(command),
+        }),
+      });
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      if (attempt === SAVE_RETRY_DELAYS_MS.length) throw error;
+      lastError = error;
+      await wait(SAVE_RETRY_DELAYS_MS[attempt]);
+      continue;
+    }
+
+    if (response.ok) return;
+
+    const detail = (await response.text().catch(() => "")).trim();
+    const detailSuffix = detail ? `: ${detail.slice(0, 180)}` : "";
+    const error = new Error(
+      `Worship song save command failed with ${response.status}${detailSuffix}`,
+    );
+    if (!shouldRetrySaveStatus(response.status) || attempt === SAVE_RETRY_DELAYS_MS.length) {
+      throw error;
+    }
+    lastError = error;
+    await wait(SAVE_RETRY_DELAYS_MS[attempt]);
   }
+
+  throw lastError ?? new Error("Worship song save command failed.");
 }
 
 export async function loadWorshipDockSongSaveCommand(): Promise<WorshipDockSongSaveCommand | null> {

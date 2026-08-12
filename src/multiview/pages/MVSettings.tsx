@@ -18,6 +18,8 @@ import {
   INTERFACE_LOCALES,
 } from "../../i18n/localeCatalog";
 import { ltDurationStore } from "../../lowerthirds/ltDurationStore";
+import { useAppTheme } from "../../hooks/useAppTheme";
+import { APP_APPEARANCE_PALETTES } from "../../services/appAppearance";
 import { applyBrandingSettingsToDom } from "../../services/branding";
 import { fetchCreditDetails, fetchCreditTransactions, onCreditChange, type CreditDetails, type CreditTransaction } from "../../services/credits";
 import {
@@ -82,17 +84,6 @@ import { refreshAccountBootstrapFromServer } from "../../services/authService";
 import "./MVSettings.css";
 
 /* ── Constants ── */
-const SWATCHES = [
-  { id: "purple", hex: "#1D4ED8", rgb: "29, 78, 216", name: "Purple" },
-  { id: "blue", hex: "#3B82F6", rgb: "59, 130, 246", name: "Blue" },
-  { id: "cyan", hex: "#06B6D4", rgb: "6, 182, 212", name: "Cyan" },
-  { id: "green", hex: "#10B981", rgb: "16, 185, 129", name: "Green" },
-  { id: "yellow", hex: "#F59E0B", rgb: "245, 158, 11", name: "Yellow" },
-  { id: "orange", hex: "#F97316", rgb: "249, 115, 22", name: "Orange" },
-  { id: "pink", hex: "#EC4899", rgb: "236, 72, 153", name: "Pink" },
-  { id: "deeppurple", hex: "#1D4ED8", rgb: "168, 85, 247", name: "Deep Purple" },
-];
-
 const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
   { value: "KJV", label: "King James Version (KJV)" },
 ];
@@ -326,10 +317,13 @@ export function MVSettings() {
   }, [activeTab, authUser?.id, refreshUser]);
 
   // ── Appearance customization state ──
-  const [theme, setTheme] = useState<"light" | "dark" | "system">(
-    () => (settings.theme as "light" | "dark" | "system") || "dark"
-  );
-  const [accentColor, setAccentColor] = useState<string>("purple");
+  const {
+    preference: theme,
+    effective: effectiveTheme,
+    setTheme,
+    appearance,
+    setAppearance,
+  } = useAppTheme();
   const [density, setDensity] = useState<"comfortable" | "balanced" | "compact">("balanced");
   const [fontSizeRange, setFontSizeRange] = useState<number>(2);
   const [highContrastUI, setHighContrastUI] = useState<boolean>(settings.highContrast ?? false);
@@ -422,18 +416,14 @@ export function MVSettings() {
 
   /* ── Dynamic CSS theming ── */
   useEffect(() => {
-    let appliedTheme = theme;
-    if (theme === "system") {
-      appliedTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-    document.documentElement.setAttribute("data-theme", appliedTheme);
+    document.documentElement.setAttribute("data-theme", effectiveTheme);
     document.documentElement.setAttribute("data-contrast", highContrastUI ? "high" : "standard");
     document.documentElement.setAttribute("data-reduced-motion", reduceMotion ? "true" : "false");
     document.documentElement.setAttribute("data-roundness", roundedCorners ? "standard" : "none");
 
     // Sync .light / .dark classes so App.css :root.light overrides activate
     const root = document.documentElement;
-    if (appliedTheme === "light") {
+    if (effectiveTheme === "light") {
       root.classList.add("light");
     } else {
       root.classList.remove("light");
@@ -444,11 +434,7 @@ export function MVSettings() {
     root.classList.add(`density-${density}`);
     root.classList.remove("font-scale-small", "font-scale-medium", "font-scale-large");
     root.classList.add(`font-scale-${fontSizeRange === 1 ? "small" : fontSizeRange === 2 ? "medium" : "large"}`);
-
-    const swatch = SWATCHES.find((s) => s.id === accentColor) || SWATCHES[0];
-    document.documentElement.style.setProperty("--accent-color", swatch.hex);
-    document.documentElement.style.setProperty("--accent-rgb", swatch.rgb);
-  }, [theme, accentColor, density, fontSizeRange, highContrastUI, reduceMotion, roundedCorners]);
+  }, [effectiveTheme, density, fontSizeRange, highContrastUI, reduceMotion, roundedCorners]);
 
   /* ── Settings update helper ── */
   const update = useCallback(
@@ -534,11 +520,21 @@ export function MVSettings() {
     setObsTestResult(null);
     setObsStatus("connecting");
     try {
+      if (obsMethod !== "WebSocket") {
+        setObsStatus("disconnected");
+        setObsTestResult("Alternative Remote API is not available for OBS connections yet. Select WebSocket.");
+        return;
+      }
+
       const obsUrl = normalizeOBSWebSocketUrl(settings.obsUrl);
       if (obsUrl !== settings.obsUrl) {
         update({ obsUrl });
       }
-      if (!obsService.isConnected) await obsService.connect(obsUrl, obsPasswordDraft || undefined);
+
+      // Always reconnect for an explicit test. If OBS is already connected to
+      // the old target, skipping connect would silently ignore a new host,
+      // port, or password and keep reporting the old connection as valid.
+      await obsService.connect(obsUrl, obsPasswordDraft || undefined);
       const version = await obsService.call("GetVersion");
       await persistOBSWebSocketConfig(obsUrl, obsPasswordDraft || undefined, settings.obsAutoReconnect);
       setObsTestResult(t("mvSettings.obs.testResultConnected", { obsVersion: version.obsVersion, wsVersion: version.obsWebSocketVersion }));
@@ -681,7 +677,7 @@ export function MVSettings() {
   /* ── Appearance helpers ── */
   const handleResetAppearance = useCallback(() => {
     setTheme("dark");
-    setAccentColor("purple");
+    setAppearance({ palette: "classic-blue", customAccent: "#1D4ED8" });
     setDensity("balanced");
     setFontSizeRange(2);
     setHighContrastUI(false);
@@ -1075,7 +1071,7 @@ export function MVSettings() {
                       <label className="form-label">{t("mvSettings.obs.connectionMethod")}</label>
                       <div className="grid-2-col" style={{ marginTop: "4px" }}>
                         <label className="option-select-card">
-                          <input type="radio" name="obs_method" checked={obsMethod === "WebSocket"} onChange={() => setObsMethod("WebSocket")} />
+                          <input type="radio" name="obs_method" checked={obsMethod === "WebSocket"} onChange={() => { setObsMethod("WebSocket"); setObsTestResult(null); setObsStatus(obsService.isConnected ? "connected" : "disconnected"); }} />
                           <div className="option-select-inner" style={{ padding: "16px", alignItems: "flex-start", textAlign: "left" }}>
                             <div className="checked-indicator"><Check size={10} /></div>
                             <div className="density-icon-box" style={{ background: obsMethod === "WebSocket" ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: obsMethod === "WebSocket" ? "var(--accent-color)" : "var(--text-secondary)" }}><Radio size={16} /></div>
@@ -1086,7 +1082,7 @@ export function MVSettings() {
                           </div>
                         </label>
                         <label className="option-select-card">
-                          <input type="radio" name="obs_method" checked={obsMethod === "Remote"} onChange={() => setObsMethod("Remote")} />
+                          <input type="radio" name="obs_method" checked={obsMethod === "Remote"} onChange={() => { setObsMethod("Remote"); setObsTestResult(null); setObsStatus("disconnected"); }} />
                           <div className="option-select-inner" style={{ padding: "16px", alignItems: "flex-start", textAlign: "left" }}>
                             <div className="checked-indicator"><Check size={10} /></div>
                             <div className="density-icon-box" style={{ background: obsMethod === "Remote" ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: obsMethod === "Remote" ? "var(--accent-color)" : "var(--text-secondary)" }}><ExternalLink size={16} /></div>
@@ -1505,10 +1501,51 @@ export function MVSettings() {
                       </div>
                     </div>
 
-
-
-                    {/* Accent color */}
-
+                    {/* Shared app + Dock color theme */}
+                    <hr className="settings-divider" />
+                    <div className="form-group">
+                      <label className="form-label">Color theme</label>
+                      <p className="form-hint" style={{ marginTop: 4, marginBottom: 10 }}>
+                        Choose the same visual language for MakeChurchEasy and the OBS Dock.
+                      </p>
+                      <div className="app-appearance-palette-grid">
+                        {APP_APPEARANCE_PALETTES.map((palette) => {
+                          const selected = appearance.palette === palette.id;
+                          return (
+                            <button
+                              key={palette.id}
+                              type="button"
+                              className={`app-appearance-palette${selected ? " app-appearance-palette--active" : ""}`}
+                              onClick={() => setAppearance({ palette: palette.id })}
+                              aria-pressed={selected}
+                            >
+                              <span className="app-appearance-palette__swatches" aria-hidden="true">
+                                {palette.swatches.map((swatch) => (
+                                  <span key={swatch} style={{ background: swatch }} />
+                                ))}
+                              </span>
+                              <span className="app-appearance-palette__copy">
+                                <span className="app-appearance-palette__title">{palette.label}</span>
+                                <span className="app-appearance-palette__desc">{palette.description}</span>
+                              </span>
+                              {selected && <Check size={15} className="app-appearance-palette__check" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <label className={`app-appearance-custom${appearance.palette === "custom" ? " app-appearance-custom--active" : ""}`}>
+                        <span>
+                          <span className="app-appearance-custom__title">Custom accent</span>
+                          <span className="app-appearance-custom__desc">Use a personal color for buttons and active states.</span>
+                        </span>
+                        <input
+                          type="color"
+                          value={appearance.customAccent}
+                          onChange={(event) => setAppearance({ palette: "custom", customAccent: event.target.value })}
+                          aria-label="Custom accent"
+                        />
+                      </label>
+                    </div>
 
                     <hr className="settings-divider" />
 

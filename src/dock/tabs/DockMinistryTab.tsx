@@ -20,7 +20,7 @@ import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
 import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import Icon from "../DockIcon";
 import { LT_ALL_THEMES } from "../../lowerthirds/themes";
-import { loadDockLTFavorites, loadDockFavoriteBibleThemes, loadDockTickerFavorites } from "../dockThemeData";
+import { loadDockLTFavorites, loadDockTickerFavorites } from "../dockThemeData";
 import { FAVORITE_THEMES_UPDATED_EVENT } from "../../services/favoriteThemes";
 import { dockClient } from "../../services/dockBridge";
 import type { LowerThirdTheme } from "../../lowerthirds/types";
@@ -46,9 +46,12 @@ import {
 } from "../../services/presentationPublish";
 import {
   DEFAULT_DOCK_TICKER_THEME_OPTION,
+  formatDockTickerMessages,
   getDockTickerThemeOptionsForFavorites,
   renderDockTickerThemeHtml,
+  resolveDockTickerDividerChar,
   resolveDockTickerThemeOption,
+  type DockTickerDivider,
 } from "../tickerThemeCatalog";
 import {
   REMOTE_PRODUCTION_THEMES_UPDATED_EVENT,
@@ -114,6 +117,8 @@ interface TickerSettings {
   loop: boolean;
   themeId: string;
   heading: string;
+  messageSpacing: number;
+  divider: DockTickerDivider;
   colors: TickerColorOverrides;
 }
 
@@ -146,6 +151,7 @@ const BIBLE_LT_COLOR_OVERRIDES_KEY = "dock-bible-lt-color-overrides";
 const MINISTRY_LT_SIZE_STORAGE_KEY = "dock-ministry-lower-third-size";
 const MAX_CHARS = 140;
 const TICKER_HEIGHT = 80;
+const TICKER_MESSAGE_SPACING_MAX = 100;
 const TICKER_COLOR_POPOVER_WIDTH = 270;
 const COLOR_INPUT_FALLBACK = "#1d4ed8";
 const TICKER_COLOR_INPUT_FALLBACKS: Record<TickerColorKey, string> = {
@@ -161,6 +167,14 @@ const TICKER_COLOR_CONTROLS: Array<{ key: TickerColorKey; label: string }> = [
   { key: "barText", label: "Ticker text" },
   { key: "barBg", label: "Ticker background" },
   { key: "separator", label: "Separator" },
+];
+const TICKER_DIVIDER_OPTIONS: Array<{ value: DockTickerDivider; label: string; icon: string }> = [
+  { value: "theme", label: "Theme default", icon: "palette" },
+  { value: "none", label: "No divider", icon: "close" },
+  { value: "dot", label: "Dot", icon: "fiber_manual_record" },
+  { value: "line", label: "Line", icon: "remove" },
+  { value: "diamond", label: "Diamond", icon: "diamond" },
+  { value: "spark", label: "Spark", icon: "auto_awesome" },
 ];
 const BIBLE_LT_COLOR_CONTROLS: Array<{ key: BibleLtColorKey; label: string; fallback: string }> = [
   { key: "fontColor", label: "Text", fallback: "#ffffff" },
@@ -269,6 +283,12 @@ function loadSettings(): TickerSettings {
         heading: typeof parsed.heading === "string" && parsed.heading.trim()
           ? parsed.heading.slice(0, 20)
           : parsedTheme?.defaultHeading ?? "LIVE",
+        messageSpacing: typeof parsed.messageSpacing === "number"
+          ? Math.max(0, Math.min(TICKER_MESSAGE_SPACING_MAX, Math.round(parsed.messageSpacing)))
+          : 0,
+        divider: TICKER_DIVIDER_OPTIONS.some((option) => option.value === parsed.divider)
+          ? parsed.divider as DockTickerDivider
+          : "theme",
         colors: loadTickerColorOverrides(parsed.colors),
       };
     }
@@ -279,6 +299,8 @@ function loadSettings(): TickerSettings {
     loop: true,
     themeId: defaultTheme?.id ?? "",
     heading: defaultTheme?.defaultHeading ?? "LIVE",
+    messageSpacing: 0,
+    divider: "theme",
     colors: {},
   };
 }
@@ -517,21 +539,13 @@ export default function DockMinistryTab({
 
   const refreshLtFavorites = useCallback(async () => {
     try {
-      const [ltIdSet, bibleThemes] = await Promise.all([
-        loadDockLTFavorites().catch(() => new Set<string>()),
-        loadDockFavoriteBibleThemes().catch(() => [] as BibleTheme[]),
-      ]);
+      const ltIdSet = await loadDockLTFavorites().catch(() => new Set<string>());
       const entries: MixedLTThemeEntry[] = [];
 
       // LowerThirdTheme favorites — only show themes favorited/added to OBS
       const ltThemes = availableLtThemes.filter((t) => ltIdSet.has(t.id));
       for (const t of ltThemes) {
         entries.push({ kind: "lt", theme: t, label: t.name });
-      }
-
-      // BibleTheme lower-third favorites (custom themes from ProductionThemeSettingsPage)
-      for (const bt of bibleThemes) {
-        entries.push({ kind: "bible", theme: bt, label: `✦ ${bt.name}` });
       }
 
       setLtFavorites(entries);
@@ -751,7 +765,13 @@ export default function DockMinistryTab({
     try {
       if (presentationLinkMode) {
         await publishTickerToPresentation({
-          text: activeMessages.map((m) => m.text).join("   •   "),
+          text: formatDockTickerMessages(
+            activeMessages.map((m) => m.text),
+            settings.divider,
+            settings.messageSpacing,
+          ),
+          divider: resolveDockTickerDividerChar(settings.divider),
+          messageSpacing: settings.messageSpacing,
           position: settings.position,
           speed: settings.speed,
           textColor: tickerColors?.barText,
@@ -778,6 +798,8 @@ export default function DockMinistryTab({
         fontFamily: dockFontFamily,
         brandLogoUrl: tickerBrandLogoUrl,
         brandName: tickerBrandName,
+        divider: settings.divider,
+        messageSpacing: settings.messageSpacing,
       });
 
       const video = await dockObsClient.call("GetVideoSettings") as { baseWidth: number; baseHeight: number };
@@ -894,7 +916,13 @@ export default function DockMinistryTab({
     try {
       if (presentationLinkMode) {
         await publishTickerToPresentation({
-          text: activeMessages.map((m) => m.text).join("   •   "),
+          text: formatDockTickerMessages(
+            activeMessages.map((m) => m.text),
+            settings.divider,
+            settings.messageSpacing,
+          ),
+          divider: resolveDockTickerDividerChar(settings.divider),
+          messageSpacing: settings.messageSpacing,
           position: settings.position,
           speed: settings.speed,
           textColor: tickerColors?.barText,
@@ -919,6 +947,8 @@ export default function DockMinistryTab({
         fontFamily: dockFontFamily,
         brandLogoUrl: tickerBrandLogoUrl,
         brandName: tickerBrandName,
+        divider: settings.divider,
+        messageSpacing: settings.messageSpacing,
       });
       const video = await dockObsClient.call("GetVideoSettings") as { baseWidth: number; baseHeight: number };
       const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
@@ -1047,7 +1077,7 @@ export default function DockMinistryTab({
               route={tickerSceneRoute}
               onRouteChange={updateTickerSceneRoute}
               disabled={presentationLinkMode}
-              title="Ticker output"
+              title={t("sceneRouting.tickerOutput", "Ticker output")}
             />
           </span>
         )}
@@ -1058,7 +1088,7 @@ export default function DockMinistryTab({
               route={lowerThirdSceneRoute}
               onRouteChange={updateLowerThirdSceneRoute}
               disabled={presentationLinkMode}
-              title="Lower-third output"
+              title={t("sceneRouting.lowerThirdOutput", "Lower-third output")}
             />
           </span>
         )}
@@ -1077,7 +1107,7 @@ export default function DockMinistryTab({
           <button
             type="button"
             className="dock-btn dock-btn--primary dock-btn--sm"
-            onClick={() => showUpgradeModal("Upgrade to Basic or higher to enable the Ticker feature.")}
+            onClick={() => showUpgradeModal(t("upgrade.tickerRequiredMessage", "Upgrade to Basic or higher to enable the Ticker feature."))}
           >
             <Icon name="upgrade" size={14} />
             <span>{t("upgrade.upgradePlan", "Upgrade Plan")}</span>
@@ -1218,6 +1248,53 @@ export default function DockMinistryTab({
                   />
                   <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 24, textAlign: "right" }}>{settings.speed}</span>
                 </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }} title="Extra space before the next message">
+                    Space
+                  </label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={TICKER_MESSAGE_SPACING_MAX}
+                    value={settings.messageSpacing}
+                    onChange={(e) => setSettings((s) => ({ ...s, messageSpacing: Number(e.target.value) }))}
+                    aria-label="Extra space before the next message"
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 32, textAlign: "right" }}>{settings.messageSpacing}px</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                  <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50, paddingTop: 7 }}>Divider</span>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, flex: 1 }} role="group" aria-label="Ticker divider">
+                    {TICKER_DIVIDER_OPTIONS.map((option) => {
+                      const isActive = settings.divider === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setSettings((s) => ({ ...s, divider: option.value }))}
+                          aria-label={option.label}
+                          title={option.label}
+                          style={{
+                            width: 28,
+                            height: 28,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: 0,
+                            borderRadius: 4,
+                            border: `1px solid ${isActive ? "var(--dock-accent)" : "var(--dock-border)"}`,
+                            background: isActive ? "var(--dock-accent)" : "var(--dock-surface)",
+                            color: isActive ? "#fff" : "var(--dock-text-dim)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <Icon name={option.icon} size={13} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 20 }}>
                   <div style={{ display: "block", alignItems: "center", gap: 6 }}>
                     <label style={{ fontSize: 10, display: "block", color: "var(--dock-text-dim)", minWidth: 50, }}>{t("ministry.position")}</label>
@@ -1294,7 +1371,7 @@ export default function DockMinistryTab({
                     disabled={!newText.trim()}
                     style={{ height: 30, whiteSpace: "nowrap" }}
                     title={t("common.add")}>
-                    Add Message
+                    {t("ministry.addMessage", "Add Message")}
                     <Icon name="add" size={14} />
                   </button>
                 </div>
@@ -1489,7 +1566,9 @@ export default function DockMinistryTab({
             {/* Theme Picker */}
             <div className="dock-mv-tab__section">
               <div className="dock-mv-tab__section-label">{t("ministry.theme")}</div>
-              {/* <div className="dock-mv-tab__section-desc">{t("ministry.themeDesc")}</div> */}
+              <div className="dock-mv-tab__section-desc">
+                {t("ministry.lowerThirdThemeHelp", "For Scripture, choose the lower-third theme in Bible.")}
+              </div>
               <div style={{ padding: "4px 0" }}>
                 {ltFavorites.length > 0 ? (
                   <select
@@ -1770,7 +1849,7 @@ export default function DockMinistryTab({
                               type="color"
                               value={colorInputValue(explicitColor || effectiveColor, control.fallback)}
                               onChange={(event) => setBibleLtColorOverride(ltSelectedEntry.theme.id, control.key, event.target.value)}
-                              title={control.label}
+                              title={t(`lowerThird.color.${control.key}`, control.label)}
                               style={{
                                 width: 26,
                                 height: 22,
@@ -1804,6 +1883,9 @@ export default function DockMinistryTab({
                           book: "",
                           chapter: 0,
                           verse: 0,
+                          verseRange: "",
+                          referenceLabel: "",
+                          displayReferenceLabel: "",
                           translation: "",
                           verseText: bibleLtText.trim(),
                           overlayMode: "lower-third",
@@ -1850,6 +1932,9 @@ export default function DockMinistryTab({
                             book: "",
                             chapter: 0,
                             verse: 0,
+                            verseRange: "",
+                            referenceLabel: "",
+                            displayReferenceLabel: "",
                             translation: "",
                             verseText: "",
                             overlayMode: "lower-third",
@@ -1910,6 +1995,9 @@ export default function DockMinistryTab({
                           book: "",
                           chapter: 0,
                           verse: 0,
+                          verseRange: "",
+                          referenceLabel: "",
+                          displayReferenceLabel: "",
                           translation: "",
                           verseText: "",
                           overlayMode: "lower-third",
@@ -2027,7 +2115,7 @@ export default function DockMinistryTab({
                     type="color"
                     value={colorInputValue(explicitColor || effectiveColor, TICKER_COLOR_INPUT_FALLBACKS[key])}
                     onChange={(e) => setTickerColorOverride(key, e.target.value)}
-                    title={label}
+                    title={t(`ministry.tickerColor.${key}`, label)}
                     style={{
                       width: 28,
                       height: 24,

@@ -1,0 +1,83 @@
+/* Shared accessibility affordances for the main app, Multiview, and Dock. */
+
+:root {
+  --mce-focus-ring: #93C5FD;
+}
+
+:root.light,
+html.mv-theme-light,
+:root[data-theme="light"] {
+  --mce-focus-ring: #1D4ED8;
+}
+
+/* Keep keyboard focus visible even when a component's base style removes the
+   browser outline. Mouse focus remains quiet through :focus:not(:focus-visible). */
+body :is(button, a, input, select, textarea, [role="button"]):focus-visible {
+  outline: 2px solid var(--mce-focus-ring) !important;
+  outline-offset: 2px !important;
+}
+
+.app-container :is(button, a, input, select, textarea, [role="button"]):focus-visible,
+.dock-root :is(button, a, input, select, textarea, [role="button"]):focus-visible,
+.mv-shell :is(button, a, input, select, textarea, [role="button"]):focus-visible {
+  outline: 2px solid var(--mce-focus-ring) !important;
+  outline-offset: 2px !important;
+}
+
+body :is(button, a, input, select, textarea, [role="button"]):focus:not(:focus-visible) {
+  outline: none;
+}
+
+.app-container :is(button, a, input, select, textarea, [role="button"]):focus:not(:focus-visible),
+.dock-root :is(button, a, input, select, textarea, [role="button"]):focus:not(:focus-visible),
+.mv-shell :is(button, a, input, select, textarea, [role="button"]):focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Every routed shell gets the same keyboard escape hatch. */
+.mce-skip-link {
+  position: fixed;
+  top: -4rem;
+  left: 0.75rem;
+  z-index: 10000;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid var(--mce-focus-ring);
+  border-radius: 4px;
+  background: var(--dock-surface, var(--surface, #1E293B));
+  color: var(--dock-text, var(--text-primary, #F8FAFC));
+  font-weight: 700;
+  text-decoration: none;
+  transition: top 120ms ease;
+}
+
+.mce-skip-link:focus-visible {
+  top: 0.75rem;
+  outline: 2px solid var(--mce-focus-ring) !important;
+  outline-offset: 2px !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-container *,
+  .dock-root *,
+  .mv-shell * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .mce-skip-link {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .app-container :is(button, a, input, select, textarea, [role="button"]):focus-visible,
+  .dock-root :is(button, a, input, select, textarea, [role="button"]):focus-visible,
+  .mv-shell :is(button, a, input, select, textarea, [role="button"]):focus-visible {
+    outline: 2px solid Highlight !important;
+  }
+}

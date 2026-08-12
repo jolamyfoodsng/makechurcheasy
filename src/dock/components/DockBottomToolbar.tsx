@@ -144,6 +144,14 @@ export default function DockBottomToolbar({
             <span>{t("dock.bottomToolbar.hideBible")}</span>
           </button>
         )}
+        {centerAction && (
+          <div
+            className="dock-btm-toolbar__center dock-btm-toolbar__center--collapsed"
+            aria-label={t("dock.bottomToolbar.centerActions", "Navigation")}
+          >
+            {centerAction}
+          </div>
+        )}
         {inlineAction}
         <button
           type="button"

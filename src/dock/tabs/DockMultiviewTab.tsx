@@ -984,12 +984,26 @@ function normalizeSourceSize(width?: number, height?: number): SourceSize {
 function normalizeSlotFraming(
   framing: { displayMode: "fill" | "fit" | "custom"; zoom: number; focalX: number; focalY: number },
 ) {
+  const focalX = Number(framing.focalX);
+  const focalY = Number(framing.focalY);
   return {
     displayMode: framing.displayMode,
     zoom: Math.max(1, Math.min(5, Number(framing.zoom) || 1)),
-    focalX: Math.max(0, Math.min(1, Number(framing.focalX) || 0.5)),
-    focalY: Math.max(0, Math.min(1, Number(framing.focalY) || 0.5)),
+    // Do not use `|| 0.5` here: 0 is a valid edge position.
+    focalX: Math.max(0, Math.min(1, Number.isFinite(focalX) ? focalX : 0.5)),
+    focalY: Math.max(0, Math.min(1, Number.isFinite(focalY) ? focalY : 0.5)),
   };
+}
+
+function normalizeEditorFraming(
+  framing: { displayMode: "fill" | "fit" | "custom"; zoom: number; focalX: number; focalY: number },
+) {
+  const normalized = normalizeSlotFraming(framing);
+  // "fill" is retained when reading older saved cards, but the editor now
+  // exposes it as the editable Custom mode.
+  return normalized.displayMode === "fill"
+    ? { ...normalized, displayMode: "custom" as const }
+    : normalized;
 }
 
 async function getSceneItemSourceSize(sceneName: string, sceneItemId: number): Promise<SourceSize> {
@@ -1059,8 +1073,11 @@ export function calculateSlotTransform(
     scaleY: scale,
     renderedWidth,
     renderedHeight,
-    positionX: slot.x - hCrop * safeFraming.focalX,
-    positionY: slot.y - vCrop * safeFraming.focalY,
+    // Crop distances are measured in source pixels, so convert them back to
+    // canvas pixels before positioning the rendered image. Without this
+    // scale, the preview stops short of the slot edge at focalX/Y = 1.
+    positionX: slot.x - hCrop * safeFraming.focalX * scale,
+    positionY: slot.y - vCrop * safeFraming.focalY * scale,
     cropLeft: hCrop * safeFraming.focalX,
     cropRight: hCrop - hCrop * safeFraming.focalX,
     cropTop: vCrop * safeFraming.focalY,
@@ -1088,17 +1105,19 @@ function FramingEditor({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState(() => normalizeSlotFraming(initialFraming));
+  const [draft, setDraft] = useState(() => normalizeEditorFraming(initialFraming));
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [previewSize, setPreviewSize] = useState<SourceSize>(() => normalizeSourceSize());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [showCustomHint, setShowCustomHint] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; startFocalX: number; startFocalY: number } | null>(null);
   const mountedRef = useRef(true);
   const captureGenRef = useRef(0);
 
-  const isCustom = draft.displayMode === "custom";
+  const isCustom = draft.displayMode !== "fit";
+  const zoomPixels = Math.round(draft.zoom * 100);
 
   // ── Capture screenshot when modal opens ──
   const captureScreenshot = useCallback(async () => {
@@ -1129,15 +1148,43 @@ function FramingEditor({
 
   useEffect(() => {
     if (open) {
-      setDraft(normalizeSlotFraming(initialFraming));
+      setDraft(normalizeEditorFraming(initialFraming));
       setScreenshot(null);
       setPreviewSize(normalizeSourceSize());
       setError(null);
+      setShowCustomHint(false);
       mountedRef.current = true;
       captureScreenshot();
     }
     return () => { mountedRef.current = false; };
   }, [open]);
+
+  useEffect(() => {
+    if (!showCustomHint) return;
+    const timeout = window.setTimeout(() => setShowCustomHint(false), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [showCustomHint]);
+
+  const handleDisplayModeChange = useCallback((mode: "fit" | "custom") => {
+    if (mode === "fit") {
+      setDraft(prev => normalizeEditorFraming({ ...prev, displayMode: "fit" }));
+      setShowCustomHint(false);
+      return;
+    }
+
+    setDraft(prev => normalizeEditorFraming({
+      ...prev,
+      displayMode: "custom",
+      // Switching from Fit starts Custom at a centered fill, ready to drag.
+      ...(prev.displayMode === "fit" ? { zoom: 1, focalX: 0.5, focalY: 0.5 } : {}),
+    }));
+    setShowCustomHint(true);
+  }, []);
+
+  const saveFraming = useCallback(() => {
+    onSave(normalizeEditorFraming(draft));
+    onClose();
+  }, [draft, onClose, onSave]);
 
   // ── Preview image transform using the shared calculation ──
   const imageStyle = useMemo((): React.CSSProperties => {
@@ -1184,8 +1231,10 @@ function FramingEditor({
     const sensitivity = 0.003;
     setDraft(prev => normalizeSlotFraming({
       ...prev,
-      focalX: Math.max(0, Math.min(1, dragRef.current!.startFocalX + dx * sensitivity)),
-      focalY: Math.max(0, Math.min(1, dragRef.current!.startFocalY + dy * sensitivity)),
+      // Direct manipulation: dragging the picture right/down moves the
+      // picture right/down, instead of reversing the user's gesture.
+      focalX: Math.max(0, Math.min(1, dragRef.current!.startFocalX - dx * sensitivity)),
+      focalY: Math.max(0, Math.min(1, dragRef.current!.startFocalY - dy * sensitivity)),
     }));
   }, [isCustom]);
 
@@ -1201,14 +1250,6 @@ function FramingEditor({
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
     setDraft(prev => normalizeSlotFraming({ ...prev, zoom: prev.zoom + delta }));
   }, [isCustom]);
-
-  // ── Compute slot aspect ratio label ──
-  const aspectLabel = useMemo(() => {
-    const g = gcd(slotWidth, slotHeight);
-    return `${slotWidth / g}:${slotHeight / g}`;
-  }, [slotWidth, slotHeight]);
-
-  const slotAspectDisplay = `${slotWidth} × ${slotHeight} (${aspectLabel})`;
 
   if (!open) return null;
 
@@ -1227,7 +1268,22 @@ function FramingEditor({
             >
               <Icon name="refresh" size={13} />
             </button>
-            <button type="button" className="dock-mv-framing-editor__close" onClick={onClose}>
+            <button
+              type="button"
+              className="dock-mv-framing-editor__save"
+              onClick={saveFraming}
+              title={t('multiview.saveFraming')}
+              aria-label={t('multiview.saveFraming')}
+            >
+              {t('common.save', 'Save')}
+            </button>
+            <button
+              type="button"
+              className="dock-mv-framing-editor__close"
+              onClick={onClose}
+              title={t('common.cancel')}
+              aria-label={t('common.cancel')}
+            >
               <Icon name="close" size={14} />
             </button>
           </div>
@@ -1282,6 +1338,16 @@ function FramingEditor({
               />
             )}
 
+            {isCustom && showCustomHint && (
+              <div className="dock-mv-framing-editor__custom-hint" role="status" aria-live="polite">
+                <span className="dock-mv-framing-editor__custom-hint-icon" aria-hidden="true">
+                  <Icon name="swap_horiz" size={18} />
+                </span>
+                <strong>{t('multiview.dragLeftRight', 'Drag left or right')}</strong>
+                <span>{t('multiview.dragToReposition', 'Drag the preview to reposition')}</span>
+              </div>
+            )}
+
             {!loading && !error && !screenshot && (
               <div className="dock-mv-framing-editor__preview-placeholder">
                 <Icon name="live_tv" size={24} />
@@ -1294,12 +1360,12 @@ function FramingEditor({
 
           {/* Display Mode selector */}
           <div className="dock-mv-framing-editor__modes">
-            {(["fill", "fit", "custom"] as const).map(mode => (
+            {(["fit", "custom"] as const).map(mode => (
               <button
                 key={mode}
                 type="button"
                 className={`dock-mv-framing-editor__mode${draft.displayMode === mode ? " dock-mv-framing-editor__mode--active" : ""}`}
-                onClick={() => setDraft(prev => normalizeSlotFraming({ ...prev, displayMode: mode }))}
+                onClick={() => handleDisplayModeChange(mode)}
               >
                 {t(`multiview.framingMode_${mode}`)}
               </button>
@@ -1314,65 +1380,26 @@ function FramingEditor({
                 <div className="dock-mv-framing-editor__control-row">
                   <input
                     type="range"
-                    min="1"
-                    max="5"
-                    step="0.05"
-                    value={draft.zoom}
-                    onChange={(e) => setDraft(prev => normalizeSlotFraming({ ...prev, zoom: parseFloat(e.target.value) }))}
+                    min="100"
+                    max="500"
+                    step="5"
+                    value={zoomPixels}
+                    onChange={(e) => setDraft(prev => normalizeSlotFraming({ ...prev, zoom: parseFloat(e.target.value) / 100 }))}
                     className="dock-mv-framing-editor__slider"
+                    aria-label={t('multiview.zoom')}
                   />
-                  <span className="dock-mv-framing-editor__control-value">{draft.zoom.toFixed(2)}x</span>
+                  <span className="dock-mv-framing-editor__control-value">{zoomPixels}px ({draft.zoom.toFixed(2)}×)</span>
                 </div>
               </label>
 
-              <p className="dock-mv-framing-editor__drag-hint">
-                {t('multiview.dragHint', 'Drag the preview to reposition. Use zoom for a tighter crop.')}
-              </p>
             </div>
           )}
-
-          {/* Dimension info */}
-          <div className="dock-mv-framing-editor__info">
-            <span>{t('multiview.source')}: <strong>{selectedContentName}</strong></span>
-            <span className="dock-mv-framing-editor__info-sep">•</span>
-            <span>{t('multiview.slot')}: {slotAspectDisplay}</span>
-          </div>
         </div>
 
-        <div className="dock-mv-framing-editor__actions">
-          {isCustom && (
-            <button
-              type="button"
-              className="dock-mv-framing-editor__reset"
-              onClick={() => setDraft(prev => normalizeSlotFraming({ ...prev, focalX: 0.5, focalY: 0.5, zoom: 1 }))}
-              title={t('multiview.resetCenter')}
-              aria-label={t('multiview.resetCenter')}
-            >
-              <Icon name="restart_alt" size={14} />
-            </button>
-          )}
-          <button type="button" className="dock-btn dock-btn--sm" onClick={onClose}>
-            {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            className="dock-btn dock-btn--sm dock-btn--primary"
-            onClick={() => { onSave(normalizeSlotFraming(draft)); onClose(); }}
-          >
-            {t('multiview.saveFraming')}
-          </button>
-        </div>
+
       </div>
     </div>
   );
-}
-
-// ── Greatest common divisor (for aspect ratio display) ──
-function gcd(a: number, b: number): number {
-  a = Math.abs(a);
-  b = Math.abs(b);
-  while (b) { [a, b] = [b, a % b]; }
-  return a;
 }
 
 // ---------------------------------------------------------------------------
@@ -1987,13 +2014,13 @@ function BackgroundSection({
     : background.type === "image" ? t('multiview.bgImage')
       : background.type === "video" ? t('multiview.bgVideo')
         : background.type === "pattern" ? t('common.pattern')
-        : background.type === "scene" ? t('multiview.bgScene')
-          : "";
+          : background.type === "scene" ? t('multiview.bgScene')
+            : "";
 
   const bgValue = background.type === "color" ? background.color
     : background.type === "pattern" ? getPatternLabel(background.patternSrc)
-    : background.type === "scene" ? background.sceneName
-      : "";
+      : background.type === "scene" ? background.sceneName
+        : "";
 
   const selectedMediaName = background.filePath ? getBackgroundMediaLabel(background.filePath) : "";
   const hasSelectedMedia = selectedMediaName.length > 0;
@@ -2730,7 +2757,7 @@ export default function DockMultiviewTab() {
       mergeIntoAddedLayoutIds(mergedIds);
 
       if (remoteIds.size === 0 && mergedIds.size > 0) {
-        saveAddedLayoutIdsToDockData(mergedIds).catch(() => {});
+        saveAddedLayoutIdsToDockData(mergedIds).catch(() => { });
       }
     };
 

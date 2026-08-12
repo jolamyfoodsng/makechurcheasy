@@ -395,6 +395,7 @@
       padding: var(--compare-panel-inner-padding, 38px);
       min-width: 0;
       min-height: 0;
+      max-height: 100%;
       overflow: hidden;
     }
 
@@ -405,6 +406,7 @@
       justify-content: center;
       width: 100%;
       min-height: 0;
+      max-height: 100%;
       overflow: hidden;
     }
 
@@ -459,6 +461,7 @@
       justify-content: center;
       width: 100%;
       max-width: none;
+      max-height: 100%;
       margin: 0;
       padding-left: 0 !important;
       padding-right: 0 !important;
@@ -468,6 +471,7 @@
       align-items: stretch;
       justify-content: stretch;
       width: 100%;
+      max-height: 100%;
     }
 
     #compare-layout.is-line-by-line .compare-column__verse {
@@ -715,18 +719,68 @@
       pointer-events: auto;
     }
 
-    /* Verse changes must never fade the background layer with the text. */
-    @keyframes mce-preview-text-fade {
-      0% { opacity: 1; }
-      38% { opacity: 0.72; }
-      50% { opacity: 0.28; }
-      62% { opacity: 0.72; }
-      100% { opacity: 1; }
+    /* Verse changes fade the text out completely before the new verse enters.
+       The background remains visible throughout the handoff. */
+    @keyframes mce-preview-text-exit {
+      from { opacity: 1; }
+      to { opacity: 0; }
     }
 
-    .mce-preview-text-fade {
-      animation: mce-preview-text-fade 520ms cubic-bezier(0.42, 0, 0.58, 1) both;
+    @keyframes mce-preview-text-fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes mce-preview-text-slide-up-in {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes mce-preview-text-slide-left-in {
+      from { opacity: 0; transform: translateX(24px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes mce-preview-text-scale-in {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .mce-preview-text-exit {
+      animation: mce-preview-text-exit var(--anim-duration, 152ms) cubic-bezier(0.4, 0, 1, 1) both;
       will-change: opacity;
+    }
+
+    .mce-preview-text-enter--fade,
+    .mce-preview-text-enter--reveal-bg-then-text {
+      animation: mce-preview-text-fade-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+      will-change: opacity;
+    }
+
+    .mce-preview-text-enter--slide-up {
+      animation: mce-preview-text-slide-up-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+      will-change: opacity, transform;
+    }
+
+    .mce-preview-text-enter--slide-left {
+      animation: mce-preview-text-slide-left-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+      will-change: opacity, transform;
+    }
+
+    .mce-preview-text-enter--scale-in {
+      animation: mce-preview-text-scale-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+      will-change: opacity, transform;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .mce-preview-text-exit,
+      .mce-preview-text-enter--fade,
+      .mce-preview-text-enter--reveal-bg-then-text,
+      .mce-preview-text-enter--slide-up,
+      .mce-preview-text-enter--slide-left,
+      .mce-preview-text-enter--scale-in {
+        animation: none;
+      }
     }
 
     #lt-bar.hidden,
@@ -753,8 +807,9 @@
 
     #lt-verse-text {
       width: 100%;
-      max-width: 100%;
+      max-width: var(--lt-text-max-width, 100%);
       min-width: 0;
+      align-self: var(--content-align-self, center);
       font-size: var(--font-size);
       font-family: var(--font-family);
       color: var(--font-color, #ffffff);
@@ -819,7 +874,7 @@
       align-self: var(--ref-align-self, center);
       margin-top: var(--ref-spacing);
       width: var(--ref-width, 100%);
-      max-width: 100%;
+      max-width: min(100%, var(--lt-text-max-width, 100%));
       padding: var(--ref-bg-padding);
       background: var(--ref-bg-color);
       border-radius: var(--ref-bg-radius);
@@ -961,9 +1016,9 @@
         'smaller': { fontSize: 28, refFontSize: 10, lineHeight: 1.26 },
         'small': { fontSize: 32, refFontSize: 11, lineHeight: 1.27 },
         'medium': { fontSize: 36, refFontSize: 12, lineHeight: 1.28 },
-        'big': { fontSize: 42, refFontSize: 12, lineHeight: 1.29 },
-        'bigger': { fontSize: 48, refFontSize: 13, lineHeight: 1.3 },
-        'biggest': { fontSize: 56, refFontSize: 14, lineHeight: 1.32 },
+        'big': { fontSize: 48, refFontSize: 32, lineHeight: 1.3 },
+        'bigger': { fontSize: 60, refFontSize: 40, lineHeight: 1.32 },
+        'biggest': { fontSize: 72, refFontSize: 48, lineHeight: 1.34 },
       };
       const WIDTH_PRESETS = {
         'sm': { maxWidth: 1000, hMargin: 460 },
@@ -1102,6 +1157,26 @@
       let baseBarPadding = 28;
       let barMaxHeight = 600;
       let autoFontScaleEnabled = false;
+      // Keep the fitted size stable between slides. A long verse may reduce
+      // the size once, but a shorter verse must not grow it back immediately.
+      let stableFullscreenTextSize = null;
+      let stableFullscreenReferenceSize = null;
+      let stableCompareTextSize = null;
+      let stableCompareReferenceSize = null;
+      let stableCompareTranslationSize = null;
+      let stableLowerThirdTextSize = null;
+      let stableLowerThirdReferenceSize = null;
+
+      function resetStableAutoFitSizes() {
+        stableFullscreenTextSize = null;
+        stableFullscreenReferenceSize = null;
+        stableCompareTextSize = null;
+        stableCompareReferenceSize = null;
+        stableCompareTranslationSize = null;
+        stableLowerThirdTextSize = null;
+        stableLowerThirdReferenceSize = null;
+      }
+
       function toCssFontWeight(w, fb) {
         const n = Number(w); if (!n || isNaN(n)) return fb || '400';
         if (n <= 100) return '100'; if (n <= 200) return '200'; if (n <= 300) return '300';
@@ -1554,10 +1629,47 @@
           Math.max(node.scrollHeight, rect.height) > height + 1;
       }
 
+      function isFitVisible(node) {
+        if (!node) return false;
+        if (!String(node.textContent || '').trim()) return false;
+        const style = getComputedStyle(node);
+        if (style.display === 'none' ||
+          style.visibility === 'hidden' ||
+          style.opacity === '0') {
+          return false;
+        }
+        const rects = node.getClientRects();
+        if (!rects || rects.length === 0) return false;
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }
+
+      function getVisibleCompareFitNodes() {
+        const nodes = [
+          compareTextLeft,
+          compareTextRight,
+          compareReferenceLeft,
+          compareReferenceRight,
+          compareTranslationLeft,
+          compareTranslationRight,
+          compareTextLeft?.querySelector('.compare-line-list'),
+        ];
+        return nodes.filter((node) => isFitVisible(node));
+      }
+
       function resolveAutoFontFloor(baseSize, fallback) {
         const base = Math.max(fallback, Math.round(Number(baseSize) || fallback));
-        const fixedFloor = fallback <= 12 ? 12 : Math.min(Math.max(fallback, 16), 24);
+        // Keep auto-scale readable instead of allowing long verses to land
+        // at the old 12px floor.
+        const fixedFloor = Math.max(fallback, 16);
         return Math.min(base, fixedFloor);
+      }
+
+      function resolveCompareAutoFontFloor(baseSize) {
+        // Compare settings can come from older preferences with an 18px
+        // value. Never let that legacy value become the auto-fit floor.
+        const base = Math.max(28, Math.round(Number(baseSize) || 36));
+        return Math.min(base, Math.max(28, Math.round(base * 0.58)));
       }
 
       function getViewportSize() {
@@ -1590,7 +1702,7 @@
           fitDimension(window.innerHeight || 0),
           rootStyle.getPropertyValue('--safe-area').trim(),
           rootStyle.getPropertyValue('--letter-spacing').trim(),
-          lastAppliedThemeKey,
+          lastAppliedThemeKeyByMode[activeMode] || '',
         ].join('|');
       }
 
@@ -1731,13 +1843,19 @@
 
         if (!autoFontScaleEnabled) {
           resetSingleAutoFitStyles();
+          resetStableAutoFitSizes();
           return;
         }
 
-        const textFloor = resolveAutoFontFloor(baseFontSize, 12);
+        const textFloor = resolveAutoFontFloor(baseFontSize, 28);
         const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
-        let textSize = Math.max(textFloor, Math.round(baseFontSize));
-        let referenceSize = Math.max(10, Math.round(baseRefFontSize));
+        const baseTextSize = Math.max(textFloor, Math.round(baseFontSize));
+        let textSize = stableFullscreenTextSize === null
+          ? baseTextSize
+          : Math.max(textFloor, Math.min(baseTextSize, stableFullscreenTextSize));
+        let referenceSize = stableFullscreenReferenceSize === null
+          ? Math.max(10, Math.round(baseRefFontSize))
+          : Math.max(10, stableFullscreenReferenceSize);
         const frameRect = getFrameContentRect(overlay);
         const targetWidth = Math.max(320, frameRect.width);
         const targetHeight = Math.max(220, frameRect.height);
@@ -1760,6 +1878,8 @@
           apply();
           guard += 1;
         }
+        stableFullscreenTextSize = textSize;
+        stableFullscreenReferenceSize = referenceSize;
         fullscreenFitKey = getSingleFitKey();
       }
 
@@ -1814,19 +1934,27 @@
 
         if (!autoFontScaleEnabled) {
           resetCompareAutoFitStyles();
+          resetStableAutoFitSizes();
           return;
         }
 
-        const textFloor = resolveAutoFontFloor(baseCompareFontSize, 16);
+        const textFloor = resolveCompareAutoFontFloor(baseCompareFontSize);
         const referenceRatio = baseCompareFontSize > 0
           ? Math.max(0.35, baseCompareRefFontSize / baseCompareFontSize)
           : 0.5;
         const translationRatio = baseCompareFontSize > 0
           ? Math.max(0.25, (baseCompareRefFontSize * 0.62) / baseCompareFontSize)
           : 0.3;
-        let textSize = Math.max(textFloor, Math.round(baseCompareFontSize));
-        let referenceSize = Math.max(10, Math.round(baseCompareRefFontSize));
-        let translationSize = Math.max(10, Math.round(baseCompareFontSize * translationRatio));
+        const baseTextSize = Math.max(textFloor, Math.round(baseCompareFontSize));
+        let textSize = stableCompareTextSize === null
+          ? baseTextSize
+          : Math.max(textFloor, Math.min(baseTextSize, stableCompareTextSize));
+        let referenceSize = stableCompareReferenceSize === null
+          ? Math.max(10, Math.round(baseCompareRefFontSize))
+          : Math.max(10, stableCompareReferenceSize);
+        let translationSize = stableCompareTranslationSize === null
+          ? Math.max(10, Math.round(baseCompareFontSize * translationRatio))
+          : Math.max(10, stableCompareTranslationSize);
         const { width: viewportWidth, height: viewportHeight } = getViewportSize();
         const safeArea = resolveSafeArea();
         const targetWidth = Math.max(420, viewportWidth - safeArea * 2);
@@ -1844,8 +1972,23 @@
             if (node) node.style.fontSize = `${translationSize}px`;
           });
         };
-        const overflowing = () => columns.some((column) =>
-          isOverflowing(column, column.clientWidth || targetWidth, column.clientHeight || targetHeight));
+        const overflowing = () => {
+          const compareFrame = getFrameContentRect(compareLayout);
+          const frameWidth = Math.max(1, compareFrame.width || targetWidth);
+          const frameHeight = Math.max(1, compareFrame.height || targetHeight);
+          const visibleColumns = columns.filter((column) => isFitVisible(column));
+          const fitNodes = getVisibleCompareFitNodes();
+
+          if (isContentOutsideFrame(fitNodes, compareLayout) || isContentOutsideFrame(fitNodes, overlay)) {
+            return true;
+          }
+
+          return visibleColumns.some((column) => {
+            const width = Math.max(1, Math.min(column.clientWidth || frameWidth, frameWidth));
+            const height = Math.max(1, Math.min(column.clientHeight || frameHeight, frameHeight));
+            return isOverflowing(column, width, height);
+          });
+        };
 
         resetCompareAutoFitStyles();
         apply();
@@ -1857,6 +2000,9 @@
           apply();
           guard += 1;
         }
+        stableCompareTextSize = textSize;
+        stableCompareReferenceSize = referenceSize;
+        stableCompareTranslationSize = translationSize;
         compareFitKey = getCompareFitKey();
       }
 
@@ -1891,13 +2037,22 @@
 
         if (!autoFontScaleEnabled) {
           resetLowerThirdAutoFitStyles();
+          resetStableAutoFitSizes();
           return;
         }
 
-        const textFloor = resolveAutoFontFloor(baseFontSize, 12);
+        // Keep lower-third scripture readable. The card itself is allowed to
+        // clip overflowing content, so the floor must be explicit rather than
+        // inferred from the clipped scroll height.
+        const textFloor = resolveAutoFontFloor(baseFontSize, 24);
         const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
-        let textSize = Math.max(textFloor, Math.round(baseFontSize));
-        let referenceSize = Math.max(10, Math.round(baseRefFontSize));
+        const baseTextSize = Math.max(textFloor, Math.round(baseFontSize));
+        let textSize = stableLowerThirdTextSize === null
+          ? baseTextSize
+          : Math.max(textFloor, Math.min(baseTextSize, stableLowerThirdTextSize));
+        let referenceSize = stableLowerThirdReferenceSize === null
+          ? Math.max(10, Math.round(baseRefFontSize))
+          : Math.max(10, stableLowerThirdReferenceSize);
         const { width: viewportWidth, height: viewportHeight } = getViewportSize();
         const targetWidth = Math.max(280, viewportWidth);
         const targetHeight = Math.max(100, Math.min(barMaxHeight, viewportHeight));
@@ -1906,8 +2061,20 @@
           ltVerseText.style.lineHeight = getComputedStyle(root).getPropertyValue('--line-height').trim() || '1.3';
           ltRefText.style.fontSize = `${referenceSize}px`;
         };
-        const overflowing = () => isOverflowing(ltBar, targetWidth, targetHeight) ||
-          isOverflowing(ltVerseText, targetWidth, targetHeight);
+        const overflowing = () => {
+          const fitNodes = [ltVerseText, ltRefText].filter((node) => isFitVisible(node));
+          if (!fitNodes.length) return false;
+
+          // Do not rely on ltBar.scrollHeight here. Because the card has
+          // overflow:hidden and a max-height, scrollHeight can equal the
+          // clipped frame even when the verse extends above or below it.
+          if (isContentOutsideFrame(fitNodes, ltBar)) return true;
+
+          const frame = getFrameContentRect(ltBar);
+          const frameWidth = Math.max(1, frame.width || targetWidth);
+          const frameHeight = Math.max(1, frame.height || targetHeight);
+          return fitNodes.some((node) => isOverflowing(node, frameWidth, frameHeight));
+        };
 
         resetLowerThirdAutoFitStyles();
         apply();
@@ -1918,6 +2085,8 @@
           apply();
           guard += 1;
         }
+        stableLowerThirdTextSize = textSize;
+        stableLowerThirdReferenceSize = referenceSize;
         lowerThirdFitKey = getLowerThirdFitKey();
       }
 
@@ -2228,16 +2397,13 @@
         root.style.setProperty('--compare-inline-align', mapFlexAlign(compareReferenceAlign));
         root.style.setProperty('--compare-reference-transform', mapTextTransform(s.compareReferenceTextTransformLeft || s.refTextTransform));
         root.style.setProperty('--compare-reference-verse-spacing', clampSetting(s.compareReferenceVerseSpacing, 10, 0, 80) + 'px');
-        if (targetMode === 'lower-third') {
-          root.style.setProperty('--lt-max-width', 'none');
-        } else {
-          const wp2 = s.lowerThirdWidthPreset || 'md', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['md'];
-          root.style.setProperty('--lt-max-width', (s.lowerThirdMaxWidth || wpr.maxWidth) + 'px');
-        }
-        if (targetMode === 'lower-third') {
-          root.style.setProperty('--lt-h-margin', '0px');
-        } else {
-          root.style.setProperty('--lt-h-margin', (s.lowerThirdHMargin ?? wpr.hMargin) + 'px');
+        const wp2 = s.lowerThirdWidthPreset || 'md', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['md'];
+        const isLowerThird = targetMode === 'lower-third';
+        root.style.setProperty('--lt-max-width', isLowerThird ? 'none' : (s.lowerThirdMaxWidth || wpr.maxWidth) + 'px');
+        root.style.setProperty('--lt-h-margin', isLowerThird ? '0px' : (s.lowerThirdHMargin ?? wpr.hMargin) + 'px');
+        root.style.setProperty('--lt-text-max-width', wpr.maxWidth + 'px');
+        if (s.referenceBackgroundEnabled !== true) {
+          root.style.setProperty('--ref-width', 'var(--lt-text-max-width, 100%)');
         }
         barMaxHeight = Math.max(120, Math.min(900, Number(s.lowerThirdBarMaxHeight) || 600));
         root.style.setProperty('--lt-max-height', barMaxHeight + 'px');
@@ -2311,13 +2477,17 @@
         } catch {
           themeKey = targetMode + '|unserializable';
         }
-        if (!force && themeKey === lastAppliedThemeKeyByMode[targetMode]) return;
+        const themeChanged = themeKey !== lastAppliedThemeKeyByMode[targetMode];
+        if (!force && !themeChanged) return;
         applyTheme(safeTheme, targetMode);
+        if (themeChanged) resetStableAutoFitSizes();
         lastAppliedThemeKeyByMode[targetMode] = themeKey;
       }
 
       /* ═══ SINGLE RENDERER ═══ */
       var lastProcessedPacketKey = '';
+      let pendingOverlayPacket = null;
+      let overlayTransitionInFlight = false;
 
       function hasRenderableSlide(data) {
         return Boolean(data && data.slide && data.blanked !== true);
@@ -2347,24 +2517,78 @@
         }
       }
 
-      function isOverlayAnimationEnabled(data) {
+      function getOverlayAnimationName(data) {
         const animation = data && data.theme && data.theme.animation
           || currentOverlayData && currentOverlayData.theme && currentOverlayData.theme.animation
           || currentBibleState && currentBibleState.theme && currentBibleState.theme.animation;
-        return ['fade', 'slide-up', 'slide-left', 'scale-in', 'reveal-bg-then-text'].includes(String(animation || ''));
+        const allowed = ['fade', 'slide-up', 'slide-left', 'scale-in', 'reveal-bg-then-text'];
+        return allowed.includes(String(animation || '')) ? String(animation) : 'none';
       }
 
-      function restartPreviewFade(mode) {
-        const targets = mode === 'lower-third'
+      function prefersReducedMotion() {
+        try {
+          return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        } catch {
+          return false;
+        }
+      }
+
+      function isOverlayAnimationEnabled(data) {
+        return !prefersReducedMotion() && getOverlayAnimationName(data) !== 'none';
+      }
+
+      function getOverlayAnimationDurationMs(data) {
+        const theme = data && data.theme && typeof data.theme === 'object'
+          ? data.theme
+          : currentOverlayData && currentOverlayData.theme && typeof currentOverlayData.theme === 'object'
+            ? currentOverlayData.theme
+            : currentBibleState && currentBibleState.theme && typeof currentBibleState.theme === 'object'
+              ? currentBibleState.theme
+              : {};
+        const configured = Number(theme.animationDuration);
+        return Math.max(95, Math.min(170, Math.round((Number.isFinite(configured) && configured > 0 ? configured : 400) * 0.38)));
+      }
+
+      function getVerseAnimationTargets(mode) {
+        const targetMode = mode === 'lower-third' || mode === 'fullscreen' ? mode : activeMode;
+        const targets = targetMode === 'lower-third'
           ? [ltVerseText, ltRefText]
           : compareLayout && compareLayout.classList.contains('is-visible')
             ? [compareLayout]
-            : [overlay];
-        const validTargets = targets.filter(Boolean);
-        if (!validTargets.length) return;
-        validTargets.forEach((target) => target.classList.remove('mce-preview-text-fade'));
-        void validTargets[0].offsetWidth;
-        validTargets.forEach((target) => target.classList.add('mce-preview-text-fade'));
+            : [verseContainer];
+        return targets.filter(Boolean);
+      }
+
+      function clearVerseAnimationClasses(targets) {
+        const classes = [
+          'mce-preview-text-exit',
+          'mce-preview-text-enter--fade',
+          'mce-preview-text-enter--slide-up',
+          'mce-preview-text-enter--slide-left',
+          'mce-preview-text-enter--scale-in',
+          'mce-preview-text-enter--reveal-bg-then-text',
+        ];
+        targets.forEach((target) => target.classList.remove(...classes));
+      }
+
+      function playVerseExitAnimation(mode) {
+        const targets = getVerseAnimationTargets(mode);
+        if (!targets.length) return;
+        clearVerseAnimationClasses(targets);
+        void targets[0].offsetWidth;
+        targets.forEach((target) => target.classList.add('mce-preview-text-exit'));
+      }
+
+      function playVerseEnterAnimation(mode, animation) {
+        const targets = getVerseAnimationTargets(mode);
+        if (!targets.length || animation === 'none' || prefersReducedMotion()) return;
+        clearVerseAnimationClasses(targets);
+        void targets[0].offsetWidth;
+        targets.forEach((target) => target.classList.add(`mce-preview-text-enter--${animation}`));
+      }
+
+      function waitForOverlayAnimation(duration) {
+        return new Promise((resolve) => window.setTimeout(resolve, duration));
       }
 
       function renderBothBibleLayers(state) {
@@ -2372,6 +2596,58 @@
         processSlideFullscreen(state);
         processSlideLowerThird(state);
         console.log('[BibleOverlay] both layers rendered', { revision: currentBibleRevision });
+      }
+
+      function commitOverlayPacket(packet, animateIn) {
+        const revision = Number(packet.revision ?? packet.timestamp ?? 0);
+        const mode = packet.mode === 'fullscreen' || packet.mode === 'lower-third'
+          ? packet.mode
+          : activeMode;
+        currentBibleRevision = revision;
+        currentBibleState = packet;
+        currentOverlayData = packet;
+        hasReceivedLiveOverlayUpdate = true;
+        persistOverlayPacket(packet);
+
+        if (mode === 'fullscreen' || mode === 'lower-third') {
+          setActiveLayer(mode);
+        }
+
+        renderBothBibleLayers(currentBibleState);
+        if (animateIn) playVerseEnterAnimation(mode, getOverlayAnimationName(packet));
+        writeRenderAck(packet);
+      }
+
+      async function runOverlayTransitionQueue() {
+        if (overlayTransitionInFlight) return;
+        overlayTransitionInFlight = true;
+        try {
+          while (pendingOverlayPacket) {
+            const firstPacket = pendingOverlayPacket;
+            pendingOverlayPacket = null;
+            const exitMode = activeMode || initialMode;
+            const exitDuration = getOverlayAnimationDurationMs(currentOverlayData || firstPacket);
+
+            if (hasShownOnce) {
+              playVerseExitAnimation(exitMode);
+              await waitForOverlayAnimation(exitDuration);
+            }
+
+            // If the operator clicked again while the old verse was leaving,
+            // render only the newest queued verse after the exit completes.
+            const packet = pendingOverlayPacket || firstPacket;
+            pendingOverlayPacket = null;
+            const animateIn = hasRenderableSlide(packet) && isOverlayAnimationEnabled(packet);
+            commitOverlayPacket(packet, animateIn);
+
+            if (animateIn) {
+              await waitForOverlayAnimation(getOverlayAnimationDurationMs(packet));
+            }
+          }
+        } finally {
+          overlayTransitionInFlight = false;
+          if (pendingOverlayPacket) void runOverlayTransitionQueue();
+        }
       }
 
       function processOverlayUpdate(packet) {
@@ -2401,25 +2677,23 @@
           packet.timestamp ??
           0
         );
-        if (revision && revision < currentBibleRevision) return;
+        const pendingRevision = pendingOverlayPacket
+          ? Number(pendingOverlayPacket.revision ?? pendingOverlayPacket.timestamp ?? 0)
+          : 0;
+        if (revision && revision < Math.max(currentBibleRevision, pendingRevision)) return;
         const previousSlideKey = getOverlaySlideKey(currentOverlayData);
-        const shouldFadePreview = hasShownOnce &&
+        const shouldAnimateVerse = hasShownOnce &&
           hasRenderableSlide(packet) &&
           previousSlideKey !== getOverlaySlideKey(packet) &&
           isOverlayAnimationEnabled(packet);
-        currentBibleRevision = revision;
-        currentBibleState = packet;
-        currentOverlayData = packet;
-        hasReceivedLiveOverlayUpdate = true;
-        persistOverlayPacket(packet);
 
-        if (packet.mode === 'fullscreen' || packet.mode === 'lower-third') {
-          setActiveLayer(packet.mode);
+        if (overlayTransitionInFlight || shouldAnimateVerse) {
+          pendingOverlayPacket = packet;
+          void runOverlayTransitionQueue();
+          return;
         }
 
-        renderBothBibleLayers(currentBibleState);
-        if (shouldFadePreview) restartPreviewFade(packet.mode || activeMode);
-        writeRenderAck(packet);
+        commitOverlayPacket(packet, false);
       }
 
       function processSlideFullscreen(data) {
@@ -2506,7 +2780,6 @@
 
       /* ═══ EVENT-DRIVEN UPDATE PIPELINE ═══ */
       function readFromCssVar() {
-        if (hasReceivedLiveOverlayUpdate) return false;
         try {
           const raw = readInjectedCssVar('--overlay-data') || readComputedCssVar('--overlay-data');
           if (!raw || raw === lastCssOverlayData) return false;
@@ -2684,7 +2957,6 @@
         return false;
       }
       function syncCssOverlayState() {
-        if (hasReceivedLiveOverlayUpdate) return false;
         if (readFromCssVar()) return true;
         readModeFromCssVar();
         return false;

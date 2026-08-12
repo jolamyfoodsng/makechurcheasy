@@ -55,7 +55,6 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    outline: none;
 }
 
 /* Handle system layouts and custom properties */
@@ -105,7 +104,10 @@
     --border-color: #cbd5e1;
     --text-primary: #0f172a;
     --text-secondary: #475569;
-    --text-muted: #94a3b8;
+    --text-muted: #64748b;
+    --success-color: #15803D;
+    --danger-color: #B91C1C;
+    --warning: #B45309;
     --text-on-accent: #ffffff;
     --glow-opacity: 0.08;
     --shadow-main: 0 4px 18px rgba(15, 23, 42, 0.05);
@@ -584,6 +586,131 @@
 
 .color-swatch-btn.active .swatch-check-icon {
     display: block;
+}
+
+/* Shared app + Dock appearance palettes */
+.app-appearance-palette-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.app-appearance-palette {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    min-height: 64px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--transition-speed), background-color var(--transition-speed), transform 0.15s ease;
+}
+
+.app-appearance-palette:hover {
+    border-color: var(--accent-color);
+    background: var(--bg-card-hover);
+    transform: translateY(-1px);
+}
+
+.app-appearance-palette--active {
+    border-color: var(--accent-color);
+    background: var(--bg-accent-light);
+    box-shadow: inset 3px 0 0 var(--accent-color);
+}
+
+.app-appearance-palette:focus-visible,
+.app-appearance-custom:focus-within {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+.app-appearance-palette__swatches {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 10px;
+    min-height: 42px;
+    flex: 0 0 10px;
+    overflow: hidden;
+    border-radius: 4px;
+}
+
+.app-appearance-palette__swatches span {
+    flex: 1;
+    min-height: 8px;
+}
+
+.app-appearance-palette__copy {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.app-appearance-palette__title,
+.app-appearance-custom__title {
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.app-appearance-palette__desc,
+.app-appearance-custom__desc {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 400;
+    line-height: 1.3;
+}
+
+.app-appearance-palette__check {
+    flex: 0 0 auto;
+    padding: 2px;
+    border-radius: 999px;
+    background: var(--accent-color);
+    color: #FFFFFF;
+}
+
+.app-appearance-custom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 54px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    cursor: pointer;
+}
+
+.app-appearance-custom > span {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.app-appearance-custom--active {
+    border-color: var(--accent-color);
+    background: var(--bg-accent-light);
+}
+
+.app-appearance-custom input[type="color"] {
+    width: 34px;
+    height: 34px;
+    padding: 2px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    cursor: pointer;
+    flex: 0 0 auto;
 }
 
 /* Styled Form controls */

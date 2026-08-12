@@ -1,4 +1,4 @@
-export const OVERLAY_HTML_VERSION = "2026-08-09-5-route-isolation";
+export const OVERLAY_HTML_VERSION = "2026-08-10-2-readable-compare-autoscale";
 
 export function buildVersionedOverlayUrl(
   baseUrl: string,

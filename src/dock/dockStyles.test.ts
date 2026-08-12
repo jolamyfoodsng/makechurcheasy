@@ -12,6 +12,16 @@ function cssBlock(selector: string): string {
 }
 
 describe("dock shared styles", () => {
+  it("keeps the zoomed dock inside the viewport so trailing controls stay visible", () => {
+    const root = cssBlock(".dock-root {");
+
+    expect(root).toContain("width: 100%");
+    expect(root).toContain("height: 100%");
+    expect(root).toContain("zoom: var(--dock-font-scale, 1)");
+    expect(root).not.toContain("calc(100% / var(--dock-font-scale, 1))");
+    expect(root).not.toContain("calc(100dvh / var(--dock-font-scale, 1))");
+  });
+
   it("keeps the lyrics toolbar controls readable in light mode", () => {
     const toolbar = cssBlock(".dock-lyrics-toolbar {");
     const button = cssBlock(".dock-lyrics-toolbar__btn {");
@@ -29,5 +39,12 @@ describe("dock shared styles", () => {
     expect(cssBlock(".dock-lyrics-toolbar__group {")).toContain("margin-left: 0");
     expect(button).not.toContain("--dock-secondary-text");
     expect(button).not.toContain("--dock-primary");
+  });
+
+  it("keeps Bible comparison rows aligned and wrapped", () => {
+    expect(dockCss).toContain(".dock-bible-verse-row--compare {\n  display: grid;");
+    expect(dockCss).toContain("grid-template-columns: minmax(18px, auto) minmax(0, 1fr);");
+    expect(dockCss).toContain(".dock-bible-verse-row--compare .dock-bible-compare-stack");
+    expect(dockCss).toContain("overflow-wrap: anywhere;");
   });
 });

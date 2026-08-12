@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, Edit2, MonitorUp, Check, StickyNote } from "lucide-react";
+import { useAppTheme } from "../../hooks/useAppTheme";
 import { dockObsClient, type DockObsStatus } from "../dockObsClient";
 import { dockClient, type DockStateMessage, type DockCommandType } from "../../services/dockBridge";
 import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
@@ -241,6 +242,7 @@ export default function DockLmTab({
   enablePresentationMicControls = false,
 }: DockLmTabProps = {}) {
   const { t } = useTranslation();
+  useAppTheme();
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   const allowLocalMicControls = presentationLinkMode && enablePresentationMicControls;
   const isTestEnv = getEnvConfig().isTest;
@@ -1878,17 +1880,14 @@ export default function DockLmTab({
                       ...(isListening ? S.presentationMicButtonActive : null),
                     }}
                     onClick={() => void handlePresentationListeningToggle()}
-                    disabled={lmStatus === "connecting" || lmStatus === "requesting-mic"}
                   >
                     <Icon name={isListening ? "stop" : "mic"} size={13} />
                     <span>
-                      {lmStatus === "requesting-mic"
-                        ? "Requesting mic..."
-                        : lmStatus === "connecting"
-                          ? "Connecting..."
-                          : isListening
-                            ? "Stop listening"
-                            : "Start listening"}
+                      {lmStatus === "requesting-mic" || lmStatus === "connecting"
+                        ? "Cancel start"
+                        : isListening
+                          ? "Stop listening"
+                          : "Start listening"}
                     </span>
                   </button>
                   <span style={S.settingHint}>Start Scripture Assistant from this presentation page without opening Verse AI.</span>

@@ -238,9 +238,9 @@ export const LOWER_THIRD_SIZE_PRESETS: Record<LowerThirdSize, {
   smaller: { maxHeight: 240, padding: 20, fontSize: 28, refFontSize: 10, safeArea: 35, lineHeight: 1.26, refSpacing: 12 },
   small: { maxHeight: 320, padding: 24, fontSize: 32, refFontSize: 11, safeArea: 38, lineHeight: 1.27, refSpacing: 14 },
   medium: { maxHeight: 400, padding: 30, fontSize: 36, refFontSize: 12, safeArea: 40, lineHeight: 1.28, refSpacing: 16 },
-  big: { maxHeight: 486, padding: 36, fontSize: 42, refFontSize: 12, safeArea: 44, lineHeight: 1.29, refSpacing: 18 },
-  bigger: { maxHeight: 560, padding: 42, fontSize: 48, refFontSize: 13, safeArea: 48, lineHeight: 1.3, refSpacing: 20 },
-  biggest: { maxHeight: 650, padding: 50, fontSize: 56, refFontSize: 14, safeArea: 52, lineHeight: 1.32, refSpacing: 24 },
+  big: { maxHeight: 520, padding: 36, fontSize: 48, refFontSize: 32, safeArea: 44, lineHeight: 1.3, refSpacing: 20 },
+  bigger: { maxHeight: 620, padding: 44, fontSize: 60, refFontSize: 40, safeArea: 48, lineHeight: 1.32, refSpacing: 24 },
+  biggest: { maxHeight: 760, padding: 52, fontSize: 72, refFontSize: 48, safeArea: 52, lineHeight: 1.34, refSpacing: 28 },
 };
 
 export interface BibleThemeSettings {
@@ -249,7 +249,7 @@ export interface BibleThemeSettings {
   fontSize: number;          // px
   /** Reduce text only when it would overflow the selected overlay frame. */
   autoFontScale?: boolean;
-  fontWeight: "normal" | "bold" | "light";
+  fontWeight: "normal" | "bold" | "light" | "extrabold";
   fontStyle?: "normal" | "italic";
   fontColor: string;         // hex
   lineHeight: number;        // ratio e.g. 1.6
@@ -263,7 +263,7 @@ export interface BibleThemeSettings {
   // Reference label
   refFontSize: number;
   refFontColor: string;
-  refFontWeight: "normal" | "bold" | "light";
+  refFontWeight: "normal" | "bold" | "light" | "extrabold";
   refPosition: "top" | "bottom";
   refAnchor?: "normal" | "top" | "bottom";
   refTextTransform: "none" | "uppercase" | "lowercase" | "capitalize";
@@ -322,6 +322,8 @@ export interface BibleThemeSettings {
   lowerThirdEdge?: "bottom" | "top" | "left" | "right";
   /** CSS padding for the lower-third text card. Accepts CSS padding syntax, e.g. "18px 28px". */
   lowerThirdCardPadding?: string;
+  /** Maximum lower-third card height used by the fitted-size presets. */
+  lowerThirdBarMaxHeight?: number;
   /** When true, the dock controls vertical and horizontal lower-third text padding together. */
   lowerThirdPaddingLinked?: boolean;
   /** Rounded corner radius for the lower-third text card. */

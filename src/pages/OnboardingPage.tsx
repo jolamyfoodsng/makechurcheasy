@@ -45,6 +45,11 @@ import {
 
 import { getDeviceId } from "../services/authService";
 import { track } from "../services/analytics";
+import {
+  trackEvent as trackProductEvent,
+  trackObsConnected as trackObsConnectedBackend,
+  trackFirstUseStarted,
+} from "../services/tracking";
 import { getDefaultOBSPort } from "../services/desktopConfig";
 import { persistOBSWebSocketConfig } from "../services/obsConnectionSettings";
 import "./OnboardingPage.css";
@@ -65,7 +70,7 @@ const STEP_NAMES = [
   "OBS",
   "Smooth Layouts",
   "Dock",
-  "Test",
+  "First Win",
   "Ready",
 ];
 
@@ -178,6 +183,9 @@ export default function OnboardingPage() {
       track("onboarding_step_completed", {
         step: STEP_NAMES[next - 1] ?? String(next),
       });
+      trackProductEvent("onboarding_step_completed", {
+        step: STEP_NAMES[next - 1] ?? String(next),
+      });
     }
   }, [step]);
 
@@ -192,18 +200,21 @@ export default function OnboardingPage() {
   const finish = useCallback(() => {
     fireMilestone("desktopOnboardingCompletedAt");
     track("onboarding_completed");
+    trackProductEvent("onboarding_completed");
     completeOnboarding();
     window.location.href = "/";
   }, []);
 
   const skip = useCallback(() => {
     track("onboarding_skipped");
+    trackProductEvent("onboarding_skipped");
     completeOnboarding();
     window.location.href = "/";
   }, []);
 
   useEffect(() => {
     track("onboarding_started");
+    trackProductEvent("onboarding_started");
     fireMilestone("desktopOnboardingStartedAt");
   }, []);
 
@@ -362,6 +373,7 @@ function StepConnectOBS({
       if (obsService.isConnected) {
         await persistOBSWebSocketConfig(url, password || undefined, true);
         setStatus("connected");
+        trackObsConnectedBackend();
         fireMilestone("firstDesktopLoginAt");
       } else {
         setStatus("error");
@@ -783,7 +795,7 @@ function StepInstallDock({
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Step 5 — Run Diagnostics
+   Step 5 — Confirm Your First Win
    ══════════════════════════════════════════════════════════════ */
 
 interface DiagItem {
@@ -917,9 +929,9 @@ function StepTest({
   return (
     <div className="ob-card">
       <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
-        <h1>Run Diagnostics</h1>
+        <h1>Confirm Your First Win</h1>
         <p>
-          Run a quick check to make sure all components are working correctly.
+          Run a quick check, then present your first Bible verse to OBS from the Ready step.
         </p>
       </div>
 
@@ -977,6 +989,12 @@ function StepTest({
    ══════════════════════════════════════════════════════════════ */
 
 function StepReady({ onFinish }: { onFinish: () => void }) {
+  const openFirstWin = useCallback(() => {
+    trackFirstUseStarted();
+    completeOnboarding();
+    window.location.href = "/resources?tab=bible";
+  }, []);
+
   return (
     <div className="ob-card">
       <div className="ob-success-hero">
@@ -1007,6 +1025,23 @@ function StepReady({ onFinish }: { onFinish: () => void }) {
       </div>
 
       <p className="ob-section-title">Quick Actions</p>
+
+      <div className="ob-info-banner" style={{ alignItems: "flex-start" }}>
+        <Play size={16} />
+        <span>
+          <strong>Get your first win now:</strong> open Bible, choose a verse, and
+          push it to OBS. This is the fastest way to confirm the setup works.
+          <button
+            className="ob-btn ob-btn--primary"
+            onClick={openFirstWin}
+            title="Try your first Bible presentation"
+            style={{ marginTop: 10 }}
+          >
+            Try a Bible presentation
+            <ArrowRight size={16} />
+          </button>
+        </span>
+      </div>
 
       <div className="ob-quick-actions">
         <button className="ob-quick-btn" onClick={onFinish} title="Open">

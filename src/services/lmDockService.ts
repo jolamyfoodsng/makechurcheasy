@@ -98,6 +98,28 @@ export function retainSuggestionsUntilReplacement(
 
 type SnapshotListener = (snapshot: LmDockSnapshot) => void;
 
+class LmStartupTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LmStartupTimeoutError";
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new LmStartupTimeoutError(message)), ms);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
+function isLocalStartupFailure(message: string): boolean {
+  return /microphone|mic|audio stream|input device|permission|timed out|timeout|default input|enumerate devices/i.test(message);
+}
+
 /**
  * Relay URL helper — builds absolute URLs to the overlay server's HTTP relay.
  * In the Tauri webview, relative URLs resolve to tauri://localhost which
@@ -171,6 +193,7 @@ class LmDockService {
   private static readonly MAX_RELAY_TRANSCRIPT_ENTRIES = 60;
   private static readonly MAX_RECONNECT_ATTEMPTS = 5;
   private static readonly RECONNECT_DELAYS_MS = [750, 1_500, 3_000, 5_000, 8_000];
+  private static readonly MIC_START_TIMEOUT_MS = 12_000;
   private lastQueuedQuoteSearchKey = "";
   private lastQueuedQuoteSearchAt = 0;
 
@@ -878,31 +901,19 @@ class LmDockService {
       }
       if (token !== this.sessionToken) return;
 
-      // Preload Bible data to avoid first-call latency
-      await this.scriptureEngine.preload();
-      if (token !== this.sessionToken) {
-        await this.cleanup();
-        return;
-      }
+      // Heavy scripture data must not block microphone startup. The first
+      // transcript can still trigger lazy loading if this has not finished yet.
+      void this.scriptureEngine.preload().catch((err) => {
+        console.warn("[LmDockService] Scripture preload failed:", err);
+      });
 
-      // Check if offline - try to load Whisper model
+      // Check if offline - warm the Whisper model without blocking mic startup.
       if (!navigator.onLine) {
-        const { loadWhisperModel } = await import("./whisperService");
-        await loadWhisperModel();
-        if (token !== this.sessionToken) {
-          await this.cleanup();
-          return;
-        }
-      }
-
-      // Start Rust-side AssemblyAI realtime STT — captures mic + streams turns from backend.
-      // Immune to WebView throttling, AudioContext suspension, and App Nap.
-      this.snapshot = { ...this.snapshot, status: "connecting" };
-      this.pushStatus();
-
-      if (token !== this.sessionToken) {
-        await this.cleanup();
-        return;
+        void import("./whisperService")
+          .then(({ loadWhisperModel }) => loadWhisperModel())
+          .catch((err) => {
+            console.warn("[LmDockService] Whisper preload failed:", err);
+          });
       }
 
       const apiKey = getAssemblyAiKey();
@@ -1060,14 +1071,32 @@ class LmDockService {
       // Pass the current user gain so the Rust pipeline applies it from the start.
       const mvSettings = getMvSettings();
       const gainMultiplier = (mvSettings.inputGain ?? 100) / 100;
-      await safeTauriInvoke("start_assemblyai_stream", {
+      const nativeStartPromise = safeTauriInvoke("start_assemblyai_stream", {
         apiKey,
         deviceId: micId || null,
         detectionSpeed: this.detectionSpeed,
       });
+      void nativeStartPromise
+        .then(() => {
+          if (token !== this.sessionToken) {
+            void this.cleanup();
+          }
+        })
+        .catch(() => {
+          // The awaited path below owns visible errors.
+        });
+      await withTimeout(
+        nativeStartPromise,
+        LmDockService.MIC_START_TIMEOUT_MS,
+        "Microphone start timed out. Check macOS microphone permission or choose another input.",
+      );
       if (token !== this.sessionToken) {
         await this.cleanup();
         return;
+      }
+      if (this.snapshot.status === "requesting-mic") {
+        this.snapshot = { ...this.snapshot, status: "connecting" };
+        this.pushStatus();
       }
       // Apply current gain (separate call so it's live-updatable)
       await safeTauriInvoke("set_microphone_gain", { gain: gainMultiplier }).catch(() => { });
@@ -1077,9 +1106,20 @@ class LmDockService {
       }
       console.warn("[LmDockService] Failed to start listening:", err);
       const msg = err instanceof Error ? err.message : String(err);
+      const stopStartup = err instanceof LmStartupTimeoutError || isLocalStartupFailure(msg);
+      if (stopStartup) {
+        this.shouldKeepListening = false;
+        this.startInFlight = false;
+        if (err instanceof LmStartupTimeoutError) {
+          this.sessionToken++;
+        }
+        void this.cleanup();
+      }
       this.snapshot = { ...this.snapshot, status: "error", error: msg };
       this.pushStatus();
-      this.recoverFromUnexpectedStreamEnd(msg);
+      if (!stopStartup) {
+        this.recoverFromUnexpectedStreamEnd(msg);
+      }
     } finally {
       if (token === this.sessionToken) {
         this.startInFlight = false;

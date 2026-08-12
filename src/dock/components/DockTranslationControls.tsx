@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
@@ -9,7 +9,10 @@ import {
   translateWithGoogleWeb,
   type GoogleTranslateLanguage,
 } from "../../services/googleTranslateWeb";
+import { normalizeDockTranslationOrder, type DockTranslationOrder } from "../dockTranslation";
 import "./DockTranslationControls.css";
+
+export type { DockTranslationOrder } from "../dockTranslation";
 
 export interface DockTranslationSection {
   id: string;
@@ -21,6 +24,7 @@ export interface DockTranslationValue {
   targetLanguageLabel: string;
   translatedSections: Record<string, string>;
   showBoth: boolean;
+  translationOrder: DockTranslationOrder;
 }
 
 interface Props {
@@ -33,6 +37,7 @@ interface Props {
 export default function DockTranslationControls({ sections, value, onChange, compact = false }: Props) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const requestIdRef = useRef(0);
   const sourceSignature = useMemo(
     () => sections.map((section) => `${section.id}:${section.text}`).join("\u001f"),
@@ -43,16 +48,65 @@ export default function DockTranslationControls({ sections, value, onChange, com
   const [languageQuery, setLanguageQuery] = useState("");
   const [targetLanguage, setTargetLanguage] = useState("en");
   const [showBoth, setShowBoth] = useState(true);
+  const [translationOrder, setTranslationOrder] = useState<DockTranslationOrder>("original-first");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [compactPanelPosition, setCompactPanelPosition] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
 
   useEffect(() => {
     setLanguageMenuOpen(false);
     setLanguageQuery("");
+    setTargetLanguage("en");
+    setShowBoth(true);
+    setTranslationOrder("original-first");
     setLoading(false);
     setError("");
     onChange(null);
   }, [sourceSignature, onChange]);
+
+  useEffect(() => {
+    if (!value) return;
+    setTargetLanguage(value.targetLanguage || "en");
+    setLanguageQuery(value.targetLanguageLabel || "");
+    setShowBoth(value.showBoth !== false);
+    setTranslationOrder(normalizeDockTranslationOrder(value.translationOrder));
+  }, [value]);
+
+  useLayoutEffect(() => {
+    if (!compact || !open) {
+      setCompactPanelPosition(null);
+      return;
+    }
+
+    const updatePanelPosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const viewportPadding = 8;
+      const width = Math.min(320, Math.max(220, window.innerWidth - (viewportPadding * 2)));
+      const left = Math.max(
+        viewportPadding,
+        Math.min(rect.right - width, window.innerWidth - width - viewportPadding),
+      );
+      const top = Math.min(
+        rect.bottom + 6,
+        Math.max(viewportPadding, window.innerHeight - 240),
+      );
+      setCompactPanelPosition({
+        top,
+        left,
+        maxHeight: Math.max(96, window.innerHeight - top - viewportPadding),
+      });
+    };
+
+    updatePanelPosition();
+    window.addEventListener("resize", updatePanelPosition);
+    window.addEventListener("scroll", updatePanelPosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePanelPosition);
+      window.removeEventListener("scroll", updatePanelPosition, true);
+    };
+  }, [compact, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -95,6 +149,7 @@ export default function DockTranslationControls({ sections, value, onChange, com
         targetLanguageLabel: language.label,
         translatedSections: Object.fromEntries(translatedEntries),
         showBoth,
+        translationOrder,
       });
     } catch (cause) {
       if (requestId !== requestIdRef.current) return;
@@ -103,7 +158,7 @@ export default function DockTranslationControls({ sections, value, onChange, com
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [onChange, sections, showBoth, t]);
+  }, [onChange, sections, showBoth, t, translationOrder]);
 
   const handleLanguageSelect = (language: GoogleTranslateLanguage) => {
     setLanguageQuery(language.label);
@@ -113,7 +168,30 @@ export default function DockTranslationControls({ sections, value, onChange, com
 
   const handleShowBothChange = (nextShowBoth: boolean) => {
     setShowBoth(nextShowBoth);
-    if (value) onChange({ ...value, showBoth: nextShowBoth });
+    if (value) {
+      onChange({
+        ...value,
+        showBoth: nextShowBoth,
+        translationOrder: normalizeDockTranslationOrder(value.translationOrder ?? translationOrder),
+      });
+    }
+  };
+
+  const handleTranslationOrderChange = (nextOrder: DockTranslationOrder) => {
+    setTranslationOrder(nextOrder);
+    if (value) onChange({ ...value, translationOrder: nextOrder });
+  };
+
+  const resetToOriginal = () => {
+    requestIdRef.current += 1;
+    setLoading(false);
+    setError("");
+    setLanguageMenuOpen(false);
+    setLanguageQuery("");
+    setTargetLanguage("en");
+    setShowBoth(true);
+    setTranslationOrder("original-first");
+    onChange(null);
   };
 
   const openGoogleTranslate = async () => {
@@ -133,6 +211,7 @@ export default function DockTranslationControls({ sections, value, onChange, com
         <button
           type="button"
           className={`dock-translation__trigger${open ? " dock-translation__trigger--active" : ""}`}
+          ref={triggerRef}
           onClick={() => setOpen((current) => !current)}
           aria-expanded={open}
           aria-label={t("dock.translation.open", { defaultValue: "Translate this song" })}
@@ -148,7 +227,17 @@ export default function DockTranslationControls({ sections, value, onChange, com
       </div>
 
       {open && (
-        <div className="dock-translation__panel" role="region" aria-label={t("common.translate", { defaultValue: "Translate" })}>
+        <div
+          className="dock-translation__panel"
+          role="region"
+          aria-label={t("common.translate", { defaultValue: "Translate" })}
+          style={compact ? {
+            top: compactPanelPosition?.top,
+            left: compactPanelPosition?.left,
+            maxHeight: compactPanelPosition?.maxHeight,
+            visibility: compactPanelPosition ? "visible" : "hidden",
+          } : undefined}
+        >
           <div className="dock-translation__panel-head">
             <div>
               <div className="dock-translation__panel-title">{t("dock.translation.title", { defaultValue: "Translate text" })}</div>
@@ -216,6 +305,20 @@ export default function DockTranslationControls({ sections, value, onChange, com
             <span>{t("dock.translation.showBoth", { defaultValue: "Show original and translation" })}</span>
           </label>
 
+          {showBoth && (
+            <label className="dock-translation__order">
+              <span>{t("dock.translation.displayFirst", { defaultValue: "Display first" })}</span>
+              <select
+                value={translationOrder}
+                onChange={(event) => handleTranslationOrderChange(event.target.value as DockTranslationOrder)}
+                aria-label={t("dock.translation.displayFirst", { defaultValue: "Display first" })}
+              >
+                <option value="original-first">{t("dock.translation.originalFirst", { defaultValue: "Original text" })}</option>
+                <option value="translation-first">{t("dock.translation.translationFirst", { defaultValue: "Translation" })}</option>
+              </select>
+            </label>
+          )}
+
           <div className="dock-translation__actions">
             <button
               type="button"
@@ -238,11 +341,24 @@ export default function DockTranslationControls({ sections, value, onChange, com
             </button>
           </div>
 
+          {value && (
+            <button
+              type="button"
+              className="dock-btn dock-btn--ghost dock-translation__reset"
+              onClick={resetToOriginal}
+            >
+              <Icon name="restart_alt" size={13} />
+              {t("dock.translation.reset", { defaultValue: "Reset to original" })}
+            </button>
+          )}
+
           {error && <div className="dock-translation__error" role="alert">{error}</div>}
           {value && !loading && !error && (
             <div className="dock-translation__ready">
               <Icon name="check_circle" size={13} />
-              {t("dock.translation.ready", { defaultValue: "Translation is shown below the original." })}
+              {translationOrder === "translation-first"
+                ? t("dock.translation.readyTranslationFirst", { defaultValue: "Translation is shown above the original." })
+                : t("dock.translation.ready", { defaultValue: "Translation is shown below the original." })}
             </div>
           )}
         </div>

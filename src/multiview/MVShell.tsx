@@ -41,7 +41,7 @@ export function MVShell() {
 
   return (
     <ToastProvider>
-      <div className="mv-shell" role="application" aria-label={t("mvShell.multiView")}>
+      <div className="mv-shell">
         {/* Skip navigation link for keyboard users */}
         <a className="mv-skip-link" href="#mv-main-content">{t("mvShell.skipToContent")}</a>
 
@@ -63,12 +63,11 @@ export function MVShell() {
             </span>
           </div>
 
-          <div className="mv-sidebar-nav" role="list">
+          <div className="mv-sidebar-nav">
             {NAV_ITEMS.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
-                role="listitem"
                 className={({ isActive }) =>
                   `mv-nav-item ${isActive ? "mv-nav-item--active" : ""}`
                 }

@@ -237,6 +237,13 @@
   flex: 0 0 28px;
 }
 
+.dock-btm-toolbar--collapsed .dock-btm-toolbar__center--collapsed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
 /* ══════════════════════════════════════════════════
    Compact mode (always-on layout)
    Layout: [ Full | LT ] ... [ visibility ] [ inline action ] [ ⋯ ]

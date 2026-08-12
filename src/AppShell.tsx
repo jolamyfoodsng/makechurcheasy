@@ -158,6 +158,9 @@ export function AppShell() {
 
   return (
     <div className="app-container">
+      <a className="mce-skip-link" href="#app-main-content">
+        {t("mvShell.skipToContent")}
+      </a>
       <DashboardSidebar
         currentPath={location.pathname + location.search}
         obsStatus={obsStatus}
@@ -167,7 +170,10 @@ export function AppShell() {
         onNavigate={handleNav}
       />
 
-      <main className={`app-main${sidebarCollapsed ? " app-main--collapsed" : ""}`}>
+      <main
+        id="app-main-content"
+        tabIndex={-1}
+        className={`app-main${sidebarCollapsed ? " app-main--collapsed" : ""}`}>
         <LiveStatusBar />
         <div className="app-glow" />
         <div className="app-content">
@@ -179,8 +185,13 @@ export function AppShell() {
       {/* ── End Service Confirmation ── */}
       {showEndConfirm && (
         <div className="end-confirm-backdrop" onClick={() => setShowEndConfirm(false)}>
-          <div className="end-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{t("appShell.endService.title")}</h2>
+          <div
+            className="end-confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="end-service-confirm-title"
+            onClick={(e) => e.stopPropagation()}>
+            <h2 id="end-service-confirm-title">{t("appShell.endService.title")}</h2>
             <p>{t("appShell.endService.description")}</p>
             <div className="end-confirm-actions">
               <button
@@ -200,8 +211,13 @@ export function AppShell() {
       {/* ── Cancel Service Confirmation ── */}
       {showCancelConfirm && (
         <div className="end-confirm-backdrop" onClick={() => setShowCancelConfirm(false)}>
-          <div className="end-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{t("appShell.cancelService.title")}</h2>
+          <div
+            className="end-confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-service-confirm-title"
+            onClick={(e) => e.stopPropagation()}>
+            <h2 id="cancel-service-confirm-title">{t("appShell.cancelService.title")}</h2>
             <p>{t("appShell.cancelService.description")}</p>
             <div className="end-confirm-actions">
               <button
@@ -232,18 +248,26 @@ export function AppShell() {
       {/* ── Keyboard Shortcuts Modal (Tabbed) ── */}
       {showShortcuts && (
         <div className="end-confirm-backdrop" onClick={() => setShowShortcuts(false)}>
-          <div className="shortcuts-modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="shortcuts-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="app-shortcuts-title"
+            onClick={(e) => e.stopPropagation()}>
             <div className="shortcuts-modal-head">
-              <h2>{t("appShell.keyboardShortcuts.title")}</h2>
-              <button className="shortcuts-modal-close" onClick={() => setShowShortcuts(false)} title={t("appShell.keyboardShortcuts.close")}>
+              <h2 id="app-shortcuts-title">{t("appShell.keyboardShortcuts.title")}</h2>
+              <button type="button" className="shortcuts-modal-close" onClick={() => setShowShortcuts(false)} title={t("appShell.keyboardShortcuts.close")} aria-label={t("appShell.keyboardShortcuts.close")}>
                 <Icon name="close" size={20} />
               </button>
             </div>
 
-            <div className="shortcuts-modal-tabs">
+            <div className="shortcuts-modal-tabs" role="tablist" aria-label={t("appShell.keyboardShortcuts.title")}>
               {SHORTCUTS_TABS.map((tab) => (
                 <button
                   key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={shortcutsTab === tab.key}
                   className={`shortcuts-modal-tab${shortcutsTab === tab.key ? " is-active" : ""}`}
                   onClick={() => setShortcutsTab(tab.key)}
                 >

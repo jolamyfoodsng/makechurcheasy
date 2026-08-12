@@ -4,7 +4,7 @@
  * The dock keeps Bible, Worship, and Media production controls inside OBS.
  */
 
-import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { dockClient, dockBridge, type DockStateMessage } from "../services/dockBridge";
@@ -13,6 +13,10 @@ import { DOCK_TABS, type DockTab, type DockStagedItem } from "./dockTypes";
 import type { DockPresentationOutputTarget } from "./dockPresentationTarget";
 import { isPresentationLinkTarget } from "./dockPresentationTarget";
 import { useAppTheme } from "../hooks/useAppTheme";
+import {
+  APP_APPEARANCE_PALETTES,
+  getDockAppearanceCssVariables,
+} from "../services/appAppearance";
 import {
   type DockProductionSettingsPayload,
   getDefaultDockProductionSettings,
@@ -34,13 +38,22 @@ import { registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
 import { fetchPlanFromOverlayServer } from "../services/entitlementClient";
 import { publishDockStagedItemToPresentation } from "../services/presentationDockBridge";
 import {
+  DEFAULT_DOCK_FONT_SCALE,
+  DOCK_FONT_FAMILY_GROUPS,
   DOCK_FONT_FAMILY_OPTIONS,
+  DOCK_FONT_SCALE_OPTIONS,
+  buildDockFontFamilyStack,
+  hydrateDockTypographyPreferences,
   loadDockFontFamily,
+  loadDockFontScale,
   normalizeDockFontFamily,
+  normalizeDockFontScale,
   saveDockFontFamily,
+  saveDockFontScale,
 } from "./dockFontFamily";
 import "./dock.css";
 import "./dock-theme.css";
+import "../accessibility.css";
 import Icon from "./DockIcon";
 
 const DockBibleTab = lazy(() => import("./tabs/DockBibleTab"));
@@ -180,7 +193,13 @@ export default function DockPage({
 
   const dockRootRef = useRef<HTMLDivElement>(null);
   const shellPreferences = loadDockShellPreferences();
-  const { effective, setTheme } = useAppTheme();
+  const {
+    effective,
+    preference: themePreference,
+    setTheme,
+    appearance,
+    setAppearance,
+  } = useAppTheme();
   const initialActiveTab = resolveDockTab(shellPreferences.activeTab);
   const [activeTab, setActiveTab] = useState<DockTab>(() => initialActiveTab);
   const [visitedTabs, setVisitedTabs] = useState<Set<DockTab>>(() => new Set([initialActiveTab]));
@@ -199,6 +218,8 @@ export default function DockPage({
   const [servicePlanner, setServicePlanner] = useState<ServicePlannerSnapshot | null>(null);
   const [projectionSettings, setProjectionSettings] = useState<ProjectionSettings>(() => loadProjectionSettings());
   const [dockFontFamily, setDockFontFamily] = useState<string>(() => loadDockFontFamily());
+  const [dockFontScale, setDockFontScale] = useState<number>(() => loadDockFontScale());
+  const typographyHydrationGenerationRef = useRef(0);
   const [upgradeModalMsg, setUpgradeModalMsg] = useState("");
   const hiddenTabsKey = hiddenTabs.join("|");
   const hiddenTabIds = useMemo(() => new Set<DockTab>(hiddenTabs), [hiddenTabsKey]);
@@ -207,6 +228,21 @@ export default function DockPage({
     () => visibleDockTabs.filter((tab) => !disabledTabs.includes(tab.id)),
     [disabledTabs, visibleDockTabs],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    const generation = typographyHydrationGenerationRef.current;
+
+    void hydrateDockTypographyPreferences().then((preferences) => {
+      if (cancelled || typographyHydrationGenerationRef.current !== generation) return;
+      setDockFontFamily(preferences.fontFamily);
+      setDockFontScale(preferences.fontScale);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const updateProjectionSettings = useCallback((patch: Partial<ProjectionSettings>) => {
     setProjectionSettings((current) => {
@@ -226,9 +262,25 @@ export default function DockPage({
   }, [updateProjectionSettings]);
 
   const updateDockFontFamily = useCallback((value: string) => {
+    typographyHydrationGenerationRef.current += 1;
     const next = normalizeDockFontFamily(value);
     setDockFontFamily(next);
     saveDockFontFamily(next);
+  }, []);
+
+  const updateDockFontScale = useCallback((value: string) => {
+    typographyHydrationGenerationRef.current += 1;
+    const next = normalizeDockFontScale(value);
+    setDockFontScale(next);
+    saveDockFontScale(next);
+  }, []);
+
+  const resetDockTypography = useCallback(() => {
+    typographyHydrationGenerationRef.current += 1;
+    setDockFontFamily("");
+    saveDockFontFamily("");
+    setDockFontScale(DEFAULT_DOCK_FONT_SCALE);
+    saveDockFontScale(DEFAULT_DOCK_FONT_SCALE);
   }, []);
 
   // Register the upgrade modal trigger so any dock tab can show it.
@@ -576,28 +628,6 @@ export default function DockPage({
     setShowCommandPalette(false);
   }, []);
 
-  // ── Global input handler to open command palette on text input ──
-  useEffect(() => {
-    const handleInput = (e: Event) => {
-      const target = e.target as HTMLElement;
-      // Only trigger on text inputs and textareas — skip file, checkbox, etc.
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement
-      ) {
-        if (target instanceof HTMLInputElement && target.type !== "text" && target.type !== "search") return;
-        const value = target.value?.trim() || "";
-        // Open palette if user types a meaningful query (3+ chars)
-        if (value.length >= 3 && /[a-zA-Z0-9]/.test(value)) {
-          openCommandPalette(value);
-        }
-      }
-    };
-
-    document.addEventListener("input", handleInput);
-    return () => document.removeEventListener("input", handleInput);
-  }, [openCommandPalette]);
-
   const shortcuts: ShortcutDefinition[] = [
     { key: "2", handler: () => setActiveTab("bible"), label: t('page.shortcutTabBible'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
     { key: "3", handler: () => setActiveTab("worship"), label: t('page.shortcutTabWorship'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
@@ -614,6 +644,7 @@ export default function DockPage({
 
   // ── Settings Menu State ──
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [showAppearance, setShowAppearance] = useState(false);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
 
   // Listen for dock-open-menu custom event (fired by tab headers)
@@ -635,8 +666,18 @@ export default function DockPage({
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
 
+  const dockStyle = useMemo<CSSProperties>(() => ({
+    ...getDockAppearanceCssVariables(appearance, effective),
+    "--dock-font-body": buildDockFontFamilyStack(dockFontFamily),
+    "--dock-font-heading": buildDockFontFamilyStack(dockFontFamily),
+    "--dock-font-scale": String(dockFontScale),
+  } as CSSProperties), [appearance, effective, dockFontFamily, dockFontScale]);
+
   return (
-    <div className={`dock-root${verticalTabs ? " dock-root--vertical-tabs" : ""}`} ref={dockRootRef}>
+    <div className={`dock-root${verticalTabs ? " dock-root--vertical-tabs" : ""}`} ref={dockRootRef} style={dockStyle}>
+      <a className="mce-skip-link" href="#dock-main-content">
+        {t('mvShell.skipToContent', 'Skip to main content')}
+      </a>
       {/* ═══ VERTICAL NAV (left side when dock is short) ═══ */}
       {verticalTabs && (
         <nav className="dock-vertical-nav" aria-label={t('page.dockSections')}>
@@ -689,10 +730,6 @@ export default function DockPage({
         {/* ── Page Header (hamburger L, refresh R) ── */}
         {!hideShellHeader && (
         <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setHeaderCollapsed((prev) => !prev)}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setHeaderCollapsed((prev) => !prev); } }}
           style={{
             display: "flex",
             alignItems: "center",
@@ -700,13 +737,33 @@ export default function DockPage({
             padding: headerCollapsed ? "2px 8px" : "6px 8px",
             borderBottom: "1px solid rgba(51, 65, 85, 0.3)",
             flexShrink: 0,
-            cursor: "pointer",
             userSelect: "none",
           }}
-          title={headerCollapsed ? "Expand header" : "Collapse header"}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <Icon name={headerCollapsed ? "chevron_right" : "expand_more"} size={14} style={{ color: "#9CA3AF", flexShrink: 0 }} />
+            <button
+              type="button"
+              aria-expanded={!headerCollapsed}
+              aria-controls="dock-shell-header-actions"
+              aria-label={headerCollapsed ? t("page.expandHeader", "Expand header") : t("page.collapseHeader", "Collapse header")}
+              title={headerCollapsed ? t("page.expandHeader", "Expand header") : t("page.collapseHeader", "Collapse header")}
+              onClick={() => setHeaderCollapsed((prev) => !prev)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 28,
+                height: 28,
+                padding: 0,
+                border: "none",
+                borderRadius: 3,
+                background: "transparent",
+                color: "#9CA3AF",
+                cursor: "pointer",
+              }}
+            >
+              <Icon name={headerCollapsed ? "chevron_right" : "expand_more"} size={14} />
+            </button>
             {!headerCollapsed && (
               <button
                 type="button"
@@ -722,41 +779,45 @@ export default function DockPage({
                   color: "#9CA3AF",
                   cursor: "pointer",
                 }}
-                title="Menu"
+                aria-label={t("page.menu", "Menu")}
+                title={t("page.menu", "Menu")}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></svg>
               </button>
             )}
           </div>
-          {!headerCollapsed && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); window.location.reload(); }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 28, height: 28,
-                border: "none",
-                borderRadius: 3,
-                background: "transparent",
-                color: "#9CA3AF",
-                cursor: "pointer",
-              }}
-              title="Refresh"
-            >
-              <Icon name="refresh" size={14} />
-            </button>
-          )}
+          <div id="dock-shell-header-actions" hidden={headerCollapsed}>
+            {!headerCollapsed && (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28, height: 28,
+                  border: "none",
+                  borderRadius: 3,
+                  background: "transparent",
+                  color: "#9CA3AF",
+                  cursor: "pointer",
+                }}
+                aria-label={t("common.refresh", "Refresh")}
+                title={t("common.refresh", "Refresh")}
+              >
+                <Icon name="refresh" size={14} />
+              </button>
+            )}
+          </div>
         </div>
         )}
 
         {/* ── Sidebar ── */}
         {showSettingsMenu && (
           <div className="dock-sidebar-backdrop" onClick={() => setShowSettingsMenu(false)}>
-            <div className="dock-sidebar" onClick={(e) => e.stopPropagation()}>
+            <div className="dock-sidebar" role="dialog" aria-modal="true" aria-labelledby="dock-menu-title" onClick={(e) => e.stopPropagation()}>
               <div className="dock-sidebar__header">
-                <span className="dock-sidebar__title">{t('dock.menu')}</span>
+                <span id="dock-menu-title" className="dock-sidebar__title">{t('dock.menu')}</span>
                 <button
                   type="button"
                   className="dock-shell-icon-btn"
@@ -781,6 +842,87 @@ export default function DockPage({
                   <Icon name={themeToggleIcon} size={16} />
                   <span>{themeToggleLabel}</span>
                 </button>
+
+                {/* Appearance */}
+                <button
+                  type="button"
+                  className={`dock-sidebar__item${showAppearance ? " dock-sidebar__item--open" : ""}`}
+                  onClick={() => setShowAppearance((current) => !current)}
+                  title={t('page.appearance', 'Appearance')}
+                  aria-expanded={showAppearance}
+                >
+                  <Icon name="palette" size={16} />
+                  <span>{t('page.appearance', 'Appearance')}</span>
+                  <Icon name={showAppearance ? "expand_less" : "expand_more"} size={14} />
+                </button>
+                {showAppearance && (
+                  <div className="dock-sidebar__subpanel dock-sidebar__appearance-panel">
+                    <div className="dock-sidebar__section-label">{t('page.colorMode', 'Color mode')}</div>
+                    <div className="dock-appearance-mode" role="group" aria-label={t('page.colorMode', 'Color mode')}>
+                      {([
+                        ["system", t('page.system', 'System')],
+                        ["dark", t('page.dark', 'Dark')],
+                        ["light", t('page.light', 'Light')],
+                      ] as const).map(([mode, label]) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          className={`dock-appearance-mode__button${themePreference === mode ? " dock-appearance-mode__button--active" : ""}`}
+                          onClick={() => setTheme(mode)}
+                          aria-pressed={themePreference === mode}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="dock-sidebar__section-label dock-sidebar__section-label--spaced">
+                      {t('page.colorTheme', 'Color theme')}
+                    </div>
+                    <div className="dock-appearance-palette-grid">
+                      {APP_APPEARANCE_PALETTES.map((palette) => {
+                        const selected = appearance.palette === palette.id;
+                        return (
+                          <button
+                            key={palette.id}
+                            type="button"
+                            className={`dock-appearance-palette${selected ? " dock-appearance-palette--active" : ""}`}
+                            onClick={() => setAppearance({ palette: palette.id })}
+                            aria-pressed={selected}
+                            title={palette.description}
+                          >
+                            <span className="dock-appearance-palette__swatches" aria-hidden="true">
+                              {palette.swatches.map((swatch) => (
+                                <span key={swatch} style={{ background: swatch }} />
+                              ))}
+                            </span>
+                            <span className="dock-appearance-palette__copy">
+                              <span className="dock-appearance-palette__title">{palette.label}</span>
+                              <span className="dock-appearance-palette__desc">{palette.description}</span>
+                            </span>
+                            {selected && <Icon name="check" size={13} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <label className={`dock-appearance-custom${appearance.palette === "custom" ? " dock-appearance-custom--active" : ""}`}>
+                      <span className="dock-appearance-custom__copy">
+                        <span className="dock-appearance-palette__title">{t('page.customAccent', 'Custom accent')}</span>
+                        <span className="dock-appearance-palette__desc">{t('page.customAccentDesc', 'Use a personal accent color')}</span>
+                      </span>
+                      <input
+                        type="color"
+                        value={appearance.customAccent}
+                        onChange={(event) => setAppearance({ palette: "custom", customAccent: event.target.value })}
+                        aria-label={t('page.customAccent', 'Custom accent')}
+                      />
+                    </label>
+                    <div className="dock-sidebar__hint">
+                      {t('page.appearanceScope', 'Applies to the app and Dock controls. OBS Bible, Worship, and graphics styles stay independent.')}
+                    </div>
+                  </div>
+                )}
 
                 {/* Language */}
                 <div className="dock-sidebar__item" style={{ cursor: "default" }}>
@@ -823,16 +965,51 @@ export default function DockPage({
                       aria-label={t('page.fontFamily', 'Font family')}
                     >
                       <option value="">{t('page.fontFamilySourceDefault', 'Use source default')}</option>
-                      {DOCK_FONT_FAMILY_OPTIONS.map((option) => (
-                        <option key={option.id} value={option.family} style={{ fontFamily: option.family }}>
-                          {option.label}
+                      {DOCK_FONT_FAMILY_GROUPS.map((group) => (
+                        <optgroup key={group} label={group}>
+                          {DOCK_FONT_FAMILY_OPTIONS.filter((option) => option.group === group).map((option) => (
+                            <option key={option.id} value={option.family} style={{ fontFamily: option.family }}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="dock-sidebar__select-field">
+                    <span className="dock-sidebar__select-label">
+                      <Icon name="text_fields" size={14} />
+                      <span>{t('page.fontSize', 'Dock font size')}</span>
+                      <output className="dock-sidebar__value" htmlFor="dock-font-scale">
+                        {Math.round(dockFontScale * 100)}%
+                      </output>
+                    </span>
+                    <select
+                      id="dock-font-scale"
+                      className="dock-sidebar__select"
+                      value={String(dockFontScale)}
+                      onChange={(event) => updateDockFontScale(event.target.value)}
+                      aria-label={t('page.fontSize', 'Dock font size')}
+                    >
+                      {DOCK_FONT_SCALE_OPTIONS.map((option) => (
+                        <option key={option.id} value={String(option.value)}>
+                          {t(`page.fontSize.${option.id}`, option.label)}
                         </option>
                       ))}
                     </select>
                   </label>
                   <div className="dock-sidebar__hint">
-                    {t('page.fontFamilyDesc', 'Used by text sources the next time you send them to OBS.')}
+                    {t('page.fontFamilyDesc', 'Applies to the dock and keeps Unicode symbols, emoji, and African-language characters readable.')}
                   </div>
+                  <button
+                    type="button"
+                    className="dock-sidebar__reset"
+                    onClick={resetDockTypography}
+                    disabled={!dockFontFamily && dockFontScale === DEFAULT_DOCK_FONT_SCALE}
+                  >
+                    <Icon name="restart_alt" size={13} />
+                    <span>{t('page.resetTypography', 'Reset typography')}</span>
+                  </button>
                 </div>
 
                 <div className="dock-sidebar__divider" />
@@ -1124,7 +1301,7 @@ export default function DockPage({
 
 
 
-        <div className="dock-content">
+        <main id="dock-main-content" tabIndex={-1} className="dock-content">
 
           <div className="dock-content-main">
             <Suspense fallback={<div className="dock-tab-loading">{t('common.loading')}</div>}>
@@ -1213,7 +1390,7 @@ export default function DockPage({
               )}
             </Suspense>
           </div>
-        </div>
+        </main>
       </div>
 
       {/* ═══ HORIZONTAL TAB NAVIGATION (bottom, hidden when vertical) ═══ */}
@@ -1254,13 +1431,14 @@ export default function DockPage({
           className="dock-shortcuts-overlay"
           onClick={() => setShowShortcutsHelp(false)}
           role="dialog"
-          aria-label={t('page.keyboardShortcuts')}
+          aria-modal="true"
+          aria-labelledby="dock-shortcuts-title"
         >
           <div className="dock-shortcuts-overlay__content" onClick={(e) => e.stopPropagation()}>
             <div className="dock-shortcuts-overlay__header">
               <div>
                 <div className="dock-shortcuts-overlay__eyebrow">{t('dock.dockLabel')}</div>
-                <div className="dock-shortcuts-overlay__title">{t('page.keyboardShortcuts')}</div>
+                <div id="dock-shortcuts-title" className="dock-shortcuts-overlay__title">{t('page.keyboardShortcuts')}</div>
               </div>
               <button
                 type="button"
@@ -1351,9 +1529,9 @@ export default function DockPage({
       {/* ── Language change confirmation modal ── */}
       {showLanguageModal && pendingLanguage && (
         <div className="dock-modal-overlay" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
-          <div className="dock-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="dock-modal" role="dialog" aria-modal="true" aria-labelledby="dock-language-title" onClick={(e) => e.stopPropagation()}>
             <div className="dock-modal__header">
-              <h3>{t('dock.changeLanguage') || 'Change Language'}</h3>
+              <h3 id="dock-language-title">{t('dock.changeLanguage') || 'Change Language'}</h3>
             </div>
             <div className="dock-modal__body">
               <p>{t('dock.changeLanguageConfirm', { language: pendingLanguage }) || `Change interface language to ${pendingLanguage}?`}</p>

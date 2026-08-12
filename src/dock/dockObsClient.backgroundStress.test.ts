@@ -705,14 +705,16 @@ describe("dockObsClient background reflection stress", () => {
       entry.method === "SetInputSettings" &&
       Object.prototype.hasOwnProperty.call(entry.payload.inputSettings as Record<string, unknown>, "url")
     );
+    const browserEvent = callLog.find((entry) => entry.method === "CallVendorRequest");
 
     expect(urlWrites).toHaveLength(0);
     expect(callLog.some((entry) => entry.method === "GetInputSettings" && entry.payload.inputName === sourceName)).toBe(true);
-    expect(callLog.some((entry) => entry.method === "CallVendorRequest")).toBe(true);
+    expect(browserEvent).toBeDefined();
+    expect((browserEvent?.payload.requestData as { event_data?: { targetSource?: string } }).event_data?.targetSource).toBe(sourceName);
     expect(client._lastBrowserSourceUrlBySource[sourceName]).toBe(baseUrl);
   });
 
-  it("delivers Bible background changes as live events without rewriting OBS browser CSS", async () => {
+  it("delivers Bible background changes through the in-place browser event", async () => {
     const sourceName = "MCE Browser - Bible";
     const baseUrl = "http://overlay.test/mce-bible-overlay.html?v=2026-07-29-1-lt-bg-image&tab=bible";
     inputs.set(sourceName, {
@@ -753,7 +755,7 @@ describe("dockObsClient background reflection stress", () => {
     expect(client._lastCssOverlayThemeCssBySource[sourceName]).toContain("--bg-pattern-data");
   });
 
-  it("does not rewrite the browser source when a live Bible click event is accepted", async () => {
+  it("updates a Bible click through the live event without rewriting source CSS", async () => {
     const sourceName = "MCE Browser - Bible";
     const baseUrl = "http://overlay.test/mce-bible-overlay.html?v=2026-07-29-1-lt-bg-image&tab=bible";
     const theme = makeBackgroundTheme({ backgroundColor: "#000000" });

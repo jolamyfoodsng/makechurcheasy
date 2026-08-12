@@ -360,10 +360,10 @@ function CountdownCard({
 
       {/* Timer adjust controls */}
       <div style={{ display: "flex", gap: 3, alignItems: "center", marginTop: 4 }}>
-        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-60); }} title="-1 minute" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}>-1m</button>
-        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-10); }} title="-10 seconds" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}><Icon name="fast_rewind" size={10} /></button>
-        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(10); }} title="+10 seconds" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}><Icon name="fast_forward" size={10} /></button>
-        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(60); }} title="+1 minute" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}>+1m</button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-60); }} title={t("countdowns.minusOneMinute", "-1 minute")} style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}>-1m</button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-10); }} title={t("countdowns.minusTenSeconds", "-10 seconds")} style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}><Icon name="fast_rewind" size={10} /></button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(10); }} title={t("countdowns.plusTenSeconds", "+10 seconds")} style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}><Icon name="fast_forward" size={10} /></button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(60); }} title={t("countdowns.plusOneMinute", "+1 minute")} style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}>+1m</button>
       </div>
 
       {/* Push to separate scene toggle */}
@@ -390,7 +390,9 @@ function CountdownCard({
         <div style={{ position: "relative", marginLeft: "auto" }}>
           <button
             type="button"
-            title={cd.message?.text?.trim() ? `Message: ${cd.message.text}` : "Add message to overlay"}
+            title={cd.message?.text?.trim()
+              ? t("countdowns.messageTooltip", "Message: {{message}}", { message: cd.message.text })
+              : t("countdowns.addMessageToOverlay", "Add message to overlay")}
             onClick={(e) => {
               e.stopPropagation();
               if (msgOpen) { setMsgOpen(false); return; }
@@ -403,12 +405,12 @@ function CountdownCard({
           </button>
           {msgOpen && (
             <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: "100%", right: 0, marginBottom: 6, background: "var(--dock-surface, #1a1a2e)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 8, padding: 10, width: 220, zIndex: 50, display: "flex", flexDirection: "column", gap: 8, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: "var(--dock-text)" }}>Message (OBS Overlay)</span>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "var(--dock-text)" }}>{t("countdowns.messageOverlay", "Message (OBS Overlay)")}</span>
               <input
                 type="text"
                 value={msgDraft.text}
                 onChange={(e) => setMsgDraft((p) => ({ ...p, text: e.target.value }))}
-                placeholder="e.g. Welcome to our service"
+                placeholder={t("countdowns.messagePlaceholder", "e.g. Welcome to our service")}
                 autoFocus
                 style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "5px 8px", color: "var(--dock-text)", fontSize: 11, outline: "none", width: "100%" }}
               />
@@ -419,7 +421,7 @@ function CountdownCard({
                   {(["above", "below"] as const).map((pos) => (
                     <button key={pos} type="button" onClick={() => setMsgDraft((p) => ({ ...p, position: pos }))}
                       style={{ flex: 1, padding: "3px 0", borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: msgDraft.position === pos ? "rgba(99,102,241,0.3)" : "rgba(0,0,0,0.2)", color: "var(--dock-text)", fontSize: 10, cursor: "pointer", textTransform: "capitalize" }}>
-                      {pos}
+                      {t(`countdowns.messagePosition.${pos}`, pos)}
                     </button>
                   ))}
                 </div>
@@ -428,12 +430,12 @@ function CountdownCard({
                 {cd.message?.text?.trim() && (
                   <button type="button" onClick={() => { onUpdateMessage(undefined); setMsgOpen(false); }}
                     style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.1)", color: "#fca5a5", fontSize: 10, cursor: "pointer" }}>
-                    Clear
+                    {t("common.clear", "Clear")}
                   </button>
                 )}
                 <button type="button" onClick={() => { onUpdateMessage(msgDraft.text.trim() ? { ...msgDraft } : undefined); setMsgOpen(false); }}
                   style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(99,102,241,0.3)", background: "rgba(99,102,241,0.2)", color: "#a5b4fc", fontSize: 10, cursor: "pointer", fontWeight: 600 }}>
-                  Save
+                  {t("common.save", "Save")}
                 </button>
               </div>
             </div>
@@ -950,7 +952,7 @@ export default function DockCountdownsTab({
           route={sceneRoute}
           onRouteChange={updateSceneRoute}
           disabled={presentationLinkMode}
-          title="Countdown output"
+          title={t("sceneRouting.countdownOutput", "Countdown output")}
         />
       </div>
 
@@ -1063,7 +1065,7 @@ export default function DockCountdownsTab({
                     {(["solid", "gradient", "image", "video", "transparent"] as BackgroundType[]).map((bgType) => (
                       <button key={bgType} type="button" onClick={() => { setEditBgUploadError(""); setEditBg((prev) => ({ ...prev, type: bgType })); }}
                         style={{ flex: 1, padding: "5px 0", borderRadius: 6, fontSize: 11, fontWeight: 500, border: `1px solid ${editBg.type === bgType ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: editBg.type === bgType ? "rgba(99,102,241,0.2)" : "transparent", color: editBg.type === bgType ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer", textTransform: "capitalize" }}>
-                        {bgType}
+                        {t(`countdowns.backgroundType.${bgType}`, bgType)}
                       </button>
                     ))}
                   </div>
@@ -1083,7 +1085,7 @@ export default function DockCountdownsTab({
                     <>
                       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>Start</span>
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("common.start", "Start")}</span>
                           <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                             <input type="color" value={editBg.gradientStart} onChange={(e) => setEditBg((p) => ({ ...p, gradientStart: e.target.value }))}
                               style={{ width: 28, height: 28, borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 1, background: "transparent" }} />
@@ -1092,7 +1094,7 @@ export default function DockCountdownsTab({
                           </div>
                         </div>
                         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>End</span>
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("bgPicker.end", "End")}</span>
                           <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                             <input type="color" value={editBg.gradientEnd} onChange={(e) => setEditBg((p) => ({ ...p, gradientEnd: e.target.value }))}
                               style={{ width: 28, height: 28, borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 1, background: "transparent" }} />
@@ -1102,7 +1104,7 @@ export default function DockCountdownsTab({
                         </div>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                        <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>Angle: {editBg.gradientAngle}°</span>
+                        <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("bgPicker.angle", "Angle")}: {editBg.gradientAngle}°</span>
                         <input type="range" min={0} max={360} value={editBg.gradientAngle}
                           onChange={(e) => setEditBg((p) => ({ ...p, gradientAngle: Number(e.target.value) }))}
                           style={{ width: "100%", accentColor: "#6366f1" }} />
@@ -1118,12 +1120,12 @@ export default function DockCountdownsTab({
                           <img src={editBg.imageUrl} alt="" style={{ width: "100%", height: 80, objectFit: "cover", display: "block" }} />
                           <div style={{ position: "absolute", bottom: 4, right: 4, display: "flex", gap: 4 }}>
                             <button type="button" onClick={() => editBgFileRef.current?.click()}
-                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>Replace</button>
+                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>{t("common.replace", "Replace")}</button>
                             <button type="button" onClick={async () => {
                               if (editBg.assetId) await deleteCountdownAsset(editBg.assetId).catch(() => { });
                               setEditBg((p) => ({ ...p, type: "solid", imageUrl: "", assetId: "", builtinId: "", source: "upload" }));
                             }}
-                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(220,38,38,0.8)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>Remove</button>
+                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(220,38,38,0.8)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>{t("common.remove", "Remove")}</button>
                           </div>
                         </div>
                       ) : (
@@ -1131,12 +1133,12 @@ export default function DockCountdownsTab({
                           <div style={{ display: "flex", gap: 6 }}>
                             {editBgUploading ? (
                               <div style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                                Uploading…
+                                {t("common.uploading", "Uploading…")}
                               </div>
                             ) : (
                               <button type="button" onClick={() => { setEditBgUploadError(""); editBgFileRef.current?.click(); }}
                                 style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                                <Upload size={14} /> Upload
+                                <Upload size={14} /> {t("common.upload", "Upload")}
                               </button>
                             )}
                             <button type="button" onClick={async () => {
@@ -1150,7 +1152,7 @@ export default function DockCountdownsTab({
                               setEditMediaLoading(false);
                             }}
                               style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                              📁 Library
+                              📁 {t("common.library", "Library")}
                             </button>
                           </div>
                           {editBgUploadError && (
@@ -1163,12 +1165,12 @@ export default function DockCountdownsTab({
                         {(["cover", "contain", "stretch"] as ImageFit[]).map((fit) => (
                           <button key={fit} type="button" onClick={() => setEditBg((p) => ({ ...p, imageFit: fit }))}
                             style={{ flex: 1, padding: "4px 0", borderRadius: 6, fontSize: 10, fontWeight: 500, border: `1px solid ${editBg.imageFit === fit ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: editBg.imageFit === fit ? "rgba(99,102,241,0.2)" : "transparent", color: editBg.imageFit === fit ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer", textTransform: "capitalize" }}>
-                            {fit}
+                            {t(`countdowns.imageFit.${fit}`, fit)}
                           </button>
                         ))}
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                        <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>Brightness: {editBg.brightness}%</span>
+                        <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("countdowns.brightness", "Brightness")}: {editBg.brightness}%</span>
                         <input type="range" min={10} max={200} value={editBg.brightness}
                           onChange={(e) => setEditBg((p) => ({ ...p, brightness: Number(e.target.value) }))}
                           style={{ width: "100%", accentColor: "#6366f1" }} />
@@ -1184,12 +1186,12 @@ export default function DockCountdownsTab({
                           <video src={editBg.videoUrl} muted loop style={{ width: "100%", height: 80, objectFit: "cover", display: "block" }} />
                           <div style={{ position: "absolute", bottom: 4, right: 4, display: "flex", gap: 4 }}>
                             <button type="button" onClick={() => editBgFileRef.current?.click()}
-                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>Replace</button>
+                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>{t("common.replace", "Replace")}</button>
                             <button type="button" onClick={async () => {
                               if (editBg.assetId) await deleteCountdownAsset(editBg.assetId).catch(() => { });
                               setEditBg((p) => ({ ...p, type: "solid", videoUrl: "", assetId: "", builtinId: "", source: "upload" }));
                             }}
-                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(220,38,38,0.8)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>Remove</button>
+                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(220,38,38,0.8)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>{t("common.remove", "Remove")}</button>
                           </div>
                         </div>
                       ) : (
@@ -1197,12 +1199,12 @@ export default function DockCountdownsTab({
                           <div style={{ display: "flex", gap: 6 }}>
                             {editBgUploading ? (
                               <div style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                                Uploading…
+                                {t("common.uploading", "Uploading…")}
                               </div>
                             ) : (
                               <button type="button" onClick={() => { setEditBgUploadError(""); editBgFileRef.current?.click(); }}
                                 style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                                <Upload size={14} /> Upload
+                                <Upload size={14} /> {t("common.upload", "Upload")}
                               </button>
                             )}
                             <button type="button" onClick={async () => {
@@ -1216,7 +1218,7 @@ export default function DockCountdownsTab({
                               setEditMediaLoading(false);
                             }}
                               style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                              📁 Library
+                              📁 {t("common.library", "Library")}
                             </button>
                           </div>
                           {editBgUploadError && (
@@ -1226,10 +1228,10 @@ export default function DockCountdownsTab({
                       )}
                       <div style={{ display: "flex", gap: 10, marginBottom: 4 }}>
                         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--dock-text-dim)", cursor: "pointer" }}>
-                          <input type="checkbox" checked={editBg.loop} onChange={(e) => setEditBg((p) => ({ ...p, loop: e.target.checked }))} style={{ accentColor: "#6366f1" }} /> Loop
+                          <input type="checkbox" checked={editBg.loop} onChange={(e) => setEditBg((p) => ({ ...p, loop: e.target.checked }))} style={{ accentColor: "#6366f1" }} /> {t("ministry.loop", "Loop")}
                         </label>
                         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--dock-text-dim)", cursor: "pointer" }}>
-                          <input type="checkbox" checked={editBg.muted} onChange={(e) => setEditBg((p) => ({ ...p, muted: e.target.checked }))} style={{ accentColor: "#6366f1" }} /> Muted
+                          <input type="checkbox" checked={editBg.muted} onChange={(e) => setEditBg((p) => ({ ...p, muted: e.target.checked }))} style={{ accentColor: "#6366f1" }} /> {t("countdowns.muted", "Muted")}
                         </label>
                       </div>
                     </>
@@ -1246,7 +1248,7 @@ export default function DockCountdownsTab({
                       const file = files[0];
                       const result = validateMediaFile(file);
                       if (!result.valid) {
-                        setEditBgUploadError(result.error || "Unsupported file type");
+                        setEditBgUploadError(result.error || t("media.unsupportedFileType", "Unsupported file type"));
                         if (editBgFileRef.current) editBgFileRef.current.value = "";
                         return;
                       }
@@ -1279,17 +1281,17 @@ export default function DockCountdownsTab({
                   {editBgMediaModal && (
                     <div style={{ border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 8, padding: 10, background: "rgba(0,0,0,0.3)" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dock-text)" }}>Choose from Library</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dock-text)" }}>{t("common.chooseFromLibrary", "Choose from Library")}</span>
                         <button type="button" onClick={() => { setEditBgMediaModal(false); setEditMediaSearch(""); }}
                           style={{ background: "none", border: "none", color: "var(--dock-text-dim)", cursor: "pointer", fontSize: 16 }}>×</button>
                       </div>
-                      <input type="text" placeholder="Search..." value={editMediaSearch} onChange={(e) => setEditMediaSearch(e.target.value)}
+                      <input type="text" placeholder={t("common.searchEllipsis", "Search...")} value={editMediaSearch} onChange={(e) => setEditMediaSearch(e.target.value)}
                         style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "6px 10px", color: "var(--dock-text)", fontSize: 12, outline: "none", width: "100%", marginBottom: 8 }} />
                       <div style={{ maxHeight: 180, overflowY: "auto" }}>
                         {editMediaLoading ? (
-                          <div style={{ padding: 16, textAlign: "center", color: "var(--dock-text-dim)", fontSize: 12 }}>Loading...</div>
+                          <div style={{ padding: 16, textAlign: "center", color: "var(--dock-text-dim)", fontSize: 12 }}>{t("common.loading", "Loading…")}</div>
                         ) : editMediaItems.length === 0 ? (
-                          <div style={{ padding: 16, textAlign: "center", color: "var(--dock-text-dim)", fontSize: 12 }}>No media files found</div>
+                          <div style={{ padding: 16, textAlign: "center", color: "var(--dock-text-dim)", fontSize: 12 }}>{t("media.noMediaFilesFound", "No media files found")}</div>
                         ) : (
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
                             {editMediaItems
@@ -1336,29 +1338,29 @@ export default function DockCountdownsTab({
               {showMsgSection && (
                 <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>Message Text</span>
+                    <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>{t("countdowns.messageText", "Message Text")}</span>
                     <input
                       type="text"
                       value={editMessage.text}
                       onChange={(e) => setEditMessage((p) => ({ ...p, text: e.target.value }))}
-                      placeholder="e.g. Welcome to our service"
+                      placeholder={t("countdowns.messagePlaceholder", "e.g. Welcome to our service")}
                       style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "6px 10px", color: "var(--dock-text)", fontSize: 12, outline: "none" }}
                     />
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>Color</span>
+                    <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>{t("common.color", "Color")}</span>
                     <input type="color" value={editMessage.color} onChange={(e) => setEditMessage((p) => ({ ...p, color: e.target.value }))}
                       style={{ width: 28, height: 28, borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 1, background: "transparent" }} />
                     <input type="text" value={editMessage.color} onChange={(e) => setEditMessage((p) => ({ ...p, color: e.target.value }))}
                       style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "6px 10px", color: "var(--dock-text)", fontSize: 12, outline: "none", fontFamily: "monospace", flex: 1 }} />
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>Position</span>
+                    <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>{t("ministry.position", "Position")}</span>
                     <div style={{ display: "flex", gap: 4 }}>
                       {(["above", "below"] as const).map((pos) => (
                         <button key={pos} type="button" onClick={() => setEditMessage((p) => ({ ...p, position: pos }))}
                           style={{ padding: "4px 10px", borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: editMessage.position === pos ? "rgba(99,102,241,0.3)" : "rgba(0,0,0,0.2)", color: "var(--dock-text)", fontSize: 11, cursor: "pointer", textTransform: "capitalize" }}>
-                          {pos}
+                          {t(`countdowns.messagePosition.${pos}`, pos)}
                         </button>
                       ))}
                     </div>

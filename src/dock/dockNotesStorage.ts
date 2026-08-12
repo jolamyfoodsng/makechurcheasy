@@ -22,6 +22,10 @@ export interface DockNotesPreferences {
   lowerThirdThemeId?: string;
   fullscreenQuickSettings?: DockFullscreenQuickThemeSettings | null;
   lowerThirdQuickSettings?: DockFullscreenQuickThemeSettings | null;
+  linesPerSlide?: number;
+  quickActionsTop?: number;
+  quickActionsLeft?: number | null;
+  quickUpdateImmediately?: boolean;
   updatedAt?: string;
 }
 

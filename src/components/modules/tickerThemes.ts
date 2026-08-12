@@ -221,6 +221,8 @@ export function generateTickerHTML(
   brandLogoUrl: string = "",
   brandName: string = "",
   fontFamilyOverride?: string,
+  dividerChar: string = theme.separatorChar,
+  messageSpacing = 0,
 ): string {
   // OBS Text Source v1 default is 32px. Use it as ticker base size for readability on program output.
 
@@ -229,11 +231,16 @@ export function generateTickerHTML(
   const pxPerSecond = Math.max(60, Math.min(320, 40 + speed * 2.8));
   const positionCSS = position === "top" ? "top: 0;" : "bottom: 0;";
   const fontFamily = normalizeDockFontFamily(fontFamilyOverride) || theme.fontFamily;
+  const safeMessageSpacing = Math.max(0, Math.min(100, Math.round(Number(messageSpacing) || 0)));
+  const safeDividerChar = String(dividerChar || "").slice(0, 4);
+  const dividerMarkup = safeDividerChar
+    ? `<span class="tk-sep">${escapeHTML(safeDividerChar)}</span>`
+    : "";
   const safeMessages = messages.map((m) => m.trim()).filter(Boolean);
   const cycleMessages = (safeMessages.length > 0 ? safeMessages : [" "])
     .map((m) => `<span class="tk-msg">${escapeHTML(m)}</span>`)
-    .join(`<span class="tk-sep">${escapeHTML(theme.separatorChar)}</span>`);
-  const cycleContent = `${cycleMessages}<span class="tk-sep">${escapeHTML(theme.separatorChar)}</span>`;
+    .join(dividerMarkup);
+  const cycleContent = `${cycleMessages}${dividerMarkup}`;
 
   const barBgCSS =
     theme.barStyle === "gradient"
@@ -255,6 +262,7 @@ export function generateTickerHTML(
       brandLogoUrl,
       brandName,
       fontFamily,
+      messageSpacing: safeMessageSpacing,
     });
   }
 
@@ -339,6 +347,8 @@ html,body{background:transparent;overflow:hidden;width:100%;height:100%}
   padding:0 12px;
   letter-spacing:0.01em;
 }
+
+.tk-msg:not(:first-child){margin-left:${safeMessageSpacing}px}
 
 .tk-sep{
   color:${colors.separator};
@@ -452,6 +462,7 @@ function generateRotatingLogoTickerHTML({
   brandLogoUrl,
   brandName,
   fontFamily,
+  messageSpacing,
 }: {
   theme: TickerThemeConfig;
   colors: TickerThemeColors;
@@ -464,6 +475,7 @@ function generateRotatingLogoTickerHTML({
   brandLogoUrl: string;
   brandName: string;
   fontFamily: string;
+  messageSpacing: number;
 }): string {
   const TICKER_BAR_HEIGHT_PX = 80;
   const positionCSS = position === "top" ? "top: 0;" : "bottom: 0;";
@@ -588,6 +600,8 @@ html,body{background:transparent;overflow:hidden;width:100%;height:100%}
   padding:0 14px;
   letter-spacing:0;
 }
+
+.tk-msg:not(:first-child){margin-left:${messageSpacing}px}
 
 .tk-sep{
   color:${colors.separator};

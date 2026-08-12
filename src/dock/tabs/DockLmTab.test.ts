@@ -8,6 +8,8 @@ import {
 } from "./DockLmTab";
 import { retainSuggestionsUntilReplacement } from "../../services/lmDockService";
 import dockLmTabSource from "./DockLmTab.tsx?raw";
+import speechToScripturePageSource from "../../pages/SpeechToScripturePage.tsx?raw";
+import lmDockServiceSource from "../../services/lmDockService.ts?raw";
 import type { VoiceBibleCandidate } from "../../services/voiceBibleTypes";
 
 function candidate(book: string, chapter: number, verse: number): VoiceBibleCandidate {
@@ -113,5 +115,18 @@ describe("DockLmTab settings helpers", () => {
     expect(dockLmTabSource).toContain('t("lm.autoPushSuggestions")');
     expect(dockLmTabSource).toContain('updateSetting("autoPushSuggestions", e.target.checked)');
     expect(dockLmTabSource).toContain("isLmAutoPushSuppressed");
+  });
+
+  it("keeps speech startup cancellable while slow native mic startup is pending", () => {
+    expect(lmDockServiceSource).toContain("void this.scriptureEngine.preload()");
+    expect(lmDockServiceSource).toContain("MIC_START_TIMEOUT_MS");
+    expect(lmDockServiceSource).toContain("Microphone start timed out.");
+
+    expect(dockLmTabSource).toContain('"Cancel start"');
+    expect(dockLmTabSource).not.toContain('disabled={lmStatus === "connecting" || lmStatus === "requesting-mic"}');
+
+    expect(speechToScripturePageSource).toContain("const canStopListening = isListening || isConnecting;");
+    expect(speechToScripturePageSource).toContain("onClick={canStopListening ? handleStop : handleStart}");
+    expect(speechToScripturePageSource).not.toContain("disabled={isConnecting || checkingAccess");
   });
 });

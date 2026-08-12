@@ -17,7 +17,12 @@ import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
 import DockTranslationControls, {
   type DockTranslationValue,
 } from "../components/DockTranslationControls";
+import DockOutputQuickActions, {
+  DEFAULT_DOCK_OUTPUT_QUICK_ACTIONS_TOP,
+  type DockOutputQuickTextSettings,
+} from "../components/DockOutputQuickActions";
 import DockNotesTextTools from "../components/DockNotesTextTools";
+import { getOrderedTranslationParts, normalizeDockTranslationOrder } from "../dockTranslation";
 import {
   DOCK_NOTES_KEY,
   DOCK_NOTES_BROADCAST_CHANNEL,
@@ -47,6 +52,7 @@ import {
   type NoteTextToolAction,
 } from "../noteTextTools";
 import { useDockSceneRoute } from "../dockSceneRouting";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -57,42 +63,166 @@ interface Props {
 
 type OverlayMode = DockNotesOverlayMode;
 
+const MIN_NOTE_LINES_PER_SLIDE = 1;
+const MAX_NOTE_LINES_PER_SLIDE = 8;
+const DEFAULT_NOTE_LINES_PER_SLIDE = 4;
+
+function clampNoteLinesPerSlide(value?: number): number {
+  if (!value || Number.isNaN(value)) return DEFAULT_NOTE_LINES_PER_SLIDE;
+  return Math.min(MAX_NOTE_LINES_PER_SLIDE, Math.max(MIN_NOTE_LINES_PER_SLIDE, Math.trunc(value)));
+}
+
+function readQuickActionsLeft(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function getNoteDisplayTitle(note: DockNote): string {
   return extractStructuredTextTitle(note.content).title || note.title;
 }
 
-function getTranslatedNoteText(
-  text: string,
-  sectionId: string,
-  translation: DockTranslationValue | null,
-): string {
-  const translated = translation?.translatedSections[sectionId]?.trim();
-  if (!translation || !translated) return text;
-  return translation.showBoth ? `${text}\n\n${translated}` : translated;
+interface DockNoteEditorDialogProps {
+  editing: boolean;
+  initialTitle: string;
+  initialContent: string;
+  onCancel: () => void;
+  onSave: (draft: { title: string; content: string }) => void;
+  onFormat: (content: string, action: NoteTextToolAction, linesPerSlide?: number) => string;
 }
 
-function generateNoteSlides(note: DockNote): { id: string; label: string; text: string }[] {
+function DockNoteEditorDialog({
+  editing,
+  initialTitle,
+  initialContent,
+  onCancel,
+  onSave,
+  onFormat,
+}: DockNoteEditorDialogProps) {
+  const [title, setTitle] = useState(initialTitle);
+  const [content, setContent] = useState(initialContent);
+
+  const handleFormat = useCallback((action: NoteTextToolAction, linesPerSlide?: number) => {
+    setContent((current) => onFormat(current, action, linesPerSlide));
+  }, [onFormat]);
+
+  return (
+    <div className="dock-dialog-backdrop" role="presentation">
+      <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-note-editor-title">
+        <div className="dock-dialog__header">
+          <div>
+            <div className="dock-dialog__eyebrow">{editing ? "Edit Note" : "Add Note"}</div>
+            <h2 id="dock-note-editor-title" className="dock-dialog__title">
+              {editing ? "Edit Note" : "New Note"}
+            </h2>
+          </div>
+          <button type="button" className="dock-dialog__close" onClick={onCancel} aria-label="Close" title="Close">
+            <Icon name="close" size={14} />
+          </button>
+        </div>
+        <div className="dock-dialog__body">
+          <label className="dock-dialog-field">
+            <span className="dock-dialog-field__label">
+              <span>Title</span>
+              <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
+            </span>
+            <input className="dock-input" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Note title" />
+          </label>
+          <DockNotesTextTools
+            className="dock-notes-text-tools dock-notes-text-tools--editor"
+            buttonClassName="dock-notes-text-tools__btn"
+            onAction={handleFormat}
+          />
+          <label className="dock-dialog-field">
+            <span className="dock-dialog-field__label">
+              <span>Content</span>
+              <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
+            </span>
+            <textarea
+              className="dock-input dock-dialog-textarea"
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
+              placeholder="Note content. Use blank lines to separate slides."
+              rows={8}
+            />
+          </label>
+        </div>
+        <div className="dock-dialog__footer">
+          <button type="button" className="dock-btn dock-btn--ghost" onClick={onCancel} title="Cancel">Cancel</button>
+          <button
+            type="button"
+            className="dock-btn dock-btn--primary"
+            onClick={() => onSave({ title, content })}
+            disabled={!title.trim() || !content.trim()}
+            title="Save">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function generateNoteSlides(note: DockNote, linesPerSlide = DEFAULT_NOTE_LINES_PER_SLIDE): { id: string; label: string; text: string }[] {
   const slides: { id: string; label: string; text: string }[] = [];
   const structuredText = extractStructuredTextTitle(note.content);
   const displayTitle = structuredText.title || note.title;
   const sections = structuredText.body.split(/\n\n+/).map((section) => section.trim()).filter(Boolean);
   if (sections.length === 0 && displayTitle) {
-    slides.push({ id: crypto.randomUUID?.() ?? `s-${Date.now()}`, label: "", text: displayTitle });
+    slides.push({ id: `note-${note.id}-0-0`, label: "", text: displayTitle });
   } else {
-    sections.forEach((text, i) => {
+    const groupedSections: Array<{ headingLabel: string; explicit: boolean; lines: string[] }> = [];
+
+    sections.forEach((text) => {
       const lines = text.split("\n");
       const heading = parseWorshipSectionLabelLine(lines[0] ?? "");
-      const slideText = heading
+      const sectionText = heading
         ? [heading.rest, ...lines.slice(1)].filter(Boolean).join("\n")
         : text;
-      slides.push({
-        id: crypto.randomUUID?.() ?? `s-${Date.now()}-${i}`,
-        label: heading?.label || (i === 0 ? displayTitle : ""),
-        text: slideText,
-      });
+      const sectionLines = sectionText.split("\n").map((line) => line.trim()).filter(Boolean);
+      if (sectionLines.length === 0) return;
+
+      if (heading) {
+        groupedSections.push({ headingLabel: heading.label, explicit: true, lines: sectionLines });
+        return;
+      }
+
+      const previous = groupedSections[groupedSections.length - 1];
+      if (!previous || previous.explicit) {
+        groupedSections.push({ headingLabel: "", explicit: false, lines: [] });
+      }
+      groupedSections[groupedSections.length - 1].lines.push(...sectionLines);
+    });
+
+    groupedSections.forEach((section, sectionIndex) => {
+      const lineCount = clampNoteLinesPerSlide(linesPerSlide);
+      for (let chunkIndex = 0; chunkIndex < Math.max(1, section.lines.length); chunkIndex += lineCount) {
+        const chunk = section.lines.slice(chunkIndex, chunkIndex + lineCount).join("\n");
+        if (!chunk) continue;
+        slides.push({
+          id: `note-${note.id}-${sectionIndex}-${chunkIndex}`,
+          label: section.headingLabel || (sectionIndex === 0 && chunkIndex === 0 ? displayTitle : ""),
+          text: chunk,
+        });
+      }
     });
   }
   return slides;
+}
+
+function getNoteQuickSettings(
+  overlayMode: OverlayMode,
+  selectedFSTheme: BibleTheme,
+  selectedLTTheme: BibleTheme,
+  fullscreenQuickSettings: DockFullscreenQuickThemeSettings | null,
+  lowerThirdQuickSettings: DockFullscreenQuickThemeSettings | null,
+): DockOutputQuickTextSettings {
+  const theme = overlayMode === "fullscreen"
+    ? getDockNotesThemeForMode(selectedFSTheme, "fullscreen")
+    : getDockNotesThemeForMode(selectedLTTheme, "lower-third");
+  const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
+  return {
+    fontSize: quickSettings?.fontSize ?? theme.settings.fontSize,
+    autoFontScale: quickSettings?.autoFontScale ?? theme.settings.autoFontScale ?? false,
+  };
 }
 
 type ToastTone = "info" | "success" | "error";
@@ -132,8 +262,10 @@ export default function DockNotesTab({
 
   const [notes, setNotes] = useState<DockNote[]>(() => loadDockNotes());
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 220);
   const [selectedNote, setSelectedNote] = useState<DockNote | null>(null);
   const [notesTranslation, setNotesTranslation] = useState<DockTranslationValue | null>(null);
+  const [noteSlidesSearchQuery, setNoteSlidesSearchQuery] = useState("");
   const [selectedSlideIdx, setSelectedSlideIdx] = useState<number | null>(null);
   const [visibleSlideIdx, setVisibleSlideIdx] = useState<number | null>(null);
   const [overlayVisible, setOverlayVisible] = useState(true);
@@ -147,32 +279,52 @@ export default function DockNotesTab({
   );
   const [fullscreenQuickSettings, setFullscreenQuickSettings] = useState<DockFullscreenQuickThemeSettings | null>(() => initialPrefs.fullscreenQuickSettings ?? null);
   const [lowerThirdQuickSettings, setLowerThirdQuickSettings] = useState<DockFullscreenQuickThemeSettings | null>(() => initialPrefs.lowerThirdQuickSettings ?? null);
+  const [notesLinesPerSlide, setNotesLinesPerSlide] = useState(() => clampNoteLinesPerSlide(initialPrefs.linesPerSlide));
+  const [quickActionsTop, setQuickActionsTop] = useState(() => (
+    typeof initialPrefs.quickActionsTop === "number" && Number.isFinite(initialPrefs.quickActionsTop)
+      ? initialPrefs.quickActionsTop
+      : DEFAULT_DOCK_OUTPUT_QUICK_ACTIONS_TOP
+  ));
+  const [quickActionsLeft, setQuickActionsLeft] = useState<number | null>(() => readQuickActionsLeft(initialPrefs.quickActionsLeft));
+  const [quickUpdateImmediately, setQuickUpdateImmediately] = useState(() => initialPrefs.quickUpdateImmediately !== false);
+  const [quickSettingsRefreshNonce, setQuickSettingsRefreshNonce] = useState(0);
   const [showNoteEditor, setShowNoteEditor] = useState(false);
   const [editingNote, setEditingNote] = useState<DockNote | null>(null);
-  const [draftTitle, setDraftTitle] = useState("");
-  const [draftContent, setDraftContent] = useState("");
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [actionError, setActionError] = useState("");
   const [toasts, setToasts] = useState<{ id: string; message: string; tone: ToastTone }[]>([]);
   const prefsReadyRef = useRef(false);
   const processedAppendCommandIdsRef = useRef<Set<string>>(new Set());
+  const pendingQuickSettingsRefreshRef = useRef(false);
+  const notesTranslationChangeRef = useRef(false);
 
   const filteredNotes = useMemo(() => {
-    if (!searchQuery.trim()) return notes;
-    const q = searchQuery.trim().toLowerCase();
+    if (!debouncedSearchQuery.trim()) return notes;
+    const q = debouncedSearchQuery.trim().toLowerCase();
     return notes.filter((n) =>
       n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q),
     );
-  }, [searchQuery, notes]);
+  }, [debouncedSearchQuery, notes]);
 
   const selectedNoteSlides = useMemo(
-    () => (selectedNote ? generateNoteSlides(selectedNote) : []),
-    [selectedNote],
+    () => (selectedNote ? generateNoteSlides(selectedNote, notesLinesPerSlide) : []),
+    [notesLinesPerSlide, selectedNote],
   );
+  const filteredNoteSlides = useMemo(() => {
+    const query = noteSlidesSearchQuery.trim().toLocaleLowerCase();
+    return selectedNoteSlides
+      .map((slide, idx) => ({ slide, idx }))
+      .filter(({ slide }) => {
+        if (!query) return true;
+        return `${slide.label} ${slide.text}`.toLocaleLowerCase().includes(query);
+      });
+  }, [noteSlidesSearchQuery, selectedNoteSlides]);
   const selectedNoteDisplayTitle = selectedNote ? getNoteDisplayTitle(selectedNote) : "";
 
   useEffect(() => {
+    notesTranslationChangeRef.current = false;
     setNotesTranslation(null);
+    setNoteSlidesSearchQuery("");
   }, [selectedNote?.id]);
 
   const activeSlideIndex = useMemo(() => {
@@ -327,23 +479,19 @@ export default function DockNotesTab({
 
   const openNewNote = useCallback(() => {
     setEditingNote(null);
-    setDraftTitle("");
-    setDraftContent("");
     setShowNoteEditor(true);
   }, []);
 
   const openEditNote = useCallback((note: DockNote) => {
     setEditingNote(note);
-    setDraftTitle(note.title);
-    setDraftContent(note.content);
     setShowNoteEditor(true);
   }, []);
 
-  const applyDraftTextTool = useCallback((action: NoteTextToolAction, linesPerSlide?: number) => {
-    setDraftContent((current) => formatNoteText(current, action, linesPerSlide));
+  const formatNoteDraft = useCallback((content: string, action: NoteTextToolAction, linesPerSlide?: number) => {
+    return formatNoteText(content, action, linesPerSlide);
   }, []);
 
-  const saveNoteDraft = useCallback(() => {
+  const saveNoteDraft = useCallback(({ title: draftTitle, content: draftContent }: { title: string; content: string }) => {
     const title = draftTitle.trim();
     const content = draftContent.trim();
     if (!title || !content) return;
@@ -367,7 +515,7 @@ export default function DockNotesTab({
     }
     setShowNoteEditor(false);
     setEditingNote(null);
-  }, [draftTitle, draftContent, editingNote, notes]);
+  }, [editingNote, notes]);
 
   const deleteNote = useCallback((id: string) => {
     const next = notes.filter((n) => n.id !== id);
@@ -390,16 +538,30 @@ export default function DockNotesTab({
       const theme = getDockNotesThemeForMode(selectedTheme, overlayMode);
       const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
       const themeSettings = quickSettings ?? theme.settings;
-      const sectionText = getTranslatedNoteText(slide.text, slide.id, notesTranslation);
+      const translatedText = notesTranslation?.translatedSections[slide.id]?.trim() ?? "";
+      const showBoth = Boolean(notesTranslation?.showBoth && translatedText);
+      const sectionText = showBoth ? slide.text : (translatedText || slide.text);
+      const translationText = showBoth ? translatedText : "";
       return {
         stageItem: {
           type: "notes" as const,
           label: slide.label || selectedNoteDisplayTitle,
           subtitle: selectedNoteDisplayTitle,
-          data: { sectionText, sectionLabel: slide.label, note: selectedNote, slideIdx: idx, overlayMode, theme: theme.id },
+          data: {
+            sectionText,
+            translationText,
+            translationOrder: normalizeDockTranslationOrder(notesTranslation?.translationOrder),
+            sectionLabel: slide.label,
+            note: selectedNote,
+            slideIdx: idx,
+            overlayMode,
+            theme: theme.id,
+          },
         },
         obsData: {
           sectionText,
+          translationText,
+          translationOrder: normalizeDockTranslationOrder(notesTranslation?.translationOrder),
           sectionLabel: slide.label || selectedNoteDisplayTitle,
           songTitle: selectedNoteDisplayTitle,
           overlayMode,
@@ -431,21 +593,7 @@ export default function DockNotesTab({
         : payload.obsData.overlayMode === "lower-third"
           ? dockObsClient.pushNotesOverlayFast(payload.obsData)
           : pushNotesToConfiguredOutput(payload.obsData);
-
-      const bringNotesForward = hasSceneRoute
-        ? Promise.resolve()
-        : dockObsClient
-          .bringNotesOverlayForward(payload.obsData.overlayMode ?? "fullscreen")
-          .catch(() => { });
-
-      if (!hasSceneRoute) {
-        void bringNotesForward
-          .then(() => dockObsClient.primeNotesOverlay(payload.obsData))
-          .catch(() => { });
-      }
-
-      bringNotesForward
-        .then(pushLive)
+      pushLive()
         .then(() => {
           setOverlayVisible(true);
         })
@@ -456,6 +604,53 @@ export default function DockNotesTab({
     },
     [buildNoteObsPayload, hasSceneRoute, onStage, presentationLinkMode, pushNotesToConfiguredOutput],
   );
+
+  const activeNoteQuickSettings = useMemo(
+    () => getNoteQuickSettings(
+      overlayMode,
+      selectedFSTheme,
+      selectedLTTheme,
+      fullscreenQuickSettings,
+      lowerThirdQuickSettings,
+    ),
+    [fullscreenQuickSettings, lowerThirdQuickSettings, overlayMode, selectedFSTheme, selectedLTTheme],
+  );
+
+  const handleNotesQuickCommit = useCallback((patch: Partial<DockOutputQuickTextSettings>, nextLineCount?: number) => {
+    const fullscreenBase = fullscreenQuickSettings
+      ?? (getDockNotesThemeForMode(selectedFSTheme, "fullscreen").settings as unknown as DockFullscreenQuickThemeSettings);
+    const lowerThirdBase = lowerThirdQuickSettings
+      ?? (getDockNotesThemeForMode(selectedLTTheme, "lower-third").settings as unknown as DockFullscreenQuickThemeSettings);
+    setFullscreenQuickSettings({ ...fullscreenBase, ...patch });
+    setLowerThirdQuickSettings({ ...lowerThirdBase, ...patch });
+    if (nextLineCount !== undefined) {
+      setNotesLinesPerSlide(clampNoteLinesPerSlide(nextLineCount));
+      setSelectedSlideIdx(0);
+      setVisibleSlideIdx(null);
+    }
+    pendingQuickSettingsRefreshRef.current = true;
+    setQuickSettingsRefreshNonce((current) => current + 1);
+  }, [fullscreenQuickSettings, lowerThirdQuickSettings, selectedFSTheme, selectedLTTheme]);
+
+  const handleNotesQuickActionsPositionChange = useCallback((top: number, left: number | null) => {
+    setQuickActionsTop(top);
+    setQuickActionsLeft(left);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingQuickSettingsRefreshRef.current || activeSlideIndex === null) return;
+    pendingQuickSettingsRefreshRef.current = false;
+    // The nonce waits for the new settings and note slide layout to render before
+    // pushing the current note to the configured output.
+    pushNoteSlide(activeSlideIndex);
+  }, [activeSlideIndex, pushNoteSlide, quickSettingsRefreshNonce]);
+
+  useEffect(() => {
+    if (!notesTranslationChangeRef.current) return;
+    notesTranslationChangeRef.current = false;
+    if (activeSlideIndex === null || !overlayVisible || visibleSlideIdx === null) return;
+    pushNoteSlide(activeSlideIndex);
+  }, [activeSlideIndex, notesTranslation, overlayVisible, pushNoteSlide, visibleSlideIdx]);
 
   const handleClear = useCallback(async () => {
     setActionError("");
@@ -500,8 +695,12 @@ export default function DockNotesTab({
     const prefs = loadDockNotesPreferences();
     prefs.fullscreenQuickSettings = fullscreenQuickSettings;
     prefs.lowerThirdQuickSettings = lowerThirdQuickSettings;
+    prefs.linesPerSlide = notesLinesPerSlide;
+    prefs.quickActionsTop = quickActionsTop;
+    prefs.quickActionsLeft = quickActionsLeft;
+    prefs.quickUpdateImmediately = quickUpdateImmediately;
     saveDockNotesPreferences(prefs);
-  }, [fullscreenQuickSettings, lowerThirdQuickSettings]);
+  }, [fullscreenQuickSettings, lowerThirdQuickSettings, notesLinesPerSlide, quickActionsLeft, quickActionsTop, quickUpdateImmediately]);
 
   // Escape key handler
   useEffect(() => {
@@ -615,6 +814,7 @@ export default function DockNotesTab({
                         setSelectedNote(note);
                         setSelectedSlideIdx(0);
                         setVisibleSlideIdx(null);
+                        setNoteSlidesSearchQuery("");
                       }}
                       title={note.title}
                     >
@@ -652,34 +852,70 @@ export default function DockNotesTab({
                 <div className="dock-worship-summary__copy">
                   <div className="dock-worship-summary__title">{selectedNoteDisplayTitle}</div>
                   <div className="dock-worship-summary__artist">Note</div>
+                  <div className="dock-worship-summary__meta">
+                    <span>{selectedNoteSlides.length} {selectedNoteSlides.length === 1 ? "slide" : "slides"}</span>
+                    <span className="dock-worship-summary__meta-dot">·</span>
+                    <span>{notesLinesPerSlide} {notesLinesPerSlide === 1 ? "line per note" : "lines per note"}</span>
+                  </div>
                 </div>
               </div>
               <div className="dock-worship-summary__actions">
-                <button type="button" className="dock-shell-icon-btn" onClick={() => openEditNote(selectedNote)} title="Edit">
-                  <Icon name="edit" size={14} />
+                <DockTranslationControls
+                  compact
+                  sections={selectedNoteSlides.map((slide) => ({ id: slide.id, text: slide.text }))}
+                  value={notesTranslation}
+                  onChange={(next) => {
+                    notesTranslationChangeRef.current = true;
+                    setNotesTranslation(next);
+                  }}
+                />
+                <button type="button" className="dock-shell-icon-btn" onClick={() => openEditNote(selectedNote)} title="Edit note" aria-label="Edit note">
+                  <Icon name="subtitles" size={14} />
                 </button>
                 <button type="button" className="dock-shell-icon-btn" onClick={() => deleteNote(selectedNote.id)} title="Delete">
                   <Icon name="delete" size={14} />
                 </button>
               </div>
             </div>
-
-            <DockTranslationControls
-              sections={selectedNoteSlides.map((slide) => ({ id: slide.id, text: slide.text }))}
-              value={notesTranslation}
-              onChange={setNotesTranslation}
-            />
           </section>
 
-          <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace">
+          <section className="dock-console-panel dock-console-panel--toolbar dock-worship-lyrics-search">
+            <div className="dock-media-search dock-media-search--plain">
+              <input
+                className="dock-media-search__input"
+                placeholder="Search note slides..."
+                value={noteSlidesSearchQuery}
+                onChange={(event) => setNoteSlidesSearchQuery(event.target.value)}
+                aria-label="Search note slides"
+              />
+              {noteSlidesSearchQuery && (
+                <button
+                  type="button"
+                  className="dock-media-search__clear"
+                  onClick={() => setNoteSlidesSearchQuery("")}
+                  aria-label="Clear"
+                  title="Clear"
+                >
+                  <Icon name="close" size={13} />
+                </button>
+              )}
+            </div>
+          </section>
+
+          <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace" data-toolbar-collapsed={toolbarCollapsed || undefined}>
             {selectedNoteSlides.length === 0 ? (
               <div className="dock-empty dock-worship-workspace__empty">
                 <Icon name="sticky_note_2" size={18} />
                 <div className="dock-empty__text">No content to display</div>
               </div>
+            ) : filteredNoteSlides.length === 0 ? (
+              <div className="dock-empty dock-worship-workspace__empty">
+                <Icon name="search_off" size={18} />
+                <div className="dock-empty__text">No note slides match “{noteSlidesSearchQuery}”</div>
+              </div>
             ) : (
               <div className="dock-console-list dock-worship-workspace__list dock-worship-slide-queue">
-                {selectedNoteSlides.map((slide, idx) => {
+                {filteredNoteSlides.map(({ slide, idx }) => {
                   const isVisible = visibleSlideIdx === idx;
                   const isSelected = selectedSlideIdx === idx;
                   return (
@@ -696,24 +932,56 @@ export default function DockNotesTab({
                           </div>
                           <div className="dock-worship-slide-card__badges" />
                         </div>
-                        {notesTranslation?.translatedSections[slide.id] && notesTranslation.showBoth ? (
-                          <>
-                            <div className="dock-worship-slide-card__text">{slide.text}</div>
-                            <div className="dock-worship-slide-card__translation">
-                              {notesTranslation.translatedSections[slide.id]}
-                            </div>
-                          </>
-                        ) : (
-                          <div className="dock-worship-slide-card__text">
-                            {getTranslatedNoteText(slide.text, slide.id, notesTranslation)}
+                        {getOrderedTranslationParts(
+                          slide.text,
+                          notesTranslation?.translatedSections[slide.id],
+                          notesTranslation?.showBoth ?? false,
+                          notesTranslation?.translationOrder,
+                        ).map((part, partIndex) => (
+                          <div
+                            key={`${slide.id}-${part.kind}-${partIndex}`}
+                            className={part.kind === "translation"
+                              ? `dock-worship-slide-card__translation${partIndex === 0 ? " dock-worship-slide-card__translation--first" : ""}`
+                              : "dock-worship-slide-card__text"}
+                          >
+                            {part.text}
                           </div>
-                        )}
+                        ))}
                       </button>
+                      <div className="dock-worship-slide-card__actions">
+                        <button
+                          type="button"
+                          className="dock-worship-slide-card__action"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openEditNote(selectedNote);
+                          }}
+                          title="Edit note"
+                          aria-label="Edit note"
+                        >
+                          <Icon name="edit_note" size={12} />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
               </div>
             )}
+            <DockOutputQuickActions
+              textLabel="Note text"
+              lineLabel="Lines per note"
+              settings={activeNoteQuickSettings}
+              lineCount={notesLinesPerSlide}
+              maxLineCount={MAX_NOTE_LINES_PER_SLIDE}
+              minFontSize={overlayMode === "fullscreen" ? 28 : 14}
+              maxFontSize={overlayMode === "fullscreen" ? 180 : 100}
+              updateImmediately={quickUpdateImmediately}
+              top={quickActionsTop}
+              left={quickActionsLeft}
+              onPositionChange={handleNotesQuickActionsPositionChange}
+              onCommit={handleNotesQuickCommit}
+              onUpdateImmediatelyChange={setQuickUpdateImmediately}
+            />
           </section>
 
           <section className="dock-console-panel dock-console-panel--deck dock-console-panel--deck-static dock-console-panel--deck-worship">
@@ -777,52 +1045,18 @@ export default function DockNotesTab({
       />
 
       {showNoteEditor && (
-        <div className="dock-dialog-backdrop" role="presentation">
-          <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-note-editor-title">
-            <div className="dock-dialog__header">
-              <div>
-                <div className="dock-dialog__eyebrow">{editingNote ? "Edit Note" : "Add Note"}</div>
-                <h2 id="dock-note-editor-title" className="dock-dialog__title">
-                  {editingNote ? "Edit Note" : "New Note"}
-                </h2>
-              </div>
-              <button type="button" className="dock-dialog__close" onClick={() => { setShowNoteEditor(false); setEditingNote(null); }} aria-label="Close" title="Close">
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-            <div className="dock-dialog__body">
-              <label className="dock-dialog-field">
-                <span className="dock-dialog-field__label">
-                  <span>Title</span>
-                  <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
-                </span>
-                <input className="dock-input" value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} placeholder="Note title" />
-              </label>
-              <DockNotesTextTools
-                className="dock-notes-text-tools dock-notes-text-tools--editor"
-                buttonClassName="dock-notes-text-tools__btn"
-                onAction={applyDraftTextTool}
-              />
-              <label className="dock-dialog-field">
-                <span className="dock-dialog-field__label">
-                  <span>Content</span>
-                  <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
-                </span>
-                <textarea
-                  className="dock-input dock-dialog-textarea"
-                  value={draftContent}
-                  onChange={(e) => setDraftContent(e.target.value)}
-                  placeholder="Note content. Use blank lines to separate slides."
-                  rows={8}
-                />
-              </label>
-            </div>
-            <div className="dock-dialog__footer">
-              <button type="button" className="dock-btn dock-btn--ghost" onClick={() => { setShowNoteEditor(false); setEditingNote(null); }} title="Cancel">Cancel</button>
-              <button type="button" className="dock-btn dock-btn--primary" onClick={saveNoteDraft} disabled={!draftTitle.trim() || !draftContent.trim()} title="Save">Save</button>
-            </div>
-          </div>
-        </div>
+        <DockNoteEditorDialog
+          key={editingNote?.id ?? "new-note"}
+          editing={Boolean(editingNote)}
+          initialTitle={editingNote?.title ?? ""}
+          initialContent={editingNote?.content ?? ""}
+          onCancel={() => {
+            setShowNoteEditor(false);
+            setEditingNote(null);
+          }}
+          onSave={saveNoteDraft}
+          onFormat={formatNoteDraft}
+        />
       )}
 
       {toasts.length > 0 && (

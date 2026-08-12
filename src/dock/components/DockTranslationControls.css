@@ -88,11 +88,14 @@
 }
 
 .dock-translation--compact .dock-translation__panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  position: fixed;
+  top: 0;
+  right: auto;
+  left: 0;
   width: min(320px, calc(100vw - 24px));
   margin-top: 0;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
 }
 
 .dock-translation__panel-head {
@@ -273,6 +276,34 @@
   accent-color: var(--dock-accent);
 }
 
+.dock-translation__order {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--dock-text-dim);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.dock-translation__order select {
+  min-width: 136px;
+  min-height: 29px;
+  padding: 0 7px;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: var(--dock-surface-alt);
+  color: var(--dock-text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.dock-translation__order select:focus-visible {
+  outline: 2px solid var(--dock-accent);
+  outline-offset: 1px;
+}
+
 .dock-translation__actions {
   display: flex;
   gap: 6px;
@@ -286,6 +317,14 @@
   padding: 0 8px;
   font-size: 11px;
   white-space: nowrap;
+}
+
+.dock-translation__reset {
+  width: 100%;
+  min-height: 30px;
+  margin-top: 6px;
+  padding: 0 8px;
+  font-size: 11px;
 }
 
 .dock-translation__error,
@@ -322,4 +361,13 @@
   font-size: 13px;
   line-height: 1.5;
   white-space: pre-line;
+}
+
+.dock-worship-slide-card__translation--first {
+  margin-top: 0;
+  margin-bottom: 8px;
+  padding-top: 0;
+  padding-bottom: 7px;
+  border-top: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--dock-accent) 28%, var(--dock-border));
 }

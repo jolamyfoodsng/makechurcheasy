@@ -106,6 +106,7 @@ describe("dock Bible theme resolution", () => {
     expect(resolved.themeSettings.backgroundColor).toBe("#102030");
     expect(resolved.themeSettings.padding).toBe(LOWER_THIRD_SIZE_PRESETS.biggest.padding);
     expect(resolved.themeSettings.safeArea).toBe(LOWER_THIRD_SIZE_PRESETS.biggest.safeArea);
+    expect(resolved.themeSettings.lowerThirdBarMaxHeight).toBe(LOWER_THIRD_SIZE_PRESETS.biggest.maxHeight);
     expect(resolved.liveOverrides).toBeNull();
   });
 

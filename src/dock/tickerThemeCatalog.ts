@@ -50,6 +50,40 @@ export type DockTickerThemeOption =
       theme: PermanentTickerTheme;
     };
 
+export type DockTickerDivider = "theme" | "none" | "dot" | "line" | "diamond" | "spark";
+
+const DOCK_TICKER_DIVIDER_CHARS: Record<Exclude<DockTickerDivider, "theme" | "none">, string> = {
+  dot: "•",
+  line: "—",
+  diamond: "◆",
+  spark: "✦",
+};
+
+export function resolveDockTickerDividerChar(
+  divider: DockTickerDivider | undefined,
+  fallback = "•",
+): string {
+  if (divider === "none") return "";
+  if (divider && divider !== "theme") return DOCK_TICKER_DIVIDER_CHARS[divider];
+  return fallback;
+}
+
+export function formatDockTickerMessages(
+  messages: string[],
+  divider: DockTickerDivider | undefined = "theme",
+  extraSpacing = 0,
+  fallbackDivider = "•",
+): string {
+  const safeMessages = messages.map((message) => message.trim()).filter(Boolean);
+  const dividerChar = resolveDockTickerDividerChar(divider, fallbackDivider);
+  const spacing = Math.max(0, Math.min(100, Math.round(Number(extraSpacing) || 0)));
+  const extraSpace = "\u00a0".repeat(Math.ceil(spacing / 8));
+  const separator = dividerChar
+    ? `${extraSpace}   ${dividerChar}   ${extraSpace}`
+    : `${extraSpace}   `;
+  return safeMessages.join(separator);
+}
+
 interface RenderDockTickerThemeOptions {
   option: DockTickerThemeOption;
   heading: string;
@@ -62,6 +96,8 @@ interface RenderDockTickerThemeOptions {
   fontFamily?: string;
   brandLogoUrl?: string;
   brandName?: string;
+  divider?: DockTickerDivider;
+  messageSpacing?: number;
 }
 
 const ALL_DOCK_TICKER_THEME_OPTIONS: DockTickerThemeOption[] = [
@@ -160,6 +196,8 @@ export function renderDockTickerThemeHtml({
   fontFamily,
   brandLogoUrl = "",
   brandName = "",
+  divider,
+  messageSpacing,
 }: RenderDockTickerThemeOptions): string {
   const safeMessages = messages.map((message) => message.trim()).filter(Boolean);
   const resolvedHeading = heading.trim() || option.defaultHeading;
@@ -178,6 +216,8 @@ export function renderDockTickerThemeHtml({
       brandLogoUrl,
       brandName,
       resolvedFontFamily || undefined,
+      resolveDockTickerDividerChar(divider, option.theme.separatorChar),
+      messageSpacing,
     );
   }
 
@@ -190,6 +230,8 @@ export function renderDockTickerThemeHtml({
     paused,
     colors,
     fontFamily: resolvedFontFamily,
+    divider,
+    messageSpacing,
   });
 }
 
@@ -198,7 +240,11 @@ function renderPermanentTickerThemeHtml(
   options: Omit<RenderDockTickerThemeOptions, "option">,
 ): string {
   const messageSequence = options.messages.length > 0 ? options.messages : [theme.tickerText || " "];
-  const joinedMessages = messageSequence.join("   •   ");
+  const joinedMessages = formatDockTickerMessages(
+    messageSequence,
+    options.divider,
+    options.messageSpacing,
+  );
   const values = resolvePermanentTickerValues(theme, {
     heading: options.heading,
     messages: messageSequence,
@@ -229,6 +275,7 @@ body { min-width: 200px; transform-origin: top left; text-align: left; }
 ${theme.css}
 ${buildPermanentTickerColorOverrides(options.colors)}
 ${buildPermanentTickerFontOverride(options.fontFamily)}
+${buildPermanentTickerSpacingOverrides(options.messageSpacing, options.divider, options.colors?.separator)}
 ${buildPermanentTickerOverrides(options.position, options.loop, Boolean(options.paused))}
 </style>
 </head>
@@ -247,6 +294,32 @@ function buildPermanentTickerFontOverride(fontFamily: string | undefined): strin
     `  font-family: ${safeFontFamily} !important;`,
     "}",
   ].join("\n");
+}
+
+function buildPermanentTickerSpacingOverrides(
+  extraSpacing: number | undefined,
+  divider: DockTickerDivider | undefined,
+  separatorColor: string | undefined,
+): string {
+  const spacing = Math.max(0, Math.min(100, Math.round(Number(extraSpacing) || 0)));
+  const rules = [
+    `.s5-move { gap: calc(22px + ${spacing}px) !important; }`,
+  ];
+
+  if (divider && divider !== "theme" && divider !== "none") {
+    const dividerChar = resolveDockTickerDividerChar(divider);
+    rules.push([
+      ".s5-move > span:not(:last-child)::after {",
+      `  content: ${JSON.stringify(dividerChar)};`,
+      `  color: ${safeCssColor(separatorColor) ?? "currentColor"};`,
+      "  display: inline-block;",
+      "  margin-left: 8px;",
+      "  font-weight: 900;",
+      "}",
+    ].join("\n"));
+  }
+
+  return rules.join("\n");
 }
 
 function resolvePermanentTickerValues(

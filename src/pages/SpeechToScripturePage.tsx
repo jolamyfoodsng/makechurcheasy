@@ -49,7 +49,7 @@ import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService } from "../services/obsService";
 import { loadData } from "../services/store";
 import { getUserScopedKey } from "../services/userScopedStorage";
-import { trackVoiceSessionCompleted, trackVoiceSessionStarted } from "../services/tracking";
+import { trackStsPushToLive, trackVoiceSessionCompleted, trackVoiceSessionStarted } from "../services/tracking";
 import type { VoiceBibleCandidate } from "../services/voiceBibleTypes";
 import { MATCH_SOURCE_LABEL } from "../services/voiceBibleTypes";
 import { isWhisperReady, loadWhisperModel } from "../services/whisperService";
@@ -538,7 +538,8 @@ export default function SpeechToScripturePage() {
 
   const isListening = snapshot.status === "listening";
   const isConnecting = snapshot.status === "requesting-mic" || snapshot.status === "connecting";
-  const isTranscribing = isListening || isConnecting;
+  const canStopListening = isListening || isConnecting;
+  const isTranscribing = canStopListening;
   const levelPercent = Math.round(snapshot.inputLevel * 100);
 
   // ── Guard: warn before closing app while transcribing ──
@@ -628,6 +629,7 @@ export default function SpeechToScripturePage() {
       };
       await bibleObsService.pushSlide(slide, null, true, false, "fullscreen");
       track("sts_push_to_live", { reference: candidate.label, confidence: candidate.confidence });
+      trackStsPushToLive();
       setPushSuccess(t("verseAi.pushedToBroadcast", { reference: candidate.label }));
       setTimeout(() => setPushSuccess(null), 3000);
     } catch (err) {
@@ -863,16 +865,14 @@ export default function SpeechToScripturePage() {
         <div className="sts3-header-right">
           <div className="sts3-header-mic-group">
             <button
-              className={`sts3-btn ${isListening ? "sts3-btn--red" : ""}`}
-              onClick={isListening ? handleStop : handleStart}
-              disabled={isConnecting || checkingAccess || (!isListening && !hasCredits)}
-              title={!isListening && !hasCredits ? t("verseAi.noCredits") : t("verseAi.startListening")}>
-              {isListening ? (
+              className={`sts3-btn ${canStopListening ? "sts3-btn--red" : ""}`}
+              onClick={canStopListening ? handleStop : handleStart}
+              disabled={(!canStopListening && checkingAccess) || (!canStopListening && !hasCredits)}
+              title={!canStopListening && !hasCredits ? t("verseAi.noCredits") : canStopListening ? t("verseAi.stopListening") : t("verseAi.startListening")}>
+              {canStopListening ? (
                 <><StopCircle size={16} /> {t("verseAi.stopListening")}</>
               ) : checkingAccess ? (
                 <><span className="sts3-spinner" /> {t("verseAi.checkingAccess")}</>
-              ) : isConnecting ? (
-                <><span className="sts3-spinner" /> {t("verseAi.connecting")}</>
               ) : !hasCredits ? (
                 <><Lock size={16} /> {t("verseAi.noCredits")}</>
               ) : (

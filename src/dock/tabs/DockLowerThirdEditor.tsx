@@ -752,7 +752,7 @@ export default function DockLowerThirdEditor({
                               onClick={(e) => { e.stopPropagation(); imageFileInputRef.current?.click(); }}
                             >
                               <span className="material-icons" style={{ fontSize: 14 }}>photo_camera</span>
-                              <span>Change</span>
+                              <span>{t("common.change", "Change")}</span>
                             </button>
                             <button
                               type="button"
@@ -760,7 +760,7 @@ export default function DockLowerThirdEditor({
                               onClick={(e) => { e.stopPropagation(); handleImageRemove(); }}
                             >
                               <span className="material-icons" style={{ fontSize: 14 }}>close</span>
-                              <span>Remove</span>
+                              <span>{t("common.remove", "Remove")}</span>
                             </button>
                           </div>
                         )}
@@ -770,7 +770,7 @@ export default function DockLowerThirdEditor({
                         <span className="material-icons" style={{ fontSize: 20, color: "var(--dock-text-dim)" }}>
                           add_photo_alternate
                         </span>
-                        <span className="dock-lt-image-picker-empty-text">Drop image or click</span>
+                        <span className="dock-lt-image-picker-empty-text">{t("lowerThird.dropImageOrClick", "Drop image or click")}</span>
                       </div>
                     )}
                   </div>

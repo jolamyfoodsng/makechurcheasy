@@ -6091,8 +6091,8 @@ body.mv-dragging-scene * {
 
 html.mv-theme-light {
   --primary: #1D4ED8;
-  --primary-hover: #7083cc;
-  --primary-rgb: 106, 52, 222;
+  --primary-hover: #2563EB;
+  --primary-rgb: 29, 78, 216;
   --bg-dark: #f3f3f3;
   --surface-dark: #ffffff;
   --surface-hover: #e8e8e8;
@@ -6102,13 +6102,13 @@ html.mv-theme-light {
   --text-muted: #374151;
   --border: rgba(0, 0, 0, 0.12);
   --border-primary: rgba(var(--primary-rgb, 106, 52, 222), 0.35);
-  --error: #d13438;
+  --error: #B91C1C;
   --error-bg: rgba(209, 52, 56, 0.1);
   --success: #107c10;
   --success-rgb: 16, 124, 16;
   --success-bg: rgba(16, 124, 16, 0.08);
-  --warning: #ca5010;
-  --live-color: #d13438;
+  --warning: #9A3412;
+  --live-color: #B91C1C;
   --live-rgb: 209, 52, 56;
 }
 
@@ -6186,13 +6186,13 @@ html.mv-theme-light .mv-toast--success {
 html.mv-theme-light .mv-toast--error {
   background: rgba(209, 52, 56, 0.1);
   border-color: rgba(209, 52, 56, 0.3);
-  color: #d13438;
+  color: #B91C1C;
 }
 
 html.mv-theme-light .mv-toast--warning {
   background: rgba(202, 80, 16, 0.1);
   border-color: rgba(202, 80, 16, 0.3);
-  color: #ca5010;
+  color: #9A3412;
 }
 
 html.mv-theme-light .mv-toast--info {

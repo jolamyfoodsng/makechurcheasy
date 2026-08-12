@@ -209,6 +209,7 @@ const USER_SCOPED_KEY_PREFIXES = [
   "mce-presentation-tickers",
 
   // Theme
+  "ocs-app-appearance",
   "obs-church-studio.theme-preference",
   "ocs-fav-obs-themes",
   "ocs-fav-bible-themes",
@@ -228,7 +229,10 @@ const USER_SCOPED_KEY_PREFIXES = [
   "ocs-dock-projection-settings",
 
   // Misc user state
+  "ocs-dock-typography",
   "ocs-song-title-counter-v1",
+  "ocs-dock-font-family",
+  "ocs-dock-font-scale",
   "ocs-dock-lt-speaker-hint-seen",
   "ocs-speech-to-scripture-mic-id",
   "bible-skip-layout-confirm",

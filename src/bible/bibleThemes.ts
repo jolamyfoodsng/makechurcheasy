@@ -615,6 +615,20 @@ const LABEL_SELECTORS = ".kicker";
 const PANEL_SELECTORS =
   ".panel, .glow-panel, .ribbon-panel, .ribbon-body";
 
+function inspectorFontWeight(weight: BibleThemeSettings["fontWeight"]): string {
+  if (weight === "light") return "300";
+  if (weight === "bold") return "700";
+  if (weight === "extrabold") return "900";
+  return "600";
+}
+
+function inspectorReferenceFontWeight(weight: BibleThemeSettings["refFontWeight"]): string {
+  if (weight === "light") return "300";
+  if (weight === "bold") return "700";
+  if (weight === "extrabold") return "900";
+  return "600";
+}
+
 /**
  * Build a CSS string of overrides driven by the inspector panel settings.
  * These are injected after the template's own CSS so they take precedence
@@ -627,7 +641,7 @@ function buildInspectorOverrides(settings: BibleThemeSettings): string {
   // ── Verse text ──
   rules.push(`${VERSE_SELECTORS} {
   font-size: ${Math.round(settings.fontSize * fontScale)}px;
-  font-weight: ${settings.fontWeight === "light" ? "300" : settings.fontWeight === "bold" ? "700" : "600"};
+  font-weight: ${inspectorFontWeight(settings.fontWeight)};
   font-style: ${settings.fontStyle || "normal"};
   color: ${settings.fontColor};
   line-height: ${settings.lineHeight};
@@ -638,7 +652,7 @@ function buildInspectorOverrides(settings: BibleThemeSettings): string {
 }`);
 
   // ── Reference text ──
-  const refWeight = settings.refFontWeight === "light" ? "300" : settings.refFontWeight === "bold" ? "700" : "600";
+  const refWeight = inspectorReferenceFontWeight(settings.refFontWeight);
   rules.push(`${REF_SELECTORS} {
   font-size: ${Math.round(settings.refFontSize * fontScale)}px;
   font-weight: ${refWeight};

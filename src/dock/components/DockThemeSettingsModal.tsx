@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { flushSync } from "react-dom";
 import type { BibleTheme } from "../../bible/types";
 import Icon from "../DockIcon";
-import BackgroundPickerCard from "./BackgroundPickerCard";
+import BackgroundPickerCard, { type BibleReferenceFormat } from "./BackgroundPickerCard";
 import type { DockBackgroundPreset } from "../dockConsoleTheme";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
 
@@ -35,6 +35,12 @@ interface Props {
   overlayMode?: "fullscreen" | "lower-third";
   /** Show the Reference section in BackgroundPickerCard (only for Bible tab) */
   showReferences?: boolean;
+  /** Bible-only reference display preferences surfaced in the Reference sub-tab */
+  referenceFormat?: BibleReferenceFormat;
+  referenceVersionVisible?: boolean;
+  referenceTranslation?: string;
+  onReferenceFormatChange?: (format: BibleReferenceFormat) => void;
+  onReferenceVersionVisibleChange?: (visible: boolean) => void;
   /** Active display mode — controls whether Compare Layout section is visible */
   displayMode?: "single" | "compare";
   initialTab?: "text" | "layout" | "background" | "compare";
@@ -96,6 +102,11 @@ export default function DockThemeSettingsModal({
   onBackgroundPresetChange,
   overlayMode = "fullscreen",
   showReferences = true,
+  referenceFormat,
+  referenceVersionVisible = false,
+  referenceTranslation = "KJV",
+  onReferenceFormatChange,
+  onReferenceVersionVisibleChange,
   displayMode = "single",
   initialTab = "text",
   storageScope = "global",
@@ -259,7 +270,7 @@ export default function DockThemeSettingsModal({
 
             {/* ── Settings View ── */}
             {view === "settings" && (
-              <div className="dtb-studio__settings-view">
+              <div className="dtb-studio__settings-view dtb-studio__settings-view--picker">
 
                 {/* ═══ Background Section ═══ */}
                 <BackgroundPickerCard
@@ -275,6 +286,11 @@ export default function DockThemeSettingsModal({
                     pendingBackgroundPresetRef.current = preset;
                   }}
                   showReferences={showReferences}
+                  referenceFormat={referenceFormat}
+                  referenceVersionVisible={referenceVersionVisible}
+                  referenceTranslation={referenceTranslation}
+                  onReferenceFormatChange={onReferenceFormatChange}
+                  onReferenceVersionVisibleChange={onReferenceVersionVisibleChange}
                   overlayMode={overlayMode}
                   displayMode={displayMode}
                   initialTab={initialTab}

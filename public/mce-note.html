@@ -498,15 +498,6 @@
       pointer-events: auto;
     }
 
-    @keyframes mce-preview-slide-fade {
-      0%, 100% { opacity: 1; }
-      45% { opacity: 0; }
-    }
-
-    .mode-layer.mce-preview-slide-fade {
-      animation: mce-preview-slide-fade 220ms ease-in-out;
-    }
-
     #lt-bar.hidden,
     #lt-bar.blank {
       opacity: 0 !important;
@@ -680,9 +671,10 @@
       let currentBibleRevision = 0;
       let hasReceivedLiveOverlayUpdate = false;
 
-      const FONT_SIZE_MIN = 12;
+      const FONT_SIZE_MIN = 28;
+      const LOWER_THIRD_FONT_SIZE_MIN = 18;
       const REF_FONT_SIZE_MIN = 10;
-      const COMPARE_TEXT_MIN = 16;
+      const COMPARE_TEXT_MIN = 28;
       const COMPARE_REF_MIN = 12;
       const COMPARE_META_MIN = 10;
       const COMPARE_PADDING_MIN = 16;
@@ -1158,7 +1150,7 @@
 
       function resolveAutoFontFloor(baseSize, fallback) {
         const base = Math.max(fallback, Math.round(Number(baseSize) || fallback));
-        const fixedFloor = fallback <= 12 ? 12 : Math.min(Math.max(fallback, 16), 24);
+        const fixedFloor = Math.max(fallback, 16);
         return Math.min(base, fixedFloor);
       }
 
@@ -1328,7 +1320,7 @@
           return;
         }
 
-        const textFloor = resolveAutoFontFloor(baseFontSize, FONT_SIZE_MIN);
+        const textFloor = resolveAutoFontFloor(baseFontSize, LOWER_THIRD_FONT_SIZE_MIN);
         const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
         let textSize = Math.max(textFloor, Math.round(baseFontSize));
         let referenceSize = Math.max(REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
@@ -1627,28 +1619,6 @@
         ].join('|');
       }
 
-      function getOverlaySlideKey(data) {
-        if (!hasRenderableSlide(data)) return '';
-        try {
-          return JSON.stringify({ mode: data.mode || '', slide: data.slide });
-        } catch {
-          return [
-            data.mode || '',
-            data.slide && data.slide.id || '',
-            data.verseText || '',
-            data.referenceText || data.referenceLabel || '',
-          ].join('|');
-        }
-      }
-
-      function restartPreviewFade(mode) {
-        const layer = mode === 'lower-third' ? lowerThirdLayer : fullscreenLayer;
-        if (!layer) return;
-        layer.classList.remove('mce-preview-slide-fade');
-        void layer.offsetWidth;
-        layer.classList.add('mce-preview-slide-fade');
-      }
-
       function renderBothBibleLayers(state) {
         if (!state) return;
         processSlideFullscreen(state);
@@ -1682,10 +1652,6 @@
           0
         );
         if (revision && revision < currentBibleRevision) return;
-        const previousSlideKey = getOverlaySlideKey(currentOverlayData);
-        const shouldFadePreview = hasShownOnce &&
-          hasRenderableSlide(packet) &&
-          previousSlideKey !== getOverlaySlideKey(packet);
         currentBibleRevision = revision;
         currentBibleState = packet;
         currentOverlayData = packet;
@@ -1696,7 +1662,6 @@
         }
 
         renderBothBibleLayers(currentBibleState);
-        if (shouldFadePreview) restartPreviewFade(packet.mode || activeMode);
         writeRenderAck(packet);
       }
 

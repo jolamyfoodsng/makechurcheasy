@@ -59,6 +59,12 @@ describe("Dock lower-third animate out wiring", () => {
     expect(ministrySource).toContain('aria-label={t("ministry.countdowns")}');
   });
 
+  it("keeps Bible verse themes in the Bible tab instead of mixing them into Low", () => {
+    expect(ministrySource).not.toContain("loadDockFavoriteBibleThemes");
+    expect(ministrySource).not.toContain('entries.push({ kind: "bible"');
+    expect(ministrySource).toContain("For Scripture, choose the lower-third theme in Bible.");
+  });
+
   it("keeps theme-defined exit animations as the default", () => {
     expect(editorSource).toContain('const overlayExitStyle = exitStyle === "fade" ? undefined : exitStyle;');
   });

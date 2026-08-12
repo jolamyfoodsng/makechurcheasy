@@ -9,9 +9,14 @@
  * Never sends Bible content, lyrics, transcript text, or personal info.
  */
 
-import { getSession } from "./authService";
+import {
+  getDeviceId,
+  getDeviceSecret,
+  getSession,
+  getSessionApiBase,
+} from "./authService";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+let trialActivationAttempted = false;
 
 // ── Core ───────────────────────────────────────────────────────────────────
 
@@ -24,15 +29,20 @@ export function trackEvent(
   properties?: Record<string, unknown>,
 ): void {
   // Skip tracking in local/dev contexts — Vercel API blocks CORS from localhost/127.0.0.1
-  const host = window.location.hostname;
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
   if (host === "localhost" || host === "127.0.0.1") return;
 
   const session = getSession();
   const userId = session?.user?.id || null;
+  const deviceId = getDeviceId();
+  const deviceSecret = getDeviceSecret();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (deviceId) headers["X-Device-Id"] = deviceId;
+  if (deviceSecret) headers["X-Device-Secret"] = deviceSecret;
 
-  void fetch(`${API_BASE}/api/tracking/event`, {
+  void fetch(`${getSessionApiBase()}/api/tracking/event`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       event,
       userId,
@@ -42,6 +52,28 @@ export function trackEvent(
     keepalive: true,
   }).catch(() => {
     // Tracking should never break the app
+  });
+}
+
+function activateTrial(event: "obs_connected" | "first_use_started" | "first_presentation" | "first_use"): void {
+  if (trialActivationAttempted) return;
+  const session = getSession();
+  const deviceId = getDeviceId();
+  if (!session?.user?.id || !deviceId) return;
+  trialActivationAttempted = true;
+
+  const headers: Record<string, string> = { "Content-Type": "application/json", "X-Device-Id": deviceId };
+  const deviceSecret = getDeviceSecret();
+  if (deviceSecret) headers["X-Device-Secret"] = deviceSecret;
+
+  void fetch(`${getSessionApiBase()}/api/trial/activate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ event }),
+    keepalive: true,
+  }).catch(() => {
+    // Trial activation is retried by the next app session if the request fails.
+    trialActivationAttempted = false;
   });
 }
 
@@ -68,6 +100,7 @@ export function trackBibleSearch(version?: string): void {
 export function trackBiblePresent(ref?: string): void {
   // Don't send the verse text, just that something was presented
   trackEvent("bible_present", { hasRef: !!ref });
+  activateTrial("first_presentation");
 }
 
 // ── Worship Events ─────────────────────────────────────────────────────────
@@ -82,6 +115,7 @@ export function trackWorshipSongImported(): void {
 
 export function trackWorshipSongPresented(): void {
   trackEvent("worship_song_presented");
+  activateTrial("first_presentation");
 }
 
 // ── Media Events ───────────────────────────────────────────────────────────
@@ -92,6 +126,7 @@ export function trackMediaUploaded(type: string = "unknown"): void {
 
 export function trackMediaPresented(type: string = "unknown"): void {
   trackEvent("media_presented", { type });
+  activateTrial("first_presentation");
 }
 
 // ── Voice / Transcription Events ───────────────────────────────────────────
@@ -114,6 +149,7 @@ export function trackTranscriptExported(format: string): void {
 
 export function trackTranslationGenerated(wordCount: number, targetLang?: string): void {
   trackEvent("translation_generated", { wordCount, targetLang });
+  activateTrial("first_use");
 }
 
 // ── Theme Events ───────────────────────────────────────────────────────────
@@ -138,4 +174,15 @@ export function trackAppClosed(sessionDurationSeconds: number): void {
 
 export function trackObsConnected(): void {
   trackEvent("obs_connected");
+  activateTrial("obs_connected");
+}
+
+export function trackFirstUseStarted(): void {
+  trackEvent("first_use_started");
+  activateTrial("first_use_started");
+}
+
+export function trackStsPushToLive(): void {
+  trackEvent("sts_push_to_live");
+  activateTrial("first_use");
 }

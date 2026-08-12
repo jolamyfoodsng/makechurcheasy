@@ -395,11 +395,23 @@ export function formatLyricsFromSections(sections: Array<Pick<LyricSection, "lab
  *  • A stanza is never merged with another stanza, even if both are short.
  *  • Continuation labels (cont) only appear when a single stanza is
  *    genuinely split because it exceeds linesPerSlide.
+ *  • The explicit continuousLineCount option lets the dock carry unlabelled
+ *    blocks forward when the operator chooses a line count manually.
  */
+export interface GenerateSlidesOptions {
+  /**
+   * When the operator explicitly chooses a line count, carry unlabelled
+   * lyric blocks into the same line-count stream instead of treating every
+   * blank line as a hard slide boundary.
+   */
+  continuousLineCount?: boolean;
+}
+
 export function generateSlides(
   rawLyrics: string,
   linesPerSlide: number,
-  identifyChorus: boolean
+  identifyChorus: boolean,
+  options: GenerateSlidesOptions = {},
 ): Slide[] {
   const normalized = extractStructuredTextTitle(rawLyrics).body.trim();
   if (!normalized) return [];
@@ -415,6 +427,68 @@ export function generateSlides(
         .trim(),
     )
     .filter((block) => block.length > 0);
+
+  if (identifyChorus && options.continuousLineCount) {
+    const sections: Array<{
+      label: SectionLabel;
+      lines: string[];
+      explicit: boolean;
+    }> = [];
+    let verseCount = 0;
+
+    for (const stanza of stanzas) {
+      const stanzaLines = stanza
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .filter((line) => line.length > 0);
+      if (stanzaLines.length === 0) continue;
+
+      const detectedLabel = parseSectionLabelLine(stanzaLines[0]);
+      if (detectedLabel) {
+        const contentLines = [
+          ...(detectedLabel.rest ? [detectedLabel.rest] : []),
+          ...stanzaLines.slice(1),
+        ];
+        if (contentLines.length > 0) {
+          sections.push({
+            label: detectedLabel.section,
+            lines: contentLines,
+            explicit: true,
+          });
+        }
+        continue;
+      }
+
+      const previous = sections[sections.length - 1];
+      if (!previous || previous.explicit) {
+        verseCount += 1;
+        sections.push({
+          label: { label: `Verse ${verseCount}`, shortLabel: `V${verseCount}`, type: "verse" },
+          lines: [],
+          explicit: false,
+        });
+      }
+      sections[sections.length - 1].lines.push(...stanzaLines);
+    }
+
+    const safeLinesPerSlide = Math.max(1, linesPerSlide || 2);
+    const continuousSlides: Slide[] = [];
+    let continuousIndex = 0;
+    for (const section of sections) {
+      for (let start = 0; start < section.lines.length; start += safeLinesPerSlide) {
+        const partIndex = Math.floor(start / safeLinesPerSlide);
+        continuousSlides.push({
+          id: `slide-continuous-${continuousIndex}`,
+          label: partIndex === 0 ? section.label.label : `${section.label.label} (cont)`,
+          content: section.lines.slice(start, start + safeLinesPerSlide).join("\n"),
+          isContinuation: partIndex > 0,
+          type: section.label.type,
+        });
+        continuousIndex += 1;
+      }
+    }
+    return continuousSlides;
+  }
 
   // 2. For each stanza: detect section label, extract lines, build slides
   let verseCount = 0;

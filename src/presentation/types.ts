@@ -91,6 +91,8 @@ export interface PresentationCountdownPayload {
 export interface PresentationTickerPayload {
   sourceTickerId?: string;
   text: string;
+  divider?: string;
+  messageSpacing?: number;
   position: PresentationTickerPosition;
   direction: PresentationTickerDirection;
   speed: number;

@@ -27,6 +27,10 @@ interface BibleControlsProps {
   onChapterSelect: (chapter: number) => void;
   onVerseToggle: (event: React.MouseEvent) => void;
   onVerseSelect: (verse: number) => void;
+  canGoPreviousChapter: boolean;
+  canGoNextChapter: boolean;
+  onPreviousChapter: () => void;
+  onNextChapter: () => void;
   onGoToChapter?: () => void;
   abbreviateBook: (book: string) => string;
   BOOK_CHAPTERS: typeof import("../dockTypes").BOOK_CHAPTERS;
@@ -47,6 +51,10 @@ export function BibleControls({
   onChapterSelect,
   onVerseToggle,
   onVerseSelect,
+  canGoPreviousChapter,
+  canGoNextChapter,
+  onPreviousChapter,
+  onNextChapter,
   abbreviateBook,
   BOOK_CHAPTERS,
 }: BibleControlsProps) {
@@ -155,6 +163,40 @@ export function BibleControls({
           )}
         </div>
 
+        <div
+          className="dock-bible-controls__chapter-nav"
+          aria-label={t("bible.chapterNavigation", "Chapter navigation")}
+        >
+          <button
+            type="button"
+            className="dock-bible-controls__chapter-nav-btn"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onPreviousChapter();
+            }}
+            disabled={!canGoPreviousChapter}
+            aria-label={t("bible.previousChapter", "Previous chapter")}
+            title={t("bible.previousChapter", "Previous chapter")}
+          >
+            <Icon name="chevron_left" size={14} />
+          </button>
+          <button
+            type="button"
+            className="dock-bible-controls__chapter-nav-btn"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onNextChapter();
+            }}
+            disabled={!canGoNextChapter}
+            aria-label={t("bible.nextChapter", "Next chapter")}
+            title={t("bible.nextChapter", "Next chapter")}
+          >
+            <Icon name="chevron_right" size={14} />
+          </button>
+        </div>
+
 
 
         {/* Verse Selector */}
@@ -202,6 +244,55 @@ export function BibleControls({
             </div>
           )}
         </div>
+      </div>
+
+      <div
+        className="dock-bible-controls__keyboard-cue"
+        role="note"
+        aria-label={t(
+          "bible.keyboardShortcutsDescription",
+          "Use the arrow keys to move through chapters and verses. Hold Shift with Left or Right to change books.",
+        )}
+      >
+        <span className="dock-bible-controls__keyboard-cue-label">
+          <span aria-hidden="true"><Icon name="keyboard" size={12} /></span>
+          <span>{t("bible.keyboardCueLabel", "Keyboard")}</span>
+        </span>
+        <span
+          className="dock-bible-controls__keyboard-cue-group"
+          title={t("bible.keyboardChapterCue", "Left arrow: previous chapter. Right arrow: next chapter.")}
+          aria-label={t("bible.keyboardChapterCue", "Left arrow: previous chapter. Right arrow: next chapter.")}
+        >
+          <span className="dock-bible-controls__keyboard-cue-keys" aria-hidden="true">
+            <kbd>←</kbd>
+            <kbd>→</kbd>
+          </span>
+          <span>{t("bible.chapter", "Chapter")}</span>
+        </span>
+        <span
+          className="dock-bible-controls__keyboard-cue-group"
+          title={t("bible.keyboardVerseCue", "Up arrow: previous verse. Down arrow: next verse.")}
+          aria-label={t("bible.keyboardVerseCue", "Up arrow: previous verse. Down arrow: next verse.")}
+        >
+          <span className="dock-bible-controls__keyboard-cue-keys" aria-hidden="true">
+            <kbd>↑</kbd>
+            <kbd>↓</kbd>
+          </span>
+          <span>{t("bible.verse", "Verse")}</span>
+        </span>
+        <span
+          className="dock-bible-controls__keyboard-cue-group"
+          title={t("bible.keyboardBookCue", "Shift + Left arrow: previous book. Shift + Right arrow: next book.")}
+          aria-label={t("bible.keyboardBookCue", "Shift + Left arrow: previous book. Shift + Right arrow: next book.")}
+        >
+          <span className="dock-bible-controls__keyboard-cue-keys" aria-hidden="true">
+            <kbd>Shift</kbd>
+            <span>+</span>
+            <kbd>←</kbd>
+            <kbd>→</kbd>
+          </span>
+          <span>{t("bible.book", "Book")}</span>
+        </span>
       </div>
 
       {/* Right: Version + Options */}
@@ -266,6 +357,10 @@ interface BibleDockContainerProps {
   onChapterSelect: (chapter: number) => void;
   onVerseToggle: (event: React.MouseEvent) => void;
   onVerseSelect: (verse: number) => void;
+  canGoPreviousChapter: boolean;
+  canGoNextChapter: boolean;
+  onPreviousChapter: () => void;
+  onNextChapter: () => void;
   onVersionChange: (version: string) => void;
   onGoToChapter?: () => void;
   abbreviateBook: (book: string) => string;
@@ -298,6 +393,10 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
   onChapterSelect,
   onVerseToggle,
   onVerseSelect,
+  canGoPreviousChapter,
+  canGoNextChapter,
+  onPreviousChapter,
+  onNextChapter,
   onVersionChange,
   onGoToChapter,
   abbreviateBook,
@@ -346,6 +445,10 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
       onChapterSelect={onChapterSelect}
       onVerseToggle={onVerseToggle}
       onVerseSelect={onVerseSelect}
+      canGoPreviousChapter={canGoPreviousChapter}
+      canGoNextChapter={canGoNextChapter}
+      onPreviousChapter={onPreviousChapter}
+      onNextChapter={onNextChapter}
       onGoToChapter={onGoToChapter}
       abbreviateBook={abbreviateBook}
       BOOK_CHAPTERS={BOOK_CHAPTERS}

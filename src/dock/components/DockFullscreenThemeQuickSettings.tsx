@@ -51,6 +51,7 @@ export type DockFullscreenQuickThemeSettings = Pick<
   | "lowerThirdCaptionPosition"
   | "lowerThirdEdge"
   | "lowerThirdCardPadding"
+  | "lowerThirdBarMaxHeight"
   | "lowerThirdPaddingLinked"
   | "lowerThirdCardRadius"
   | "lowerThirdTextDirection"

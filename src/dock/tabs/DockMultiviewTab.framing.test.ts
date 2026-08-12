@@ -55,6 +55,24 @@ describe("DockMultiviewTab framing transform", () => {
     expect(tx.cropBottom).toBeCloseTo(90, 1);
   });
 
+  it("positions the custom preview all the way to either horizontal edge", () => {
+    const left = calculateSlotTransform(1920, 1080, slot, {
+      mode: "custom",
+      focalX: 0,
+      focalY: 0.5,
+      zoom: 1.5,
+    });
+    const right = calculateSlotTransform(1920, 1080, slot, {
+      mode: "custom",
+      focalX: 1,
+      focalY: 0.5,
+      zoom: 1.5,
+    });
+
+    expect(left.positionX).toBeCloseTo(slot.x, 5);
+    expect(right.positionX + right.renderedWidth).toBeCloseTo(slot.x + slot.width, 5);
+  });
+
   it("clamps impossible custom zoom below 1x", () => {
     const lowZoom = calculateSlotTransform(1920, 1080, slot, {
       mode: "custom",

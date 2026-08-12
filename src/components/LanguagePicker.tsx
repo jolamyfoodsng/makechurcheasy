@@ -1,5 +1,6 @@
 import { ChevronDown, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import allLanguageData from '../../full_langugae_list.json';
 import './LanguagePicker.css';
 
@@ -43,12 +44,24 @@ const REGION_ORDER = [
   'Global',
 ];
 
+const REGION_I18N_KEYS: Record<string, string> = {
+  Africa: 'languagePicker.region.africa',
+  Asia: 'languagePicker.region.asia',
+  Europe: 'languagePicker.region.europe',
+  'Middle East': 'languagePicker.region.middleEast',
+  'North America': 'languagePicker.region.northAmerica',
+  'South America': 'languagePicker.region.southAmerica',
+  Oceania: 'languagePicker.region.oceania',
+  Global: 'languagePicker.region.global',
+};
+
 interface LanguagePickerProps {
   value: string;
   onChange: (code: string) => void;
 }
 
 export default function LanguagePicker({ value, onChange }: LanguagePickerProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -107,7 +120,7 @@ export default function LanguagePicker({ value, onChange }: LanguagePickerProps)
 
   return (
     <div className="lp-root">
-      <button className="lp-trigger" onClick={() => setOpen(true)} type="button" title="Select">
+      <button className="lp-trigger" onClick={() => setOpen(true)} type="button" title={t('languagePicker.select', 'Select')}>
         <span className="lp-trigger-content">
           {selected ? (
             <>
@@ -117,7 +130,7 @@ export default function LanguagePicker({ value, onChange }: LanguagePickerProps)
               )}
             </>
           ) : (
-            <span className="lp-trigger-placeholder">Select a language…</span>
+            <span className="lp-trigger-placeholder">{t('languagePicker.selectLanguage', 'Select a language…')}</span>
           )}
         </span>
         <ChevronDown size={16} />
@@ -131,12 +144,12 @@ export default function LanguagePicker({ value, onChange }: LanguagePickerProps)
               <input
                 ref={inputRef}
                 className="lp-search-input"
-                placeholder="Search by name, native name, or code…"
+                placeholder={t('languagePicker.searchPlaceholder', 'Search by name, native name, or code…')}
                 value={query}
                 onChange={e => setQuery(e.target.value)}
               />
               {query && (
-                <button className="lp-search-clear" onClick={() => setQuery('')} type="button" title="Clear search">
+                <button className="lp-search-clear" onClick={() => setQuery('')} type="button" title={t('languagePicker.clearSearch', 'Clear search')}>
                   <X size={14} />
                 </button>
               )}
@@ -146,7 +159,7 @@ export default function LanguagePicker({ value, onChange }: LanguagePickerProps)
               {/* Popular section */}
               {popular.length > 0 && (
                 <div className="lp-section">
-                  <div className="lp-section-title">Popular Languages</div>
+                  <div className="lp-section-title">{t('languagePicker.popularLanguages', 'Popular Languages')}</div>
                   {popular.map(l => (
                     <button
                       key={l.code}
@@ -160,7 +173,7 @@ export default function LanguagePicker({ value, onChange }: LanguagePickerProps)
                           <span className="lp-item-native">{l.nativeName}</span>
                         )}
                       </span>
-                      <span className="lp-item-region">{l.region}</span>
+                      <span className="lp-item-region">{t(REGION_I18N_KEYS[l.region] ?? 'languagePicker.region.global', l.region)}</span>
                     </button>
                   ))}
                 </div>
@@ -169,7 +182,7 @@ export default function LanguagePicker({ value, onChange }: LanguagePickerProps)
               {/* Region groups */}
               {grouped.map(([region, items]) => (
                 <div className="lp-section" key={region}>
-                  <div className="lp-section-title">{region}</div>
+                  <div className="lp-section-title">{t(REGION_I18N_KEYS[region] ?? 'languagePicker.region.global', region)}</div>
                   {items.map(l => (
                     <button
                       key={l.code}
@@ -190,7 +203,7 @@ export default function LanguagePicker({ value, onChange }: LanguagePickerProps)
               ))}
 
               {filtered.length === 0 && (
-                <div className="lp-empty">No languages match "{query}"</div>
+                <div className="lp-empty">{t('languagePicker.noMatches', 'No languages match "{{query}}"', { query })}</div>
               )}
             </div>
           </div>

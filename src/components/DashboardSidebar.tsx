@@ -86,7 +86,9 @@ export default function DashboardSidebar({
   );
 
   return (
-    <nav className={`sidebar${collapsed ? " sidebar--collapsed" : ""}`}>
+    <nav
+      className={`sidebar${collapsed ? " sidebar--collapsed" : ""}`}
+      aria-label={t("sidebar.navigation")}>
       <div className="sidebar-header">
         <AppLogo alt={appName} className="sidebar-logo" />
         <div className="sidebar-header-text">
@@ -151,6 +153,7 @@ export default function DashboardSidebar({
               className="sidebar-user-signout"
               onClick={() => setShowLogoutConfirm(true)}
               title={t("sidebar.signOut")}
+              aria-label={t("sidebar.signOut")}
             >
               <LogOut className="sidebar-user-signout-icon" />
             </button>
@@ -160,8 +163,13 @@ export default function DashboardSidebar({
 
       {showLogoutConfirm && (
         <div className="end-confirm-backdrop" onClick={() => setShowLogoutConfirm(false)}>
-          <div className="end-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{t("sidebar.signOutConfirm")}</h2>
+          <div
+            className="end-confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sidebar-signout-confirm-title"
+            onClick={(e) => e.stopPropagation()}>
+            <h2 id="sidebar-signout-confirm-title">{t("sidebar.signOutConfirm")}</h2>
             <p>{t("sidebar.signOutDesc")}</p>
             <div className="end-confirm-actions">
               <button

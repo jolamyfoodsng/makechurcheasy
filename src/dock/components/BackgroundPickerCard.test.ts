@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
 import type { BibleThemeSettings } from "../../bible/types";
 import { DEFAULT_THEME_SETTINGS } from "../../bible/types";
@@ -15,6 +17,8 @@ import themeCreatorSource from "../../pages/ThemeCreatorModal.tsx?raw";
 import productionThemeSettingsSource from "../../pages/ProductionThemeSettingsPage.tsx?raw";
 import productionSettingsSource from "../../services/productionSettings.ts?raw";
 import bibleDbSource from "../../bible/bibleDb.ts?raw";
+
+const dockCssSource = readFileSync(fileURLToPath(new URL("../dock.css", import.meta.url)), "utf8");
 
 /* ── Helpers — mirrors the updater pattern each Text tab control uses ── */
 
@@ -84,7 +88,7 @@ describe("Text Tab settings pipeline", () => {
     expect(result.fontSize).toBe(72);
   });
 
-  it.each(["light", "normal", "bold"] as const)("fontWeight: %s button calls onQuickSettingsChange with fontWeight=%s", (w) => {
+  it.each(["light", "normal", "bold", "extrabold"] as const)("fontWeight: %s button calls onQuickSettingsChange with fontWeight=%s", (w) => {
     const updater: Updater = (prev) => ({ ...prev, fontWeight: w });
     const result = applyUpdater(BASE, updater);
     expect(result.fontWeight).toBe(w);
@@ -124,6 +128,63 @@ describe("Bible motion opt-in", () => {
   });
 });
 
+describe("Background picker layout", () => {
+  it("centers a compact picker while the shared content region owns scrolling", () => {
+    const tabsIndex = backgroundPickerSource.indexOf('className="dtb-bg-picker__tabs"');
+    const scrollIndex = backgroundPickerSource.indexOf('className="dtb-bg-picker__scroll"');
+
+    expect(backgroundPickerSource).toContain('className="dtb-studio-card dtb-studio-card--picker"');
+    expect(tabsIndex).toBeGreaterThan(-1);
+    expect(scrollIndex).toBeGreaterThan(tabsIndex);
+    expect(dockThemeSettingsModalSource).toContain('dtb-studio__settings-view dtb-studio__settings-view--picker');
+    expect(dockCssSource).toContain('.dtb-studio__settings-view--picker {\n  overflow: hidden;\n}');
+    expect(dockCssSource).toContain('align-items: center;\n  justify-content: center;');
+    expect(dockCssSource).toContain('padding: 16px;\n  animation: dtb-studio-fadeIn');
+    expect(dockCssSource).toContain('height: 50vh;\n  min-height: 0;');
+    expect(dockCssSource).toContain('.dtb-studio-card--picker {\n  display: flex;\n  flex: 1 1 auto;\n  min-height: 0;\n}');
+    expect(dockCssSource).toContain('.dtb-bg-picker {\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow: hidden;\n}');
+    expect(dockCssSource).toContain('.dtb-bg-picker__grid {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 8px;\n}');
+    expect(dockCssSource).toContain('.dtb-bg-picker__theme-grid {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}');
+    expect(dockCssSource).not.toContain('max-height: 560px;\n  max-height: min(560px');
+    expect(dockCssSource).toContain('overflow-y: auto;');
+  });
+});
+
+describe("Bible picker reference tabs", () => {
+  it("splits Bible text and layout settings into Bible/Text and Reference sub-tabs", () => {
+    expect(backgroundPickerSource).toContain('className="dtb-bg-picker__subtabs"');
+    expect(backgroundPickerSource).toContain('setTextSubTab("bible")');
+    expect(backgroundPickerSource).toContain('setTextSubTab("reference")');
+    expect(backgroundPickerSource).toContain('setLayoutSubTab("text")');
+    expect(backgroundPickerSource).toContain('setLayoutSubTab("reference")');
+    expect(backgroundPickerSource).toContain('t("bible.bible", "Bible")');
+    expect(backgroundPickerSource).toContain('t("common.text", "Text")');
+    expect(backgroundPickerSource).toContain("ReferenceDisplaySection");
+    expect(backgroundPickerSource).toContain("!isBiblePicker && (");
+  });
+
+  it("wires Bible reference display preferences from the dock into the picker", () => {
+    expect(backgroundPickerSource).toContain("referenceFormat");
+    expect(backgroundPickerSource).toContain("referenceVersionVisible");
+    expect(backgroundPickerSource).toContain("onReferenceFormatChange");
+    expect(backgroundPickerSource).toContain("onReferenceVersionVisibleChange");
+    expect(dockThemeSettingsModalSource).toContain("referenceTranslation={referenceTranslation}");
+    expect(dockBibleTabSource).toContain("referenceFormat={referenceFormat}");
+    expect(dockBibleTabSource).toContain("onReferenceFormatChange={handleReferenceFormatChange}");
+    expect(dockBibleTabSource).toContain("onReferenceVersionVisibleChange={handleReferenceVersionVisibleChange}");
+  });
+});
+
+describe("Bible stable auto-fit", () => {
+  it("keeps the fitted Bible size stable when the verse changes", () => {
+    expect(overlayHtml).toContain("stableFullscreenTextSize");
+    expect(overlayHtml).toContain("stableLowerThirdTextSize");
+    expect(overlayHtml).toContain("Math.min(baseTextSize, stableFullscreenTextSize)");
+    expect(overlayHtml).toContain("Math.min(baseTextSize, stableLowerThirdTextSize)");
+    expect(overlayHtml).toContain("if (themeChanged) resetStableAutoFitSizes();");
+  });
+});
+
 describe("Bible reader font-size quick actions", () => {
   it("provides OBS live text and reference size controls in the reading header", () => {
     expect(dockBibleTabSource).toContain("handleBrowserFontSizeChange");
@@ -131,9 +192,10 @@ describe("Bible reader font-size quick actions", () => {
     expect(dockBibleTabSource).toContain('Icon name="add"');
     expect(dockBibleTabSource).toContain('field: "fontSize" | "refFontSize"');
     expect(dockBibleTabSource).toContain("handleSyncBibleBrowserSettings");
-    expect(dockBibleTabSource).toContain("autoFontScale: !activeBrowserFontSettings.autoFontScale");
+    expect(dockBibleTabSource).toContain("autoFontScale: !displayedBrowserFontSettings.autoFontScale");
     expect(dockBibleTabSource).toContain("nextLowerThirdSettings");
-    expect(dockBibleTabSource).toContain("Updates the active OBS browser source immediately");
+    expect(dockBibleTabSource).toContain("Update Immediately");
+    expect(dockBibleTabSource).toContain("saveBrowserQuickSettings");
     expect(dockBibleTabSource).toContain("refreshCurrentBibleOutputAfterThemeSave");
   });
 });
@@ -243,7 +305,7 @@ describe("Full pipeline: Text tab → BibleThemeSettings → extract back", () =
     expect(extracted.fontSize).toBe(72);
   });
 
-  it.each(["light", "normal", "bold"] as const)("fontWeight=%s round-trips", (weight) => {
+  it.each(["light", "normal", "bold", "extrabold"] as const)("fontWeight=%s round-trips", (weight) => {
     const quickSettings: DockFullscreenQuickThemeSettings = { ...BASE, fontWeight: weight };
     const themed = applyFullscreenQuickThemeSettings(baseTheme, quickSettings);
     expect(themed.settings.fontWeight).toBe(weight);
@@ -529,24 +591,26 @@ describe("Active OBS Bible overlay wiring", () => {
   });
 
   it("keeps text weight, line height, and text case in the Text typography section", () => {
-    const textSectionStart = backgroundPickerSource.indexOf("{/* ── Text Section ── */}");
+    const textSectionStart = backgroundPickerSource.indexOf("{/* ── Bible Text Section ── */}");
     const referenceSectionStart = backgroundPickerSource.indexOf("{/* ── Reference Section ── */}", textSectionStart);
     const textSectionSource = backgroundPickerSource.slice(textSectionStart, referenceSectionStart);
 
-    expect(textSectionSource).toContain("dtb-control-section--nested");
-    expect(textSectionSource).toContain("sermon.typography");
+    expect(textSectionSource).toContain("dtb-typography-control-row");
+    expect(textSectionSource).toContain("dtb-typography-control-row--segmented");
+    expect(backgroundPickerSource).toContain('["light", "normal", "bold", "extrabold"]');
     expect(textSectionSource).toContain("fontWeight: w");
-    expect(textSectionSource).toContain("lineHeight: Number(e.target.value)");
+    expect(textSectionSource).toContain("lineHeight: value");
     expect(textSectionSource).toContain("textTransform: tc");
     expect(textSectionSource).toContain("IconSegmentedControl<CompactFontWeight>");
     expect(textSectionSource).toContain("IconSegmentedControl<CompactTextCase>");
+    expect(textSectionSource).not.toContain("sermon.typography");
     expect(textSectionSource).not.toContain("common.moreOptions");
   });
 
   it("applies worship text case directly in the overlay renderer", () => {
     expect(worshipOverlayHtml).toContain("function applyDisplayTextTransform");
     expect(worshipOverlayHtml).toContain("case 'uppercase': return value.toLocaleUpperCase()");
-    expect(worshipOverlayHtml).toContain("safeSupText(applyDisplayTextTransform(sl.text, data.theme && data.theme.textTransform))");
+    expect(worshipOverlayHtml).toContain("safeSupText(applyDisplayTextTransform(displayText.primary, textTransform))");
     expect(worshipOverlayHtml).toContain("safeSupText(applyDisplayTextTransform(l.text || '', textTransform))");
   });
 
@@ -582,7 +646,7 @@ describe("Active OBS Bible overlay wiring", () => {
     const referenceSectionEnd = backgroundPickerSource.indexOf("/* ── Reference Layout Section ── */", referenceSectionStart);
     const referenceSectionSource = backgroundPickerSource.slice(referenceSectionStart, referenceSectionEnd);
     const colorIndex = referenceSectionSource.indexOf("refFontColor: v");
-    const fontSizeIndex = referenceSectionSource.indexOf("Reference Font Size");
+    const fontSizeIndex = referenceSectionSource.indexOf("bgPicker.fontSize");
     const weightIndex = referenceSectionSource.indexOf("refFontWeight: w");
     const textCaseIndex = referenceSectionSource.indexOf("refTextTransform: tc");
     const moreOptionsIndex = referenceSectionSource.indexOf("common.moreOptions");
@@ -642,6 +706,29 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(overlayHtml).toContain("compareTranslationLeft.textContent = ''");
     expect(overlayHtml).toContain("compareTranslationRight.textContent = ''");
     expect(overlayHtml).toContain("lt-compare-unit");
+  });
+
+  it("auto-scales line-by-line compare content against the actual overlay frame", () => {
+    expect(overlayHtml).toContain("function getVisibleCompareFitNodes()");
+    expect(overlayHtml).toContain("function resolveCompareAutoFontFloor(baseSize)");
+    expect(overlayHtml).toContain("if (!String(node.textContent || '').trim()) return false");
+    expect(overlayHtml).toContain("const rects = node.getClientRects()");
+    expect(overlayHtml).toContain("compareTextLeft?.querySelector('.compare-line-list')");
+    expect(overlayHtml).toContain("isContentOutsideFrame(fitNodes, compareLayout) || isContentOutsideFrame(fitNodes, overlay)");
+    expect(overlayHtml).toContain("Math.min(column.clientHeight || frameHeight, frameHeight)");
+    expect(overlayHtml).toContain("#compare-layout.is-line-by-line .compare-column");
+    expect(overlayHtml).toContain("max-height: 100%");
+  });
+
+  it("auto-scales lower-third Bible content against the visible card bounds", () => {
+    expect(overlayHtml).toContain("const textFloor = resolveAutoFontFloor(baseFontSize, 24)");
+    expect(overlayHtml).toContain("const fitNodes = [ltVerseText, ltRefText].filter((node) => isFitVisible(node))");
+    expect(overlayHtml).toContain("if (isContentOutsideFrame(fitNodes, ltBar)) return true");
+    expect(overlayHtml).toContain("Because the card has");
+    expect(overlayHtml).toContain("const wp2 = s.lowerThirdWidthPreset || 'md'");
+    expect(overlayHtml).toContain("root.style.setProperty('--lt-max-width', isLowerThird ? 'none'");
+    expect(overlayHtml).toContain("root.style.setProperty('--lt-text-max-width', wpr.maxWidth + 'px')");
+    expect(overlayHtml).toContain("max-width: var(--lt-text-max-width, 100%)");
   });
 
   it("orders scripture reference above or below the verse without DOM reshuffling", () => {
@@ -707,17 +794,20 @@ describe("Active OBS Bible overlay wiring", () => {
   });
 
   it("fades Bible content without fading the background layer", () => {
-    expect(overlayHtml).toContain("@keyframes mce-preview-text-fade");
-    expect(overlayHtml).toContain(".mce-preview-text-fade");
-    expect(overlayHtml).toContain("animation: mce-preview-text-fade 520ms cubic-bezier(0.42, 0, 0.58, 1) both");
-    expect(overlayHtml).toContain("50% { opacity: 0.28; }");
-    expect(overlayHtml).toContain("const targets = mode === 'lower-third'");
+    expect(overlayHtml).toContain("@keyframes mce-preview-text-exit");
+    expect(overlayHtml).toContain("@keyframes mce-preview-text-fade-in");
+    expect(overlayHtml).toContain(".mce-preview-text-enter--fade");
+    expect(overlayHtml).toContain("animation: mce-preview-text-fade-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both");
+    expect(overlayHtml).toContain("animation: mce-preview-text-exit var(--anim-duration, 152ms) cubic-bezier(0.4, 0, 1, 1) both");
+    expect(overlayHtml).toContain("function getVerseAnimationTargets");
+    expect(overlayHtml).toContain("const targets = targetMode === 'lower-third'");
+    expect(overlayHtml).toContain("compareLayout && compareLayout.classList.contains('is-visible')");
     expect(overlayHtml).not.toContain("mode-layer.mce-preview-slide-fade");
   });
 
   it("does not re-apply the background when both Bible modes render a new verse", () => {
     expect(overlayHtml).toContain("const lastAppliedThemeKeyByMode = {");
-    expect(overlayHtml).toContain("themeKey === lastAppliedThemeKeyByMode[targetMode]");
+    expect(overlayHtml).toContain("const themeChanged = themeKey !== lastAppliedThemeKeyByMode[targetMode]");
     expect(overlayHtml).toContain("lastAppliedThemeKeyByMode[targetMode] = themeKey");
   });
 
@@ -775,6 +865,16 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(dockBibleTabSource).toContain("useState<DockFullscreenQuickThemeSettings | null>(initialFullscreenQuickThemeSettings)");
     expect(dockBibleTabSource).toContain("persistDockBiblePreferencesNow({");
     expect(dockBibleTabSource).toContain("fullscreenQuickThemeSettings: nextSavedSettings");
+  });
+
+  it("uses linked lower-third size presets when fitting Bible text", () => {
+    expect(dockBibleTabSource).toContain('Fit text to frame');
+    expect(dockBibleTabSource).toContain('Shrinks the verse and reference when they would overflow.');
+    expect(dockBibleTabSource).toContain('LOWER_THIRD_QUICK_SIZE_OPTIONS');
+    expect(dockBibleTabSource).toContain('lowerThirdCardPadding: `${preset.padding}px ${horizontalPadding}px`');
+    expect(dockBibleTabSource).toContain('lowerThirdBarMaxHeight: preset.maxHeight');
+    expect(dockBibleTabSource).toContain('disabled={areManualFontSizesDisabled || displayedBrowserFontSettings.fontSize <= browserFontSizeMin}');
+    expect(dockBibleTabSource).toContain('disabled={areManualFontSizesDisabled || displayedBrowserFontSettings.refFontSize <= browserReferenceFontSizeMin}');
   });
 
   it("pairs dual-variant Bible theme selection so later lower-third uses the same theme", () => {

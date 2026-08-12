@@ -288,6 +288,8 @@ export async function publishCountdownToPresentation(countdown: CountdownConfig)
 
 export async function publishTickerToPresentation(payload: {
   text: string;
+  divider?: string;
+  messageSpacing?: number;
   position: "top" | "bottom";
   speed: number;
   textColor?: string;
@@ -303,6 +305,8 @@ export async function publishTickerToPresentation(payload: {
     title: "Ticker",
     ticker: {
       text: payload.text,
+      divider: payload.divider,
+      messageSpacing: payload.messageSpacing,
       position: payload.position,
       direction: "rtl",
       speed: payload.speed,

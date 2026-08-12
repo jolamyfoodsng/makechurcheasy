@@ -25,9 +25,11 @@
 /* ── Root container ── */
 .dock-root {
   --dock-font-african-latin: "Questrial", "Charis SIL", "Noto Sans";
-  --dock-font-body: var(--dock-font-african-latin), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --dock-font-heading: var(--dock-font-african-latin), "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --dock-font-unicode-fallback: "Charis SIL", "Noto Sans", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Symbol", "Apple Symbols", "Arial Unicode MS", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  --dock-font-body: var(--dock-font-african-latin), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", var(--dock-font-unicode-fallback);
+  --dock-font-heading: var(--dock-font-african-latin), "Inter", -apple-system, BlinkMacSystemFont, var(--dock-font-unicode-fallback);
   --dock-font-mono: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+  --dock-font-scale: 1;
   --dock-bg: #0F172A;
   --dock-bg-secondary: #111827;
   --dock-surface: #111827;
@@ -45,6 +47,7 @@
   --text-primary: #FFFFFF;
   --text-secondary: #CBD5E1;
   --text-muted: #94A3B8;
+  --input-placeholder: #94A3B8;
   --dock-accent: #1D4ED8;
   --dock-accent-hover: #2563EB;
   --dock-accent-pressed: #1E40AF;
@@ -67,13 +70,17 @@
 
   display: flex;
   flex-direction: column;
+  /* CSS zoom already expands the layout viewport for the scaled content.
+     Compensating the width here applies the scale twice and pushes the
+     right-side controls outside the OBS dock. */
   width: 100%;
   max-width: none;
-  height: 100dvh;
+  height: 100%;
   background: var(--dock-bg);
   color: var(--dock-text);
   font-family: var(--dock-font-body);
   font-size: 12px;
+  zoom: var(--dock-font-scale, 1);
   font-weight: 600;
   line-height: 1.4;
   overflow: hidden;
@@ -5212,6 +5219,11 @@
   background: var(--dock-surface-hover, #1F2937);
 }
 
+.dock-sidebar__item--open {
+  background: color-mix(in srgb, var(--dock-accent) 12%, transparent);
+  color: var(--dock-text, #F8FAFC);
+}
+
 .dock-sidebar__item--label {
   cursor: default;
   color: var(--dock-text-secondary, #CBD5E1);
@@ -5238,6 +5250,168 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.dock-sidebar__appearance-panel {
+  gap: 8px;
+}
+
+.dock-appearance-mode {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--dock-surface-alt) 72%, transparent);
+}
+
+.dock-appearance-mode__button {
+  min-height: 27px;
+  padding: 3px 2px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dock-text-dim, #94A3B8);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.dock-appearance-mode__button:hover {
+  color: var(--dock-text, #F8FAFC);
+  background: color-mix(in srgb, var(--dock-surface-hover) 70%, transparent);
+}
+
+.dock-appearance-mode__button--active {
+  border-color: color-mix(in srgb, var(--dock-accent) 55%, var(--dock-border));
+  background: var(--dock-accent-soft, rgba(29, 78, 216, 0.12));
+  color: var(--dock-text, #F8FAFC);
+  box-shadow: inset 0 -2px 0 var(--dock-accent, #1D4ED8);
+}
+
+.dock-appearance-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.dock-appearance-palette {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 7px 6px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--dock-surface) 82%, transparent);
+  color: var(--dock-text, #F8FAFC);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.dock-appearance-palette:hover {
+  border-color: color-mix(in srgb, var(--dock-accent) 45%, var(--dock-border));
+  background: var(--dock-surface-hover, #334155);
+  transform: translateY(-1px);
+}
+
+.dock-appearance-palette--active {
+  border-color: var(--dock-accent, #1D4ED8);
+  background: color-mix(in srgb, var(--dock-accent) 12%, var(--dock-surface));
+  box-shadow: inset 2px 0 0 var(--dock-accent, #1D4ED8);
+}
+
+.dock-appearance-palette:focus-visible,
+.dock-appearance-mode__button:focus-visible,
+.dock-appearance-custom:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--dock-accent) 75%, transparent);
+  outline-offset: 1px;
+}
+
+.dock-appearance-palette__swatches {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 0 8px;
+  width: 8px;
+  min-height: 40px;
+  overflow: hidden;
+  border-radius: 3px;
+}
+
+.dock-appearance-palette__swatches span {
+  flex: 1;
+  min-height: 8px;
+}
+
+.dock-appearance-palette__copy,
+.dock-appearance-custom__copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dock-appearance-palette__title {
+  overflow: hidden;
+  color: var(--dock-text, #F8FAFC);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-appearance-palette__desc {
+  overflow: hidden;
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 9px;
+  font-weight: 400;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-appearance-palette > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--dock-accent, #1D4ED8);
+  color: #FFFFFF;
+}
+
+.dock-appearance-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 6px 8px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--dock-surface) 82%, transparent);
+  cursor: pointer;
+}
+
+.dock-appearance-custom--active {
+  border-color: var(--dock-accent, #1D4ED8);
+  background: color-mix(in srgb, var(--dock-accent) 12%, var(--dock-surface));
+}
+
+.dock-appearance-custom input[type="color"] {
+  width: 28px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 6px;
+  background: var(--dock-input-bg, #0F172A);
+  cursor: pointer;
+  flex: 0 0 auto;
 }
 
 .dock-sidebar__check {
@@ -5300,6 +5474,40 @@
   font-size: 10.5px;
   font-weight: 400;
   line-height: 1.35;
+}
+
+.dock-sidebar__value {
+  margin-left: auto;
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dock-sidebar__reset {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  margin: 2px 2px 0;
+  padding: 5px 7px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dock-text-dim, #94A3B8);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.dock-sidebar__reset:hover:not(:disabled) {
+  border-color: var(--dock-border-active, #2563EB);
+  background: var(--dock-surface-hover, #334155);
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-sidebar__reset:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .dock-sidebar__radio-group {
@@ -6945,6 +7153,7 @@
   z-index: 6;
   display: inline-flex;
   align-items: center;
+  will-change: top;
 }
 
 .dock-bible-reader__quick-actions-trigger {
@@ -6966,8 +7175,16 @@
   font-weight: 700;
   line-height: 1;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.12s ease;
+}
+
+.dock-bible-reader__quick-actions--menu-right .dock-bible-reader__quick-actions-trigger {
+  border-right: 1px solid var(--dock-border);
+  border-left: 0;
+  border-radius: 0 10px 10px 0;
 }
 
 .dock-bible-reader__quick-actions-label {
@@ -6984,6 +7201,16 @@
   background: var(--dock-accent);
   color: #fff;
   transform: translateX(-2px);
+}
+
+.dock-bible-reader__quick-actions--menu-right .dock-bible-reader__quick-actions-trigger:hover,
+.dock-bible-reader__quick-actions--menu-right .dock-bible-reader__quick-actions-trigger--active {
+  border-color: var(--dock-accent);
+  transform: translateX(2px);
+}
+
+.dock-bible-reader__quick-actions-trigger--dragging {
+  cursor: grabbing;
 }
 
 .dock-bible-reader__font-size-btn {
@@ -7021,6 +7248,45 @@
   font-variant-numeric: tabular-nums;
 }
 
+.dock-bible-reader__font-size-input {
+  flex: 1;
+  min-width: 0;
+  width: 42px;
+  height: 22px;
+  padding: 0 2px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--dock-accent-hover);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.dock-bible-reader__font-size-input:focus {
+  color: var(--dock-text);
+  background: color-mix(in srgb, var(--dock-accent) 16%, transparent);
+  border-radius: 3px;
+}
+
+.dock-bible-reader__font-size-input:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dock-bible-reader__font-size-input::-webkit-inner-spin-button,
+.dock-bible-reader__font-size-input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.dock-bible-reader__font-size-input[type="number"] {
+  appearance: textfield;
+}
+
 .dock-bible-reader__font-size-menu {
   position: absolute;
   top: 50%;
@@ -7028,18 +7294,24 @@
   z-index: 20;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: 220px;
-  padding: 10px;
+  gap: 6px;
+  width: 188px;
+  max-height: min(330px, calc(100vh - 24px));
+  overflow-y: auto;
+  padding: 8px;
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: 10px;
   background: var(--dock-surface);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   transform: translateY(-50%);
 }
 
-.dock-bible-reader__font-size-menu-header,
-.dock-bible-reader__font-size-row {
+.dock-bible-reader__quick-actions--menu-right .dock-bible-reader__font-size-menu {
+  right: auto;
+  left: calc(100% + 8px);
+}
+
+.dock-bible-reader__font-size-menu-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -7050,30 +7322,51 @@
   color: var(--dock-text);
   font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-.dock-bible-reader__font-size-menu-header span:last-child {
-  color: var(--dock-green, #22c55e);
+.dock-output-quick-actions__live {
+  color: var(--dock-success, #22c55e);
   font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
-.dock-bible-reader__font-size-row>span {
-  min-width: 0;
-  color: var(--dock-text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.dock-bible-reader__font-size-row--toggle>div {
+.dock-bible-reader__font-size-field {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
-.dock-bible-reader__font-size-row--toggle small {
+.dock-bible-reader__font-size-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  align-items: end;
+}
+
+.dock-bible-reader__font-size-field--compact {
+  height: 100%;
+  justify-content: space-between;
+}
+
+.dock-bible-reader__font-size-field-label {
+  min-width: 0;
+  color: var(--dock-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.dock-bible-reader__font-size-field small {
   color: var(--dock-text-dim);
   font-size: 9px;
   font-weight: 400;
@@ -7081,22 +7374,110 @@
 }
 
 .dock-bible-reader__font-size-controls {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 1px;
-  flex-shrink: 0;
+  width: 100%;
+  min-height: 26px;
   padding: 1px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 88%, transparent);
-  border-radius: 4px;
+  border-radius: 6px;
   background: color-mix(in srgb, var(--dock-surface-alt) 82%, transparent);
 }
 
-.dock-bible-reader__font-size-menu-hint {
+.dock-bible-reader__size-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  width: 100%;
+}
+
+.dock-bible-reader__size-preset {
+  min-height: 26px;
+  padding: 0 4px;
+  border: 1px solid var(--dock-border);
+  border-radius: 5px;
+  background: var(--dock-surface-alt);
+  color: var(--dock-text-secondary);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dock-bible-reader__size-preset:hover {
+  border-color: var(--dock-accent);
+  color: var(--dock-text);
+}
+
+.dock-bible-reader__size-preset--active {
+  border-color: var(--dock-accent);
+  background: color-mix(in srgb, var(--dock-accent) 22%, var(--dock-surface-alt));
+  color: var(--dock-text);
+}
+
+.dock-bible-reader__font-size-select {
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--dock-border);
+  border-radius: 6px;
+  background: var(--dock-surface-alt);
+  color: var(--dock-text);
+  font: inherit;
+  font-size: 10px;
+}
+
+.dock-bible-reader__font-size-select:focus {
+  outline: 1px solid var(--dock-accent);
+  outline-offset: 1px;
+}
+
+.dock-bible-reader__font-size-menu-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   padding-top: 2px;
   border-top: 1px solid color-mix(in srgb, var(--dock-border) 72%, transparent);
+}
+
+.dock-bible-reader__font-size-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--dock-text-dim);
   font-size: 9px;
-  line-height: 1.35;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dock-bible-reader__font-size-checkbox input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--dock-accent);
+}
+
+.dock-bible-reader__font-size-save {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--dock-accent);
+  border-radius: 6px;
+  background: var(--dock-accent);
+  color: #fff;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dock-bible-reader__font-size-save:disabled {
+  border-color: var(--dock-border);
+  background: var(--dock-surface-alt);
+  color: var(--dock-text-dim);
+  cursor: default;
 }
 
 .dock-bible-reader__history-dropdown {
@@ -13017,6 +13398,7 @@
 .dock-bible-controls {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 6px 8px;
   position: relative;
@@ -13171,6 +13553,113 @@
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.dock-bible-controls__chapter-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.dock-bible-controls__keyboard-cue {
+  display: flex;
+  flex: 1 0 100%;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 9px;
+  padding: 5px 2px 0;
+  border-top: 1px solid color-mix(in srgb, var(--dock-border) 68%, transparent);
+  color: var(--dock-text-dim);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.dock-bible-controls__keyboard-cue-label,
+.dock-bible-controls__keyboard-cue-group,
+.dock-bible-controls__keyboard-cue-keys {
+  display: inline-flex;
+  align-items: center;
+}
+
+.dock-bible-controls__keyboard-cue-label {
+  gap: 4px;
+  color: var(--dock-text-secondary);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dock-bible-controls__keyboard-cue-group {
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.dock-bible-controls__keyboard-cue-group > span:last-child {
+  color: var(--dock-text-secondary);
+  font-weight: 600;
+}
+
+.dock-bible-controls__keyboard-cue-keys {
+  gap: 2px;
+}
+
+.dock-bible-controls__keyboard-cue kbd {
+  display: inline-flex;
+  min-width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--dock-surface-alt) 82%, var(--dock-surface));
+  color: var(--dock-text);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dock-bible-controls__keyboard-cue-group:hover kbd,
+.dock-bible-controls__keyboard-cue-group:focus-visible kbd {
+  border-color: color-mix(in srgb, var(--dock-accent) 52%, var(--dock-border));
+  color: var(--dock-accent);
+}
+
+.dock-bible-controls__chapter-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 88%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dock-surface-alt) 74%, var(--dock-surface));
+  color: var(--dock-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+  flex-shrink: 0;
+}
+
+.dock-bible-controls__chapter-nav-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--dock-accent) 32%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-surface-hover) 72%, transparent);
+  color: var(--dock-text);
+}
+
+.dock-bible-controls__chapter-nav-btn:focus-visible,
+.dock-bible-reader__chapter-nav-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--dock-accent) 78%, transparent);
+  outline-offset: 1px;
+}
+
+.dock-bible-controls__chapter-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .dock-bible-controls__go-chapter {
@@ -13731,7 +14220,7 @@
 @media (min-width: 901px) {
   .dock-bible-controls {
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
   }
 
   .dock-bible-controls__book-card {
@@ -13751,7 +14240,7 @@
 @media (min-width: 601px) and (max-width: 900px) {
   .dock-bible-controls {
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
   }
@@ -13791,7 +14280,7 @@
 @media (max-width: 600px) {
   .dock-bible-controls {
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
   }
@@ -13837,6 +14326,15 @@
   .dock-bible-controls {
     gap: 4px;
     padding: 4px 6px;
+  }
+
+  .dock-bible-controls__keyboard-cue {
+    gap: 3px 6px;
+    font-size: 9px;
+  }
+
+  .dock-bible-controls__keyboard-cue-label {
+    font-size: 8px;
   }
 
   .dock-bible-controls__book-card {
@@ -14510,10 +15008,10 @@
   inset: 0;
   z-index: 9999;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.55);
-  padding: 0;
+  padding: 16px;
   animation: dtb-studio-fadeIn 0.15s ease;
 }
 
@@ -14531,13 +15029,14 @@
 .dtb-studio__modal {
   width: 100%;
   max-width: 380px;
-  height: 92vh;
+  height: 50vh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--dock-surface);
   border: none;
-  border-radius: 4px 8px 0 0;
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
   overflow: hidden;
 }
 
@@ -14609,6 +15108,10 @@
   flex-direction: column;
   gap: 12px;
   -webkit-overflow-scrolling: touch;
+}
+
+.dtb-studio__settings-view--picker {
+  overflow: hidden;
 }
 
 .dtb-studio__themes-view::-webkit-scrollbar,
@@ -14816,6 +15319,13 @@
   flex-shrink: 0;
 }
 
+/* The picker owns the available settings height; its content scrolls inside. */
+.dtb-studio-card--picker {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .dtb-studio-card--no-collapse {
   border: 1px solid color-mix(in srgb, var(--dock-border) 60%, transparent);
 }
@@ -14866,6 +15376,11 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.dtb-studio-card--picker > .dtb-studio-card__body {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* ── Segmented Controls ── */
@@ -14990,11 +15505,80 @@
 .dtb-slider-field__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   font-size: 12px;
   color: var(--dock-text-secondary);
   font-weight: 500;
   line-height: 1.3;
+}
+
+.dtb-slider-field__stepper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  overflow: hidden;
+  border: 1px solid var(--dock-border);
+  border-radius: 8px;
+  background: var(--dock-surface-alt);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.dtb-slider-field__stepper:focus-within {
+  border-color: var(--dock-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dock-accent) 20%, transparent);
+}
+
+.dtb-slider-field__step-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dock-text-secondary);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dtb-slider-field__step-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dock-surface-hover) 70%, transparent);
+  color: var(--dock-text);
+}
+
+.dtb-slider-field__step-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.dtb-slider-field__number {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 4px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--dock-accent-hover, var(--dock-text));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.dtb-slider-field__number::-webkit-inner-spin-button,
+.dtb-slider-field__number::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.dtb-slider-field__number:focus-visible {
+  color: var(--dock-text);
 }
 
 .dtb-slider-field__value {
@@ -15003,6 +15587,23 @@
   color: var(--dock-text);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+}
+
+.dtb-typography-control-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+
+.dtb-typography-control-row--segmented {
+  align-items: end;
+}
+
+@media (max-width: 260px) {
+  .dtb-typography-control-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dtb-slider {
@@ -23318,6 +23919,9 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .dtb-bg-picker--compare-only {
@@ -23332,12 +23936,75 @@
 /* Tab navigation */
 .dtb-bg-picker__tabs {
   display: flex;
+  flex: 0 0 auto;
   gap: 2px;
   padding: 4px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   border: 1px solid var(--dock-border);
   border-radius: 12px;
   background: color-mix(in srgb, var(--dock-surface-1) 72%, var(--dock-surface));
+}
+
+.dtb-bg-picker__subtabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 78%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dock-surface-1) 52%, var(--dock-surface));
+}
+
+.dtb-bg-picker__subtab {
+  min-width: 0;
+  min-height: 26px;
+  padding: 0 10px;
+  flex: 1 1 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dock-text-tertiary, #94A3B8);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dtb-bg-picker__subtab:hover {
+  color: var(--dock-text-secondary, #CBD5E1);
+  background: color-mix(in srgb, var(--dock-surface-hover) 52%, transparent);
+}
+
+.dtb-bg-picker__subtab--active {
+  background: var(--dock-surface-1, #334155);
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dtb-bg-picker__scroll {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--dock-border) transparent;
+  scrollbar-width: thin;
+}
+
+.dtb-bg-picker__scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dtb-bg-picker__scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dtb-bg-picker__scroll::-webkit-scrollbar-thumb {
+  background: var(--dock-border);
+  border-radius: 4px;
 }
 
 .dtb-bg-picker__tab {
@@ -23709,24 +24376,6 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  max-height: 180px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--dock-border) transparent;
-}
-
-.dtb-bg-picker__grid::-webkit-scrollbar {
-  width: 4px;
-}
-
-.dtb-bg-picker__grid::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.dtb-bg-picker__grid::-webkit-scrollbar-thumb {
-  background: var(--dock-border);
-  border-radius: 4px;
 }
 
 /* Media card */
@@ -23821,23 +24470,6 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 220px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--dock-border) transparent;
-}
-
-.dtb-bg-picker__theme-grid::-webkit-scrollbar {
-  width: 4px;
-}
-
-.dtb-bg-picker__theme-grid::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.dtb-bg-picker__theme-grid::-webkit-scrollbar-thumb {
-  background: var(--dock-border);
-  border-radius: 4px;
 }
 
 /* Theme card */
@@ -23935,6 +24567,17 @@
   gap: 16px;
   padding: 16px 0px;
   border-top: 1px solid var(--dock-border);
+}
+
+.dtb-reference-display-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 78%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dock-surface-alt) 54%, var(--dock-surface));
 }
 
 /* ── Reference Section ── */
@@ -28548,7 +29191,8 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 340px;
+  width: min(340px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
   background: var(--dock-bg);
   border: 1px solid var(--dock-border);
   border-radius: 6px;
@@ -28564,6 +29208,7 @@
   align-items: center;
   justify-content: space-between;
   position: relative;
+  flex-shrink: 0;
 }
 
 .dock-mv-framing-editor__title {
@@ -28601,6 +29246,7 @@
   cursor: default;
 }
 
+.dock-mv-framing-editor__save,
 .dock-mv-framing-editor__close {
   width: 24px;
   height: 24px;
@@ -28614,6 +29260,30 @@
   cursor: pointer;
 }
 
+.dock-mv-framing-editor__save {
+  width: auto;
+  min-width: 54px;
+  padding: 0 10px;
+  border-color: var(--dock-border-active);
+  background: var(--dock-border-active);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dock-mv-framing-editor__save:hover {
+  background: var(--dock-accent-hover, #2563EB);
+  border-color: var(--dock-accent-hover, #2563EB);
+}
+
+.dock-mv-framing-editor__save:focus-visible,
+.dock-mv-framing-editor__close:focus-visible,
+.dock-mv-framing-editor__refresh:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--dock-accent, #1D4ED8) 70%, transparent);
+  outline-offset: 2px;
+}
+
 .dock-mv-framing-editor__close:hover {
   color: var(--dock-text);
   border-color: var(--dock-border-active);
@@ -28622,8 +29292,11 @@
 .dock-mv-framing-editor__body {
   padding: 8px 12px 12px;
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* Visual Preview */
@@ -28687,6 +29360,43 @@
   border: 2px solid rgba(255, 255, 255, 0.35);
   border-radius: 4px;
   pointer-events: none;
+}
+
+.dock-mv-framing-editor__custom-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.78);
+  color: var(--dock-text);
+  text-align: center;
+  pointer-events: none;
+}
+
+.dock-mv-framing-editor__custom-hint-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid color-mix(in srgb, var(--dock-accent) 70%, white 10%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dock-accent) 28%, transparent);
+  color: #BFDBFE;
+}
+
+.dock-mv-framing-editor__custom-hint strong {
+  font-size: 12px;
+}
+
+.dock-mv-framing-editor__custom-hint > span:last-child {
+  color: var(--dock-text-dim);
+  font-size: 10px;
 }
 
 /* Mode buttons */
@@ -28757,35 +29467,17 @@
 .dock-mv-framing-editor__control-value {
   font-size: 11px;
   color: var(--dock-text);
-  width: 40px;
+  width: 96px;
   text-align: right;
   flex-shrink: 0;
-}
-
-.dock-mv-framing-editor__drag-hint {
-  font-size: 10px;
-  color: var(--dock-text-dim);
-  margin: 0;
-}
-
-.dock-mv-framing-editor__info {
-  font-size: 10px;
-  color: var(--dock-text-dim);
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.dock-mv-framing-editor__info-sep {
-  color: var(--dock-border);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .dock-mv-framing-editor__actions {
   padding: 0 12px 12px;
   display: flex;
+  flex-shrink: 0;
   justify-content: flex-end;
   align-items: center;
   gap: 6px;
@@ -33293,4 +33985,40 @@ button.dock-btm-toolbar__clear--inline,
 .dock-module--bible--narrow .dock-bible-compact-actions__popover {
   left: auto;
   right: 0;
+}
+
+/* Keep comparison verses in the same columns at every font scale. The
+   comparison stack used to remain an intrinsic-width flex item while the
+   row used space-between, so short verses drifted to the right and long
+   verses started at the left edge. */
+.dock-bible-verse-row--compare {
+  display: grid;
+  grid-template-columns: minmax(18px, auto) minmax(0, 1fr);
+  justify-content: initial;
+}
+
+.dock-bible-verse-row--compare .dock-bible-verse-row__num {
+  grid-column: 1;
+}
+
+.dock-bible-verse-row--compare .dock-bible-compare-grid,
+.dock-bible-verse-row--compare .dock-bible-compare-stack {
+  grid-column: 2;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+.dock-bible-verse-row--compare .dock-bible-compare-card,
+.dock-bible-verse-row--compare .dock-bible-compare-block,
+.dock-bible-verse-row--compare .dock-bible-compare-card__text,
+.dock-bible-verse-row--compare .dock-bible-compare-block__text {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dock-bible-verse-row--compare .dock-bible-compare-card__text,
+.dock-bible-verse-row--compare .dock-bible-compare-block__text {
+  overflow-wrap: anywhere;
+  word-break: normal;
 }

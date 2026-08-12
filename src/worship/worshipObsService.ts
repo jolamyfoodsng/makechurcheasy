@@ -34,6 +34,13 @@ const SLOT_BG_INPUT = "worship-bg-source";
 const SLOT_BG_ITEM = `${SLOT_SCENE}:${SLOT_BG_INPUT}`;
 const FULLSCREEN_CLEAR_WAIT_MS = 240;
 
+function cssFontWeight(value: unknown): string {
+  if (value === "light") return "300";
+  if (value === "bold") return "700";
+  if (value === "extrabold") return "900";
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "normal";
+}
+
 class WorshipObsService {
   private sceneItemId: number | null = null;
   private bgSceneItemId: number | null = null;
@@ -1100,7 +1107,7 @@ class WorshipObsService {
     const cssParts: string[] = [];
     if (theme.fontFamily) cssParts.push(`--font-family: ${theme.fontFamily};`);
     if (theme.fontSize) cssParts.push(`--font-size: ${theme.fontSize}px;`);
-    if (theme.fontWeight) cssParts.push(`--font-weight: ${theme.fontWeight};`);
+    if (theme.fontWeight) cssParts.push(`--font-weight: ${cssFontWeight(theme.fontWeight)};`);
     if (theme.fontColor) cssParts.push(`--text-color: ${theme.fontColor};`);
     if (theme.textShadow) cssParts.push(`--text-shadow: ${theme.textShadow};`);
     if (theme.textAlign) cssParts.push(`--text-align: ${theme.textAlign};`);
