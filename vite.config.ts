@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { DEFAULT_PLAN_CONFIG, FEATURE_LABELS, deriveFeatureRequiredPlan } from "./src/services/planConfigTypes";
@@ -8,10 +9,38 @@ import { DEFAULT_PLAN_CONFIG, FEATURE_LABELS, deriveFeatureRequiredPlan } from "
 const host = process.env.TAURI_DEV_HOST;
 
 const root: string = import.meta.dirname ?? ".";
+const PUBLIC_DIR = resolve(root, "public");
 
 // Read version from package.json at build time
 const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf-8"));
 const APP_VERSION: string = pkg.version;
+
+// OBS caches browser-source documents aggressively. Keep the URL token tied to
+// the actual bundled overlay HTML so a changed renderer gets a new document,
+// while verse packets can continue using the stable in-place event path.
+const OVERLAY_HTML_FILES = [
+  "mce-bible-overlay.html",
+  "mce-worship-overlay.html",
+  "mce-note.html",
+  "mce-media-overlay.html",
+  "lower-third-overlay.html",
+  "pre-service-countdown.html",
+  "countdown-overlay.html",
+  "countdown-bg-overlay.html",
+  "live-tool-overlay.html",
+  "bible-overlay-bg.html",
+];
+
+const OVERLAY_HTML_FINGERPRINT = createHash("sha256")
+  .update(
+    OVERLAY_HTML_FILES
+      .map((fileName) => `${fileName}\n${readFileSync(resolve(PUBLIC_DIR, fileName), "utf-8")}`)
+      .join("\n"),
+  )
+  .digest("hex")
+  .slice(0, 12);
+
+const OVERLAY_HTML_VERSION = `${APP_VERSION}-${OVERLAY_HTML_FINGERPRINT}`;
 
 // Auth session file — written by desktop app, read by OBS dock.
 // In dev the overlay server doesn't have the Rust auth endpoints yet,
@@ -21,7 +50,6 @@ const SESSION_FILE = resolve(root, "makechurcheasy-session.json");
 // The overlay server (Rust) reads from ~/Documents/MakeChurchEasy/makechurcheasy-session.json.
 // On logout we must delete from BOTH locations so the dock can't still see a stale session.
 const OVERLAY_SESSION_FILE = resolve(homedir(), "Documents", "MakeChurchEasy", "makechurcheasy-session.json");
-const PUBLIC_DIR = resolve(root, "public");
 const ALLOWED_APP_DOCUMENTS = new Set([
   "/",
   "/index.html",
@@ -387,6 +415,7 @@ export default defineConfig(async () => ({
   // Expose version to the app at build time
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),
+    __MCE_OVERLAY_HTML_VERSION__: JSON.stringify(OVERLAY_HTML_VERSION),
   },
 
   // Multi-page build: main app + standalone dock + LM dock

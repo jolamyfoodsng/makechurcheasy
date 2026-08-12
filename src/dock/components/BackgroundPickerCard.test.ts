@@ -11,6 +11,7 @@ import noteOverlayHtml from "../../../public/mce-note.html?raw";
 import backgroundPickerSource from "./BackgroundPickerCard.tsx?raw";
 import dockThemeSettingsModalSource from "./DockThemeSettingsModal.tsx?raw";
 import dockBibleTabSource from "../tabs/DockBibleTab.tsx?raw";
+import dockBibleThemeResolutionSource from "../dockBibleThemeResolution.ts?raw";
 import dockWorshipTabSource from "../tabs/DockWorshipTab.tsx?raw";
 import dockThemeDataSource from "../dockThemeData.ts?raw";
 import themeCreatorSource from "../../pages/ThemeCreatorModal.tsx?raw";
@@ -129,7 +130,7 @@ describe("Bible motion opt-in", () => {
 });
 
 describe("Background picker layout", () => {
-  it("centers a compact picker while the shared content region owns scrolling", () => {
+  it("sizes the picker from the live viewport while the shared content region owns scrolling", () => {
     const tabsIndex = backgroundPickerSource.indexOf('className="dtb-bg-picker__tabs"');
     const scrollIndex = backgroundPickerSource.indexOf('className="dtb-bg-picker__scroll"');
 
@@ -140,13 +141,33 @@ describe("Background picker layout", () => {
     expect(dockCssSource).toContain('.dtb-studio__settings-view--picker {\n  overflow: hidden;\n}');
     expect(dockCssSource).toContain('align-items: center;\n  justify-content: center;');
     expect(dockCssSource).toContain('padding: 16px;\n  animation: dtb-studio-fadeIn');
-    expect(dockCssSource).toContain('height: 50vh;\n  min-height: 0;');
+    expect(dockCssSource).toContain('calc(80dvh / var(--dock-font-scale, 1))');
+    expect(dockCssSource).toContain('calc((100dvh - 32px) / var(--dock-font-scale, 1))');
+    expect(dockCssSource).toContain('--dtb-studio-height: min(');
+    expect(dockCssSource).toContain('--dtb-studio-width: min(');
+    expect(dockCssSource).toContain('width: var(--dtb-studio-width);\n  max-width: none;\n  height: var(--dtb-studio-height);');
+    expect(dockCssSource).not.toContain('height: 50vh;');
     expect(dockCssSource).toContain('.dtb-studio-card--picker {\n  display: flex;\n  flex: 1 1 auto;\n  min-height: 0;\n}');
     expect(dockCssSource).toContain('.dtb-bg-picker {\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow: hidden;\n}');
     expect(dockCssSource).toContain('.dtb-bg-picker__grid {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 8px;\n}');
     expect(dockCssSource).toContain('.dtb-bg-picker__theme-grid {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}');
     expect(dockCssSource).not.toContain('max-height: 560px;\n  max-height: min(560px');
     expect(dockCssSource).toContain('overflow-y: auto;');
+  });
+});
+
+describe("Background picker background retention", () => {
+  it("keeps the last selected pattern when switching through another background mode", () => {
+    const typeChangeStart = backgroundPickerSource.indexOf("const handleTypeChange = useCallback");
+    const typeChangeEnd = backgroundPickerSource.indexOf("const persistSavedStyles", typeChangeStart);
+    const typeChangeSource = backgroundPickerSource.slice(typeChangeStart, typeChangeEnd);
+
+    expect(typeChangeSource).toContain('backgroundPattern: prev.backgroundPattern || PATTERN_OPTIONS[0]?.src || ""');
+    expect(typeChangeSource).not.toContain('backgroundPattern: ""');
+    expect(backgroundPickerSource).toContain('backgroundPattern: src');
+    expect(backgroundPickerSource).not.toContain('backgroundPattern: ""');
+    expect(dockBibleTabSource).toContain('bgType === "pattern"');
+    expect(dockBibleThemeResolutionSource).toContain('bgType === "pattern"');
   });
 });
 

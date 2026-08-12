@@ -54,6 +54,17 @@ describe("dock scene routing", () => {
     expect(lowerThirdOverlaySource).toContain("targetSource !== routeSource");
   });
 
+  it("isolates only MCE-owned sources when a new presentation source is activated", () => {
+    const methodStart = obsClientSource.indexOf("private async ensureActiveMceOverlaySource(");
+    const methodEnd = obsClientSource.indexOf("\n  private invalidateActiveMceOverlayState", methodStart);
+    const methodSource = obsClientSource.slice(methodStart, methodEnd);
+
+    expect(methodSource).toContain('item.sourceName.startsWith("MCE ")');
+    expect(methodSource).toContain('sceneItemEnabled: false');
+    expect(methodSource).toContain("presentationSourceVisibility");
+    expect(methodSource).toContain("lowerThirdSourceVisibility");
+  });
+
   it("exposes the same scene picker in every requested output area", () => {
     expect(routingControlSource).toContain("Send to another scene");
     expect(routingControlSource).toContain("Also update MCE Presentation");

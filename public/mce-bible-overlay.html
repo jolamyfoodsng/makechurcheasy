@@ -391,7 +391,8 @@
     .compare-column {
       display: flex;
       flex-direction: column;
-      justify-content: flex-start;
+      /* Keep shorter translations centered against longer translations. */
+      justify-content: center;
       padding: var(--compare-panel-inner-padding, 38px);
       min-width: 0;
       min-height: 0;

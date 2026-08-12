@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { getUserScopedKey } from "../services/userScopedStorage";
+import { refreshAppAppearance } from "../services/appAppearance";
 import { DEFAULT_PLAN_CONFIG } from "../services/planConfigTypes";
 import {
   getEffectivePlan as resolveCanonicalPlan,
@@ -29,6 +30,7 @@ function clearDockAuthCache(): void {
     localStorage.removeItem(getUserScopedKey(PLAN_KEY));
     localStorage.removeItem(getUserScopedKey(ENTITLEMENTS_KEY));
     localStorage.removeItem(DOCK_AUTH_USER_ID_KEY);
+    refreshAppAppearance();
   } catch {
     // ignore localStorage failures
   }
@@ -38,6 +40,7 @@ function storeDockAuthUserId(userId: unknown): void {
   if (typeof userId !== "string" || !userId.trim()) return;
   try {
     localStorage.setItem(DOCK_AUTH_USER_ID_KEY, userId.trim());
+    refreshAppAppearance();
   } catch {
     // ignore localStorage failures
   }

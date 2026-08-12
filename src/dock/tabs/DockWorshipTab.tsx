@@ -732,6 +732,9 @@ function DockLyricsEditorDialog({
             <textarea
               className="dock-input dock-dialog-textarea"
               value={draft.lyrics}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+              }}
               onChange={(event) => {
                 autoSplitSourceRef.current = null;
                 setDraft((current) => ({ ...current, lyrics: event.target.value }));
@@ -1062,7 +1065,16 @@ function applyQuickThemeSettings(
       fontStyle: quickSettings.fontStyle,
       animation: quickSettings.animation,
       animationDuration: quickSettings.animationDuration,
-      backgroundPattern: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundPattern ?? "") : quickSettings.backgroundPattern,
+      // Keep the last pattern in quick settings so the picker can restore it
+      // after a temporary color/video switch, but only send it to the overlay
+      // while Pattern is the active background mode.
+      backgroundPattern: useNoBg
+        ? ""
+        : useThemeBg
+          ? (theme.settings.backgroundPattern ?? "")
+          : bgType === "pattern"
+            ? quickSettings.backgroundPattern
+            : "",
       boxBackground: useNoBg ? "transparent" : (theme.settings.boxBackground || "rgba(0,0,0,0.7)"),
       backgroundImage: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImage ?? "") : quickSettings.backgroundImage,
       backgroundImageFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImageFilePath ?? "") : quickSettings.backgroundImageFilePath,
@@ -3065,7 +3077,7 @@ export default function DockWorshipTab({
                               aria-label={`${t('common.edit')} ${song.title}`}
                               title={t('worship.editSong')}
                             >
-                              <Icon name="subtitles" size={13} />
+                              <Icon name="edit" size={16} />
                             </button>
                           )}
                         </div>
@@ -3116,7 +3128,7 @@ export default function DockWorshipTab({
                       title={t('worship.editSong')}
                       aria-label={t('worship.editSong')}
                     >
-                      <Icon name="subtitles" size={14} />
+                      <Icon name="edit" size={16} />
                     </button>
                   </div>
                 </div>
@@ -3226,7 +3238,7 @@ export default function DockWorshipTab({
                               title={t('worship.quickEdit')}
                               aria-label={t('worship.quickEdit')}
                             >
-                              <Icon name="edit_note" size={12} />
+                              <Icon name="edit" size={16} />
                             </button>
                             <button
                               type="button"
@@ -3493,6 +3505,9 @@ export default function DockWorshipTab({
                     <textarea
                       className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
                       value={slideEditor.text}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+                      }}
                       onChange={(event) => {
                         slideEditorAutoSplitSourceRef.current = null;
                         setSlideEditor((draft) => draft ? { ...draft, text: event.target.value } : draft);

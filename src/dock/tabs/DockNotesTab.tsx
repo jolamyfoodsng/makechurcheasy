@@ -140,6 +140,9 @@ function DockNoteEditorDialog({
               className="dock-input dock-dialog-textarea"
               value={content}
               onChange={(event) => setContent(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+              }}
               placeholder="Note content. Use blank lines to separate slides."
               rows={8}
             />
@@ -206,6 +209,21 @@ function generateNoteSlides(note: DockNote, linesPerSlide = DEFAULT_NOTE_LINES_P
     });
   }
   return slides;
+}
+
+function serializeNoteSlides(note: DockNote, slides: Array<{ label: string; text: string }>): string {
+  const structuredText = extractStructuredTextTitle(note.content);
+  const titleMarker = structuredText.title ? `[${structuredText.title}]\n\n` : "";
+  const body = slides
+    .map((slide) => {
+      const label = slide.label.trim();
+      const isDocumentTitle = label === structuredText.title || (!structuredText.title && label === note.title);
+      const heading = !isDocumentTitle && parseWorshipSectionLabelLine(label) ? `${label}:` : "";
+      return [heading, slide.text.trim()].filter(Boolean).join("\n");
+    })
+    .filter(Boolean)
+    .join("\n\n");
+  return `${titleMarker}${body}`.trim();
 }
 
 function getNoteQuickSettings(
@@ -290,6 +308,7 @@ export default function DockNotesTab({
   const [quickSettingsRefreshNonce, setQuickSettingsRefreshNonce] = useState(0);
   const [showNoteEditor, setShowNoteEditor] = useState(false);
   const [editingNote, setEditingNote] = useState<DockNote | null>(null);
+  const [noteSlideEditor, setNoteSlideEditor] = useState<{ index: number; label: string; text: string } | null>(null);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [actionError, setActionError] = useState("");
   const [toasts, setToasts] = useState<{ id: string; message: string; tone: ToastTone }[]>([]);
@@ -517,17 +536,49 @@ export default function DockNotesTab({
     setEditingNote(null);
   }, [editingNote, notes]);
 
-  const deleteNote = useCallback((id: string) => {
-    const next = notes.filter((n) => n.id !== id);
-    setNotes(next);
-    saveDockNotes(next);
-    if (selectedNote?.id === id) {
-      setSelectedNote(null);
-      setSelectedSlideIdx(null);
-      setVisibleSlideIdx(null);
-    }
-    showToast("Note deleted", "info");
-  }, [notes, selectedNote, showToast]);
+  const openNoteSlideEditor = useCallback((idx: number) => {
+    const slide = selectedNoteSlides[idx];
+    if (!slide) return;
+    setNoteSlideEditor({ index: idx, label: slide.label || `Slide ${idx + 1}`, text: slide.text });
+  }, [selectedNoteSlides]);
+
+  const closeNoteSlideEditor = useCallback(() => setNoteSlideEditor(null), []);
+
+  const saveNoteSlideEditor = useCallback(() => {
+    if (!selectedNote || !noteSlideEditor || !noteSlideEditor.text.trim()) return;
+    const nextSlides = selectedNoteSlides.map((slide, index) => (
+      index === noteSlideEditor.index ? { ...slide, text: noteSlideEditor.text } : slide
+    ));
+    const updated: DockNote = {
+      ...selectedNote,
+      content: serializeNoteSlides(selectedNote, nextSlides),
+      updatedAt: Date.now(),
+    };
+    const nextNotes = notes.map((note) => note.id === updated.id ? updated : note);
+    setNotes(nextNotes);
+    saveDockNotes(nextNotes);
+    setSelectedNote(updated);
+    setNoteSlideEditor(null);
+    showToast("Slide updated", "success");
+  }, [noteSlideEditor, notes, selectedNote, selectedNoteSlides, showToast]);
+
+  const deleteNoteSlide = useCallback((idx: number) => {
+    if (!selectedNote || selectedNoteSlides.length <= 1) return;
+    const nextSlides = selectedNoteSlides.filter((_, index) => index !== idx);
+    const updated: DockNote = {
+      ...selectedNote,
+      content: serializeNoteSlides(selectedNote, nextSlides),
+      updatedAt: Date.now(),
+    };
+    const nextNotes = notes.map((note) => note.id === updated.id ? updated : note);
+    setNotes(nextNotes);
+    saveDockNotes(nextNotes);
+    setSelectedNote(updated);
+    setSelectedSlideIdx((current) => current === null ? null : Math.min(current > idx ? current - 1 : current, nextSlides.length - 1));
+    setVisibleSlideIdx((current) => current === null ? null : Math.min(current > idx ? current - 1 : current, nextSlides.length - 1));
+    setNotesTranslation(null);
+    showToast("Slide deleted", "info");
+  }, [notes, selectedNote, selectedNoteSlides, showToast]);
 
   const buildNoteObsPayload = useCallback(
     (idx: number) => {
@@ -870,10 +921,7 @@ export default function DockNotesTab({
                   }}
                 />
                 <button type="button" className="dock-shell-icon-btn" onClick={() => openEditNote(selectedNote)} title="Edit note" aria-label="Edit note">
-                  <Icon name="subtitles" size={14} />
-                </button>
-                <button type="button" className="dock-shell-icon-btn" onClick={() => deleteNote(selectedNote.id)} title="Delete">
-                  <Icon name="delete" size={14} />
+                  <Icon name="edit" size={16} />
                 </button>
               </div>
             </div>
@@ -954,12 +1002,25 @@ export default function DockNotesTab({
                           className="dock-worship-slide-card__action"
                           onClick={(event) => {
                             event.stopPropagation();
-                            openEditNote(selectedNote);
+                            openNoteSlideEditor(idx);
                           }}
-                          title="Edit note"
-                          aria-label="Edit note"
+                          title="Quick edit slide"
+                          aria-label="Quick edit slide"
                         >
-                          <Icon name="edit_note" size={12} />
+                          <Icon name="edit" size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="dock-worship-slide-card__action dock-worship-slide-card__action--danger"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            deleteNoteSlide(idx);
+                          }}
+                          title="Delete slide"
+                          aria-label="Delete slide"
+                          disabled={selectedNoteSlides.length <= 1}
+                        >
+                          <Icon name="delete" size={15} />
                         </button>
                       </div>
                     </div>
@@ -1057,6 +1118,48 @@ export default function DockNotesTab({
           onSave={saveNoteDraft}
           onFormat={formatNoteDraft}
         />
+      )}
+
+      {noteSlideEditor && (
+        <div className="dock-dialog-backdrop" role="presentation">
+          <div className="dock-dialog dock-dialog--compact" role="dialog" aria-modal="true" aria-labelledby="dock-note-slide-editor-title">
+            <div className="dock-dialog__header">
+              <div>
+                <div className="dock-dialog__eyebrow">Quick edit</div>
+                <h2 id="dock-note-slide-editor-title" className="dock-dialog__title">{noteSlideEditor.label}</h2>
+              </div>
+              <button type="button" className="dock-dialog__close" onClick={closeNoteSlideEditor} aria-label="Close" title="Close">
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+            <div className="dock-dialog__body">
+              <DockNotesTextTools
+                className="dock-notes-text-tools dock-notes-text-tools--editor"
+                buttonClassName="dock-notes-text-tools__btn"
+                onAction={(action, linesPerSlide) => {
+                  setNoteSlideEditor((current) => current
+                    ? { ...current, text: formatNoteText(current.text, action, linesPerSlide) }
+                    : current);
+                }}
+              />
+              <label className="dock-dialog-field">
+                <span>Slide text</span>
+                <textarea
+                  className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
+                  value={noteSlideEditor.text}
+                  onChange={(event) => setNoteSlideEditor((current) => current ? { ...current, text: event.target.value } : current)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+                  }}
+                />
+              </label>
+            </div>
+            <div className="dock-dialog__footer">
+              <button type="button" className="dock-btn dock-btn--ghost" onClick={closeNoteSlideEditor} title="Cancel">Cancel</button>
+              <button type="button" className="dock-btn dock-btn--primary" onClick={saveNoteSlideEditor} disabled={!noteSlideEditor.text.trim()} title="Save">Save</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {toasts.length > 0 && (

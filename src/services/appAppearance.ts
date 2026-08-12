@@ -180,12 +180,19 @@ let currentAppearance = loadAppAppearance();
 const listeners = new Set<() => void>();
 let appearanceChannel: BroadcastChannel | null = null;
 
+export function refreshAppAppearance(): AppAppearancePreferences {
+  const next = loadAppAppearance();
+  if (JSON.stringify(next) === JSON.stringify(currentAppearance)) return currentAppearance;
+  currentAppearance = next;
+  listeners.forEach((listener) => listener());
+  return currentAppearance;
+}
+
 if (typeof window !== "undefined") {
   try {
     appearanceChannel = new BroadcastChannel("mce-app-appearance");
     appearanceChannel.addEventListener("message", () => {
-      currentAppearance = loadAppAppearance();
-      listeners.forEach((listener) => listener());
+      refreshAppAppearance();
     });
   } catch {
     appearanceChannel = null;
@@ -193,8 +200,7 @@ if (typeof window !== "undefined") {
   window.addEventListener("storage", (event) => {
     const scopedKey = `${APP_APPEARANCE_STORAGE_KEY}:`;
     if (event.key !== APP_APPEARANCE_STORAGE_KEY && !event.key?.startsWith(scopedKey)) return;
-    currentAppearance = loadAppAppearance();
-    listeners.forEach((listener) => listener());
+    refreshAppAppearance();
   });
 }
 

@@ -1116,6 +1116,48 @@ export default function DockPage({
                             <small>{t('page.returnToPreviousSceneDesc', 'When MCE clears its overlay, OBS goes back to the scene that was live before.')}</small>
                           </span>
                         </label>
+
+                        <div className="dock-sidebar__section-label dock-sidebar__section-label--spaced">
+                          {t('page.sourceVisibility', 'MCE source visibility')}
+                        </div>
+                        <label className="dock-sidebar__select-field">
+                          <span className="dock-sidebar__select-label">
+                            <Icon name={projectionSettings.presentationSourceVisibility === "active-only" ? "visibility_off" : "visibility"} size={14} />
+                            <span>{t('page.presentationSourceVisibility', 'Bible, Worship, and Notes')}</span>
+                          </span>
+                          <select
+                            className="dock-sidebar__select"
+                            value={projectionSettings.presentationSourceVisibility}
+                            onChange={(event) => updateProjectionSettings({
+                              presentationSourceVisibility: event.target.value as ProjectionSettings["presentationSourceVisibility"],
+                            })}
+                            aria-label={t('page.presentationSourceVisibility', 'Bible, Worship, and Notes')}
+                          >
+                            <option value="active-only">{t('page.showActiveOnly', 'Show only the active MCE source')}</option>
+                            <option value="keep-visible">{t('page.keepOtherSourcesVisible', 'Keep other MCE sources visible')}</option>
+                          </select>
+                        </label>
+                        <div className="dock-sidebar__hint">
+                          {t('page.sourceVisibilityDesc', 'Only sources created by MakeChurchEasy are changed. Your own OBS sources are left untouched.')}
+                        </div>
+
+                        <label className="dock-sidebar__select-field">
+                          <span className="dock-sidebar__select-label">
+                            <Icon name="branding_watermark" size={14} />
+                            <span>{t('page.lowerThirdSourceVisibility', 'Lower third behavior')}</span>
+                          </span>
+                          <select
+                            className="dock-sidebar__select"
+                            value={projectionSettings.lowerThirdSourceVisibility}
+                            onChange={(event) => updateProjectionSettings({
+                              lowerThirdSourceVisibility: event.target.value as ProjectionSettings["lowerThirdSourceVisibility"],
+                            })}
+                            aria-label={t('page.lowerThirdSourceVisibility', 'Lower third behavior')}
+                          >
+                            <option value="keep-first">{t('page.lowerThirdKeepFirst', 'Keep the first MCE source')}</option>
+                            <option value="active-only">{t('page.lowerThirdActiveOnly', 'Show the lower third only')}</option>
+                          </select>
+                        </label>
                       </div>
                     )}
                   </>

@@ -394,7 +394,6 @@ export default function BackgroundPickerCard({
       updater = (prev) => ({
         ...prev,
         backgroundType: "off",
-        backgroundPattern: "",
         backgroundImage: "",
         backgroundImageFilePath: "",
         backgroundVideo: "",
@@ -408,7 +407,6 @@ export default function BackgroundPickerCard({
       updater = (prev) => ({
         ...prev,
         backgroundType: "theme",
-        backgroundPattern: "",
         backgroundImage: "",
         backgroundImageFilePath: "",
         backgroundVideo: "",
@@ -420,7 +418,6 @@ export default function BackgroundPickerCard({
       updater = (prev) => ({
         ...prev,
         backgroundType: "image",
-        backgroundPattern: "",
         backgroundColor: "",
         backgroundColorEnd: "",
         bgGradientAngle: 180,
@@ -434,7 +431,6 @@ export default function BackgroundPickerCard({
       updater = (prev) => ({
         ...prev,
         backgroundType: "video",
-        backgroundPattern: "",
         backgroundColor: "",
         backgroundColorEnd: "",
         bgGradientAngle: 180,
@@ -463,7 +459,6 @@ export default function BackgroundPickerCard({
       updater = (prev) => ({
         ...prev,
         backgroundType: "color",
-        backgroundPattern: "",
         backgroundImage: "",
         backgroundImageFilePath: "",
         backgroundVideo: "",
@@ -1248,7 +1243,6 @@ function ImageTab({
       backgroundType: "image",
       backgroundImage: prev.backgroundImage === relUrl ? "" : relUrl,
       backgroundImageFilePath: prev.backgroundImage === relUrl ? "" : (item.filePath || ""),
-      backgroundPattern: "",
       backgroundVideo: "",
       backgroundVideoFilePath: "",
     }));
@@ -1272,7 +1266,6 @@ function ImageTab({
             backgroundType: "image",
             backgroundImage: relUrl,
             backgroundImageFilePath: result.item.filePath || "",
-            backgroundPattern: "",
             backgroundVideo: "",
             backgroundVideoFilePath: "",
           }));
@@ -1451,7 +1444,6 @@ function VideoTab({
       backgroundType: "video",
       backgroundVideo: prev.backgroundVideo === relUrl ? "" : relUrl,
       backgroundVideoFilePath: prev.backgroundVideo === relUrl ? "" : (item.filePath || ""),
-      backgroundPattern: "",
       backgroundImage: "",
       backgroundImageFilePath: "",
     }));
@@ -1475,7 +1467,6 @@ function VideoTab({
             backgroundType: "video",
             backgroundVideo: relUrl,
             backgroundVideoFilePath: result.item.filePath || "",
-            backgroundPattern: "",
             backgroundImage: "",
             backgroundImageFilePath: "",
           }));
@@ -1752,7 +1743,6 @@ function ColorSection({
         return {
           ...next,
           backgroundType: "color",
-          backgroundPattern: "",
           backgroundImage: "",
           backgroundImageFilePath: "",
           backgroundVideo: "",

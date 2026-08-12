@@ -42,6 +42,35 @@ export const GOOGLE_TRANSLATE_LANGUAGES: GoogleTranslateLanguage[] = [
 
 const GOOGLE_TRANSLATE_WEB_ENDPOINT = "https://translate.googleapis.com/translate_a/single";
 
+async function requestGoogleTranslate(url: string): Promise<Response> {
+  // The OBS dock normally uses the browser fetch path. The Tauri desktop
+  // window can fall back to the native HTTP plugin when its webview blocks a
+  // cross-origin request, so translation does not depend on a Cloud API key.
+  try {
+    const browserResponse = await fetch(url);
+    if (browserResponse.ok) return browserResponse;
+
+    // A webview may return an HTTP error even though the native request is
+    // allowed. Try the native path before surfacing the provider error.
+    try {
+      const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+      const nativeResponse = await tauriFetch(url);
+      if (nativeResponse.ok) return nativeResponse;
+    } catch {
+      // Keep the original browser response when the native plugin is absent
+      // or unavailable outside the Tauri desktop runtime.
+    }
+    return browserResponse;
+  } catch (browserError) {
+    try {
+      const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+      return await tauriFetch(url);
+    } catch {
+      throw browserError;
+    }
+  }
+}
+
 export function getGoogleTranslateLanguage(code: string): GoogleTranslateLanguage {
   return GOOGLE_TRANSLATE_LANGUAGES.find((language) => language.code === code)
     ?? { code, label: code.toUpperCase() };
@@ -81,7 +110,7 @@ export async function translateWithGoogleWeb(text: string, targetLanguage: strin
     dt: "t",
     q: source,
   });
-  const response = await fetch(`${GOOGLE_TRANSLATE_WEB_ENDPOINT}?${params.toString()}`);
+  const response = await requestGoogleTranslate(`${GOOGLE_TRANSLATE_WEB_ENDPOINT}?${params.toString()}`);
   if (!response.ok) throw new Error(`Google Translate returned ${response.status}`);
 
   const translated = readTranslatedSegments(await response.json());

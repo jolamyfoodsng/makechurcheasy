@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
@@ -38,6 +39,9 @@ export default function DockTranslationControls({ sections, value, onChange, com
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const languageTriggerRef = useRef<HTMLButtonElement>(null);
+  const languageMenuRef = useRef<HTMLDivElement>(null);
+  const onChangeRef = useRef(onChange);
   const requestIdRef = useRef(0);
   const sourceSignature = useMemo(
     () => sections.map((section) => `${section.id}:${section.text}`).join("\u001f"),
@@ -52,6 +56,16 @@ export default function DockTranslationControls({ sections, value, onChange, com
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [compactPanelPosition, setCompactPanelPosition] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
+  const [compactLanguageMenuPosition, setCompactLanguageMenuPosition] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     setLanguageMenuOpen(false);
@@ -61,8 +75,8 @@ export default function DockTranslationControls({ sections, value, onChange, com
     setTranslationOrder("original-first");
     setLoading(false);
     setError("");
-    onChange(null);
-  }, [sourceSignature, onChange]);
+    onChangeRef.current(null);
+  }, [sourceSignature]);
 
   useEffect(() => {
     if (!value) return;
@@ -75,6 +89,7 @@ export default function DockTranslationControls({ sections, value, onChange, com
   useLayoutEffect(() => {
     if (!compact || !open) {
       setCompactPanelPosition(null);
+      setCompactLanguageMenuPosition(null);
       return;
     }
 
@@ -92,10 +107,36 @@ export default function DockTranslationControls({ sections, value, onChange, com
         rect.bottom + 6,
         Math.max(viewportPadding, window.innerHeight - 240),
       );
+      const panelTop = top;
       setCompactPanelPosition({
         top,
         left,
-        maxHeight: Math.max(96, window.innerHeight - top - viewportPadding),
+        maxHeight: Math.max(96, window.innerHeight - panelTop - viewportPadding),
+      });
+
+      const languageTrigger = languageTriggerRef.current;
+      if (!languageMenuOpen || !languageTrigger) {
+        setCompactLanguageMenuPosition(null);
+        return;
+      }
+      const languageRect = languageTrigger.getBoundingClientRect();
+      const menuWidth = Math.min(300, Math.max(220, languageRect.width));
+      const menuLeft = Math.max(
+        viewportPadding,
+        Math.min(languageRect.left, window.innerWidth - menuWidth - viewportPadding),
+      );
+      const spaceBelow = window.innerHeight - languageRect.bottom - viewportPadding;
+      const spaceAbove = languageRect.top - viewportPadding;
+      const openAbove = spaceBelow < 180 && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(120, Math.min(300, openAbove ? spaceAbove - 6 : spaceBelow - 6));
+      const menuTop = openAbove
+        ? Math.max(viewportPadding, languageRect.top - maxHeight - 6)
+        : languageRect.bottom + 6;
+      setCompactLanguageMenuPosition({
+        top: menuTop,
+        left: menuLeft,
+        width: menuWidth,
+        maxHeight,
       });
     };
 
@@ -106,12 +147,13 @@ export default function DockTranslationControls({ sections, value, onChange, com
       window.removeEventListener("resize", updatePanelPosition);
       window.removeEventListener("scroll", updatePanelPosition, true);
     };
-  }, [compact, open]);
+  }, [compact, languageMenuOpen, open]);
 
   useEffect(() => {
     if (!open) return;
     const handlePointerDown = (event: PointerEvent) => {
-      if (!panelRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!panelRef.current?.contains(target) && !languageMenuRef.current?.contains(target)) {
         setOpen(false);
         setLanguageMenuOpen(false);
       }
@@ -205,6 +247,46 @@ export default function DockTranslationControls({ sections, value, onChange, com
     }
   };
 
+  const languageMenu = (
+    <div
+      ref={languageMenuRef}
+      className={`dock-translation__language-menu${compact ? " dock-translation__language-menu--portal" : ""}`}
+      style={compact && compactLanguageMenuPosition ? {
+        position: "fixed",
+        top: compactLanguageMenuPosition.top,
+        left: compactLanguageMenuPosition.left,
+        width: compactLanguageMenuPosition.width,
+        maxHeight: compactLanguageMenuPosition.maxHeight,
+        overflowY: "auto",
+      } : undefined}
+    >
+      <div className="dock-translation__language-search">
+        <Icon name="search" size={13} />
+        <input
+          value={languageQuery}
+          onChange={(event) => setLanguageQuery(event.target.value)}
+          placeholder={t("dock.translation.searchLanguages", { defaultValue: "Search languages" })}
+          autoFocus
+        />
+      </div>
+      <div className="dock-translation__language-list">
+        {filteredLanguages.length === 0 ? (
+          <div className="dock-translation__empty">{t("common.noResults", { defaultValue: "No results" })}</div>
+        ) : filteredLanguages.map((language) => (
+          <button
+            type="button"
+            key={language.code}
+            className={`dock-translation__language-option${language.code === targetLanguage ? " dock-translation__language-option--active" : ""}`}
+            onClick={() => handleLanguageSelect(language)}
+          >
+            <span>{language.label}</span>
+            <span className="dock-translation__language-code">{language.code}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div className={`dock-translation${compact ? " dock-translation--compact" : ""}`} ref={panelRef}>
       <div className="dock-translation__trigger-row">
@@ -259,42 +341,25 @@ export default function DockTranslationControls({ sections, value, onChange, com
             <button
               type="button"
               className="dock-translation__language-trigger"
-              onClick={() => setLanguageMenuOpen((current) => !current)}
+              ref={languageTriggerRef}
+              onClick={() => setLanguageMenuOpen((current) => {
+                const next = !current;
+                if (next) setLanguageQuery("");
+                return next;
+              })}
               aria-expanded={languageMenuOpen}
             >
               <Icon name="language" size={14} />
               <span>{selectedLanguage.label}</span>
               <Icon name={languageMenuOpen ? "expand_less" : "expand_more"} size={14} />
             </button>
-            {languageMenuOpen && (
-              <div className="dock-translation__language-menu">
-                <div className="dock-translation__language-search">
-                  <Icon name="search" size={13} />
-                  <input
-                    value={languageQuery}
-                    onChange={(event) => setLanguageQuery(event.target.value)}
-                    placeholder={t("dock.translation.searchLanguages", { defaultValue: "Search languages" })}
-                    autoFocus
-                  />
-                </div>
-                <div className="dock-translation__language-list">
-                  {filteredLanguages.length === 0 ? (
-                    <div className="dock-translation__empty">{t("common.noResults", { defaultValue: "No results" })}</div>
-                  ) : filteredLanguages.map((language) => (
-                    <button
-                      type="button"
-                      key={language.code}
-                      className={`dock-translation__language-option${language.code === targetLanguage ? " dock-translation__language-option--active" : ""}`}
-                      onClick={() => handleLanguageSelect(language)}
-                    >
-                      <span>{language.label}</span>
-                      <span className="dock-translation__language-code">{language.code}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            {languageMenuOpen && !compact && languageMenu}
           </div>
+
+          {languageMenuOpen && compact && compactLanguageMenuPosition && createPortal(
+            languageMenu,
+            panelRef.current?.closest<HTMLElement>(".dock-root") ?? document.body,
+          )}
 
           <label className="dock-translation__toggle">
             <input

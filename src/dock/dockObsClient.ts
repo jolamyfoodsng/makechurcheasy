@@ -1829,9 +1829,19 @@ class DockObsClient {
       PRESENTATION_SCENE_NAME,
       PROGRAM_SCENE_SOURCE_NAME,
     ]);
+    const projectionSettings = loadProjectionSettings();
+    const isLowerThirdSource = primary === DOCK_LT_SOURCE
+      || primary === SOURCE_NAMES.LOWER_THIRD
+      || primary.startsWith("MCE Lower Third");
+    const shouldIsolateSources = isLowerThirdSource
+      ? projectionSettings.lowerThirdSourceVisibility === "active-only"
+        || projectionSettings.presentationSourceVisibility === "active-only"
+      : projectionSettings.presentationSourceVisibility === "active-only";
     const stateSignature = JSON.stringify({
       primary,
       keep: Array.from(keepSet).sort(),
+      shouldIsolateSources,
+      lowerThirdSourceVisibility: projectionSettings.lowerThirdSourceVisibility,
     });
 
     // Always ensure ticker is positioned correctly, even if overlay state
@@ -1844,8 +1854,28 @@ class DockObsClient {
     const requests: Array<{ requestType: string; requestData: Record<string, unknown> }> = [];
     const items = await this.getSceneItemListCached(sceneName);
 
+    if (shouldIsolateSources && isLowerThirdSource && projectionSettings.lowerThirdSourceVisibility === "keep-first") {
+      const firstMceSource = [...items]
+        .filter((item) => item.sourceName.startsWith("MCE ") && item.sourceName !== PROGRAM_SCENE_SOURCE_NAME)
+        .sort((first, second) => (first.sceneItemIndex ?? 0) - (second.sceneItemIndex ?? 0))[0];
+      if (firstMceSource) keepSet.add(firstMceSource.sourceName);
+    }
+
     for (const item of items) {
       const shouldKeep = keepSet.has(item.sourceName);
+      const isMceManagedSource = item.sourceName.startsWith("MCE ");
+      if (shouldIsolateSources && isMceManagedSource && !shouldKeep && item.sceneItemEnabled !== false) {
+        requests.push({
+          requestType: "SetSceneItemEnabled",
+          requestData: {
+            sceneName,
+            sceneItemId: item.sceneItemId,
+            sceneItemEnabled: false,
+          },
+        });
+        changedVisibility = true;
+        continue;
+      }
       if (shouldKeep && item.sourceName === primary && item.sceneItemEnabled === false) {
         requests.push({
           requestType: "SetSceneItemEnabled",
@@ -4185,6 +4215,10 @@ class DockObsClient {
     themeCss = "",
   ): Promise<void> {
     const overlayCss = this.buildCssOverlayDataCss(packet, themeCss);
+    const sourceWasNotTracked = !Object.prototype.hasOwnProperty.call(
+      this._lastBrowserSourceUrlBySource,
+      inputName,
+    );
     const urlChanged = await this.hasBrowserSourceUrlChanged(inputName, baseUrl);
     const previousMode = this._lastCssOverlayPacketBySource[inputName]?.mode;
     const modeChanged = previousMode !== undefined && previousMode !== packet.mode;
@@ -4200,9 +4234,12 @@ class DockObsClient {
       }
     }
 
-    // URL changes still require a browser reload. Mode-only changes must NOT
-    // force-reload — the same mce-bible-overlay document morphs Full ↔ LT.
-    if (urlChanged) {
+    // URL changes still require a browser reload. On the first packet after
+    // connecting to OBS, put the complete packet into CSS as well: a newly
+    // loaded CEF document may not have attached its obs-browser event listener
+    // yet, so an event-only packet can be lost and leave the source blank.
+    // This is a one-time/bootstrap path; normal verse changes stay in-place.
+    if (urlChanged || sourceWasNotTracked) {
       await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
       this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
       return;

@@ -707,7 +707,9 @@ export function BibleModule({
         textTransform: quickSettings.textTransform,
         backgroundColor: quickSettings.backgroundColor,
         backgroundImage: quickSettings.backgroundImage,
-        backgroundPattern: quickSettings.backgroundPattern,
+        backgroundPattern: quickSettings.backgroundType && quickSettings.backgroundType !== "pattern"
+          ? ""
+          : quickSettings.backgroundPattern,
         backgroundVideo: quickSettings.backgroundVideo,
         backgroundOpacity: quickSettings.backgroundOpacity,
         fullscreenShadeOpacity: quickSettings.fullscreenShadeOpacity,

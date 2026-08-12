@@ -28,4 +28,10 @@ describe("presentation page Scripture Assistant", () => {
     expect(presentationHtml).toContain("function getPreviewTextFontSize");
     expect(presentationHtml).toContain("function formatScaledTextSize");
   });
+
+  it("centers both columns in Bible compare presentation output", () => {
+    expect(presentationHtml).toContain("align-items: center;\n      text-align: center;");
+    expect(presentationHtml).toContain("justify-self: center;");
+    expect(presentationHtml).toContain(".stage-compare-text");
+  });
 });

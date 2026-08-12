@@ -57,6 +57,9 @@
         },
         {
           "url": "https://graph.facebook.com/*"
+        },
+        {
+          "url": "https://translate.googleapis.com/*"
         }
       ]
     }

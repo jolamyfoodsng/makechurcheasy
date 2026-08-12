@@ -1,4 +1,10 @@
-export const OVERLAY_HTML_VERSION = "2026-08-10-2-readable-compare-autoscale";
+// The Vite build injects a content fingerprint so OBS receives a new browser
+// document whenever the bundled overlay HTML changes. The fallback keeps the
+// module usable in tooling that does not load the Vite config.
+export const OVERLAY_HTML_VERSION =
+  typeof __MCE_OVERLAY_HTML_VERSION__ !== "undefined"
+    ? __MCE_OVERLAY_HTML_VERSION__
+    : `dev-${typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "overlay"}`;
 
 export function buildVersionedOverlayUrl(
   baseUrl: string,

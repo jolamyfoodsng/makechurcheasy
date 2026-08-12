@@ -33,6 +33,11 @@ describe("dock projection settings", () => {
     expect(loadProjectionSettings().sceneMode).toBe("no-clone");
   });
 
+  it("defaults to isolating the active MCE source while preserving the lower-third first-source option", () => {
+    expect(loadProjectionSettings().presentationSourceVisibility).toBe("active-only");
+    expect(loadProjectionSettings().lowerThirdSourceVisibility).toBe("keep-first");
+  });
+
   it("migrates the removed Mirror Program mode to Program background on", () => {
     localStorage.setItem("ocs-dock-projection-settings", JSON.stringify({ sceneMode: "reference" }));
 
@@ -72,18 +77,36 @@ describe("dock projection settings", () => {
     expect(loadProjectionSettings().restoreOriginalScene).toBe(true);
   });
 
+  it("persists source visibility choices", () => {
+    saveProjectionSettings({
+      ...loadProjectionSettings(),
+      presentationSourceVisibility: "keep-visible",
+      lowerThirdSourceVisibility: "active-only",
+    });
+
+    expect(loadProjectionSettings().presentationSourceVisibility).toBe("keep-visible");
+    expect(loadProjectionSettings().lowerThirdSourceVisibility).toBe("active-only");
+  });
+
   it("shows Program background routing as one compact dropdown in the dock sidebar", () => {
+    const routingPanel = dockPageSource.slice(
+      dockPageSource.indexOf("{/* Advanced OBS Output */}"),
+      dockPageSource.indexOf("{/* History */}"),
+    );
     expect(dockPageSource).toContain("page.programBackground");
     expect(dockPageSource).toContain('className="dock-sidebar__select dock-sidebar__select--routing"');
     expect(dockPageSource).toContain('<option value="no-clone">');
     expect(dockPageSource).toContain('<option value="auto-duplicate">');
     expect(dockPageSource).toContain('updateProjectionSceneMode(event.target.value as ProjectionSettings["sceneMode"])');
     expect(dockPageSource).toContain("updateProjectionSettings({ restoreOriginalScene: e.target.checked })");
+    expect(dockPageSource).toContain("presentationSourceVisibility");
+    expect(dockPageSource).toContain("lowerThirdSourceVisibility");
+    expect(dockPageSource).toContain("Only sources created by MakeChurchEasy are changed");
     expect(dockPageSource).not.toContain("setProjectionSettings((s) => ({ ...s, restoreOriginalScene: e.target.checked }))");
-    expect(dockPageSource).not.toContain("dock-sidebar__radio");
-    expect(dockPageSource).not.toContain("aria-pressed");
-    expect(dockPageSource).not.toContain("Mirror Program");
-    expect(dockPageSource).not.toContain("page.mirrorProgram");
-    expect(dockPageSource).not.toContain("Direct Program");
+    expect(routingPanel).not.toContain("dock-sidebar__radio");
+    expect(routingPanel).not.toContain("aria-pressed");
+    expect(routingPanel).not.toContain("Mirror Program");
+    expect(routingPanel).not.toContain("page.mirrorProgram");
+    expect(routingPanel).not.toContain("Direct Program");
   });
 });

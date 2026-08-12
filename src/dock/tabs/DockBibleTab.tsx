@@ -815,7 +815,16 @@ function applyFullscreenQuickThemeSettings(
             ? (quickSettings.backgroundColorEnd || "#162040")
             : (quickSettings.backgroundColorEnd || ""),
       bgGradientAngle: useThemeBg ? (theme.settings.bgGradientAngle ?? 180) : quickSettings.bgGradientAngle,
-      backgroundPattern: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundPattern ?? "") : quickSettings.backgroundPattern,
+      // Keep the last pattern in quick settings so the picker can restore it
+      // after a temporary color/video switch, but only send it to the overlay
+      // while Pattern is the active background mode.
+      backgroundPattern: useNoBg
+        ? ""
+        : useThemeBg
+          ? (theme.settings.backgroundPattern ?? "")
+          : bgType === "pattern"
+            ? quickSettings.backgroundPattern
+            : "",
       boxBackground: useNoBg ? "transparent" : (theme.settings.boxBackground || "rgba(0,0,0,0.7)"),
       referenceBackgroundEnabled: quickSettings.referenceBackgroundEnabled,
       referenceBackgroundColor: quickSettings.referenceBackgroundColor,

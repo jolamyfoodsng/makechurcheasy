@@ -193,6 +193,20 @@
   box-shadow: 0 12px 26px rgba(0, 0, 0, 0.4);
 }
 
+.dock-translation--compact .dock-translation__language-menu {
+  z-index: 1000;
+  margin: 0;
+}
+
+.dock-translation__language-menu--portal .dock-translation__language-list {
+  max-height: none;
+}
+
+.dock-translation__language-menu--portal {
+  z-index: 1000;
+  margin: 0;
+}
+
 .dock-translation__language-search {
   display: flex;
   align-items: center;

@@ -88,7 +88,7 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-subtab:hover {
-  background: rgba(29, 78, 216, 0.06);
+  background: var(--dock-accent-soft);
 }
 
 :root.light .dock-subtab--active {
@@ -142,7 +142,7 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-console-segmented__item:hover {
-  background: rgba(29, 78, 216, 0.06);
+  background: var(--dock-accent-soft);
 }
 
 :root.light .dock-bottom-nav__item {
@@ -151,8 +151,8 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-bottom-nav__item--active {
-  background: #1D4ED8;
-  border-color: #1D4ED8;
+  background: var(--dock-accent);
+  border-color: var(--dock-accent);
 }
 
 :root.light .dock-worship-subtab-bar {
@@ -170,7 +170,7 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-worship-subtab--active {
-  background: #1D4ED8;
+  background: var(--dock-accent);
   color: #FFFFFF;
   box-shadow: none;
 }
@@ -194,7 +194,7 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-btm-segmented__item--active {
-  background: #1D4ED8;
+  background: var(--dock-accent);
   color: #FFFFFF;
 }
 
@@ -207,14 +207,14 @@ html.mv-theme-light #dock-root,
 
 :root.light .dock-btm-toolbar__icon-btn:hover,
 :root.light .dock-btm-toolbar__clear--inline:hover {
-  border-color: rgba(29, 78, 216, 0.34);
+  border-color: var(--dock-accent-soft-border);
   background: #F1F5F9;
   color: #0F172A;
 }
 
 :root.light .dock-btm-toolbar__icon-btn--active {
-  border-color: #1D4ED8;
-  background: #1D4ED8;
+  border-color: var(--dock-accent);
+  background: var(--dock-accent);
   color: #FFFFFF;
 }
 
@@ -234,7 +234,7 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-btm-display-mode-menu__item--active {
-  color: #1D4ED8;
+  color: var(--dock-accent);
 }
 
 :root.light .dock-search-dropdown,
@@ -266,7 +266,7 @@ html.mv-theme-light #dock-root,
 :root.light .dock-search-dropdown__item:hover,
 :root.light .dock-search-dropdown__item--active,
 :root.light .dock-search-dropdown__item--favorite:hover {
-  background: rgba(29, 78, 216, 0.08);
+  background: var(--dock-accent-soft);
   color: #0F172A;
 }
 
@@ -291,14 +291,14 @@ html.mv-theme-light #dock-root,
 
 :root.light .dock-input:focus,
 :root.light .dock-select:focus {
-  border-color: rgba(29, 78, 216, 0.38);
+  border-color: var(--dock-accent-soft-border);
   background: #ffffff;
-  box-shadow: 0 0 0 1px rgba(29, 78, 216, 0.12);
+  box-shadow: 0 0 0 1px var(--dock-accent-soft-border);
 }
 
 :root.light .dock-select--translation {
-  background: rgba(29, 78, 216, 0.08);
-  border-color: rgba(29, 78, 216, 0.24);
+  background: var(--dock-accent-soft);
+  border-color: var(--dock-accent-soft-border);
 }
 
 :root.light .dtb-backdrop {
@@ -332,13 +332,13 @@ html.mv-theme-light #dock-root,
 :root.light .dtb-compare-layout-trigger {
   border-color: #CBD5E1;
   background: #FFFFFF;
-  color: #1D4ED8;
+  color: var(--dock-accent);
 }
 
 :root.light .dtb-compare-layout-trigger:hover {
-  border-color: rgba(29, 78, 216, 0.36);
+  border-color: var(--dock-accent-soft-border);
   background: #F1F5F9;
-  color: #1E40AF;
+  color: var(--dock-accent-pressed);
 }
 
 :root.light .dtb-compare-layout-popover {
@@ -369,8 +369,8 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dtb-compare-layout-popover__option-icon {
-  background: rgba(29, 78, 216, 0.08);
-  color: #1D4ED8;
+  background: var(--dock-accent-soft);
+  color: var(--dock-accent);
 }
 
 :root.light .dtb-compare-layout-popover__option-desc {
@@ -389,7 +389,7 @@ html.mv-theme-light #dock-root,
 
 :root.light .dock-service-plan-btn:hover,
 :root.light .dock-service-item:hover {
-  border-color: rgba(29, 78, 216, 0.28);
+  border-color: var(--dock-accent-soft-border);
 }
 
 :root.light .dock-service-progress-bar {
@@ -398,8 +398,8 @@ html.mv-theme-light #dock-root,
 
 :root.light .dock-bible-verse-row--selected,
 :root.light .dock-bible-verse-row--highlighted {
-  background: rgba(29, 78, 216, 0.10);
-  border-bottom-color: rgba(29, 78, 216, 0.18);
+  background: var(--dock-accent-soft);
+  border-bottom-color: var(--dock-accent-soft-border);
 }
 
 :root.light .dock-bible-verse-row--selected .dock-bible-verse-row__text,

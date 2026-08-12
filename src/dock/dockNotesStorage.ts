@@ -175,7 +175,9 @@ function applyQuickSettingsToNotesTheme(
         ? ""
         : useThemeBg
           ? (theme.settings.backgroundPattern ?? "")
-          : (quickSettings.backgroundPattern ?? ""),
+          : bgType === "pattern"
+            ? (quickSettings.backgroundPattern ?? "")
+            : "",
       backgroundImage: useNoBg
         ? ""
         : useThemeBg

@@ -819,10 +819,10 @@
 }
 
 .dock-numpad-btn--active {
-  background: #2563EB;
+  background: var(--dock-accent);
   color: #fff;
-  border-color: #2563EB;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #ffffff 14%, transparent);
+  border-color: var(--dock-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dock-accent) 14%, transparent);
 }
 
 .dock-hover-actions {
@@ -6460,8 +6460,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   border: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
   border-radius: 4px;
   background: color-mix(in srgb, var(--dock-surface) 92%, transparent);
@@ -15027,9 +15027,28 @@
 
 /* Modal shell */
 .dtb-studio__modal {
-  width: 100%;
-  max-width: 380px;
-  height: 50vh;
+  /* Keep the picker tall on short-width windows. Width should constrain the
+     card horizontally without shrinking its viewport-driven height. */
+  --dtb-studio-height: min(
+    calc(80vh / var(--dock-font-scale, 1)),
+    calc((100vh - 32px) / var(--dock-font-scale, 1))
+  );
+  --dtb-studio-height: min(
+    calc(80dvh / var(--dock-font-scale, 1)),
+    calc((100dvh - 32px) / var(--dock-font-scale, 1))
+  );
+  --dtb-studio-width: min(
+    var(--dtb-studio-height),
+    calc((100vw - 32px) / var(--dock-font-scale, 1))
+  );
+  --dtb-studio-width: min(
+    var(--dtb-studio-height),
+    calc((100dvw - 32px) / var(--dock-font-scale, 1))
+  );
+  width: var(--dtb-studio-width);
+  max-width: none;
+  height: var(--dtb-studio-height);
+  max-height: var(--dtb-studio-height);
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -16390,14 +16409,12 @@
 /* ── Responsive: narrow widths ── */
 @media (max-width: 390px) {
   .dtb-studio__modal {
-    max-width: 100%;
-    height: 96vh;
     border-radius: 12px 10px 0 0;
   }
 
   .dtb-studio__backdrop {
-    align-items: flex-end;
-    padding: 0;
+    align-items: center;
+    padding: 16px;
   }
 
   .dtb-studio__header {
@@ -16425,7 +16442,6 @@
 
 @media (max-width: 240px) {
   .dtb-studio__modal {
-    height: 100vh;
     border-radius: 0;
   }
 
@@ -16921,7 +16937,7 @@
   font-size: 14px;
   color: var(--dock-text);
   line-height: 1.5;
-  white-space: pre-line;
+  white-space: pre-wrap;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   line-clamp: 3;
@@ -16951,8 +16967,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 30px;
+  height: 30px;
   border: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
   border-radius: 4px;
   background: color-mix(in srgb, var(--dock-surface) 92%, transparent);
@@ -16976,6 +16992,11 @@
   background: color-mix(in srgb, var(--dock-red) 12%, var(--dock-surface));
   border-color: var(--dock-red);
   color: var(--dock-red-text, #EF4444);
+}
+
+.dock-worship-slide-card__action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .dock-worship-slide-card__footer {
