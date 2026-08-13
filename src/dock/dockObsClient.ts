@@ -4340,6 +4340,27 @@ class DockObsClient {
     const emitted = await this.emitBrowserOverlayPacket(tabType, packet, overlayCss, inputName);
     if (!emitted) {
       await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
+      return;
+    }
+
+    // OBS acknowledges the vendor request before the CEF page necessarily
+    // paints it. Wait for an acknowledgement from the actual browser source,
+    // not the dock page's localStorage. If the source did not paint quickly,
+    // restore the complete packet through CSS so the source cannot remain
+    // blank until the operator manually refreshes it.
+    if (tabType !== "bible") return;
+
+    overlayBridge.connect();
+    const rendered = await this.waitForOverlayRenderAck(
+      tabType,
+      Number(packet.timestamp) || Date.now(),
+      String(packet.mode || "fullscreen"),
+      280,
+      undefined,
+      inputName,
+    );
+    if (!rendered) {
+      await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
     }
   }
 
@@ -5014,7 +5035,60 @@ class DockObsClient {
     mode: string,
     timeoutMs = 250,
     transitionId?: number,
+    targetSource?: string,
   ): Promise<boolean> {
+    const bridgeChannel = tabType === "notes"
+      ? "notes"
+      : tabType === "worship" || tabType === "announcements"
+        ? "worship"
+        : "bible";
+
+    if (targetSource) {
+      overlayBridge.connect();
+      let acknowledged = overlayBridge.getLatestRenderAck(bridgeChannel, targetSource);
+      if (
+        acknowledged &&
+        Number(acknowledged.timestamp) >= timestamp &&
+        acknowledged.mode === mode &&
+        (transitionId === undefined || acknowledged.transitionId === transitionId)
+      ) {
+        return true;
+      }
+
+      let resolved = false;
+      const unsubscribe = overlayBridge.subscribe((packet) => {
+        if (
+          packet.type === "overlay-render-ack" &&
+          packet.channel === bridgeChannel &&
+          packet.targetSource === targetSource &&
+          Number(packet.timestamp) >= timestamp &&
+          packet.mode === mode &&
+          (transitionId === undefined || packet.transitionId === transitionId)
+        ) {
+          resolved = true;
+        }
+      });
+
+      try {
+        const deadline = Date.now() + timeoutMs;
+        while (!resolved && Date.now() <= deadline) {
+          acknowledged = overlayBridge.getLatestRenderAck(bridgeChannel, targetSource);
+          if (
+            acknowledged &&
+            Number(acknowledged.timestamp) >= timestamp &&
+            acknowledged.mode === mode &&
+            (transitionId === undefined || acknowledged.transitionId === transitionId)
+          ) {
+            return true;
+          }
+          await this.sleep(16);
+        }
+        return resolved;
+      } finally {
+        unsubscribe();
+      }
+    }
+
     const storageKey = this.getOverlayRenderAckStorageKey(tabType);
     const deadline = Date.now() + timeoutMs;
 
@@ -6380,11 +6454,14 @@ class DockObsClient {
       }
 
       if (mode === "lower-third" && useCssOverlayTransport && cssOverlayPacket) {
+        const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
         await this.waitForOverlayRenderAck(
           "bible",
           Number(cssOverlayPacket.timestamp) || Date.now(),
           mode,
           isFirstLowerThirdBootstrap ? 3500 : 500,
+          undefined,
+          browserSourceName,
         ).catch(() => { });
       }
 

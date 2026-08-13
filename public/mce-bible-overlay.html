@@ -1177,6 +1177,12 @@
       let hasShownOnce = false;
       let bgClearToken = 0;
       let lastCssOverlayData = '';
+      // Keep a live acknowledgement channel for the dock. OBS can report a
+      // successful vendor request even when a browser source was still
+      // loading and never painted the packet.
+      let overlayRelaySocket = null;
+      let latestRenderAck = null;
+      let lastTargetSource = _routeSource;
       // Both presentation modes are rendered ahead of time. Keep their
       // theme caches separate so updating the verse does not re-apply the
       // fullscreen background after the lower-third layer is rendered.
@@ -2216,11 +2222,19 @@
         try {
           const timestamp = Number(packet && packet.timestamp) || 0;
           if (!timestamp) return;
-          localStorage.setItem(_ackStorageKey, JSON.stringify({
+          const ack = {
+            channel: _tabParam,
+            type: 'overlay-render-ack',
+            targetSource: lastTargetSource || '',
             timestamp,
             mode: packet.mode || activeMode,
             transitionId: packet.transitionId,
-          }));
+          };
+          latestRenderAck = ack;
+          localStorage.setItem(_ackStorageKey, JSON.stringify(ack));
+          if (overlayRelaySocket && overlayRelaySocket.readyState === WebSocket.OPEN) {
+            overlayRelaySocket.send(JSON.stringify(ack));
+          }
         } catch { }
       }
 
@@ -2953,6 +2967,7 @@
           if (_routeSource && targetSource !== _routeSource) return false;
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
+          if (targetSource) lastTargetSource = targetSource;
           applyObsBrowserEventCss(data.css || data.overlayCss || '');
           processOverlayUpdate(packet);
           return true;
@@ -2965,6 +2980,7 @@
           const targetSource = typeof packet.targetSource === 'string' ? packet.targetSource : '';
           if (_routeSource && targetSource !== _routeSource) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
+          if (targetSource) lastTargetSource = targetSource;
           if (packet.type === 'mode-change' && packet.mode) {
             if (packet.theme) {
               applyThemeIfChanged(packet.theme, true, packet.mode);
@@ -2981,9 +2997,13 @@
       }
       function connectOverlayRelay() {
         if (!('WebSocket' in window)) return;
+        var ackOnly = false;
         try {
           var params = new URLSearchParams(window.location.search);
-          if (params.get('mceRelay') === '0') return;
+          // OBS sources may disable incoming relay updates to avoid duplicate
+          // packets, but they still need to report that a vendor event painted.
+          // Keep the socket in acknowledgement-only mode in that case.
+          ackOnly = params.get('mceRelay') === '0';
           var host = window.location.hostname;
           var allowed = params.get('mceRelay') === '1' || host === 'localhost' || host === '127.0.0.1' || host === 'tauri.localhost' || host === '::1';
           if (!allowed) return;
@@ -3012,11 +3032,21 @@
           if (Date.now() < disabledUntil) return;
           try {
             var ws = new WebSocket('ws://127.0.0.1:17891');
-            ws.onopen = function () { attempts = 0; };
+            overlayRelaySocket = ws;
+            ws.onopen = function () {
+              attempts = 0;
+              if (latestRenderAck) {
+                try { ws.send(JSON.stringify(latestRenderAck)); } catch { }
+              }
+            };
             ws.onmessage = function (event) {
+              if (ackOnly) return;
               try { readFromOverlayRelayPacket(JSON.parse(event.data)); } catch { }
             };
-            ws.onclose = schedule;
+            ws.onclose = function () {
+              if (overlayRelaySocket === ws) overlayRelaySocket = null;
+              schedule();
+            };
             ws.onerror = function () {
               try { ws.close(); } catch { }
             };

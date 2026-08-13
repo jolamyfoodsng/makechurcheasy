@@ -35,6 +35,7 @@ class DockOverlayBridge {
   private connected = false;
   private senderId = generateSenderId();
   private pendingPackets: Map<string, BridgePacket> = new Map();
+  private latestRenderAcks: Map<string, BridgePacket> = new Map();
   private reconnectAttempts = 0;
   private nextConnectAt = 0;
   private disabledUntil = 0;
@@ -82,6 +83,10 @@ class DockOverlayBridge {
       ws.onmessage = (event) => {
         try {
           const packet = JSON.parse(event.data) as BridgePacket;
+          if (packet.type === "overlay-render-ack") {
+            const key = `${String(packet.channel ?? "general")}:${String(packet.targetSource ?? "")}`;
+            this.latestRenderAcks.set(key, packet);
+          }
           // Ignore our own messages
           if (packet.senderId === this.senderId) return;
           for (const handler of this.handlers) {
@@ -159,6 +164,10 @@ class DockOverlayBridge {
 
   isConnected(): boolean {
     return this.connected;
+  }
+
+  getLatestRenderAck(channel: string, targetSource: string): BridgePacket | null {
+    return this.latestRenderAcks.get(`${channel}:${targetSource}`) ?? null;
   }
 }
 

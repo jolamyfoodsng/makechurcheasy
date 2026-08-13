@@ -197,6 +197,9 @@ describe("dockObsClient background reflection stress", () => {
     client.sleep = vi.fn(async () => {});
     client.buildOverlayHtmlUrl = vi.fn((file: string) => `http://overlay.test/${file}`);
     client.invalidateSceneItemListCache = vi.fn();
+    // Model a healthy OBS browser-source render by default. Recovery behavior
+    // is covered by the explicit missing-ack test below.
+    client.waitForOverlayRenderAck = vi.fn(async () => true);
     client.getSceneItemListCached = vi.fn(async (sceneName: string) => {
       const items = Array.from(sceneItems.get(sceneName)?.values() ?? []);
       return items.map((item) => ({
@@ -637,7 +640,6 @@ describe("dockObsClient background reflection stress", () => {
     client.hideFullscreenBg = vi.fn(async () => {});
     client._hideLowerThirdBgSource = vi.fn(async () => {});
     client.fitSceneSourceToCanvas = vi.fn(async () => {});
-    client.waitForOverlayRenderAck = vi.fn(async () => {});
     client.publishFullscreenOverlayPacket = vi.fn();
     client.deliverCssOverlayPacket = vi.fn(async () => {});
 
@@ -800,6 +802,48 @@ describe("dockObsClient background reflection stress", () => {
 
     expect(callLog.some((entry) => entry.method === "CallVendorRequest")).toBe(true);
     expect(cssWrites).toHaveLength(0);
+  });
+
+  it("recovers the browser source when OBS accepts an event but the page does not render it", async () => {
+    const sourceName = "MCE Browser - Bible";
+    const baseUrl = "http://overlay.test/mce-bible-overlay.html?v=2026-07-29-1-lt-bg-image&tab=bible";
+    inputs.set(sourceName, {
+      inputKind: "browser_source",
+      inputSettings: { url: baseUrl, css: "" },
+    });
+    client._lastBrowserSourceUrlBySource[sourceName] = baseUrl;
+    client._lastCssOverlayPacketBySource[sourceName] = {
+      slide: { id: "dock-bible-slide", reference: "Acts 3:1 (KJV)", text: "Old verse", verseRange: "1" },
+      theme: makeBackgroundTheme({ backgroundColor: "#000000" }),
+      live: true,
+      blanked: false,
+      timestamp: 122,
+      mode: "lower-third",
+    };
+    client._lastCssOverlayBaseUrlBySource[sourceName] = baseUrl;
+    client._lastCssOverlayThemeCssBySource[sourceName] = "";
+    client.waitForOverlayRenderAck = vi.fn(async () => false);
+
+    await client.deliverCssOverlayPacket(
+      sourceName,
+      "bible",
+      {
+        slide: { id: "dock-bible-slide", reference: "Acts 3:2 (KJV)", text: "A new visible verse", verseRange: "2" },
+        theme: makeBackgroundTheme({ backgroundColor: "#000000" }),
+        live: true,
+        blanked: false,
+        timestamp: 124,
+        mode: "lower-third",
+      },
+      baseUrl,
+      "",
+    );
+
+    expect(callLog.some((entry) => entry.method === "CallVendorRequest")).toBe(true);
+    expect(callLog.some((entry) => (
+      entry.method === "SetInputSettings" &&
+      Object.prototype.hasOwnProperty.call(entry.payload.inputSettings as Record<string, unknown>, "css")
+    ))).toBe(true);
   });
 
   it("keeps Bible fullscreen setup stable when only background settings change", () => {
