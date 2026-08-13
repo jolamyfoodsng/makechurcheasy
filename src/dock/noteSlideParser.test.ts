@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitNoteBodyIntoSections } from "./noteSlideParser";
+import { paginateNoteSections, splitNoteBodyIntoSections } from "./noteSlideParser";
 
 describe("note slide boundaries", () => {
   it("keeps consecutive editor lines together until a blank line", () => {
@@ -19,6 +19,26 @@ describe("note slide boundaries", () => {
     expect(splitNoteBodyIntoSections("First line\nSecond line\n\nNext paragraph")).toEqual([
       "First line\nSecond line",
       "Next paragraph",
+    ]);
+  });
+
+  it("groups all stored note lines globally for the quick line-count setting", () => {
+    const sections = ["One", "Two", "Three", "Four", "Five"].map((line) => ({
+      headingLabel: "",
+      lines: [line],
+    }));
+
+    expect(paginateNoteSections(sections, 2).map((slide) => slide.text)).toEqual([
+      "One\nTwo",
+      "Three\nFour",
+      "Five",
+    ]);
+    expect(paginateNoteSections(sections, 3).map((slide) => slide.text)).toEqual([
+      "One\nTwo\nThree",
+      "Four\nFive",
+    ]);
+    expect(paginateNoteSections(sections, 5).map((slide) => slide.text)).toEqual([
+      "One\nTwo\nThree\nFour\nFive",
     ]);
   });
 });

@@ -51,7 +51,7 @@ import {
   formatNoteText,
   type NoteTextToolAction,
 } from "../noteTextTools";
-import { splitNoteBodyIntoSections } from "../noteSlideParser";
+import { paginateNoteSections, splitNoteBodyIntoSections } from "../noteSlideParser";
 import { normalizeDockMultilineText } from "../textLineBreaks";
 import { useDockSceneRoute } from "../dockSceneRouting";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
@@ -145,7 +145,7 @@ function DockNoteEditorDialog({
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") event.stopPropagation();
               }}
-              placeholder="Blank lines separate slides; single lines stay together."
+              placeholder="Lines are grouped by the Lines per note setting."
               rows={8}
             />
           </label>
@@ -193,17 +193,12 @@ function generateNoteSlides(note: DockNote, linesPerSlide = DEFAULT_NOTE_LINES_P
       groupedSections.push({ headingLabel: "", lines: sectionLines });
     });
 
-    groupedSections.forEach((section, sectionIndex) => {
-      const lineCount = clampNoteLinesPerSlide(linesPerSlide);
-      for (let chunkIndex = 0; chunkIndex < Math.max(1, section.lines.length); chunkIndex += lineCount) {
-        const chunk = section.lines.slice(chunkIndex, chunkIndex + lineCount).join("\n");
-        if (!chunk) continue;
-        slides.push({
-          id: `note-${note.id}-${sectionIndex}-${chunkIndex}`,
-          label: section.headingLabel || (sectionIndex === 0 && chunkIndex === 0 ? displayTitle : ""),
-          text: chunk,
-        });
-      }
+    paginateNoteSections(groupedSections, clampNoteLinesPerSlide(linesPerSlide)).forEach((slide, slideIndex) => {
+      slides.push({
+        id: `note-${note.id}-${slideIndex}`,
+        label: slide.headingLabel || (slideIndex === 0 ? displayTitle : ""),
+        text: slide.text,
+      });
     });
   }
   return slides;
